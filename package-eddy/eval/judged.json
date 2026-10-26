@@ -1,0 +1,1552 @@
+{
+  "model": "claude-opus-5-5",
+  "min_share": 0.5,
+  "pairs": [
+    {
+      "fix": 118,
+      "culprit": 36,
+      "share": 0.71,
+      "lines": 7,
+      "addsTest": true,
+      "title": "fix(monomorph): resolve cross-module generic function return types",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "When resolving the return type of a generic function imported from another module, the function's type parameters were not put in scope, so `T` did not resolve to a TypeParam. Separately, the monomorphized call kept the defining module's source instead of the calling module's.",
+        "reason": "The culprit only rewrote the loaded-module return-type lookup to clone the AST and call resolve_type, a borrow-checker restructuring. Generic functions and monomorphization appear to be later features, so the missing type-param scoping became a bug only when generics were added, and the lower.rs part is not in the culprit at all."
+      },
+      "error": null
+    },
+    {
+      "fix": 686,
+      "culprit": 684,
+      "share": 0.78,
+      "lines": 18,
+      "addsTest": true,
+      "title": "fix: resolve struct naming conflicts across modules",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The struct name index was keyed only by name, so same-named structs from different modules collided and lookups could return another module's struct.",
+        "reason": "The culprit replaced the plain-struct fallback loop, which checked both `struct_name == &name` and `struct_source == &module_source`, with a name-only `find_struct_by_name` index. That visibly drops the module check, and later inserts silently overwrite earlier entries. The fix restores module-aware lookup by keying the index on `(name, module_source)`."
+      },
+      "error": null
+    },
+    {
+      "fix": 689,
+      "culprit": 670,
+      "share": 0.68,
+      "lines": 19,
+      "addsTest": true,
+      "title": "fix: enable SQLite parser with backtracking and channel(HIDDEN) support",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The generated parsers mishandled ambiguous grammars: overlapping alternatives became identical, unreachable if/else-if branches; left-recursive alternatives recursed into themselves; and optional groups that failed part-way could not be retried, so even \"SELECT 1;\" failed to parse.",
+        "reason": "The culprit wrote gen_consume_group, gen_multi_alt_body and alt_position_first_sets, which only dispatch on FIRST sets with no backtracking or left-recursion handling; the fix replaces exactly this logic. A reviewer could see that overlapping FIRST sets yield duplicate branch conditions and that a rule whose alternative starts with itself calls its own parse function first, though the fix also bundles feature work (channel(HIDDEN)) and an unrelated compiler fix."
+      },
+      "error": null
+    },
+    {
+      "fix": 774,
+      "culprit": 464,
+      "share": 0.57,
+      "lines": 7,
+      "addsTest": true,
+      "title": "fix: resolve gale parser bugs and variant-in-variant codegen ICE",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": false,
+        "defect": "The match-ergonomics boxing check skipped boxing whenever the variant payload field was any `Ref` type, so a nested variant payload (`ref Inner`) bound where `Box<Inner>` was expected went unboxed and codegen hit a type-mismatch ICE.",
+        "reason": "The culprit added the `needs_boxing` condition that treats every `Ref` payload as already compatible; the fix narrows that to boxing when the binding and payload ref type ids differ. Spotting this requires knowing that variant payloads are stored as `ref Inner` while ref bindings lower to a Box struct, which the culprit diff does not show."
+      },
+      "error": null
+    },
+    {
+      "fix": 890,
+      "culprit": 241,
+      "share": 1,
+      "lines": 3,
+      "addsTest": true,
+      "title": "fix(resolver): bind trait type params to impl args in default methods",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": false,
+        "defect": "Default trait methods synthesized for an impl of a generic trait (e.g. `impl Maker<i32>`) never bound the trait's type parameters to the impl's concrete arguments, so `T::default()` and `T`-typed returns failed to resolve. The trait declaration was also looked up by the mangled trait name.",
+        "reason": "The culprit added default-method synthesis and call-site lookup through `resolve_method` and `find_trait_decl_methods` without binding trait type params, and the fix patches exactly those paths. The gap is an omission that only matters for generic traits; nothing in the culprit diff mentions trait type params, so a reviewer would have had to think of that case unprompted."
+      },
+      "error": null
+    },
+    {
+      "fix": 900,
+      "culprit": 389,
+      "share": 0.5,
+      "lines": 112,
+      "addsTest": true,
+      "title": "fix(resolver): cross-module aliased generic type inference + CalleeRef refactor",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Cross-module generic calls through an import alias with no turbofish failed type inference, because `lookup_generic_func_for_inference` re-looked up the symbol by its defining-module name, while the symbol table is keyed by the local alias.",
+        "reason": "The culprit is a file-splitting refactor that moved the existing `(module, name, is_known)` tuple threading. It has no `infer_fn_type_args` or `lookup_generic_func_for_inference` at all, since type args were explicit-only then, so the faulty re-lookup was added later and cannot be seen in this diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 933,
+      "culprit": 931,
+      "share": 0.94,
+      "lines": 17,
+      "addsTest": false,
+      "title": "fix(cli/doc): recognise fenced code blocks in render_md_doc",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "render_md_doc in wado-cli/src/doc.rs did not recognise fenced code blocks, so lines inside them were treated as markdown: `#`-prefixed lines became headings and whitespace was collapsed.",
+        "reason": "The renderer bug lives in doc.rs, which the culprit never touched. The culprit only added doc-comment prose to serde.wado, which the fix merely rewrote. Blame landed on documentation text, not on the code containing the defect."
+      },
+      "error": null
+    },
+    {
+      "fix": 955,
+      "culprit": 949,
+      "share": 0.5,
+      "lines": 8,
+      "addsTest": false,
+      "title": "fix(opt): enumerate WithHandler / Resume / TemplateString in catch-all walkers",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "No wrong behaviour is corrected: catch-all `_ => {}` arms and silent no-op arms for TemplateString/WithHandler/Resume are replaced with explicit variant lists and `unreachable!` assertions, because those variants should never reach the optimizer.",
+        "reason": "This is a hardening/refactor that turns silent no-ops into panics for states the fix itself treats as impossible; it does not fix an observed crash, wrong result or hang. The culprit's lines that list these variants in a no-op arm were not producing wrong output."
+      },
+      "error": null
+    },
+    {
+      "fix": 958,
+      "culprit": 524,
+      "share": 0.83,
+      "lines": 320,
+      "addsTest": true,
+      "title": "fix(closure): contextual types, stable functor IDs, scope hygiene",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Closure lowering had several bugs. It matched closures to functors with a counter re-walked in lockstep across passes, so nested closures got the wrong functor. Pattern lowering allocated temps inside closure bodies from the outer function's local namespace, colliding with closure parameters. Several walkers skipped `Break` values or turned `TupleZip` into `TupleSpread`.",
+        "reason": "The culprit is a mechanical refactor that extracted existing lowering code into new `closure.rs` and `pattern.rs` files, so the faulty logic was moved there rather than written there. A reviewer of this move-only diff would not reasonably flag pre-existing semantics."
+      },
+      "error": null
+    },
+    {
+      "fix": 985,
+      "culprit": 848,
+      "share": 0.52,
+      "lines": 25,
+      "addsTest": true,
+      "title": "fix(lsp): clean diagnostics when opening bundled stdlib files",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Opening a bundled stdlib file in the LSP produced spurious diagnostics. The file was loaded as an EntryPoint, so it was not deduplicated against the cached bundled copy and clashed with it as duplicate definitions. Prelude-collision checks also fired against the very types the prelude defines.",
+        "reason": "The real defect is in the compiler's loader and analyzer, which handle module identity and the prelude-collision gate; the culprit never touched these files. The culprit only wrote the LSP glue calling `compile_with_options`, and the fix's switch to `annotate` is a secondary hardening, not the root cause."
+      },
+      "error": null
+    },
+    {
+      "fix": 999,
+      "culprit": 996,
+      "share": 0.91,
+      "lines": 230,
+      "addsTest": false,
+      "title": "fix(cm_binding): address #997 follow-up bugs from #996 review",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "List lifting and Array<T> param lowering used cm_abi::cm_size/cm_align, which return the 4-byte i32-handle fallback for named WASI variants/records, so the buffer walk used the wrong element stride and the wrong realloc alignment. Stream CM names were also derived by mechanical kebab-casing, non-Result task returns emitted a hard-coded task-return(0), and flat Result lifts used I32 placeholder types.",
+        "reason": "The culprit is a pure file split that moved these lines verbatim from cm_binding.rs into submodules, so the defects predate it. A reviewer could not attribute them to the culprit's changes."
+      },
+      "error": null
+    },
+    {
+      "fix": 1006,
+      "culprit": 706,
+      "share": 0.75,
+      "lines": 12,
+      "addsTest": true,
+      "title": "fix(gale): close 3 ANTLR4 stage_b compatibility gaps",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The generated LR loops committed to a left-recursive suffix on first-token match alone and propagated its failure as a whole-rule failure instead of backing off to the longest valid prefix; separately, list-label (`+=`) LR fields got a bare `left` instead of an array, and keyword-shaped lexer rules with no carrier rule were unreachable.",
+        "reason": "Before the culprit, the dispatch already emitted `result = {suffix_fn}(p, result, start)?;` after a first-token check, so the mis-prediction existed earlier; the culprit only wrapped that call in a precedence check and moved it into `gen_lr_call_with_prec`. The other two fixed gaps (list-label wrapping and the keyword carrier check) are in code the culprit did not write."
+      },
+      "error": null
+    },
+    {
+      "fix": 1068,
+      "culprit": 993,
+      "share": 1,
+      "lines": 4,
+      "addsTest": true,
+      "title": "fix(kiln): hash generator sources via canonical token stream",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Byte-level hashing of generator `.wado` sources changed `generator_source_hash` on comment, docstring or whitespace-only edits, churning committed kiln.json files.",
+        "reason": "The culprit deliberately and correctly hashed raw file bytes, and that hash is deterministic, so the new determinism and revert tests would pass against it too. Switching to a comment- and whitespace-insensitive token-stream hash (with a sidecar version bump) is a policy change, not a fix for a crash or wrong result."
+      },
+      "error": null
+    },
+    {
+      "fix": 1088,
+      "culprit": 627,
+      "share": 0.6,
+      "lines": 10,
+      "addsTest": false,
+      "title": "fix(dev-tools): surface buffered diagnostics on empty golden output",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "compile_one used a silent host and threw away the compiler's diagnostics, both through `map_err(|_| \"compilation failed\")` and by silently producing empty output when the dump returned None, so fixture-generation failures were reported with no reason.",
+        "reason": "The culprit newly created pipeline.rs with the `|_|` error-swallowing `map_err` calls and the `if let Some` branches that fall through to empty output; the fix replaces exactly these with errors that carry the buffered diagnostics. Discarding the error and using a silent host are both plainly visible in the culprit diff, though this is borderline, since the tool still failed or skipped and only the explanation was missing."
+      },
+      "error": null
+    },
+    {
+      "fix": 1100,
+      "culprit": 1096,
+      "share": 1,
+      "lines": 1,
+      "addsTest": true,
+      "title": "fix(lower): reject Binding default in dense-int Switch rewrite",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "The dense-int Switch rewrite accepted a `Binding` pattern as the default arm, but `build` never emitted a `Let` binding the name to the scrutinee, so the bound variable read as zero at runtime.",
+        "reason": "The culprit is a relocation refactor (NIR 9.C.1), and the fix's own comment says the same gap existed before 9.C.1, so the bug was moved rather than introduced. A careful reviewer could still see in the new file that `analyze` accepts `Binding` while `build` only clones the arm body."
+      },
+      "error": null
+    },
+    {
+      "fix": 1112,
+      "culprit": 935,
+      "share": 0.64,
+      "lines": 11,
+      "addsTest": false,
+      "title": "fix(tagpr): sync Cargo.lock via postVersionCommand to fix --locked CI",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The .tagpr config put keys outside a [tagpr] section, where tagpr silently ignores them, and used `command` (which runs before the version bump) instead of `postVersionCommand`, so Cargo.lock was never synced and `cargo --locked` CI broke.",
+        "reason": "The culprit wrote the section-less keys and the `command = cargo update --workspace` line that the fix replaces. A reviewer who knows the git-config format, or reads the tagpr docs, could see the keys sit outside any section and that `command` runs at the wrong time."
+      },
+      "error": null
+    },
+    {
+      "fix": 1134,
+      "culprit": 389,
+      "share": 0.5,
+      "lines": 6,
+      "addsTest": true,
+      "title": "fix: unify break value types in labeled block expressions",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "A labeled block expression took the type of its first `break` value without unifying or checking the other breaks, and resolved break values without the use-site expected type. As a result, mismatched break types were silently accepted and literals did not coerce (e.g. to i64).",
+        "reason": "The culprit is a pure refactor that split the resolver into submodules, so the first-break-type logic and its 'TODO: type unification' comment were moved there rather than written there. The TODO and the `None` expected type in `resolve_break` are still plainly visible in the diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1135,
+      "culprit": 951,
+      "share": 0.86,
+      "lines": 28,
+      "addsTest": true,
+      "title": "fix: address review feedback on labeled block break unification",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "A bare `null` branch or arm next to a concrete non-Option sibling (e.g. `if true { null } else { 42 }`) silently took the sibling's type and had its `Null` rewritten to `i32`; all-`null` constructs also let `Option<UNKNOWN>` reach codegen, crashing WIR translation instead of producing a diagnostic.",
+        "reason": "The culprit added the rule that an UNKNOWN-containing branch defers to its sibling's type, and added `patch_unresolved_null`, which overwrites `Null.type_id` with any target type without checking that it is an `Option`; the fix adds that check and reports errors. The unconditional `expr.type_id = target_type` and the silent skip when the type contains UNKNOWN are both plainly visible in the culprit diff, though the labeled-block and shadowed-label parts of the fix come from other code."
+      },
+      "error": null
+    },
+    {
+      "fix": 1142,
+      "culprit": 1136,
+      "share": 0.6,
+      "lines": 10,
+      "addsTest": true,
+      "title": "fix(serve): bound the response body pump with an idle timeout",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The response body pump awaited `frame_tx.send` with no time bound, so a client that stopped draining but kept its connection open pinned the handler task's fiber stack forever.",
+        "reason": "The culprit removed the old wall-clock `tokio::time::timeout` around `run_concurrent`, whose deleted comment explicitly described this non-draining-client hang. It replaced that with an unbounded pump and only the epoch deadline, which cannot preempt host awaits. All of this is visible in the culprit diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1146,
+      "culprit": 1136,
+      "share": 0.88,
+      "lines": 8,
+      "addsTest": true,
+      "title": "fix: run the epoch ticker on a dedicated OS thread",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The epoch ticker ran as a tokio task, so on a single-core host a runaway wasm guest blocking the only tokio worker thread also starved the ticker; the epoch never advanced and the server deadlocked.",
+        "reason": "The tokio-task ticker existed before the culprit; the old code even said it was deliberately a tokio task rather than std::thread, so the culprit only simplified its shutdown (Notify replaced by abort) and did not introduce the starvation hazard. The hazard also depends on runtime thread count, which a reviewer could not see in this diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1156,
+      "culprit": 935,
+      "share": 1,
+      "lines": 2,
+      "addsTest": false,
+      "title": "fix: create tagpr release as draft so release.yml can upload assets",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "tagpr created the GitHub Release already published, so with the repository's 'Immutable releases' setting enabled, release.yml could not upload build assets to it.",
+        "reason": "The only culprit lines the fix touched are the workflow description comments. The failure comes from tagpr's default publish behaviour combined with a repository setting that does not appear in the culprit diff, and intermediate changes to .tagpr (the culprit's `release = patch` is already gone in the fix's context) make the culprit an unlikely origin."
+      },
+      "error": null
+    },
+    {
+      "fix": 1185,
+      "culprit": 1080,
+      "share": 0.89,
+      "lines": 9,
+      "addsTest": true,
+      "title": "fix(resolver): enforce fn mut root-mutability for non-identifier callees",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The `fn mut` rule (callee binding must be `mut`) was only checked for bare identifier callees, so calls like `(h.f)()`, `arr[i]()` or `(arr[i].f)()` through an immutable root binding compiled without the required error.",
+        "reason": "The culprit introduced `fn mut` and its `ClosureMutBindingRequired` check, but placed it only in the local-identifier call branch and left the indirect-call path unchecked. A reviewer could see from the diff that field and index callees bypass the new diagnostic."
+      },
+      "error": null
+    },
+    {
+      "fix": 1190,
+      "culprit": 1015,
+      "share": 0.93,
+      "lines": 15,
+      "addsTest": true,
+      "title": "fix(optimize): field_scalarize must not propagate post-sync state past a labeled break (#1187)",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The dataflow walker treated labeled blocks as straight-line code. It recorded no state at a labeled `break`, so the post-block state ignored early-exit paths that skipped syncs emitted inside the block. Later code then missed a re-read or write-back, and the field update was lost (the indent_level drift).",
+        "reason": "The culprit added the new walker with `LabeledBlock { label: _ } => walk_block(...)`, and its labeled `break` does no commit and records no state. Its own comment says it cannot precisely model the post-block JOIN, so a reviewer could see the post-block state ignores break paths."
+      },
+      "error": null
+    },
+    {
+      "fix": 1204,
+      "culprit": 1199,
+      "share": 0.63,
+      "lines": 1996,
+      "addsTest": true,
+      "title": "fix(optimize): address branch-review findings in NIR mod_ref / sroa_param / elide_box_local",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "can_move_past only checked whether the intervening statement clobbers the moved expression's reads, not the reverse; a call-containing field initializer could therefore be relocated past an intervening read of a global it mutates, a miscompile.",
+        "reason": "The culprit added WIR mod_ref's one-sided `!int_mr.may_clobber(expr_mr)` and used it in adjacent struct elision. The fix replaces that pass with a NIR version that checks both directions, plus a regression fixture for the missing case. A reviewer could see from the culprit's own `can_move_past` (and its documented condition 4) that only one direction of interference was checked."
+      },
+      "error": null
+    },
+    {
+      "fix": 1215,
+      "culprit": 1055,
+      "share": 0.74,
+      "lines": 31,
+      "addsTest": true,
+      "title": "fix(gale): stamp min_prec / variant_id on LR self-refs nested in containers",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "Self-recursive calls nested inside Repeat/Group/OptionalLookahead in an LR suffix were never stamped with min_prec (or variant_id). They recursed with min_prec=0 and consumed the outer suffix token, e.g. `'>>'` in `b+=expr (',' b+=expr)* '>>' c=expr`.",
+        "reason": "The top-level-only stamping of `stamp_lr_self_ref_min_prec` predates the culprit, which says it mirrors the existing `compute_lr_self_ref_prec` emitter logic. The culprit only extended that same top-level limitation to the scan side and `variant_id`, so it carried an older gap into the GIR rather than creating it. Its new walkers visibly match only top-level `RuleCall` elements, so a reviewer could have spotted the missing nested case."
+      },
+      "error": null
+    },
+    {
+      "fix": 1222,
+      "culprit": 948,
+      "share": 1,
+      "lines": 5,
+      "addsTest": false,
+      "title": "fix(kiln): demote per-file regeneration notice to debug",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Every regenerated generator output file raised a Warning-severity diagnostic, which flooded output with per-file warnings after an ordinary generator edit.",
+        "reason": "The fix only lowers the diagnostic's severity from Warning to Debug, a noise and policy adjustment rather than a correction of wrong behaviour. The culprit plainly added `emit_generated_regenerated_warning` with `Severity::Warning`, as a deliberate and visible design choice."
+      },
+      "error": null
+    },
+    {
+      "fix": 1223,
+      "culprit": 281,
+      "share": 0.6,
+      "lines": 5,
+      "addsTest": true,
+      "title": "fix(zlib): decode gzip FNAME/FCOMMENT as UTF-8",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "inflate_get_gzip_header converted each FNAME/FCOMMENT byte to its own char (Latin-1 style), while gzip_compress_with_header wrote the names' UTF-8 bytes, so non-ASCII names and comments came back as mojibake.",
+        "reason": "The culprit added both the writer (emitting `get_byte` UTF-8 bytes) and the byte-as-char `bytes_to_string` reader in the same diff. A reviewer could see the encode/decode mismatch for multi-byte characters; later edits only added a FIXME and swapped `append` for `push`."
+      },
+      "error": null
+    },
+    {
+      "fix": 1240,
+      "culprit": 996,
+      "share": 0.73,
+      "lines": 1173,
+      "addsTest": true,
+      "title": "fix(synthesis): cm_binding boundary bug fixes + migrate walkers to TirVisitor",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Lifting signed CM s8/s16 values used zero-extending loads, so -1 became 255/65535. The record stream-read discovery walker also missed reads nested in if-expressions, leaving a dangling call to a binding function that was never synthesized.",
+        "reason": "The culprit PR is a pure mechanical split of cm_binding.rs into submodules, so the faulty lines were only moved into new files, not authored there. The defects predate it."
+      },
+      "error": null
+    },
+    {
+      "fix": 1242,
+      "culprit": 1006,
+      "share": 0.86,
+      "lines": 36,
+      "addsTest": true,
+      "title": "fix(gale): two Stage A lexer bugs (EOF-suffix rule priority, channel tokens)",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "A keyword candidate was admitted to the classifier shortcut even when a carrier rule declared before it could match the same text, so that earlier rule's match was mis-tagged as the keyword; separately, `to_lexer_string` dropped non-default-channel tokens.",
+        "reason": "Before the culprit, every keyword candidate was admitted unconditionally, so the priority mis-tagging already existed. The culprit only added a reachability filter that narrowed which candidates are admitted, and it never touched `to_lexer_string`."
+      },
+      "error": null
+    },
+    {
+      "fix": 1271,
+      "culprit": 1231,
+      "share": 1,
+      "lines": 10,
+      "addsTest": false,
+      "title": "fix(hooks): reconcile vendor/wasmtime to pinned commit every session",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": false,
+        "defect": "The setup hook only ran `git submodule update` when vendor/wasmtime/Cargo.toml was missing, so a populated checkout at the wrong commit (the fork's branch tip instead of the pinned gitlink) was never reconciled and builds used a drifted wasmtime.",
+        "reason": "The culprit added the `[ ! -f vendor/wasmtime/Cargo.toml ]` guard that skips syncing an existing but stale checkout, and the fix removes it and adds `--force`. That guard looks like a sensible idempotence check in the diff; the problem only shows up once you know the remote container provisions submodules at the branch tip rather than the pinned SHA."
+      },
+      "error": null
+    },
+    {
+      "fix": 1299,
+      "culprit": 802,
+      "share": 1,
+      "lines": 114,
+      "addsTest": false,
+      "title": "fix(jco): run example/hello.wado on upstream jco b1f93c27",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "No defect in the culprit: the shim and the jco patch worked against the pinned jco commit, and the fix ports them to a newer upstream jco whose async lowering now expects a Promise from `writeViaStream`.",
+        "reason": "The fix is a dependency upgrade: it bumps the submodule, rebases `vendor/jco.patch`, switches the build to pnpm and adds `--no-wasi-shim`. The `Promise.resolve` change answers new upstream behaviour, not a mistake in the culprit's code for the jco version it targeted."
+      },
+      "error": null
+    },
+    {
+      "fix": 1307,
+      "culprit": 509,
+      "share": 0.67,
+      "lines": 6,
+      "addsTest": false,
+      "title": "fix(benchmark): fixed header/legend/axis on combined benchmark pages",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "When the combined benchmark chart scrolled horizontally, the chart title, legend and y-axis scrolled out of view with it, because they were drawn inside the canvas.",
+        "reason": "The fix is mainly a UX enhancement: it adds an HTML title, an HTML legend and a y-axis overlay, plus a new wasm-size page. The horizontal scroller that caused the problem (PX_PER_POINT and the scroll container) came from a later change; the culprit's chart had no scrolling at all."
+      },
+      "error": null
+    },
+    {
+      "fix": 1313,
+      "culprit": 1307,
+      "share": 1,
+      "lines": 7,
+      "addsTest": false,
+      "title": "fix(benchmark): render wasm-size graphs and serialize gh-pages writes",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The wasm-size combined page drops every benchmark name that lacks a ' (-Ox)' suffix, and wasm-size programs carry no such suffix, so no graphs are rendered.",
+        "reason": "The culprit created wasm-size-index.html with grouping logic copied from the runtime page, which skips unsuffixed entries as 'legacy data'. That leaves the wasm-size page empty. A reviewer who knows wasm-size names have no -O suffix could flag the skip, though that knowledge comes from outside this diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1329,
+      "culprit": 1210,
+      "share": 0.71,
+      "lines": 7,
+      "addsTest": true,
+      "title": "fix(compiler): attribute method-signature use→def edges to the owning module",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "While resolving a foreign method's signature, `lookup_method_info` recorded use→def edges keyed under the consumer module instead of the owning module, so colliding AstIds clobbered real edges and live functions were wrongly pruned.",
+        "reason": "The culprit only moved the `references` map from an `Rc<RefCell>` field into `ModuleSemantics::bindings`. Keying uses by `current_module_source` and recording during method-info lookup already existed before it, so it did not introduce the mis-attribution, and nothing in its diff reveals the issue."
+      },
+      "error": null
+    },
+    {
+      "fix": 1331,
+      "culprit": 579,
+      "share": 1,
+      "lines": 1,
+      "addsTest": true,
+      "title": "fix(compiler): infer trailing type params on a partial turbofish",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "When a call gave only some of its type arguments explicitly (a partial turbofish), inference was skipped entirely, so trailing type params stayed unsubstituted and caused a type-mismatch error or an 'unsubstituted TypeParam' codegen panic.",
+        "reason": "The culprit added argument-based inference only for calls with no explicit type args. Before it there was no inference at all, so partial turbofish calls were already left with unbound trailing params; the culprit extended inference without introducing the failure, and the blamed `if type_args.is_empty()` line is an incomplete feature rather than new wrong behaviour."
+      },
+      "error": null
+    },
+    {
+      "fix": 1345,
+      "culprit": 1344,
+      "share": 0.96,
+      "lines": 28,
+      "addsTest": true,
+      "title": "fix(wir): guard representation-crossing casts; perf: IEEE bit assembly for wide-int float conversions",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "No actual defect: the culprit's power-of-two scaling loops in u128::as_f64/as_f32 already gave correctly rounded results, and the fix swaps them for direct IEEE bit assembly purely for performance.",
+        "reason": "The blamed lines are the scaling loops, which are rewritten for speed with the same behaviour. The other change, a WIR assertion that rejects reference↔scalar pass-through casts, is defensive hardening and does not touch culprit code."
+      },
+      "error": null
+    },
+    {
+      "fix": 1352,
+      "culprit": 1351,
+      "share": 0.82,
+      "lines": 165,
+      "addsTest": true,
+      "title": "fix(compiler): dispatch concrete-generic trait impls to the correct module",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Concrete impls on a generic head (`impl Tag for List<Token>`) were indexed and dispatched under the AST's unqualified argument spelling, and module qualifiers were stripped at lookup. Two modules' `impl Tag for List<Token>` with distinct `Token` types therefore collided, and calls through a generic bound were routed to the wrong module's impl.",
+        "reason": "The culprit added `instantiated_type_name` (bare AST names) and the `simplify_generic_type_args` fallbacks that deliberately drop module qualifiers. The fix removes exactly these and replaces them with qualified resolved names. A reviewer could see that stripping qualifiers makes same-named types from different modules indistinguishable."
+      },
+      "error": null
+    },
+    {
+      "fix": 1370,
+      "culprit": 1350,
+      "share": 0.54,
+      "lines": 41,
+      "addsTest": true,
+      "title": "fix(cm): make all wasi:cli/exit functions work",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The compiler crashed (ICE) when lowering a unit-payload `Result<(), ()>` argument for `wasi:cli/exit#exit`, so `exit_success`/`exit_error` could not be used.",
+        "reason": "The culprit only added TODO comments documenting the existing ICE and enabled the exit-with-code linker option. The buggy compiler lowering and the `Exit::exit(Ok(()))` calls predate it, so the blamed lines are documentation, not the cause."
+      },
+      "error": null
+    },
+    {
+      "fix": 1379,
+      "culprit": 897,
+      "share": 1,
+      "lines": 2,
+      "addsTest": false,
+      "title": "fix(kiln): don't double-stamp the generated header",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": false,
+        "defect": "The Kiln driver always prepended a canonical `#![generated]` header to every generator output, so a generator that stamps its own header (e.g. Gale) ended up with two headers and an overridden `by` attribution.",
+        "reason": "The culprit wrote the unconditional header prepend in `execute` that the fix makes conditional on `has_generated_marker`. Nothing in the culprit's diff suggests generators would emit their own header (that came later with Gale), so a reviewer could not reasonably have flagged it then."
+      },
+      "error": null
+    },
+    {
+      "fix": 1422,
+      "culprit": 1198,
+      "share": 0.64,
+      "lines": 72,
+      "addsTest": true,
+      "title": "fix(cli): share Kiln generator AOT cache across a `wado test` run",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "No functional defect: each per-fixture compiler host in a `wado test` run kept its own Kiln component cache, so a shared generator was AOT-compiled once per fixture instead of once per run, which was slow but correct.",
+        "reason": "The fix is a performance optimization that hoists the per-host cache into a shared `Arc<KilnComponentCache>`, and no crash, wrong result or hang is corrected. The culprit's per-host cache was a deliberate, correct design scoped to a single pipeline run, and it only moved lines the fix later refactored."
+      },
+      "error": null
+    },
+    {
+      "fix": 1425,
+      "culprit": 829,
+      "share": 0.91,
+      "lines": 754,
+      "addsTest": true,
+      "title": "fix(cm): fix Future&lt;Result&lt;(), ErrorCode&gt;&gt; read ICE and unify future-read on the shared CM lift",
+      "verdict": null,
+      "error": "the culprit diff is empty"
+    },
+    {
+      "fix": 1435,
+      "culprit": 994,
+      "share": 0.52,
+      "lines": 23,
+      "addsTest": true,
+      "title": "fix: keep cross-module fn-param closure specializations distinct",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Closure fn-param specialization keyed the callee map and FnParamSpecKey on the bare function name, so same-named functions from different modules were conflated, which leaked types across modules and produced invalid Wasm.",
+        "reason": "The culprit is a refactor that ported the walks to visitors and reworded comments. The bare-name `func_by_name` map and the `callee_name`-only key already existed before it and were only moved, so the culprit did not introduce the defect."
+      },
+      "error": null
+    },
+    {
+      "fix": 1436,
+      "culprit": 1419,
+      "share": 0.91,
+      "lines": 4699,
+      "addsTest": true,
+      "title": "fix(kiln): resolve inline-clause paths relative to the declaring file",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Inline Kiln `from`, `inputs` and `output_dir` paths were resolved against the manifest root instead of the declaring .wado file, so consumers in different directories could read the wrong schema or overwrite each other's default output dirs.",
+        "reason": "The faulty path lowering lives in `kiln/inline.rs` (`InvocationPath::normalize(&use_decl.source)` etc.), which the culprit did not touch. The blamed culprit lines are mostly example consumers whose `output_dir` workarounds and committed generated files the fix deletes, plus transitive-harvest plumbing that exposed the bug but did not write the wrong resolution."
+      },
+      "error": null
+    },
+    {
+      "fix": 1448,
+      "culprit": 1419,
+      "share": 0.69,
+      "lines": 48,
+      "addsTest": true,
+      "title": "fix: canonicalize local module identity so each file loads once",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "A module reached both directly and through a `../` chain that climbs above the entry directory and re-enters got two non-canonical loader identities, so it was loaded twice (duplicate symbols and type identities) and the Kiln redirect missed on one of the two paths.",
+        "reason": "The root cause is the loader's non-canonical `resolve_module_path` identity composition, which predates the culprit and is not in its diff. The culprit's CLI harvest only mirrored that existing scheme in its single-valued identity map, so its lines were blamed mainly because the fix rewrote them."
+      },
+      "error": null
+    },
+    {
+      "fix": 1484,
+      "culprit": 1326,
+      "share": 1,
+      "lines": 9,
+      "addsTest": true,
+      "title": "fix(compiler): treat `pub` as a liveness root, like `export`",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The liveness pass seeded only `export`/`#[export]`/world-export functions as production roots, so `pub` functions and globals with no in-package caller were falsely reported as dead (and gated out of reify).",
+        "reason": "The culprit created liveness.rs with the root condition `func.is_export || has_export_attr || world_export_names` and never seeded globals at all. The fix changes exactly that condition to `visibility.is_public()` and adds global seeding, and a reviewer could see that `pub` items were not treated as roots."
+      },
+      "error": null
+    },
+    {
+      "fix": 1506,
+      "culprit": 509,
+      "share": 1,
+      "lines": 1,
+      "addsTest": false,
+      "title": "fix(benchmark): order runtime graphs by latest run, retire legacy json/* series",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Graphs were ordered by first appearance in history, and benchmark series that had been retired (the old suffix-less json/* names) still got their own graphs.",
+        "reason": "The fix is a presentation change made after a later benchmark rename split json/* into ser/de series; it reorders graphs and hides retired series rather than correcting wrong output. The culprit's ordering-by-history behaviour was a reasonable design for the data that existed when it was written, so there was nothing defective for a reviewer to spot."
+      },
+      "error": null
+    },
+    {
+      "fix": 1529,
+      "culprit": 1528,
+      "share": 1,
+      "lines": 3,
+      "addsTest": false,
+      "title": "fix(vscode): restore extension name `wado`",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The culprit, a dependency-update chore, changed the extension's package `name` from `wado` to `wado-vscode`, which changes the VS Code extension ID (`wado-lang.wado` → `wado-lang.wado-vscode`) and breaks identity for installs, publishing and references.",
+        "reason": "The fix reverts exactly the `name` lines the culprit changed, while deliberately keeping the new `displayName`, so the extension ID itself was the problem. The rename is plainly visible in the culprit's package.json hunk and is out of scope for a lockfile/dependency update."
+      },
+      "error": null
+    },
+    {
+      "fix": 1579,
+      "culprit": 1468,
+      "share": 0.7,
+      "lines": 27,
+      "addsTest": true,
+      "title": "fix(publish): unblock releasing facade/types-only libraries; export marl escape helpers",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The compiler's `--lib` empty-export check rejected types-only data-model libraries, and marl's escape helpers were `pub` instead of `export`, so releasing those packages failed.",
+        "reason": "The real defects sit in wado-compiler's empty-lib check and package-marl, neither of which the culprit touched. The culprit's publish.rs lines only made `--dry-run` skip building, a choice it documented on purpose; the fix changes that design to add a CI safety net rather than correcting a bug the culprit introduced."
+      },
+      "error": null
+    },
+    {
+      "fix": 1583,
+      "culprit": 1580,
+      "share": 0.92,
+      "lines": 26,
+      "addsTest": true,
+      "title": "fix(gale): don't over-shadow a named single-literal lexer rule",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The gale lexer generator let an inline parser literal (e.g. '{') shadow a same-text named lexer rule. That dropped the rule's mode-push/pop commands, and it also removed the matcher for a same-literal rule living in a non-default mode.",
+        "reason": "The actual bug is in package-gale/src/lexer_gen.wado, which the culprit did not touch. The culprit only edited the example grammar to use named OPEN_BRACE/CLOSE_BRACE tokens, which looks like a workaround that the fix reverts to inline '{' '}' once the generator is corrected."
+      },
+      "error": null
+    },
+    {
+      "fix": 1585,
+      "culprit": 1526,
+      "share": 1,
+      "lines": 3,
+      "addsTest": false,
+      "title": "fix(cli): make dependency-cache write_atomic concurrency-safe",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "write_atomic named its temp file only by process id, so concurrent threads in one process writing the same cache path shared one temp file and could rename it out from under each other, causing failed writes.",
+        "reason": "The culprit added write_atomic with the pid-only temp name, and its comment claims concurrent-writer safety. A reviewer could notice that the pid does not tell apart threads within one process."
+      },
+      "error": null
+    },
+    {
+      "fix": 1601,
+      "culprit": 1597,
+      "share": 0.67,
+      "lines": 9,
+      "addsTest": true,
+      "title": "fix(format): preserve doc comments on trait associated types",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The formatter (unparse.rs) dropped leading doc comments on trait associated types and inserted a blank line between a doc comment and an attributed trait method, breaking round-trip and idempotence.",
+        "reason": "The culprit only added the Reflect trait declaration to traits.wado; its odd double blank lines are a symptom of the formatter bug, not its cause. The faulty unparse.rs logic is not in the culprit's diff, and the fix's traits.wado edit merely moves documentation onto the members."
+      },
+      "error": null
+    },
+    {
+      "fix": 1630,
+      "culprit": 1225,
+      "share": 0.72,
+      "lines": 145,
+      "addsTest": true,
+      "title": "fix(elaborator): once-eval compound assignment (#1179) and non-primitive index-key coercion (#1628)",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "Compound assignment `target OP= rhs` evaluated side-effecting sub-expressions of the target (e.g. `bump()` in `arr[bump()] += 1`) twice, and non-primitive index keys were not coerced to the Index impl's key type.",
+        "reason": "The culprit's new `reify_compound_assign` visibly walks the target AST twice, and its comment admits this. But issue #1179 predates the culprit (#1225), and the comment says it mirrors the existing elaborator, so the double evaluation was carried over rather than introduced; the key-coercion half lives in code the culprit didn't touch."
+      },
+      "error": null
+    },
+    {
+      "fix": 1638,
+      "culprit": 1635,
+      "share": 0.6,
+      "lines": 5,
+      "addsTest": false,
+      "title": "fix(cargo-cache): make the web container reuse CI's sccache compile cache",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The sccache cache key differed between the CI upload job and the container warm-cache build because their CARGO_* environment variables differed (the runner set CARGO_HOME, CARGO_TARGET_DIR and CARGO_INCREMENTAL, while the container leaked CARGO_HTTP_CAINFO and lacked those three), so the container's lookups missed the cache built by CI.",
+        "reason": "The culprit added both the runner env block and the warm-cache command, setting CARGO_* differently on each side, so every lookup missed. The env sets are visibly different in the diff, but recognizing that sccache hashes all CARGO_* vars into the cache key takes specialized knowledge."
+      },
+      "error": null
+    },
+    {
+      "fix": 1651,
+      "culprit": 1341,
+      "share": 0.56,
+      "lines": 77,
+      "addsTest": true,
+      "title": "fix(compiler): remove superlinear value-graph invalidation churn (Gale O3 OOM)",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": false,
+        "defect": "The value-graph builder rescanned each nested block's write set without caching and minted a fresh opaque for every written local on every loop, labeled-block or guard invalidation, so work and pool memory grew superlinearly and the Gale O3 build ran out of memory.",
+        "reason": "The culprit added the uncached recursive `collect_writes_in_*` walk and the invalidate-by-minting-fresh-opaque loops in `walk_loop`, `dirty_all_writes_in_block` and `walk_match_arms` that the fix replaces. Later code (`bump_call_effects`) probably made it worse, and the blowup only shows on large, deeply nested real-world inputs, so a reviewer would struggle to see it as an OOM bug from the diff alone."
+      },
+      "error": null
+    },
+    {
+      "fix": 1672,
+      "culprit": 1667,
+      "share": 1,
+      "lines": 12,
+      "addsTest": true,
+      "title": "fix(cm): skip a provider whose dependency was eliminated instead of panicking",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "When a provider's dependency was dead-code-eliminated and never added to dep_instances, compose_dependency_components bailed with 'no composed dependency imports provider interface' instead of skipping the unused provider, so compilation failed.",
+        "reason": "The culprit added the provider-wiring loop with the unconditional `if !wired { bail! }`, while dependencies are only instantiated when the import plan still references them. A reviewer could see the mismatch: providers are iterated unfiltered, but dep_instances is filtered by the plan."
+      },
+      "error": null
+    },
+    {
+      "fix": 1674,
+      "culprit": 1052,
+      "share": 0.75,
+      "lines": 12,
+      "addsTest": true,
+      "title": "fix(gale): terminate scan on mandatory-group mismatch; reject hidden/indirect left recursion",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "General and SimpleCst scan groups were always emitted `lenient`, so a mandatory alternation group that failed to match silently matched zero tokens. That let a rule's scan fall into its own recursive tail without consuming input, recursing until the stack was exhausted (e.g. `closure : ('||' | '|' '|') expr` on input `|`).",
+        "reason": "The culprit flipped `lenient: false` to `lenient: true` in `lower_general_scan_group` and `lower_simple_cst_scan_group` and added the lenient-only gate and fallthrough in `gen_scan_op_group`; the fix changes exactly those lines to be strict for scan-cyclic rules. A reviewer could see that making every mandatory group able to match zero tokens risks zero-consumption recursion. The same diff even notes that groups inside repeat bodies must stay strict to avoid 0-advance loops."
+      },
+      "error": null
+    },
+    {
+      "fix": 1680,
+      "culprit": 897,
+      "share": 1,
+      "lines": 5,
+      "addsTest": false,
+      "title": "fix(cli): tolerate concurrent removal in kiln output reconcile",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "walk_and_delete propagated NotFound errors from read_dir, the directory entries, file_type and remove_file, so a file or directory removed concurrently during output reconcile aborted the whole pipeline with an I/O error.",
+        "reason": "The culprit introduced walk_and_delete with bare `?` on every filesystem call and no NotFound tolerance, even though reconcile_outputs already treats a missing output_dir as non-fatal through a racy exists() check. A reviewer could have spotted the time-of-check/time-of-use race and the inconsistent handling of missing paths."
+      },
+      "error": null
+    },
+    {
+      "fix": 1697,
+      "culprit": 1396,
+      "share": 0.8,
+      "lines": 5,
+      "addsTest": true,
+      "title": "fix(gale): decide optionals in the op-only walker as the surface walker does",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The op-only walker (gen_repeat_body) emitted every greedy/non-greedy Optional as a plain one-token first-set check, so it ignored the lowered strategy (lookahead, scan guard, shape lookahead, `??` ATN). Optionals inside LR-suffix bodies were therefore mis-decided.",
+        "reason": "The culprit added gen_repeat_body with an `Optional => if first_check` arm, replacing the old gen_lr_suffix_helpers path that routed suffix repeats through gen_op_repeat's strategy-aware dispatch. Its own comment claims `??` 'never reaches here', yet `??` lowers to Plain. A reviewer comparing it against the surface walker's strategy match could spot that r.strategy is ignored for Optional."
+      },
+      "error": null
+    },
+    {
+      "fix": 1710,
+      "culprit": 1384,
+      "share": 0.5,
+      "lines": 14,
+      "addsTest": true,
+      "title": "fix(cm): reclaim linear memory at the synchronously-lifted export boundary",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Synchronously-lifted `--lib` exports were emitted without a `post-return` canonical option, and incoming string parameter buffers were never released, so every call leaked guest linear memory.",
+        "reason": "The culprit added the `sync_lift` path for `--lib` exports (core function returns lowered values directly), and the plan struct has no post-return slot, which creates the per-call leak the fix closes. A reviewer who knows the Canonical ABI could ask how an indirectly returned, realloc'd result gets freed, though it is an omission rather than a wrong line."
+      },
+      "error": null
+    },
+    {
+      "fix": 1713,
+      "culprit": 1710,
+      "share": 0.95,
+      "lines": 87,
+      "addsTest": true,
+      "title": "fix(cm): free the buffers a `task.return` payload owns",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Async exports returning through `task.return` never freed the linear-memory buffers lowered for the result payload, so every call leaked them. A mismatched `task return` value type was also never type-checked.",
+        "reason": "The culprit only added reclamation for the synchronous `post-return` path and left the async `task.return` path as it was, so it did not introduce this leak. The fix's blamed lines in `cm_free.rs` are a refactor of the culprit's helpers so the new flat-slot walk can reuse them."
+      },
+      "error": null
+    },
+    {
+      "fix": 1733,
+      "culprit": 1607,
+      "share": 0.69,
+      "lines": 86,
+      "addsTest": true,
+      "title": "fix(optimizer): sroa_param must not snapshot a boxed reference parameter",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "sroa_param treated a boxed `&T`/`&mut T` parameter (collapsed by boxing onto a by-value `Box<T>`) as a copy, and it only checked plain `MutRef` siblings. Scalarizing it into a call-time snapshot therefore lost writes made through aliasing siblings, by-value holders or closures.",
+        "reason": "The 'only reference candidates, only MutRef siblings' guard already existed in the pre-culprit `param_may_alias_sibling`; the culprit extended it with global-write and transitive-containment checks but did not create the boxed-ref blind spot. A careful reader could still see that the diff's own comments say both 'by-value candidate is already a copy' and that the pass unwraps the `Box<Scalar>` of `&T` params, which contradict each other."
+      },
+      "error": null
+    },
+    {
+      "fix": 1783,
+      "culprit": 1585,
+      "share": 0.5,
+      "lines": 24,
+      "addsTest": false,
+      "title": "fix(kiln): output reconciliation spares a staging temp",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Output reconciliation (`walk_and_delete`) treated a concurrent writer's in-flight `write_atomic` staging temp as an orphaned generated output, because the temp carries the generated header, and deleted it.",
+        "reason": "The culprit only changed the temp file's naming in cache.rs (pid plus a counter instead of pid alone); staging temps existed before it. The bug comes from kiln_driver publishing outputs through `write_atomic` while its reconciliation walk does not skip temps, and neither appears in the culprit diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1788,
+      "culprit": 1704,
+      "share": 0.54,
+      "lines": 112,
+      "addsTest": true,
+      "title": "fix(elaborator): let a trait-qualified call name a bound's implied supertraits",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Supertrait elaboration keyed traits by bare name and re-resolved the declaring module's supertrait spelling in the caller's frame, so an implied bound could resolve to a different same-named or aliased trait, report false ambiguities, or never be matched by a trait-qualified call.",
+        "reason": "The culprit added the name-keyed supertrait closure, `elaborate_bound_names` and the name-based `find_method_in_trait_bounds` that the fix rewrites to carry declaration keys. The culprit's own comment ('a name is the identity here too') flags the assumption, and its frame-mismatched resolution of supertrait names is visible in the diff, although the qualified-call filter itself came from a later change."
+      },
+      "error": null
+    },
+    {
+      "fix": 1797,
+      "culprit": 1566,
+      "share": 0.98,
+      "lines": 43,
+      "addsTest": true,
+      "title": "fix(gale): a parser literal is an alias for the lexer rule it duplicates",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "A parser literal that duplicated a lexer rule's whole-literal body was given its own anonymous token instead of aliasing the rule, unlike ANTLR4. This made `K`-led alternatives unreachable, dropped the rule's actions, and let `~X` complements miss the literal spelling.",
+        "reason": "The wrong token minting lives in the literal-collection and dedup pipeline that predates the culprit. The culprit's highlight `shadow` map only worked around that existing behaviour, and the fix deletes that workaround once aliasing makes it unnecessary."
+      },
+      "error": null
+    },
+    {
+      "fix": 1813,
+      "culprit": 1812,
+      "share": 0.73,
+      "lines": 30,
+      "addsTest": false,
+      "title": "fix(cache): decide the target restore on cargo's lock, and bound incremental state",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The target restore skipped whenever target/ already existed. That made it never run in resumed containers whose snapshot images already carry a target/, and its atomic-rename approach could not merge into an existing tree.",
+        "reason": "The culprit added the `existsSync(TARGET_DIR)` gate and the staging/rename logic. A reviewer could see that the mere existence of target/ was used as proof of an in-progress build, which is a heuristic that wrongly suppresses the restore."
+      },
+      "error": null
+    },
+    {
+      "fix": 1814,
+      "culprit": 729,
+      "share": 0.5,
+      "lines": 8,
+      "addsTest": true,
+      "title": "fix: stop the e2e suite failing tests for the machine's load",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The e2e harness shared one current-thread tokio runtime across tests and bounded guests only by wall-clock epoch deadlines, so tests failed spuriously when the machine was loaded.",
+        "reason": "The real defect is in the test harness (`common.rs` runtime sharing and epoch-only timeouts), which the culprit did not touch. The culprit's `payload == 2` loop is only generalised to `> STARTED` as hardening: the cancelled states can't arise because the code never cancels subtasks."
+      },
+      "error": null
+    },
+    {
+      "fix": 1848,
+      "culprit": 1838,
+      "share": 0.56,
+      "lines": 18,
+      "addsTest": true,
+      "title": "fix(elaborator): classify `as` cast operands by their ultimate base type",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The new unrelated-aggregate cast check classified the source by its surface type, recognizing only direct structs and tuples, and exempted any wide-int target. As a result, casts from variants, generic instances (e.g. `ArraySlice` → `List`) and newtypes of aggregates, as well as struct → i128-newtype casts, slipped through without the invalid-cast diagnostic.",
+        "reason": "The culprit added the `unrelated_aggregate` block with `tt.get(source_type)` on the non-base type and the `!wide_int(target_type)` exemption; the fix reclassifies by ultimate base type and drops that exemption. A reviewer could see the narrow Struct/tuple-only match and the missing newtype handling in the culprit diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1888,
+      "culprit": 1268,
+      "share": 0.55,
+      "lines": 71,
+      "addsTest": true,
+      "title": "fix(gale): balance a rule-argument `[...]`, and expose a grammar's capture vocabulary",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "`preceded_by_prequel_keyword` checks the already-emitted output text, so a `{` after a line comment, block comment or string ending in `tokens`/`options`/`channels` is wrongly kept as a grammar prequel instead of being stripped as an action body.",
+        "reason": "The culprit added `preceded_by_prequel_keyword`, which scans the output buffer that comments and strings are copied into verbatim; the fix replaces it with token-aware `prequel_open` tracking and adds a test for `// tokens\\n { act(); }`. The headline bracket-balancing issue came from a later switch to the non-nesting `scan_char_class`, since the culprit's own `[...]` scan nested, but the prequel bug is the culprit's and is readable from its diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 1900,
+      "culprit": 1899,
+      "share": 0.75,
+      "lines": 4,
+      "addsTest": false,
+      "title": "fix(wir): give each bulk array clone its own temporaries",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Bulk array clone temporaries were named only by element type index, so a same-typed bulk clone nested in the `len` operand overwrote the outer clone's `src`/`dst`/`len` locals between its store and its copy.",
+        "reason": "The per-type-index naming was already there before the culprit, which only wrapped the existing names in `unshadowed(...)` without changing their sharing between same-typed clones. A reader of the culprit diff sees a hygiene tweak, not the new arrival of a nested-clone collision."
+      },
+      "error": null
+    },
+    {
+      "fix": 1901,
+      "culprit": 1563,
+      "share": 0.6,
+      "lines": 5,
+      "addsTest": true,
+      "title": "fix(compiler): land or refuse a whole-value write through a `&mut` to a variant place",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "A `&mut` to a variant field or element is lowered as a detached box, so a whole-value write through it (e.g. `*p = v` in a callee) silently landed in the copy instead of the place.",
+        "reason": "The culprit only added the confinement analysis and its call site in plan.rs, and the fix merely reuses that call graph. The lost-write bug comes from how `&mut` to a variant place is boxed, which the culprit did not touch, so nothing in its diff points at it."
+      },
+      "error": null
+    },
+    {
+      "fix": 1905,
+      "culprit": 1822,
+      "share": 0.6,
+      "lines": 5,
+      "addsTest": false,
+      "title": "fix(optimizer): price a cast by what it emits, and walk value-position blocks",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The inline cost walk charged one instruction for every cast, even same-Wasm-shape casts such as char→u32 that emit nothing. This overpriced some callees and held them back from inlining; separately, condition_implication never visited blocks in value position.",
+        "reason": "These are optimization-heuristic refinements (missed inlining and missed condition-implication opportunities), not incorrect program behaviour. The flat cast charge was written by the culprit's new instruction-based cost model and is plainly visible in its diff, though the old expression-count model also charged casts."
+      },
+      "error": null
+    },
+    {
+      "fix": 1915,
+      "culprit": 1202,
+      "share": 0.65,
+      "lines": 130,
+      "addsTest": true,
+      "title": "fix(lsp): keep the receiver's argument slot in path-form parameter hints",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "For path-form method calls like `Scale::scaled(&p, 2, 3)`, the receiver is passed as `args[0]`, but self params were filtered from the parameter-name list, so every label shifted one argument left (`factor:` on `&p`, `bias:` on `2`).",
+        "reason": "The culprit added `filter_non_self_param_names` and applied it to static-method and path-form calls, where the receiver occupies a positional slot. Its doc comment wrongly claims only `SelfKind::None` params can appear as positional arguments, and a reviewer could spot the mismatch from `hint_static_method_call_args` sharing the dot-form filtering."
+      },
+      "error": null
+    },
+    {
+      "fix": 1957,
+      "culprit": 1955,
+      "share": 1,
+      "lines": 2,
+      "addsTest": false,
+      "title": "fix(optimizer): use the receiver verdict alone for a call's receiver slot",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "For the receiver slot of a call, the culprit OR-ed the declared `arg.is_mut` with the receiver-immutable verdict, so a `&mut self` method whose body provably never writes through the receiver was still treated as borrowing it in a loop.",
+        "reason": "The culprit's line `arg.is_mut || (receiver_borrowed && i == 0)` lets the declared mutability override the verdict, which a reviewer could spot. But the effect is only a conservative missed optimization (extra invalidation), not wrong output, so this is a precision improvement rather than a correctness fix."
+      },
+      "error": null
+    },
+    {
+      "fix": 1967,
+      "culprit": 899,
+      "share": 0.51,
+      "lines": 224,
+      "addsTest": true,
+      "title": "fix(kiln): point every options diagnostic at the key it names",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Kiln options-validation diagnostics carried no span. When the driver re-validated an inline clause's `raw_options`, errors landed on line 1 of the file instead of on the offending key, and the LSP never reported options errors at all.",
+        "reason": "The culprit wrote the span-less `validate`, but at that point no key spans existed in `AttrValue`. Its inline caller back-filled the `use` clause's span, and its driver path skipped inline invocations entirely. The line-1 mislocation only appears once a later change re-validates inline `raw_options` in the driver, so nothing in the culprit's diff was visibly wrong."
+      },
+      "error": null
+    },
+    {
+      "fix": 2013,
+      "culprit": 2011,
+      "share": 0.86,
+      "lines": 83,
+      "addsTest": false,
+      "title": "fix(nir): a census that walks the body sees the value pool's extraction sources",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Whole-body and subtree censuses (address-taken locals, usage counts, loop/return/bind searches, etc.) walked only skeleton children. They skipped the expressions a promoted operand names as its extraction source, so live nodes were treated as absent.",
+        "reason": "The culprit only rewrote each pre-existing manual `for_each_child` stack walk into the equivalent `for_each_node_under` / `find_in_nodes_under` helper, so the skeleton-only coverage was the same before and after. The blame lands on those lines because of the refactor, not because the culprit created the gap."
+      },
+      "error": null
+    },
+    {
+      "fix": 2014,
+      "culprit": 1956,
+      "share": 1,
+      "lines": 7,
+      "addsTest": true,
+      "title": "fix(ownership): a binding read through a reference field keeps its own copy",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The share rule matched writes to reads only by root local, so a read or write through a reference-typed field (a borrowed path whose root is the holder, not the referent) let a binding alias storage that was later mutated under another name.",
+        "reason": "The root-keyed comparison (`m.path.root != path.root || write_cannot_reach`) and the `compute_ref_targets` filter already existed before the culprit, which only restructured them into the liveness-based walk. The missing `through_borrow` handling was a pre-existing gap, not something the culprit's lines added."
+      },
+      "error": null
+    },
+    {
+      "fix": 2053,
+      "culprit": 524,
+      "share": 0.65,
+      "lines": 241,
+      "addsTest": true,
+      "title": "fix(compiler): a global initializer is a body — templates expand in one, and its closures' captures move with it",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "Template expansion skipped global initializers, so a template literal or an `assert` inside one reached pattern lowering unexpanded and hit `unreachable!`; separately, merging initializers into `$initialize_module` renumbered locals without shifting closure captures' `outer_index`, which produced invalid Wasm.",
+        "reason": "The culprit is a refactor that extracts existing lowering code (including `renumber_locals_in_expr`) into new files, so the capture-shift omission was moved there rather than introduced. The main defect, template expansion not visiting globals, lives in `template.rs`, which the culprit never touches."
+      },
+      "error": null
+    },
+    {
+      "fix": 2103,
+      "culprit": 1094,
+      "share": 0.82,
+      "lines": 28,
+      "addsTest": true,
+      "title": "fix(cli): a dev `wado test` run starts with its results, not a panic",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "In a dev build, `wado test`'s prewarm workers reached the stdlib before `install_dev_stdlib` had run, so each worker panicked, and `let _ = handle.await` silently discarded those panics.",
+        "reason": "The root cause is the later dev-stdlib installation requirement, which the culprit predates; at the time of the culprit, prewarming the snapshot was safe. The culprit only supplied the prewarm call site and the panic-swallowing await, so a reviewer of that diff could not have foreseen the missing-install panic."
+      },
+      "error": null
+    },
+    {
+      "fix": 2107,
+      "culprit": 2105,
+      "share": 0.9,
+      "lines": 30,
+      "addsTest": true,
+      "title": "fix(kiln): diagnose a duplicate public type name instead of asserting",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Geas's `infer` never checked the graph's declared outputs, so an output no node produced was silently left out of the emitted boundary, and a declared output shape that disagreed with the produced one passed unreported.",
+        "reason": "The culprit's `emit_boundary` returns Ok for a shapeless output and its comment claims 'the caller reports that first', yet the culprit's `infer` loops only over inputs, initializers and nodes, never outputs; a reviewer could spot that mismatch in the diff. The headline compiler fix (duplicate public type asserting under kiln) touches files outside the culprit, but the blamed geas lines carry a real missed diagnostic the fix corrects."
+      },
+      "error": null
+    },
+    {
+      "fix": 2131,
+      "culprit": 1704,
+      "share": 0.87,
+      "lines": 23,
+      "addsTest": true,
+      "title": "fix(elaborator): diagnose a bound naming no trait, wherever it is written",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "A bound naming no declared trait, or naming a non-trait declaration, was silently accepted on functions, structs, variants, impls, methods, associated types and packs; only supertrait clauses were checked.",
+        "reason": "The culprit added the supertrait feature and its narrow UnknownSupertrait check, which the fix generalises and replaces. The missing check in every other bound position predates the culprit and is not something its lines introduced, so blame lands on the replaced supertrait code rather than the cause."
+      },
+      "error": null
+    },
+    {
+      "fix": 2194,
+      "culprit": 1433,
+      "share": 0.53,
+      "lines": 694,
+      "addsTest": true,
+      "title": "fix(gale): parse open-ended and nested LR suffixes as the ANTLR4 jar does; test codegen by running the parser",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "A self-reference nested in an LR suffix subrule was given a fixed precedence floor (`conflict_min` when an operator could follow) instead of ANTLR4's plain `e[0]`, so inputs like `a,a>>a,a>>a` parsed differently from ANTLR4. Separately, a suffix was routed to the ATN only when its static first set was empty, so open-ended suffixes such as `A? .` or `(w | A)` were dispatched statically and mis-parsed.",
+        "reason": "The culprit wrote the follow-aware floor stamping (`stamp_op_follow`/`stamp_scan_follow`, `build_lr_suffix_element`) and the empty-`suffix_first`-only ATN-class test; the fix deletes both and replaces them with plain calls and an open-ended class check. The culprit's own comments state the floor rule, and a reviewer who knows ANTLR4 rewrites only direct self-references could have flagged it, as well as the gap where a suffix has a first set yet still admits every token."
+      },
+      "error": null
+    },
+    {
+      "fix": 2209,
+      "culprit": 2206,
+      "share": 1,
+      "lines": 1,
+      "addsTest": false,
+      "title": "fix(loam): hf2loam names a malformed header, and next_token asserts its input",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "hf2loam's readHeader and Model::next_token did not validate their inputs: a short or truncated checkpoint, and empty, overlong or out-of-vocabulary token lists, went unchecked, so they failed later with generic errors instead of named ones.",
+        "reason": "The fix is input-validation hardening that replaces errors which would already be raised (a DataView RangeError, a JSON.parse failure, an indexing panic) with named messages, plus a CI test task, so it is not a correction of wrong behaviour. The culprit only added next_token without these preconditions, which is a missing nicety rather than an introduced bug."
+      },
+      "error": null
+    },
+    {
+      "fix": 2253,
+      "culprit": 1520,
+      "share": 0.53,
+      "lines": 186,
+      "addsTest": true,
+      "title": "fix: closures have no Display, and a closure local used as a method receiver no longer traps",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The closure safety analysis kept a closure local specialised as the receiver of any method call, so non-Inspect methods (inherent or trait) received a `&$Closure_N` where they expected a canonical closure and trapped; closures also wrongly accepted `Display`.",
+        "reason": "The trap comes from `ClosureSafetyAnalyzer` setting `in_callee_position = true` for every method receiver, and that code is not in the culprit's diff. Treating closure `Display` as `Inspect` already existed in the redirect before the culprit, which only restructured it into the delegate table that the fix's blame lands on."
+      },
+      "error": null
+    },
+    {
+      "fix": 2271,
+      "culprit": 2085,
+      "share": 0.83,
+      "lines": 6,
+      "addsTest": true,
+      "title": "fix(run-webgpu): make on_submitted_work_done wait without hanging, on wasi-webgpu-wasmtime 0.3.1",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The host's `gpu-queue.on-submitted-work-done` from wasi-webgpu-wasmtime awaited a wgpu callback without ever polling a device, so a guest waiting on it hung forever.",
+        "reason": "The hang lives in the third-party crate's implementation; the culprit only added the dependency pin in Cargo.toml and Cargo.lock, and those are the only blamed lines. Nothing in those manifest and lockfile lines reveals the upstream bug to a reviewer."
+      },
+      "error": null
+    },
+    {
+      "fix": 2273,
+      "culprit": 1903,
+      "share": 0.76,
+      "lines": 1982,
+      "addsTest": true,
+      "title": "fix(core:temporal)!: follow TC39 Temporal as the specification",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The Temporal port added by the culprit diverged from TC39 Temporal in several observable ways: duration digits overflowed and wrapped silently in `read_duration_number`, Instant rounding before the epoch treated `Trunc`/`Expand` by sign rather than as-if-positive, there was no range checking on instants or durations, PlainDateTime used the wrong default largest unit, and the HTTP-date weekday was never validated.",
+        "reason": "Though framed as a spec-conformance rewrite, the fix corrects concrete wrong results in code the culprit wrote wholesale (Duration, rounding, parsers, plain types). Several of these, such as the unchecked `value * 10` accumulation and the sign-based `round_to_increment`, are directly readable in the culprit diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 2277,
+      "culprit": 1351,
+      "share": 0.54,
+      "lines": 180,
+      "addsTest": true,
+      "title": "fix(core:json)!: settle the points where JSON readers disagree, and state each one",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": false,
+        "visible_in_diff": true,
+        "defect": "Integer reads of tokens with a fraction or exponent went through f64, so values past 2^53 (e.g. `1234567890123456789e0` as i64) were silently rounded, i128/u128 rejected exponent forms, and float tokens past the type's range read as infinity instead of an Overflow error.",
+        "reason": "The culprit consolidated and range-checked the existing f64-detour integer paths and the infinity-returning float path, but the code it replaced already went through f64 and already returned infinity, so it carried the lossy design forward rather than introducing it. The detour is plainly visible in its `checked_int_f64` / `scanned_to_f64` code."
+      },
+      "error": null
+    },
+    {
+      "fix": 2293,
+      "culprit": 2175,
+      "share": 0.81,
+      "lines": 239,
+      "addsTest": true,
+      "title": "fix(grog): hold decode, encode and schema checks to the protobuf spec",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Grog's new runtime and emitter, added by the culprit, depart from the protobuf spec in several ways. A map entry with a closed-enum key the type does not hold makes `unwrap()` panic in `Reader::map`. Re-reading a oneof message member copies the held value each time, which is quadratic. Sizes are counted in `i32` and can wrap. Open enums with a nonzero first value, closed-enum or message fields with implicit presence, and oneof name collisions are not refused.",
+        "reason": "These lines all appear as new code in the culprit's diff. `KS::take(self)?.unwrap()` sits right next to the `None` handling for the value, and the oneof arm visibly rebuilds `v` from `held` by value, so a reviewer could have flagged both."
+      },
+      "error": null
+    },
+    {
+      "fix": 2289,
+      "culprit": 2150,
+      "share": 0.51,
+      "lines": 442,
+      "addsTest": true,
+      "title": "fix(opt): keep a field read through a reference sound across calls that may write it",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Field reads through a reference were treated as unchanged across calls that can write the pointee without taking the reference (through a global, an opaque/host call, or a `&mut` held in another argument), so bindings, conditions and forwarded loads went stale and were miscompiled.",
+        "reason": "The culprit added condition_implication's write model, where `Write::Call` hits only `mut_escaped` locals even though `reachable_elsewhere` admits a reference's pointee is not frame-owned. It also added heap_effect's summaries, which record no `elsewhere` reads or writes for an opaque callee; the fix corrects both, along with the value graph's matching invalidation. A reviewer reading `write_hits`/`call_summary` could see that a call writing a global aliased by a `&P` parameter is not counted."
+      },
+      "error": null
+    },
+    {
+      "fix": 2310,
+      "culprit": 1545,
+      "share": 0.79,
+      "lines": 111,
+      "addsTest": true,
+      "title": "fix(marl): stop the formatter from rewriting paragraphs into other blocks",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The block parser let any list marker (e.g. a wrapped `2010) b` line), a link reference definition, or any HTML-tag-like line interrupt an open paragraph, and blockquotes had no lazy continuation, so the formatter rewrote paragraph text into lists, ref defs, or HTML blocks.",
+        "reason": "The culprit wrote parse_blocks, which checks ref-def, list-marker and HTML starts before falling through to paragraph text regardless of whether a paragraph is open. It also wrote interrupts_paragraph without CommonMark's ordered-marker-must-be-1 and non-empty-item rules. A reviewer comparing against CommonMark's paragraph-interruption rules could spot this in the dispatch order."
+      },
+      "error": null
+    },
+    {
+      "fix": 2342,
+      "culprit": 2335,
+      "share": 0.5,
+      "lines": 58,
+      "addsTest": true,
+      "title": "fix: an effect inside a generic newtype's argument reaches the effect check",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Effect parameters written inside a generic newtype's type arguments are never found: `effect_params_in` skips `Newtype` arguments and `zip_rows` strips the newtype to its base. So those parameters are neither instantiated nor bound, wrongly accepting code (a missed effect diagnostic) or rejecting newtype instances that differ only in their rows.",
+        "reason": "The culprit added `effect_params_in` and `zip_rows`, along with per-use effect-variable instantiation. It handled `GenericInstance` and `GenericResource` arguments but not `Newtype` ones, so the newly minted rows went unreached through a newtype. A reviewer could see that `Newtype` (which carries `type_args`) is missing from the match in `effect_params_in` and is flattened by `representation_head` in `zip_rows`."
+      },
+      "error": null
+    },
+    {
+      "fix": 2351,
+      "culprit": 1563,
+      "share": 0.5,
+      "lines": 254,
+      "addsTest": true,
+      "title": "fix(compiler): a by-value argument keeps its copy wherever the call may write it",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "A by-value argument passed to a confined parameter skipped its defensive copy whenever it did not alias a `&mut` argument of the same call, even though a later argument (by assignment, a closure, a kept `&mut`, a global) or the callee could write that storage before the callee read it.",
+        "reason": "The culprit added `arg_confined`, `call_mut_roots` and `AliasComponents`, which elide the copy using only the roots of sibling `&mut` parameters, so writes made any other way are missed and the callee reads mutated values. A reviewer could see that the check ignores assignments and other writes inside later arguments, which the fix replaces with a points-to based write check."
+      },
+      "error": null
+    },
+    {
+      "fix": 2358,
+      "culprit": 1707,
+      "share": 0.56,
+      "lines": 260,
+      "addsTest": true,
+      "title": "fix(globals)!: reject every global initializer cycle an execution may take",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "Global initializer dependency analysis let call-inferred edges silently yield when they would close a cycle, and sorted modules independently while silently picking one module on a cross-module cycle. Real initializer cycles (through calls, across modules, or between modules) therefore compiled and read placeholders at runtime instead of being rejected.",
+        "reason": "The culprit added the `depends_on` yield rule for via-call edges and the `sort_modules_by_dependency` fallback `ready.unwrap_or(0)`, both of which the fix removes. Its own comments state the edges yield rather than report a cycle and that a stuck module is simply taken, so a reviewer could see that genuine cycles would be accepted."
+      },
+      "error": null
+    },
+    {
+      "fix": 2387,
+      "culprit": 2345,
+      "share": 0.78,
+      "lines": 55,
+      "addsTest": true,
+      "title": "fix: a deferred local whose reference a call may keep compiles to valid Wasm",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "In-place-assignment detection counted any reference to a local taken anywhere in the body, so an assignment that runs before any reference exists (e.g. the first assignment to a `let x: P;` local) was treated as writing into existing storage, which produced invalid Wasm.",
+        "reason": "The culprit added `in_place_assigns` and `unanalyzed_in_place_assigns`, which decide 'held' from flow-insensitive sets of referenced locals. The fix makes this decision flow-sensitive by recording where each reference is first taken; a reviewer could notice that the culprit's `Borrowed` scan ignores whether a reference precedes the assignment site."
+      },
+      "error": null
+    },
+    {
+      "fix": 2399,
+      "culprit": 2217,
+      "share": 0.8,
+      "lines": 5,
+      "addsTest": true,
+      "title": "fix(test): end the run by naming every failed test",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "The end-of-run recap named only compile and load failures, not failed tests or unexpectedly passing TODO tests, and it was printed before the coverage summary rather than last.",
+        "reason": "The fix mainly extends the recap to list failed tests, which is an enhancement; the blamed coverage-finish lines in the culprit were only reordered so the recap prints after them. The culprit's diff does not show the recap code, so a reviewer of it could not have seen an ordering defect."
+      },
+      "error": null
+    },
+    {
+      "fix": 2407,
+      "culprit": 1023,
+      "share": 0.51,
+      "lines": 72,
+      "addsTest": true,
+      "title": "fix(serve): a service reaches the host network, as run and test do",
+      "verdict": {
+        "is_defect_fix": false,
+        "introduced_by_culprit": false,
+        "visible_in_diff": false,
+        "defect": "`wado serve` built its WasiState without granting host network access, so a service's `wasi:sockets` calls were denied while `wado run` and `wado test` could reach the network.",
+        "reason": "The deny-all stance for serve was a documented, deliberate choice (the removed comment says operators opt in explicitly), so the fix reverses a policy rather than repairing a malfunction. The culprit only split the constructors before any network grant existed; the asymmetry came from a later PR that added `inherit_network` to `build()` alone, so it is not visible in the culprit's diff."
+      },
+      "error": null
+    },
+    {
+      "fix": 2424,
+      "culprit": 2423,
+      "share": 0.95,
+      "lines": 66,
+      "addsTest": true,
+      "title": "fix: T::method checks every argument against its settled parameter",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "`T::method(...)` skipped the type check for the receiver argument, for parameters instantiated by the turbofish, and for parameters spelled `Self` or `T`, so mistyped arguments reached codegen and produced an invalid module.",
+        "reason": "The culprit added the argument checking for `T::method`. It sliced off the receiver and checked only the parameters that carry no type param, before the method type args were bound, which skips exactly the cases the fix covers. A reviewer could see in that diff that the receiver is never checked and that `Self`/turbofish-bound params are excluded by `contains_type_param`."
+      },
+      "error": null
+    },
+    {
+      "fix": 2449,
+      "culprit": 2395,
+      "share": 0.67,
+      "lines": 18,
+      "addsTest": true,
+      "title": "fix: assign a whole affine aggregate without trapping, and refuse a reference the assignment leaves stale",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "The dangling-reference check let a reference stay readable after an assignment refilled a moved affine local or replaced the old object it pointed into, because `clear_place` erased the move record that `owner_gone` relied on and treated no assignment as dropping what a reference names.",
+        "reason": "The culprit added the reference/holder tracking, `owner_gone` (which decides staleness only from `flow.moved`), and `clear_place` (which deletes those move records on assignment), so it introduced the missed diagnostic. A careful reviewer could see in that diff that an assignment wipes the very evidence `owner_gone` checks, and does nothing to mark held references as stale."
+      },
+      "error": null
+    }
+  ]
+}
