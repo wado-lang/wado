@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792974778097,
+  "lastUpdate": 1792984351435,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71073,6 +71073,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/73611c2bfc0ed5050b73c93222f1400df359b76b"
         },
         "date": 1792974777373,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3048,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7394,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19864,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8f02c9ebfd7df689cdd0aab984e83ded81afc2d1",
+          "message": "Merge pull request #2462 from wado-lang/ccr-bf269f57-0gkwrh\n\nfix(cm): import a component whose record refers to a type of its own interface beside a same-named one",
+          "timestamp": "2026-10-26T11:58:35+09:00",
+          "tree_id": "3f984bda7c14c94777561040e98fc8585f68704c",
+          "url": "https://github.com/wado-lang/wado/commit/8f02c9ebfd7df689cdd0aab984e83ded81afc2d1"
+        },
+        "date": 1792984350534,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
