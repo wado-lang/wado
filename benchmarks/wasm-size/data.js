@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793019009550,
+  "lastUpdate": 1793024946899,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71337,6 +71337,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/651e704052590b494bf8c4eb05a9f0ec74bc700d"
         },
         "date": 1793019008562,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295381,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c80386b9db5f16c449ff186d170954eb4a94c570",
+          "message": "Merge pull request #2469 from wado-lang/claude/peaceful-volta-u08hot\n\nfeat(eddy): mine an evaluation set from this repository's fix pull requests",
+          "timestamp": "2026-10-26T23:14:41+09:00",
+          "tree_id": "69d6dc1f7b0bbd2b8fd6297328e62f28c106c6b7",
+          "url": "https://github.com/wado-lang/wado/commit/c80386b9db5f16c449ff186d170954eb4a94c570"
+        },
+        "date": 1793024945748,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
