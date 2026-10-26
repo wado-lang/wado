@@ -37,9 +37,26 @@ use {
 } from "core:prelude/types.wado";
 
 /// Copies bytes from linear memory to a new GC array.
+///
+/// Wasm has no copy from linear memory into a GC array, so each byte is its
+/// own `array.set`. Loading eight at a time halves the cost per byte against a
+/// load per byte, which every stream read of bytes pays.
 internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);
-    for let mut i = 0; i < len; i += 1 {
+    let mut i = 0;
+    while i <= len - 8 {
+        let w = builtin::i64_load(ptr + i);
+        builtin::array_set_u8(&mut arr, i, w as u8);
+        builtin::array_set_u8(&mut arr, i + 1, (w >> 8) as u8);
+        builtin::array_set_u8(&mut arr, i + 2, (w >> 16) as u8);
+        builtin::array_set_u8(&mut arr, i + 3, (w >> 24) as u8);
+        builtin::array_set_u8(&mut arr, i + 4, (w >> 32) as u8);
+        builtin::array_set_u8(&mut arr, i + 5, (w >> 40) as u8);
+        builtin::array_set_u8(&mut arr, i + 6, (w >> 48) as u8);
+        builtin::array_set_u8(&mut arr, i + 7, (w >> 56) as u8);
+        i += 8;
+    }
+    for ; i < len; i += 1 {
         builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
     }
     return arr;

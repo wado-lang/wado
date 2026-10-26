@@ -1,12 +1,34 @@
 //! Tests for `core:rt`.
 
-use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
+use {
+    i64_add128_soft,
+    i64_sub128_soft,
+    i64_mul_wide_u_soft,
+    i64_mul_wide_s_soft,
+    log_stdout,
+    memory_to_gc_array,
+} from "core:rt";
 use { MonotonicClock } from "wasi:clocks";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
     let [rx, tx] = Stream::<u8>::new();
     rx.start_read(builtin::black_box(-1));
+}
+
+test "a lift copies every byte of linear memory, whatever the length" {
+    let ptr = builtin::realloc(0, 0, 1, 19);
+    for let i of 0..<19 {
+        builtin::i32_store8(ptr + i, (0xA0 + i) as u8);
+    }
+    for let len of 0..=18 {
+        let arr = memory_to_gc_array(ptr + 1, len);
+        assert arr.len() == len;
+        for let i of 0..<len {
+            assert builtin::array_get_value_u8(&arr, i) == (0xA1 + i) as u8;
+        }
+    }
+    let _ = builtin::realloc(ptr, 19, 1, 0);
 }
 
 test "a write to a stream whose reader is gone reports the drop" {
