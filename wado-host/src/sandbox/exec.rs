@@ -16,8 +16,7 @@ const PT_INTERP: u64 = 3;
 
 /// The files `exec` of `program` opens after it, in order and at their real
 /// paths: each `#!` interpreter, then the ELF loader the last one names. The
-/// list stops at a file the host cannot read or resolve, where the `exec`
-/// fails too, or the host cannot follow it.
+/// list ends where the host cannot read or resolve the next file.
 pub(super) fn interpreters(program: &Path) -> Vec<PathBuf> {
     let mut chain = Vec::new();
     let mut current = program.to_owned();

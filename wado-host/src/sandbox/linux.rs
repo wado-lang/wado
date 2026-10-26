@@ -150,12 +150,7 @@ fn probe_listener() -> io::Result<bool> {
     check(pid)?;
     let mut status = 0;
     // SAFETY: `status` outlives the call.
-    while unsafe { libc::waitpid(pid, &raw mut status, 0) } == -1 {
-        let err = io::Error::last_os_error();
-        if err.kind() != io::ErrorKind::Interrupted {
-            return Err(err);
-        }
-    }
+    retried(|| unsafe { libc::waitpid(pid, &raw mut status, 0) })?;
     Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
 }
 
@@ -317,10 +312,10 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
 
 /// `call` until a signal no longer interrupts it. Safe between `fork` and
 /// `exec`.
-fn retried(mut call: impl FnMut() -> isize) -> io::Result<isize> {
+fn retried<T: Copy + PartialEq + From<i8>>(mut call: impl FnMut() -> T) -> io::Result<T> {
     loop {
         let ret = call();
-        if ret != -1 {
+        if ret != T::from(-1) {
             return Ok(ret);
         }
         let err = io::Error::last_os_error();
@@ -363,15 +358,10 @@ enum Received {
 fn receive_listener(socket: &OwnedFd) -> Received {
     let mut message = FdMessage::new();
     let header = message.header();
-    let received = loop {
-        // SAFETY: `message` outlives the call.
-        let received = unsafe { libc::recvmsg(socket.as_raw_fd(), header, libc::MSG_CMSG_CLOEXEC) };
-        if received != -1 {
-            break received;
-        }
-        let err = io::Error::last_os_error();
-        assert_eq!(err.kind(), io::ErrorKind::Interrupted, "recvmsg: {err}");
-    };
+    // SAFETY: `message` outlives the call.
+    let received =
+        retried(|| unsafe { libc::recvmsg(socket.as_raw_fd(), header, libc::MSG_CMSG_CLOEXEC) })
+            .unwrap_or_else(|err| panic!("recvmsg: {err}"));
     if received == 0 {
         return Received::Nothing;
     }
@@ -406,11 +396,8 @@ fn answer_refusals(listener: &OwnedFd, refusals: &Refusals, traced: Option<&Reso
             revents: 0,
         };
         // SAFETY: `ready` outlives the call.
-        if unsafe { libc::poll(&raw mut ready, 1, -1) } == -1 {
-            let err = io::Error::last_os_error();
-            assert_eq!(err.kind(), io::ErrorKind::Interrupted, "poll: {err}");
-            continue;
-        }
+        retried(|| unsafe { libc::poll(&raw mut ready, 1, -1) })
+            .unwrap_or_else(|err| panic!("poll: {err}"));
         // `POLLHUP` alone: the last task using the filter is gone.
         if ready.revents & libc::POLLIN == 0 {
             return;
@@ -912,27 +899,22 @@ fn refused_paths(
     let mut refused = Vec::new();
     for (path, found, ask, at, access) in judged {
         if !policy.permits(&at, access) {
-            // A file's grant is the directory's holding it.
-            let dir = if at != path || found == Found::Dir {
-                at
-            } else {
-                at.parent().expect("a file has a parent").to_owned()
-            };
+            // Judged on a directory: the one holding an entry, or one opened.
+            let dir = (at != path || found == Found::Dir).then_some(at);
             refused.push(path_refusal(path, dir, access));
         } else if let Ask::Exec { .. } = ask
             && let Some(interpreter) = policy.refused_interpreter(&path)
         {
-            let dir = interpreter
-                .parent()
-                .expect("a file has a parent")
-                .to_owned();
-            refused.push(path_refusal(interpreter, dir, Access::ReadExecute));
+            refused.push(path_refusal(interpreter, None, Access::ReadExecute));
         }
     }
     Ok(refused)
 }
 
-fn path_refusal(path: PathBuf, dir: PathBuf, access: Access) -> Refusal {
+/// `path` refused `access` where Landlock judged it: on the directory `dir`,
+/// or else on `path` itself, a file whose directory a grant must cover.
+fn path_refusal(path: PathBuf, dir: Option<PathBuf>, access: Access) -> Refusal {
+    let dir = dir.unwrap_or_else(|| path.parent().expect("a file has a parent").to_owned());
     if is_process_entry(&path) {
         Refusal::ProcessEntry { access }
     } else {

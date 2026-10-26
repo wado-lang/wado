@@ -164,9 +164,9 @@ impl ResolvedPolicy {
             .any(|(root, granted)| path.starts_with(root) && *granted >= access)
     }
 
-    /// The first interpreter `exec` of `program`, a real path the policy lets
-    /// the child execute, opens that it does not: Landlock refuses the `exec`
-    /// there, whose program was granted.
+    /// The first interpreter that `exec` of `program`, a real path, opens and
+    /// the policy does not let the child execute. Landlock refuses the `exec`
+    /// there even where `program` itself is granted.
     #[cfg(unix)]
     #[must_use]
     pub fn refused_interpreter(&self, program: &Path) -> Option<PathBuf> {
