@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793007421796,
+  "lastUpdate": 1793013452590,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71249,6 +71249,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bca8aec3b4e927c5fa15333eb68a5e90aeaa2850"
         },
         "date": 1793007420690,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21813,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295362,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d2885be7b578ba6e5975d9f1fc797490ef3fd310",
+          "message": "Merge pull request #2468 from wado-lang/claude/gracious-faraday-rjp97k\n\nfeat(template): inspect a tagged template value as the template it was written as",
+          "timestamp": "2026-10-26T20:03:34+09:00",
+          "tree_id": "9e4704e639f9b943bf35df75e32efdf23eb7d447",
+          "url": "https://github.com/wado-lang/wado/commit/d2885be7b578ba6e5975d9f1fc797490ef3fd310"
+        },
+        "date": 1793013452156,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
