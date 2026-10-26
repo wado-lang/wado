@@ -1102,15 +1102,22 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit(&t)` / `raw(&t)` (the preceding segment of `t`, escapes processed or
-preserved), `get(&t)` (a copy of the value, `V`), `has_spec()`, and
+preserved), `get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
+to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
 [Format Types](#format-types) states). A tag declaring `affine ..V` takes an
 affine hole, and its handles offer no `get`, since a copy of an affine value
 does not exist. `String::format` and `String::raw` declare it.
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
 last hole. A segment is a `StrSlice` over the template's own text, so reading
-one copies nothing. `index()` and `has_spec()` are constants of the
+one copies nothing. `index()`, `spec()` and `has_spec()` are constants of the
 shape. A hole handle is minted only by `members()`.
+
+A template value inspects as the template it was written as: each segment raw,
+and each hole as its value inspected, followed by its specifier.
+`` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
+`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so two
+values that differ render differently.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple

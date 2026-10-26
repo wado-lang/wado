@@ -35,7 +35,7 @@ use crate::ast::{HandleClasses, NamePolicy, Visibility};
 use crate::defs::DefId;
 use crate::name::{
     FqTraitName, case_construct_helper_name, case_extract_helper_name, eq_payload_local,
-    field_get_helper_name, field_ref_helper_name, hole_get_helper_name,
+    field_get_helper_name, field_ref_helper_name, hole_get_helper_name, hole_ref_helper_name,
     template_segment_helper_name,
 };
 use crate::synthesis::common;
@@ -1332,14 +1332,22 @@ pub(super) fn generate_hole_bridge_helpers(
         })
         .collect();
     let ref_struct_type = type_table.borrow_mut().make_ref(struct_type);
-    let mut helpers = generate_read_bridge_helpers(
-        type_table,
-        &holes,
-        (hole_get_helper_name, Read::Value),
-        struct_type,
-        ref_struct_type,
-        span,
-    );
+    let mut helpers: Vec<TirFunction> = [
+        (hole_get_helper_name as fn(&str, &str) -> String, Read::Value),
+        (hole_ref_helper_name, Read::Ref),
+    ]
+    .into_iter()
+    .flat_map(|helper| {
+        generate_read_bridge_helpers(
+            type_table,
+            &holes,
+            helper,
+            struct_type,
+            ref_struct_type,
+            span,
+        )
+    })
+    .collect();
     helpers.extend(generate_read_bridge_helpers(
         type_table,
         &segments,
@@ -1587,6 +1595,7 @@ fn generate_template_reflect_impls(
     }
 
     let env = ReflectSynthEnv::resolve(&mut module.type_table.borrow_mut());
+    let option_string_type = module.type_table.borrow_mut().make_option(env.string_type);
     let (hole_struct_name, hole_struct_def) = resolve_member_struct(
         &module.type_table.borrow(),
         CompilerItem::ReflectTemplateHole,
@@ -1676,6 +1685,8 @@ fn generate_template_reflect_impls(
                 span,
             ),
             generate_template_members_fn(
+                &module.type_table,
+                (env.string_type, option_string_type),
                 &target.shape,
                 &member_types,
                 members_tuple_type,
@@ -1758,8 +1769,10 @@ fn generate_template_tail_fn(
 }
 
 /// Build `Shape^ReflectTemplate::members()` as one `TemplateHole` literal per hole —
-/// `{ index, has_spec }` in the handle's declaration order.
+/// `{ index, spec }` in the handle's declaration order.
 fn generate_template_members_fn(
+    type_table: &RefCell<TypeTable>,
+    (string_type, option_string_type): (TypeId, TypeId),
     shape: &TemplateShape,
     member_types: &[TypeId],
     members_tuple_type: TypeId,
@@ -1775,8 +1788,14 @@ fn generate_template_members_fn(
             vec![
                 reflect_meta_int_field("index", k as i64, TypeTable::I32, 0, span),
                 TirStructField {
-                    name: "has_spec".to_string(),
-                    value: bool_lit(hole.spec.is_some(), span),
+                    name: "spec".to_string(),
+                    value: optional_string_literal(
+                        type_table,
+                        string_type,
+                        option_string_type,
+                        hole.spec.as_deref(),
+                        span,
+                    ),
                     field_index: 1,
                 },
             ]

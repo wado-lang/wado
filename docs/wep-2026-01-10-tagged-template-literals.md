@@ -150,6 +150,12 @@ impl<T, V> TemplateHole<T, V> {
     /// `StructField::get` does; only a mutation copies.
     pub fn get(&self, t: &T) -> V;
 
+    /// A reference to the hole's value in `t`, which reaches an affine hole.
+    pub fn get_ref(&self, t: &T) -> &V;
+
+    /// The specifier as written after the `:`, or `None` without one.
+    pub fn spec(&self) -> Option<String>;
+
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool;
 
@@ -161,7 +167,7 @@ impl<T, V> TemplateHole<T, V> {
 }
 ```
 
-`index()` and `has_spec()` return constants of the shape. `lit` and `raw` view
+`index()`, `spec()` and `has_spec()` return constants of the shape. `lit` and `raw` view
 the text `t` refers to, which at a literal site is the constant written there.
 `fmt`'s body is synthesized per hole, so the choice of trait method — a
 compile-time decision, as in an untagged template — is closed inside it. The
@@ -176,6 +182,13 @@ of the tag's signature. `String::raw` is a tag that reads `raw(t)` and
 still a template segment, so it spells only the escapes the language has:
 `` String::raw`a\nb` `` is `a\nb` as written, and `\p` is the error it is in
 any template.
+
+A template value inspects as the template it was written as: the raw segments,
+and each hole's value inspected and followed by its specifier. The form is a
+blanket `impl Inspect` over `ReflectTemplate` in the prelude, as every other
+kind's is, reading the holes through `get_ref` so that an affine hole renders
+too. A struct of the holes was the alternative. It drops the text, and `==`
+compares the text, so a failing `assert` would show two unequal values alike.
 
 ### Desugaring
 
@@ -463,8 +476,9 @@ introduces a mechanism; each item names the existing one it extends.
 - `#[compiler_item("reflect_template")] pub trait ReflectTemplate: Reflect`
   with `Holes`, `Members`, `members()`, `tail(t)`, `raw_tail(t)`, each method
   carrying its own `compiler_item`.
-- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, has_spec }` with the constant accessors reading fields, and three bridged ones:
-  `get` is `builtin::hole_get::<T, V>(t, self.index)`, `fmt` is
+- `#[compiler_item("template_hole")] pub struct TemplateHole<T, V> { index, spec }` with the constant accessors reading fields, and four bridged ones:
+  `get` is `builtin::hole_get::<T, V>(t, self.index)`, `get_ref` is
+  `builtin::hole_get_ref::<T, V>(t, self.index)`, `fmt` is
   `builtin::hole_fmt::<T>(t, self.index, f)`, and `lit` / `raw` are
   `builtin::template_segment::<T>(t, 2 * self.index)` and `… + 1`. The
   builtins are bodyless markers beside `struct_field_get`. `core:prelude`
@@ -561,9 +575,10 @@ serial advances on read, so a template nested inside a hole mints its own
   `generate_template_members_fn` with one `TemplateHole` literal per hole,
   plus `tail(t)` and `raw_tail(t)` reading the last segment fields. The impl
   is recorded into `TraitEnv` like the struct kind's.
-- Three bridges per shape, minted beside `generate_field_bridge_helpers`:
+- Four bridges per shape, minted beside `generate_field_bridge_helpers`:
   `$hole_get$<shape>$<V>` (one per erased hole type, `match index` over the
-  holes of that type, dereferencing a handle field), `$template_segment$<shape>`
+  holes of that type, dereferencing a handle field), its by-reference twin
+  `$hole_ref$<shape>$<V>`, `$template_segment$<shape>`
   (`match key` over the segment fields) and `$hole_fmt$<shape>`
   (`match index`, each arm rendering its hole:
   `trait_fmt_call` on the hole's value with the `Formatter`
@@ -572,12 +587,12 @@ serial advances on read, so a template nested inside a hole mints its own
   a constant at every site `TemplateHole::fmt` reaches once `members()` folds, so the
   splice keeps one arm where a call would keep the whole dispatch, which the
   threshold refuses.
-- `lower/translate.rs` folds `builtin::hole_get` / `hole_fmt` /
-  `template_segment` calls to the bridge names beside its `struct_field_get`
+- `lower/translate.rs` folds `builtin::hole_get` / `hole_get_ref` /
+  `hole_fmt` / `template_segment` calls to the bridge names beside its `struct_field_get`
   arm; `name.rs` owns the names.
 - An open template shape gets no bridge. Each concrete shape only a
   substitution reaches gets its own: `$hole_fmt` inside the monomorphization
-  fixpoint, `$hole_get` and `$template_segment` after monomorphization beside
+  fixpoint, `$hole_get`, `$hole_ref` and `$template_segment` after monomorphization beside
   `$field_get`. The roadmap's generic template shapes item says why.
 
 ### Optimizer (`optimize/param_spec.rs`, `optimize/multi_value_param.rs`)
@@ -620,6 +635,9 @@ things the optimizer gains here.
 - `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
 - `tagged_template_type_name.wado`: the reader's name, specifiers and the cut
   included.
+- `tagged_template_inspect.wado`: a value inspects as the template it was
+  written as, in both forms and through an affine hole, and an `assert`
+  captures one.
 - `tagged_template_shape_is_its_holes.wado`: two templates differing only in
   their text, or in how a hole is spelled, are one type, each value carrying
   its own text.
@@ -883,12 +901,6 @@ warm-up phase takes that cost. Three runs:
   tagged-template gap: the same static method fails the same way when spelled
   as a call, and is pinned as `#[TODO]` in
   `reflect_pack_blanket_static_todo.wado`.
-- The type has no `Inspect`, though every other type does. An `assert` that
-  captures a template's value fails to compile
-  (``assert id`n=${n}` == id`n=${n}`;``), and the error names the type by its
-  internal symbol (`$tmpl$…`) rather than by the name above. How the value
-  prints is open: as the template it was written as, or as a struct of its
-  holes.
 - A hole that is an affine place is read where the tag runs, not at its own
   position, since it cannot be copied. A later hole that writes it shows
   through: `` `${c:?} ${c.bump()}` `` renders `c` after the bump. The

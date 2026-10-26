@@ -1,0 +1,56 @@
+// A template value inspects as the template it was written as: the literal
+// text raw, each hole's value inspected, and its specifier as written. The text
+// is the value's, and `==` compares it, so the form shows all that `==` reads.
+// See docs/spec-literals.md § Tagged Template Literals.
+
+fn id<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> T {
+    return t;
+}
+
+fn inspected<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:?}`;
+}
+
+fn inspected_alternate<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:#?}`;
+}
+
+struct Point {
+    x: i32,
+}
+
+affine struct Counter {
+    n: i32,
+}
+
+impl Drop for Counter {
+    fn drop(self) {}
+}
+
+test "literal text, holes and specifiers" {
+    let n = 7;
+    let s = "a";
+    assert inspected`n=${n:04}, s=${s}\n\`` == "`n=${7:04}, s=${\"a\"}\\n\\``";
+}
+
+test "a template without holes" {
+    assert inspected`plain` == "`plain`";
+}
+
+test "the alternate form reaches the holes" {
+    let p = Point { x: 1 };
+    assert inspected_alternate`p=${p:?}` == "`p=${Point {\n  x: 1,\n}:?}`";
+}
+
+test "an affine hole is inspected in place" {
+    let c = Counter { n: 1 };
+    assert inspected`c=${c:?}` == "`c=${Counter { n: 1 }:?}`";
+}
+
+test "an assert captures a template value" {
+    let n = 1;
+    assert id`n=${n}` == id`n=${n}`;
+}
+
+__DATA__
+{"test": {}}

@@ -117,6 +117,13 @@ pub fn struct_field_ref<affine T, affine F>(v: &T, index: i32) -> &F;
 #[side_effect(none)]
 pub fn hole_get<T, V>(t: &T, index: i32) -> V;
 
+/// Reads hole `index` of template `t` by reference, so an affine hole is not
+/// copied. Rewritten by lowering like `hole_get`. Used by
+/// `TemplateHole::get_ref`.
+#[storage(part_of_args)]
+#[side_effect(none)]
+pub fn hole_get_ref<T, affine V>(t: &T, index: i32) -> &V;
+
 /// Reads the literal segment `key` numbers out of template `t`: segment `k`
 /// cooked at `2 * k`, raw at `2 * k + 1`. Rewritten by lowering to the
 /// per-shape helper synthesized alongside `ReflectTemplate` (WEP 2026-01-10).
