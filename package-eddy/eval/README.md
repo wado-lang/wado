@@ -16,6 +16,10 @@ reverts, so the defects come from fix pull requests rather than reverts.
   half of the blamed lines. Each verdict says whether the fix corrects a
   defect, whether the blamed pull request introduced it, and whether a reviewer
   reading only that pull request's diff could have pointed at it.
+- `checked.json` holds a second check of the 26 pairs both judges call usable,
+  by Claude reading the diffs and the repository history. Each answer is
+  `yes`, `no`, `unsure` (left for a person), or `na`. An `unsure` pair carries
+  the `ask` class that kept it open.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -74,6 +78,21 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   model alone keeps its answer on 86 (Opus) and 84 (Sonnet) of the 96 across
   two runs, one of them on diffs that ignored whitespace. The 26 both call
   usable are the strongest candidates for the human sample.
+- The history check finds what the judges cannot. They read two diffs, so
+  they take a culprit's lines as its own work. Of the 26, the check keeps 15,
+  rejects 4 and leaves 7 open:
+
+  | Pairs                                                                                         | Count |
+  | --------------------------------------------------------------------------------------------- | ----: |
+  | Usable                                                                                        |    15 |
+  | Not a defect fix (a feature)                                                                  |     1 |
+  | Defect from another pull request (a later redesign, refactor, or code the culprit only moved) |     3 |
+  | Open: the culprit's new check left a gap that predates it                                     |     3 |
+  | Open: a dev-environment cache miss, not wrong behaviour                                       |     2 |
+  | Open: a conformance sweep fixing several defects at once                                      |     2 |
+
+  The open pairs are not noise. They mark the cases a single-diff verdict cannot
+  settle, so they stay as data whichever way a person decides them.
 - Sonnet 5.5 sometimes answers with malformed JSON, such as a field given
   twice. Such a pair gets an error, and a rerun judges it again.
 
@@ -81,6 +100,6 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
 
 - [ ] Mine `fix:` commits inside other pull requests, not only pull requests
   titled `fix`.
-- [ ] Have a person check a sample of the judge's verdicts, and fix the share
-  of entries that gets checked.
+- [ ] Have a person settle the open pairs in `checked.json`, then sample the
+  ones Claude settled.
 - [ ] Split off the held-out part that learning never sees.
