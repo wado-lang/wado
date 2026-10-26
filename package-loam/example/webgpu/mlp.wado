@@ -25,44 +25,10 @@ use {
 } from "wasi:webgpu";
 use { deviation, noise } from "./compare.wado";
 use { Cpu, Tensor, WebGpuBackend, element_count } from "lib:loam";
-use { Batch, In, Weights, forward } from "./mlp.onnxtext"
+use { N as Batch, Weights, X1 as In, forward } from "./mlp.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "X",
-                        axes: ["Batch", "In"],
-                    },
-                    {
-                        pattern: "W1",
-                        axes: ["In", "Wide"],
-                    },
-                    {
-                        pattern: "B1",
-                        axes: ["Wide"],
-                    },
-                    {
-                        pattern: "W2",
-                        axes: ["Wide", "Deep"],
-                    },
-                    {
-                        pattern: "B2",
-                        axes: ["Deep"],
-                    },
-                    {
-                        pattern: "W3",
-                        axes: ["Deep", "Out"],
-                    },
-                    {
-                        pattern: "B3",
-                        axes: ["Out"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 global BATCH: i32 = 256;

@@ -15,8 +15,10 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
 use crate::module_source::ModuleSource;
-use crate::name::{DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::{GlobalSymbol, SymbolKind, SymbolTable};
+use crate::name::{
+    DeclaredHead, NAMESPACE_MEMBER_SEP, namespace_member_alias, split_namespace_member,
+};
+use crate::symbol::{GlobalSymbol, Symbol, SymbolKind, SymbolTable};
 use crate::tir::EffectRef;
 use crate::token::Span;
 
@@ -609,8 +611,9 @@ fn namespace_import_names(module: &Module) -> impl Iterator<Item = &str> {
         })
 }
 
-/// `ns::member` written in `module`, through a namespace import, which
-/// registers each member under its `ns$member` alias.
+/// `ns::member` written in `module`: through a namespace import, which
+/// registers each member under its `ns$member` alias, or through an interface,
+/// which names its types.
 fn namespace_member(
     symbols: &SymbolTable,
     defs: &DefTable,
@@ -618,9 +621,22 @@ fn namespace_member(
     namespace: &str,
     member: &str,
 ) -> Option<DefId> {
+    let alias = namespace_member_alias(namespace, member);
     symbols
-        .imported(module, &namespace_member_alias(namespace, member))
+        .imported(module, &alias)
+        .or_else(|| interface_type(symbols, module, &alias))
         .map(|sym| defs.def_at(sym.defined_at))
+}
+
+/// The type a path spelled `Interface$Type` names in `module`: one an
+/// interface declares, named through it.
+fn interface_type<'s>(
+    symbols: &'s SymbolTable,
+    module: &ModuleSource,
+    key: &str,
+) -> Option<&'s Symbol> {
+    let (owner, member) = split_namespace_member(key)?;
+    symbols.interface_type(module, owner, member)
 }
 
 /// The trait an `impl` header names, for a pass that rewrites the AST before
@@ -774,7 +790,12 @@ impl Resolver<'_> {
         }
         self.scopes
             .resolve(self.module, name)
+            .or_else(|| self.interface_type(name))
             .map_or(Resolution::Unresolved, Resolution::Def)
+    }
+
+    fn interface_type(&self, key: &str) -> Option<DefId> {
+        interface_type(self.symbols, self.module, key).map(|sym| self.defs.def_at(sym.defined_at))
     }
 
     /// Record what `site`, which named `key` in its scope, refers to.
@@ -811,6 +832,12 @@ impl Resolver<'_> {
     fn note_import(&mut self, key: &str, def: DefId) {
         if self.scopes.imported(self.module, key) == Some(def) {
             self.used_imports.insert(key.to_string());
+        } else if let Some((owner, _)) = split_namespace_member(key)
+            && self.scopes.imported(self.module, owner).is_some()
+        {
+            // A `$` key no import holds names no binder or item either, so
+            // the imported interface `owner` answered it.
+            self.used_imports.insert(owner.to_string());
         }
     }
 
@@ -1389,11 +1416,11 @@ impl AstVisitor<'_> for Resolver<'_> {
         {
             self.record_name(head.id, &head.name);
             if let Some(owner) = ident.owner_index().filter(|i| *i > 0) {
-                let qualified = format!(
-                    "{}${}",
-                    ident.segments[owner - 1].name,
-                    ident.segments[owner].name
-                );
+                let qualified = ident.segments[..=owner]
+                    .iter()
+                    .map(|segment| segment.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(&NAMESPACE_MEMBER_SEP.to_string());
                 self.record_name(ident.segments[owner].id, &qualified);
             }
         }

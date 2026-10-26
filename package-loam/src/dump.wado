@@ -25,6 +25,8 @@ impl Serialize for Report;
 
 /// One scope: the graph, or a branch of an `If`.
 pub struct ScopeReport {
+    /// Each axis's name and where it took it from.
+    pub named_axes: List<[String, String]>,
     pub inputs: List<TensorReport>,
     pub weights: List<TensorReport>,
     pub nodes: List<NodeReport>,
@@ -151,6 +153,7 @@ fn scope(graph: &Graph, checked: &Checked, fuse: bool) -> ScopeReport {
         owed.push([c.reason, `${c.slack}`]);
     }
     return ScopeReport {
+        named_axes: checked.axis_names.into_iter().map(|n| [n.name, n.source]).collect(),
         inputs: boundary(&graph.inputs, checked),
         weights: boundary(&graph.initializers, checked),
         nodes,
@@ -371,6 +374,14 @@ struct Tally {
 }
 
 fn write_scope(w: &mut CodeWriter, s: &ScopeReport, tally: &mut Tally) {
+    if !s.named_axes.is_empty() {
+        w.line("axes");
+        w.indent();
+        for let [name, source] of &s.named_axes {
+            w.line(`${*name}: ${*source}`);
+        }
+        w.dedent();
+    }
     write_boundary(w, "inputs", &s.inputs);
     write_boundary(w, "weights", &s.weights);
     w.line("nodes");

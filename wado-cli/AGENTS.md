@@ -14,7 +14,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   / `CompileKnobOpt` carry what the compiler is told: `-O`, `--log-level`,
   `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` / `RuntimeKnobOpt` carry
   what the wasmtime engine is built with: `--collector`, `--gc-heap-initial`,
-  `--report-fuel`, `--deny-process`.
+  `--report-fuel`, `--deny-process`, `--process-read`.
   A subcommand lists the subset it accepts and holds one field per family it
   uses. It declares no field, parse arm, or spec of its own for a shared knob,
   and a new one is added in `knobs.rs` only.
@@ -43,13 +43,14 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - `compile.rs`, `check.rs`, `run.rs`, `serve.rs`, `test.rs`, `format.rs`, `doc.rs`, `dump.rs`, `wit.rs`, `query.rs` — one subcommand each.
 - `runtime.rs`, `http_hooks.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs. The timezone host and the TLS trust store live in `wado-host`, which the compiler's tests share.
 - `process_host.rs` — the `core:process` host: whether a guest may spawn, and the streams, timeout and kill of each child. `wado-host`'s `sandbox` confines it.
+- `user_config.rs` — the user's `~/.config/wado/config.toml` (`$XDG_CONFIG_HOME`): the Wado root and `[process] read`. Read once, and ignored whole when another user could have written it.
 - `kiln_provider.rs`, `kiln_wit.rs` — how `wado` resolves a Kiln generator to its component. The pipeline and the runtime it feeds live in `wado-host`'s `kiln/`. `check` runs the same pipeline `compile` does, writes included.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.
 - `discover.rs`, `test_report.rs` — source file discovery (shared by `test`, `format`, and `query`) and the progress digest. A directory argument goes through `files_in_dir` and a project-wide walk through `discover_tree`; a file named directly is taken as given, filters and all. The subcommand supplies only a `Filters` callback: `filters_at` naming its manifest section, or `no_filters` where a package's excludes must not apply (`query references` spans them). Directory expansion has no second implementation to drift from.
 - `external.rs` — the `wado-<name>` files on `PATH` that `wado --list` names and `wado help <name>` runs. `PATH` only, and never an entry that is empty or relative, which the OS search would read as the current directory. See [WEP: External Subcommands](../docs/wep-2026-09-19-external-subcommands.md).
 - `run_cache.rs` — what one CLI run resolves once and holds fixed: AOT generator components, generator resolutions, and a watch over the sources it read. `wado test` shares one across every fixture, so a mid-run edit cannot split the run and is named in the failure at the end. A `scoped` view of it also records what one compile read.
-- `test_cache.rs`, `fingerprint.rs` — the `wado test` result cache, keyed by the compiler and the run's options and checked against what each compile read; `core:eval`'s outcome cache shares the fingerprint.
+- `input_cache.rs`, `fingerprint.rs` — what a compile produced, keyed by the compiler and the run's options and checked against the files and environment variables it read. `wado test` keeps a pass in one (`test_cache.rs`) and `run` / `serve` a component (`build.rs`); `core:eval`'s outcome cache shares the fingerprint. A file in no package caches in the user cache (`cache::derived_dir`), never beside itself.
 
 ## Tests
 

@@ -87,9 +87,11 @@ impl<..T: Eq> Eq for [..T] { ... }
 impl<..T: Default> Default for [..T] { ... }
 ```
 
-The bound `..T: Trait` means "every type in the pack T implements Trait." This is checked
-at monomorphization: when `T` is instantiated to `[i32, String]`, the compiler verifies
-that `i32: Eq` and `String: Eq`.
+The bound `..T: Trait` means "every type in the pack T implements Trait." It is
+checked once the pack is known: when `T` is instantiated to `[i32, String]`, the
+compiler verifies that `i32: Eq` and `String: Eq`. A pack a pin binds
+(`ReflectStruct<FieldTypes = [..F]>`) is known where the blanket is asked for,
+and checked there.
 
 Multiple bounds are written with `+`:
 
@@ -370,6 +372,18 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
 with a `FieldTypes` associated type that matches the pack `F`. The compiler extracts `F` from
 the concrete `FieldTypes` type at monomorphization. This is the mechanism that lets the
 struct-inspect implementation be written entirely in Wado.
+
+### 12. Homogeneous Packs and Rigid Walk Elements
+
+`[..X]` over a non-pack `X` is a tuple of any length whose every element is `X`,
+so `List::from_tuple(elements: [..T])` needs no pack of its own. The parser
+mints an unwritten pack for each such spread (`name::repeat_pack_name`), and
+the resolver maps it to `X` per position. A walk over it binds `X` itself.
+
+A walk over a pack binds a `PackElement` scoped to that walk, which is rigid, as
+a type parameter is. Earlier the element was left open, so `pick(x, v)` across
+two nested walks over `[1, "a"]` unified an `i32` with a `String` and emitted
+invalid Wasm (`variadic_nested_walks_distinct_elements_error.wado`).
 
 ---
 

@@ -280,9 +280,17 @@ struct TestSpec {
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
 
-    /// Lines the emitted component's WAT must carry.
+    /// Optimizer remarks, by the optimization level that emits them (`"O2"`).
+    /// Each remark reads `"file:line:col remark: …"`, so `":6:5 remark: a copy"`
+    /// pins the position in the fixture.
     #[serde(default)]
-    wat_lines: Vec<WatLineSpec>,
+    remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
+
+    /// Lines the emitted component's WAT must carry. A CM import's shape —
+    /// which names an instance type exports, which functions are aliased out of
+    /// it — is visible here and nowhere a run reaches.
+    #[serde(default)]
+    wat_lines: Vec<TextMatch>,
 
     /// Compile and stop. For a program whose subject is the component the
     /// compiler emits, and whose imports the runner hosts nothing for.
@@ -313,18 +321,39 @@ struct CoverageSpec {
     uncovered_functions: Vec<String>,
 }
 
-/// A line of the emitted component's WAT: the substrings it holds, and how many
-/// such lines there must be. A CM import's shape — which names an instance type
-/// exports, which functions are aliased out of it — is visible here and nowhere
-/// a run reaches.
+/// One text the compiler emits, a WAT line or a remark: the substrings it
+/// holds, and how many such texts there must be.
 #[derive(Debug, serde::Deserialize)]
-struct WatLineSpec {
-    /// Substrings that must all appear on one trimmed line.
+#[serde(deny_unknown_fields)]
+struct TextMatch {
+    /// Substrings that must all appear in one text.
     contains: Vec<String>,
 
-    /// How many lines must match. Omitted means at least one.
+    /// How many texts must match. Omitted means at least one.
     #[serde(default)]
     count: Option<usize>,
+}
+
+impl TextMatch {
+    /// Assert this entry against `texts`, each a `what`, printing `context` on
+    /// a failure.
+    fn assert_in(&self, texts: &[&str], what: &str, test_id: &str, context: &str) {
+        let matched: Vec<&str> = texts
+            .iter()
+            .copied()
+            .filter(|text| self.contains.iter().all(|needle| text.contains(needle)))
+            .collect();
+        let (ok, wanted) = match self.count {
+            Some(exact) => (matched.len() == exact, exact.to_string()),
+            None => (!matched.is_empty(), "1 or more".to_string()),
+        };
+        assert!(
+            ok,
+            "[{test_id}] expected {wanted} {what}(s) holding {:?}, found {}:\n{matched:#?}\n\n{context}",
+            self.contains,
+            matched.len(),
+        );
+    }
 }
 
 impl TestSpec {
@@ -383,14 +412,20 @@ fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D
 /// Whether `wir` contains `pattern`, where `{}` stands for a run of digits and
 /// `{name}` for one run that every `{name}` in the pattern repeats. A generated
 /// local's number is an allocation counter, not what a golden means; that two
-/// sites name the same local is.
+/// sites name the same local is. A hole after `_` also matches no suffix at
+/// all, since a local takes one only while another shares its name.
 fn wir_contains(wir: &str, pattern: &str) -> bool {
     let mut texts = Vec::new();
     let mut holes = Vec::new();
     let mut rest = pattern;
     while let Some((start, name, end)) = next_hole(rest) {
-        texts.push(&rest[..start]);
-        holes.push(name);
+        let text = &rest[..start];
+        let suffix = text.strip_suffix('_');
+        texts.push(suffix.unwrap_or(text));
+        holes.push(Hole {
+            name,
+            suffix: suffix.is_some(),
+        });
         rest = &rest[end..];
     }
     texts.push(rest);
@@ -420,24 +455,39 @@ fn next_hole(pattern: &str) -> Option<(usize, &str, usize)> {
     })
 }
 
-/// Whether `wir` opens with each hole's digits followed by its text, a named
-/// hole repeating the digits it took first.
-fn holes_match(mut wir: &str, holes: &[&str], texts: &[&str]) -> bool {
+/// A `{}` or `{name}` in a WIR pattern. `suffix` is one written after `_`,
+/// which matches `_` and digits, or nothing.
+struct Hole<'p> {
+    name: &'p str,
+    suffix: bool,
+}
+
+/// Whether `wir` opens with each hole's serial followed by its text, a named
+/// hole repeating the serial it took first.
+fn holes_match(mut wir: &str, holes: &[Hole<'_>], texts: &[&str]) -> bool {
     let mut taken: Vec<(&str, &str)> = Vec::new();
-    for (&name, text) in holes.iter().zip(texts) {
-        let digits = wir.len() - wir.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-        let serial = &wir[..digits];
-        if digits == 0 {
+    for (hole, text) in holes.iter().zip(texts) {
+        let run = |s: &str| s.len() - s.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        let len = match wir.strip_prefix('_') {
+            Some(after) if hole.suffix && run(after) > 0 => 1 + run(after),
+            _ if hole.suffix => 0,
+            _ => run(wir),
+        };
+        if len == 0 && !hole.suffix {
             return false;
         }
-        if !name.is_empty() {
-            match taken.iter().find(|(taken_name, _)| *taken_name == name) {
+        let serial = &wir[..len];
+        if !hole.name.is_empty() {
+            match taken
+                .iter()
+                .find(|(taken_name, _)| *taken_name == hole.name)
+            {
                 Some((_, first)) if *first != serial => return false,
                 Some(_) => {}
-                None => taken.push((name, serial)),
+                None => taken.push((hole.name, serial)),
             }
         }
-        let Some(after) = wir[digits..].strip_prefix(text) else {
+        let Some(after) = wir[len..].strip_prefix(text) else {
             return false;
         };
         wir = after;
@@ -454,6 +504,10 @@ fn wir_patterns_match_serials_by_hole() {
     assert!(!wir_contains(wir, "$b_{p} = $a_{p};"));
     assert!(!wir_contains("$a_16 = $a_17 + 1", "$a_{p} = $a_{p} + 1"));
     assert!(wir_contains("{ x }", "{ x }"));
+    assert!(wir_contains("select(c, x, 0)", "select(c, x_{}, 0)"));
+    assert!(wir_contains("f(i, n - i)", "f(i_{i}, n - i_{i})"));
+    assert!(!wir_contains("f(i, n - i_2)", "f(i_{i}, n - i_{i})"));
+    assert!(!wir_contains("x_ = 1", "x_{} = 1"));
 }
 
 /// The body of the first function in `wir` whose name contains `scope`, from
@@ -918,6 +972,7 @@ fn run_with_allocator(
         wir_text,
         warnings,
         errors,
+        remarks,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -943,6 +998,27 @@ fn run_with_allocator(
             "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {}",
             warning_text()
         );
+    }
+
+    for level in spec.remarks.keys() {
+        assert!(
+            [
+                OptLevel::O0,
+                OptLevel::O1,
+                OptLevel::O2,
+                OptLevel::O3,
+                OptLevel::Os
+            ]
+            .map(common::opt_level_name)
+            .contains(&level.as_str()),
+            "[{test_id}] `remarks` is keyed by an optimization level, not {level:?}"
+        );
+    }
+    if let Some(expected) = spec.remarks.get(common::opt_level_name(opt_level)) {
+        let texts: Vec<&str> = remarks.iter().map(String::as_str).collect();
+        for wanted in expected {
+            wanted.assert_in(&texts, "remark", test_id, &format!("remarks: {remarks:#?}"));
+        }
     }
 
     for expected in &spec.compile_errors_contains {
@@ -1309,27 +1385,9 @@ fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
     );
     let wat = wasmprinter::print_bytes(wasm)
         .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
-    for wanted_line in &spec.wat_lines {
-        let matched: Vec<&str> = wat
-            .lines()
-            .map(str::trim)
-            .filter(|line| {
-                wanted_line
-                    .contains
-                    .iter()
-                    .all(|needle| line.contains(needle))
-            })
-            .collect();
-        let (ok, wanted) = match wanted_line.count {
-            Some(exact) => (matched.len() == exact, exact.to_string()),
-            None => (!matched.is_empty(), "1 or more".to_string()),
-        };
-        assert!(
-            ok,
-            "[{test_id}] expected {wanted} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
-            wanted_line.contains,
-            matched.len(),
-        );
+    let lines: Vec<&str> = wat.lines().map(str::trim).collect();
+    for wanted in &spec.wat_lines {
+        wanted.assert_in(&lines, "WAT line", test_id, &format!("full WAT:\n{wat}"));
     }
 }
 

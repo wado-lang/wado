@@ -1,4 +1,3 @@
-use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
@@ -24,7 +23,8 @@ use crate::coverage_host::{CoverageFormats, CoverageOptions, CoverageRun, parse_
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
 use crate::fingerprint::Input;
-use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
+use crate::fuel_host::{self, FuelRegion};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest::package_root;
 use crate::process_host::ProcessGrant;
 use crate::rss::summary_line;
@@ -377,13 +377,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut include: Option<CoverageScope> = None;
     let mut baseline: Option<PathBuf> = None;
     let mut runtime_knobs = RuntimeKnobs::default();
-    // Tests compile unoptimized by default: the compile stage dominates a run,
-    // and `-O` opts back in. Each file's optimizer runs on one thread, since
-    // `--parallel` already spreads the files across the cores.
+    // Each file's optimizer runs on one thread, since `--parallel` already
+    // spreads the files across the cores.
     let mut knobs = CompileKnobs {
-        opt_level: OptLevel::O0,
         opt_threads: Some(1),
-        ..CompileKnobs::default()
+        ..CompileKnobs::compile_and_run()
     };
     // `core:log`'s own default is `trace`, which buries a run in the events a
     // library emits while working. `-D log.level=` wins over this.
@@ -580,7 +578,7 @@ struct CompiledArtifact {
     path: String,
     wasm: Vec<u8>,
     is_todo_module: bool,
-    /// What the compile read, where it read nothing but files.
+    /// What the compile read, where none of it is untracked.
     reads: Option<Vec<Input>>,
 }
 
@@ -721,6 +719,8 @@ pub(crate) struct TestResult {
     /// Fuel the test's store spent, instantiation included, under
     /// `--report-fuel`.
     pub(crate) fuel: Option<u64>,
+    /// The regions the test measured through `core:fuel`, empty unless metered.
+    pub(crate) fuel_regions: Vec<FuelRegion>,
     /// Captured guest stdout/stderr (see `runtime::create_test_store`).
     /// Empty when nothing was printed, or when the test never got as far
     /// as calling its test function (`fail_result`'s setup-time failures).
@@ -737,13 +737,18 @@ impl TestResult {
             .expect("a resolved TODO carries its advice")
     }
 
-    /// What the test cost: its duration, and its fuel where it was metered.
+    /// What the test cost: its duration, and its fuel and that of each region
+    /// it measured where it was metered.
     pub(crate) fn cost(&self) -> String {
         let duration = format_duration(self.duration);
-        match self.fuel {
-            Some(fuel) => format!("{duration}, fuel {fuel}"),
-            None => duration,
+        let Some(fuel) = self.fuel else {
+            return duration;
+        };
+        let mut cost = format!("{duration}, fuel {fuel}");
+        for region in &self.fuel_regions {
+            cost.push_str(&format!("; {} {}", region.label, region.fuel));
         }
+        cost
     }
 }
 
@@ -985,7 +990,7 @@ fn load_module(
         &artifact.wasm,
         opt_level,
         profile,
-        runtime_knobs,
+        runtime_knobs.clone(),
         profiler_slot,
     );
     let load_duration = load_start.elapsed();
@@ -1234,6 +1239,7 @@ async fn run_load_stage(
             let slot_for_load = profiler_slot.clone();
             let coverage_for_load = coverage_run.clone();
             let testing = artifact.path.clone();
+            let runtime_knobs = runtime_knobs.clone();
             // Each load worker is its own task so its progress is not
             // gated by `buffer_unordered`'s outer poll.
             let task = tokio::spawn(async move {
@@ -1667,6 +1673,7 @@ fn fail_result(job: &TestJob, error: String, start: Instant, fuel: Option<u64>) 
         error: Some(error),
         duration: start.elapsed(),
         fuel,
+        fuel_regions: Vec::new(),
         stdout: String::new(),
         stderr: String::new(),
     }
@@ -1688,7 +1695,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
             cpu_permit,
             Arc::clone(&clock),
         ),
-        module.process,
+        module.process.clone(),
     ) {
         Ok(v) => v,
         Err(e) => return fail_result(job, format!("failed to set up store: {e:#}"), start, None),
@@ -1798,6 +1805,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
         error,
         duration: start.elapsed(),
         fuel: runtime::fuel_spent(&store),
+        fuel_regions: std::mem::take(store.data_mut().fuel_regions()),
         stdout: String::from_utf8_lossy(&stdout_pipe.contents()).into_owned(),
         stderr: String::from_utf8_lossy(&stderr_pipe.contents()).into_owned(),
     }
@@ -2206,6 +2214,7 @@ async fn run_one_package(
     coverage_run: Option<Arc<CoverageRun>>,
     test_cache: Option<&TestCache>,
     cached: &[(String, Tally)],
+    metered: Option<&mut Vec<TestResult>>,
 ) -> PackageTotals {
     reporter.on_package_start(pkg_run, show_banner);
 
@@ -2301,6 +2310,9 @@ async fn run_one_package(
         no_run,
     });
 
+    if let Some(metered) = metered {
+        metered.extend(test_results);
+    }
     totals
 }
 
@@ -2409,17 +2421,6 @@ fn write_profile(
     Ok(())
 }
 
-/// The `WADO_*` environment, sorted. The compiler reads these itself
-/// (`WADO_SKIP_PASS`, `WADO_NO_PRELOWER_PRUNE`) rather than through its host,
-/// and they change what it emits.
-fn wado_env() -> Vec<(OsString, OsString)> {
-    let mut vars: Vec<_> = std::env::vars_os()
-        .filter(|(name, _)| name.as_encoded_bytes().starts_with(b"WADO_"))
-        .collect();
-    vars.sort();
-    vars
-}
-
 pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let overall_start = Instant::now();
     let multi_pkg = opts.package_runs.len() > 1;
@@ -2461,15 +2462,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let measures = coverage_run.is_some()
         || !matches!(profile, ProfileMode::None)
         || runtime_knobs.report_fuel;
-    let test_cache = (!no_run && !measures).then(|| {
-        let mut keyed = (*flags).clone();
-        // `--no-cache` only skips reading, so it is no part of the key.
-        keyed.knobs.no_cache = false;
-        TestCache::new(
-            &format!("{keyed:?} {runtime_knobs:?} {:?}", wado_env()),
-            !flags.knobs.no_cache,
-        )
-    });
+    let test_cache = (!no_run && !measures).then(|| TestCache::new(&flags, runtime_knobs.clone()));
     // Settled before anything is sized by the work, which the hits are not.
     let cached: Vec<Vec<(String, Tally)>> = package_runs
         .iter_mut()
@@ -2500,6 +2493,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let profiler_slot = matches!(profile, ProfileMode::Guest { .. })
         .then(|| Arc::new(Mutex::new(None)) as GuestProfilerSlot);
     let mut grand = PackageTotals::default();
+    let mut metered = runtime_knobs.report_fuel.then(Vec::new);
     for (pkg_run, cached) in package_runs.iter().zip(&cached) {
         let totals = run_one_package(
             pkg_run,
@@ -2513,13 +2507,14 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             profile.clone(),
-            runtime_knobs,
+            runtime_knobs.clone(),
             profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),
             coverage_run.clone(),
             test_cache.as_ref(),
             cached,
+            metered.as_mut(),
         )
         .await;
         grand.merge(&totals);
@@ -2527,13 +2522,22 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
-    let reported = write_profile(&profile, profiler_slot.as_ref()).and_then(|()| {
-        coverage_run.map_or(Ok(()), |run| {
-            Arc::into_inner(run)
-                .expect("every stage holding the coverage run has finished")
-                .finish(reporter.as_ref())
+    let reported = write_profile(&profile, profiler_slot.as_ref())
+        .and_then(|()| {
+            coverage_run.map_or(Ok(()), |run| {
+                Arc::into_inner(run)
+                    .expect("every stage holding the coverage run has finished")
+                    .finish(reporter.as_ref())
+            })
         })
-    });
+        .and_then(|()| {
+            metered.map_or(Ok(()), |results| {
+                let root = std::env::current_dir().map_err(|e| {
+                    CliExit::error(format!("cannot read the current directory: {e}"))
+                })?;
+                fuel_host::write_report(&root, &results)
+            })
+        });
     reporter.on_recap();
     reported?;
 

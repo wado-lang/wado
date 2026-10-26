@@ -1,17 +1,17 @@
 use icu from "core:icu";
-use { BinaryProperty } from "core:icu";
+use { Properties } from "core:icu";
 
 test "a property named in the source needs no name lookup" {
-    assert icu::has(BinaryProperty::Uppercase, 'À');
-    assert !icu::has(BinaryProperty::Uppercase, 'à');
-    assert icu::set(BinaryProperty::WhiteSpace)[0] == [9, 13];
-    assert icu::set(BinaryProperty::HexDigit)[0] == [48, 57];
+    assert icu::has(Properties::BinaryProperty::Uppercase, 'À');
+    assert !icu::has(Properties::BinaryProperty::Uppercase, 'à');
+    assert icu::set(Properties::BinaryProperty::WhiteSpace)[0] == [9, 13];
+    assert icu::set(Properties::BinaryProperty::HexDigit)[0] == [48, 57];
 }
 
 test "the two paths answer with the same set" {
-    assert icu::set(BinaryProperty::WhiteSpace) == icu::ranges("White_Space").unwrap();
-    assert icu::set(BinaryProperty::HexDigit) == icu::ranges("Hex_Digit").unwrap();
-    assert icu::has(BinaryProperty::Math, '+') == icu::contains("Math", '+').unwrap();
+    assert icu::set(Properties::BinaryProperty::WhiteSpace) == icu::ranges("White_Space").unwrap();
+    assert icu::set(Properties::BinaryProperty::HexDigit) == icu::ranges("Hex_Digit").unwrap();
+    assert icu::has(Properties::BinaryProperty::Math, '+') == icu::contains("Math", '+').unwrap();
 }
 
 test "an enumerated property takes its value" {

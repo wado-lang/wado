@@ -1,0 +1,21 @@
+// A trait's default body is walked again in each module that takes it, and a
+// transposition in it is an `index_swap` there too: each element drops once.
+// The importing module copying the elements instead dropped a copy three times.
+
+use { println, Stdout } from "core:cli";
+use { Flip } from "./sub/index_swap_default_body_trait.wado";
+
+struct Flipper {}
+
+impl Flip for Flipper {}
+
+export fn run() with Stdout {
+    let f = Flipper {};
+    println(`${f.flip()}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "stderr": "drop 2\ndrop 1\n"
+}

@@ -1,0 +1,16 @@
+#![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/fuel/fuel.wit"])]
+#![stdlib("core:fuel/fuel_host.wado")]
+
+/// Host interface behind `core:fuel`. Only `wado test` supplies it, and only
+/// under `--report-fuel` does it meter.
+#[cm("core:fuel/fuel-host@0.1.0")]
+pub interface FuelHost {
+    /// The fuel the running test has spent so far, or none when the run is
+    /// not metered.
+    #[cm("core:fuel/fuel-host@0.1.0#spent")]
+    fn spent() -> Option<u64>;
+    /// Region `label` of the running test spent `fuel`.
+    #[cm("core:fuel/fuel-host@0.1.0#report")]
+    #[cm_params("label", "fuel")]
+    fn report(label: String, fuel: u64);
+}

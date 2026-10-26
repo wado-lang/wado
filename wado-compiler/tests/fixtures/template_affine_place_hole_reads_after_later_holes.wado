@@ -1,0 +1,26 @@
+// An affine place cannot be copied at its own position, so the tag reads it
+// once every hole has run, and a later hole's write shows through. See
+// docs/spec-literals.md § Tagged Template Literals.
+
+affine struct Counter {
+    n: i32,
+}
+
+impl Drop for Counter {
+    fn drop(self) {}
+}
+
+impl Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+test "a later hole's write shows through an affine place" {
+    let mut c = Counter { n: 0 };
+    assert `${c:?} ${c.bump()}` == "Counter { n: 1 } 1";
+}
+
+__DATA__
+{"test": {}}

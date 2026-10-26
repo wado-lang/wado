@@ -1,0 +1,24 @@
+// A derived `Hash` needs every field and payload to hash: a `fn` field blocks
+// it, as it blocks `Eq`.
+
+use { HashMap } from "core:collections";
+
+struct Callback {
+    id: i32,
+    run: fn(),
+}
+
+variant Event {
+    Fire(Callback),
+    Idle,
+}
+
+export fn run() {
+    let m = HashMap::<Callback, i32>::new();
+    let n = HashMap::<Event, i32>::new();
+}
+
+__DATA__
+{
+    "compile_error": ":17:13: analysis error: type 'Callback' does not implement trait 'Hash' required by bound on 'K'\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`; 18:13: type 'Event' does not implement trait 'Hash' required by bound on 'K'\n  note: `Event` does not implement `Hash` because variant `Fire` of type `Callback` does not implement `Hash`\n  note: `Callback` does not implement `Hash` because field `run` of type `fn() -> ()` does not implement `Hash`"
+}

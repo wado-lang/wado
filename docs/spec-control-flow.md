@@ -309,7 +309,7 @@ before the first iteration. Each iteration then calls `next()` on the result,
 binds the element to `item` and runs the body. The loop ends when `next()`
 returns `None`.
 
-An [affine](./spec-types.md#affine-types) operand whose type implements the
+An [affine](./spec-affine.md) operand whose type implements the
 prelude trait `ForOf` is walked through it instead. The loop passes the operand
 by value to `ForOf::start` once, then calls `next()` on the state it returns.
 So the loop owns what it walks: the operand moves into the loop, each element
@@ -356,6 +356,12 @@ assert out == "42 hello true ";
 
 `break` and `continue` are errors inside a tuple for-of body, since the runs are
 not iterations of one loop.
+
+In a generic body, a walk over a pack (`[..T]`) types its binding as the pack's
+element, which is rigid, as a type parameter is. Each walk binds an element of
+its own. Two nested walks over one pack bind two element types. They are distinct
+even though the walks share the pack, since over `[1, "a"]` one run pairs an
+`i32` with a `String`.
 
 `.enumerate()` binds the index beside the element:
 `for let [i, v] of t.enumerate()`. The index is a compile-time constant, so it

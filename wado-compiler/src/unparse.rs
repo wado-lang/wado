@@ -25,7 +25,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::member_visible;
 use crate::tir;
-use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
+use crate::tir::{EffectRef, ResolvedType, TirCapture};
 use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;
@@ -2265,7 +2265,8 @@ impl<'a> Unparser<'a> {
     /// Emit `(args)`, one line per argument when the single-line form would
     /// overflow, wrap anyway, or leave a comment inside the call unplaced.
     /// `span` is the call expression's, so an empty argument list holding a
-    /// comment wraps too.
+    /// comment wraps too. One holding none never does: wrapping it shortens
+    /// nothing.
     fn unparse_call_args(&mut self, args: &[Expr], has_trailing_comma: bool, span: Span) {
         // Multiline-with-trailing-comma is requested explicitly by the source;
         // in that case we skip the single-line attempt entirely, as does a
@@ -2274,10 +2275,12 @@ impl<'a> Unparser<'a> {
         if forced {
             self.force_wrap = None;
         }
-        if (!has_trailing_comma || args.is_empty()) && !forced {
+        if args.is_empty() || (!has_trailing_comma && !forced) {
             let snap = self.snapshot();
             self.emit_inline_call_args(args, span.start);
-            if !self.exceeds_width_since(snap) && !self.has_comment_in_range(span.start, span.end) {
+            if (args.is_empty() || !self.exceeds_width_since(snap))
+                && !self.has_comment_in_range(span.start, span.end)
+            {
                 return;
             }
             self.rollback(snap);
@@ -3287,16 +3290,16 @@ fn collect_logical_chain_expr<'a>(expr: &'a Expr, op: BinaryOp, parts: &mut Vec<
 }
 
 /// The span start of the call whose `)` ends `expr`'s rendering, if a call
-/// does. That call is the only one whose wrapping shortens the line `expr`
-/// ends on, so it is the one a caller short of room forces. Follows the right
-/// spine, where the rendering's last token is, and stops at an operand the
-/// unparser would parenthesize: there the last token is the paren, not the
-/// call.
+/// with arguments does. That call is the only one whose wrapping shortens the
+/// line `expr` ends on, so it is the one a caller short of room forces. Follows
+/// the right spine, where the rendering's last token is, and stops at an
+/// operand the unparser would parenthesize: there the last token is the paren,
+/// not the call.
 fn tail_call_span_start(expr: &Expr) -> Option<usize> {
     match expr {
-        Expr::Call(c) => Some(c.span.start),
-        Expr::MethodCall(m) => Some(m.span.start),
-        Expr::StaticMethodCall(s) => Some(s.span.start),
+        Expr::Call(c) if !c.args.is_empty() => Some(c.span.start),
+        Expr::MethodCall(m) if !m.args.is_empty() => Some(m.span.start),
+        Expr::StaticMethodCall(s) if !s.args.is_empty() => Some(s.span.start),
         Expr::Binary(b) if !needs_parens(&b.right, b.op, false) => tail_call_span_start(&b.right),
         Expr::ComparisonChain(chain) => tail_call_span_start(&chain.comparisons.last()?.right),
         _ => None,
@@ -5060,29 +5063,6 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("$variant_payload(");
                 self.unparse_expr(expr);
                 self.output.push_str(&format!(", case={case_index})"));
-            }
-            TirExprKind::TemplateString { parts } => {
-                self.output.push('`');
-                for part in parts {
-                    match part {
-                        TirTemplatePart::Literal(s) => {
-                            self.output.push_str(s);
-                        }
-                        TirTemplatePart::Interpolation {
-                            expr: inner,
-                            format_spec,
-                        } => {
-                            self.output.push_str("${");
-                            self.unparse_expr(inner);
-                            if let Some(spec) = format_spec {
-                                self.output.push(':');
-                                self.output.push_str(&spec.to_string());
-                            }
-                            self.output.push('}');
-                        }
-                    }
-                }
-                self.output.push('`');
             }
             TirExprKind::WithHandler { bindings, body, .. } => {
                 self.output.push_str("with ");

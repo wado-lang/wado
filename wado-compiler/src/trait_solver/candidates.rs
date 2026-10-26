@@ -2,7 +2,9 @@
 //! (`docs/wep-2026-09-01-trait-resolution.md`, "The candidates"). What picks
 //! between them is [`rank`](super::rank).
 
-use super::holds::{answers_args, impl_applies, newtype_base, peels_to_never, withheld_at};
+use super::holds::{
+    answers_args, impl_applies, newtype_base, peels_to_never, withheld_at, written_only_at,
+};
 use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
@@ -153,6 +155,7 @@ fn collect(
                 found.out_of_scope.push(candidate);
             }
         }
+        withheld.extend(written_only_at(program, ty));
     }
     if !found.in_scope.is_empty() {
         found.out_of_scope.clear();

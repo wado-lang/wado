@@ -414,7 +414,7 @@ let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 
 // A hole handle also answers raw(&t) / has_spec() / index(), and
 // fmt(&t, f) renders through the trait the specifier selects.
-format`x=${x:04}`          // what `x=${x:04}` is sugar for
+String::format`x=${x:04}`  // what `x=${x:04}` is sugar for
 String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x
 ```
 
@@ -594,7 +594,7 @@ assert rw as u32 == 3;     // cast to/from u32
 
 A resource is move-only, and so is anything holding one: such a type is
 declared `affine`. A value of it drops once, where its scope ends, unless it
-moved. See [the spec](./spec-types.md#affine-types).
+moved. See [the spec](./spec-affine.md).
 
 ```wado
 affine struct Conn { socket: TcpSocket, retries: i32 }
@@ -914,9 +914,9 @@ assert x > 0, "x must be positive";
 
 A `contract` clause states what a caller owes. An unmarked call checks it in
 every build; a call marked `unchecked` vouches for it, and only a build that
-checks contracts checks it: `wado test`, `-O0` and `-O1` (the default of
-`wado run` and `wado serve`), or `-f contract-checks`. A clause runs at the
-call, so a `return` or `?` inside it is an error. See
+checks contracts checks it: `wado test` at any level, `-O0` and `-O1` (the
+default of `wado run`, `wado serve` and `wado test`), or `-f contract-checks`. A
+clause runs at the call, so a `return` or `?` inside it is an error. See
 [the spec](./spec-assertions.md#contract-checks).
 
 ```wado
@@ -1120,6 +1120,11 @@ fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
 // middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
 
+// A spread over a non-pack type: a tuple of any length, every element that type
+fn sum(values: [..i32]) -> i32 { ... }
+sum([1, 2, 3]);                           // 6
+fn collect<T>(items: [..T]) -> List<T> { ... }   // a walk binds `T` itself
+
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]
@@ -1274,6 +1279,8 @@ affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, 
 affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
 trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
 affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
+// `[c[i], c[j]] = [c[j], c[i]]` calls it: the elements move, affine ones too
+affine trait IndexSwap<I> with () { fn index_swap(&mut self, a: I, b: I); }
 
 // For string template interpolation
 pub affine trait Display with () { fn fmt(&self, f: &mut Formatter); } // stringify with specifiers
@@ -1342,7 +1349,7 @@ impl<T: Eq> Eq for Pair<T> {
 
 ### Auto-Derived Traits
 
-`Eq`, `Ord`, `Default`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable and serializable with no declaration:
+`Eq`, `Ord`, `Default`, `Hash`, `Serialize`, and `Deserialize` are _bound-driven_: they are derived where a use or bound needs them, no marker required. A plain struct is comparable, hashable and serializable with no declaration:
 
 ```wado
 struct Point { x: i32, y: i32 }
@@ -2007,6 +2014,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
   point ranges or per character
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
+- [`core:fuel`](./stdlib-core-fuel.md) — `measure`, the fuel (Wasm instructions)
+  a region of a test ran, under `wado test --report-fuel`
 - [`core:eval`](./stdlib-core-eval.md) — compile and run a program from source
   under `wado test`, for testing code generators
 

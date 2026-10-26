@@ -3,22 +3,22 @@
 //! toolchain. A name it does not answer is `null`, never an approximate set:
 //! `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
 
-pub use { BinaryProperty, Properties } from "./icu.wat" with { type: "wat" };
+pub use { Properties } from "./icu.wat" with { type: "wat" };
 
 #[synopsis]
 test {
-    assert has(BinaryProperty::Uppercase, 'À');
+    assert has(Properties::BinaryProperty::Uppercase, 'À');
     assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 }
 
 /// Whether `ch` has the property. Total, and the name costs nothing at run
 /// time: an enum case is a number, and ICU4X bakes each property as a static.
-pub fn has(property: BinaryProperty, ch: char) -> bool {
+pub fn has(property: Properties::BinaryProperty, ch: char) -> bool {
     return Properties::has(property, ch);
 }
 
 /// The property's inclusive code point ranges, lowest first.
-pub fn set(property: BinaryProperty) -> List<[u32, u32]> {
+pub fn set(property: Properties::BinaryProperty) -> List<[u32, u32]> {
     return Properties::set(property);
 }
 

@@ -2,66 +2,27 @@
 //! picks it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Embed, One, Past, Prepared, Seq, forward } from "./branch.onnxtext"
+use { C0, M, N, Prepared, X1, forward } from "./branch.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "C",
-                        axes: ["One"],
-                    },
-                    {
-                        pattern: "X",
-                        axes: ["Seq", "Embed"],
-                    },
-                    {
-                        pattern: "P",
-                        axes: ["Past", "Embed"],
-                    },
-                    {
-                        pattern: "V",
-                        axes: ["Seq", "Embed"],
-                    },
-                    {
-                        pattern: "K",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "W",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "T",
-                        axes: ["Total", "Embed"],
-                        graph: "with_past",
-                    },
-                    {
-                        pattern: "Y",
-                        axes: ["Total", "Embed"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
-fn cond(taken: bool) -> Tensor<bool, [One]> {
+fn cond(taken: bool) -> Tensor<bool, [C0]> {
     return Tensor {
         data: [taken],
         extents: [1],
     };
 }
 
-fn x(data: List<f32>) -> Tensor<f32, [Seq, Embed]> {
+fn x(data: List<f32>) -> Tensor<f32, [N, X1]> {
     return Tensor {
         data,
         extents: [data.len() / 2, 2],
     };
 }
 
-fn past(data: List<f32>) -> Tensor<f32, [Past, Embed]> {
+fn past(data: List<f32>) -> Tensor<f32, [M, X1]> {
     return Tensor {
         data,
         extents: [data.len() / 2, 2],

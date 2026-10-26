@@ -40,8 +40,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     for let length of [4, 7] as List<i32> {
         let ids: List<i64> = (0..<length).map(|i| (i * 13 + 5) as i64).collect();
         let extents: List<i32> = [1, length];
-        let input = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: ids, extents };
-        let mask = Tensor::<i64, [gpt2::Batch, gpt2::Seq]> { data: List::<i64>::filled(length, 1), extents };
+        let input = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: ids, extents };
+        let mask = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+            data: List::<i64>::filled(length, 1),
+            extents,
+        };
         let want = gpt2::forward(&mut Cpu {}, &input, &mask, &on_cpu);
         let [read, dispatched] = [
             gpu.read_backs(),
@@ -49,8 +52,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         ];
         let got = gpt2::forward(&mut gpu, &input, &mask, &on_gpu);
         println(
-            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs(
-            ) - read}`,
+            `logits ${got.extents:?} ${deviation(&got.data, &want.data)} dispatches ${gpu.dispatches() - dispatched} read backs ${gpu.read_backs() - read}`,
         );
     }
 }

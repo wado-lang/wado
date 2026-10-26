@@ -3,11 +3,11 @@
 //! beside each model, one bare `TensorProto` to a `.pb` file.
 
 use { eval } from "core:eval";
+use { Tensor } from "lib:loam";
 use { emit } from "lib:loam/src/emit.wado";
 use { Graph, Known, Stored } from "lib:loam/src/graph.wado";
 use { infer } from "lib:loam/src/infer.wado";
 use { known_tensor, read_tensor } from "lib:loam/src/onnx_proto.wado";
-use { Schema } from "lib:loam/src/schema.wado";
 
 /// The backend a generated module's `forward` runs through in these tests,
 /// spliced after the module; see `opaque_backend.wado`.
@@ -22,10 +22,10 @@ use { println, Stdout } from "core:cli";
 `;
 }
 
-/// The module the generator writes for `graph` under `schema`, its kernels
-/// fused where `fuse` lets them, or why the build refuses it.
-pub fn generated(graph: &Graph, schema: &Schema, fuse: bool = true) -> Result<String, String> {
-    let checked = infer(graph, schema).map_err(|e| `${e}`)?;
+/// The module the generator writes for `graph`, its kernels fused where `fuse`
+/// lets them, or why the build refuses it.
+pub fn generated(graph: &Graph, fuse: bool = true) -> Result<String, String> {
+    let checked = infer(graph).map_err(|e| `${e}`)?;
     return emit(graph, &checked, &"lib:loam", fuse).map_err(|e| `${e}`);
 }
 
@@ -48,6 +48,17 @@ pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
         panic("the tensor is not float");
     };
     return [data, extents];
+}
+
+/// A decoder's keys and values so far, one `[data, extents]` per layer's key
+/// and value in the order the graph names them. Each layer's cache, and each
+/// present, has axes of its own, so the cache crosses back as its elements.
+pub type Cache = List<[List<f32>, List<i32>]>;
+
+/// Entry `i` of the cache, under the axes the input it is passed as names.
+pub fn past<A>(cache: &Cache, i: i32) -> Tensor<f32, A> {
+    let [data, extents] = cache[i];
+    return Tensor { data, extents };
 }
 
 /// `tensor_of` for an int64 tensor, such as token ids.

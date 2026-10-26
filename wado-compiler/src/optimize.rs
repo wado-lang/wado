@@ -54,7 +54,6 @@ mod sroa_param;
 pub(crate) mod sroa_variant_return;
 mod store_load_forward;
 mod string_push;
-mod tmpl_hoist;
 mod tuple_projection;
 mod unsigned_range_check;
 mod value_copy;
@@ -76,7 +75,7 @@ use crate::trace::filter;
 #[cfg(debug_assertions)]
 use crate::type_table::TypeTable;
 
-use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
+use const_branch_prune::prune_constant_branches;
 use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
@@ -90,6 +89,7 @@ use dce::{
 use drve::eliminate_dead_return_values;
 use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
+pub(crate) use inline::is_constant_arg;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
 use mod_ref::{SummaryCache, summarize};
@@ -98,7 +98,6 @@ use sroa::scalar_replace_aggregates;
 use sroa_param::{SroaParamState, sroa_single_field_parameters};
 use sroa_variant_return::scalarize_variant_returns;
 use store_load_forward::forward_stores_to_loads;
-use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
 use extract::FreezePhase;
@@ -463,7 +462,7 @@ fn live_bodies(project: &NirPackage) -> usize {
 }
 
 /// Defensive iteration cap for the post-loop cleanup fixpoints
-/// (`cond_impl_post_promote`, `branch_prune_final`, `const_fold_post_global`).
+/// (`cond_impl_post_promote`, `const_fold_post_global`).
 /// In practice these converge in a handful of rounds; the cap exists only so an
 /// oscillating rewrite pair cannot hang compilation, mirroring the bounded
 /// iteration count of the main fixed-point loop.
@@ -935,9 +934,8 @@ fn run_optimization_passes(
             // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
             gated!("nir/const_fold", GatedPass::ConstFold, fold_constants);
             // Trivial-block / dead-statement pruning moved into the pre-inline
-            // `nir/peephole` run above; the post-loop `branch_prune_final` and the
-            // post-globalization `const_fold_post_global` keep their own engine
-            // sessions (`prune_template_block_wrappers` / `prune_constant_branches`).
+            // `nir/peephole` run above; the post-loop runs keep their own engine
+            // sessions (`prune_constant_branches`).
             // After `const_fold`, so a caller's config struct literal already holds
             // folded constants; inside the loop, so a constant a later pass exposes
             // is carried down its whole call chain too. Its column only skips a
@@ -955,9 +953,6 @@ fn run_optimization_passes(
             });
             gated!("nir/licm", GatedPass::Licm, |p, g| {
                 apply_licm(p, g, &mut heap_effects)
-            });
-            gated!("nir/tmpl_hoist", GatedPass::TmplHoist, |p, g| {
-                hoist_template_buffers(p, g, &mut heap_effects)
             });
         });
         compiler_trace!(
@@ -1022,16 +1017,6 @@ fn run_optimization_passes(
             forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
         },
     );
-    // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
-    // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
-    // by now (it runs inside the fixpoint loop), so the wrappers are
-    // pure overhead — peel them so codegen emits the inner straight-line
-    // body directly. Iterate until convergence because one flatten can
-    // expose another (e.g. single-stmt Block collapse on a freshly
-    // produced `Block { Expr(tail) }`).
-    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, exec, |p, g| {
-        prune_template_block_wrappers(p, g)
-    });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
     // into shared immutable module globals so they build once at instantiation
     // (WEP-2026-05-31). Runs once after the fixpoint converges, on the stable

@@ -2,9 +2,7 @@
 //! `TirOptVisitor` to mutate with change tracking. Plus a few shared TIR queries.
 
 use crate::flat_package::FlatPackage;
-use crate::tir::{
-    TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind, TirTemplatePart,
-};
+use crate::tir::{TirBlock, TirExpr, TirExprKind, TirPattern, TirStmt, TirStmtKind};
 
 /// Trait for mutable traversal of TIR trees.
 ///
@@ -228,13 +226,6 @@ pub trait TirMutVisitor {
                 self.visit_expr(callee);
                 for arg in args {
                     self.visit_expr(arg);
-                }
-            }
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.visit_expr(inner);
-                    }
                 }
             }
             TirExprKind::WithHandler { bindings, body, .. } => {
@@ -480,13 +471,6 @@ pub trait TirRefVisitor {
                 self.visit_expr(callee);
                 for arg in args {
                     self.visit_expr(arg);
-                }
-            }
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                        self.visit_expr(inner);
-                    }
                 }
             }
             TirExprKind::WithHandler { bindings, body, .. } => {
@@ -741,13 +725,6 @@ pub fn opt_walk_expr(visitor: &mut impl TirOptVisitor, expr: &mut TirExpr) -> bo
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => {}
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr: inner, .. } = part {
-                    changed |= visitor.visit_expr(inner);
-                }
-            }
-        }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for binding in bindings {
                 changed |= visitor.visit_expr(&mut binding.handler);
@@ -883,7 +860,6 @@ pub fn expr_has_break_to(label: &str, expr: &TirExpr) -> bool {
         | TirExprKind::Null
         | TirExprKind::Unit
         | TirExprKind::EnumConstruct { .. } => false,
-        TirExprKind::TemplateString { .. } => false,
         TirExprKind::WithHandler { body, .. } => block_has_break_to(label, body),
     }
 }

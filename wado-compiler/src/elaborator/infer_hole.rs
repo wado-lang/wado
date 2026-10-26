@@ -23,7 +23,7 @@ use crate::elaborator::sem::types::{
     StaticMethodDispatch,
 };
 use crate::elaborator::types::VariantInfo;
-use crate::name::{FqTraitName, mangle_generic_name};
+use crate::name::{FqTraitName, mangle_generic_name, written_param_name};
 use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
@@ -72,7 +72,7 @@ impl Blame {
         }
         let named = params
             .iter()
-            .map(|p| format!("`{p}`"))
+            .map(|p| format!("`{}`", written_param_name(p)))
             .collect::<Vec<_>>()
             .join(", ");
         format!("cannot infer type parameter {named} {}", self.owner)
@@ -692,6 +692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .operator_dispatch
             .values_mut()
             .chain(facts.index_assign_dispatch.values_mut())
+            .chain(facts.index_swap_dispatch.values_mut())
         {
             sub_operator_dispatch(tt, od, subst);
         }

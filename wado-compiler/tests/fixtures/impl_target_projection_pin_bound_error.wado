@@ -1,0 +1,47 @@
+// A target projection naming a parameter only a pin binds is still checked:
+// `U::K` is `i32`, so `Wrap<Ka, String>` has no `foo`.
+
+trait Tr with () {
+    type Key;
+}
+
+trait Keyed with () {
+    type K;
+}
+
+trait Foo with () {
+    fn foo(&self) -> i32;
+}
+
+struct Wrap<A, B> {
+    a: A,
+    b: B,
+}
+
+struct Ka {}
+
+struct Kb {}
+
+impl Tr for Ka {
+    type Key = Kb;
+}
+
+impl Keyed for Kb {
+    type K = i32;
+}
+
+impl<T: Tr<Key = U>, U: Keyed> Foo for Wrap<T, U::K> {
+    fn foo(&self) -> i32 {
+        return 1;
+    }
+}
+
+test {
+    let w = Wrap { a: Ka {}, b: "x" };
+    let _ = w.foo();
+}
+
+__DATA__
+{
+    "compile_error": ":41:13: analysis error: no method 'foo' found on type 'Wrap<Ka, String>'"
+}

@@ -1,23 +1,15 @@
-//! Template string expansion: `TirExprKind::TemplateString` becomes a `$tmpl`
-//! labeled block of `String::with_capacity`, `push_str` calls, `Formatter`
-//! construction, and `Display` / `Inspect` dispatch. Runs pre-monomorphize, so
-//! the emitted trait calls resolve there — no post-mono `has_trait_impl` check
-//! or standalone inspect function is needed.
+//! A template shape's `$hole_fmt` bridge: hole `k` rendered through the format
+//! trait its specifier selects, into a caller's `Formatter`. Runs
+//! pre-monomorphize, so the emitted trait calls resolve there.
 //!
-//! The emitted shape is a contract: `optimize::tmpl_hoist` matches it back
-//! apart, which is why `optimize::const_branch_prune` leaves the block
-//! un-flattened until that pass has run. Both sides name what they agree on
-//! through [`crate::name`], [`CompilerItem`],
-//! [`crate::compiler_item::SeqField`] and [`FormatterField`] rather than
-//! spelling it out twice. `Formatter`'s sentinels are the one exception —
-//! repeated in Rust, and pinned by the e2e fixture
-//! `template_format_spec.wado`.
+//! The `Formatter` literal a specifier builds names its fields through
+//! [`FormatterField`], checked against the declaration. Its sentinels are
+//! repeated in Rust, and pinned by the e2e fixture `template_format_spec.wado`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::call_args::CallArgs;
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::SolverBridge;
@@ -27,21 +19,17 @@ use crate::elaborator::trait_env::{
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{
-    FqTraitName, FqTypeName, LocalMethodName, MethodName, RefKind, TEMPLATE_BLOCK_LABEL,
-    TEMPLATE_FORMATTER_LOCAL, TEMPLATE_RESULT_LOCAL, hole_fmt_helper_name,
-};
+use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
 use crate::synthesis::common::{
     deref_expr, field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr,
     ref_expr,
 };
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
-    CallArg, FunctionRef, LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId,
-    TemplateShape, TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam,
-    TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TemplateShape,
+    TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TypeId,
 };
-use crate::tir_visitor::{TirOptVisitor, opt_walk_expr};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::{format_spec, tir};
@@ -51,9 +39,6 @@ use crate::{format_spec, tir};
 #[derive(Clone, Debug)]
 pub(super) struct FormatStdlibNames {
     pub formatter: String,
-    /// `formatter` qualified by its declaring module, as a function name
-    /// embeds it.
-    pub formatter_fq: FqTypeName,
     /// In the order [`Align`] names them.
     pub alignment_cases: [EnumCase; 3],
 }
@@ -77,7 +62,6 @@ impl FormatStdlibNames {
         assert_formatter_layout(type_table);
         Self {
             formatter: items.struct_name(CompilerItem::Formatter).to_string(),
-            formatter_fq: type_table.compiler_struct_fq_name(CompilerItem::Formatter),
             alignment_cases: [
                 case(CompilerItem::AlignmentLeft),
                 case(CompilerItem::AlignmentCenter),
@@ -114,35 +98,9 @@ fn assert_formatter_layout(type_table: &TypeTable) {
     );
 }
 
-/// Expand every `TemplateString` in the module's bodies — function bodies and
-/// global initializers alike, both of which `reify` can put one in.
-pub fn expand_templates(
-    module: &mut TirModule,
-    tt: &Rc<RefCell<TypeTable>>,
-    trait_env: &Arc<TraitEnv>,
-) {
-    let names = FormatStdlibNames::from_type_table(&tt.borrow());
-    let ctx = TemplateCtx {
-        tt,
-        module_src: module.module_source.clone(),
-        trait_env,
-        names: &names,
-    };
-    for func_rc in &module.functions {
-        let mut func = func_rc.borrow_mut();
-        let local_count = func.local_count;
-        if let Some(ref mut body) = func.body {
-            let mut expander = TemplateExpander::over(local_count, &ctx);
-            TirOptVisitor::visit_block(&mut expander, body);
-            func.local_count = expander.alloc.next_index;
-            func.locals.extend(expander.alloc.new_locals);
-        }
-    }
-}
-
-/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every tagged
-/// template shape in `module`, each arm hole `index` rendered through the
-/// per-specifier dispatch `build_template_block` emits for an interpolation.
+/// Mint `$hole_fmt$<shape>(t: &S, index: i32, f: &mut Formatter)` for every
+/// template shape in `module`, arm `index` rendering hole `index` through the
+/// trait method its specifier selects.
 pub fn synthesize_hole_fmt_helpers(
     module: &mut TirModule,
     tt: &Rc<RefCell<TypeTable>>,
@@ -226,8 +184,7 @@ struct HoleFmtArm {
 }
 
 /// Build one shape's `$hole_fmt` helper: `t` is local 0, `index` local 1 and
-/// `f` local 2; arm `k` renders hole `k` as [`build_template_block`] renders
-/// an interpolation.
+/// `f` local 2; arm `k` renders hole `k`.
 fn build_hole_fmt_helper(
     struct_type: TypeId,
     holes: &[HoleFmtArm],
@@ -336,292 +293,6 @@ struct TemplateCtx<'a> {
     names: &'a FormatStdlibNames,
 }
 
-struct FuncLocalAlloc {
-    next_index: u32,
-    new_locals: Vec<TirLocal>,
-}
-
-impl FuncLocalAlloc {
-    fn alloc(&mut self, type_id: TypeId) -> u32 {
-        let idx = self.next_index;
-        self.next_index += 1;
-        self.new_locals.push(TirLocal::synth(idx, type_id, false));
-        idx
-    }
-}
-
-/// Rewrites every `TemplateString` in a body into its expanded block, through
-/// the exhaustive [`TirOptVisitor`] walk so no node kind skips one.
-struct TemplateExpander<'a> {
-    alloc: FuncLocalAlloc,
-    ctx: &'a TemplateCtx<'a>,
-}
-
-impl<'a> TemplateExpander<'a> {
-    /// Expands into a body whose locals already run `0..next_index`.
-    fn over(next_index: u32, ctx: &'a TemplateCtx<'a>) -> Self {
-        Self {
-            alloc: FuncLocalAlloc {
-                next_index,
-                new_locals: Vec::new(),
-            },
-            ctx,
-        }
-    }
-}
-
-impl TirOptVisitor for TemplateExpander<'_> {
-    fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
-        // Closure bodies own an independent local-index namespace, so the
-        // template synth locals (`$r`, `$f`, …) must be allocated there;
-        // otherwise they collide with closure params or body lets and
-        // `LocalCollector` merges incompatibly-typed locals into one Wasm
-        // slot. Mirrors the closure-scope switch in pattern lowering.
-        if let TirExprKind::Closure {
-            params,
-            body,
-            body_locals,
-            ..
-        } = &mut expr.kind
-        {
-            let next_index = u32::try_from(params.len() + body_locals.len()).unwrap();
-            let mut nested = TemplateExpander::over(next_index, self.ctx);
-            let changed = nested.visit_expr(body);
-            // Surface the new synth locals on the closure so later passes
-            // (pattern lowering, closure planning) see a `body_locals` that
-            // matches the body's actual let-index range.
-            body_locals.extend(nested.alloc.new_locals);
-            return changed;
-        }
-
-        // Interpolations first: expanding inside out keeps a nested template
-        // (`${ `${x}` }`) from being left behind in the block this one builds.
-        let mut changed = opt_walk_expr(self, expr);
-
-        if matches!(expr.kind, TirExprKind::TemplateString { .. }) {
-            let (string_type, span) = (expr.type_id, expr.span);
-            let TirExprKind::TemplateString { parts } =
-                std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-            else {
-                unreachable!("checked above")
-            };
-            *expr = build_template_block(parts, string_type, span, &mut self.alloc, self.ctx);
-            changed = true;
-        }
-        changed
-    }
-}
-
-/// Reserved per interpolation, on top of the literal segments' exact length.
-const CAPACITY_PER_INTERPOLATION: i64 = 16;
-
-/// Build the `$tmpl: { ... }` labeled block for a template string.
-fn build_template_block(
-    parts: Vec<TirTemplatePart>,
-    string_type: TypeId,
-    span: Span,
-    alloc: &mut FuncLocalAlloc,
-    ctx: &TemplateCtx,
-) -> TirExpr {
-    let tt = ctx.tt;
-    let label = TEMPLATE_BLOCK_LABEL.to_string();
-
-    let capacity_estimate: i64 = parts
-        .iter()
-        .map(|p| match p {
-            TirTemplatePart::Literal(s) => s.len() as i64,
-            TirTemplatePart::Interpolation { .. } => CAPACITY_PER_INTERPOLATION,
-        })
-        .sum();
-
-    let buf_index = alloc.alloc(string_type);
-    let buf = BufLocal {
-        index: buf_index,
-        string_type,
-        span,
-    };
-
-    // let mut $r = String::with_capacity(N);
-    let with_capacity_call = string_call(
-        CompilerItem::StringWithCapacity,
-        None,
-        vec![],
-        vec![CallArg::new(int_literal(capacity_estimate, span), false)],
-        string_type,
-        span,
-        ctx,
-    );
-    let mut stmts = vec![TirStmt::new(
-        TirStmtKind::Let {
-            name: TEMPLATE_RESULT_LOCAL.to_string(),
-            local_index: buf_index,
-            is_mut: true,
-            type_id: string_type,
-            value: with_capacity_call,
-            storage: LetStorage::Planned,
-        },
-        span,
-    )];
-
-    let formatter_type = {
-        let def = tt
-            .borrow()
-            .require_compiler_item_def(CompilerItem::Formatter);
-        tt.borrow_mut().make_struct(StructDef::Decl(def))
-    };
-    let mut_ref_formatter = tt.borrow_mut().make_mut_ref(formatter_type);
-    let mut fmt_local_index: Option<u32> = None;
-
-    for part in parts {
-        match part {
-            TirTemplatePart::Literal(s) => {
-                let literal = TirExpr::new(TirExprKind::StringLiteral(s), string_type, span);
-                stmts.push(buf.push_str(literal, ctx));
-            }
-            TirTemplatePart::Interpolation {
-                expr: resolved,
-                format_spec,
-            } => {
-                let inner_type = tt.borrow().peel_refs(resolved.type_id);
-                let kind = format_spec
-                    .as_ref()
-                    .map_or(FormatKind::Display, |spec| spec.kind);
-
-                // A plain `${s}` on a `String` is the buffer append itself.
-                if inner_type == string_type && format_spec.is_none() {
-                    let derefed = deref_to_inner(*resolved, string_type, span);
-                    stmts.push(buf.push_str(derefed, ctx));
-                    continue;
-                }
-
-                let formatter_expr = || {
-                    build_formatter_expr(&buf, formatter_type, format_spec.as_ref(), tt, ctx.names)
-                };
-                // One `Formatter` local serves the whole block: the first
-                // interpolation declares it, the rest overwrite it.
-                let fmt_index = if let Some(idx) = fmt_local_index {
-                    let assign = TirExpr::new(
-                        TirExprKind::Assign {
-                            target: Box::new(formatter_local(idx, formatter_type, span)),
-                            value: Box::new(formatter_expr()),
-                        },
-                        TypeTable::UNIT,
-                        span,
-                    );
-                    stmts.push(TirStmt::new(TirStmtKind::Expr(assign), span));
-                    idx
-                } else {
-                    let idx = alloc.alloc(formatter_type);
-                    fmt_local_index = Some(idx);
-                    stmts.push(TirStmt::new(
-                        TirStmtKind::Let {
-                            name: TEMPLATE_FORMATTER_LOCAL.to_string(),
-                            local_index: idx,
-                            is_mut: true,
-                            type_id: formatter_type,
-                            value: formatter_expr(),
-                            storage: LetStorage::Planned,
-                        },
-                        span,
-                    ));
-                    idx
-                };
-
-                let fmt_mut_ref = mut_ref_expr(
-                    formatter_local(fmt_index, formatter_type, span),
-                    mut_ref_formatter,
-                    span,
-                );
-                let dispatch = interpolation_dispatch_type(
-                    resolved.type_id,
-                    kind,
-                    ctx.trait_env,
-                    &tt.borrow(),
-                );
-                stmts.extend(trait_fmt_call(
-                    dispatch,
-                    *resolved,
-                    fmt_mut_ref,
-                    kind,
-                    span,
-                    ctx,
-                ));
-            }
-        }
-    }
-
-    // break $tmpl: $r;
-    stmts.push(TirStmt::new(
-        TirStmtKind::Break {
-            label: Some(label.clone()),
-            value: Some(buf.read()),
-        },
-        span,
-    ));
-
-    TirExpr::new(
-        TirExprKind::LabeledBlock {
-            label,
-            block: TirBlock::new(stmts, span),
-            result_type: string_type,
-        },
-        string_type,
-        span,
-    )
-}
-
-/// The `$r` accumulator the expanded block appends into. Every read of it —
-/// the value, a `&`, a `&mut` — comes from here, so the local's identity is
-/// written once.
-struct BufLocal {
-    index: u32,
-    string_type: TypeId,
-    span: Span,
-}
-
-impl BufLocal {
-    fn read(&self) -> TirExpr {
-        TirExpr::new(
-            TirExprKind::Local {
-                index: self.index,
-                name: TEMPLATE_RESULT_LOCAL.to_string(),
-            },
-            self.string_type,
-            self.span,
-        )
-    }
-
-    fn mut_ref(&self, tt: &Rc<RefCell<TypeTable>>) -> TirExpr {
-        let mut_ref_string = tt.borrow_mut().make_mut_ref(self.string_type);
-        mut_ref_expr(self.read(), mut_ref_string, self.span)
-    }
-
-    /// `$r.push_str::<String>(value)`.
-    fn push_str(&self, value: TirExpr, ctx: &TemplateCtx) -> TirStmt {
-        let call = string_call(
-            CompilerItem::StringPushStr,
-            Some(self.read()),
-            vec![self.string_type],
-            vec![CallArg::new(value, false)],
-            TypeTable::UNIT,
-            self.span,
-            ctx,
-        );
-        TirStmt::new(TirStmtKind::Expr(call), self.span)
-    }
-}
-
-fn formatter_local(index: u32, formatter_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::Local {
-            index,
-            name: TEMPLATE_FORMATTER_LOCAL.to_string(),
-        },
-        formatter_type,
-        span,
-    )
-}
-
 fn int_literal(value: i64, span: Span) -> TirExpr {
     TirExpr::new(
         TirExprKind::IntLiteral {
@@ -631,84 +302,6 @@ fn int_literal(value: i64, span: Span) -> TirExpr {
         TypeTable::I32,
         span,
     )
-}
-
-/// Call an inherent `String` method named by a compiler item — `receiver`
-/// present for a method call, absent for an associated function.
-fn string_call(
-    item: CompilerItem,
-    receiver: Option<TirExpr>,
-    type_args: Vec<TypeId>,
-    args: Vec<CallArg>,
-    return_type: TypeId,
-    span: Span,
-    ctx: &TemplateCtx,
-) -> TirExpr {
-    let (module_source, method_name, template) = {
-        let tt = ctx.tt.borrow();
-        let items = tt.compiler_items();
-        let (module_source, _, method_name) = items.require_method(item);
-        (
-            module_source.clone(),
-            method_name.to_string(),
-            items.require_template(item),
-        )
-    };
-    let owner = ctx
-        .tt
-        .borrow()
-        .compiler_struct_fq_name(CompilerItem::String);
-    let method_info = LocalMethodName::new(owner.clone(), None, method_name.clone());
-    let func = FunctionRef {
-        module_source,
-        name: MethodName::format_local(&owner, None, &method_name),
-        template: Some(template),
-        monomorph_info: None,
-        method_info: Some(method_info),
-    };
-    let kind = match receiver {
-        Some(receiver) => TirExprKind::method_call(Box::new(receiver), func, type_args, args),
-        None => TirExprKind::Call {
-            func: Box::new(func),
-            type_args,
-            args: CallArgs::free(args),
-        },
-    };
-    TirExpr::new(kind, return_type, span)
-}
-
-/// Build a `Formatter::new(&mut $r)` or, when the spec asks for padding or
-/// precision, the full `Formatter { ... }` literal.
-fn build_formatter_expr(
-    buf: &BufLocal,
-    formatter_type: TypeId,
-    spec: Option<&TemplateFormatSpec>,
-    tt: &Rc<RefCell<TypeTable>>,
-    names: &FormatStdlibNames,
-) -> TirExpr {
-    let span = buf.span;
-    let Some(spec) = spec.filter(|s| s.needs_formatter_fields()) else {
-        return TirExpr::new(
-            TirExprKind::Call {
-                func: Box::new(FunctionRef {
-                    module_source: ModuleSource::format(),
-                    name: format!("{}::new", names.formatter_fq),
-                    template: None,
-                    monomorph_info: None,
-                    method_info: Some(LocalMethodName::new(
-                        names.formatter_fq.clone(),
-                        None,
-                        "new".to_string(),
-                    )),
-                }),
-                type_args: vec![],
-                args: CallArgs::free(vec![CallArg::new(buf.mut_ref(tt), false)]),
-            },
-            formatter_type,
-            span,
-        );
-    };
-    build_formatter_literal(&|| buf.mut_ref(tt), formatter_type, spec, tt, names, span)
 }
 
 /// The full `Formatter { … }` literal a field-setting specifier asks for,
@@ -949,21 +542,6 @@ fn method_call_info_for_type(
     let tt = ctx.tt;
     let resolved = tt.borrow().get(type_id).clone();
     match resolved {
-        // In generic code `&T` and `&X::Item` refer to a value of the pointee, so
-        // they format as it. A reference over any other type keeps the ref
-        // blanket (`${&x:?}` → `&42`), whether or not it mentions a parameter.
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
-            if tt.borrow().receiver_head_awaits_substitution(inner) =>
-        {
-            let local_name = method_name_for_type(inner, trait_name, method_name, ctx.tt);
-            let impl_module = trait_impl_module(&local_name, inner, ctx);
-            MethodCallInfo {
-                local_name,
-                monomorph_info: None,
-                impl_module,
-                template: None,
-            }
-        }
         // An impl written on the reference answers before the blanket does.
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)
             if !ref_impl_written(

@@ -20,6 +20,7 @@ use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { Benchmark } from "core:benchmark";
+use { measure } from "core:fuel";
 
 test "smoke" {
     // Empty statuses keeps the input small while still exercising the round-trip.
@@ -29,6 +30,15 @@ test "smoke" {
     let back = cbor_from_bytes::<TwitterResponse, _>(cbor).unwrap();
     assert back.statuses.len() == 0;
     assert back.search_metadata.count == 0;
+}
+
+// `cbor/` holds three benchmarks, so each label names its dataset.
+test "fuel" {
+    let resp = json_from_bytes::<TwitterResponse, _>(#include_bytes("../json_twitter/twitter.json")).unwrap();
+    let cbor = cbor_to_bytes::<TwitterResponse>(&resp).unwrap();
+    measure("twitter/ser", || cbor_to_bytes::<TwitterResponse>(&resp).unwrap().len());
+    let count = measure("twitter/de", || cbor_from_bytes::<TwitterResponse, _>(cbor).unwrap().statuses.len());
+    assert count == 100;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

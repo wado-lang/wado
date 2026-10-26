@@ -115,10 +115,21 @@ pub(super) fn unify(
                 if packs.len() == 1 {
                     let pack_elements: Vec<TypeId> =
                         actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
+                    let pack = expected_elems[packs[0]];
+                    let repeated = type_table.borrow_mut().repeated_element(pack);
+                    let key = match repeated {
+                        // A repeat's pack is only its length: the elements meet
+                        // the one type it repeats.
+                        Some((identity, element)) => {
+                            for &actual_elem in &pack_elements {
+                                unify(type_table, element, actual_elem, bindings);
+                            }
+                            identity
+                        }
+                        None => pack,
+                    };
                     let pack_tuple = type_table.borrow_mut().make_tuple(pack_elements);
-                    bindings
-                        .entry(expected_elems[packs[0]])
-                        .or_insert(pack_tuple);
+                    bindings.entry(key).or_insert(pack_tuple);
                 }
             }
         }

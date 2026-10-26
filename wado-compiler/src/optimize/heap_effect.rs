@@ -515,50 +515,6 @@ impl HeapEffects<'_> {
         !r.elements || source.is_none_or(|a| self.elements_hold_reference(body.operand_type(a)))
     }
 
-    /// Each argument of `call`, in the callee's parameter order, with what the
-    /// call keeps of it.
-    pub(super) fn kept_args(&self, body: &Body, call: ExprId) -> Vec<(Operand, Kept)> {
-        let (target, args) = call_parts(self, body, call);
-        args.iter()
-            .enumerate()
-            .map(|(j, &a)| {
-                let kept = match target {
-                    Target::Summary(s) => Kept {
-                        in_result: s.ret.has_param(j),
-                        stored: s.into_elsewhere.has_param(j)
-                            || s.into_params
-                                .iter()
-                                .enumerate()
-                                .any(|(k, into)| k != j && into.has_param(j)),
-                    },
-                    Target::Builtin(declaration) => {
-                        let retains = || {
-                            declaration.retains.iter().filter(|r| {
-                                r.source == j && self.retains_reference(body, r, Some(a))
-                            })
-                        };
-                        Kept {
-                            in_result: returns_part_of(declaration, j)
-                                || retains().any(|r| {
-                                    matches!(r.into, RetainInto::Result | RetainInto::Anywhere)
-                                }),
-                            stored: retains().any(|r| match r.into {
-                                RetainInto::Param(q) => q != j,
-                                RetainInto::Anywhere => true,
-                                RetainInto::Result => false,
-                            }),
-                        }
-                    }
-                    Target::Opaque { .. } => Kept {
-                        in_result: true,
-                        stored: true,
-                    },
-                };
-                (a, kept)
-            })
-            .collect()
-    }
-
     /// Every object type `call` may write that its caller can reach: through
     /// an argument, or held elsewhere.
     fn call_writes(&self, body: &Body, call: ExprId) -> ObjectTypes {
@@ -726,6 +682,7 @@ impl HeapEffects<'_> {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => {
@@ -873,15 +830,6 @@ impl Keys {
             }
         }
     }
-}
-
-/// What a call keeps of one argument.
-#[derive(Clone, Copy, Default, Debug)]
-pub(super) struct Kept {
-    /// The result may hold what the argument holds.
-    pub(super) in_result: bool,
-    /// The call may store it in a global or another argument.
-    pub(super) stored: bool,
 }
 
 /// One read or write of an object: where it happens, through which operand,

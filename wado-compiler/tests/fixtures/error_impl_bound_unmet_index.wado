@@ -27,7 +27,7 @@ impl<T: Tag> IndexValue<i32> for Wrap<T> {
 }
 
 struct Point {
-    x: i32,
+    x: fn() -> i32,
 }
 
 struct Sink<T> {
@@ -44,14 +44,14 @@ test {
     let w = Wrap { v: "s" };
     let a = w[0];
     let mut m = HashMap::<Point, i32>::new();
-    m[Point { x: 1 }] = 3;
-    let b = m[Point { x: 1 }];
+    m[Point { x: || 1 }] = 3;
+    let b = m[Point { x: || 1 }];
     let mut s = Sink { v: "s" };
     s[0] = 1;
 }
 
 __DATA__
 {
-    "compile_error": ":45:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 46:17: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 47:5: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 48:13: type 'Point' does not implement trait 'Hash' required by bound on 'K'; 50:5: type 'String' does not implement trait 'Tag' required by bound on 'T'",
+    "compile_error": ":45:13: analysis error: type 'String' does not implement trait 'Tag' required by bound on 'T'; 46:17: type 'Point' does not implement trait 'Hash' required by bound on 'K'\n  note: `Point` does not implement `Hash` because field `x` of type `fn() -> i32` does not implement `Hash`; 47:5: type 'Point' does not implement trait 'Hash' required by bound on 'K'\n  note: `Point` does not implement `Hash` because field `x` of type `fn() -> i32` does not implement `Hash`; 48:13: type 'Point' does not implement trait 'Hash' required by bound on 'K'\n  note: `Point` does not implement `Hash` because field `x` of type `fn() -> i32` does not implement `Hash`; 50:5: type 'String' does not implement trait 'Tag' required by bound on 'T'",
     "compile_errors_not_contains": ["IndexValue", "not a place"]
 }

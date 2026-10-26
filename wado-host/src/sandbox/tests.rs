@@ -220,7 +220,13 @@ fn reads_only_what_is_granted() {
     let read = |path: &Path| sh(&policy, &format!("cat '{}'", path.display()));
     assert_eq!(read(&tree.granted().join("in.txt")), OK);
     assert_ne!(read(&tree.outside().join("out.txt")), OK);
-    assert_ne!(read(Path::new("/etc/passwd")), OK);
+}
+
+#[test]
+fn reads_the_system_configuration() {
+    assert_available();
+    let tree = Tree::new();
+    assert_eq!(sh(&tree.policy(Network::Denied), "cat /etc/passwd"), OK);
 }
 
 #[test]

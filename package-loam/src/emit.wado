@@ -2,10 +2,11 @@
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
 use { HashMap, HashSet } from "core:collections";
-use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, is_reserved, wado } from "lib:wadopoet";
+use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { Extent, Solved, solved } from "./extent.wado";
+use { BACKEND_PARAM, KEPT, MAP, PASSED, PREPARED, RUNTIME_NAMES, is_bound, module_idents } from "./idents.wado";
 use { Poly } from "./poly.wado";
-use { Axis, Shape } from "./shape.wado";
+use { Axes, Axis, Shape } from "./shape.wado";
 use {
     Elements,
     GROUP_QUERY_ATTENTION,
@@ -72,9 +73,6 @@ pub struct NameCollision {
 }
 
 pub variant EmitError {
-    /// An axis named as something the generated module declares. Unlike a
-    /// tensor, it is not renamed: the schema's author chose the word.
-    ReservedAxis(String),
     Dtype(UnmappedDtype),
     Collision(NameCollision),
     /// A graph with nothing for `forward` to return.
@@ -100,9 +98,6 @@ impl Display for NameCollision {
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
-            ReservedAxis(axis) => {
-                f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
-            },
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             NoOutput => f.write_str("the graph declares no output for `forward` to return"),
@@ -266,10 +261,7 @@ impl Names {
             reserved.insert(MAP);
         }
         for let axis of *axes {
-            if is_bound(&reserved, &axis) {
-                builtin::cold_path();
-                return Result::Err(EmitError::ReservedAxis(axis));
-            }
+            assert !is_bound(&reserved, &axis), "infer names an axis past every name the module declares";
             reserved.insert(axis);
         }
         let mut tensors: List<String> = [];
@@ -357,65 +349,13 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
     }
 }
 
-/// What the generated module imports from the runtime: every name its code
-/// spells, whether or not one graph's code reads it.
-global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "Columns", "Concat", "Epilogue", "Expected", "Expr", "LoadError", "Merged",
-    "Paired", "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch",
-    "extents_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent",
-    "unmet",
-];
-
-/// Whether `name` already means something in the generated module.
-fn is_bound(module: &HashSet<String>, name: &String) -> bool {
-    return module.contains(*name) || is_reserved(name);
-}
-
-/// The names the generated module binds beyond the language's own.
-fn module_idents() -> HashSet<String> {
-    let mut reserved = HashSet::<String>::new();
-    for let name of RUNTIME_NAMES {
-        reserved.insert(name);
-    }
-    reserved.insert("forward");
-    reserved.insert("pass");
-    reserved.insert("Outputs");
-    reserved.insert(PASSED);
-    reserved.insert("weights");
-    reserved.insert("Weights");
-    reserved.insert(PREPARED);
-    reserved.insert(KEPT);
-    // The methods `Weights`, `Prepared` and `Kept` carry, which a field must
-    // not share.
-    reserved.insert("prepare");
-    reserved.insert("load");
-    reserved.insert("embedded");
-    reserved.insert("new");
-    reserved.insert("backend");
-    reserved.insert(BACKEND_PARAM);
-    return reserved;
-}
-
-/// The type parameter `forward` takes its backend as.
-global BACKEND_PARAM: String = "Bk";
-
-/// That parameter declared with its kind and bound: a backend may own device
-/// resources.
+/// The backend parameter declared with its kind and bound: a backend may own
+/// device resources.
 global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
 
-/// The struct `pass` returns several outputs in, as the backend holds them.
-global PASSED: String = "Passed";
-
-/// The struct `forward` reads the weights from, and its type over the backend.
-global PREPARED: String = "Prepared";
+/// `Prepared` and `Kept` over the backend.
 global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
-
-/// The struct the constructors of `Prepared` take its kept literals from.
-global KEPT: String = "Kept";
 global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
-
-/// The map a sharded `load` takes the shards in, keyed by file name.
-global MAP: String = "HashMap";
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.
@@ -2020,7 +1960,7 @@ fn binary_term(node: &Node, shapes: &HashMap<String, Shape>, exprs: &Operands) -
 /// The window stage 0 read for a `MaxPool` or `Conv`, as the kernel takes it.
 fn window_geometry(node: &Node, shapes: &HashMap<String, Shape>, symbols: &mut Symbols) -> Result<String, EmitError> {
     // Stage 0 owed these already.
-    let window = settled(window_of(node, &shapes.get(node.inputs[0]).unwrap(), shapes, &mut []));
+    let window = settled(window_of(node, &shapes.get(node.inputs[0]).unwrap(), shapes, &mut [], &Axes {}));
     let pads = symbols.spell_polys(&window.pads)?;
     let output = symbols.spell_polys(&window.output)?;
     return Result::Ok(

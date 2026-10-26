@@ -1171,12 +1171,12 @@ The compiler writes some trait impls itself. This section says which, and when.
 
 Each prelude trait follows one policy for when an impl exists:
 
-| Policy    | `T: Trait` holds when                                                             | Traits                                             |
-| --------- | --------------------------------------------------------------------------------- | -------------------------------------------------- |
-| on demand | every member of `T` satisfies the trait                                           | `Eq`, `Ord`, `Default`, `Serialize`, `Deserialize` |
-| total     | always                                                                            | `Inspect`                                          |
-| written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                          |
-| explicit  | an impl is written                                                                | every user-defined trait                           |
+| Policy    | `T: Trait` holds when                                                             | Traits                                                     |
+| --------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| on demand | every member of `T` satisfies the trait                                           | `Eq`, `Ord`, `Default`, `Hash`, `Serialize`, `Deserialize` |
+| total     | always                                                                            | `Inspect`                                                  |
+| written   | an impl is written, `T` is a plain `enum`, or `T` is a newtype whose base has one | `Display`                                                  |
+| explicit  | an impl is written                                                                | every user-defined trait                                   |
 
 One exception narrows the on-demand row. `Default` asks that every field carry a
 default expression, not that every member satisfy `Default`, so only a struct
@@ -1193,6 +1193,12 @@ it were not written.
 [Ord - Ordering](./spec-standard-traits.md#ord---ordering) says what holds when
 both are written.
 
+`Hash` follows the same source. A derived `hash` feeds the members a derived
+`eq` compares, and a written `eq` or `cmp` may equate values whose members
+differ. So a type writing either derives no `Hash`, and a newtype writing one
+inherits none from its base: a use that needs one is a compile error until
+`hash` is written too.
+
 Each instance of a generic declaration reads this rule by the impls that reach
 it. An `Eq` taken from `cmp` holds wherever the written `Ord` does, so
 `impl<T: Ord> Ord for Ranked<T>` makes `Ranked<T>` an `Eq` where `T: Ord`, and
@@ -1204,16 +1210,17 @@ gives `&Item` no `Eq` of its own.
 
 A [marker](#compiler-synthesized-impl) asks for the impl this rule gives. So
 `impl Eq for T;` beside a written `cmp` takes `Eq` from `cmp`, and
-`impl Ord for T;` beside a written `eq` is an error.
+`impl Ord for T;` beside a written `eq`, or `impl Hash for T;` beside a written
+`eq` or `cmp`, is an error.
 
 An on-demand impl is generated only where a use needs it, not for every declared
 type. For `Eq` and `Ord` that use is an operator, a comparison method, or a
-bound; for `Default`, a `T: Default` bound or a `T::default()` call; for serde,
-a bound. A [marker](#compiler-synthesized-impl) needs one too.
+bound; for `Default`, a `T: Default` bound or a `T::default()` call; for `Hash`
+and serde, a bound. A [marker](#compiler-synthesized-impl) needs one too.
 
-A `fn`-typed member blocks `Eq`, `Ord`, and serde. A plain `enum` and a `flags`
-type have no members, so they satisfy those three outright.
-[Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
+A `fn`-typed member blocks `Eq`, `Ord`, `Hash`, and serde. A plain `enum` and a
+`flags` type have no members, so they satisfy `Eq`, `Ord`, `Hash`, and serde
+outright. [Auto-derived Traits](./spec-types.md#auto-derived-traits) says what each
 derived `Eq` and `Ord` compares.
 
 A generic declaration derives once, for every instantiation whose type
@@ -1235,7 +1242,7 @@ is never derived.
 
 A marker `impl Trait for Type;` (a semicolon instead of a block) asks the
 compiler to write the impl's methods. It is accepted for `From`, `Serialize`,
-`Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`, on a struct, enum,
+`Deserialize`, `Eq`, `Ord`, `Hash`, `Default`, and `Inspect`, on a struct, enum,
 variant, or flags type, except where the trait narrows it: `Default` derives
 only for a struct ([Auto-Derivation](./spec-standard-traits.md#auto-derivation)),
 and `From` only for a variant
@@ -1261,9 +1268,9 @@ test {
 }
 ```
 
-For `Eq`, `Ord`, `Default`, and serde, a marker is also a conformance check. A
-type that is not eligible is a compile error at the marker's own span, with a
-reason chain:
+For `Eq`, `Ord`, `Hash`, `Default`, and serde, a marker is also a conformance
+check. A type that is not eligible is a compile error at the marker's own span,
+with a reason chain:
 
 <!-- {"fixture":"spec_traits_marker_ineligible.wado"} -->
 
@@ -1304,7 +1311,7 @@ supply.
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 
 ```wado
-fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
+fn describe<T>(v: &T) -> String { return `${*v:?}`; }         // any type
 fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
 
 test {

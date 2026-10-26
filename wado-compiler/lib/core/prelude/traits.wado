@@ -68,8 +68,48 @@ pub trait Hasher with () {
 }
 
 /// A value a hash table can key on. Values that are `==` feed a hasher alike.
+#[compiler_item("hash")]
 pub affine trait Hash: Eq with () {
     fn hash<H: Hasher>(&self, h: &mut H);
+}
+
+/// A struct feeds its fields in declaration order, as its derived `Eq`
+/// compares them.
+impl<T: ReflectStruct<FieldTypes = [..F]> + Eq, ..F: Hash> Hash for T {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for let f of ReflectStruct::<T>::members() {
+            f.get_ref(self).hash(h);
+        }
+    }
+}
+
+/// A variant feeds its live case's tag, then the payload a payload case
+/// carries, as its derived `Eq` compares them.
+impl<V: ReflectVariant<CasePayloads = [..P]> + Eq, ..P: Hash> Hash for V {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(self) {
+                h.write_u64(case.discriminant() as u64);
+                if !case.is_unit() {
+                    case.extract(self).hash(h);
+                }
+                return;
+            }
+        }
+        unreachable();
+    }
+}
+
+impl<E: ReflectEnum + Eq> Hash for E {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(ReflectEnum::discriminant(self) as u64);
+    }
+}
+
+impl<L: ReflectFlags + Eq> Hash for L {
+    fn hash<H: Hasher>(&self, h: &mut H) {
+        h.write_u64(ReflectFlags::bits(self));
+    }
 }
 
 /// Trait for providing a default value for a type.
@@ -279,11 +319,11 @@ pub trait ReflectTemplate: Reflect with () {
     /// The literal text after the last hole of `t` — the whole template when
     /// it has none — with escapes processed.
     #[compiler_item("reflect_template_tail")]
-    fn tail(t: &Self) -> String;
+    fn tail(t: &Self) -> StrSlice;
 
     /// `tail(t)` with escapes preserved.
     #[compiler_item("reflect_template_raw_tail")]
-    fn raw_tail(t: &Self) -> String;
+    fn raw_tail(t: &Self) -> StrSlice;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -421,12 +461,12 @@ impl<T> Member for FlagsBit<T> {
 /// and specifier presence are constants of the shape, and `lit` / `raw` /
 /// `get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 #[compiler_item("template_hole")]
-pub struct TemplateHole<T, V> {
+pub struct TemplateHole<T, affine V> {
     index: i32,
     has_spec: bool,
 }
 
-impl<T, V> TemplateHole<T, V> {
+impl<T, affine V> TemplateHole<T, V> {
     /// The hole's position in the template.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -434,23 +474,18 @@ impl<T, V> TemplateHole<T, V> {
 
     /// The literal text in `t` between the previous hole (or the start) and
     /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index);
+    pub fn lit(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index).internal_view();
     }
 
     /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index + 1);
+    pub fn raw(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index + 1).internal_view();
     }
 
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool {
         return self.has_spec;
-    }
-
-    /// The hole's value in `t`.
-    pub fn get(&self, t: &T) -> V {
-        return builtin::hole_get(t, self.index);
     }
 
     /// Renders the value through the trait method the specifier's type
@@ -461,26 +496,11 @@ impl<T, V> TemplateHole<T, V> {
     }
 }
 
-global HOLE_CAPACITY_GUESS: i32 = 16;
-
-/// The tag an untagged template is sugar for: every hole rendered through its
-/// specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
-/// See WEP 2026-01-10.
-pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    // Where the template is a literal, the segments are constants, so this
-    // folds to one: the buffer is sized once, and only a hole rendering past
-    // its guess grows it.
-    let mut capacity = ReflectTemplate::<T>::tail(&t).len();
-    for let h of ReflectTemplate::<T>::members() {
-        capacity += h.lit(&t).len() + HOLE_CAPACITY_GUESS;
+impl<T, V> TemplateHole<T, V> {
+    /// The hole's value in `t`.
+    pub fn get(&self, t: &T) -> V {
+        return builtin::hole_get(t, self.index);
     }
-    let mut out = String::with_capacity(capacity);
-    for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit(&t));
-        h.fmt(&t, &mut Formatter::new(&mut out));
-    }
-    out.push_str(&ReflectTemplate::<T>::tail(&t));
-    return out;
 }
 
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
@@ -727,6 +747,15 @@ pub affine trait IndexAssign<IndexType> with () {
 
     /// Assigns a value to the element at the given index.
     fn index_assign(&mut self, index: IndexType, value: Self::Output);
+}
+
+/// Element exchange: `c.index_swap(a, b)` does what `[c[a], c[b]] = [c[b], c[a]]`
+/// does, moving the two elements rather than copying them, so it serves an
+/// affine element too. Like that assignment it checks `b` before `a`, and
+/// `a == b` leaves the container as it was.
+#[compiler_item("index_swap")]
+pub affine trait IndexSwap<IndexType> with () {
+    fn index_swap(&mut self, a: IndexType, b: IndexType);
 }
 
 /// Value-copy indexing: `container[i]` yields a copy of the element.

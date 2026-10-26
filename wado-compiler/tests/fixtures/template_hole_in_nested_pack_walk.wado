@@ -1,0 +1,31 @@
+// A hole whose type is an element of a pack walked inside another walk takes
+// that inner walk's element, not the outer walk's.
+
+fn render<..X: Inspect, V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(
+    xs: [..X],
+    v: &V,
+) -> String {
+    let mut s = "";
+    for let x of xs {
+        for let case of ReflectVariant::<V>::members() {
+            if case.holds(v) {
+                let payload = case.extract(v);
+                s.push_str(`${x:?}=${payload:?};`);
+            }
+        }
+    }
+    return s;
+}
+
+variant Shape {
+    Dot(i32),
+    Tag(String),
+}
+
+test "a hole in an inner walk renders that walk's element" {
+    assert render([1, "a"], &Shape::Tag("z")) == "1=\"z\";\"a\"=\"z\";";
+    assert render([true], &Shape::Dot(7)) == "true=7;";
+}
+
+__DATA__
+{"test": {}}

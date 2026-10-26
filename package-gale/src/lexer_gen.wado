@@ -4284,8 +4284,7 @@ fn keyword_elem_ends(
             let Some(set) = lexer_elem_leading_chars(elem, all_rules, casing_of(ci), false, &mut no_refs) else {
                 return unread_keyword_ends(kw, reading, starts);
             };
-            return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect(
-            );
+            return starts.iter_ref().filter(|p| *p < len && keyword_chars_in(kw, *p, &set, reading)).map(|p| *p + 1).collect();
         },
     }
 }
@@ -5367,8 +5366,7 @@ fn gen_second_char_dispatch(
     w.line("let second_char = if second_at < lexer.src.len() { char_at(&lexer.src, second_at) } else { '\\u{0}' };");
     w.begin("match second_char");
     for let arm of &arms {
-        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect(
-        );
+        let middle: List<i32> = arm.calls.iter_value().filter(|m| !leading.contains(&m) && !trailing.contains(&m)).collect();
         w.begin(`${arm.pattern} =>`);
         gen_group_calls(w, calls, &middle, needs_extras, has_actions, has_members);
         w.end_with(",");

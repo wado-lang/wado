@@ -1,0 +1,30 @@
+// A hole typed by a pack, inside a walk over it, holds the step's element. Its
+// template's `Holes` names that element, where a pack in a tuple would splice
+// the whole pack: `String::format` was instantiated at `[i32, String, ()]`
+// against a one-hole template, and the module failed to validate.
+
+variant Shape {
+    Circle(i32),
+    Named(String),
+    Empty,
+}
+
+fn payload_text<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {
+    let mut out = "";
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(v) && !case.is_unit() {
+            let payload: P = case.extract(v);
+            out = String::format`<${payload:?}>`;
+        }
+    }
+    return out;
+}
+
+test "a pack-typed hole reaches the tag as the step's element" {
+    assert payload_text(&Shape::Circle(3)) == "<3>";
+    assert payload_text(&Shape::Named("x")) == "<\"x\">";
+    assert payload_text(&Shape::Empty) == "";
+}
+
+__DATA__
+{"test": {}}

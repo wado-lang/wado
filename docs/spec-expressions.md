@@ -849,6 +849,10 @@ assert i == 1;
 assert xs == [0, 9];
 ```
 
+A transposition within one container, `[c[i], c[j]] = [c[j], c[i]]`, is the
+container's `index_swap`
+([Element Exchange](./spec-standard-traits.md#element-exchange)).
+
 A right side with another number of elements is an error:
 
 <!-- {"fixture":"destructuring_assign_arity_error.wado"} -->

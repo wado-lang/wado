@@ -1,0 +1,11 @@
+// `seed` keeps the list out of reach of constant folding, which would evaluate
+// the helper away and leave no copy to report. `#[inline(never)]` keeps the
+// copy in this module: spliced into the caller, it would be the entry file's.
+
+#[inline(never)]
+pub fn grow(seed: i32) -> i32 {
+    let a: List<i32> = [seed, seed + 1];
+    let mut b = a;
+    b.push(seed + 2);
+    return a.len() + b.len();
+}

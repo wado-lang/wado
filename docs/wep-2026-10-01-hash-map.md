@@ -154,10 +154,15 @@ pub trait Hash: Eq with () {
 }
 ```
 
-`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, tuples,
-`List`, `String`, integers, `char` and `bool` wherever a use needs it. Every
-implementation keeps `a == b` implying equal hashes. `String` and `StrSlice`
-hash alike, so `HashMap<String, V>` offers `get_str` as `TreeMap` does.
+`Hash` is bound-driven, as `Eq` is. It is derived for structs, variants, enums
+and flags types, and written for tuples, `List`, `String`, integers, floats,
+`char` and `bool`. Every implementation keeps `a == b` implying equal hashes, so
+a written `eq` or `cmp` withholds the derived `hash`, which would feed members
+the comparison ignores. A float's `==` treats every NaN as one value and `-0.0`
+as `0.0`, so its `hash` feeds its bits with each of those groups made one bit
+pattern. `f16` and `bf16` hash the `f32` they widen to, the value their
+comparison reads. `String` and `StrSlice` hash alike, so
+`HashMap<String, V>` offers `get_str` as `TreeMap` does.
 
 The hash function is a seeded multiply-and-fold hash, chosen by measurement.
 Each word is folded into the state by a full-width multiply with a seeded key,
@@ -198,7 +203,7 @@ an all-zero seed.
 
 ## Roadmap
 
-- [ ] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
+- [x] `Hash` and `Hasher` in the prelude, with bound-driven derivation. Done when
   every type listed above hashes consistently with its `Eq`.
 - [ ] The hash function, chosen by measurement on Wasm.
 - [x] `HashSeed`, `HashMap` and `HashSet` in `core:collections`. Done when they
@@ -228,8 +233,5 @@ an all-zero seed.
 - Every map built under `DEFAULT_HASH_SEED` in one instance shares it. A
   long-lived instance, such as an HTTP service, gives an attacker many requests
   against one seed to learn its collisions from timing.
-- Floating-point keys have no `Hash`. Their `==` treats every NaN as one value
-  and `-0.0` as equal to `0.0`, so a `Hash` has to agree on each of those
-  groups, which bit patterns do not.
 - Derivation serializes private fields of any type without a hand-written impl.
   `core:prng`'s `Seed` serializes its state words this way.

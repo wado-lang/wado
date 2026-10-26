@@ -3,7 +3,8 @@
 // with no written bound, and the concrete `P^Inspect` body (generated eagerly)
 // resolves once monomorphize substitutes `T` → `P`. (`{v}` / `Display` is not
 // total and would require a `T: Display` bound — see
-// display_no_autoderive_unbounded_generic.wado.)
+// display_no_autoderive_unbounded_generic.wado.) `v` is a `&T`, so it renders
+// as the `&P` the substitution makes it, `&`-prefixed.
 struct P {
     x: i32,
 }
@@ -28,14 +29,14 @@ fn indirect<U>(v: &U) -> String {
 
 test "unbounded generic inspect discovered at monomorphize" {
     let p = P { x: 7 };
-    assert show(&p) == "P { x: 7 }";
-    assert show(&E::A) == "E::A";
-    assert show(&V::Leaf(3)) == "V::Leaf(3)";
+    assert show(&p) == "&P { x: 7 }";
+    assert show(&E::A) == "&E::A";
+    assert show(&V::Leaf(3)) == "&V::Leaf(3)";
 }
 
 test "transitive unbounded generic" {
     let p = P { x: 9 };
-    assert indirect(&p) == "P { x: 9 }";
+    assert indirect(&p) == "&P { x: 9 }";
 }
 
 __DATA__

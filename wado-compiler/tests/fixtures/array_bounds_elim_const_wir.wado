@@ -2,7 +2,7 @@
 // leaves nothing behind.
 //
 // The list is a compile-time value, so each read folds to the element it
-// denotes and the formatter is handed the literals directly. The array is then
+// denotes and the formatted line folds to one constant. The array is then
 // unread and drops, taking the bounds checks — and the panic path that
 // reported them — with it.
 
@@ -20,9 +20,7 @@ __DATA__
 {
     "stdout": "10, 20, 30\n",
     "wir_expect:O2": [
-        "_{}, 10_i64, 2)",
-        "_{}, 20_i64, 2)",
-        "_{}, 30_i64, 2)"
+        "array.new_data<u8>(\"10, 20, 30\")"
     ],
     "wir_not_expect:O2": [
         "array.new_fixed<i32>",

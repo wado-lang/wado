@@ -31,7 +31,7 @@ use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
-use super::trait_query::{DerivedAt, SelfBinding};
+use super::trait_query::{DerivedAt, OnBoundTrait, SelfBinding};
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use super::tysys::TypeSystem;
 use super::{AbstractSelection, Elaborator};
@@ -657,12 +657,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 s.impl_offers_method(def, method_name, required_trait)
             }) {
                 let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
-                let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
-                let hint = if self.tysys.trait_declares_method(ord, method_name, |_| true) {
-                    self.tysys.ord_withheld_note(base_type_id)
-                } else {
-                    None
-                };
+                let hint = [OnBoundTrait::Ord, OnBoundTrait::Hash]
+                    .into_iter()
+                    .find_map(|tr| {
+                        let trait_ = self.tysys.compiler_trait_def(tr.compiler_item());
+                        self.tysys
+                            .trait_declares_method(trait_, method_name, |_| true)
+                            .then(|| self.tysys.comparison_withheld_note(tr, base_type_id))?
+                    });
                 let _ = self.emit(TypeError::MethodNotFound {
                     type_name,
                     method_name: method_name.to_string(),

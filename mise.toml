@@ -43,6 +43,7 @@ mise run doc-stdlib
 mise run update-docs-index
 mise run update-rust-paths-baseline
 mise run update-wadopoet-vocabulary
+mise run update-baselines
 mise run format
 mise run test
 mise run test-wado
@@ -81,23 +82,35 @@ mise run check-review-filters
 
 [tasks.check-grammar]
 description = "Fail if Wado.g4 and the compiler's parser disagree on the stdlib + fixture corpus"
-run = "scripts/check-grammar.sh"
+run = "scripts/dev-bin.sh wado-dev-tools grammar-corpus"
 
 [tasks.check-highlight]
 description = "Fail if Wado.g4 and the compiler's classifier colour the corpus differently"
-run = "scripts/check-highlight.sh"
+run = "scripts/dev-bin.sh wado-dev-tools highlight-corpus"
 
 [tasks.check-highlight-vocab]
 description = "Fail if the Gale highlight query drifts from the compiler's syntax registries"
 run = "scripts/dev-bin.sh wado-dev-tools highlight-vocab"
 
+# A corpus is listed by the task rather than by its tool: a `git` the tool ran
+# would be confined to the current directory, which a worktree's git directory
+# is not.
+[tasks.rust-corpus]
+hide = true
+run = "mkdir -p target && git ls-files '*.rs' > target/rust-paths.txt"
+
 [tasks.check-rust-paths]
 description = "Fail if a Rust file gained a `crate::` / `super::` path outside a module-level `use` item"
-run = "scripts/check-rust-paths.sh --check"
+depends = ["rust-corpus"]
+run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --check --paths-from target/rust-paths.txt"
+
+[tasks.list-rust-paths]
+description = "List the inline `crate::` / `super::` paths the named Rust files carry"
+run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado --"
 
 [tasks.check-spec-examples]
 description = "Fail if a `wado` block in the specification does not quote an e2e fixture or a source file"
-run = "scripts/check-spec-examples.sh"
+run = "mkdir -p target && git ls-files 'docs/spec-*.md' > target/spec-files.txt && scripts/dev-bin.sh wado run package-gale-highlight-wado/tools/spec_examples.wado -- --paths-from target/spec-files.txt"
 
 [tasks.check-internal-names]
 description = "Fail if a name the compiler mints for itself is spelled `__x` instead of `$x`"
@@ -128,7 +141,8 @@ git diff --exit-code -- package-wadopoet/src/vocabulary.wado
 
 [tasks.update-rust-paths-baseline]
 description = "Record the inline paths each Rust file still carries, ratcheting the baseline down"
-run = "scripts/check-rust-paths.sh --update"
+depends = ["rust-corpus"]
+run = "scripts/dev-bin.sh wado run package-gale/tools/rust_inline_paths.wado -- --update --paths-from target/rust-paths.txt"
 
 [tasks.check-deps]
 description = "Fail if wasm-tools crates drift off wasmtime's generation (duplicate 0.x trees)"
@@ -255,7 +269,7 @@ run = """
 set -xe -o pipefail
 # package-gale and the stdlib are excluded: `test-gale-o2` and `test-stdlib`
 # cover them, and the full run reaches the stdlib through
-# `update-stdlib-coverage-baseline` already. benchmark/* test blocks need
+# `update-baselines` already. benchmark/* test blocks need
 # no `--dir`: their file reads sit in `export fn run()`, which the test world
 # never calls. Same batch-compilation shape as `test-gale-o2`, whose comment
 # explains the purge and what holding the pages costs in RSS.
@@ -302,13 +316,16 @@ mise run test-stdlib "${1:-O2}" \
     --coverage --coverage-include=stdlib --coverage-baseline scripts/stdlib-coverage.json
 """
 
-[tasks.update-stdlib-coverage-baseline]
-description = "Rewrite scripts/stdlib-coverage.json from what the stdlib tests leave unrun"
+# Both baselines move with the compiler and the stdlib, so one task rewrites
+# them, and a branch reaching either commits both.
+[tasks.update-baselines]
+description = "Rewrite the baselines CI holds a pull request to: scripts/stdlib-coverage.json (what the stdlib tests leave unrun) and benchmark/fuel.json (the fuel benchmarks)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run test-stdlib O2 --coverage=lcov,baseline --coverage-include=stdlib
 cp build/coverage/baseline.json scripts/stdlib-coverage.json
+./scripts/exclusive.sh test-fuel node benchmark/fuel.ts write
 """
 
 [tasks.test-log-levels]
@@ -342,11 +359,33 @@ run = "node --test .claude/hooks/*.test.mts"
 description = "Run the tests of package-loam's JavaScript helpers"
 run = "node --test 'package-loam/**/*.test.mjs'"
 
+# The oracle tasks run the ANTLR4 jar, so Java is installed for them alone. A
+# child the guest spawns reaches it only where `[process] read` in
+# ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).
+[tasks.oracle-gale]
+description = "Run the ANTLR4 jar on a grammar and the input on stdin (package-gale/scripts/antlr4_oracle.wado)"
+tools = { java = "temurin-21" }
+run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle.wado"
+
+[tasks.oracle-gale-selftest]
+description = "Check the ANTLR4 oracle's answers and refusals against the corpus grammars"
+tools = { java = "temurin-21" }
+run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle_selftest.wado"
+
+[tasks.oracle-gale-regen]
+description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or all)"
+tools = { java = "temurin-21" }
+run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
+
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
-# Java runs only the jar, so it is installed for this task alone.
 tools = { java = "temurin-21" }
-file = "package-gale/scripts/oracle-typescript.sh"
+run = "scripts/dev-bin.sh wado run package-gale/tools/oracle_typescript.wado"
+
+[tasks.extract-gale-descriptors]
+description = "Regenerate Gale's ANTLR4 descriptor corpus (all categories, or those named)"
+tools = { java = "temurin-21" }
+run = "scripts/dev-bin.sh wado run package-gale/scripts/extract_antlr4_descriptors.wado"
 
 [tasks.test-gale-o2]
 description = "Run package-gale tests with -O2"
@@ -471,7 +510,7 @@ set -xe -o pipefail
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:jsonc core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:prng core:secure_random core:uuid core:temporal core:log core:jwt \
-  core:icu core:eval core:process"
+  core:icu core:eval core:fuel core:process"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 scripts/dev-bin.sh wado doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -664,13 +703,13 @@ cargo run -p wado-from-idl -- \
 """
 
 [tasks.update-stdlib-core-wit]
-description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:process; facades are hand-written)"
+description = "Regenerate the core:* stdlib submodules generated from WIT (core:kiln, core:eval, core:coverage, core:fuel, core:process; facades are hand-written)"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # Submodules only — each facade `lib/core/<package>.wado` is hand-written.
 # `--package` leaves out the `deps/` a world includes, which `wasi:*` covers.
-for package in kiln eval coverage process; do
+for package in kiln eval coverage fuel process; do
     rm -f "wado-compiler/lib/core/$package/"*.wado
     cargo run -p wado-from-idl -- \
         --wit-dir "wado-compiler/lib/core/$package" \
@@ -726,6 +765,10 @@ grep -lE '^#!?\\[TODO\\]' wado-compiler/tests/fixtures/*.wado 2>/dev/null | sort
 [tasks.benchmark-all]
 description = "Run all benchmarks"
 run = "mise run -C benchmark all"
+
+[tasks.test-fuel]
+description = "Measure the `test \"fuel\"` regions of benchmark/ at -O1, -O2 and -O3, and fail on any difference from benchmark/fuel.json"
+run = "./scripts/exclusive.sh test-fuel node benchmark/fuel.ts check"
 
 # The arm an A/B compares against: `origin/main`'s compiler, kept as the one
 # binary, since the worktree and target dir it was built from are gigabytes and

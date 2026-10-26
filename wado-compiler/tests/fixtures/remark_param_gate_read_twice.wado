@@ -1,0 +1,27 @@
+// The gate failed once, so it is reported once, however many times the
+// condition reads the parameter.
+
+use { println, Stdout } from "core:cli";
+
+#[param(name = "log.level")]
+global LOG_LEVEL: String = "trace";
+
+fn is_level(s: String, want: String) -> bool {
+    if s == want {
+        return true;
+    }
+    return false;
+}
+
+export fn run() with Stdout {
+    if is_level(LOG_LEVEL, "trace") || is_level(LOG_LEVEL, "debug") {
+        println(`verbose`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "",
+    "params": {"log.level": "info"},
+    "remarks": {"O2": [{"contains": ["compile-time parameter `log.level`"], "count": 1}]}
+}

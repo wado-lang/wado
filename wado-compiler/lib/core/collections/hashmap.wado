@@ -405,6 +405,14 @@ impl<K: Hash, V> IndexValue<K> for HashMap<K, V> {
     }
 }
 
+impl<K: Hash, V> IndexSwap<K> for HashMap<K, V> {
+    fn index_swap(&mut self, a: K, b: K) {
+        let at_b = self.log.found(self.find_index(&b), &b);
+        let at_a = self.log.found(self.find_index(&a), &a);
+        self.log.values.index_swap(at_a, at_b);
+    }
+}
+
 impl<K: Hash, V: Ref> IndexRef<K> for HashMap<K, V> {
     type Output = V;
 

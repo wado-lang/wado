@@ -3,24 +3,17 @@
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
-use { A, B, C, D, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
+use {
+    Axis00,
+    Axis01,
+    Axis02,
+    Axis03,
+    Weights,
+    forward,
+} from "../tests/onnx/pytorch-operator/test_operator_pow/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["A", "B", "C", "D"],
-                    },
-                    {
-                        pattern: "1",
-                        axes: ["A", "B", "C", "D"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "Pow reproduces the output ONNX ships" {
@@ -36,8 +29,8 @@ test "Pow reproduces the output ONNX ships" {
 
     let got = forward(
         &mut Cpu {},
-        &Tensor::<f32, [A, B, C, D]> { data: x, extents: x_extents },
-        &Tensor::<f32, [A, B, C, D]> { data: y, extents: y_extents },
+        &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: x, extents: x_extents },
+        &Tensor::<f32, [Axis00, Axis01, Axis02, Axis03]> { data: y, extents: y_extents },
         &Weights {}.prepare(&mut Cpu {}),
     );
 

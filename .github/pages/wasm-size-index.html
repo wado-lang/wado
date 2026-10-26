@@ -161,7 +161,7 @@
       </div>
       <div class="header-item">
         <strong>Note:</strong>
-        <span>The graphs show wasm binary size, so smaller is better.</span>
+        <span>The graphs show wasm binary size, so smaller is better. They draw the latest <span id="max-commits"></span> commits; the data download holds every one.</span>
       </div>
     </header>
     <main id="main"></main>
@@ -190,6 +190,7 @@
           const data = window.BENCHMARK_DATA;
 
           document.getElementById('last-update').textContent = new Date(data.lastUpdate).toString();
+          document.getElementById('max-commits').textContent = MAX_COMMITS;
           const repoLink = document.getElementById('repository-link');
           repoLink.href = data.repoUrl;
           repoLink.textContent = data.repoUrl;
@@ -240,6 +241,13 @@
         // are visible at once therefore depends on the viewport width.
         const PX_PER_POINT = 16;
 
+        // Only the latest commits are drawn; data.js keeps every one. A canvas
+        // past a browser's limits stays blank (32767 device pixels a side, and
+        // 16777216 in area on iOS), and the whole history crossed them: 1647
+        // commits at 16px on a 2x display. 256 commits fit a 400px-high chart
+        // on a 3x display.
+        const MAX_COMMITS = 256;
+
         function renderCombinedGraph(parent, baseName, optLevelMap) {
           // Column wrapper so the fixed title sits above the scrollable chart.
           const graph = document.createElement('div');
@@ -288,7 +296,7 @@
           chartWrap.appendChild(axisOverlay);
 
           // Find all unique commit IDs across all optimization levels, preserving order
-          const commitIds = [];
+          const allCommitIds = [];
           const commitSet = new Set();
           const commitMeta = new Map();
           for (const results of optLevelMap.values()) {
@@ -296,11 +304,12 @@
               const id = r.commit.id;
               if (!commitSet.has(id)) {
                 commitSet.add(id);
-                commitIds.push(id);
+                allCommitIds.push(id);
                 commitMeta.set(id, r);
               }
             }
           }
+          const commitIds = allCommitIds.slice(-MAX_COMMITS);
 
           // Give every commit PX_PER_POINT of width. CSS min-width keeps the box
           // filling the viewport when there are only a few points, so the chart
@@ -384,9 +393,11 @@
                 xAxes: [{
                   scaleLabel: { display: true, labelString: 'commit' },
                 }],
+                // The axis fits the data rather than starting at zero: a
+                // measure without noise moves in small exact steps, which an
+                // axis from zero draws flat.
                 yAxes: [{
                   scaleLabel: { display: true, labelString: unit },
-                  ticks: { beginAtZero: true },
                 }],
               },
               tooltips: {

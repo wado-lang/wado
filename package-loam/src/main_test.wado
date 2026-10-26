@@ -8,7 +8,6 @@ use { loam } from "./main.wado";
 use { Report } from "./dump.wado";
 use { from_string } from "core:json";
 use { generate as kiln_generate, Options } from "./generator.wado";
-use { LayoutRule } from "./schema.wado";
 use { StoredTensor, write_safetensors } from "./safetensors.wado";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
@@ -25,11 +24,7 @@ g (float[N, 2] X) => (float[N, 3] Y, float[N, 3] Z)
 }
 ";
 
-global OPTIONS: String = "{\"layout\": [
-    {\"pattern\": \"X\", \"axes\": [\"Batch\", \"In\"]},
-    {\"pattern\": \"W\", \"axes\": [\"In\", \"Out\"]},
-    {\"pattern\": \"B\", \"axes\": [\"Out\"]}
-]}";
+global OPTIONS: String = "{\"fuse\": true}";
 
 /// `target/loam-main-test/<case>`, emptied, holding the graph and its options.
 fn scratch(case: String) -> String with Preopens {
@@ -111,28 +106,11 @@ fn kiln(primary: [String, ByteList, String], options: Options) -> String with (S
     return response.files[0].content;
 }
 
-fn layout() -> List<LayoutRule> {
-    return [
-        LayoutRule {
-            pattern: "X",
-            axes: ["Batch", "In"],
-        },
-        LayoutRule {
-            pattern: "W",
-            axes: ["In", "Out"],
-        },
-        LayoutRule {
-            pattern: "B",
-            axes: ["Out"],
-        },
-    ];
-}
-
 test "gen prints the module the Kiln generator builds for the same graph and options" {
     let dir = scratch("gen");
     let printed = on_graph("gen", &dir, []).unwrap();
     let path = `${dir}/g.onnxtext`;
-    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { layout: layout() });
+    assert printed == kiln([path, GRAPH.bytes().collect(), "onnxtext"], Options { fuse: true });
 }
 
 test "gen prints the tokenizer the Kiln generator builds" {
@@ -160,7 +138,7 @@ test "gen --checkpoint checks the graph against the checkpoint's header" {
     fs::write(`${dir}/bad.safetensors`, &checkpoint([2, 4])).unwrap();
     assert on_graph("gen", &dir, ["--checkpoint", `${dir}/good.safetensors`]) matches { Ok(_) };
     let refused = on_graph("gen", &dir, ["--checkpoint", `${dir}/bad.safetensors`]).unwrap_err();
-    assert refused == `loam: '${dir}/bad.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+    assert refused == `loam: '${dir}/bad.safetensors': W: axis Y1 is 4 in the checkpoint and 3 in the graph`;
 }
 
 /// `W` in the second of two shards, as `index.json` places it, the first holding
@@ -207,15 +185,14 @@ test "a shard that disagrees with the graph is named by its path" {
         "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
         `${dir}/g-00002-of-00002.safetensors`,
     ]).unwrap_err();
-    assert refused == `loam: '${dir}/g-00002-of-00002.safetensors': W: axis Out is 4 in the checkpoint and 3 in the graph`;
+    assert refused == `loam: '${dir}/g-00002-of-00002.safetensors': W: axis Y1 is 4 in the checkpoint and 3 in the graph`;
 }
 
 test "a shard the index does not name is refused" {
     let dir = scratch("gen-stray-shard");
     shards(&dir);
     fs::write(`${dir}/other.safetensors`, &write_safetensors(&[])).unwrap();
-    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err(
-    );
+    let refused = on_graph("gen", &dir, ["--index", `${dir}/index.json`, "--checkpoint", `${dir}/other.safetensors`]).unwrap_err();
     assert refused == `loam: '${dir}/other.safetensors': the index names no shard of this file name`;
 }
 
@@ -232,65 +209,67 @@ test "dump reports each node's lowering and each tensor's shape" {
     let dir = scratch("dump");
     let report = on_graph("dump", &dir, []).unwrap();
     assert report == "graph g (opset 13)
+axes
+    N: dim_param N at X
+    X1: minted from X[1]
+    Y1: minted from Y[1]
 inputs
-    X: f32 [Batch=N, In=2]
+    X: f32 [N=N, X1=2]
 weights
-    W: f32 [In=2, Out=3]
-    B: f32 [Out=3]
+    W: f32 [X1=2, Y1=3]
+    B: f32 [Y1=3]
 nodes
     fused     H = MatMul(X, W)
-        H: f32 [Batch=N, Out=3]
+        H: f32 [N=N, Y1=3]
         into the kernel writing Y
     kernel    Y = Add(H, B)
-        Y: f32 [Batch=N, Out=3]
+        Y: f32 [N=N, Y1=3]
         written: the scope returns it
         takes in H, keeping 12 * N bytes out of memory
     alias     Z = Identity(Y)
-        Z: f32 [Batch=N, Out=3]
+        Z: f32 [N=N, Y1=3]
     folded    S = Shape(X)
         S: i64 [2] = [N, 2]
 outputs
-    Y: f32 [Batch=N, Out=3]
-    Z: f32 [Batch=N, Out=3]
+    Y: f32 [N=N, Y1=3]
+    Z: f32 [N=N, Y1=3]
 
 1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread, 0 transposes viewed
 ";
 }
 
 test "dump reports each branch of an If as a scope of its own, with what it owes" {
-    let dir = scratch("dump-branch");
-    let options = "{\"layout\": [
-        {\"pattern\": \"C\", \"axes\": [\"One\"]},
-        {\"pattern\": \"X\", \"axes\": [\"Seq\", \"Embed\"]},
-        {\"pattern\": \"V\", \"axes\": [\"Seq\", \"Embed\"]},
-        {\"pattern\": \"P\", \"axes\": [\"Past\", \"Embed\"]},
-        {\"pattern\": \"K\", \"axes\": [\"Embed\"]},
-        {\"pattern\": \"W\", \"axes\": [\"Embed\"]},
-        {\"pattern\": \"T\", \"axes\": [\"Total\", \"Embed\"], \"graph\": \"with_past\"},
-        {\"pattern\": \"Y\", \"axes\": [\"Total\", \"Embed\"]}
-    ]}";
-    fs::write(`${dir}/options.json`, &options).unwrap();
-    let report = loam(["dump", "--type", "onnxtext", "--options", `${dir}/options.json`, "conformance/branch.onnxtext"]).unwrap(
-    );
+    let report = loam(["dump", "--type", "onnxtext", "conformance/branch.onnxtext"]).unwrap();
+    assert report.starts_with("graph branch (opset 13)
+axes
+    C0: minted from C[0]
+    N: dim_param N at X
+    X1: minted from X[1]
+    M: dim_param M at P
+    Y0: minted from Y[0]
+");
+    // A branch lists the axes only it reaches.
     assert report.contains("
     branch    Y, Z = If(C)
-        Y: f32 [Total=\"Y[0]\", Embed=2]
-        Z: f32 [Seq=N, Embed=2]
+        Y: f32 [Y0=\"Y[0]\", X1=2]
+        Z: f32 [N=N, X1=2]
         then_branch
+            axes
+                T0: minted from T[0]
             nodes
                 kernel    T = Concat(P, X)
-                    T: f32 [Total=M + N, Embed=2]
+                    T: f32 [T0=M + N, X1=2]
                     written: a regrouping takes in no operator after it
 ");
     assert report.contains("
                 kernel    TZ = Mul(SK, W)
-                    TZ: f32 [Seq=N, Embed=2]
+                    TZ: f32 [N=N, X1=2]
                     written: the scope returns it
                     takes in S, SK, keeping 16 * N bytes out of memory
 ");
     assert report.contains("
             owed
-                Add: axis Seq is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
+                Add: axis N is N on the left and L on the right, and the two must be one length (where -L + N >= 0)
 ");
     assert report.contains("
         else_branch
@@ -343,7 +322,7 @@ test "an argument error names the subcommand and shows the usage" {
 
 test "an options file that is not the options' JSON names the file" {
     let dir = scratch("bad-options");
-    fs::write(`${dir}/options.json`, &"{\"layout\": 3}").unwrap();
+    fs::write(`${dir}/options.json`, &"{\"fuse\": 3}").unwrap();
     let refused = on_graph("dump", &dir, []).unwrap_err();
     assert refused.starts_with(`loam: '${dir}/options.json': `);
 }

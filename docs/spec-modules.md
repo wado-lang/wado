@@ -415,11 +415,13 @@ test {
 
 ### Core Modules
 
-Each function export becomes a free function of the same name. A call to it
-calls that export, whatever the name: an export named like a `core:builtin`
-intrinsic or like another asset's export is still its own asset's function. An
-export spelled like a Wado keyword is imported under an alias
-(`use { resume as seven } from ...`).
+Each function export becomes a free function named by its export's
+`snake_case` reading, as a component's function is: `add-one` and `addOne` are
+both `add_one`. A reading that is a Wado keyword takes a trailing `_`
+(`use { resume_ as seven } from ...`), unless that keyword may also be a name:
+`type` stays `type`. A call to it calls that export, whatever
+the name: an export named like a `core:builtin` intrinsic or like another
+asset's export is still its own asset's function.
 
 An asset is embedded in the output and shares the component's memory. The
 memory's first pages, as many as the asset's own memory declares at minimum,
@@ -433,6 +435,8 @@ rejected at the import when it:
   64-bit, shared, has a custom page size, or has a minimum of 2 GiB or more;
 - has a `start` section;
 - exports a function that re-exports an imported one;
+- exports a function whose `snake_case` reading is no Wado identifier (`1st`),
+  or two whose readings are one name (`a-b` and `a_b`);
 - exports a function whose parameters are not `i32`, `i64`, `f32`, `f64`, or
   `v128`, or that has more than one result, or a result of any other type.
 
@@ -466,11 +470,13 @@ or side-car `.wit` is involved.
   interface's basename. Where names of different ranks coincide, the higher
   rank keeps the name. Importing a name two items of one rank share is an
   error, and the error names each item the name could mean. A full name reaches
-  an item whatever its rank. A `wasi:*` module is Wado source, so its
-  module-level names are the ones its own `pub use` list gives.
+  an item whatever its rank. A `wasi:*` module is Wado source, so the
+  interfaces it offers are the ones its own `pub use` list gives. It offers no
+  type by bare name: each WASI type is declared inside its interface and named
+  through it, as `SystemClock::Instant`.
 - A non-WASI interface the component imports is an item of its module too,
-  named by the same rules as an export. An interface name has one declaration
-  in the whole program, so two components importing it name one Wado
+  named by the same rules as an export. An imported interface name has one
+  declaration in the whole program, so two components importing it name one Wado
   interface, and their shapes of it must agree. Naming an interface the
   component both imports and exports is an error.
 - The default interface is the one named after its own package
@@ -489,8 +495,9 @@ or side-car `.wit` is involved.
   A `stream<T>` or `future<T>` value is the readable end; the writable end stays
   with whoever created the pair.
 
-> Not yet implemented: an interface offered at two versions, types named
-> through their interface, and one declaration per imported interface name
+> Not yet implemented: an interface offered at two versions, a `wasi:*` type
+> declared inside its interface, and one declaration per imported interface
+> name
 > ([WEP](./wep-2026-10-22-component-export-names.md)).
 
 The dependency is statically composed into the output, so the result is one

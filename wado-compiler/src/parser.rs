@@ -12,23 +12,23 @@ use crate::ast::{
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, HandleClasses, IdentExpr, IfExpr, IfStmt,
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype, Param, PathSegment, Pattern,
-    RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ReturnKeyword, ReturnStmt,
-    SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
-    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
-    TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface,
-    WorldImport,
+    LabeledBlockStmt, LetStmt, Literal, LiteralExpr, LoopStmt, MAX_GENERIC_PARAMS, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, NamedType, NamespacedGenericType, Newtype,
+    Param, PathSegment, Pattern, RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl,
+    ReturnKeyword, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StrLit, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, StructLiteralSpread, StructPatternField,
+    TaggedTemplateExpr, TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound,
+    TraitDecl, TraitHead, TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
+    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, UseNameSpelling, VariantCase, VariantDecl,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn,
+    WorldExportInterface, WorldImport, repeat_outside_signature,
 };
 use crate::attribute::{CANONICAL, CM, GENERATED, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
 use crate::lexer::{LexResult, WILDCARD, defaults_to_float, is_decimal_integer, lex_interpolation};
-use crate::name::{contract_holder_name, namespaced_name};
+use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
@@ -52,7 +52,7 @@ pub struct Parser {
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
     /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
-    include_paths: hashmap::IndexSet<String>,
+    include_paths: hashmap::IndexMap<String, Span>,
     /// Inner attributes parsed before items. Retained even if parsing fails later,
     /// so callers can check `has_todo()` after a parse error.
     parsed_inner_attributes: Vec<InnerAttribute>,
@@ -99,8 +99,15 @@ pub struct Parser {
     /// `with ()` says it is pure rather than nothing.
     pure_override_allowed: bool,
     bodies: Bodies,
-    /// Each skipped body's block, and the position of its `{`.
-    skipped: Vec<(AstId, usize)>,
+    /// Each skipped body's block, the position of its `{`, and its
+    /// [`Self::body_packs`].
+    skipped: Vec<(AstId, usize, Option<Vec<String>>)>,
+    /// The packs the `impl` or `trait` whose members are being read declares.
+    /// A member's `..X` naming none of them, nor one of its own, repeats `X`.
+    enclosing_packs: Vec<String>,
+    /// The packs in scope while a function's body is read. A `..X` there names
+    /// one of them: only a signature mints a repeat, which a call settles.
+    body_packs: Option<Vec<String>>,
 }
 
 /// Whether the parser reads function bodies.
@@ -293,7 +300,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang,
             data_section,
-            include_paths: hashmap::IndexSet::default(),
+            include_paths: hashmap::IndexMap::default(),
             parsed_inner_attributes: Vec::new(),
             ast_id_space,
             next_ast_id: 0,
@@ -308,6 +315,8 @@ impl Parser {
             pure_override_allowed: false,
             bodies: Bodies::Read,
             skipped: Vec::new(),
+            enclosing_packs: Vec::new(),
+            body_packs: None,
         }
     }
 
@@ -339,8 +348,9 @@ impl Parser {
         );
         self.bodies = Bodies::Read;
         let mut read = hashmap::IndexMap::<AstId, Vec<Stmt>>::default();
-        for (block, pos) in std::mem::take(&mut self.skipped) {
+        for (block, pos, packs) in std::mem::take(&mut self.skipped) {
             self.pos = pos;
+            self.body_packs = packs;
             match self.parse_block() {
                 Ok(body) => {
                     read.insert(block, body.stmts);
@@ -348,6 +358,7 @@ impl Parser {
                 Err(e) => self.errors.push(e),
             }
         }
+        self.body_packs = None;
         let functions = module.items.iter_mut().flat_map(|item| match item {
             Item::Function(func) => std::slice::from_mut(func),
             Item::Impl(decl) => &mut decl.methods[..],
@@ -494,7 +505,7 @@ impl Parser {
         self.contextual_keywords
             .truncate(cp.contextual_keywords_len);
         let rolled_back = AstId::new(self.ast_id_space, cp.next_ast_id);
-        self.skipped.retain(|(block, _)| *block < rolled_back);
+        self.skipped.retain(|(block, ..)| *block < rolled_back);
     }
 
     /// Returns true if the parsed inner attributes include `#![TODO]`.
@@ -1189,29 +1200,41 @@ impl Parser {
             Vec::new()
         };
 
-        let (qualifier, case_name, case_span) = if self.check(&TokenKind::ColonColon) {
+        // Every segment after the second; the last names the case, the ones
+        // before it extend the namespace (`ns::Interface::Type::Case`).
+        let mut rest = Vec::new();
+        while self.check(&TokenKind::ColonColon) {
             self.advance();
-            let case_span = self.peek().span;
-            let case_name = self.consume_ident()?;
-            let qualifier = match first_type {
-                Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+            let span = self.peek().span;
+            rest.push((self.consume_ident()?, span));
+        }
+        let (qualifier, case_name, case_span) = match (rest.pop(), first_type) {
+            (None, first_type) => (first_type, second_name, second_span),
+            (Some((case_name, case_span)), Type::Named(t))
+                if rest.is_empty() || second_args.is_empty() =>
+            {
+                let mut namespace = t.name;
+                let (mut name, mut name_span) = (second_name, second_span);
+                for (segment, span) in rest {
+                    namespace = namespaced_name(&namespace, &name);
+                    (name, name_span) = (segment, span);
+                }
+                let qualifier = Type::NamespacedGeneric(Box::new(NamespacedGenericType {
                     id: self.alloc_ast_id(),
-                    namespace: t.name.clone(),
-                    name: second_name,
-                    name_span: second_span,
+                    namespace,
+                    name,
+                    name_span,
                     args: second_args,
                     span: start_span,
-                })),
-                _ => {
-                    return Err(ParseError {
-                        message: "invalid qualified case pattern".to_string(),
-                        span: start_span,
-                    });
-                }
-            };
-            (qualifier, case_name, case_span)
-        } else {
-            (first_type, second_name, second_span)
+                }));
+                (qualifier, case_name, case_span)
+            }
+            (Some(_), _) => {
+                return Err(ParseError {
+                    message: "invalid qualified case pattern".to_string(),
+                    span: start_span,
+                });
+            }
         };
 
         if self.check(&TokenKind::LBrace) {
@@ -1422,7 +1445,11 @@ impl Parser {
             return self.parse_test_decl(attrs).map(Item::Test);
         }
 
-        match self.peek_kind() {
+        // A local item in a function body is read as a module item is, and
+        // what follows it in the body and the impl still sees the packs.
+        let outer_packs = std::mem::take(&mut self.enclosing_packs);
+        let outer_body_packs = self.body_packs.take();
+        let item = match self.peek_kind() {
             TokenKind::Use => self
                 .parse_use_decl(visibility, has_export, attrs)
                 .map(Item::Use),
@@ -1465,7 +1492,10 @@ impl Parser {
                 message: format!("expected item, found {}", self.peek_kind()),
                 span: self.peek().span,
             }),
-        }
+        };
+        self.enclosing_packs = outer_packs;
+        self.body_packs = outer_body_packs;
+        item
     }
 
     /// Parse test declaration: `[#[attr]] test "name" { ... }` or `[#[attr]] test { ... }`
@@ -2253,6 +2283,9 @@ impl Parser {
         }
 
         let return_type = self.parse_optional_return_type()?;
+        let repeats = self.repeat_pack_params(&type_params, &params, return_type.as_ref());
+        type_params.extend(repeats);
+        self.bound_generic_params(&type_params, name_span)?;
 
         let pure_override = std::mem::take(&mut self.pure_override_allowed)
             && self.check(&TokenKind::With)
@@ -2282,27 +2315,14 @@ impl Parser {
             type_params.push(hole);
         }
 
-        let contracts = self.parse_contract_clauses()?;
-
-        // Check for bodyless function declaration (compiler built-in /
-        // trait-method signature) e.g., `pub fn stream_new() -> i64;`
-        let mut decl_end_span = None;
-        let body = if self.check(&TokenKind::Semicolon) {
-            self.advance();
-            // Span must cover through the terminating `;`, not just the `fn`
-            // keyword line. The formatter's blank-line accounting keys off
-            // `span.end_line()`; a single-line span would drift once the
-            // signature is reflowed across multiple lines, manufacturing
-            // blank lines between members on the next pass (idempotency
-            // break). A function with a body already covers the full extent
-            // via the block span below.
-            decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
-            None
-        } else if self.bodies == Bodies::Skipped {
-            Some(self.skip_block()?)
-        } else {
-            Some(self.parse_block()?)
-        };
+        let packs = self
+            .packs_in_scope(&type_params)
+            .map(str::to_string)
+            .collect();
+        let outer_body_packs = self.body_packs.replace(packs);
+        let contracts_and_body = self.parse_contracts_and_body();
+        self.body_packs = outer_body_packs;
+        let (contracts, body, decl_end_span) = contracts_and_body?;
 
         let span = match (&body, decl_end_span) {
             (Some(b), _) => start_span.merge(&b.span),
@@ -2334,6 +2354,35 @@ impl Parser {
             span,
         };
         Ok((func, contracts))
+    }
+
+    /// A function's `contract` clauses and its body, `None` for a bodyless
+    /// declaration, which also hands back where its `;` ends it.
+    fn parse_contracts_and_body(
+        &mut self,
+    ) -> ParseResult<(Vec<Stmt>, Option<Block>, Option<Span>)> {
+        let contracts = self.parse_contract_clauses()?;
+
+        // Check for bodyless function declaration (compiler built-in /
+        // trait-method signature) e.g., `pub fn stream_new() -> i64;`
+        let mut decl_end_span = None;
+        let body = if self.check(&TokenKind::Semicolon) {
+            self.advance();
+            // Span must cover through the terminating `;`, not just the `fn`
+            // keyword line. The formatter's blank-line accounting keys off
+            // `span.end_line()`; a single-line span would drift once the
+            // signature is reflowed across multiple lines, manufacturing
+            // blank lines between members on the next pass (idempotency
+            // break). A function with a body already covers the full extent
+            // via the block span below.
+            decl_end_span = Some(self.tokens[self.pos.saturating_sub(1)].span);
+            None
+        } else if self.bodies == Bodies::Skipped {
+            Some(self.skip_block()?)
+        } else {
+            Some(self.parse_block()?)
+        };
+        Ok((contracts, body, decl_end_span))
     }
 
     /// The hidden default method holding the `contract` clauses of the trait
@@ -2373,6 +2422,8 @@ impl Parser {
         if let Some(hole) = method.type_params.iter().find(|p| p.name == EFFECT_HOLE) {
             type_params.push(self.effect_hole_param(hole.span));
         }
+        let repeats = self.repeat_pack_params(&type_params, &params, None);
+        type_params.extend(repeats);
 
         let span = contracts
             .iter()
@@ -2843,7 +2894,7 @@ impl Parser {
     /// braces in `tokens` balance in any well-formed body.
     fn skip_block(&mut self) -> ParseResult<Block> {
         let id = self.alloc_ast_id();
-        self.skipped.push((id, self.pos));
+        self.skipped.push((id, self.pos, self.body_packs.clone()));
         let start_span = self.peek().span;
         self.expect(&TokenKind::LBrace)?;
         let mut depth = 1;
@@ -5088,11 +5139,10 @@ impl Parser {
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
             self.expect(&TokenKind::LParen)?;
-            let path = match self.peek_kind() {
+            let (path, path_span) = match self.peek_kind() {
                 TokenKind::StringLit(s) => {
                     let s = s.clone();
-                    self.advance();
-                    s
+                    (s, self.advance().span)
                 }
                 _ => {
                     return Err(ParseError {
@@ -5102,7 +5152,7 @@ impl Parser {
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
-            self.include_paths.insert(path.clone());
+            self.include_paths.entry(path.clone()).or_insert(path_span);
             let value = if is_str {
                 Literal::IncludeStr(path)
             } else {
@@ -5652,6 +5702,15 @@ impl Parser {
             self.consume_dot_dot()?;
             // The span starts at the name, not the `..`, as on every type node.
             let (name, span) = self.consume_ident_with_span()?;
+            if let Some(packs) = &self.body_packs
+                && !packs.contains(&name)
+            {
+                self.errors.push(ParseError {
+                    message: repeat_outside_signature(&name),
+                    span,
+                });
+                return Ok(Type::Error(span));
+            }
             return Ok(Type::TypePackSpread(name, span));
         }
         self.parse_type()
@@ -5723,10 +5782,17 @@ impl Parser {
 
         let name = self.consume_ident()?;
 
-        // Check for namespaced type: namespace::type<T>
+        // Check for namespaced type: namespace::type<T>, where the namespace may
+        // itself be a path (`ns::Interface::Type`).
         if self.check(&TokenKind::ColonColon) {
             self.advance();
-            let (type_name, type_name_span) = self.consume_ident_with_span()?;
+            let mut name = name;
+            let (mut type_name, mut type_name_span) = self.consume_ident_with_span()?;
+            while self.check(&TokenKind::ColonColon) {
+                self.advance();
+                name = namespaced_name(&name, &type_name);
+                (type_name, type_name_span) = self.consume_ident_with_span()?;
+            }
 
             // Namespaced generic type: namespace::type<T>
             if self.check(&TokenKind::Lt) {
@@ -5935,6 +6001,7 @@ impl Parser {
                 default,
                 span: start_span,
             });
+            self.bound_generic_params(&params, start_span)?;
 
             if !self.eat_angle_list_comma() {
                 break;
@@ -5943,6 +6010,18 @@ impl Parser {
 
         self.expect_gt()?;
         Ok(params)
+    }
+
+    /// Refuse a list past [`MAX_GENERIC_PARAMS`]: unrolling keys a pack's
+    /// element by its parameter's index (`TypeTable::pack_walk_slot`).
+    fn bound_generic_params(&self, params: &[GenericParam], span: Span) -> ParseResult<()> {
+        if params.len() > MAX_GENERIC_PARAMS {
+            return Err(self.error_at_span(
+                span,
+                &format!("a declaration takes at most {MAX_GENERIC_PARAMS} type parameters"),
+            ));
+        }
+        Ok(())
     }
 
     /// Parse a single trait bound:
@@ -6474,6 +6553,7 @@ impl Parser {
         }
 
         self.expect(&TokenKind::LBrace)?;
+        self.enclosing_packs = pack_names(&type_params);
 
         let mut associated_types = Vec::new();
         let mut constants = Vec::new();
@@ -6720,6 +6800,7 @@ impl Parser {
         }
 
         self.expect(&TokenKind::LBrace)?;
+        self.enclosing_packs = pack_names(&type_params);
 
         let mut associated_types = Vec::new();
         let mut methods = Vec::new();
@@ -6854,6 +6935,51 @@ impl Parser {
             return Ok(TraitHead::Open { span });
         }
         Ok(TraitHead::Fixed { effects, span })
+    }
+
+    /// The packs a member declaring `declared` sees: its own, and the
+    /// enclosing `impl`'s or `trait`'s.
+    fn packs_in_scope<'a>(&'a self, declared: &'a [GenericParam]) -> impl Iterator<Item = &'a str> {
+        self.enclosing_packs.iter().map(String::as_str).chain(
+            declared
+                .iter()
+                .filter(|p| p.is_pack)
+                .map(|p| p.name.as_str()),
+        )
+    }
+
+    /// The packs a signature's `[..X]` mints, one per `X` that names no pack in
+    /// scope: such a spread repeats `X`, and the minted pack is its length.
+    fn repeat_pack_params(
+        &mut self,
+        declared: &[GenericParam],
+        params: &[Param],
+        return_type: Option<&Type>,
+    ) -> Vec<GenericParam> {
+        let mut repeated: Vec<(String, Span)> = Vec::new();
+        for ty in params.iter().map(|p| &p.ty).chain(return_type) {
+            for (name, span) in ty.pack_spreads() {
+                let in_scope = self.packs_in_scope(declared).any(|p| p == name);
+                if !in_scope && !repeated.iter().any(|(r, _)| r == name) {
+                    repeated.push((name.to_string(), span));
+                }
+            }
+        }
+        repeated
+            .into_iter()
+            .map(|(element, span)| GenericParam {
+                id: self.alloc_ast_id(),
+                attrs: Vec::new(),
+                name: repeat_pack_name(&element),
+                name_span: span,
+                is_effect: false,
+                is_affine: false,
+                is_pack: true,
+                bounds: Vec::new(),
+                default: None,
+                span,
+            })
+            .collect()
     }
 
     /// The effect parameter a `with _` stands for, named `_` so the clause that
@@ -7326,6 +7452,14 @@ fn span_of_open_brace(origin: Position, space: AstIdSpace) -> Span {
         origin.column,
     )
     .in_space(space)
+}
+
+fn pack_names(params: &[GenericParam]) -> Vec<String> {
+    params
+        .iter()
+        .filter(|p| p.is_pack)
+        .map(|p| p.name.clone())
+        .collect()
 }
 
 /// Linearity is a property of the handle type, so it has one home: the

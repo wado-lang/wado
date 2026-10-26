@@ -92,7 +92,7 @@ fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gf
     let $ds_i: i32;
     let $ds_addr: i32;
     let $ds_elem: ref null "core:prelude//$Resource";
-    let $licm_repr_23: ref null "Array<cm_list_of_own_param.wado/Device>";
+    let $licm_repr_21: ref null "Array<cm_list_of_own_param.wado/Device>";
     $ds_len = ds.used;
     if @unlikely(536870911 <u $ds_len) {
         cold_path;
@@ -101,12 +101,12 @@ fn "cm_list_of_own_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#pick"(ds) with Gf
     }
     $ds_base = "mem/realloc"(0, 0, 4, $ds_len * 4);
     $ds_i = 0;
-    $licm_repr_23 = ds.repr;
+    $licm_repr_21 = ds.repr;
     b1: block {
         l2: loop {
             break_if b1 $ds_i >= $ds_len;
             $ds_addr = $ds_base + ($ds_i * 4);
-            $ds_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_23, $ds_i);
+            $ds_elem = builtin::array_get_value<ref null "core:prelude//$Resource">($licm_repr_21, $ds_i);
             builtin::store_i32($ds_addr, $ds_elem.value);
             $ds_i = $ds_i + 1;
             continue l2;

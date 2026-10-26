@@ -8,13 +8,13 @@ use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::affine_holding::{Held, HeldTypes, holds_affine};
 use crate::ast::{BinaryOp, Expr, Literal, RangeKind};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::resource_holding::{Held, HeldTypes, holds_resource};
 use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
 use crate::tir::{ResolvedType, StructDef, TypeId, range_item};
 use crate::type_table::{TypeKey, TypeTable};
@@ -142,17 +142,17 @@ impl TypeSystem {
         Some(info.fields.iter().map(|(_, tid, _)| *tid).collect())
     }
 
-    /// Whether `type_id` is, or holds at any depth, an affine resource: what
+    /// Whether `type_id` is, or holds at any depth, an affine type: what
     /// makes a binding of it move-only, and a by-value `self` on it legal.
-    pub(crate) fn carries_resource(&self, type_id: TypeId) -> bool {
-        holds_resource(self, type_id)
+    pub(crate) fn carries_affine(&self, type_id: TypeId) -> bool {
+        holds_affine(self, type_id)
     }
 
     /// Whether a value of `type_id` is move-only in a body whose `affine`
-    /// type parameters are `affine_params`: it holds an affine resource, or
-    /// one of those parameters, at any depth.
+    /// type parameters are `affine_params`: it holds an affine type, or one of
+    /// those parameters, at any depth.
     pub(crate) fn is_affine(&self, type_id: TypeId, affine_params: &[TypeId]) -> bool {
-        holds_resource(
+        holds_affine(
             &AffineParams {
                 types: self,
                 affine_params,
@@ -170,7 +170,7 @@ impl TypeSystem {
         };
         members
             .into_iter()
-            .position(|member| holds_resource(self, member))
+            .position(|member| holds_affine(self, member))
     }
 
     /// Whether a value of `type_id` reaches a `&mut`, through which a call
@@ -254,6 +254,7 @@ impl TypeSystem {
                 ResolvedType::TypeParam { .. }
                     | ResolvedType::AssocParam { .. }
                     | ResolvedType::TypePack { .. }
+                    | ResolvedType::PackElement { .. }
                     | ResolvedType::AssocTypeProjection { .. }
             )
         };
@@ -290,6 +291,7 @@ impl TypeSystem {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return params,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -364,6 +366,7 @@ impl TypeSystem {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
@@ -780,7 +783,7 @@ impl TypeSystem {
     /// The name the type parameter or pack in this slot carries, `None` for a
     /// slot holding anything else.
     pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
-        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
+        bound_param_name(&self.type_table.borrow(), type_id).cloned()
     }
 
     /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
@@ -920,7 +923,7 @@ fn reaches(
 }
 
 /// What a type holds inside a body that declares `affine_params`: each of
-/// them counts as an affine resource.
+/// them counts as affine.
 struct AffineParams<'a> {
     types: &'a TypeSystem,
     affine_params: &'a [TypeId],
@@ -933,13 +936,25 @@ impl HeldTypes for AffineParams<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         let table = self.types.type_table.borrow();
+        let declared_affine = |param_id: TypeId| {
+            let key = table.type_key(param_id);
+            self.affine_params
+                .iter()
+                .any(|&param| table.type_key(param) == key)
+        };
         let is_affine_param = match table.get(type_id) {
-            ResolvedType::TypeParam { .. } => {
-                let key = table.type_key(type_id);
-                self.affine_params
-                    .iter()
-                    .any(|&param| table.type_key(param) == key)
+            // A pack mapped through a constructor (`[..TemplateHole<T, V>]`)
+            // holds its element as a parameter of the pack's name and index.
+            ResolvedType::TypeParam { name, index } => {
+                declared_affine(type_id)
+                    || self.affine_params.iter().any(|&param| {
+                        matches!(table.get(param), ResolvedType::TypePack { name: n, index: i, .. }
+                            if n == name && i == index)
+                    })
             }
+            ResolvedType::TypePack { .. } => declared_affine(type_id),
+            // A walk's element is one of its pack's, as affine as the pack.
+            ResolvedType::PackElement { pack, .. } => declared_affine(*pack),
             ResolvedType::AssocTypeProjection {
                 owning_trait,
                 assoc_name,
@@ -966,7 +981,7 @@ impl HeldTypes for AffineParams<'_> {
         };
         drop(table);
         if is_affine_param {
-            Held::Resource
+            Held::Affine
         } else {
             self.types.held(type_id)
         }
@@ -988,7 +1003,7 @@ impl HeldTypes for TypeSystem {
                 .is_some_and(|def| table.is_affine_decl(def))
         };
         if declared_affine {
-            return Held::Resource;
+            return Held::Affine;
         }
         self.members_held(type_id)
     }
@@ -1007,7 +1022,7 @@ impl TypeSystem {
                 if self.type_table.borrow().is_unrestricted_resource(def) {
                     Held::Nothing
                 } else {
-                    Held::Resource
+                    Held::Affine
                 }
             }
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => Held::Nothing,

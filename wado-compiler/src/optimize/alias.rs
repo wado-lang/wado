@@ -1028,6 +1028,7 @@ fn shared_object_key(type_id: TypeId, type_table: &TypeTable) -> Option<TypeKey>
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Unknown
@@ -1118,6 +1119,7 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Newtype { .. }

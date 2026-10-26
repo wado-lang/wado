@@ -1,0 +1,47 @@
+// Test: a callee run at compile time steps through a statement-position
+// `match` whose scrutinee the frame knows.
+//
+// The frame reduces the `match` to its chosen arm's block, which is unit-typed.
+// Read as a value it is nothing, so the frame abandoned the call there, and
+// `classify` stayed a call on a constant argument.
+use { println, Stdout } from "core:cli";
+
+enum Mode {
+    Plain,
+    Quoted,
+}
+
+#[inline("never")]
+fn classify(text: &StrSlice) -> i32 {
+    let mut mode = Mode::Plain;
+    let mut quotes = 0;
+    for let c of text.chars() {
+        match mode {
+            Mode::Plain => {
+                if c == '"' {
+                    mode = Mode::Quoted;
+                    quotes += 1;
+                }
+            },
+            Mode::Quoted => {
+                if c == '"' {
+                    mode = Mode::Plain;
+                }
+            },
+        }
+    }
+    return quotes;
+}
+
+export fn run() with Stdout {
+    let text = "say \"hi\" and \"bye\"";
+    println(`${classify(&text.as_str_slice())}`);
+}
+
+__DATA__
+{
+    "stdout": "2\n",
+    "wir_not_expect:O2": [
+        "niri_ctfe_stmt_match_arm.wado/classify"
+    ]
+}

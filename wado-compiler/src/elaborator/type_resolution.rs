@@ -19,7 +19,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{
     ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
 };
-use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, type_pack_name};
+use crate::name::{FqTypeName, namespace_member_alias, namespaced_name, repeat_pack_name};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
 use crate::trait_solver::args_per_param;
@@ -92,6 +92,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // A pack a space has bound to its arguments' tuple splices
                     // them here, as `[..X]` at `X = [i32, bool]` is `[i32, bool]`.
                     match element {
+                        // A spread that resolved to nothing leaves no arity.
+                        Type::TypePackSpread(..) if resolved == TypeTable::ERROR => {
+                            return TypeTable::ERROR;
+                        }
                         Type::TypePackSpread(..) => elem_types
                             .extend(self.tysys.type_table.borrow().elem_types_or_self(resolved)),
                         _ => elem_types.push(resolved),
@@ -109,6 +113,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             Type::NamespacedGeneric(namespaced) => self.resolve_namespaced_generic_type(namespaced),
             Type::TypePackSpread(name, span) => {
+                let repeat = repeat_pack_name(name);
+                if let Some(&BinderInScope { index, type_id, .. }) =
+                    self.annotate_ctx.trait_ctx.type_params.get(&repeat)
+                {
+                    if self.tysys.type_table.borrow().is_tuple(type_id) {
+                        return type_id;
+                    }
+                    let element = self.resolve_unsited_type_name(name, *span);
+                    return self
+                        .tysys
+                        .type_table
+                        .borrow_mut()
+                        .make_mapped_type_pack(repeat, index, element);
+                }
                 // Look up the type pack parameter
                 if let Some(&BinderInScope { index, type_id, .. }) =
                     self.annotate_ctx.trait_ctx.type_params.get(name)
@@ -121,10 +139,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow_mut()
                         .make_type_pack(name.clone(), index)
                 } else {
-                    let _ = self.emit(TypeError::UnknownType {
-                        name: type_pack_name(name),
-                        span: *span,
-                    });
+                    // An unknown element is the name check's to report.
+                    let element = self.resolve_unsited_type_name(name, *span);
+                    if element != TypeTable::UNKNOWN {
+                        let _ = self.emit(TypeError::RepeatOutsideSignature {
+                            element: name.clone(),
+                            span: *span,
+                        });
+                    }
                     TypeTable::ERROR
                 }
             }
@@ -457,16 +479,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.project_off(param_type_id, &base_name, namespaced)
     }
 
-    /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import.
+    /// `ns::Type` / `ns::Type<args>`, where `ns` is a namespace import or an
+    /// interface declaring `Type`.
     fn resolve_namespace_member(&mut self, namespaced: &NamespacedGenericType) -> TypeId {
         // The alias belongs to whichever module wrote this node, so a type a
         // travelled expression spells `ns::Type` reads its author's `use ns`.
+        // The resolve walk answered an interface's type at the site.
         if self
             .namespace_alias_source(&namespaced.namespace, namespaced.id)
             .is_some()
+            || self
+                .tysys
+                .resolutions
+                .declared_if_walked(namespaced.id)
+                .is_some()
         {
-            // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
-            // resolve the `ns$Type` alias, which the import tier scopes to the
+            // Resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
             let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
@@ -1459,19 +1487,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// answers `T::Output` where a bare `T: Mul` leaves it abstract. Reached
     /// at `trait_args`, only the bound written at them answers:
     /// `H: Holder<i32, Out = A> + Holder<String, Out = B>` is two answers.
+    /// `base` is the type the bound is read at: the binder, or an element of
+    /// the pack it binds, whose `Self` is the element.
     pub(super) fn frame_projection_of_trait(
         &mut self,
+        base: TypeId,
         base_name: &str,
         trait_: DefId,
         trait_args: Option<&[TypeId]>,
         assoc: &str,
     ) -> Option<TypeId> {
-        let base = self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)?
-            .type_id;
         for (bound, space) in self.bound_closure_of(base_name)? {
             let Some(decl) = self.trait_decl_of(&bound) else {
                 continue;
@@ -1511,7 +1536,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.annotate_ctx.trait_ctx.type_param_bounds.is_empty() {
             return ty;
         }
-        let asked: Vec<(u32, String, ProjectionAnswer)> = {
+        let asked: Vec<(u32, TypeId, String, ProjectionAnswer)> = {
             let table = self.tysys.type_table.borrow();
             let binders = &self.annotate_ctx.trait_ctx.type_params;
             table
@@ -1539,13 +1564,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         assoc_name: assoc_name.clone(),
                         answer: TypeTable::UNKNOWN,
                     };
-                    (binders.get(name)?.type_id == *param_id).then(|| (*index, name.clone(), asked))
+                    (binders.get(name)?.type_id == *param_id)
+                        .then(|| (*index, *param_id, name.clone(), asked))
                 })
                 .collect()
         };
         let mut answers = SlotProjections::default();
-        for (slot, base_name, mut asked) in asked {
+        for (slot, base, base_name, mut asked) in asked {
             if let Some(answer) = self.frame_projection_of_trait(
+                base,
                 &base_name,
                 asked.owning_trait,
                 asked.trait_args.as_deref(),

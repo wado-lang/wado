@@ -822,6 +822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             OnBoundTrait::ReflectNewtype
             | OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default
@@ -956,7 +957,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_compiler_struct(CompilerItem::String)
+                    .make_compiler_struct(CompilerItem::StrSlice)
             };
             let param_is_mut = arg_param_is_mut(method != methods.members);
             self.record_type_param_reflect_dispatch(
@@ -984,7 +985,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.tysys
                 .type_table
                 .borrow_mut()
-                .make_compiler_struct(CompilerItem::String)
+                .make_compiler_struct(CompilerItem::StrSlice)
         };
 
         let (base_name, module_source) = self
@@ -1507,9 +1508,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             OnBoundTrait::ReflectTemplate => {
                 let holes = self.tysys.reflect_template_holes(subject)?;
                 return match assoc_name {
-                    REFLECT_HOLES_ASSOC => {
-                        Some(self.tysys.type_table.borrow_mut().make_tuple(holes))
-                    }
+                    REFLECT_HOLES_ASSOC => Some(
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .template_holes_tuple(&holes),
+                    ),
                     REFLECT_MEMBERS_ASSOC => Some(self.payload_members_ty(
                         CompilerItem::ReflectTemplateHole,
                         subject,
@@ -1556,6 +1560,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             OnBoundTrait::ReflectFlags => ScalarReflectSpec::FLAGS,
             OnBoundTrait::Eq
             | OnBoundTrait::Ord
+            | OnBoundTrait::Hash
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
             | OnBoundTrait::Default

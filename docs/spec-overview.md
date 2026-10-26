@@ -82,7 +82,7 @@ Each chapter builds on the ones before it.
 1. [Lexical Structure](./spec-lexical.md): whitespace, comments, identifiers and keywords.
 2. [Literals](./spec-literals.md): numbers, strings, templates, tuples, lists and compile-time literals.
 3. [Statements and Expressions](./spec-expressions.md): statements, variables, globals, operators and ranges.
-4. [Types](./spec-types.md): primitives, strings, tuples, lists, newtypes, structs, affine types, enums and variants.
+4. [Types](./spec-types.md): primitives, strings, tuples, lists, newtypes, structs, enums and variants.
 5. [Patterns](./spec-patterns.md): taking a value apart in `match`, `let` and `for`.
 6. [Control Flow](./spec-control-flow.md): branches, loops, labeled blocks and error handling.
 7. [Assertions](./spec-assertions.md): the `assert` statement and its failure message.
@@ -90,17 +90,18 @@ Each chapter builds on the ones before it.
 9. [Memory Model](./spec-memory.md): value semantics and references.
 10. [Traits](./spec-traits.md): declaring, implementing and bounding traits.
 11. [Standard Traits](./spec-standard-traits.md): the traits behind `for-of`, comparison, operators and indexing.
-12. [Static Reflection](./spec-reflection.md): the compile-time view of a type's members.
-13. [Effect System](./spec-effects.md): declaring, propagating and handling effects.
-14. [Module System](./spec-modules.md): visibility, imports and re-exports.
-15. [Packages](./spec-packages.md): the manifest, dependencies and package specifiers.
-16. [Kiln Generators](./spec-kiln.md): imports that a build-time generator writes.
-17. [Worlds and Entry Points](./spec-worlds.md): what a program imports from its host and exports to it.
-18. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
-19. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
-20. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
-21. [Diagnostics](./spec-diagnostics.md): the warnings and remarks lints report on code the compiler accepts.
-22. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
+12. [Affine Types](./spec-affine.md): move-only values, their drops, and references into them.
+13. [Static Reflection](./spec-reflection.md): the compile-time view of a type's members.
+14. [Effect System](./spec-effects.md): declaring, propagating and handling effects.
+15. [Module System](./spec-modules.md): visibility, imports and re-exports.
+16. [Packages](./spec-packages.md): the manifest, dependencies and package specifiers.
+17. [Kiln Generators](./spec-kiln.md): imports that a build-time generator writes.
+18. [Worlds and Entry Points](./spec-worlds.md): what a program imports from its host and exports to it.
+19. [Components](./spec-components.md): the Component Model boundary, concurrency and resources.
+20. [Serialization](./spec-serialization.md): `Serialize`, `Deserialize` and wire formats.
+21. [Compiler Attributes](./spec-attributes.md): the `#[...]` attributes.
+22. [Diagnostics](./spec-diagnostics.md): the warnings and remarks lints report on code the compiler accepts.
+23. [Testing](./spec-testing.md): `test` blocks, their outcomes and how `wado test` finds them.
 
 ## Design Philosophy
 

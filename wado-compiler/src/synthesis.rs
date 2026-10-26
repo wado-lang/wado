@@ -1,14 +1,14 @@
 //! TIR synthesis: the functions user code cannot express — auto-derived `Eq` /
-//! `Ord` for enums, `Inspect` / `Display` fallback impls, `TemplateString`
-//! expansion into formatting code, and Component Model import / export adapters.
-//! All of it runs pre-monomorphize, so the trait calls template expansion emits
-//! resolve to concrete implementations there.
+//! `Ord` for enums, `Inspect` / `Display` fallback impls, a template shape's
+//! per-hole formatting bridge, and Component Model import / export adapters.
+//! All of it runs pre-monomorphize, so the trait calls it emits resolve to
+//! concrete implementations there.
 
+pub mod affine_drop;
 pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
 pub mod reflect_bridge;
-pub mod resource_cleanup;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
@@ -80,7 +80,7 @@ fn synthesize_reflect_metadata(project: &mut Package) {
 /// 1. Reflection metadata — `Reflect{Struct,Variant,Enum,Flags,Newtype}`, which
 ///    the auto-derived bodies dispatch through
 /// 2. Traits — generates `Eq`/`Ord` for enums, `Inspect`/`Display` for all types
-/// 3. Template expansion — expands `TemplateString` nodes into trait method calls
+/// 3. Template shapes — each shape's `$hole_fmt` bridge into the format traits
 /// 4. CM bindings — generates Component Model boundary adapters
 pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     let mut project = project;
@@ -107,16 +107,11 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     let synth_impls = collect_synthesised_impls(&project);
     project.trait_env = TraitEnv::extend_with_synthesised(project.trait_env, synth_impls);
 
-    // Expand template strings into Display/Inspect trait calls.
-    // This must run after traits synthesis (which generates the impls)
-    // but before monomorphization (which resolves the trait calls).
+    // After traits synthesis, which generates the impls a hole renders
+    // through, and before monomorphization, which resolves the calls.
     let trait_env = project.trait_env.clone();
     for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
-        template::expand_templates(module, &tt, &trait_env);
-        // A tagged template's `TemplateHole::fmt` renders a hole through the
-        // same per-specifier dispatch as the direct untagged lowering, so its
-        // bridge is minted here, by that lowering's code.
         template::synthesize_hole_fmt_helpers(module, &tt, &trait_env);
     }
 
@@ -124,15 +119,16 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     // cm_binding, so a user resource call is intercepted at its pre-cm_binding
     // `cm_name`-tagged shape and routed to the dispatch wrapper, whose fallback
     // emits that same shape for cm_binding to rewrite uniformly. `WithHandler`
-    // desugaring stays late: effect-check reads the original shape.
+    // desugars ahead of drop elaboration, so a handler held by value drops
+    // after the `with` restores the handler it shadowed, on every path out.
     let project =
         effect_dispatch::synthesize_pre_cm_binding(project).map_err(SynthesisError::from)?;
 
-    // Insert `resource.drop` for every owned Component Model resource that is
-    // never transferred. Runs before CM-binding synthesis, whose rewrite of
-    // resource method calls would obscure the reference-vs-transfer distinction.
+    // Insert the drop of every affine value that never moves. Runs before
+    // CM-binding synthesis, whose rewrite of resource method calls would
+    // obscure the reference-vs-transfer distinction.
     let mut project = project;
-    resource_cleanup::elaborate_resource_drops(&mut project);
+    affine_drop::elaborate_affine_drops(&mut project);
     effect_dispatch::rewrite_resource_drops(&project);
 
     let project = cm_binding::generate_adapters(project)?;

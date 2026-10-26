@@ -53,10 +53,9 @@ impl SeqField {
 
 /// The fields of `core:prelude/format::Formatter`, in declaration order.
 ///
-/// Template expansion builds a `Formatter` literal field by field and the NIR
-/// template-hoist matches one back apart; naming the fields here rather than in
-/// string literals makes a Wado-side rename a one-line change instead of a
-/// silent miscompile.
+/// Template expansion builds a `Formatter` literal field by field; naming the
+/// fields here rather than in string literals makes a Wado-side rename a
+/// one-line change instead of a silent miscompile.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum FormatterField {
     Fill,
@@ -160,6 +159,8 @@ pub enum CompilerItem {
     /// codegen (CM binding, serde, format) refers to it through this
     /// item so the Rust side never hard-codes the struct name.
     String,
+    /// `StrSlice` — the view a synthesized `ReflectTemplate::tail` answers.
+    StrSlice,
     /// `Case<T, P>` — the per-case member struct minted by
     /// `ReflectVariant::members()` (WEP 2026-06-13 §3e).
     ReflectVariantCase,
@@ -277,6 +278,8 @@ pub enum CompilerItem {
     IndexRef,
     IndexRefMut,
     IndexAssign,
+    /// What `[c[i], c[j]] = [c[j], c[i]]` dispatches to.
+    IndexSwap,
     /// The traits an operator dispatches to. The compiler picks each by
     /// construction, so they are items and not spellings a user trait of
     /// the same name could answer for.
@@ -299,6 +302,9 @@ pub enum CompilerItem {
     /// `Ord` — anchor for synthesised `<` / `>` / `<=` / `>=`
     /// lowering and for auto-derived `T^Ord::cmp` bodies.
     Ord,
+    /// `Hash` — derived on demand where `Eq` is, its body from the prelude's
+    /// `Reflect*` blankets.
+    Hash,
     /// `From<T>` — what `?` converts an error through, and what the solver
     /// states for the conversions no impl writes.
     From,
@@ -461,10 +467,6 @@ pub enum CompilerItem {
     /// into the element's storage where a reference to it may be read after
     /// (WEP 2026-10-13).
     ListIndexAssign,
-    /// `List::from_tuple` — collects a homogeneous tuple into a `List<T>`;
-    /// synthesized `ReflectEnum::members` / `ReflectFlags::members`
-    /// call it.
-    ListFromTuple,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
     /// `Reflect::type_name` — the declaration's name, for every kind.
@@ -523,9 +525,8 @@ pub enum CompilerItem {
     ReflectFlagsFromBits,
     /// `ReflectFlags::members` — the per-bit member list.
     ReflectFlagsMembers,
-    /// `String::with_capacity` — the buffer allocation template expansion
-    /// emits and the NIR template-hoist recognises.
-    StringWithCapacity,
+    /// `String::format` — the tag an untagged template is reified as.
+    StringFormat,
     /// `String::push_str` — recognised by the WIR optimiser for
     /// string-building inlining.
     StringPushStr,
@@ -539,6 +540,9 @@ pub enum CompilerItem {
     /// `String::len` — the byte length the NIR `append_fuse` rewrite reads
     /// before a fused reservation advances it.
     StringLen,
+    /// `String::internal_view` — the view of a template segment a synthesized
+    /// `ReflectTemplate::tail` answers.
+    StringView,
     /// `String::internal_reserve_uninit` — the single capacity check the NIR
     /// `append_fuse` rewrite emits for a whole run of appends.
     StringReserveUninit,
@@ -774,6 +778,7 @@ impl CompilerItem {
         Self::KilnRequest,
         Self::KilnNoOptions,
         Self::String,
+        Self::StrSlice,
         Self::Option,
         Self::Result,
         Self::Ordering,
@@ -819,6 +824,7 @@ impl CompilerItem {
         Self::IndexRef,
         Self::IndexRefMut,
         Self::IndexAssign,
+        Self::IndexSwap,
         Self::Add,
         Self::Sub,
         Self::Mul,
@@ -833,6 +839,7 @@ impl CompilerItem {
         Self::Shr,
         Self::Eq,
         Self::Ord,
+        Self::Hash,
         Self::From,
         Self::Serialize,
         Self::Deserialize,
@@ -890,7 +897,6 @@ impl CompilerItem {
         Self::ListLen,
         Self::ListIndexValue,
         Self::ListIndexAssign,
-        Self::ListFromTuple,
         Self::ListFromLeBytes,
         Self::ReflectTypeName,
         Self::ReflectWireNamePolicy,
@@ -917,11 +923,12 @@ impl CompilerItem {
         Self::ReflectFlagsBits,
         Self::ReflectFlagsFromBits,
         Self::ReflectFlagsMembers,
-        Self::StringWithCapacity,
+        Self::StringFormat,
         Self::StringPushStr,
         Self::StringPushChar,
         Self::StringPushAscii,
         Self::StringLen,
+        Self::StringView,
         Self::StringReserveUninit,
         Self::StringSetByteUnchecked,
         Self::StringWriteStrAt,
@@ -1028,6 +1035,7 @@ impl CompilerItem {
             Self::KilnRequest => "kiln_request",
             Self::KilnNoOptions => "kiln_no_options",
             Self::String => "string",
+            Self::StrSlice => "str_slice",
             Self::Option => "option",
             Self::Result => "result",
             Self::Ordering => "ordering",
@@ -1073,6 +1081,7 @@ impl CompilerItem {
             Self::IndexRef => "index_ref",
             Self::IndexRefMut => "index_ref_mut",
             Self::IndexAssign => "index_assign",
+            Self::IndexSwap => "index_swap",
             Self::Add => "add",
             Self::Sub => "sub",
             Self::Mul => "mul",
@@ -1087,6 +1096,7 @@ impl CompilerItem {
             Self::Shr => "shr",
             Self::Eq => "eq",
             Self::Ord => "ord",
+            Self::Hash => "hash",
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
@@ -1144,7 +1154,6 @@ impl CompilerItem {
             Self::ListLen => "list_len",
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
-            Self::ListFromTuple => "list_from_tuple",
             Self::ListFromLeBytes => "list_from_le_bytes",
             Self::ReflectTypeName => "reflect_type_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
@@ -1207,11 +1216,12 @@ impl CompilerItem {
             Self::ReflectFlagsBits => "reflect_flags_bits",
             Self::ReflectFlagsFromBits => "reflect_flags_from_bits",
             Self::ReflectFlagsMembers => "reflect_flags_members",
-            Self::StringWithCapacity => "string_with_capacity",
+            Self::StringFormat => "string_format",
             Self::StringPushStr => "string_push_str",
             Self::StringPushChar => "string_push_char",
             Self::StringPushAscii => "string_push_ascii",
             Self::StringLen => "string_len",
+            Self::StringView => "string_view",
             Self::StringReserveUninit => "string_reserve_uninit",
             Self::StringSetByteUnchecked => "string_set_byte_unchecked",
             Self::StringWriteStrAt => "string_write_str_at",
@@ -1330,6 +1340,7 @@ impl CompilerItem {
             | Self::RangeExclusive
             | Self::RangeInclusive
             | Self::String
+            | Self::StrSlice
             | Self::Option
             | Self::Result
             | Self::Ordering
@@ -1382,9 +1393,11 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::Hash
             | Self::From
             | Self::ListPush
             | Self::ListSplitOff
@@ -1392,7 +1405,6 @@ impl CompilerItem {
             | Self::ListLen
             | Self::ListIndexValue
             | Self::ListIndexAssign
-            | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
@@ -1417,11 +1429,12 @@ impl CompilerItem {
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::StringWithCapacity
+            | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
             | Self::StringLen
+            | Self::StringView
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt
@@ -1559,7 +1572,7 @@ impl CompilerItem {
                 // mints. The sealed `Reflect*` faces need no entry: that pass
                 // writes them at TIR level, where no AST block exists.
                 | Self::Member
-                // Called by every drop `synthesis::resource_cleanup` writes.
+                // Called by every drop `synthesis::affine_drop` writes.
                 | Self::Drop
         )
     }
@@ -1616,6 +1629,7 @@ impl CompilerItem {
             | Self::KilnRequest
             | Self::KilnNoOptions
             | Self::String
+            | Self::StrSlice
             | Self::ReflectVariantCase
             | Self::ReflectStructField
             | Self::ReflectEnumCase
@@ -1661,9 +1675,11 @@ impl CompilerItem {
             | Self::IndexRef
             | Self::IndexRefMut
             | Self::IndexAssign
+            | Self::IndexSwap
             | Self::LiteralSpread
             | Self::Eq
             | Self::Ord
+            | Self::Hash
             | Self::From
             | Self::Serialize
             | Self::Deserialize
@@ -1705,7 +1721,6 @@ impl CompilerItem {
             | Self::ListLen
             | Self::ListIndexValue
             | Self::ListIndexAssign
-            | Self::ListFromTuple
             | Self::ListFromLeBytes
             | Self::ReflectTypeName
             | Self::ReflectWireNamePolicy
@@ -1732,11 +1747,12 @@ impl CompilerItem {
             | Self::ReflectFlagsBits
             | Self::ReflectFlagsFromBits
             | Self::ReflectFlagsMembers
-            | Self::StringWithCapacity
+            | Self::StringFormat
             | Self::StringPushStr
             | Self::StringPushChar
             | Self::StringPushAscii
             | Self::StringLen
+            | Self::StringView
             | Self::StringReserveUninit
             | Self::StringSetByteUnchecked
             | Self::StringWriteStrAt

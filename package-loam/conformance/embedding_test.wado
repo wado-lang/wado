@@ -2,38 +2,16 @@
 //! literal tensor.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Batch, Hidden, Prepared, Seq, forward } from "./embedding.onnxtext"
+use { Ids0, Ids1, Prepared, Y2, forward } from "./embedding.onnxtext"
     with {
         type: "onnxtext",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "ids",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "pos",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "wte",
-                        axes: ["Vocab", "Hidden"],
-                    },
-                    {
-                        pattern: "wpe",
-                        axes: ["Pos", "Hidden"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "each token's row adds its position's row, and -1 names the last token" {
-    let got: Tensor<f32, [Batch, Seq, Hidden]> = forward(
+    let got: Tensor<f32, [Ids0, Ids1, Y2]> = forward(
         &mut Cpu {},
-        &Tensor::<i64, [Batch, Seq]> {
+        &Tensor::<i64, [Ids0, Ids1]> {
             data: [3, 0, -1],
             extents: [1, 3],
         },

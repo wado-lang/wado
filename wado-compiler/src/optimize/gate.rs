@@ -39,7 +39,6 @@ pub enum GatedPass {
     ConstFold,
     Sroa,
     Licm,
-    TmplHoist,
     ContainerSroa,
     Inline,
     Dae,
@@ -60,7 +59,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 20;
+    const COUNT: usize = 19;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -328,7 +327,6 @@ mod tests {
             GatedPass::ConstFold,
             GatedPass::Sroa,
             GatedPass::Licm,
-            GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
             GatedPass::Inline,
             GatedPass::Dae,
@@ -351,7 +349,6 @@ mod tests {
                 | GatedPass::ConstFold
                 | GatedPass::Sroa
                 | GatedPass::Licm
-                | GatedPass::TmplHoist
                 | GatedPass::ContainerSroa
                 | GatedPass::Inline
                 | GatedPass::Dae

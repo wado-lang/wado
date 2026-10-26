@@ -160,6 +160,7 @@ pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> 
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. }
         | ResolvedType::InferVar(_)
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::BuiltinArray(_)
@@ -2507,6 +2508,7 @@ impl CmInterfaceRegistry {
         &mut self,
         module: &ast::Module,
         interface_fqs: &[String],
+        imported_fqs: &[String],
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) -> Result<(), String> {
@@ -2520,6 +2522,13 @@ impl CmInterfaceRegistry {
                 self.component_host_leaf_imports
                     .insert(fq.clone(), host_leaf_imports.to_vec());
             }
+        }
+        // The bindings declare an imported interface's types too, so each maps
+        // back to them; the first component to import one declares it.
+        for fq in imported_fqs {
+            self.cm_interface_module_sources
+                .entry(fq.clone())
+                .or_insert_with(|| module_source.clone());
         }
         Ok(())
     }

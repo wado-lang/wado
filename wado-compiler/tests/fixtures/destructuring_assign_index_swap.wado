@@ -1,0 +1,187 @@
+// A transposition within one container is its `index_swap`: a list, a map, a
+// container reached through a field path and through a dereference, an index
+// written as arithmetic, and one index twice. Each element is a list, so a
+// value copy would show. An affine element, which no read can copy, swaps too.
+
+use { println, Stdout } from "core:cli";
+use { TreeMap } from "core:collections";
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+struct Holder {
+    items: List<List<i32>>,
+}
+
+fn sizes(xs: &List<List<i32>>) -> String {
+    let mut out = "";
+    for let x of xs {
+        out.push_str(`${x.len()}`);
+    }
+    return out;
+}
+
+fn in_list() -> String {
+    let mut xs: List<List<i32>> = [[1], [2, 2], [3, 3, 3]];
+    let i = 0;
+    let j = 2;
+    [xs[i], xs[j]] = [xs[j], xs[i]];
+    [xs[i + 1], xs[2]] = [xs[2], xs[i + 1]];
+    [xs[1], xs[1]] = [xs[1], xs[1]];
+    return sizes(&xs);
+}
+
+fn in_map() -> String {
+    let mut m = TreeMap::<String, List<i32>>::new();
+    m["a"] = [1];
+    m["b"] = [2, 2];
+    [m["a"], m["b"]] = [m["b"], m["a"]];
+    return `${m["a"].len()}${m["b"].len()}`;
+}
+
+enum Color {
+    Red,
+    Blue,
+}
+
+// The right side's keys take the map's key type, as the targets' do.
+fn in_map_by_case() -> String {
+    let mut m = TreeMap::<Color, List<i32>>::new();
+    m[Color::Red] = [1];
+    m[Color::Blue] = [2, 2];
+    [m[Red], m[Blue]] = [m[Blue], m[Red]];
+    return `${m[Color::Red].len()}${m[Color::Blue].len()}`;
+}
+
+struct At {
+    n: i32,
+}
+
+// An index read out of a container, even another one, keeps the desugaring,
+// which reads it again after the first write.
+fn index_through_subscript(c: &mut List<At>, a: &List<At>) -> String {
+    [c[a[0].n], c[a[1].n]] = [c[a[1].n], c[a[0].n]];
+    return `${c[0].n}${c[1].n}`;
+}
+
+fn through_field() -> String {
+    let mut h = Holder { items: [[1], [2, 2]] };
+    [h.items[0], h.items[1]] = [h.items[1], h.items[0]];
+    return sizes(&h.items);
+}
+
+fn through_deref(r: &mut List<List<i32>>) {
+    [(*r)[0], (*r)[1]] = [(*r)[1], (*r)[0]];
+}
+
+fn toks() -> List<Tok> {
+    let mut ts: List<Tok> = [];
+    ts.push(Tok { id: 1 });
+    ts.push(Tok { id: 2 });
+    return ts;
+}
+
+fn affine_elements() -> i32 {
+    let mut ts = toks();
+    [ts[0], ts[1]] = [ts[1], ts[0]];
+    return ts[0].id * 10 + ts[1].id;
+}
+
+// A closure that captures the container still swaps in place.
+fn captured_container() -> i32 {
+    let mut ts = toks();
+    let mut f = || {
+        [ts[0], ts[1]] = [ts[1], ts[0]];
+    };
+    f();
+    return ts[0].id * 10 + ts[1].id;
+}
+
+// A reference local that is not `mut` names one container however it is
+// referenced.
+fn referenced_reference(r: &mut List<Tok>) -> i32 {
+    let rr = &r;
+    [(*r)[0], (*r)[1]] = [(*r)[1], (*r)[0]];
+    return (*rr)[0].id * 10 + (*rr)[1].id;
+}
+
+// A closure's own local is no capture.
+fn closure_local_index() -> i32 {
+    let mut ts = toks();
+    let mut f = || {
+        let i = 0;
+        [ts[i], ts[1]] = [ts[1], ts[i]];
+    };
+    f();
+    return ts[0].id * 10 + ts[1].id;
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+fn field_index(p: Pair) -> i32 {
+    let mut ts = toks();
+    [ts[p.a], ts[p.b]] = [ts[p.b], ts[p.a]];
+    return ts[0].id * 10 + ts[1].id;
+}
+
+// A container indexed by two keys swaps by the one a read of the subscript
+// selects.
+affine struct Grid {
+    cells: List<Tok>,
+}
+
+impl IndexRef<i32> for Grid {
+    type Output = Tok;
+
+    fn index_ref(&self, i: i32) -> &Tok {
+        return &self.cells[i];
+    }
+}
+
+impl IndexRef<String> for Grid {
+    type Output = Tok;
+
+    fn index_ref(&self, k: String) -> &Tok {
+        return &self.cells[if k == "a" { 0 } else { 1 }];
+    }
+}
+
+impl IndexSwap<String> for Grid {
+    fn index_swap(&mut self, a: String, b: String) {
+        let i = if a == "a" { 0 } else { 1 };
+        let j = if b == "a" { 0 } else { 1 };
+        [self.cells[i], self.cells[j]] = [self.cells[j], self.cells[i]];
+    }
+}
+
+fn swap_by_selected_key() -> i32 {
+    let mut g = Grid { cells: toks() };
+    [g["a"], g["b"]] = [g["b"], g["a"]];
+    return g.cells[0].id * 10 + g.cells[1].id;
+}
+
+export fn run() with Stdout {
+    let mut ys: List<List<i32>> = [[1], [2, 2]];
+    through_deref(&mut ys);
+    println(`${in_list()} ${in_map()} ${through_field()} ${sizes(&ys)} ${affine_elements()}`);
+    let mut ts = toks();
+    println(`${captured_container()} ${referenced_reference(&mut ts)}`);
+    println(`${closure_local_index()} ${field_index(Pair { a: 0, b: 1 })} ${swap_by_selected_key()}`);
+    let mut ats: List<At> = [At { n: 1 }, At { n: 0 }];
+    println(`${in_map_by_case()} ${index_through_subscript(&mut ats, &ats)}`);
+}
+
+__DATA__
+{
+    "stdout": "312 21 21 21 21\n21 21\n21 21 21\n21 10\n",
+    "wir_not_expect:O0": ["List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value"],
+    "wir_not_expect:O2": ["$value_copy$core:prelude/list.wado/List<i32>"]
+}

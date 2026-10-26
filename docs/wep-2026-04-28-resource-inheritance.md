@@ -744,7 +744,7 @@ This WEP is the full feature. The order it lands in is [Web § Minimum Implement
 
 Implemented, with tests in `wado-compiler/tests/integration/unrestricted_resource.rs`:
 
-- `#[cm(..., linearity = "affine" | "unrestricted", classes = "lo..=hi")]` — parsed, value and placement validated (`parser.rs`), `classes` only beside `"unrestricted"`; an unrestricted resource is copyable and exempt from the affine analysis and the cleanup pass (`resource_move_check.rs`, `synthesis/resource_cleanup.rs`, both reading `TypeTable::is_unrestricted_resource`).
+- `#[cm(..., linearity = "affine" | "unrestricted", classes = "lo..=hi")]` — parsed, value and placement validated (`parser.rs`), `classes` only beside `"unrestricted"`; an unrestricted resource is copyable and exempt from the affine analysis and the cleanup pass (`affine_move_check.rs`, `synthesis/affine_drop.rs`, both reading `TypeTable::is_unrestricted_resource`).
 - `extends` — keyword, AST, parser; the parent is resolved and validated in `elaborator/orchestration.rs::resolve_resource_extends` (parent is a resource, both sides unrestricted, no cycle, neither side generic), and the relation lives in `TypeTable::resource_parent` / `is_resource_subtype`.
 - Subtyping and implicit upcast — one rule in `elaborator/typecheck.rs::check_at`, gated by `Position`: value, `return` and a `&T` referent admit a subtype; `&mut T`, containers and function types do not. Branch agreement is `elaborator/expr.rs::agreed_branch_type`, which `if`, `if let` and `match` all route through.
 - Method resolution over the chain, and the corner cases: override forbidden, trait-vs-inherited ambiguity, statics do not inherit, `Self` fixed at the declaring resource.

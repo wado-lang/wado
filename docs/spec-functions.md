@@ -1380,3 +1380,86 @@ takes every type the scalar parameters leave over
 `zip` transposes its operands position by position, so its rows must be equally
 long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
 rejected where it is written.
+
+### Homogeneous Packs
+
+A spread over a type that is not a pack, `[..X]`, is a tuple of any length whose
+every element is `X`. The function takes it without declaring a pack. A walk over
+it binds `X` itself, so the body treats every element as one type.
+
+<!-- {"fixture":"variadic_homogeneous_pack.wado"} -->
+
+```wado
+fn collect<T>(items: [..T]) -> List<T> {
+    let mut out: List<T> = [];
+    for let item of items {
+        out.push(item);
+    }
+    return out;
+}
+
+fn sum(values: [..i32]) -> i32 {
+    let mut total = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+test {
+    assert collect([1, 2, 3]) == [1, 2, 3];
+    assert collect(["a", "b"]) == ["a", "b"];
+    assert sum([1, 2, 3, 4]) == 10;
+    assert sum([]) == 0;
+}
+```
+
+The call settles `X` from the tuple's elements, which must all be `X`. A tuple
+that mixes types is a mismatch:
+
+<!-- {"fixture":"variadic_homogeneous_pack_mismatch_error.wado"} -->
+
+```wado
+assert sum([1, "a"]) == 1;
+```
+
+It is reported as `expected '[i32, i32]', found '[i32, String]'`.
+
+Every length the program passes is its own instantiation, as with a declared
+pack.
+
+Every `[..X]` over one `X` in a signature has that one length. A return type
+spelling it returns as many elements as the parameter took:
+
+<!-- {"fixture":"variadic_homogeneous_pack_shared_length.wado"} -->
+
+```wado
+fn doubled(values: [..i32]) -> [..i32] {
+    return [for let v of values { v * 2 }];
+}
+
+test {
+    let [a, b, c] = doubled([1, 2, 3]);
+    assert a + b + c == 12;
+}
+```
+
+Two parameters spelling it take tuples of one length, so `total([1], [1, 2])`
+is a mismatch:
+
+<!-- {"fixture":"variadic_homogeneous_pack_shared_length_error.wado"} -->
+
+```wado
+fn total(a: [..i32], b: [..i32]) -> i32 {
+    return 0;
+}
+```
+
+Only a call settles that length, so `[..X]` appears only in a function's
+parameter or return type. A `let` annotation cannot name one:
+
+<!-- {"fixture":"variadic_homogeneous_pack_outside_signature_error.wado"} -->
+
+```wado
+let t: [..i32] = [1, 2, 3];
+```

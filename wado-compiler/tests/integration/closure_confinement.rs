@@ -38,8 +38,6 @@ fn caller_body() -> String {
 fn a_closure_does_not_unconfine_the_other_parameters() {
     let body = caller_body();
     let copies = body.matches("array_copy").count();
-    assert_eq!(
-        copies, 1,
-        "only `let mine = *src` copies; the call must not:\n{body}"
-    );
+    // `mine` is only read, so it shares `*src`, and the call reads it in place.
+    assert_eq!(copies, 0, "neither `mine` nor the call copies:\n{body}");
 }

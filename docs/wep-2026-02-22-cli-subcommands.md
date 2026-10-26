@@ -63,6 +63,16 @@ still sees dependencies and builds real files; it just never does the resolving.
 - `run` / `serve` / `test` / `publish` share the `build` core in project mode.
   A bare-file argument (`wado run file.wado`) routes through the standalone
   `compile` path instead.
+- `run` and `serve` keep the component they built, keyed by the `wado`
+  binary, the options, the `WADO_*` environment and the entry file, and reuse
+  it while every file and environment variable its compile read is unchanged.
+  It lives in `build/run/` under the package root, or in the user cache,
+  `$XDG_CACHE_HOME/wado/run/` (else `~/.cache/wado/run/`), for a file in no
+  package, so a script run from a shebang writes nothing beside itself.
+  `--no-cache` compiles anyway. The cache holds Wasm and never machine code:
+  wasmtime validates a component each time it loads one, while a precompiled
+  `.cwasm` is run as written, so caching one would trust whatever replaced the
+  file.
 
 | Tier                  | Commands                                                             | Resolves deps                  |
 | --------------------- | -------------------------------------------------------------------- | ------------------------------ |
@@ -390,6 +400,10 @@ existing ghq root to share checkouts with `ghq`:
 root = "~/ghq"
 ```
 
+The same file's `[process] read` opens a toolchain to every child a guest
+spawns; see [WEP: `core:process`](./wep-2026-10-21-core-process.md). A file that
+another user could have written is ignored whole, with a warning.
+
 ### `wado list`
 
 List packages in the local dependency cache.
@@ -442,6 +456,11 @@ the canonical clones and registry components so a rebuild needs no network;
 `--all` additionally removes those. Worktrees are reproducible from the lock, so
 this is always safe — `wado fetch` rebuilds them. Like `wado list`, it scans the
 cache and needs no project context.
+
+`--global` removes the user cache instead (`$XDG_CACHE_HOME/wado`, else
+`~/.cache/wado`): what `run`, `serve`, `test` and `core:eval` cached for
+files in no package, whichever files those were. A package's own caches live in
+its `build/`.
 
 ### Entry Point and CLI Commands
 

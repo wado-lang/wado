@@ -196,9 +196,11 @@ There are three instruments, and the roadmap is ordered by what they count rathe
 than by what looks important.
 
 - A remark, over the [remarks](./wep-2026-06-03-optimizer-remarks.md)
-  infrastructure, names a block that computes a constant at run time and what
-  stopped it: the calls that survived inside it, or the fact that refused it as a
-  frame. It fires from the final IR, never from a refusal a pass recorded, so it
+  infrastructure, names a block or a call that computes a constant at run time,
+  and what stopped it. A block reports the calls that survived inside it, or the
+  fact that refused it as a frame. A call is one into a body the engine can run,
+  every argument a constant, and it reports the calls that survived in that
+  body. It fires from the final IR, never from a refusal a pass recorded, so it
   retires itself as the fold reaches each shape.
 - `WADO_TRACE=ctfe_call` names what each declined call wanted that the frame
   could not give, `ctfe_stmt` the statement a frame abandoned at, and
@@ -382,37 +384,33 @@ literals, `Array::slice`'s computed bounds fold, and the corpus is recounted.
 
 ### 3. The frame owns storage
 
-`` `${'x'}` `` does not fold, where `` `${true}` `` does. The census names no
-call for it. With `` `${255:x}` `` the place-valued field is what still pays for
-a formatter short of floats, and there the census does name a call.
+Every template builds `Formatter { …, buf: &mut buffer }`. `bool::fmt` writes
+the buffer straight, so inlining dissolves its `Formatter`; `char::fmt` reads
+`f.buf` back and appends through it, so the field outlives every pass and only
+the frame can run it.
 
-Every template builds `Formatter { …, buf: &mut buffer }`, and a `&mut` in a
-struct-literal field is a write the frame does not perform, so the buffer is
-clobbered and the region abandons at its first append. `bool::fmt` writes the
-buffer straight, so inlining dissolves its `Formatter` and a later iteration
-folds the region; `char::fmt` reads `f.buf` back and appends through it, so the
-field outlives every pass. What the two once also differed by — a branch on
-`f.width` that no NIR pass folded — was two gaps in `store_load_forward`, since
-fixed, and the branch is gone.
+The frame runs it through a place field. A `let` of a struct literal whose field
+is a `&mut` over a local place records that field in `place_fields`, keyed by the
+local and the field's path. It resolves the field to the place as
+`place_aliases` resolves a `let`-bound reference. A read or a write through the
+field (`f.buf.used`, or `f.buf` passed as a `&mut` argument) reaches the place.
+The aggregate holds a placeholder in the field, so the value never carries the
+place out of the frame:
+
+- A read of the field itself, or of anything enclosing it, is refused.
+- A store over it abandons the evaluation, since it would repoint the reference
+  rather than write through it.
+- A fresh binding of the place it names abandons the evaluation too.
+
+`Trackability` records the `&mut` as reached, as it records a `let` of the
+reference alone, so the place is not clobbered.
 
 - [x] What distinguishes the `char` path from the `bool` one: reading the buffer
   back out of the `&mut` field, which is the item below.
-- [ ] A place-valued field, so an aggregate can carry a reference. Today such an
-  aggregate is not a constant, since a field holding the referent's value
-  would take a write meant for the referent; what it needs to hold is the
-  place the frame already names elsewhere — `place_aliases` records exactly
-  that pair for a `let`-bound reference, and the gap is carrying one inside a
-  value. The refusal is whole-value, so a scalar field naming no storage is
-  refused with the rest. A template folds today only where inlining and SROA
-  dissolve its `Formatter` first, which the inliner's pricing decides, not
-  the engine.
+- [x] A place-valued field, so an aggregate can carry a reference.
 - [ ] `String::grow`, which reshapes the caller's container from a frame of its
   own and so abandons the evaluation whenever a buffer outgrows its
   reservation.
-
-A place names the frame's own storage and must not outlive it, so the aggregate
-exit refuses to write any value carrying one — a leaf gate beside the one that
-refuses a reference-shaped leaf.
 
 Upstream: the retention-gated temp and write-back carve-outs and divergences D1–D6
 in [Reference Representation](./wep-2026-06-13-reference-representation.md). The
@@ -504,6 +502,19 @@ The census counts 13. The frame cannot say where such a write lands, so it
 refuses the region rather than carry it out. A frame's places cover locals only.
 The roots it leaves out, such as a global or a call result, have not been
 counted against the 13.
+
+### An aggregate holding a place, handed to a call
+
+A call taking the aggregate itself, such as `fmt(&mut f)`, declines. The callee
+runs in a frame of its own, and the place its field names is a local of the
+caller's. Only a field reached through, such as `f.buf`, crosses the call. A
+template folds past such a call only where inlining dissolves it first.
+
+### A place field nested in a field, or bound by anything but a `let`
+
+Only a `&mut` written directly in the literal a `let` binds becomes a place
+field. One in a nested literal, or in a literal assigned or passed rather than
+bound, leaves the place clobbered.
 
 ### Comparing two literal strings as a guard
 

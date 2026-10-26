@@ -61,6 +61,9 @@ Four things force the wrapped form whatever the width allows.
 - More than one element bearing a call, which keeps a dense line readable.
 - A comment inside the construct that the compact form has no place for.
 
+Nothing else wraps an empty argument list, since wrapping it shortens nothing:
+`label()` stays on its line however long the line runs.
+
 An array that does not fit packs as many elements per line as the budget
 allows, unless it holds a call, a nested container, or a comment. Every other wrapped list
 is one entry per line with a trailing comma. Declaration bodies, a `match` with
