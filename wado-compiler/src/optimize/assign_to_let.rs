@@ -11,13 +11,18 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirLocal, NirParam};
 use crate::nir_arena::{BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind};
 
+use super::arena_query::{mentions_local_except, operand_read_locals, stmt_mentions_local};
+
 /// Promote every such assignment in `body`. Answers whether any changed.
 pub(super) fn promote_lone_assignments(
     body: &mut Body,
     locals: &[NirLocal],
     params: &[NirParam],
 ) -> bool {
-    let census = Census::of(body);
+    let lone = lone_assignees(body, params);
+    if lone.is_empty() {
+        return false;
+    }
     let mut blocks: Vec<BlockId> = Vec::new();
     body.for_each_reachable_node(|node| {
         if let NodeRef::Block(b) = node {
@@ -28,14 +33,19 @@ pub(super) fn promote_lone_assignments(
     for block in blocks {
         let stmts = &body.blocks[block].stmts;
         for (at, &stmt) in stmts.iter().enumerate() {
-            let Some((local, value)) = assignment_statement(body, stmt) else {
-                continue;
-            };
-            let lone = census.assignments.get(&local) == Some(&1)
-                && !census.bound.contains(&local)
-                && params.iter().all(|p| p.local_index != local);
-            // The target is a mention too, and the only one ahead of the rest.
-            if lone && mentions(body, &stmts[at + 1..], local) + 1 == census.mentions[&local] {
+            if let Some((local, value)) = assignment_statement(body, stmt)
+                && lone.contains(&local)
+                && !operand_read_locals(body, value).contains(&local)
+                && !stmts[..at]
+                    .iter()
+                    .any(|&s| stmt_mentions_local(body, s, local))
+                && !mentions_local_except(
+                    body,
+                    NodeRef::Block(body.root()),
+                    Some(NodeRef::Block(block)),
+                    local,
+                )
+            {
                 promoted.push((stmt, local, value));
             }
         }
@@ -54,46 +64,36 @@ pub(super) fn promote_lone_assignments(
     !promoted.is_empty()
 }
 
-/// What one walk of the body says about each local.
-#[derive(Default)]
-struct Census {
-    /// Bound by a `let` or a pattern.
-    bound: IndexSet<u32>,
-    /// How many assignments write each local as a whole.
-    assignments: IndexMap<u32, usize>,
-    /// How many times each local is mentioned: by a node naming it, or by an
-    /// operand slot whose promoted value reads it.
-    mentions: IndexMap<u32, usize>,
-}
-
-impl Census {
-    fn of(body: &Body) -> Self {
-        let mut census = Census::default();
-        body.for_each_reachable_node(|node| {
-            match node {
-                NodeRef::Stmt(s) => {
-                    if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
-                        census.bound.insert(*local_index);
-                    }
-                }
-                NodeRef::Pat(p) => {
-                    if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
-                        census.bound.insert(*local_index);
-                    }
-                }
-                NodeRef::Expr(e) => {
-                    if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
-                        && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                    {
-                        *census.assignments.entry(*index).or_default() += 1;
-                    }
-                }
-                NodeRef::Block(_) => {}
+/// The locals one assignment writes as a whole and nothing binds: no `let`,
+/// pattern or parameter.
+fn lone_assignees(body: &Body, params: &[NirParam]) -> IndexSet<u32> {
+    let mut bound: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
+    let mut assignments: IndexMap<u32, usize> = IndexMap::default();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                bound.insert(*local_index);
             }
-            count_mentions(body, node, &mut census.mentions);
-        });
-        census
-    }
+        }
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                bound.insert(*local_index);
+            }
+        }
+        NodeRef::Expr(e) => {
+            if let ExprKind::Assign { target, .. } = &body.exprs[e].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+            {
+                *assignments.entry(*index).or_default() += 1;
+            }
+        }
+        NodeRef::Block(_) => {}
+    });
+    assignments
+        .into_iter()
+        .filter(|&(local, count)| count == 1 && !bound.contains(&local))
+        .map(|(local, _)| local)
+        .collect()
 }
 
 /// The local and value of a statement assigning a local as a whole, `x = v;`.
@@ -108,37 +108,4 @@ fn assignment_statement(body: &Body, stmt: StmtId) -> Option<(u32, Operand)> {
         ExprKind::Local { index, .. } => Some((index, value)),
         _ => None,
     }
-}
-
-/// How many times `stmts` mention `local`, as [`Census::mentions`] counts.
-fn mentions(body: &Body, stmts: &[StmtId], local: u32) -> usize {
-    let mut counts = IndexMap::default();
-    for &stmt in stmts {
-        body.for_each_node_under(NodeRef::Stmt(stmt), |node| {
-            count_mentions(body, node, &mut counts)
-        });
-    }
-    counts.get(&local).copied().unwrap_or(0)
-}
-
-/// Count the locals `node` names, and those each of its promoted operands
-/// reads, once per slot.
-fn count_mentions(body: &Body, node: NodeRef, counts: &mut IndexMap<u32, usize>) {
-    if let NodeRef::Expr(e) = node
-        && let ExprKind::Local { index, .. } = &body.exprs[e].kind
-    {
-        *counts.entry(*index).or_default() += 1;
-    }
-    let mut leaves = IndexSet::default();
-    body.for_each_operand(node, |op| {
-        if let Operand::Value(v) = op
-            && body.values.names_a_local(v)
-        {
-            leaves.clear();
-            body.values.collect_opaque_locals(v, &mut leaves);
-            for &local in &leaves {
-                *counts.entry(local).or_default() += 1;
-            }
-        }
-    });
 }
