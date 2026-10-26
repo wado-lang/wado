@@ -176,6 +176,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;

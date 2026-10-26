@@ -5,14 +5,14 @@
 The optimizer already leans on cold paths. `builtin::cold_path()` marks code
 that rarely runs, and every pass that reads the marker acts on it:
 
-- `nir/cold_outline` moves the marked region into a function of its own.
-- `nir/inline` prices a callee without its cold tail. It does not inline at a
+- `nir/cold_outline` moves the marker's basic block into a function of its own.
+- `nir/inline` prices a callee without its cold code. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
   is taken.
 - `param_spec` mints no specialized clone for a cold call site, and
   `const_object_globalization` skips a function that runs only on a cold path.
-- `infer_branch_hints` turns the marker into a Wasm branch hint, and wasmtime
-  lays out the cold side out of line.
+- `wir_build` turns the marker into a Wasm branch hint, and wasmtime lays out
+  the cold side out of line.
 
 An author's marker is a guess: it goes where they believe a path is rare. Only
 a path that ends in a trap is known to be cold. `infer_branch_hints` hints
@@ -209,20 +209,25 @@ A test checks what a program computes, which a profile never changes, so the
 test world has no use for one by default. `-f pgo` turns it on there, mainly for
 fuzzing the application of profiles.
 
-`-f no-cold-paths` ignores every `cold_path()` the author or the profile put
-there. It drops the markers before any pass reads them, so no pass sees one.
-The two flags give three builds of one program: `-f no-cold-paths` has no
-markers, `-f no-pgo` has the author's only, and the default has the author's
-and the profile's.
+`-f no-cold-paths` drops every marker before any pass reads one: the author's,
+the profile's, and the compiler's, ahead of a trap, past a global's once-guard,
+and in the default arm `match_to_switch` writes. A build with it shows what the
+optimizer does with no marker to go on. The hints `infer_branch_hints` derives
+from traps stay, since they read no marker. The two flags give three builds of
+one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
+and the compiler's, and the default adds the profile's.
 
-`-f no-cold-paths` leaves alone what the compiler knows from traps: the hints
-`infer_branch_hints` derives and the markers `match_to_switch` writes. Those
-follow from what the program does, not from a guess.
+Reify and lowering write the compiler's marker as `builtin::$known_cold_path()`,
+so the conflict remark can tell it from the author's until NIR, which has one
+marker: a global's once-guard runs once, and its marker states no guess to
+audit. The marker on a `?` propagating a failure is a guess and is written as
+the author's.
 
-The existing `-f no-branch-hinting` is a different cut. It drops the markers
-only at WIR build, after every NIR pass has read them, and it also skips the
-hints derived from traps. It answers what branch hints are worth to wasmtime;
-`-f no-cold-paths` answers what the markers are worth to the whole pipeline.
+The existing `-f no-branch-hinting` is a different cut. Every pass sees the
+same markers and hints with it as without, and only the emitter leaves out the
+hint section, the trap-derived hints included. It answers what branch hints are
+worth to wasmtime; `-f no-cold-paths` answers what the markers are worth to the
+whole pipeline.
 
 ### A profile changes no output
 
@@ -245,7 +250,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo`, `-f no-pgo` and `-f no-cold-paths`.
+5. [ ] `-f pgo` and `-f no-pgo`.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
@@ -262,3 +267,12 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
+- [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
+  an arm `match_to_switch` turns into a `br_table` target reaches no hint the
+  engine reads.
+- [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
+  first arm's guard runs on every path through the `match`, so a marker under
+  it covers the `match` but is not read that way.
+- [ ] The inliner reads a caller's cold code once, before it splices. A callee
+  whose whole body is cold, spliced in, covers its block on both sides of the
+  call, yet the calls after it are still inlined at hot-path prices.

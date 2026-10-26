@@ -24,10 +24,10 @@ use crate::lower::plan::value_copy::place::{
 use crate::lower::translate::{convert_function_ref, tir_function_key};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, LocalMethodName, RefKind,
-    contract_report_name, minted_name,
+    CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC,
+    LocalMethodName, RefKind, contract_report_name, minted_name,
 };
-use crate::synthesis::common::builtin_call;
+use crate::synthesis::common::known_cold_path_stmt;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, LetStorage, LocalFrame, TemplateId, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirParam, TirPattern, TirStmt, TirStmtKind, TirUnaryOp,
@@ -335,10 +335,7 @@ impl ReportFailures<'_> {
             span,
         );
         then_block.stmts = vec![
-            TirStmt::new(
-                TirStmtKind::Expr(builtin_call("cold_path", Vec::new(), TypeTable::UNIT)),
-                span,
-            ),
+            known_cold_path_stmt(span),
             TirStmt::new(TirStmtKind::Expr(call), span),
         ];
     }
@@ -545,7 +542,7 @@ fn report_function(
     // The report is cold as a whole; the call to it keeps the marker.
     let stmts = stmts
         .into_iter()
-        .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, "cold_path")))
+        .filter(|stmt| !matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_intrinsic_call(expr, KNOWN_COLD_PATH_INTRINSIC)))
         .collect();
     let mut body = TirExpr::new(
         TirExprKind::Block(TirBlock::new(stmts, span)),

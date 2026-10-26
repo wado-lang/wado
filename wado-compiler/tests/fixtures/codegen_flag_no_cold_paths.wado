@@ -1,0 +1,20 @@
+// `-f no-cold-paths` compiles as if no cold marker existed, the compiler's
+// included: the failure path of `checked`'s `assert`, which a build with its
+// marker outlines into `checked$cold0`, stays in place.
+
+fn checked(id: i32) -> i32 {
+    assert id >= 0 && id < 100, `id ${id} out of range`;
+    return id * 2;
+}
+
+export fn run() {
+    assert checked(builtin::black_box(3)) == 6;
+    assert checked(builtin::black_box(4)) == 8;
+}
+
+__DATA__
+{
+    "codegen_flags": ["no-cold-paths"],
+    "stdout": "",
+    "wir_not_expect:O2": ["$cold"]
+}

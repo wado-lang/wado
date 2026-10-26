@@ -304,6 +304,7 @@ fn "assert_operand_range.wado/$template_segment$assert_operand_range.wado/$tmpl$
 
 fn "assert_operand_range.wado/$cm_export__run"() {
     let $v2: ref "core:prelude/range.wado//RangeExclusive<i32>";
+    cold_path;
     $v2 = struct.new "core:prelude/range.wado//RangeExclusive<i32>" { start: 0, end: 5 };
     cold_path;
     let $mv_arg_1: ref "core:prelude/string.wado//String";
@@ -717,6 +718,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;

@@ -88,7 +88,7 @@ pub fn build_component(
 
     // Core memory module
     let mem_info = wasm_modules.get("mem");
-    let mem_module = build_memory_module(project.strip_names, mem_info);
+    let mem_module = build_memory_module(project.strip_names, mem_info, project.codegen_flags);
     ctx.register_core_module("mem-mod");
     builder.core_module_raw(Some("mem-mod"), &mem_module);
 
@@ -755,11 +755,14 @@ fn wado_type_to_cm_val_type(
     }
 }
 
-/// Emit the memory/allocator core module. It contains no `array.copy`, so
-/// codegen feature flags do not apply here.
-fn build_memory_module(strip_names: bool, wasm_mod: Option<&WirPackage>) -> Vec<u8> {
+/// Emit the memory/allocator core module.
+fn build_memory_module(
+    strip_names: bool,
+    wasm_mod: Option<&WirPackage>,
+    codegen_flags: CodegenFlags,
+) -> Vec<u8> {
     let wir = wasm_mod.expect("core:allocator with #![wasm_module(\"mem\")] is required");
-    emit_core_module(wir, strip_names, CodegenFlags::default())
+    emit_core_module(wir, strip_names, codegen_flags)
 }
 
 /// Sanitise a wasm namespace string (e.g. `"wasm:core:libm.wat"`) into a

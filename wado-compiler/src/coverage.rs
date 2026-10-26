@@ -205,6 +205,8 @@ pub enum ProbeSite {
 pub struct CoverageMap {
     pub modules: Vec<ModulePlan>,
     pub bases: Vec<u32>,
+    /// The module each of `modules` plans.
+    sources: Vec<ModuleSource>,
     probes: IndexMap<(ProbeSite, AstId), u32>,
     /// The function holding each probed region, by global id.
     probe_function: IndexMap<u32, usize>,
@@ -215,15 +217,26 @@ pub struct CoverageMap {
 }
 
 impl CoverageMap {
-    /// Plan `modules` in the order given, which fixes the global ids.
+    /// Plan `modules` in the order given, which fixes the global ids. The
+    /// stdlib modules `seed` planned keep its plans, ids and probe sites
+    /// instead: they come from the stdlib snapshot with their probes already in
+    /// place, and reify still reads their sites where it replays a default body
+    /// of theirs in another module. The rest number past the seed's last id.
     pub fn build<'a>(
+        seed: Option<&CoverageMap>,
         modules: impl IntoIterator<Item = (&'a ModuleSource, &'a ast::Module)>,
         rt_unreachable_calls: &IndexSet<AstId>,
     ) -> Self {
-        let mut map = Self::default();
+        let mut map = seed.map_or_else(Self::default, Self::without_entry);
+        let seeded: IndexSet<ModuleSource> = map.sources.iter().cloned().collect();
+        let mut next = map.end();
         for (source, module) in modules {
+            if seeded.contains(source) {
+                continue;
+            }
             let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
-            let base = map.modules.iter().map(|m| m.regions.len() as u32).sum();
+            let base = next;
+            next += plan.regions.len() as u32;
             let first_function = map.function_probes.len();
             map.function_probes
                 .resize(first_function + plan.functions.len(), Vec::new());
@@ -238,10 +251,45 @@ impl CoverageMap {
                 map.for_of_bodies
                     .insert(id, base + regions.start..base + regions.end);
             }
-            map.modules.push(plan);
-            map.bases.push(base);
+            map.push(source, plan, base);
         }
         map
+    }
+
+    /// This map less its entry: the stdlib snapshot's, an empty one that every
+    /// entry compares equal to.
+    fn without_entry(&self) -> Self {
+        let mut map = Self {
+            probes: self.probes.clone(),
+            probe_function: self.probe_function.clone(),
+            function_probes: self.function_probes.clone(),
+            for_of_bodies: self.for_of_bodies.clone(),
+            ..Self::default()
+        };
+        for ((source, plan), &base) in self.sources.iter().zip(&self.modules).zip(&self.bases) {
+            if let ModuleSource::EntryPoint { .. } = source {
+                assert!(plan.regions.is_empty(), "the snapshot's entry is empty");
+            } else {
+                map.push(source, plan.clone(), base);
+            }
+        }
+        map
+    }
+
+    fn push(&mut self, source: &ModuleSource, plan: ModulePlan, base: u32) {
+        self.modules.push(plan);
+        self.bases.push(base);
+        self.sources.push(source.clone());
+    }
+
+    /// One past the last id any module takes.
+    pub(crate) fn end(&self) -> u32 {
+        self.modules
+            .iter()
+            .zip(&self.bases)
+            .map(|(plan, base)| base + plan.regions.len() as u32)
+            .max()
+            .unwrap_or(0)
     }
 
     /// The probe id reify puts at `site` on node `id`, if one goes there.
