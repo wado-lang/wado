@@ -1715,13 +1715,15 @@ impl LocalMethodName {
     #[must_use]
     pub fn to_display_name(&self) -> String {
         let receiver = self.fq_struct_name().to_display();
+        let args: Vec<String> = self
+            .method_type_args
+            .iter()
+            .map(FqTypeName::to_display)
+            .collect();
+        let method = MethodName::format_method_with_args(&self.method_name, &args);
         match &self.trait_name {
-            Some(trait_name) => format!(
-                "{receiver}^{}::{}",
-                trait_name.to_display(),
-                self.method_name
-            ),
-            None => format!("{receiver}::{}", self.method_name),
+            Some(trait_name) => format!("{receiver}^{}::{method}", trait_name.to_display()),
+            None => format!("{receiver}::{method}"),
         }
     }
 
@@ -2933,6 +2935,16 @@ mod tests {
         assert_eq!(
             named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
             "id<fn(P)->i32with($e263)>"
+        );
+        let method = LocalMethodName::with_method_type_args(
+            FqTypeName::builtin("Box"),
+            None,
+            "transform$spec0".into(),
+            vec![FqTypeName::builtin("i64")],
+        );
+        assert_eq!(
+            diagnostic_function_name(&method.to_mangled_name(), &entry, Some(&method)),
+            "Box::transform<i64>"
         );
     }
 

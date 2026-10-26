@@ -91,15 +91,45 @@ fn index() -> String with (Preopens, Stderr, Exit) {
 
 /// The first `# ` heading outside a code fence.
 fn title(file: &String) -> String with (Preopens, Stderr, Exit) {
-    let mut fence = false;
+    let mut open: Option<StrSlice> = null;
     for let line of read(&`${DOCS}/${file}`).lines() {
-        if line.starts_with("```") || line.starts_with("~~~") {
-            fence = !fence;
-        } else if !fence && let Some(rest) = line.strip_prefix("# ") {
+        let line = line.as_str_slice();
+        if let Some(fence) = open {
+            if let Some([marker, rest]) = fence_run(line) && marker.starts_with(fence) && rest.trim().is_empty() {
+                open = null;
+            }
+        } else if let Some([marker, _]) = fence_run(line) {
+            open = Some(marker);
+        } else if let Some(rest) = line.strip_prefix("# ") {
             return rest.trim().to_string();
         }
     }
     fail(`${DOCS}/${file}: no top-level heading`);
+}
+
+/// The run of three or more backticks or tildes that `line` opens with, past
+/// at most three spaces, and the text after it. A fence closes only on a run of
+/// its own character at least as long as its own (CommonMark 4.5).
+fn fence_run(line: StrSlice) -> Option<[StrSlice, StrSlice]> {
+    let body = line.trim_start();
+    if line.len() - body.len() > 3 {
+        return null;
+    }
+    let Some(mark) = body.chars().next() else { return null; };
+    if mark != '`' && mark != '~' {
+        return null;
+    }
+    let mut n = 0;
+    for let c of body.chars() {
+        if c != mark {
+            break;
+        }
+        n += 1;
+    }
+    if n < 3 {
+        return null;
+    }
+    return Some([body.slice(0, n), body.slice(n, body.len())]);
 }
 
 /// The overview's `## Chapters` list: the specification's reading order. It
