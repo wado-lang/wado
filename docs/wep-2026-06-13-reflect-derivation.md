@@ -214,9 +214,9 @@ without bound. They are not reflectable, by the same seal that rejects a user
 
 A member carries no validation. A value's permitted range is a fact about the
 field's _type_, not about the field, so it is declared once as a
-[refined type](./wep-2026-10-25-refined-types.md), whose `ReflectRefined`
-clauses a boundary and a schema read alike. A member reports its type and
-nothing about the range.
+[refined type](./wep-2026-10-25-refined-types.md). The type enforces every
+clause, and `ReflectRefined` hands its value clauses to a schema. A member
+reports its type and nothing about the range.
 
 ## Type identity
 

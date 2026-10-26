@@ -296,8 +296,9 @@ and admitting affine bases later breaks no program that compiles today.
 ### Serialization enforces the clauses
 
 `Serialize` writes a refined value as its base. `Deserialize` reads the base and
-enters the refined type through `try_from`. A failed clause is a
-`DeserializeError` carrying the path to the field. A field written
+enters the refined type through `try_from`. A failed clause is an `InvalidValue`
+`DeserializeError` whose message is the `try_from` error's, and the struct
+holding the field adds the field to its path, as it does for any field's error. A field written
 `bio: String contract Length { max: 200 }` is therefore checked by the derived
 `Deserialize` of the struct holding it, with no library involved.
 
