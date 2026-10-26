@@ -107,8 +107,9 @@ fn fixup_types_in_stmts(
     }
 }
 
-/// Retype a Let holding an adapter intermediate: a method-call result, or the
-/// `ref.null` or `None` a lifted result starts from.
+/// Retype a Let holding an adapter intermediate: a method-call result, the
+/// `ref.null` or `None` a lifted result starts from, or the raw call's own
+/// value, bound so the argument frees can follow it.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -120,7 +121,9 @@ fn fixup_adapter_let(
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
     let holds_intermediate = match &expr.kind {
         TirExprKind::Call { func, .. } => func.method_info.is_some(),
-        TirExprKind::Null | TirExprKind::VariantConstruct { .. } => true,
+        TirExprKind::Null | TirExprKind::VariantConstruct { .. } | TirExprKind::CmRawCall { .. } => {
+            true
+        }
         _ => false,
     };
     if !(should_fix && holds_intermediate) {

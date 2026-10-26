@@ -2,6 +2,7 @@
 //! through the flat CM ABI. A sync import returns the lifted result, an async one an `AsyncCall<T>`.
 
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 use crate::ast::Type;
@@ -21,6 +22,9 @@ use crate::synthesis::common::{
     return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
+use super::cm_free::{
+    CmShapeContext, FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value,
+};
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
 use super::lower::{
     buffer_bytes, list_element, list_len, synthesize_flatten_value_to_flat_args,
@@ -28,8 +32,8 @@ use super::lower::{
 };
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
-    cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
-    needs_flat_result_lifting,
+    cm_param_store_plan, cm_type_to_type_id, cm_val_type_from_type_id, cm_val_type_to_type_id,
+    flatten_param_type, needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
@@ -516,15 +520,23 @@ pub(super) fn synthesize_adapter(
     let plans = builder.plan_params();
     builder.params_in_buffer = cm_interface_registry
         .params_in_buffer(plans.iter().map(|plan| plan.ty), func_info.is_async);
-    builder.emit_param_lowering(&plans);
+    let flat_ranges = builder.emit_param_lowering(&plans);
 
     let async_outptr = if func_info.is_async {
         builder.prepare_async_args(&plans)
     } else {
         None
     };
-    let sync_params_buf = (!func_info.is_async && builder.params_in_buffer)
-        .then(|| builder.emit_indirect_params_buffer(&plans, None));
+    // A sync callee has read every argument by the time it returns, so the
+    // buffers lowering them, the params buffer included, are freed then.
+    let sync_frees = if func_info.is_async {
+        Vec::new()
+    } else if builder.params_in_buffer {
+        let buf = builder.emit_indirect_params_buffer(&plans, None);
+        builder.buffered_arg_frees(&plans, buf)
+    } else {
+        builder.flat_arg_frees(&plans, &flat_ranges)
+    };
     let sync_outptr = if func_info.is_async {
         None
     } else {
@@ -537,8 +549,8 @@ pub(super) fn synthesize_adapter(
         std::mem::take(&mut builder.flat_args),
         raw_call_return_type,
     );
-    if let Some(buf) = sync_params_buf {
-        raw_call = builder.released_after(raw_call, buf);
+    if !sync_frees.is_empty() {
+        raw_call = builder.released_after(raw_call, sync_frees);
     }
 
     let adapter_return_type = if func_info.is_async {
@@ -668,6 +680,13 @@ struct OutptrBuffer {
     local: u32,
     size: u32,
     align: u32,
+}
+
+fn shape_ctx<'c>(lower_ctx: &'c LowerContext<'_>) -> CmShapeContext<'c> {
+    CmShapeContext {
+        cm_interface_registry: lower_ctx.cm_interface_registry,
+        names: &lower_ctx.names,
+    }
 }
 
 fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
@@ -816,9 +835,12 @@ impl<'a> AdapterBuilder<'a> {
     }
 
     /// Emit the per-parameter lowering code that turns adapter params into
-    /// flat CM args. Intermediate locals land after all param locals.
-    fn emit_param_lowering(&mut self, plans: &[ParamPlan<'a>]) {
+    /// flat CM args. Intermediate locals land after all param locals. Answers
+    /// the flat args each plan pushed.
+    fn emit_param_lowering(&mut self, plans: &[ParamPlan<'a>]) -> Vec<Range<usize>> {
+        let mut ranges = Vec::with_capacity(plans.len());
         for plan in plans {
+            let start = self.flat_args.len();
             match plan.lowering {
                 ParamLowering::Unit => {}
                 ParamLowering::PackedPtrLen { helper } => {
@@ -859,7 +881,71 @@ impl<'a> AdapterBuilder<'a> {
                     }
                 }
             }
+            ranges.push(start..self.flat_args.len());
         }
+        ranges
+    }
+
+    /// The frees of what the flat args in `ranges` own, read after the call.
+    /// Each flat arg of an owning parameter is bound to a local first, so the
+    /// free reads the address the call was handed.
+    fn flat_arg_frees(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> Vec<TirStmt> {
+        let mut frees = Vec::new();
+        for (plan, range) in plans.iter().zip(ranges) {
+            if !cm_shape(plan.ty, &shape_ctx(&self.lower_ctx)).owns_memory() {
+                continue;
+            }
+            let mut slots = Vec::with_capacity(range.len());
+            for index in range.clone() {
+                let arg = self.flat_args[index].clone();
+                let ty = arg.type_id;
+                let name = format!("${}_flat{}", plan.name, index - range.start);
+                let local = alloc_local(&mut self.next_local, &mut self.locals, ty);
+                self.body_stmts.push(let_stmt(&name, local, ty, arg));
+                self.flat_args[index] = local_ref(local, &name, ty);
+                slots.push(FlatSlot {
+                    local,
+                    cm_type: cm_val_type_from_type_id(ty),
+                });
+            }
+            frees.extend(synthesize_free_cm_flat(
+                plan.ty,
+                &slots,
+                &shape_ctx(&self.lower_ctx),
+                &mut self.next_local,
+                &mut self.locals,
+            ));
+        }
+        frees
+    }
+
+    /// The frees of what the arguments in the params buffer `buf` own, then of
+    /// the buffer itself.
+    fn buffered_arg_frees(&mut self, plans: &[ParamPlan<'a>], buf: OutptrBuffer) -> Vec<TirStmt> {
+        let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
+        let offsets =
+            layout_tuple_with_registry(&param_types, self.lower_ctx.cm_interface_registry).offsets;
+        let mut frees = Vec::new();
+        for (plan, offset) in plans.iter().zip(offsets) {
+            let shape = cm_shape(plan.ty, &shape_ctx(&self.lower_ctx));
+            frees.extend(synthesize_free_cm_value(
+                &shape,
+                &params_buf_addr(buf.local, offset),
+                &mut self.next_local,
+                &mut self.locals,
+            ));
+        }
+        frees.push(expr_stmt(builtin_call(
+            "realloc",
+            vec![
+                local_ref(buf.local, "$params_buf", TypeTable::I32),
+                i32_const(buf.size as i32),
+                i32_const(buf.align as i32),
+                i32_const(0),
+            ],
+            TypeTable::I32,
+        )));
+        frees
     }
 
     /// String / List<u8>: call the packing helper (→ packed i64) and split it
@@ -1145,10 +1231,9 @@ impl<'a> AdapterBuilder<'a> {
         }
     }
 
-    /// `raw_call` made, then the params buffer it read released. A sync callee
-    /// has read every parameter by the time it returns. The call's value, if
-    /// any, is bound first, so what follows reads it from a local.
-    fn released_after(&mut self, raw_call: TirExpr, buf: OutptrBuffer) -> TirExpr {
+    /// `raw_call` made, then `frees` run. The call's value, if any, is bound
+    /// first, so what follows reads it from a local.
+    fn released_after(&mut self, raw_call: TirExpr, frees: Vec<TirStmt>) -> TirExpr {
         let return_type = raw_call.type_id;
         let value = if return_type == TypeTable::UNIT {
             self.body_stmts.push(expr_stmt(raw_call));
@@ -1159,16 +1244,7 @@ impl<'a> AdapterBuilder<'a> {
                 .push(let_stmt("$raw_result", local, return_type, raw_call));
             Some(local_ref(local, "$raw_result", return_type))
         };
-        self.body_stmts.push(expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(buf.local, "$params_buf", TypeTable::I32),
-                i32_const(buf.size as i32),
-                i32_const(buf.align as i32),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        )));
+        self.body_stmts.extend(frees);
         value.unwrap_or_else(|| TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()))
     }
 

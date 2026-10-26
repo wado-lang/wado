@@ -1,0 +1,31 @@
+// A synchronous import's caller lowers each argument into its own memory, and
+// the callee has read every one by the time it returns, so the caller frees
+// them all then. Each call here lowers 64 KiB; once the first call has grown
+// memory to hold that, the rest reuse it, through a flat argument, one nested in
+// a tuple, a string, and an argument in the parameter buffer alike. The debug
+// allocator never reuses a block, so the fixture runs under the free list.
+use { println, Stdout } from "core:cli";
+use { Lists } from "./sub/wasm_import_cm_list_sum.wat" with { type: "wat" };
+
+global SIZE: i32 = 65_536;
+
+export fn run() with Stdout {
+    let mut bytes: List<u8> = [];
+    let mut text = String::with_capacity(SIZE);
+    for let _ of 0..<SIZE {
+        bytes.push(1);
+        text.push('a');
+    }
+    let mut total: u64 = Lists::sum(bytes) as u64;
+    let warm = builtin::memory_size();
+    for let _ of 0..<8 {
+        total += Lists::sum(bytes) as u64;
+        total += Lists::length(text) as u64;
+        total += Lists::sum_blob([bytes, 1]) as u64;
+        total += Lists::wide(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, bytes) as u64;
+    }
+    println(`${total} ${builtin::memory_size() - warm}`);
+}
+
+__DATA__
+{"stdout": "2162704 0\n", "allocator": "freelist"}
