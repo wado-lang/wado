@@ -594,8 +594,7 @@ const TMPFILE: libc::c_int = libc::O_TMPFILE & !libc::O_DIRECTORY;
 struct Named {
     /// The last component is `.` or `..`.
     dot: bool,
-    /// The path ends in `/`, asking for a directory: a lookup follows a link
-    /// there, and removing or moving anything else fails with `ENOTDIR`.
+    /// The path ends in `/`, asking for a directory.
     slash: bool,
 }
 
