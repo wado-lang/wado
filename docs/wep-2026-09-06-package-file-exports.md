@@ -256,7 +256,8 @@ names as left.
    build-dependency ([Kiln](./wep-2026-04-12-kiln.md) Roadmap 1). Until item 5,
    a dependency's clause runs even where its output is committed.
 7. `#include_str` / `#include_bytes`: the same reference, resolved through the
-   same path.
+   same path. The loader takes only a `./` or `../` include path today
+   (`LoadError::InvalidIncludePath`), so this item admits a specifier there.
 8. Registry distribution: assets and recorded Kiln outputs travel in the
    `wado:package` section and are extracted into the shared cache on fetch, so
    `CompilerHost::load_source` serves them like any other file.
