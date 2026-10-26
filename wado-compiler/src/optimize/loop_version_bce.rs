@@ -9,7 +9,8 @@
 //! lengths: each distinct `i + k < B` adds its own residual term, which also
 //! keeps `B - k` and `i + k` clear of the wrap. An `i32` index may scale `i`
 //! too, `a[i * s + k]` with `s` a positive constant or an invariant local: the
-//! row walk of a matrix stored row-major.
+//! row walk of a matrix stored row-major. The guard may offset `i` as well,
+//! `i + g < H`, as a loop taking two elements a step writes.
 //!
 //! Where the entry value reads as no constant, the check's floor joins the
 //! residual too: `i >= FLOOR` at the version point, carried to every later
@@ -71,6 +72,8 @@ struct Plan {
     /// `true` for `i <= H` (residual `H < B`), `false` for `i < H`
     /// (residual `H <= B`).
     guard_le: bool,
+    /// The constant `g` a guard `i + g < H` adds to `i`, `0` for none.
+    guard_offset: i64,
     /// Whether `var`'s type is unsigned, which the residual compares as.
     unsigned: bool,
     /// The distinct limits the deleted checks put on `var`, one residual term
@@ -275,17 +278,21 @@ fn collect_loops(
 
 /// Parse the loop-head guard `if !(var CMP bound) { break }`, or the
 /// comparison turned round as in `if var >= bound { break }` (skipping
-/// leading `let`s), through both the skeleton and promoted-operand forms.
-/// Returns `(guard_idx, var, bound, guard_le)`, the bound a local or a
-/// constant.
+/// leading `let`s), through both the skeleton and promoted-operand forms, or
+/// `var + g < bound` with `g` a positive constant. Returns `(guard_idx, var,
+/// bound, guard_le, g)`, the bound a local or a constant.
 fn parse_loop_guard(
     engine: &Engine,
     binds: &Binds,
     loop_body: BlockId,
-) -> Option<(usize, u32, BoundKey, bool)> {
+) -> Option<(usize, u32, BoundKey, bool, i64)> {
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
     let (var, off, h, op) = break_guard_cmp(engine, binds, cond)?;
-    if off != 0 || matches!(h, BoundKey::Field(..)) {
+    let h = match h {
+        BoundKey::Field(..) => guard_bound_local(engine, binds, cond)?,
+        BoundKey::Local(_) | BoundKey::Const(_) => h,
+    };
+    if off < 0 || (off > 0 && op != NirBinaryOp::Lt) {
         return None;
     }
     let guard_le = match op {
@@ -309,7 +316,16 @@ fn parse_loop_guard(
         | NirBinaryOp::Shr
         | NirBinaryOp::RefNotEq => return None,
     };
-    Some((guard_idx, var, h, guard_le))
+    Some((guard_idx, var, h, guard_le, off))
+}
+
+/// The local a guard compares against, as written. [`break_guard_cmp`] reads a
+/// `let` of a field (`let per_row = b.per_row`) as the field, which the
+/// residual cannot re-read, where the guard reads the local.
+fn guard_bound_local(engine: &Engine, binds: &Binds, cond: Operand) -> Option<BoundKey> {
+    let cmp = negated_operand(engine, binds, cond).unwrap_or(cond);
+    let (_, _, right) = binary_parts(engine.body, resolve(engine, binds, cmp))?;
+    operand_local(engine.body, peel_capture_block(engine, binds, right)).map(BoundKey::Local)
 }
 
 /// A versionable in-body check over the guard variable.
@@ -343,8 +359,10 @@ fn collect_checks_in_node(
 /// Read one panic guard as a versionable check: exactly one upper-bound
 /// conjunct `var + shift < B` over the guard variable, and any number of
 /// constant floors under that same index — the shape `assert 0 <= i < n`
-/// lowers to. Any other conjunct refuses the check, so versioning never deletes
-/// a condition it has only half proved.
+/// lowers to — or under `var + k` with `k` a constant up to the shift's own,
+/// which lies between `var` and the index and so wraps no more than it does.
+/// Any other conjunct refuses the check, so versioning never deletes a
+/// condition it has only half proved.
 fn parse_versionable_check(
     engine: &Engine,
     binds: &Binds,
@@ -360,10 +378,7 @@ fn parse_versionable_check(
                 if limit.is_some() {
                     return None;
                 }
-                limit = Some(Limit {
-                    shift: parse_shift(engine, binds, left, var)?,
-                    bound: parse_check_bound(engine, binds, right)?,
-                });
+                limit = Some(parse_limit(engine, binds, left, right, var)?);
             }
             Conjunct::AtLeast(fvar, foff, f) => {
                 floors.push((local_shift(engine, binds, fvar, var)?.plus(foff)?, f));
@@ -373,7 +388,10 @@ fn parse_versionable_check(
     let limit = limit?;
     let mut floor = i64::MIN;
     for (shift, f) in floors {
-        if shift != limit.shift {
+        let below_index = shift.stride.is_none()
+            && shift.local.is_none()
+            && shift.konst <= limit.shift.konst;
+        if shift != limit.shift && !below_index {
             return None;
         }
         floor = floor.max(f);
@@ -551,12 +569,42 @@ const MAX_LIMITS: usize = 8;
 /// field read) would compare a different representation. A local present as
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
-fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
+///
+/// A local less a non-negative constant, `B - c`, reads as `B` with the `c`
+/// it takes away: the form `condition_implication` leaves where it merged
+/// `i < B` and `i + c < B` into one check.
+fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<(BoundKey, i64)> {
     let op = peel_capture_block(engine, binds, op);
     if let Some(c) = parse_const_i64(engine, binds, op) {
-        return Some(BoundKey::Const(c));
+        return Some((BoundKey::Const(c), 0));
     }
-    operand_local(engine.body, op).map(BoundKey::Local)
+    if let Some(l) = operand_local(engine.body, op) {
+        return Some((BoundKey::Local(l), 0));
+    }
+    let (minuend, NirBinaryOp::Sub, less) = binary_parts(engine.body, op)? else {
+        return None;
+    };
+    let c = parse_const_i64(engine, binds, less).filter(|&c| c >= 0)?;
+    Some((BoundKey::Local(operand_local(engine.body, minuend)?), c))
+}
+
+/// Read the conjunct `left < right` as a limit on `var`. A constant `right`
+/// takes away from its bound moves onto the shift: `i < B - c` is
+/// `i + c < B` once the residual puts `B` at or over the shift's `konst`
+/// ([`limit_terms`]), so the subtraction does not wrap.
+fn parse_limit(
+    engine: &Engine,
+    binds: &Binds,
+    left: Operand,
+    right: Operand,
+    var: u32,
+) -> Option<Limit> {
+    let shift = parse_shift(engine, binds, left, var)?;
+    let (bound, less) = parse_check_bound(engine, binds, right)?;
+    Some(Limit {
+        shift: shift.plus(less)?,
+        bound,
+    })
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -573,7 +621,7 @@ fn analyze_loop(
     if block_contains_loop(engine.body, loop_body) {
         return None;
     }
-    let (guard_idx, var, h, guard_le) = parse_loop_guard(engine, binds, loop_body)?;
+    let (guard_idx, var, h, guard_le, offset) = parse_loop_guard(engine, binds, loop_body)?;
     // Scan statements after the guard while `var` / `H` are unmodified —
     // within that window the guard fact `var <= H` still holds.
     let mut checks: Vec<Check> = Vec::new();
@@ -589,13 +637,14 @@ fn analyze_loop(
     let demanded = checks.iter().map(|c| c.floor).max()?;
     let mut limits: Vec<Limit> = Vec::new();
     for check in &checks {
-        // An unshifted check on the guard's own bound is statically decidable,
-        // not our case.
-        let decidable = check.limit
-            == Limit {
-                shift: Shift::NONE,
-                bound: h,
-            };
+        // An unshifted check on the bound of an unshifted guard is statically
+        // decidable, not our case.
+        let decidable = offset == 0
+            && check.limit
+                == Limit {
+                    shift: Shift::NONE,
+                    bound: h,
+                };
         if !decidable && !limits.contains(&check.limit) {
             limits.push(check.limit);
         }
@@ -610,6 +659,13 @@ fn analyze_loop(
         return None;
     }
     let key = type_table.type_key(ty);
+    // A residual evaluated in `i64`, where no `i32` product or sum wraps, is
+    // what reads a strided check or an offset guard. An offset guard also
+    // leans on `var >= 0`, so `var + g` stays above `var`.
+    let is_i32 = key == type_table.type_key(TypeTable::I32);
+    if offset != 0 && (!is_i32 || demanded < 0 || !spells_same(type_table, ty, offset)?) {
+        return None;
+    }
     let of_ty = |l: u32| {
         locals
             .get(l as usize)
@@ -635,10 +691,8 @@ fn analyze_loop(
             }
             invariant.push(s);
         }
-        // A strided residual is evaluated in `i64`, where an `i32` product
-        // cannot wrap.
         if let Some(stride) = limit.shift.stride {
-            if key != type_table.type_key(TypeTable::I32) {
+            if !is_i32 {
                 return None;
             }
             invariant.extend(bound_local(stride)?);
@@ -647,7 +701,8 @@ fn analyze_loop(
     let floor = match demanded {
         i64::MIN => None,
         _ => match induction_entry(engine, binds, parent, loop_stmt, loop_body, var) {
-            Some(entry) if entry >= demanded => None,
+            // The first guard's `var + g` must not wrap, as later ones cannot.
+            Some(entry) if entry >= demanded && i32::try_from(entry + offset).is_ok() => None,
             // A constant entry below the floor is a loop no fast arm can take.
             Some(_) => return None,
             None => Some(runtime_floor(
@@ -684,6 +739,7 @@ fn analyze_loop(
         var,
         bound: h,
         guard_le,
+        guard_offset: offset,
         unsigned: type_table.is_unsigned_int(ty),
         limits,
         floor,
@@ -825,11 +881,11 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// `<=`), with `B >= konst` and a term on `local` keeping that subtraction and
 /// the check's own addition clear of the wrap. The term is `local >= 0` for a
 /// signed type and `local <= B - konst` for an unsigned one. An unshifted
-/// check needs only the comparison, and a strided one
-/// [`strided_limit_terms`].
+/// check needs only the comparison. A strided check, or any under an offset
+/// guard, takes [`wide_limit_terms`].
 fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
-    if let Some(stride) = limit.shift.stride {
-        return strided_limit_terms(engine, plan, limit, stride, span);
+    if limit.shift.stride.is_some() || plan.guard_offset != 0 {
+        return wide_limit_terms(engine, plan, limit, span);
     }
     let ty = engine.locals()[plan.var as usize].type_id;
     let int = |e: &mut Engine, c: i64| e.const_operand(ValueKind::Int(c as u64, ty), ty);
@@ -876,19 +932,14 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
     conjoin(engine, clear, fits, span)
 }
 
-/// The residual terms for an `i32` check `var * stride + local + konst < B`,
-/// compared in `i64`: the largest `var` the guard admits (`H`, or `H - 1`
-/// under `<`) lands under `B`, with `local >= 0` and `stride >= 1`. With the
-/// check's demanded `var >= 0`, every partial sum the loop computes then lies
-/// in `0..B`, so none wraps. `stride >= 1` also puts `H` under `B`, the
-/// headroom a `+ 1` step's wrap rests on (see [`induction_entry`]).
-fn strided_limit_terms(
-    engine: &mut Engine,
-    plan: &Plan,
-    limit: Limit,
-    stride: BoundKey,
-    span: Span,
-) -> Operand {
+/// The residual terms for an `i32` check `var * stride + local + konst < B`
+/// (the stride `1` where it has none), compared in `i64`: the largest `var`
+/// the guard admits (`H - g`, or `H - g - 1` under `<`) lands under `B`, with
+/// `local >= 0` and `stride >= 1`. With the check's demanded `var >= 0`, every
+/// partial sum the loop computes then lies in `0..B`, so none wraps.
+/// `stride >= 1` also puts `H - g` under `B`, the headroom a `+ 1` step's wrap
+/// rests on (see [`induction_entry`]).
+fn wide_limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
     let wide = |e: &mut Engine, expr: Operand| {
         Operand::Expr(e.alloc_expr(
@@ -905,31 +956,34 @@ fn strided_limit_terms(
     };
     let add = |e: &mut Engine, l, r| alloc_binary(e, l, NirBinaryOp::Add, r, TypeTable::I64, span);
     let mut clear = Vec::new();
-    let stride = match stride {
-        BoundKey::Local(s) => {
-            let s_read = local_read(engine, s, span);
-            let one = engine.const_operand(ValueKind::Int(1, ty), ty);
-            clear.push(alloc_pred(engine, s_read, NirBinaryOp::GtEq, one, span));
-            let s_read = local_read(engine, s, span);
-            wide(engine, s_read)
-        }
-        BoundKey::Const(c) => long(engine, c),
-        BoundKey::Field(..) => unreachable!("`Terms::scaled` reads a local or a constant"),
-    };
     let h_read = bound_read(engine, plan, plan.bound, span);
     let mut reach = wide(engine, h_read);
-    if !plan.guard_le {
-        let minus_one = long(engine, -1);
-        reach = add(engine, reach, minus_one);
+    let below = plan.guard_offset + i64::from(!plan.guard_le);
+    if below != 0 {
+        let less = long(engine, -below);
+        reach = add(engine, reach, less);
     }
-    reach = alloc_binary(
-        engine,
-        reach,
-        NirBinaryOp::Mul,
-        stride,
-        TypeTable::I64,
-        span,
-    );
+    if let Some(stride) = limit.shift.stride {
+        let stride = match stride {
+            BoundKey::Local(s) => {
+                let s_read = local_read(engine, s, span);
+                let one = engine.const_operand(ValueKind::Int(1, ty), ty);
+                clear.push(alloc_pred(engine, s_read, NirBinaryOp::GtEq, one, span));
+                let s_read = local_read(engine, s, span);
+                wide(engine, s_read)
+            }
+            BoundKey::Const(c) => long(engine, c),
+            BoundKey::Field(..) => unreachable!("`Terms::scaled` reads a local or a constant"),
+        };
+        reach = alloc_binary(
+            engine,
+            reach,
+            NirBinaryOp::Mul,
+            stride,
+            TypeTable::I64,
+            span,
+        );
+    }
     if let Some(l) = limit.shift.local {
         let l_read = local_read(engine, l, span);
         let zero = engine.const_operand(ValueKind::Int(0, ty), ty);
@@ -971,6 +1025,15 @@ fn and_floor_terms(
     let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
     let at_least = pred(engine, var_read, NirBinaryOp::GtEq, demanded);
     let mut out = pred(engine, residual, NirBinaryOp::And, at_least);
+    // The first guard's `var + g` must not wrap; each later `var` is one the
+    // guard admitted, plus a step the terms below keep clear of it.
+    if plan.guard_offset != 0 {
+        let var_read = local_read(engine, plan.var, span);
+        let bits = floor.type_max - plan.guard_offset.unsigned_abs();
+        let most = engine.const_operand(ValueKind::Int(bits, ty), ty);
+        let room = pred(engine, var_read, NirBinaryOp::LtEq, most);
+        out = pred(engine, out, NirBinaryOp::And, room);
+    }
 
     let headroom = match floor.step {
         // The residual already puts the last `i + 1` at or under `B`, so no wrap.
@@ -1088,9 +1151,7 @@ fn is_check_comparison(
         NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
     );
     let is_limit = limit.is_some_and(|limit| {
-        op == NirBinaryOp::Lt
-            && parse_shift(engine, binds, left, var) == Some(limit.shift)
-            && parse_check_bound(engine, binds, right) == Some(limit.bound)
+        op == NirBinaryOp::Lt && parse_limit(engine, binds, left, right, var) == Some(limit)
     });
     (relational && (reads_var(left) || reads_var(right))) || is_limit
 }
@@ -1134,10 +1195,11 @@ fn try_fill_idiom(
     plan: &Plan,
     arm: &FastArm,
 ) -> bool {
-    // The fill form needs the guard at index 0 (no leading lets); `plan` carries
-    // the guard layout from analysis, and `arm.fast_body` is its structural clone.
+    // The fill form needs an unshifted guard at index 0 (no leading lets), whose
+    // count it reads; `plan` carries the guard layout from analysis, and
+    // `arm.fast_body` is its structural clone.
     let (var, h, guard_le) = (plan.var, plan.bound, plan.guard_le);
-    if plan.guard_idx != 0 {
+    if plan.guard_idx != 0 || plan.guard_offset != 0 {
         return false;
     }
     // The then-block must still hold exactly the fast loop statement.
