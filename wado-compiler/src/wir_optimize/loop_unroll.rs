@@ -47,7 +47,8 @@ impl WirMutVisitor for Unroller {
         self.walk_body(body);
         let mut at = 0;
         while at < body.len() {
-            if let Some(unrolled) = unrolled(&body[at]) {
+            let before = at.checked_sub(1).map(|prev| &body[prev]);
+            if let Some(unrolled) = unrolled(&body[at], before) {
                 body.insert(at, unrolled);
                 at += 1;
             }
@@ -57,8 +58,10 @@ impl WirMutVisitor for Unroller {
 }
 
 /// The unrolled copy to run ahead of `instr`, when it is a loop this pass
-/// unrolls.
-fn unrolled(instr: &WirInstr) -> Option<WirInstr> {
+/// unrolls. `before` is the statement ahead of it, which may give the loop
+/// variable a constant the copy would leave on at once: a loop of fewer
+/// iterations than the copy runs.
+fn unrolled(instr: &WirInstr, before: Option<&WirInstr>) -> Option<WirInstr> {
     let WirInstr::Block {
         result: None,
         body: outer,
@@ -105,6 +108,13 @@ fn unrolled(instr: &WirInstr) -> Option<WirInstr> {
         let mut next = step.as_ref().clone();
         substitute(&mut next, var, &ahead);
         ahead = next;
+    }
+    if let Some(WirInstr::LocalSet { name, value }) = before
+        && name == var
+        && let WirInstr::I32Const(entry) = value.as_ref()
+        && eval_i32(&leave, var, *entry).is_some_and(|leaves| leaves != 0)
+    {
+        return None;
     }
     let mut looped = Vec::with_capacity(factor * (work.len() + 1) + 2);
     looped.push(WirInstr::BrIf {
@@ -202,6 +212,35 @@ fn may_trap(instr: &WirInstr) -> bool {
     let mut trap = own_traps(instr).any();
     instr.for_each_child(&mut |child| trap = trap || may_trap(child));
     trap
+}
+
+/// What the i32 `instr` computes with `var` holding `value`, where it is
+/// integer arithmetic this knows.
+fn eval_i32(instr: &WirInstr, var: &str, value: i32) -> Option<i32> {
+    use WirInstr as I;
+    let eval = |operand: &WirInstr| eval_i32(operand, var, value);
+    let both = |a: &WirInstr, b: &WirInstr| Some((eval(a)?, eval(b)?));
+    Some(match instr {
+        I::I32Const(c) => *c,
+        I::LocalGet { name, .. } if name == var => value,
+        I::I32Add(a, b) => both(a, b).map(|(a, b)| a.wrapping_add(b))?,
+        I::I32Sub(a, b) => both(a, b).map(|(a, b)| a.wrapping_sub(b))?,
+        I::I32Mul(a, b) => both(a, b).map(|(a, b)| a.wrapping_mul(b))?,
+        I::I32Or(a, b) => both(a, b).map(|(a, b)| a | b)?,
+        I::I32And(a, b) => both(a, b).map(|(a, b)| a & b)?,
+        I::I32Eqz(a) => i32::from(eval(a)? == 0),
+        I::I32Eq(a, b) => both(a, b).map(|(a, b)| i32::from(a == b))?,
+        I::I32Ne(a, b) => both(a, b).map(|(a, b)| i32::from(a != b))?,
+        I::I32LtS(a, b) => both(a, b).map(|(a, b)| i32::from(a < b))?,
+        I::I32LeS(a, b) => both(a, b).map(|(a, b)| i32::from(a <= b))?,
+        I::I32GtS(a, b) => both(a, b).map(|(a, b)| i32::from(a > b))?,
+        I::I32GeS(a, b) => both(a, b).map(|(a, b)| i32::from(a >= b))?,
+        I::I32LtU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) < (b as u32)))?,
+        I::I32LeU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) <= (b as u32)))?,
+        I::I32GtU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) > (b as u32)))?,
+        I::I32GeU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) >= (b as u32)))?,
+        _ => return None,
+    })
 }
 
 /// Replace each read of `var` under `instr` with `value`.
