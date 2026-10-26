@@ -1,6 +1,6 @@
 ;; A component whose functions read lists, a string and a record holding a list,
 ;; so a caller has to lower each argument into the callee's memory, flat and
-;; through a parameter buffer alike.
+;; through a parameter buffer alike, through an interface and as world functions.
 (component
   (core module $m
     ;; Room for 4 MiB of arguments past the scratch address.
@@ -132,4 +132,7 @@
     (export "wide" (func $wide))
     (export "sum-f32" (func $sum_f32)))
   (export "wado:test/lists@0.1.0" (instance $iface))
+  ;; The same functions as world functions, which no handler serves.
+  (export "sum-bytes" (func $sum))
+  (export "sum-floats" (func $sum_f32))
 )

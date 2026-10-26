@@ -18,7 +18,10 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
+use crate::compiler_item::CompilerItem;
+use crate::elaborator::trait_env::TraitEnv;
 use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
+use crate::synthesis::traits::trait_call_on_type;
 
 use super::callback_export::{Callbacks, erased_callback_type};
 use super::import_adapter::is_gc_passthrough_param;
@@ -121,9 +124,9 @@ fn fixup_adapter_let(
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
     let holds_intermediate = match &expr.kind {
         TirExprKind::Call { func, .. } => func.method_info.is_some(),
-        TirExprKind::Null | TirExprKind::VariantConstruct { .. } | TirExprKind::CmRawCall { .. } => {
-            true
-        }
+        TirExprKind::Null
+        | TirExprKind::VariantConstruct { .. }
+        | TirExprKind::CmRawCall { .. } => true,
         _ => false,
     };
     if !(should_fix && holds_intermediate) {
@@ -165,21 +168,31 @@ fn fixup_expr_type(expr: &mut TirExpr, old_type: TypeId, new_type: TypeId) {
     fixup_variant_construct(expr, old_type, new_type);
 }
 
+/// What every call site's rewrite reads, whichever module holds it.
+pub(super) struct CallRewriteContext<'a> {
+    pub(super) adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
+    pub(super) entry_source: &'a ModuleSource,
+    pub(super) call_sites: &'a CmCallSites<'a>,
+    pub(super) type_table: &'a Rc<RefCell<TypeTable>>,
+    pub(super) trait_env: &'a TraitEnv,
+}
+
+/// `module`'s `block`, rewritten as [`CallRewriteWalker`] says.
 pub(super) fn rewrite_calls_in_block(
     block: &mut TirBlock,
-    adapters: &IndexMap<String, Rc<RefCell<TirFunction>>>,
-    entry_source: &ModuleSource,
-    call_sites: &CmCallSites,
-    type_table: &Rc<RefCell<TypeTable>>,
+    module: &ModuleSource,
+    ctx: &CallRewriteContext<'_>,
     applied_returns: &mut IndexMap<usize, TypeId>,
     callbacks: &mut Callbacks,
 ) {
-    let names = CmStdlibNames::from_type_table(&type_table.borrow());
+    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
     CallRewriteWalker {
-        adapters,
-        entry_source,
-        call_sites,
-        type_table,
+        adapters: ctx.adapters,
+        entry_source: ctx.entry_source,
+        module,
+        call_sites: ctx.call_sites,
+        type_table: ctx.type_table,
+        trait_env: ctx.trait_env,
         applied_returns,
         callbacks,
         names: &names,
@@ -192,8 +205,11 @@ pub(super) fn rewrite_calls_in_block(
 struct CallRewriteWalker<'a> {
     adapters: &'a IndexMap<String, Rc<RefCell<TirFunction>>>,
     entry_source: &'a ModuleSource,
+    /// The module whose calls are rewritten.
+    module: &'a ModuleSource,
     call_sites: &'a CmCallSites<'a>,
     type_table: &'a Rc<RefCell<TypeTable>>,
+    trait_env: &'a TraitEnv,
     applied_returns: &'a mut IndexMap<usize, TypeId>,
     /// The type of every closure an import takes, which the host calls back.
     callbacks: &'a mut Callbacks,
@@ -344,6 +360,7 @@ impl CallRewriteWalker<'_> {
             args.iter_mut().map(|a| &mut a.expr),
             param_offset,
         );
+        self.lower_list_args(func_info, &mut args, param_offset);
         let args = {
             // The adapter's name is a non-injective `interface_method` join.
             let adapter_key = Rc::as_ptr(adapter) as usize;
@@ -392,6 +409,40 @@ impl CallRewriteWalker<'_> {
                 "cm_callback_key",
                 vec![cast(closure, erased)],
                 TypeTable::U32,
+            );
+        }
+    }
+
+    /// Replace each `ListArg` `func_info` takes with its `ListArg::lowered()`.
+    /// `args` starts at parameter `param_offset`.
+    fn lower_list_args(
+        &self,
+        func_info: &CmFunctionInfo,
+        args: &mut [CallArg],
+        param_offset: usize,
+    ) {
+        for &index in &func_info.list_args {
+            let arg = &mut args[index - param_offset].expr;
+            let value = std::mem::replace(
+                arg,
+                TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
+            );
+            let mut tt = self.type_table.borrow_mut();
+            let list_arg = tt.compiler_trait_fq(CompilerItem::ListArg);
+            let lowered = tt.make_compiler_struct(CompilerItem::LoweredList);
+            let value_type = value.type_id;
+            *arg = trait_call_on_type(
+                value,
+                value_type,
+                &list_arg,
+                "lowered",
+                lowered,
+                Vec::new(),
+                false,
+                self.trait_env,
+                self.module,
+                &mut tt,
+                synth_span(),
             );
         }
     }

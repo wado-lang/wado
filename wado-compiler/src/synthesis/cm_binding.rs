@@ -58,7 +58,9 @@ use task_return::{
     assert_task_returns_eliminated, expand_task_returns_in_func, reduce_task_returns_in_func,
     split_task_entry,
 };
-use type_fixup::{CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block};
+use type_fixup::{
+    CallRewriteContext, CmCallSites, collect_effect_calls_in_block, rewrite_calls_in_block,
+};
 use types::{Boundary, Slot, flat_types_from_type_id};
 pub use types::{
     LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
@@ -503,16 +505,21 @@ fn generate_import_adapters(project: &mut Package) -> Callbacks {
     // Spans all modules, so call sites disagreeing on a shared adapter's
     // return type are caught.
     let mut applied_returns: IndexMap<usize, TypeId> = IndexMap::default();
+    let ctx = CallRewriteContext {
+        adapters: &adapters,
+        entry_source: &entry_source,
+        call_sites: &call_sites,
+        type_table: &entry_type_table,
+        trait_env: &project.trait_env,
+    };
     for module in project.tir_modules.values() {
         for func_rc in &module.functions {
             let mut func = func_rc.borrow_mut();
             if let Some(body) = &mut func.body {
                 rewrite_calls_in_block(
                     body,
-                    &adapters,
-                    &entry_source,
-                    &call_sites,
-                    &entry_type_table,
+                    &module.module_source,
+                    &ctx,
                     &mut applied_returns,
                     &mut callbacks,
                 );

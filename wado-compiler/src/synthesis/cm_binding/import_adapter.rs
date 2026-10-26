@@ -17,9 +17,9 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const, if_stmt, internal_call,
-    is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    return_stmt, split_packed_ptr_len, struct_literal, synth_span,
+    cm_raw_call, compiler_function_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none,
+    option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
 };
 
 use super::cm_free::{
@@ -592,6 +592,9 @@ enum ParamLowering<'a> {
     /// General List<T>: single placeholder param; elements are lowered into a
     /// realloc'd linear-memory buffer passed as (ptr, len).
     ListBuffer { elem: &'a Type },
+    /// A `ListArg` (see [`CmFunctionInfo::list_args`]): the `LoweredList` the
+    /// call site made, passed as its (ptr, len) and released after the call.
+    ListArg,
     /// Record, variant, option, result, tuple, or map: a single GC-ref param,
     /// flattened into flat slots or, on a params-buffer call, lowered there.
     Aggregate,
@@ -776,7 +779,7 @@ impl<'a> AdapterBuilder<'a> {
     fn plan_params(&mut self) -> Vec<ParamPlan<'a>> {
         let func_info = self.func_info;
         let mut plans = Vec::with_capacity(func_info.params.len());
-        for (param_name, _, param_type) in &func_info.params {
+        for (index, (param_name, _, param_type)) in func_info.params.iter().enumerate() {
             let flat_tys = flatten_param_type(
                 param_type,
                 self.lower_ctx.cm_interface_registry,
@@ -784,6 +787,8 @@ impl<'a> AdapterBuilder<'a> {
             );
             let lowering = if flat_tys.is_empty() {
                 ParamLowering::Unit
+            } else if func_info.list_args.contains(&index) {
+                ParamLowering::ListArg
             } else {
                 classify_param(
                     param_type,
@@ -796,6 +801,11 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::Unit => {}
                 ParamLowering::PackedPtrLen { .. } | ParamLowering::ListBuffer { .. } => {
                     self.push_param(param_name.clone(), TypeTable::I32);
+                }
+                ParamLowering::ListArg => {
+                    let lowered = (self.lower_ctx.type_table.borrow_mut())
+                        .make_compiler_struct(CompilerItem::LoweredList);
+                    self.push_param(param_name.clone(), lowered);
                 }
                 ParamLowering::Aggregate => {
                     let type_id = self.cm_type_id(param_type);
@@ -823,6 +833,13 @@ impl<'a> AdapterBuilder<'a> {
         plans
     }
 
+    /// The one adapter param `plan` takes.
+    fn param_ref(&self, plan: &ParamPlan<'a>) -> TirExpr {
+        assert_eq!(plan.param_count, 1);
+        let param = &self.params[plan.first_param];
+        local_ref(param.local_index, plan.name, param.type_id)
+    }
+
     fn push_flat_params(&mut self, param_name: &str, flat_tys: &[TypeId]) {
         for (j, flat_ty) in flat_tys.iter().enumerate() {
             let name = if flat_tys.len() == 1 {
@@ -844,16 +861,17 @@ impl<'a> AdapterBuilder<'a> {
             match plan.lowering {
                 ParamLowering::Unit => {}
                 ParamLowering::PackedPtrLen { helper } => {
-                    let param_local = self.params[plan.first_param].local_index;
-                    self.emit_packed_ptr_len(plan.name, param_local, helper);
+                    self.emit_packed_ptr_len(plan, helper);
+                }
+                ParamLowering::ListArg => {
+                    self.emit_packed_ptr_len(plan, CompilerItem::CmLowerListArg);
                 }
                 ParamLowering::ListBuffer { elem } => {
                     let param_local = self.params[plan.first_param].local_index;
                     self.emit_list_buffer(plan.name, param_local, elem);
                 }
                 ParamLowering::Aggregate => {
-                    let param = &self.params[plan.first_param];
-                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    let param_ref = self.param_ref(plan);
                     if self.params_in_buffer {
                         self.flat_args.push(param_ref);
                     } else {
@@ -892,6 +910,10 @@ impl<'a> AdapterBuilder<'a> {
     fn flat_arg_frees(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> Vec<TirStmt> {
         let mut frees = Vec::new();
         for (plan, range) in plans.iter().zip(ranges) {
+            if matches!(plan.lowering, ParamLowering::ListArg) {
+                frees.push(self.release_list_arg(plan));
+                continue;
+            }
             if !cm_shape(plan.ty, &shape_ctx(&self.lower_ctx)).owns_memory() {
                 continue;
             }
@@ -927,6 +949,10 @@ impl<'a> AdapterBuilder<'a> {
             layout_tuple_with_registry(&param_types, self.lower_ctx.cm_interface_registry).offsets;
         let mut frees = Vec::new();
         for (plan, offset) in plans.iter().zip(offsets) {
+            if matches!(plan.lowering, ParamLowering::ListArg) {
+                frees.push(self.release_list_arg(plan));
+                continue;
+            }
             let shape = cm_shape(plan.ty, &shape_ctx(&self.lower_ctx));
             frees.extend(synthesize_free_cm_value(
                 &shape,
@@ -948,16 +974,25 @@ impl<'a> AdapterBuilder<'a> {
         frees
     }
 
-    /// String / List<u8>: call the packing helper (→ packed i64) and split it
+    /// Gives back the block `plan`'s `LoweredList` copied its elements into,
+    /// if it did; a borrowed block stays with its owner.
+    fn release_list_arg(&self, plan: &ParamPlan<'a>) -> TirStmt {
+        let release = CompilerItem::CmReleaseListArg;
+        expr_stmt(self.helper_call(release, self.param_ref(plan), TypeTable::UNIT))
+    }
+
+    /// A call of the compiler-item function `helper` on `arg`.
+    fn helper_call(&self, helper: CompilerItem, arg: TirExpr, return_type: TypeId) -> TirExpr {
+        let tt = self.lower_ctx.type_table.borrow();
+        compiler_function_call(tt.compiler_items(), helper, vec![arg], return_type)
+    }
+
+    /// Call the packing helper on `plan`'s param (→ packed i64) and split it
     /// into (ptr, len) flat args.
-    fn emit_packed_ptr_len(&mut self, param_name: &str, param_local: u32, helper: CompilerItem) {
-        let packed_name = format!("${param_name}_packed");
+    fn emit_packed_ptr_len(&mut self, plan: &ParamPlan<'a>, helper: CompilerItem) {
+        let packed_name = format!("${}_packed", plan.name);
         let packed_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I64);
-        let packed = internal_call(
-            helper.attr_name(),
-            vec![local_ref(param_local, param_name, TypeTable::I32)],
-            TypeTable::I64,
-        );
+        let packed = self.helper_call(helper, self.param_ref(plan), TypeTable::I64);
         self.body_stmts
             .push(let_stmt(&packed_name, packed_local, TypeTable::I64, packed));
 
@@ -1200,6 +1235,7 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::Unit
                 | ParamLowering::PackedPtrLen { .. }
                 | ParamLowering::ListBuffer { .. }
+                | ParamLowering::ListArg
                 | ParamLowering::Direct => {
                     let stores = cm_param_store_plan(plan.ty, registry, &self.lower_ctx.names);
                     for (sub_offset, store_name) in &stores {

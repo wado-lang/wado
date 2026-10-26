@@ -53,10 +53,30 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
 
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).
 pub fn internal_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
+    function_call(ModuleSource::rt(), name, args, return_type)
+}
+
+/// A call of the compiler-item function `item`, wherever its module is.
+pub fn compiler_function_call(
+    items: &CompilerItems,
+    item: CompilerItem,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
+    let (module_source, name) = items.require_function(item);
+    function_call(module_source.clone(), name, args, return_type)
+}
+
+fn function_call(
+    module_source: ModuleSource,
+    name: &str,
+    args: Vec<TirExpr>,
+    return_type: TypeId,
+) -> TirExpr {
     TirExpr::new(
         TirExprKind::Call {
             func: Box::new(FunctionRef {
-                module_source: ModuleSource::rt(),
+                module_source,
                 name: name.to_string(),
                 template: None,
                 monomorph_info: None,

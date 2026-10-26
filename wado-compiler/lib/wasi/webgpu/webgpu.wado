@@ -1,6 +1,7 @@
 #![generated(by = "wado-from-idl", sources = ["vendor/wasi-webgpu/wit/imports.wit", "vendor/wasi-webgpu/wit/webgpu.wit"])]
 #![stdlib("wasi:webgpu/webgpu.wado")]
 
+use { ListArg } from "core:linear";
 #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-query-set-error-kind")]
 pub variant CreateQuerySetErrorKind {
     #[cm("type-error")]
@@ -1734,9 +1735,9 @@ pub resource GpuBuffer {
     fn set_label(&self, label: String);
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.get-mapped-range-set-with-copy")]
     #[cm_params("self", "data", "offset", "size")]
-    fn get_mapped_range_set_with_copy(
+    fn get_mapped_range_set_with_copy<affine L: ListArg<Elem = u8>>(
         &self,
-        data: ByteList,
+        data: L,
         offset: Option<GpuSize64>,
         size: Option<GpuSize64>,
     ) -> Result<(), GetMappedRangeError>;
@@ -1936,10 +1937,10 @@ pub resource GpuComputePassEncoder {
     ) -> Result<(), SetBindGroupError>;
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-immediates")]
     #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
-    fn set_immediates(
+    fn set_immediates<affine L: ListArg<Elem = u8>>(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: L,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );
@@ -2123,20 +2124,20 @@ pub resource GpuQueue {
     async fn on_submitted_work_done(&self) -> AsyncCall<()>;
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-buffer-with-copy")]
     #[cm_params("self", "buffer", "buffer-offset", "data", "data-offset", "size")]
-    fn write_buffer_with_copy(
+    fn write_buffer_with_copy<affine L: ListArg<Elem = u8>>(
         &self,
         buffer: &GpuBuffer,
         buffer_offset: GpuSize64,
-        data: ByteList,
+        data: L,
         data_offset: Option<GpuSize64>,
         size: Option<GpuSize64>,
     ) -> Result<(), WriteBufferError>;
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-texture-with-copy")]
     #[cm_params("self", "destination", "data", "data-layout", "size")]
-    fn write_texture_with_copy(
+    fn write_texture_with_copy<affine L: ListArg<Elem = u8>>(
         &self,
         destination: GpuTexelCopyTextureInfo,
-        data: ByteList,
+        data: L,
         data_layout: GpuTexelCopyBufferLayout,
         size: GpuExtent3D,
     );
@@ -2196,10 +2197,10 @@ pub resource GpuRenderBundleEncoder {
     ) -> Result<(), SetBindGroupError>;
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-immediates")]
     #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
-    fn set_immediates(
+    fn set_immediates<affine L: ListArg<Elem = u8>>(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: L,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );
@@ -2313,10 +2314,10 @@ pub resource GpuRenderPassEncoder {
     ) -> Result<(), SetBindGroupError>;
     #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-immediates")]
     #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
-    fn set_immediates(
+    fn set_immediates<affine L: ListArg<Elem = u8>>(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: L,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );

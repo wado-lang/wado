@@ -14,8 +14,8 @@ use wasm_encoder::ValType;
 
 use crate::ast;
 use crate::ast::{
-    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
+    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericParam, GenericType, InterfaceDecl,
+    Item, Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
     cm_import_of, declares_unrestricted, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
@@ -631,6 +631,22 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
+/// `core:linear`'s trait a sync import's `list<T>` parameter is declared
+/// through, as `L: ListArg<Elem = T>`.
+const LIST_ARG: &str = "ListArg";
+
+/// The `E` of `ty` when it names a type parameter of `type_params` bounded
+/// `ListArg<Elem = E>`.
+fn list_arg_elem<'t>(type_params: &'t [GenericParam], ty: &Type) -> Option<&'t Type> {
+    let Type::Named(named) = ty else {
+        return None;
+    };
+    let param = type_params.iter().find(|p| p.name == named.name)?;
+    let bound = param.bounds.iter().find(|b| b.name == LIST_ARG)?;
+    let elem = bound.assoc_types.iter().find(|a| a.name == "Elem")?;
+    Some(&elem.ty)
+}
+
 /// The prelude's `type ByteList = List<u8>`, which a binding names for a WIT
 /// `list<u8>`. No CM interface declares it, so the registry carries its base.
 const BYTE_LIST: &str = "ByteList";
@@ -694,6 +710,10 @@ pub struct CmFunctionInfo {
     pub is_async: bool,
     /// Parameter names and types: (`wado_name`, `cm_name`, type)
     pub params: Vec<(String, String, Type)>,
+    /// The indices of `params` declared `L: ListArg<Elem = E>`, recorded at
+    /// the `list<E>` they cross as. Each call site lowers its argument
+    /// through `ListArg::lowered`.
+    pub list_args: Vec<usize>,
     /// The closures among `params`, by index and declared type. Each crosses as its `u32` key.
     pub callbacks: Vec<(usize, Type)>,
     /// Return type
@@ -1953,6 +1973,45 @@ impl CmInterfaceRegistry {
             .unwrap_or_else(|| resolve_type(ty, &self.newtypes, &self.source_interfaces))
     }
 
+    /// `func`'s parameters as `(wado_name, cm_name, type)`, and the indices of
+    /// those declared `L: ListArg<Elem = E>`, each recorded as the `List<E>`
+    /// it crosses as. `fallback` names a parameter `#[cm_params]` leaves out,
+    /// and `rewrite` maps a declared type before it is resolved.
+    fn cm_params_of(
+        &self,
+        func: &ast::Function,
+        fallback: impl Fn(&str) -> String,
+        rewrite: impl Fn(&Type) -> Type,
+    ) -> (Vec<(String, String, Type)>, Vec<usize>) {
+        let cm_param_names = extract_cm_params_attr(&func.attrs);
+        let mut list_args = Vec::new();
+        let params = func
+            .params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let cm_name = cm_param_names
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| fallback(&p.name));
+                let ty = match list_arg_elem(&func.type_params, &p.ty) {
+                    Some(elem) => {
+                        list_args.push(i);
+                        Type::Generic(GenericType {
+                            id: AstId::fresh(),
+                            name: "List".to_string(),
+                            args: vec![elem.clone()],
+                            span: p.ty.span(),
+                        })
+                    }
+                    None => rewrite(&p.ty),
+                };
+                (p.name.clone(), cm_name, self.cm_param_type(&ty))
+            })
+            .collect();
+        (params, list_args)
+    }
+
     /// Drop the reference around an extern-handle: the handle is a value, so
     /// `&self` and a `&Handle` argument both cross as the handle itself.
     fn deref_extern_handle(&self, ty: &Type) -> Type {
@@ -2303,28 +2362,18 @@ impl CmInterfaceRegistry {
                 }
                 for method in &resource.methods {
                     if let Some(wasi) = cm_import_of(&method.attrs) {
-                        // Extract CM param names from #[cm_params] attribute
-                        let cm_param_names = extract_cm_params_attr(&method.attrs);
-                        let params: Vec<(String, String, Type)> = method
-                            .params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, p)| {
-                                let cm_name = match cm_param_names.get(i) {
-                                    Some(declared) => declared.clone(),
-                                    None => {
-                                        scope.param_fallback(&p.name, &resource.name, &method.name)
-                                    }
-                                };
-                                let ty = substitute_self_in_type(
+                        let (params, list_args) = self.cm_params_of(
+                            method,
+                            |param| scope.param_fallback(param, &resource.name, &method.name),
+                            |ty| {
+                                substitute_self_in_type(
                                     &self.source_interfaces,
-                                    &p.ty,
+                                    ty,
                                     &resource.name,
                                     &resource_source,
-                                );
-                                (p.name.clone(), cm_name, self.cm_param_type(&ty))
-                            })
-                            .collect();
+                                )
+                            },
+                        );
 
                         // Keep original return type for newtype semantics.
                         // Resource methods declared as `async fn -> AsyncCall<T>`
@@ -2339,6 +2388,7 @@ impl CmInterfaceRegistry {
                             wasi,
                             method.is_async,
                             params,
+                            list_args,
                             return_type,
                         )?;
                     }
@@ -2470,19 +2520,11 @@ impl CmInterfaceRegistry {
                 let Some(wasi) = cm_import_of(&method.attrs) else {
                     continue;
                 };
-                let cm_param_names = extract_cm_params_attr(&method.attrs);
-                let params: Vec<(String, String, Type)> = method
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        let cm_name = match cm_param_names.get(i) {
-                            Some(declared) => declared.clone(),
-                            None => scope.param_fallback(&p.name, &effect.name, &method.name),
-                        };
-                        (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
-                    })
-                    .collect();
+                let (params, list_args) = self.cm_params_of(
+                    method,
+                    |param| scope.param_fallback(param, &effect.name, &method.name),
+                    Type::clone,
+                );
                 // Store the CM-ABI return type: an async import's `AsyncCall<T>`
                 // wrapper is stripped here, and both the elaborator and the
                 // binding synthesiser re-wrap it so user code still sees it.
@@ -2493,6 +2535,7 @@ impl CmInterfaceRegistry {
                     wasi,
                     method.is_async,
                     params,
+                    list_args,
                     return_type,
                 )?;
             }
@@ -2639,6 +2682,7 @@ impl CmInterfaceRegistry {
                     &cm_import,
                     method.is_async,
                     params,
+                    Vec::new(),
                     return_type,
                 )?;
             }
@@ -3471,6 +3515,7 @@ impl CmInterfaceRegistry {
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function
     /// * `params` - Parameter names and types
+    /// * `list_args` - See [`CmFunctionInfo::list_args`]
     /// * `return_type` - Return type (if any)
     ///
     /// `Err` when the CM function is already bound with another signature.
@@ -3481,6 +3526,7 @@ impl CmInterfaceRegistry {
         wasi: &CmImport,
         is_async: bool,
         params: Vec<(String, String, Type)>,
+        list_args: Vec<usize>,
         return_type: Option<Type>,
     ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
@@ -3493,6 +3539,7 @@ impl CmInterfaceRegistry {
             package: wasi.package.clone(),
             is_async,
             params,
+            list_args,
             callbacks,
             return_type,
             world: None,
@@ -3569,24 +3616,16 @@ impl CmInterfaceRegistry {
             let Some(cm_func_name) = world_import_of(&func.attrs) else {
                 continue;
             };
-            let cm_param_names = extract_cm_params_attr(&func.attrs);
-            let params: Vec<(String, String, Type)> = func
-                .params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let cm_name = cm_param_names
-                        .get(i)
-                        .unwrap_or_else(|| {
-                            panic!(
-                                "missing #[cm_params] for param '{}' in world import {}",
-                                p.name, func.name
-                            )
-                        })
-                        .clone();
-                    (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
-                })
-                .collect();
+            let (params, list_args) = self.cm_params_of(
+                func,
+                |param| {
+                    panic!(
+                        "missing #[cm_params] for param '{param}' in world import {}",
+                        func.name
+                    )
+                },
+                Type::clone,
+            );
             let (params, callbacks) = self.value_params(params);
             let namespace = component
                 .wasm_canonical_namespace()
@@ -3601,6 +3640,7 @@ impl CmInterfaceRegistry {
                 package: String::new(),
                 is_async: func.is_async,
                 params,
+                list_args,
                 callbacks,
                 // As for an interface method, the CM-ABI return type drops the
                 // `AsyncCall<T>` wrapper user code keeps seeing.
@@ -5299,6 +5339,7 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
+                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5337,6 +5378,7 @@ mod tests {
                     &CmImport::parse(cm).unwrap(),
                     false,
                     vec![],
+                    vec![],
                     None,
                 )
                 .unwrap();
@@ -5365,6 +5407,7 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
+                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5383,6 +5426,7 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
+                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5420,6 +5464,7 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
+                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5446,6 +5491,7 @@ mod tests {
             package: "cli".to_string(),
             is_async: true,
             params: vec![],
+            list_args: vec![],
             callbacks: vec![],
             return_type: None,
             world: None,

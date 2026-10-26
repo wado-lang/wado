@@ -81,6 +81,14 @@ impl WadoCodeGenerator {
             let names = import.type_names.join(", ");
             self.writeln(&format!("use {{ {names} }} from \"{}\";", import.from_path));
         }
+        if module
+            .resources
+            .iter()
+            .flat_map(|r| &r.methods)
+            .any(takes_list_args)
+        {
+            self.writeln("use { ListArg } from \"core:linear\";");
+        }
     }
 
     fn write_type_def(&mut self, type_def: &WadoTypeDef) {
@@ -225,7 +233,7 @@ impl WadoCodeGenerator {
             self.indent += 1;
 
             for method in &resource.methods {
-                self.write_function(method);
+                self.write_function(method, takes_list_args(method));
             }
             if drops {
                 self.writeln("/// Drop the resource. Scope exit drops one that nothing moved.");
@@ -268,15 +276,18 @@ impl WadoCodeGenerator {
         self.writeln(&format!("pub interface {} {{", effect.name));
         self.indent += 1;
 
+        // An operation declares no type parameters: a handler serves it at
+        // one type.
         for func in &effect.functions {
-            self.write_function(func);
+            self.write_function(func, false);
         }
 
         self.indent -= 1;
         self.writeln("}");
     }
 
-    fn write_function(&mut self, func: &WadoFunction) {
+    /// `lends_lists` writes each `list<T>` of numbers as a `ListArg`.
+    fn write_function(&mut self, func: &WadoFunction, lends_lists: bool) {
         self.write_doc_comment(func.doc_comment.as_ref());
         self.writeln(&format!("#[cm(\"{}\")]", func.cm_attr));
 
@@ -290,7 +301,42 @@ impl WadoCodeGenerator {
             self.writeln(&format!("#[cm_params({})]", wit_names.join(", ")));
         }
 
-        let params = Self::format_params(&func.params);
+        let list_args: Vec<(usize, String)> = if !lends_lists {
+            Vec::new()
+        } else {
+            func.params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| list_arg_elem(&p.ty).is_some())
+                .enumerate()
+                .map(|(nth, (index, _))| {
+                    let name = if nth == 0 {
+                        "L".to_string()
+                    } else {
+                        format!("L{}", nth + 1)
+                    };
+                    (index, name)
+                })
+                .collect()
+        };
+        let generics = if list_args.is_empty() {
+            String::new()
+        } else {
+            let bounds: Vec<String> = list_args
+                .iter()
+                .map(|(index, name)| {
+                    let elem = list_arg_elem(&func.params[*index].ty).expect("filtered above");
+                    format!("affine {name}: ListArg<Elem = {}>", Self::format_type(elem))
+                })
+                .collect();
+            format!("<{}>", bounds.join(", "))
+        };
+        let params = Self::format_params_with(&func.params, |index| {
+            list_args
+                .iter()
+                .find(|(at, _)| *at == index)
+                .map(|(_, name)| name.clone())
+        });
 
         // For CM `async func` imports, the Wado-level signature returns
         // `AsyncCall<T>` instead of `T` (or `AsyncCall<()>` for WIT-void async
@@ -321,8 +367,8 @@ impl WadoCodeGenerator {
 
         let async_kw = if func.is_async { "async " } else { "" };
         self.writeln(&format!(
-            "{}fn {}({}){};",
-            async_kw, func.name, params, return_type
+            "{}fn {}{}({}){};",
+            async_kw, func.name, generics, params, return_type
         ));
     }
 
@@ -380,9 +426,19 @@ impl WadoCodeGenerator {
     }
 
     fn format_params(params: &[WadoParam]) -> String {
+        Self::format_params_with(params, |_| None)
+    }
+
+    /// `params`, each typed as written unless `type_param` names the type
+    /// parameter standing for it.
+    fn format_params_with(
+        params: &[WadoParam],
+        type_param: impl Fn(usize) -> Option<String>,
+    ) -> String {
         params
             .iter()
-            .map(|p| {
+            .enumerate()
+            .map(|(index, p)| {
                 if p.wit_name == "self" {
                     match &p.ty {
                         WadoType::Borrow(_) => "&self".to_string(),
@@ -394,7 +450,8 @@ impl WadoCodeGenerator {
                         .as_ref()
                         .map(|value| format!(" = {value}"))
                         .unwrap_or_default();
-                    format!("{}: {}{default}", p.name, Self::format_type(&p.ty))
+                    let ty = type_param(index).unwrap_or_else(|| Self::format_type(&p.ty));
+                    format!("{}: {ty}{default}", p.name)
                 }
             })
             .collect::<Vec<_>>()
@@ -489,4 +546,41 @@ impl Default for WadoCodeGenerator {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// The element of a `list<T>` whose `T` is a Component Model number type,
+/// which a `LinearArray<T>` lays out as the Canonical ABI does.
+fn list_arg_elem(ty: &WadoType) -> Option<&WadoType> {
+    match ty {
+        WadoType::List(inner)
+            if matches!(
+                **inner,
+                WadoType::U8
+                    | WadoType::I8
+                    | WadoType::U16
+                    | WadoType::I16
+                    | WadoType::U32
+                    | WadoType::I32
+                    | WadoType::U64
+                    | WadoType::I64
+                    | WadoType::F32
+                    | WadoType::F64
+            ) =>
+        {
+            Some(inner)
+        }
+        _ => None,
+    }
+}
+
+/// Whether the resource method `method` takes a `list<T>` of numbers as a
+/// `ListArg`, so a `LinearArray` lends its own block (WEP: Linear Arrays). A
+/// sync call has read its arguments by the time it returns; an async one has
+/// not, so it keeps the `List`.
+fn takes_list_args(method: &WadoFunction) -> bool {
+    !method.is_async
+        && method
+            .params
+            .iter()
+            .any(|param| list_arg_elem(&param.ty).is_some())
 }

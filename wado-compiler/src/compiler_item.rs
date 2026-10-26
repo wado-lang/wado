@@ -185,6 +185,12 @@ pub enum CompilerItem {
     /// `CopyBuffer` — the linear memory a started stream copy moves through,
     /// with the copy it belongs to.
     CopyBuffer,
+    /// `core:linear::ListArg` — what a sync import's `list<T>` parameter of
+    /// numbers takes; each call site lowers its argument through it.
+    ListArg,
+    /// `core:linear::LoweredList` — where a `ListArg`'s elements lie for one
+    /// call, and what the call frees after it.
+    LoweredList,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -697,6 +703,10 @@ pub enum CompilerItem {
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
     CmLowerArrayU8,
+    /// `core:linear::cm_lower_list_arg`.
+    CmLowerListArg,
+    /// `core:linear::cm_release_list_arg`.
+    CmReleaseListArg,
     /// `core:rt::cm_callback_key`.
     CmCallbackKey,
     /// `core:rt::cm_callback`.
@@ -806,6 +816,8 @@ impl CompilerItem {
         Self::AsyncCall,
         Self::ResultBuffer,
         Self::CopyBuffer,
+        Self::ListArg,
+        Self::LoweredList,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -991,6 +1003,8 @@ impl CompilerItem {
         Self::MemoryToGcString,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
+        Self::CmLowerListArg,
+        Self::CmReleaseListArg,
         Self::CmCallbackKey,
         Self::CmCallback,
         Self::CmAwaitBlocked,
@@ -1063,6 +1077,8 @@ impl CompilerItem {
             Self::AsyncCall => "async_call",
             Self::ResultBuffer => "result_buffer",
             Self::CopyBuffer => "copy_buffer",
+            Self::ListArg => "list_arg",
+            Self::LoweredList => "lowered_list",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1190,6 +1206,8 @@ impl CompilerItem {
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
+            Self::CmLowerListArg => "cm_lower_list_arg",
+            Self::CmReleaseListArg => "cm_release_list_arg",
             Self::CmCallbackKey => "cm_callback_key",
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
@@ -1493,6 +1511,11 @@ impl CompilerItem {
             | Self::ForOf => true,
             // Kiln generator world only.
             Self::KilnRequest | Self::KilnNoOptions => generator_world,
+            // Loaded only when a module imports `core:linear`, which every one
+            // declaring a `ListArg` parameter does.
+            Self::ListArg | Self::LoweredList | Self::CmLowerListArg | Self::CmReleaseListArg => {
+                false
+            }
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
             | Self::MapEntriesIter
@@ -1578,6 +1601,9 @@ impl CompilerItem {
                 | Self::Member
                 // Called by every drop `synthesis::affine_drop` writes.
                 | Self::Drop
+                // Called at every `list<T>` argument `synthesis::cm_binding`
+                // lowers.
+                | Self::ListArg
         )
     }
 
@@ -1600,6 +1626,8 @@ impl CompilerItem {
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
+            | Self::CmLowerListArg
+            | Self::CmReleaseListArg
             | Self::CmCallbackKey
             | Self::CmCallback
             | Self::CmAwaitBlocked
@@ -1641,7 +1669,8 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
-            | Self::CopyBuffer => CompilerItemKind::Struct,
+            | Self::CopyBuffer
+            | Self::LoweredList => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream
@@ -1718,6 +1747,7 @@ impl CompilerItem {
             | Self::BitNot
             | Self::Shl
             | Self::Shr
+            | Self::ListArg
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListSplitOff

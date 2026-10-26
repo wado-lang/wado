@@ -158,11 +158,61 @@ The rest are left out, because some byte pattern is no value of theirs:
 - `i128` and `u128`, which are GC objects.
 - `()`, which has no width.
 
-### It does not cross a component boundary
+### It crosses into an import, and nowhere else
 
 A `LinearArray` names a block in this instance's memory, so it may not appear in
-an `export` signature. A value that needs to cross is converted with
+an `export` signature. A value that needs to cross there is converted with
 `to_list()`.
+
+A synchronous import reads a `list<T>` argument out of the caller's memory
+during the call, and a `LinearArray<T>` already lies there in the layout the
+Canonical ABI gives a `list<T>`. So such an import takes the array's own block,
+with no copy:
+
+```wado
+use { ListArg } from "core:linear";
+
+// What the bindings generator writes for `write-buffer-with-copy`.
+fn write_buffer_with_copy<affine L: ListArg<Elem = u8>>(
+    &self,
+    buffer: &GpuBuffer,
+    buffer_offset: GpuSize64,
+    data: L,
+    data_offset: Option<GpuSize64>,
+    size: Option<GpuSize64>,
+) -> Result<(), WriteBufferError>;
+
+queue.write_buffer_with_copy(&buffer, 0, &weights, null, null);   // no copy
+queue.write_buffer_with_copy(&buffer, 0, bytes, null, null);      // copied, as before
+```
+
+`ListArg` is what a `list<T>` argument is, for `T` a Component Model number
+type. `List<T>`, and so `ByteList`, implement it by copying the elements into a
+block for the call, as every list argument is lowered today. `&LinearArray<T>`
+implements it by handing over its own block, which the borrow keeps alive for
+the whole call. Both generators write such a parameter this way, the WIT
+bindings of the standard library and the declarations a component import
+produces, so a call site never chooses between two functions. A list literal
+no longer coerces to such a parameter, since nothing tells it which `ListArg`
+to be: `write_buffer_with_copy(&buffer, 0, [1, 2] as ByteList, null, null)`
+names it.
+
+The generators write it on a resource method and on a world function, but not
+on an interface's operation. An operation declares no type parameters, because
+a handler installed for it serves it at one type, so an operation keeps its
+`List<T>`.
+
+`ListArg::lowered` answers a `LoweredList`, whose fields only `core:*` can
+write. An implementation outside it can only delegate to one of these two, so
+no implementation hands the host a block it does not own or frees one it did
+not allocate.
+
+An asynchronous import is left as it is. Its call returns before the host has
+read the argument, and nothing holds a borrow past the call that made it.
+
+A result is left as it is too. Lifting a `list<T>` result into a `LinearArray`
+would also save a copy, but a binding would then have to say which of the two
+it answers, and no workload yet reads back enough for that to pay.
 
 ### Built-ins
 
@@ -214,7 +264,13 @@ In order:
   affine by instantiation, as `Model<WebGpuBackend>` already is. Done when
   Gemma 3's next token is measured against what it is now.
 
-Gemma 3 (270M) before and after that item, both run by one `wado` from
+- [ ] A synchronous import's `list<T>` parameter takes any `ListArg<Elem = T>`,
+  in the standard library's WIT bindings and in a component import's
+  declarations. Done when Loam's WebGPU backend uploads weights from a
+  `LinearArray` with no copy, and Gemma 3's load on WebGPU is measured against
+  what it is now.
+
+Gemma 3 (270M) before and after the `Cpu` item, both run by one `wado` from
 `package-loam/example/gemma3-270m` with
 `wado run -O2 --collector <collector> gemma3.wado`. The two figures in a cell
 are the two prompts `generate.json` records.

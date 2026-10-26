@@ -65,6 +65,21 @@ An anonymous struct never crosses either: no signature can name one yet
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
 
+### List Arguments
+
+A synchronous imported resource method or world function, from WASI or from a
+component, takes a `list<T>` parameter, for `T` a number type (`u8`…`u64`, `s8`…`s64`, `f32`,
+`f64`), as a type parameter `affine L: ListArg<Elem = T>` from `core:linear`. A
+`List<T>`, or a newtype over one such as `ByteList`, copies its elements for the
+call. A `&LinearArray<T>` lends its own block, which the callee reads in place.
+Either way, what the call copied is freed once it returns.
+
+An asynchronous import, and an interface's operation, take the `List<T>`. The
+host reads an asynchronous call's arguments after it returns, and an operation
+declares no type parameters.
+
+Rationale: [WEP: Linear Arrays](./wep-2026-10-26-linear-arrays.md).
+
 ### Published Types
 
 An `export fn` puts every named type its signature reaches, through fields and
