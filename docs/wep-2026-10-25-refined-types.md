@@ -90,9 +90,14 @@ In the type theory literature, "refinement type" usually means one whose
 predicate is proven statically. Wado checks the clause at run time, where a
 value enters the type, and the type records that the check passed. That is a
 manifest contract, the design Scala's and Haskell's `refined` libraries also
-ship under this name. A clause the compiler can decide on a constant is
-reported at compile time (see
+ship under this name.
+
+The share decided at compile time grows as the compiler learns to evaluate more
+clauses, as in hybrid type checking. A conversion the compiler proves needs no
+check at run time, and one it refutes is reported (see
 [the explicit conversions](#a-value-enters-a-refined-type-only-by-an-explicit-conversion)).
+Either way the conversion stays written: proving more removes checks and
+reports more failures, but never lets a narrowing go unwritten.
 
 A refined type is not a newtype. `type UserName = String contract …` declares a
 newtype whose base is the refined type `String contract …`. The newtype gives
@@ -341,6 +346,13 @@ xs.clear();                                      // and now it does not
 A function value may read state it captured, so a clause calling one has the
 same problem. A resource does too, since its state lives in the host, and so a
 resource is never refined (see [What can be refined](#what-can-be-refined)).
+
+### A narrowing the compiler can prove
+
+`let a: Age = 5;` is a type error, though the compiler can prove `5` is in
+`0..=150`. Admitting it would make whether a program compiles depend on what the
+compiler can prove, which grows release by release. Nothing states yet whether
+a proven narrowing may be implicit.
 
 ### A default for an inline refined field
 
