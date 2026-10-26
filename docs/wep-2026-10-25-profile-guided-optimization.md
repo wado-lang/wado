@@ -274,5 +274,5 @@ level.
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
 - [ ] The inliner reads a caller's cold code once, before it splices. A callee
-  whose whole body is cold, spliced in, covers what precedes the call in its
-  block, and those statements are not repriced as cold.
+  whose whole body is cold, spliced in, covers its block on both sides of the
+  call, yet the calls after it are still inlined at hot-path prices.
