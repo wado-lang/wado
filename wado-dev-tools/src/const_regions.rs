@@ -10,10 +10,12 @@ use std::cmp::Reverse;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
 use wado_compiler::hashmap::IndexMap;
+
+use crate::pipeline::default_num_workers;
 
 const CORPUS_DIRS: &[&str] = &["benchmark", "wasm-size"];
 
@@ -128,28 +130,32 @@ fn entries(dir: &str) -> Vec<String> {
         .collect()
 }
 
-/// Compile every file, one per CPU at a time, keeping the corpus order.
+/// Compile every file, as many at a time as the golden run's workers, keeping
+/// the corpus order.
 fn compile_all(wado: &str, files: &[String]) -> Vec<Outcome> {
-    let next = Mutex::new(files.iter().enumerate());
-    let outcomes: Mutex<Vec<Option<Outcome>>> = Mutex::new(vec![None; files.len()]);
-    let workers = thread::available_parallelism().map_or(1, usize::from);
-    let (next, outcomes_ref) = (&next, &outcomes);
-    thread::scope(|scope| {
-        for _ in 0..workers {
-            scope.spawn(move || {
-                while let Some((i, file)) = next.lock().unwrap().next() {
-                    let outcome = compile(wado, file);
-                    outcomes_ref.lock().unwrap()[i] = Some(outcome);
-                }
-            });
-        }
+    let next = AtomicUsize::new(0);
+    let mut outcomes: Vec<(usize, Outcome)> = thread::scope(|scope| {
+        let workers: Vec<_> = (0..default_num_workers())
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut mine = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(file) = files.get(i) else {
+                            return mine;
+                        };
+                        mine.push((i, compile(wado, file)));
+                    }
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().unwrap())
+            .collect()
     });
-    outcomes
-        .into_inner()
-        .unwrap()
-        .into_iter()
-        .map(|o| o.expect("every file compiles once"))
-        .collect()
+    outcomes.sort_by_key(|(i, _)| *i);
+    outcomes.into_iter().map(|(_, outcome)| outcome).collect()
 }
 
 fn compile(wado: &str, file: &str) -> Outcome {
@@ -166,12 +172,23 @@ fn compile(wado: &str, file: &str) -> Outcome {
             .map(str::to_string)
             .collect());
     }
-    // A file that is not an entry point and one the compiler rejects both land
-    // here, and only the first is expected: the line tells them apart.
-    Err(stderr
-        .lines()
-        .find_map(|l| l.find("error:").map(|at| l[at..].trim_end().to_string()))
-        .unwrap_or_else(|| output.status.to_string()))
+    // A file that is not an entry point, one the compiler rejects and a
+    // compiler crash all land here, and only the first is expected: the line
+    // tells them apart. A crash prints no `error:` line, but ends with why.
+    let lines: Vec<&str> = stderr.lines().map(without_timestamp).collect();
+    let reason = lines
+        .iter()
+        .find(|l| l.contains("error:"))
+        .or_else(|| lines.iter().rfind(|l| !l.trim().is_empty()))
+        .map_or_else(|| output.status.to_string(), |l| l.trim().to_string());
+    Err(reason)
+}
+
+/// A log line without the `[00:00:01.2345] ` the CLI's logger opens it with.
+fn without_timestamp(line: &str) -> &str {
+    line.strip_prefix('[')
+        .and_then(|rest| rest.split_once("] "))
+        .map_or(line, |(_, message)| message)
 }
 
 fn region_cause(remark: &str) -> Option<&str> {
@@ -214,6 +231,18 @@ mod tests {
         assert_eq!(
             blamed("no call on its path explains it"),
             ["no call on its path explains it"]
+        );
+    }
+
+    #[test]
+    fn a_log_line_keeps_its_position_without_its_timestamp() {
+        assert_eq!(
+            without_timestamp("[00:00:01.3846] a.wado:3:5: error: x"),
+            "a.wado:3:5: error: x"
+        );
+        assert_eq!(
+            without_timestamp("thread 'main' panicked"),
+            "thread 'main' panicked"
         );
     }
 
