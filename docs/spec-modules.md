@@ -205,6 +205,10 @@ built, and from then on it is read as a local file would be.
 ```wado
 use { greet } from "https://example.com/lib/greet.wado"
     with { integrity: "sha256:9ceb5c048c24f2a36440cdcb5c7bcd48e52bd119028e88a0e38b5580b583d9c8" };
+
+test "a remote module and the one beside it load" {
+    assert greet("wado") == "hello, wado!";
+}
 ```
 
 The URL starts `https://`. A plain `http://` URL is an error unless its host is

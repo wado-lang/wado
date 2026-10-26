@@ -112,6 +112,10 @@ use { hello } from "https://example.com/data/header_and_payload.schema"
         generator: { module: "./sub/kiln/header_probe_generator.wado" },
         integrity: "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
     };
+
+test {
+    assert hello() == 7;
+}
 ```
 
 The pin of the primary input is the `integrity` beside `generator`. A
