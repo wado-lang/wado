@@ -215,6 +215,9 @@ pub enum CompilerItem {
     /// `CopyBuffer` — the linear memory a started stream copy moves through,
     /// with the copy it belongs to.
     CopyBuffer,
+    /// `ReadInto` — where a `Stream::begin_read` copy lands, the last
+    /// parameter of every read binding.
+    ReadInto,
     /// `core:linear::ListArg<T>` — what converts to a `&ListView<T>` argument,
     /// through its `lowered`.
     ListArg,
@@ -843,6 +846,7 @@ impl CompilerItem {
         Self::ResultBuffer,
         Self::ArgBuffer,
         Self::CopyBuffer,
+        Self::ReadInto,
         Self::ListArg,
         Self::ListView,
         Self::Future,
@@ -1103,6 +1107,7 @@ impl CompilerItem {
             Self::ResultBuffer => "result_buffer",
             Self::ArgBuffer => "arg_buffer",
             Self::CopyBuffer => "copy_buffer",
+            Self::ReadInto => "read_into",
             Self::ListArg => "list_arg",
             Self::ListView => "list_view",
             Self::Future => "future",
@@ -1418,6 +1423,7 @@ impl CompilerItem {
             | Self::ResultBuffer
             | Self::ArgBuffer
             | Self::CopyBuffer
+            | Self::ReadInto
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
@@ -1691,6 +1697,7 @@ impl CompilerItem {
             | Self::ResultBuffer
             | Self::ArgBuffer
             | Self::CopyBuffer
+            | Self::ReadInto
             | Self::ListView => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable

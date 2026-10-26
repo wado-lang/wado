@@ -348,6 +348,10 @@ started one included. A copy dropped in flight is cancelled by `cancel_read` or
 `cancel_write` on the end the program holds. A handler that started the copy on
 another end answers that operation by cancelling there.
 
+`begin_read` also takes a `ReadInto`: where a host copy lands, in memory the
+copy allocates or in memory `core:*` lends it. A handler that settles the copy
+ignores it, and one that starts the copy on another end passes it on.
+
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands
 it to the reader, so nothing comes back in `rest`.

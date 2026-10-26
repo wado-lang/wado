@@ -71,7 +71,7 @@ the one Wado's streams already require.
 
 A handler for `Stream<T>` or `StreamWritable<T>` is how a test feeds a program
 input or captures its output, so the started copy has to go through it. The
-copy starts with a resource operation, `Stream::begin_read(&self, max)` or
+copy starts with a resource operation, `Stream::begin_read(&self, max, into)` or
 `StreamWritable::begin_write(&self, data)`, which returns a `StartedRead<T>` or
 `StartedWrite<T>`. `start_read` and `start_write` call it and take the end, and
 so do the loops. A handler answers with a copy that has already settled,

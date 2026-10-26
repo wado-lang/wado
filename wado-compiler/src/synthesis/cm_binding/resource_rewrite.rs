@@ -1090,7 +1090,7 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The names of the two functions a stream read binds to.
 struct StreamReadNames {
-    /// Starts the copy: `(handle, max) -> StartedRead<T>`.
+    /// Starts the copy: `(handle, max, into) -> StartedRead<T>`.
     begin: String,
     /// Lifts what it copied: `(handle, ptr, count) -> List<T>`.
     lift: String,
@@ -1130,6 +1130,16 @@ fn synthesize_stream_read_funcs(
         &mut locals,
         Some("max".to_string()),
         TypeTable::I32,
+        false,
+    );
+    // Only `core:linear` lends a destination, and only to a byte stream: a
+    // read of any other element lands in memory of its own.
+    let read_into_type = type_table.borrow_mut().make_read_into();
+    let into_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("into".to_string()),
+        read_into_type,
         false,
     );
     let count_idx = alloc_named_local(
@@ -1205,7 +1215,7 @@ fn synthesize_stream_read_funcs(
     stmts.push(return_stmt(Some(started)));
     let begin = binding_function(
         names.begin,
-        &[handle_idx, max_idx],
+        &[handle_idx, max_idx, into_idx],
         started_type_id,
         stmts,
         next_local,

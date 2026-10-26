@@ -249,10 +249,16 @@ the safe API. `LinearArray` is.
 at the offset already filled. No byte is lifted into the GC heap. A file of
 `f32`s then becomes a `LinearArray<f32>` by `cast`, with no element copied.
 
-The stated size is a hint. A block it fills reads the next copy into a chunk of
-its own, so a file as long as it says ends without growing the block. A longer
-one doubles the block, which may then hold more bytes than the array uses;
-`len` bounds every access, `cast` included.
+The copy goes through `Stream::begin_read`, so a `Stream<u8>` handler answers
+`read_linear` as it answers `read`. The array's memory reaches the copy as a
+`ReadInto` lent by `core:linear`, which no other package can build, so no raw
+address is handed out. A handler that settles the copy answers with its items,
+and `read_linear` copies them into the block.
+
+The stated size is a hint. A block it fills reads the next copy into memory of
+the copy's own, so a file as long as it says ends without growing the block. A
+longer one doubles the block, which may then hold more bytes than the array
+uses; `len` bounds every access, `cast` included.
 
 ## Roadmap
 

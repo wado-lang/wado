@@ -25,6 +25,7 @@ use {
     StreamWritable,
     ReadyEvent,
     CopyBuffer,
+    ReadInto,
     StartedRead,
     StartedWrite,
     WaitEvent,
@@ -391,12 +392,12 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
 
 /// CM adapter for stream.read(max) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_read_u8")]
-internal fn cm_stream_read_u8(handle: i32, max: i32) -> StartedRead<u8> {
+internal fn cm_stream_read_u8(handle: i32, max: i32, into: ReadInto) -> StartedRead<u8> {
     let room = cm_buffer_bytes(cm_copy_count(max), 1);
-    let ptr = builtin::realloc(0, 0, 1, room);
+    let [ptr, size] = into.landing(room);
     let packed = builtin::stream_read(handle, ptr, room);
     return StartedRead {
-        buffer: CopyBuffer { handle, packed, ptr, size: room, align: 1 },
+        buffer: CopyBuffer { handle, packed, ptr, size, align: 1 },
         items: [],
     };
 }

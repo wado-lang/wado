@@ -61,7 +61,7 @@ struct Inputs {
 }
 
 impl Stream<u8> for Inputs {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let _ = [this, max];
         resume StartedRead::settled(StreamChunk { items: self.content as List<u8>, result: CopyResult::Dropped });
     }

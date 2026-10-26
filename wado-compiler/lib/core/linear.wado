@@ -26,7 +26,7 @@ test {
 
 use { CopyResult } from "core:prelude/types.wado";
 use { copy_result, cm_packed_upper, STREAM_CHUNK_ELEMENTS } from "core:prelude/types.wado";
-use { cm_await_blocked, cm_copy_count, cm_lower_list_u8 } from "core:rt";
+use { cm_lower_list_u8, gc_array_to_memory } from "core:rt";
 
 /// What converts to a `&ListView<T>` argument: `List<T>` by copying its
 /// elements into a block of the view's own, `&LinearArray<T>` by lending its
@@ -252,36 +252,37 @@ impl LinearArray<u8> {
         return loaded(self.block.ptr + start, (end - start) / builtin::size_of::<U>());
     }
 
-    /// Every byte `stream` delivers until its writer drops, each copy landing
-    /// in the array's own block, so no byte passes through the GC heap. The
-    /// block takes `expected` bytes up front and grows only for a stream that
-    /// runs past them.
+    /// Every byte `stream` delivers until its writer drops. A host copy lands
+    /// in the array's own block, so no byte passes through the GC heap; a
+    /// handler's items are copied in. The block takes `expected` bytes up
+    /// front and grows only for a stream that runs past them.
     internal fn internal_read_stream(stream: &Stream<u8>, expected: i32) -> LinearArray<u8>
         contract expected >= 0
     {
-        let handle = builtin::resource_handle(stream);
         let mut block = Block { ptr: builtin::realloc(0, 0, ALIGN, expected), bytes: expected };
         let mut len = 0;
         loop {
-            if len < block.bytes {
-                let packed = read_copy(handle, block.ptr + len, block.bytes - len);
-                len += cm_packed_upper(packed);
-                if copy_result(packed) != CopyResult::Completed {
-                    break;
+            // A full block reads into memory of the copy's own, so a stream
+            // exactly as long as `expected` ends without growing it.
+            let full = len == block.bytes;
+            let into = if full { ReadInto::fresh() } else { ReadInto::lent(block.ptr + len) };
+            let room = if full { STREAM_CHUNK_ELEMENTS } else { block.bytes - len };
+            let mut started = stream.begin_read(room, into);
+            let packed = started.buffer.settle();
+            let landed = cm_packed_upper(packed);
+            let items = &started.items;
+            if landed > 0 {
+                if full {
+                    block = grown(block, len, landed);
+                    builtin::memory_copy(block.ptr + len, started.buffer.ptr, landed);
                 }
-                continue;
-            }
-            // A full block reads into a chunk of its own, so a stream exactly
-            // as long as `expected` ends without growing it.
-            let chunk = Block {
-                ptr: builtin::realloc(0, 0, ALIGN, STREAM_CHUNK_ELEMENTS),
-                bytes: STREAM_CHUNK_ELEMENTS,
-            };
-            let packed = read_copy(handle, chunk.ptr, chunk.bytes);
-            let count = cm_packed_upper(packed);
-            if count > 0 {
-                block = grown(block, len, count);
-                builtin::memory_copy(block.ptr + len, chunk.ptr, count);
+                len += landed;
+            } else if !items.is_empty() {
+                let count = items.len();
+                if count > block.bytes - len {
+                    block = grown(block, len, count);
+                }
+                gc_array_to_memory(items.internal_raw_data_ref(), 0, block.ptr + len, count);
                 len += count;
             }
             if copy_result(packed) != CopyResult::Completed {
@@ -290,12 +291,6 @@ impl LinearArray<u8> {
         }
         return LinearArray::<u8> { block, len };
     }
-}
-
-/// One copy of up to `room` bytes from the stream on `handle` into `ptr`,
-/// waited for. Returns the packed word the copy settled on.
-fn read_copy(handle: i32, ptr: i32, room: i32) -> i32 {
-    return cm_await_blocked(handle, builtin::stream_read(handle, ptr, cm_copy_count(room)));
 }
 
 /// A block holding the `len` bytes `block` starts with and room for `more`

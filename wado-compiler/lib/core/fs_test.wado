@@ -62,6 +62,31 @@ test "read_linear reports what read reports" {
     assert fs::read_linear(&dir).unwrap_err().kind matches { Io(IsDirectory) };
 }
 
+/// A file's stream that serves fixed bytes in place of the file's own. The
+/// drop reaches the host, whose write of the file then ends.
+struct Substitute {
+    content: List<u8>,
+}
+
+impl Stream<u8> for Substitute {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        resume StartedRead::settled(StreamChunk { items: self.content, result: CopyResult::Dropped });
+    }
+
+    ..forward
+}
+
+test "read_linear reads what a Stream handler serves" {
+    let dir = scratch("linear-handled");
+    let path = `${dir}/real.bin`;
+    fs::write(&path, &b"real").unwrap();
+    let mut substitute = Substitute { content: b"virtual" as List<u8> };
+    let array = with &mut substitute do {
+        fs::read_linear(&path).unwrap()
+    };
+    assert array.to_list() == b"virtual" as List<u8>;
+}
+
 // One Component Model copy moves at most 2^28 - 1 elements, and the host takes
 // 8 KiB of each.
 #[timeout_ms(30000)]
