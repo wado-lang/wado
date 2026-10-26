@@ -7,6 +7,7 @@
 mod aggregate_forward;
 mod alias;
 mod arena_query;
+mod assign_to_let;
 mod body_memo;
 mod bounds;
 mod census;

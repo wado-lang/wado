@@ -10,6 +10,7 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::{block_contains_loop, strip_refs};
+use super::assign_to_let::promote_lone_assignments;
 use super::gate::{FunctionGate, GatedPass};
 
 /// Flatten every block a statement evaluates first, across the package.
@@ -27,12 +28,19 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
         functions.len(),
         |buffers, fid| {
             let mut func = functions[fid.index()].borrow_mut();
-            let FuncParts { body, locals, .. } = func.parts();
+            let FuncParts {
+                body,
+                locals,
+                params,
+                ..
+            } = func.parts();
             let Some(body) = body else {
                 return false;
             };
-            let mut engine = Engine::new(body, buffers, locals);
-            engine.run(&[&rule])
+            let flattened = Engine::new(body, buffers, locals).run(&[&rule]);
+            // Flattening is what lays an argument's in-place binding out as a
+            // statement of the caller's block.
+            promote_lone_assignments(body, locals, params) || flattened
         },
     )
 }

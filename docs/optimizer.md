@@ -158,6 +158,8 @@ Scalars and dataflow:
 - `elide_local` — drop a binding that is never read.
 - `let_block_flatten` — hoist the statements out of a block a statement
   evaluates first: a binding's value, a call's leading argument, a condition.
+  Then the one assignment of a local no `let` binds becomes its `let`, where
+  every mention of the local follows it in its block.
 - `scalar_forward` — fold a single-use scalar temp into its use.
 - `const_folding` — partial evaluation: constant arithmetic, compile-time calls,
   constant globals, and constant aggregates

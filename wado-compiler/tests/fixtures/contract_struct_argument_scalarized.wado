@@ -1,0 +1,44 @@
+// A struct a checked call takes ahead of its last argument is bound for the
+// clauses by assignment. Once the call is inlined, that binding scalarizes like
+// a `let`: the struct is built only where a failed clause reports it.
+use { println, Stdout } from "core:cli";
+
+struct Span {
+    start: i32,
+    end: i32,
+}
+
+impl Span {
+    fn len(&self) -> i32 {
+        return self.end - self.start;
+    }
+}
+
+fn at(s: Span, i: i32) -> i32
+    contract 0 <= i && i < s.len()
+{
+    return s.start + i;
+}
+
+fn sum(start: i32, end: i32) -> i32 {
+    let mut total = 0;
+    for let i of 0..<end - start {
+        total += at(Span { start, end }, i);
+    }
+    return total;
+}
+
+export fn run() with Stdout {
+    println(`${sum(builtin::black_box(3), builtin::black_box(7))}`);
+}
+
+__DATA__
+{
+    "stdout": "18\n",
+    "wir_expect:O2": [
+        ", struct.new \"contract_struct_argument_scalarized.wado//Span\" {"
+    ],
+    "wir_not_expect:O2": [
+        "= struct.new \"contract_struct_argument_scalarized.wado//Span\""
+    ]
+}
