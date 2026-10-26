@@ -417,11 +417,6 @@ impl OwnTraps {
     pub(super) fn on_null(&self) -> impl Iterator<Item = usize> {
         self.on_null.into_iter().flatten()
     }
-
-    /// Whether it can trap at all, whatever its operands hold.
-    pub(super) fn any(&self) -> bool {
-        self.otherwise || self.on_null().next().is_some()
-    }
 }
 
 /// How `instr` itself traps.

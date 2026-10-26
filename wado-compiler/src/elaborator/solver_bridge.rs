@@ -1124,7 +1124,7 @@ impl SolverBridge {
         for index in 0..self.lowering.decls.len() {
             let head = TypeDeclId(u32::try_from(index).expect("fewer than 2^32 declarations"));
             if let DeclKey::Builtin(name) = self.lowering.decl_key(head)
-                && PrimitiveType::from_name(&name).is_some_and(|p| p.any_bits_width().is_some())
+                && PrimitiveType::from_name(name).is_some_and(|p| p.any_bits_width().is_some())
             {
                 self.program.facts.insert((head, any_bits), Fact::default());
             }

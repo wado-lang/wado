@@ -24,7 +24,8 @@
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::util::{Footprint, is_side_effect_free, own_traps};
+use super::nullability::Nullability;
+use super::util::{Footprint, is_side_effect_free, may_trap_in};
 
 /// The most nodes the copy's iterations may hold together, which picks the
 /// largest of [`FACTORS`] that fits.
@@ -34,21 +35,27 @@ const FACTORS: [usize; 2] = [4, 2];
 
 pub(super) fn unroll_array_loops(module: &mut WirPackage) {
     for func in &mut module.functions {
+        let locals = func.declared_locals();
         if let Some(body) = &mut func.body {
-            Unroller.visit_body(body);
+            Unroller {
+                null: Nullability::new(&locals),
+            }
+            .visit_body(body);
         }
     }
 }
 
-struct Unroller;
+struct Unroller<'a> {
+    null: Nullability<'a>,
+}
 
-impl WirMutVisitor for Unroller {
+impl WirMutVisitor for Unroller<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         self.walk_body(body);
         let mut at = 0;
         while at < body.len() {
             let before = at.checked_sub(1).map(|prev| &body[prev]);
-            if let Some(unrolled) = unrolled(&body[at], before) {
+            if let Some(unrolled) = unrolled(&body[at], before, &self.null) {
                 body.insert(at, unrolled);
                 at += 1;
             }
@@ -61,7 +68,7 @@ impl WirMutVisitor for Unroller {
 /// unrolls. `before` is the statement ahead of it, which may give the loop
 /// variable a constant the copy would leave on at once: a loop of fewer
 /// iterations than the copy runs.
-fn unrolled(instr: &WirInstr, before: Option<&WirInstr>) -> Option<WirInstr> {
+fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> Option<WirInstr> {
     let WirInstr::Block {
         result: None,
         body: outer,
@@ -88,7 +95,7 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>) -> Option<WirInstr> {
     else {
         return None;
     };
-    if !is_local_arith(exit) || !is_local_arith(step) {
+    if !is_local_arith(exit, null) || !is_local_arith(step, null) {
         return None;
     }
     let factor = unroll_factor(work)?;
@@ -204,14 +211,10 @@ fn scan(instr: &WirInstr, nesting: u32, f: &mut impl FnMut(&WirInstr, u32)) {
 
 /// Whether `instr` computes from locals alone, writing nothing and trapping
 /// nowhere, so evaluating it early or twice changes nothing.
-fn is_local_arith(instr: &WirInstr) -> bool {
-    is_side_effect_free(instr) && !Footprint::reads(instr).touches_heap() && !may_trap(instr)
-}
-
-fn may_trap(instr: &WirInstr) -> bool {
-    let mut trap = own_traps(instr).any();
-    instr.for_each_child(&mut |child| trap = trap || may_trap(child));
-    trap
+fn is_local_arith(instr: &WirInstr, null: &Nullability) -> bool {
+    is_side_effect_free(instr)
+        && !Footprint::reads(instr).touches_heap()
+        && !may_trap_in(instr, null)
 }
 
 /// What the i32 `instr` computes with `var` holding `value`, where it is

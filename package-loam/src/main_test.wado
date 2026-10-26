@@ -165,7 +165,9 @@ test "gen --index reads each weight from the shard the index places it in" {
         "--index", `${dir}/index.json`, "--checkpoint", `${dir}/g-00001-of-00002.safetensors`, "--checkpoint",
         `${dir}/g-00002-of-00002.safetensors`,
     ]).unwrap();
-    assert printed.contains("header.payload::<f32>(shards, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",");
+    assert printed.contains(
+        "header.payload::<f32>(shards, \"g-00002-of-00002.safetensors\", &Expected { tensor: \"W\",",
+    );
 }
 
 test "a weight whose shard is not given names the shard" {

@@ -53,8 +53,8 @@ use crate::optimize::arena_query::{
 use crate::optimize::mod_ref::{CallFacts, summarize};
 
 /// A versionable loop: guard `var CMP bound` with in-body panic checks
-/// `var + shift < B`, `B` and the shift's local loop-invariant locals of the
-/// guard's type (or constants).
+/// `var + shift < B`, `B` and the shift's local and stride loop-invariant
+/// locals of the guard's type (or constants).
 struct Plan {
     /// Block holding the `Loop` statement.
     parent: BlockId,
@@ -447,10 +447,8 @@ impl Terms {
     ) -> Option<Terms> {
         let mut inner = Terms::default();
         inner.add_operand(engine, binds, var_side, var, depth + 1)?;
-        let exactly_var = inner.var
-            && inner.stride.is_none()
-            && inner.local.is_none()
-            && inner.konst == 0;
+        let exactly_var =
+            inner.var && inner.stride.is_none() && inner.local.is_none() && inner.konst == 0;
         if !exactly_var {
             return None;
         }
@@ -827,7 +825,8 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
 /// `<=`), with `B >= konst` and a term on `local` keeping that subtraction and
 /// the check's own addition clear of the wrap. The term is `local >= 0` for a
 /// signed type and `local <= B - konst` for an unsigned one. An unshifted
-/// check needs only the comparison.
+/// check needs only the comparison, and a strided one
+/// [`strided_limit_terms`].
 fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
     if let Some(stride) = limit.shift.stride {
         return strided_limit_terms(engine, plan, limit, stride, span);
@@ -923,7 +922,14 @@ fn strided_limit_terms(
         let minus_one = long(engine, -1);
         reach = add(engine, reach, minus_one);
     }
-    reach = alloc_binary(engine, reach, NirBinaryOp::Mul, stride, TypeTable::I64, span);
+    reach = alloc_binary(
+        engine,
+        reach,
+        NirBinaryOp::Mul,
+        stride,
+        TypeTable::I64,
+        span,
+    );
     if let Some(l) = limit.shift.local {
         let l_read = local_read(engine, l, span);
         let zero = engine.const_operand(ValueKind::Int(0, ty), ty);

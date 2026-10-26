@@ -107,7 +107,11 @@ test "a tensor the checkpoint lacks names itself" {
 
 test "an element type that disagrees names both" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload::<f16, ByteList>(&bytes, &Expected { ..b(), dtype: "F16", width: 2 }).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f16, ByteList>(&bytes, &Expected {
+        ..b(),
+        dtype: "F16",
+        width: 2,
+    }).unwrap_err();
     assert `${e}` == "b: the checkpoint holds F32, and the graph F16";
 }
 
@@ -183,7 +187,10 @@ test "a tensor named twice in the header is refused" {
 
 test "the header's metadata is not a tensor" {
     let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
-    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
+        ..b(),
+        tensor: "__metadata__",
+    }).unwrap_err();
     assert `${e}` == "__metadata__: the checkpoint has no such tensor";
 }
 
