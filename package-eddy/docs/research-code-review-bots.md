@@ -191,6 +191,76 @@ merges, and it is spent best on evidence rather than on prose. Two things
 shrink what it has to judge: dispatch done in code, and findings that arrive
 already verified or reproduced.
 
+### Splitting the Change
+
+How a change is cut into units decides what each reviewer can see, and what
+the coordinator must stitch back together.
+
+| Source       | Measure                                                      | Result         |
+| ------------ | ------------------------------------------------------------ | -------------- |
+| [2609.32057] | PRs where over half the changed functions share a call graph | about 40%      |
+| [2610.11593] | Histories left unrunnable, file and hunk splits              | 27.5%, 37.4%   |
+| [2610.11593] | Histories left unrunnable, splits by dependency analysis     | 20.6%, 26.2%   |
+| [2610.11593] | Histories left unrunnable, split checked by test collection  | 0%             |
+| [2608.09290] | Tokens, one subagent per file vs Claude Code                 | 5 to 15× fewer |
+
+- Splitting by file is the cheap default. OpenCodeReview runs one subagent per
+  file, tells it to comment only on its own file, and lets it read the others
+  through bounded tools. It has no step that merges findings across files, and
+  no ablation isolates the split from its other modules ([2608.09290]).
+- Splitting by file cuts what belongs together. Changed functions are often
+  joined by calls, and the callee often sits in another file. Grouping by call
+  graph helped people orient in a PR, but functions repeated across groups
+  confused them, and changes outside functions (globals, imports) got lost
+  ([2609.32057]).
+- A split proposed by a model and checked by the build holds. RucTangle groups
+  changes by purpose, then applies the groups in order and checks that the
+  tests still collect after each; a failing group is reordered, revised, or
+  merged into the next. Every split by file, by hunk, or by dependency
+  analysis left some histories unrunnable. More pieces is not better: hunk
+  splitting cut three times as many and scored worse ([2610.11593]).
+- Dependencies a call graph does not show need knowledge of the project:
+  generated files and their generators, configuration, schemas, text matched
+  by name. Before the window, an LLM judging such links leaned on words that
+  co-occur rather than on real dependencies ([2511.00262]), and dense
+  annotation paid only where dependencies were implicit ([2606.26979]).
+
+### Language Services
+
+No study in the window measures a language server inside a review bot. Two
+just before it measure one inside coding agents.
+
+- A language server buys precision, not recall or tokens. Finding references
+  through one was exact where grep returned comments, strings and other
+  symbols of the same name, but recall stayed where the agent's thoroughness
+  left it. It saved tokens only for the weakest model; for the others it cost
+  6% to 118% more. Left free to choose, models used grep for localization
+  almost always. A rename solved by grep failed three times in four through a
+  location-only server, which misses comments and strings. The authors
+  propose routing between the two by task, model and noise ([2608.13568],
+  dated 2026-06-29).
+- Call and inheritance links written into the code as comments made agents
+  steadier rather than smarter: localization rose 2.2 points, trajectories
+  shortened, and run-to-run variance roughly halved, for about 10% more input
+  tokens. Large repositories did better with only the links to callers
+  ([2606.26979], 2026-06).
+- Greptile builds a code graph and queries it on each review; reviews of it
+  report more findings and more noise than CodeRabbit's ([sourcegraph-tools],
+  a vendor comparison).
+
+What carries over:
+
+- Split with the language service, not by file. Its call and reference graph
+  gives the first cut deterministically.
+- Check the split with the build. A unit is sound when it compiles and its
+  tests collect on its own.
+- Give a reviewer callers more readily than callees.
+- Let the language service answer what a symbol is and who uses it. Leave text
+  search for what it cannot see: comments, strings, and generated code.
+- Implicit dependencies are project knowledge. They can come from rules the
+  repository states and from the learning loop: a defect that landed in
+  another unit is a link the split missed.
+
 ### Context
 
 - Diff-only review misses what lies outside the touched files. On security
@@ -410,6 +480,8 @@ These are directions the findings point to, not decisions.
   that the others do not, measured as how rarely they miss the same defect,
   and aggregate by evidence rather than by vote count. Hide authorship from
   every judge.
+- Cut the change along the language service's call and reference graph,
+  checked by the build, and learn the implicit links from missed defects.
 - Put the strongest model where findings merge, not where work is split, and
   hand it structured, verified findings so that its context holds evidence
   rather than transcripts.
@@ -446,11 +518,18 @@ These are directions the findings point to, not decisions.
 - [2406.04692] Mixture-of-Agents Enhances Large Language Model Capabilities
   (2024-06)
 - [2512.08296] Towards a Science of Scaling Agent Systems (2025-12)
+- [2511.00262] LLM-Driven Cost-Effective Requirements Change Impact Analysis
+  (2025-11)
 - [2602.01011] Multi-Agent Teams Hold Experts Back (2026-02)
 - [2602.11988] Evaluating AGENTS.md: Are Repository-Level Context Files
   Helpful for Coding Agents? (2026-02, revised 2026-09-29)
 - [2606.01351] Recognize Your Orchestrator: An Entropy Dynamics Perspective
   for LLM Multi-Agent Systems (2026-06)
+- [2606.26979] How Much Static Structure Do Code Agents Need? A Study of
+  Deterministic Anchoring (2026-06-25, revised 2026-07-02)
+- [2608.13568] Does a Language Server Save Tokens for Coding Agents? A
+  Measurement Methodology and Preliminary Study (2026-06-29)
+- [2610.11593] Runnable Commit Untangling for Coding Agents (2026-10-08)
 - [2608.30661] SwarmBench: Can Large Language Models Act as Agent Swarm
   Orchestrators? (2026-08-31)
 - [2603.17111] Hidden Clones: Exposing and Fixing Family Bias in
@@ -500,6 +579,7 @@ These are directions the findings point to, not decisions.
 - [bugbot-learning] Cursor, Bugbot now self-improves with learned rules
   (2026-04)
 - [coderabbit-changelog] CodeRabbit changelog, August to October 2026
+- [sourcegraph-tools] Sourcegraph, 13 Best Automated Code Review Tools in 2026
 - [coderabbit-context] CodeRabbit, The art and science of context engineering
 - [codex-security-cloud] eesel, Codex Security Cloud: how it works
   (2026-10-01)
@@ -533,7 +613,12 @@ These are directions the findings point to, not decisions.
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
 [2406.04692]: https://arxiv.org/abs/2406.04692
 [2512.08296]: https://arxiv.org/abs/2512.08296
+[2511.00262]: https://arxiv.org/abs/2511.00262
 [2602.01011]: https://arxiv.org/abs/2602.01011
+[2606.26979]: https://arxiv.org/abs/2606.26979
+[2608.13568]: https://arxiv.org/abs/2608.13568
+[2610.11593]: https://arxiv.org/abs/2610.11593
+[sourcegraph-tools]: https://sourcegraph.com/blog/automated-code-review-tools
 [2602.11988]: https://arxiv.org/abs/2602.11988
 [2606.01351]: https://arxiv.org/abs/2606.01351
 [2608.30661]: https://arxiv.org/abs/2608.30661
