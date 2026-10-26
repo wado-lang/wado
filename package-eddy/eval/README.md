@@ -21,11 +21,17 @@ culprit's diff, and its expected finding is the defect the fix names.
 
 ## Reproducing
 
+From the repository root:
+
 ```sh
 git fetch --unshallow origin main   # in a shallow clone
-node package-eddy/tools/szz.mjs . package-eddy/eval/szz.json
-CLAUDE_API_KEY=... node package-eddy/tools/judge.mjs . package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
+wado run package-eddy/tools/szz.wado -- package-eddy/eval/szz.json
+CLAUDE_API_KEY=... wado run package-eddy/tools/judge.wado -- \
+    package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
 ```
+
+Both run `git` through `core:process`, which needs no flag: `git` is under
+`/usr`, and the repository is the directory `wado run` grants.
 
 ## Findings So Far
 
@@ -46,4 +52,3 @@ CLAUDE_API_KEY=... node package-eddy/tools/judge.mjs . package-eddy/eval/szz.jso
 - [ ] Have a person check a sample of the judge's verdicts, and fix the share
   of entries that gets checked.
 - [ ] Split off the held-out part that learning never sees.
-- [ ] Port the census and the judge to Wado.

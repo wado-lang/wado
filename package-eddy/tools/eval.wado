@@ -1,0 +1,104 @@
+//! What the evaluation-set tools share: running `git`, the pull requests merged
+//! into `main`, and the census they exchange as JSON.
+
+use { Command, Process } from "core:process";
+use { TreeMap } from "core:collections";
+
+/// One pull request, as the merge commit that landed it on `main` records it.
+pub struct Merge {
+    pub sha: String,
+    pub date: String,
+    pub num: i32,
+    pub title: String,
+}
+
+pub struct Blamed {
+    pub pr: i32,
+    pub n: i32,
+}
+
+/// One `fix` pull request: the pull requests that last wrote the lines it
+/// changed, most lines first. Pull request 0 stands for a commit that no merge
+/// brought in.
+#[wire(name_policy = "camelCase")]
+pub struct FixResult {
+    pub pr: i32,
+    pub date: String,
+    pub title: String,
+    pub adds_test: bool,
+    pub old_lines: i32,
+    pub blamed: List<Blamed>,
+}
+
+pub struct Census {
+    pub prs: i32,
+    pub results: List<FixResult>,
+}
+
+/// `git`'s stdout, or `null` when it exits other than 0.
+pub fn try_git(args: List<String>) -> Option<String> with Process {
+    return match Command::new("git").args(args).capture_limit(i32::MAX).read() {
+        Ok(out) => Some(String::from_utf8_lossy(out)),
+        Err(_) => null,
+    };
+}
+
+pub fn git(args: List<String>) -> String with Process {
+    return match Command::new("git").args(args).capture_limit(i32::MAX).read() {
+        Ok(out) => String::from_utf8_lossy(out),
+        Err(e) => panic(`${e}`),
+    };
+}
+
+/// The pull requests merged into `origin/main`, oldest first. A merge's
+/// subject names the number (`Merge pull request #12 from …`), and the first
+/// line of its body is the pull request's title.
+pub fn merged_prs() -> List<Merge> with Process {
+    let log = git([
+        "log", "--first-parent", "--merges", "--reverse", "--date=short",
+        "--format=%H%x00%ad%x00%s%x00%b%x1e", "origin/main",
+    ]);
+    let mut merges: List<Merge> = [];
+    for let record of log.split("\u{1E}") {
+        let record = record.trim();
+        if record.is_empty() {
+            continue;
+        }
+        let fields: List<String> = record.split("\u{0}").map(|f| f.to_string()).collect();
+        let title = match fields[3].lines().next() {
+            Some(line) => line.trim().to_string(),
+            None => "",
+        };
+        merges.push(Merge { sha: fields[0], date: fields[1], num: pr_number(&fields[2]), title });
+    }
+    return merges;
+}
+
+/// The merges keyed by pull request number.
+pub fn merges_by_pr(merges: &List<Merge>) -> TreeMap<i32, Merge> {
+    let mut by_pr = TreeMap::<i32, Merge>::new();
+    for let m of merges {
+        by_pr.try_insert(m.num, *m);
+    }
+    return by_pr;
+}
+
+/// The digits after the first `#`, or 0 without one.
+fn pr_number(subject: &String) -> i32 {
+    let Some(hash) = subject.find("#") else {
+        return 0;
+    };
+    let mut num = 0;
+    for let c of subject.substr_bytes(hash + 1, subject.len()).chars() {
+        if !c.is_ascii_digit() {
+            break;
+        }
+        num = num * 10 + (c as i32 - '0' as i32);
+    }
+    return num;
+}
+
+test "a merge subject names its pull request" {
+    assert pr_number(&"Merge pull request #2464 from wado-lang/x") == 2464;
+    assert pr_number(&"Merge branch 'main'") == 0;
+}

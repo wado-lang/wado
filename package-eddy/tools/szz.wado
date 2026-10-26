@@ -1,0 +1,245 @@
+//! SZZ census: for each `fix` pull request merged into `main`, blames the lines
+//! it changed back to the pull requests that last wrote them.
+//!
+//! Run it from the repository root, over `main`'s whole history
+//! (`git fetch --unshallow origin main` in a shallow clone):
+//!
+//! ```sh
+//! wado run package-eddy/tools/szz.wado -- package-eddy/eval/szz.json
+//! ```
+
+use { args, eprintln, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { TreeMap } from "core:collections";
+use { to_bytes_pretty } from "core:json";
+use { git, try_git, merged_prs, Merge, Blamed, FixResult, Census } from "./eval.wado";
+
+struct Change {
+    status: char,
+    old_path: String,
+    new_path: String,
+}
+
+/// A conventional-commit `fix` title: `fix:`, `fix(scope):`, `fix!:`.
+fn is_fix_title(title: &String) -> bool {
+    let Some(mut rest) = title.as_str_slice().strip_prefix("fix") else {
+        return false;
+    };
+    if rest.starts_with("(") {
+        let Some(close) = rest.find(")") else {
+            return false;
+        };
+        rest = rest.slice(close + 1, rest.len());
+    }
+    if rest.starts_with("!") {
+        rest = rest.slice(1, rest.len());
+    }
+    return rest.starts_with(":");
+}
+
+fn is_test(path: &String) -> bool {
+    let name = match path.rfind("/") {
+        Some(slash) => path.substr_bytes(slash + 1, path.len()),
+        None => *path,
+    };
+    return path.starts_with("wado-compiler/tests/")
+        || path.ends_with("_test.wado")
+        || path.contains("/test/")
+        || path.contains("/tests/")
+        || (name.starts_with("test_") && name.ends_with(".rs"));
+}
+
+/// Commit to the pull request whose merge brought it in. A commit two merges
+/// share belongs to the earlier one.
+fn commit_prs(merges: &List<Merge>) -> TreeMap<String, i32> with Process {
+    let mut by_commit = TreeMap::<String, i32>::new();
+    for let m of merges {
+        for let c of git(["rev-list", `${m.sha}^1..${m.sha}^2`]).lines() {
+            by_commit.try_insert(c.to_string(), m.num);
+        }
+        by_commit[m.sha] = m.num;
+    }
+    return by_commit;
+}
+
+/// The paths `.gitattributes` marks generated or vendored.
+fn generated(paths: &List<String>) -> List<String> with Process {
+    let mut marked: List<String> = [];
+    if paths.is_empty() {
+        return marked;
+    }
+    let mut check = ["check-attr", "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    check.extend(paths);
+    for let line of git(check).lines() {
+        if !(line.ends_with(": set") || line.ends_with(": true")) {
+            continue;
+        }
+        if let Some(at) = line.find(": linguist-") {
+            marked.push(line.slice(0, at).to_string());
+        }
+    }
+    return marked;
+}
+
+fn changes(base: &String, head: &String) -> List<Change> with Process {
+    let mut out: List<Change> = [];
+    for let line of git(["diff", "--name-status", "-M", *base, *head]).lines() {
+        let f: List<String> = line.split("\t").map(|s| s.to_string()).collect();
+        out.push(Change {
+            status: f[0].chars().next().unwrap(),
+            old_path: f[1],
+            new_path: f[f.len() - 1],
+        });
+    }
+    return out;
+}
+
+/// The old-side line ranges a `diff -U0` changed: `@@ -start[,count] +…`.
+fn old_ranges(diff: &String) -> List<[i32, i32]> {
+    let mut ranges: List<[i32, i32]> = [];
+    for let line of diff.lines() {
+        let Some(rest) = line.strip_prefix("@@ -") else {
+            continue;
+        };
+        let Some([old, _]) = rest.split_once(" ") else {
+            continue;
+        };
+        let [start, count] = match old.split_once(",") {
+            Some([s, c]) => [i32::from_str(s).unwrap(), i32::from_str(c).unwrap()],
+            None => [i32::from_str(old).unwrap(), 1],
+        };
+        if count > 0 {
+            ranges.push([start, start + count - 1]);
+        }
+    }
+    return ranges;
+}
+
+/// A `blame --porcelain` header line: the commit, then line numbers.
+fn header_commit(line: StrSlice) -> Option<String> {
+    let Some([sha, rest]) = line.split_once(" ") else {
+        return null;
+    };
+    if sha.len() != 40 {
+        return null;
+    }
+    for let c of sha.chars() {
+        if !(c.is_ascii_digit() || ('a' <= c && c <= 'f')) {
+            return null;
+        }
+    }
+    if !(rest.chars().next() matches { Some(c) && c.is_ascii_digit() }) {
+        return null;
+    }
+    return Some(sha.to_string());
+}
+
+fn census(m: &Merge, commit_pr: &TreeMap<String, i32>) -> FixResult with Process {
+    let base = `${m.sha}^1`;
+    let all = changes(&base, &m.sha);
+    let mut paths: List<String> = [];
+    for let c of &all {
+        paths.push(c.new_path);
+    }
+    let gen = generated(&paths);
+    let mut adds_test = false;
+    let mut blamed = TreeMap::<i32, i32>::new();
+    let mut old_lines = 0;
+    for let c of &all {
+        if gen.contains_str(&c.new_path) {
+            continue;
+        }
+        if is_test(&c.new_path) {
+            adds_test = true;
+            continue;
+        }
+        if c.new_path.ends_with(".md") || c.status == 'A' {
+            continue;
+        }
+        let diff = git(["diff", "-U0", "-w", "-M", base, m.sha, "--", c.old_path, c.new_path]);
+        let ranges = old_ranges(&diff);
+        if ranges.is_empty() {
+            continue;
+        }
+        let mut blame = ["blame", "-w", "--porcelain"] as List<String>;
+        for let [a, b] of ranges {
+            blame.push("-L");
+            blame.push(`${a},${b}`);
+        }
+        blame.push(base);
+        blame.push("--");
+        blame.push(c.old_path);
+        // A submodule path has no blame.
+        let Some(out) = try_git(blame) else {
+            continue;
+        };
+        for let line of out.lines() {
+            let Some(sha) = header_commit(line.as_str_slice()) else {
+                continue;
+            };
+            old_lines += 1;
+            let pr = commit_pr.get(sha).unwrap_or(0);
+            blamed[pr] = blamed.get(pr).unwrap_or(0) + 1;
+        }
+    }
+    let mut ranked: List<Blamed> = [];
+    for let [pr, n] of blamed.entries() {
+        ranked.push(Blamed { pr: *pr, n: *n });
+    }
+    ranked.sort_by(|a, b| b.n.cmp(&a.n));
+    return FixResult { pr: m.num, date: m.date, title: m.title, adds_test, old_lines, blamed: ranked };
+}
+
+export fn run() with (Stderr, Environment, Preopens, Process) {
+    let arguments = args();
+    assert arguments.len() == 1, "usage: szz.wado <out.json>";
+    let merges = merged_prs();
+    eprintln(`PRs: ${merges.len()}`);
+    let commit_pr = commit_prs(&merges);
+    let mut fixes: List<Merge> = [];
+    for let m of &merges {
+        if is_fix_title(&m.title) {
+            fixes.push(*m);
+        }
+    }
+    eprintln(`fix PRs: ${fixes.len()}`);
+    let mut results: List<FixResult> = [];
+    for let m of &fixes {
+        results.push(census(m, &commit_pr));
+        if results.len() % 50 == 0 {
+            eprintln(`${results.len()}/${fixes.len()}`);
+        }
+    }
+    let out = Census { prs: merges.len(), results };
+    fs::write(&arguments[0], &to_bytes_pretty(&out).unwrap()).unwrap();
+    eprintln("done");
+}
+
+test "a fix title" {
+    assert is_fix_title(&"fix: x");
+    assert is_fix_title(&"fix(compiler)!: x");
+    assert !is_fix_title(&"fixup: x");
+    assert !is_fix_title(&"feat: fix x");
+}
+
+test "test paths" {
+    assert is_test(&"wado-compiler/tests/fixtures/a.wado");
+    assert is_test(&"package-gale/src/codegen_test.wado");
+    assert is_test(&"wado-cli/tests/integration/main.rs");
+    assert is_test(&"wado-lsp/src/test_hover.rs");
+    assert !is_test(&"wado-compiler/src/latest.rs");
+}
+
+test "a porcelain header, not a content line" {
+    let sha = "0123456789abcdef0123456789abcdef01234567";
+    assert header_commit(`${sha} 3 4 1`.as_str_slice()) == Some(sha);
+    assert header_commit("\t// 名前 0123456789".as_str_slice()) == null;
+    assert header_commit(`${sha}é 3 4`.as_str_slice()) == null;
+}
+
+test "the old side of each hunk" {
+    let diff = "@@ -3 +3 @@\n-a\n+b\n@@ -10,2 +9,0 @@\n@@ -20,0 +18,4 @@\n";
+    assert old_ranges(&diff) == [[3, 3], [10, 11]] as List<[i32, i32]>;
+}

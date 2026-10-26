@@ -1,0 +1,101 @@
+//! Anthropic's Messages API: one request, one text reply.
+
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http";
+use { to_bytes, from_bytes } from "core:json";
+
+struct Message {
+    role: String,
+    content: String,
+}
+
+struct MessagesRequest {
+    model: String,
+    max_tokens: i32,
+    system: String,
+    messages: List<Message>,
+}
+
+// Only a `text` block carries `text`; a `thinking` block, say, does not.
+struct ContentBlock {
+    text: Option<String> = null,
+}
+
+struct MessagesResponse {
+    content: List<ContentBlock>,
+}
+
+/// The text of `model`'s reply to `user` under `system`, or the error the API
+/// returned.
+pub fn ask(api_key: String, model: String, system: String, user: String, max_tokens: i32) -> Result<String, String> with Client {
+    let request = MessagesRequest { model, max_tokens, system, messages: [Message { role: "user", content: user }] };
+    let resp = send("api.anthropic.com", "/v1/messages", [
+        ["x-api-key", api_key],
+        ["anthropic-version", "2023-06-01"],
+        ["content-type", "application/json"],
+    ], to_bytes(&request).unwrap());
+    let status = resp.get_status_code() as i32;
+    let body = read_body(resp);
+    if status != 200 {
+        return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+    }
+    let parsed = match from_bytes::<MessagesResponse, ByteList>(body) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(`unparsed response: ${e:?}`);
+        },
+    };
+    let mut text = "";
+    for let block of parsed.content {
+        if let Some(t) = block.text {
+            text.push_str(t);
+        }
+    }
+    return Ok(text);
+}
+
+fn send<B: AsByteSlice>(authority: String, path: String, headers: List<[String, String]>, body: B) -> Response with Client {
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+    let fields = Headers::new();
+    for let [name, value] of headers {
+        fields.append(name as FieldName, value.bytes().collect() as FieldValue);
+    }
+    let [req, sent] = Request::new(fields, Option::<Stream<u8>>::Some(body_rx), trailers_rx, null);
+    req.set_method(Method::Post);
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some(authority));
+    req.set_path_with_query(Option::<String>::Some(path));
+
+    // The host consumes the body stream once the send starts, so the writes
+    // below rendezvous with it rather than deadlock.
+    let subtask = Client::send(req);
+    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    let resp = match subtask.wait() {
+        Ok(resp) => resp,
+        Err(e) => panic(`HTTP request failed: ${e:?}`),
+    };
+    expect_done(sent, "HTTP request");
+    return resp;
+}
+
+fn read_body(resp: Response) -> ByteList {
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
+    let buf = body_stream_rx.read_to_end_bytes();
+    body_stream_rx.drop();
+    res_tx.write(Result::Ok(()));
+    expect_done(received, "HTTP response body");
+    return buf;
+}
+
+/// Panics unless `done`, the future a `wasi:http` transfer resolves once it
+/// ends, reports success.
+fn expect_done<affine T>(done: Future<Result<T, ErrorCode>>, what: String) {
+    let outcome = done.read();
+    if !outcome matches { Some(Ok(_)) } {
+        panic(`${what} failed: ${outcome:?}`);
+    }
+}
