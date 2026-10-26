@@ -1,4 +1,5 @@
-//! An HTTPS POST over `wasi:http`, shared by the API-calling examples.
+//! An HTTPS POST over `wasi:http`, and reading a response body, shared by the
+//! HTTP examples.
 
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
@@ -30,7 +31,7 @@ fn send<B: AsByteSlice>(
         fields.append(name as FieldName, value.bytes().collect() as FieldValue);
     }
 
-    let [req, _req_future] = Request::new(
+    let [req, sent] = Request::new(
         fields,
         Option::<Stream<u8>>::Some(body_rx),
         trailers_rx,
@@ -50,22 +51,30 @@ fn send<B: AsByteSlice>(
     body_tx.drop();
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
 
-    return match subtask.wait() {
+    let resp = match subtask.wait() {
         Ok(resp) => resp,
         Err(e) => panic(`HTTP request failed: ${e:?}`),
     };
+    expect_done(sent, "HTTP request");
+    return resp;
 }
 
-fn read_body(resp: Response) -> ByteList {
+pub fn read_body(resp: Response) -> ByteList {
     let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
 
     let buf = body_stream_rx.read_to_end_bytes();
     body_stream_rx.drop();
     res_tx.write(Result::Ok(()));
-    let outcome = received.read();
-    if !outcome matches { Some(Ok(_)) } {
-        panic(`HTTP response body failed: ${outcome:?}`);
-    }
+    expect_done(received, "HTTP response body");
     return buf;
+}
+
+/// Panics unless `done`, the future a `wasi:http` transfer resolves once it
+/// ends, reports success.
+pub fn expect_done<affine T>(done: Future<Result<T, ErrorCode>>, what: String) {
+    let outcome = done.read();
+    if !outcome matches { Some(Ok(_)) } {
+        panic(`${what} failed: ${outcome:?}`);
+    }
 }
