@@ -203,22 +203,41 @@ pub fn display_function_name(name: &str) -> String {
     }
 }
 
-/// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`, and
-/// `Formatter::pad<String>` for one whose type arguments carry module paths too.
-/// A clone's suffix names no function an author wrote, and the span already
-/// carries the module path.
+/// The name a diagnostic shows for a function: a method as source spells it
+/// (`String::grow`), from its structure; any other function by the name it was
+/// declared under (`id<&P>`), the span already carrying its module. A clone's
+/// suffix names no function an author wrote.
+///
+/// The function's own module is stripped as the exact prefix it is, since a
+/// module path may hold any character. Only the paths inside type arguments
+/// are found by search.
 ///
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
-///
-/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker; so may a type argument.
 #[must_use]
-pub fn diagnostic_function_name(name: &str) -> String {
+pub fn diagnostic_function_name(
+    name: &str,
+    module: &ModuleSource,
+    method: Option<&LocalMethodName>,
+) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name.to_string();
     }
+    if let Some(method) = method {
+        let mut declared = method.clone();
+        declared.method_name = as_declared(&method.method_name);
+        return declared.to_display_name();
+    }
+    let local = name
+        .strip_prefix(&format!("{}/", module.to_path_string()))
+        .unwrap_or(name);
+    as_declared(local)
+}
+
+/// `name` with the module paths in its type arguments dropped and its clone
+/// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
+/// own first character rather than a suffix marker; so may a type argument.
+fn as_declared(name: &str) -> String {
     let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
@@ -1661,11 +1680,11 @@ impl LocalMethodName {
     /// Get the full method name including type args (e.g., `"transform<i64>"`)
     #[must_use]
     pub fn full_method_name(&self) -> String {
-        let args: Vec<String> = self
-            .method_type_args
-            .iter()
-            .map(FqTypeName::to_mangled)
-            .collect();
+        self.method_with_args(FqTypeName::to_mangled)
+    }
+
+    fn method_with_args(&self, spell: fn(&FqTypeName) -> String) -> String {
+        let args: Vec<String> = self.method_type_args.iter().map(spell).collect();
         MethodName::format_method_with_args(&self.method_name, &args)
     }
 
@@ -1686,8 +1705,8 @@ impl LocalMethodName {
         }
     }
 
-    /// [`Self::to_mangled_name`] as source spells it: the receiver and the
-    /// trait lose their declaring modules, the method keeps its name.
+    /// [`Self::to_mangled_name`] as source spells it: the receiver, the trait
+    /// and the method's type arguments lose their declaring modules.
     ///
     /// The display counterpart of the mangle, derived from the same fields —
     /// so a reader wanting `String::len` out of
@@ -1696,13 +1715,10 @@ impl LocalMethodName {
     #[must_use]
     pub fn to_display_name(&self) -> String {
         let receiver = self.fq_struct_name().to_display();
+        let method = self.method_with_args(FqTypeName::to_display);
         match &self.trait_name {
-            Some(trait_name) => format!(
-                "{receiver}^{}::{}",
-                trait_name.to_display(),
-                self.method_name
-            ),
-            None => format!("{receiver}::{}", self.method_name),
+            Some(trait_name) => format!("{receiver}^{}::{method}", trait_name.to_display()),
+            None => format!("{receiver}::{method}"),
         }
     }
 
@@ -2862,43 +2878,68 @@ mod tests {
     }
 
     #[test]
-    fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {
+    fn diagnostic_name_drops_the_module_and_suffixes_but_keeps_a_minted_name() {
+        let mut interner = ModuleSourceInterner::new();
+        let entry = interner.entry_point("main.wado");
+        let named = |module: &ModuleSource, name: &str| {
+            let mangled = FreeFunctionName::new(module.clone(), name.to_string()).to_string();
+            diagnostic_function_name(&mangled, module, None)
+        };
+        assert_eq!(named(&entry, "run"), "run");
+        assert_eq!(named(&entry, "$cm_export__run"), "$cm_export__run");
         assert_eq!(
-            diagnostic_function_name("core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]"),
-            "String::grow"
+            named(
+                &interner.core("prelude/fmt.wado"),
+                "write_decimal_digits$sroa[&mut(self.repr)]"
+            ),
+            "write_decimal_digits"
         );
-        assert_eq!(diagnostic_function_name("main.wado/run"), "run");
+        // A module path may hold the characters a mangled name separates with.
+        assert_eq!(
+            named(
+                &interner.local("./src (old)/my lib.wado"),
+                "follow<core:prelude/string.wado/String>$spec0"
+            ),
+            "follow<String>"
+        );
         // A minted name opens with the prefix; cutting there would leave nothing.
-        assert_eq!(diagnostic_function_name("$test_0_adds"), "$test_0_adds");
         assert_eq!(
-            diagnostic_function_name("main.wado/$cm_export__run"),
-            "$cm_export__run"
+            diagnostic_function_name("$test_0_adds", &entry, None),
+            "$test_0_adds"
         );
         assert_eq!(
-            diagnostic_function_name("$value_copy$Point$shallow"),
+            diagnostic_function_name(
+                &value_copy_helper_name("core:prelude/string.wado/String"),
+                &ModuleSource::builtin(),
+                None
+            ),
             "$value_copy"
         );
         // A type argument carries a module path of its own.
+        let traits = interner.core("prelude/traits.wado");
         assert_eq!(
-            diagnostic_function_name(
-                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
-            ),
-            "Formatter::pad<String>"
-        );
-        assert_eq!(
-            diagnostic_function_name(
-                "core:prelude/traits.wado/TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
+            named(
+                &traits,
+                "TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"
         );
-        assert_eq!(diagnostic_function_name("f1.wado/id<&f1.wado/P>"), "id<&P>");
+        let f1 = interner.entry_point("f1.wado");
+        assert_eq!(named(&f1, "id<&f1.wado/P>"), "id<&P>");
+        assert_eq!(named(&f1, "id<[f1.wado/P,i32]>"), "id<[P,i32]>");
         assert_eq!(
-            diagnostic_function_name("f1.wado/id<[f1.wado/P,i32]>"),
-            "id<[P,i32]>"
+            named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
+            "id<fn(P)->i32with($e263)>"
+        );
+        let method = LocalMethodName::with_method_type_args(
+            FqTypeName::builtin("Box"),
+            None,
+            "transform$spec0".into(),
+            vec![FqTypeName::builtin("i64")],
         );
         assert_eq!(
-            diagnostic_function_name("f1.wado/id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
-            "id<fn(P)->i32with($e263)>"
+            diagnostic_function_name(&method.to_mangled_name(), &entry, Some(&method)),
+            "Box::transform<i64>"
         );
     }
 

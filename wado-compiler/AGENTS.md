@@ -24,7 +24,6 @@ The Wado compiler crate.
   through it.
 - Every name the compiler mints for itself starts with one `$`
   (`name::INTERNAL_PREFIX`), which no Wado identifier can spell.
-  `mise run check-internal-names` gates it.
 - What makes such a name unique is a serial that advances on read
   (`FunctionContext::fresh_serial`), never a local index the site has yet to
   allocate. A step that reads one before recursing hands its own names to
