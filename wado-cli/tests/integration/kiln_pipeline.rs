@@ -203,7 +203,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
     assert_eq!(outcome.executed.len(), 2);
     assert!(outcome.executed.contains(&"kiln-alpha".to_string()));
     assert!(outcome.executed.contains(&"kiln-beta".to_string()));
-    assert!(outcome.cached.is_empty());
+    assert!(outcome.cached.is_empty(), "{:?}", outcome.cached);
 
     assert!(tmp.path().join("build/kiln/kiln-alpha/alpha.wado").exists());
     assert!(tmp.path().join("build/kiln/kiln-beta/beta.wado").exists());
@@ -237,7 +237,7 @@ fn end_to_end_two_generators_execute_cache_and_reuse() {
 
     let outcome2 = run(tmp.path(), &host2, &provider2, invs);
     assert_eq!(outcome2.cached.len(), 2);
-    assert!(outcome2.executed.is_empty());
+    assert!(outcome2.executed.is_empty(), "{:?}", outcome2.executed);
     // alpha and beta declare distinct `GeneratorModule` values, so the
     // upfront `resolve_modules` step asks the provider once per module.
     // The resolution feeds `cache_matches` the current `source_hash`;

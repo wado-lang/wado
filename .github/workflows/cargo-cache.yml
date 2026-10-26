@@ -60,9 +60,6 @@ jobs:
       CONTAINER_REPO: /home/user/wado
       CARGO_HOME: /root/.cargo
       CARGO_TARGET_DIR: /home/user/wado/target
-      # Runner disk and time only. Cargo never passes `-C incremental` to a
-      # registry dependency, so this cannot change what gets published.
-      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -151,7 +148,6 @@ jobs:
       contents: read
     env:
       CARGO_TERM_COLOR: always
-      CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v7
         with:

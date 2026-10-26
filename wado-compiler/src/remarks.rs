@@ -14,7 +14,12 @@ use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+<<<<<<< HEAD
 use crate::name::{COLD_PATH_INTRINSIC, diagnostic_function_name};
+||||||| 5a2ad1349
+use crate::name::diagnostic_function_name;
+=======
+>>>>>>> origin/main
 use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
@@ -568,7 +573,7 @@ fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
         .iter()
         .map(|f| {
             let f = f.borrow();
-            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name))
+            is_ctfe_runnable(&f).then(|| f.diagnostic_name())
         })
         .collect()
 }

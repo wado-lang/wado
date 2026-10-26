@@ -1,0 +1,72 @@
+// Call Anthropic's Messages API with a fixed prompt.
+//
+// Requires CLAUDE_API_KEY in the environment. The model is a build input:
+// CLAUDE_MODEL in the environment, or `-D CLAUDE_MODEL=...`.
+//
+// Usage:
+//   export CLAUDE_API_KEY=sk-ant-...
+//   wado run example/claude.wado
+//   wado run -D CLAUDE_MODEL=claude-haiku-5-5 example/claude.wado
+
+use { println, env, Stdout, Stderr, Environment } from "core:cli";
+use { Client } from "wasi:http";
+use { to_bytes, from_bytes } from "core:json";
+use { post } from "./https_post.wado";
+
+struct Message {
+    role: String,
+    content: String,
+}
+
+struct MessagesRequest {
+    model: String,
+    max_tokens: i32,
+    messages: List<Message>,
+}
+
+// Only a `text` block carries `text`; a `thinking` block, say, does not.
+struct ContentBlock {
+    text: Option<String> = null,
+}
+
+struct MessagesResponse {
+    content: List<ContentBlock>,
+}
+
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
+
+export fn run() with (Stdout, Stderr, Environment, Client) {
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+
+    let request = MessagesRequest {
+        model: CLAUDE_MODEL,
+        max_tokens: 16000,
+        messages: [
+            Message { role: "user", content: "Explain WebAssembly briefly" },
+        ],
+    };
+    let [status, body] = post("api.anthropic.com", "/v1/messages", [
+        ["x-api-key", api_key],
+        ["anthropic-version", "2023-06-01"],
+        ["content-type", "application/json"],
+        ["user-agent", #file],
+    ], to_bytes(&request).unwrap());
+
+    if status != 200 {
+        panic(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
+    }
+
+    let parsed = match from_bytes::<MessagesResponse, ByteList>(body) {
+        Ok(r) => r,
+        Err(e) => panic(`failed to parse JSON response: ${e:?}`),
+    };
+
+    for let block of parsed.content {
+        if let Some(text) = block.text {
+            println(text);
+        }
+    }
+}

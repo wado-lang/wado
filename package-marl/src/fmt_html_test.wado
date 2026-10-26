@@ -245,6 +245,18 @@ test "render renders an inline link with an escaped href" {
     assert render("[home](http://example.com)").html == "<p><a href=\"http://example.com\">home</a></p>";
 }
 
+test "render resolves backslash escapes in a destination and a title" {
+    assert render("[x](foo\\)bar \"a \\\" b\")").html == "<p><a href=\"foo)bar\" title=\"a &quot; b\">x</a></p>";
+}
+
+test "render finds an inline link's close after a title holding a parenthesis" {
+    assert render("[x](/url \"a ) b\")").html == "<p><a href=\"/url\" title=\"a ) b\">x</a></p>";
+}
+
+test "render reads text that fails as an inline link as a shortcut reference" {
+    assert render("[foo](not a link)\n\n[foo]: /url1").html == "<p><a href=\"/url1\">foo</a>(not a link)</p>";
+}
+
 test "render renders an inline link title" {
     assert render("[home](http://x.test \"Home\")").html == "<p><a href=\"http://x.test\" title=\"Home\">home</a></p>";
 }

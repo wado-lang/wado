@@ -460,7 +460,8 @@ license = "MIT"
 authors = ["Alice"]
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(validate_for_publish(&m).is_empty());
+        let errors = validate_for_publish(&m);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]
@@ -508,7 +509,8 @@ license-file = "LICENSE-COMMERCIAL"
 authors = ["Alice"]
 "#;
         let m = toml.parse::<Manifest>().unwrap();
-        assert!(validate_for_publish(&m).is_empty());
+        let errors = validate_for_publish(&m);
+        assert!(errors.is_empty(), "{errors:?}");
     }
 
     #[test]

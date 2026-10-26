@@ -334,7 +334,8 @@ mod tests {
 
     #[test]
     fn no_dir_drops_the_default_grant_and_keeps_every_explicit_one() {
-        assert!(parse(&["--no-dir", "app.wado"]).preopens.is_empty());
+        let preopens = parse(&["--no-dir", "app.wado"]).preopens;
+        assert!(preopens.is_empty(), "{preopens:?}");
         assert_eq!(
             parse(&["--no-dir", "--dir", "/data", "app.wado"]).preopens,
             [PathBuf::from("/data")]

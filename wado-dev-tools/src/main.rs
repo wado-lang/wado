@@ -1,4 +1,5 @@
 mod bundled_asset;
+mod const_regions;
 mod data_section;
 mod grammar_corpus;
 mod highlight_corpus;
@@ -9,8 +10,8 @@ mod template;
 use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
-const COMMANDS: &str =
-    "golden-dump, bundled-asset, grammar-corpus, highlight-corpus, highlight-vocab";
+const COMMANDS: &str = "golden-dump, bundled-asset, const-regions, grammar-corpus, \
+     highlight-corpus, highlight-vocab";
 
 fn main() {
     let mut parser = lexopt::Parser::from_env();
@@ -24,6 +25,7 @@ fn main() {
     match cmd.as_str() {
         "golden-dump" => golden_dump(parser),
         "bundled-asset" => bundled_asset::run(parser),
+        "const-regions" => const_regions::run(parser),
         "grammar-corpus" => grammar_corpus::run(parser),
         "highlight-corpus" => highlight_corpus::run(parser),
         "highlight-vocab" => highlight_vocab::run(parser),

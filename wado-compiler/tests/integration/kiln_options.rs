@@ -178,7 +178,7 @@ pub fn generate() {}
     let sem = block_on(semantics(source, &host, Some("entry.wado")));
     let descriptor =
         extract_options_descriptor(&sem, &entry(&sem)).expect("missing Options is allowed");
-    assert!(descriptor.fields.is_empty());
+    assert!(descriptor.fields.is_empty(), "{:?}", descriptor.fields);
 }
 
 #[test]

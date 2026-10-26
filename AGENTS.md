@@ -137,7 +137,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
 - `wado-host/` — the native host pieces `wado-cli`, `wado-dev-tools` and the compiler's tests share: the `wasi:clocks/timezone` host, the TLS trust store, and `StubHost`, the `CompilerHost` that compiles e2e fixtures from the `__DATA__` inputs it reads.
-- `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack whose wasmtime follows its own schedule. The `test-webgpu` CI job is the only one that builds it.
+- `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary. It is deliberately a Cargo workspace of its own: its GPU stack is heavy, and its wasmtime follows its own schedule. No command at the repository root builds or lints it; the `test-webgpu` CI job is the only one. A change that reaches every crate, such as a toolchain upgrade, runs `cargo clippy --all-targets` in `wado-run-webgpu/` too.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*` and `core:kiln` stdlib modules from WIT, and `package-web`'s DOM bindings from WebIDL.
@@ -149,6 +149,7 @@ form means the same, commit that instead (`.wat` for `.wasm`, `.onnxtext` for
 - `benchmark/`, `wasm-size/` — performance and code-size measurement.
 - `cloudflare-worker/` — serves a `wasi:http/service` component from a Cloudflare
   Worker, via jco.
+- `package-eddy/` - A code review bot in Wado, on the Anthropic API for now; later, models of several providers review a change by exchanging opinions. Its docs and research live in this repository.
 - `package-gale/` — A parser generator compatible with ANTLR4 (`.g4`) in Wado.
 - `package-gale-highlight-html` - A syntax highlighter for HTML that highlights embedded CSS and JavaScript as those languages, built with `package-gale` on the grammars-v4 grammars.
 - `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.

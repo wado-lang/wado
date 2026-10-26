@@ -466,7 +466,7 @@ mod tests {
                 .map(|(fid, _)| fid)
                 .collect()
         };
-        assert!(visited(&mut gate).is_empty());
+        assert_eq!(visited(&mut gate), Vec::<FuncId>::new());
         // Dirty function 1 (and its caller 0 via propagation), then run again.
         gate.mark_changed(FuncId::new(1));
         assert_eq!(visited(&mut gate), vec![FuncId::new(0), FuncId::new(1)]);

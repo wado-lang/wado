@@ -130,7 +130,9 @@ fn try_ref_def_line_chars(chars: &List<char>) -> Option<LinkReferenceDef> {
     if q >= len {
         return null;
     }
-    let [url, title] = parse_dest_and_title(&slice_chars(chars, q, len));
+    let Some([url, title]) = parse_dest_and_title(&slice_chars(chars, q, len)) else {
+        return null;
+    };
     if url.len() == 0 {
         return null;
     }

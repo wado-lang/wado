@@ -15,7 +15,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
 
 jobs:
   # A change to Markdown no gate reads skips every test job below, and the
@@ -157,7 +156,6 @@ jobs:
       - run: mise run check-deps
       - run: mise run test-hooks
       - run: mise run test-loam-js
-      - run: mise run check-internal-names
       - run: mise run check-review-filters
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown

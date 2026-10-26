@@ -223,7 +223,7 @@ mod tests {
             }),
         };
         let diag = from_compiler_diagnostic(&compiler_diag, None, PositionEncoding::Utf16).unwrap();
-        assert!(diag.tags.is_empty());
+        assert!(diag.tags.is_empty(), "{:?}", diag.tags);
         let json = serde_json::to_string(&diag).unwrap();
         assert!(
             !json.contains("tags"),
