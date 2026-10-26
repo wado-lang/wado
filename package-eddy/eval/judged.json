@@ -133,7 +133,7 @@
     {
       "fix": 958,
       "culprit": 524,
-      "share": 0.82,
+      "share": 0.83,
       "lines": 320,
       "addsTest": true,
       "title": "fix(closure): contextual types, stable functor IDs, scope hygiene",
@@ -167,7 +167,7 @@
       "culprit": 996,
       "share": 0.91,
       "lines": 230,
-      "addsTest": true,
+      "addsTest": false,
       "title": "fix(cm_binding): address #997 follow-up bugs from #996 review",
       "verdict": {
         "is_defect_fix": true,
@@ -1253,8 +1253,8 @@
     {
       "fix": 2107,
       "culprit": 2105,
-      "share": 0.99,
-      "lines": 268,
+      "share": 0.9,
+      "lines": 30,
       "addsTest": true,
       "title": "fix(kiln): diagnose a duplicate public type name instead of asserting",
       "verdict": {
@@ -1379,22 +1379,6 @@
       "error": null
     },
     {
-      "fix": 2289,
-      "culprit": 2150,
-      "share": 0.51,
-      "lines": 442,
-      "addsTest": true,
-      "title": "fix(opt): keep a field read through a reference sound across calls that may write it",
-      "verdict": {
-        "is_defect_fix": true,
-        "introduced_by_culprit": true,
-        "visible_in_diff": true,
-        "defect": "A field read through a reference, or a bind depending on a reference local, was treated as still valid across a call that may write the pointee through a global or argument. This happened because call invalidation only covered `mut_escaped` locals, not reference-shaped storage.",
-        "reason": "The culprit added `write_hits` with `Write::Call => mut_escaped.contains(root)`, while its own `reachable_elsewhere` admits that references reach storage the frame does not own. A reviewer could spot that the call case ignores reference locals; the much larger value-graph builder portion of the fix may also cover forwarding behaviour that predates the culprit."
-      },
-      "error": null
-    },
-    {
       "fix": 2293,
       "culprit": 2175,
       "share": 0.81,
@@ -1407,6 +1391,22 @@
         "visible_in_diff": true,
         "defect": "The generated code and runtime broke the protobuf spec in several ways: an open enum's first value was never checked to be 0; implicit closed-enum and message fields were accepted; a oneof message member was copied on every merge, making repeated reads quadratic; sizes were counted in i32 and could wrap; and an open enum's unrecognized zero was not treated as zero.",
         "reason": "The culprit wrote this generator logic, including the copy-on-merge oneof arm, `enum_is_open` without the zero check, and the i32 `size` signatures, plus the runtime the fix corrects. Several of these are plainly visible in its diff, for example the `let mut v = match self.field { Some(..(held)) => held, ... }` copy and the comment claiming open enums require 0 with no check behind it."
+      },
+      "error": null
+    },
+    {
+      "fix": 2289,
+      "culprit": 2150,
+      "share": 0.51,
+      "lines": 442,
+      "addsTest": true,
+      "title": "fix(opt): keep a field read through a reference sound across calls that may write it",
+      "verdict": {
+        "is_defect_fix": true,
+        "introduced_by_culprit": true,
+        "visible_in_diff": true,
+        "defect": "A field read through a reference, or a bind depending on a reference local, was treated as still valid across a call that may write the pointee through a global or argument. This happened because call invalidation only covered `mut_escaped` locals, not reference-shaped storage.",
+        "reason": "The culprit added `write_hits` with `Write::Call => mut_escaped.contains(root)`, while its own `reachable_elsewhere` admits that references reach storage the frame does not own. A reviewer could spot that the call case ignores reference locals; the much larger value-graph builder portion of the fix may also cover forwarding behaviour that predates the culprit."
       },
       "error": null
     },

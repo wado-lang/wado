@@ -39,6 +39,10 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   most "fix" pull requests do correct a defect, but about half blame a pull
   request that only moved or reformatted the lines, such as a refactor that
   relocated a function.
+- `git blame -M -C`, which follows moved and copied lines, does not take the
+  movers out. It changes the top culprit of 26 fix pull requests but only 3 of
+  the 54 pairs the judge found moved rather than introduced, and it shrinks the
+  pairs above a 50% share from 97 to 84. The census blames with `-w` alone.
 - The usable yield is about the same at a 50% share as at 80%, so the share
   threshold does little; the model check is what filters.
 - The judge is not deterministic. Two runs over the 43 pairs above an 80% share
