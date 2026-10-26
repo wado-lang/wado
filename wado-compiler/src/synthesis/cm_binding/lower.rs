@@ -18,8 +18,8 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, cast, deref_expr,
     expr_stmt, generic_method_call, generic_method_call_monomorphized, handle_to_f64, i32_const,
-    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, ref_expr,
-    split_packed_ptr_len, synth_span,
+    i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt, linear_alloc, local_ref, loop_stmt,
+    ref_expr, split_packed_ptr_len, synth_span,
 };
 
 use super::types::{
@@ -757,15 +757,9 @@ pub(super) fn synthesize_lower_list_to_buffer(
         "$list_base",
         base_local,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(elem_align),
-                buffer_bytes(local_ref(len_local, "$list_len", TypeTable::I32), elem_size),
-            ],
-            TypeTable::I32,
+        linear_alloc(
+            i32_const(elem_align),
+            buffer_bytes(local_ref(len_local, "$list_len", TypeTable::I32), elem_size),
         ),
     ));
 
@@ -989,15 +983,9 @@ pub(super) fn synthesize_lower_map_to_buffer(
         "$base",
         base_local,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(pair_align),
-                buffer_bytes(local_ref(len_local, "$len", TypeTable::I32), pair_size),
-            ],
-            TypeTable::I32,
+        linear_alloc(
+            i32_const(pair_align),
+            buffer_bytes(local_ref(len_local, "$len", TypeTable::I32), pair_size),
         ),
     ));
 

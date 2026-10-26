@@ -26,8 +26,9 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
     cm_canonical_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const, if_stmt,
-    internal_call, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some,
-    param_local, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
+    internal_call, let_mut_stmt, let_stmt, linear_alloc, linear_free, local_ref, loop_stmt,
+    option_none, option_some, param_local, return_stmt, split_packed_ptr_len, struct_literal,
+    synth_param, synth_span,
 };
 
 use super::cm_free::{
@@ -225,15 +226,9 @@ fn lower_to_flat_inner(
                 "$arr_ptr",
                 ptr_local,
                 TypeTable::I32,
-                builtin_call(
-                    "realloc",
-                    vec![
-                        i32_const(0),
-                        i32_const(0),
-                        i32_const(elem_align as i32),
-                        local_ref(bytes_local, "$arr_bytes", TypeTable::I32),
-                    ],
-                    TypeTable::I32,
+                linear_alloc(
+                    i32_const(elem_align as i32),
+                    local_ref(bytes_local, "$arr_bytes", TypeTable::I32),
                 ),
             ));
 
@@ -1112,11 +1107,7 @@ fn spill_ptr_len_to_temp(
         "$lift_tmp",
         tmp,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![i32_const(0), i32_const(0), i32_const(4), i32_const(8)],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(4), i32_const(8)),
     ));
     stmts.push(expr_stmt(builtin_call(
         "i32_store",
@@ -1136,16 +1127,11 @@ fn spill_ptr_len_to_temp(
 
 /// Release the block [`spill_ptr_len_to_temp`] allocated.
 fn free_ptr_len_temp(tmp: u32, stmts: &mut Vec<TirStmt>) {
-    stmts.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            local_ref(tmp, "$lift_tmp", TypeTable::I32),
-            i32_const(8),
-            i32_const(4),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
+    stmts.push(linear_free(
+        local_ref(tmp, "$lift_tmp", TypeTable::I32),
+        i32_const(8),
+        i32_const(4),
+    ));
 }
 
 /// Lift a record from the flat CM ABI, the concatenation of its fields'
@@ -1316,14 +1302,7 @@ fn build_spilled_export_params(
     body_stmts: &mut Vec<TirStmt>,
     locals: &mut Vec<TirLocal>,
 ) -> (Vec<TirParam>, Vec<TirExpr>, u32) {
-    let params = vec![TirParam {
-        name: "$params".to_string(),
-        type_id: TypeTable::I32,
-        local_index: 0,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }];
+    let params = vec![synth_param("$params", 0, TypeTable::I32)];
     locals.push(param_local("$params", TypeTable::I32, false));
     let mut next_local = 1;
     let base = || local_ref(0, "$params", TypeTable::I32);
@@ -1357,16 +1336,11 @@ fn build_spilled_export_params(
             locals,
         ));
     }
-    body_stmts.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            base(),
-            i32_const(layout.size as i32),
-            i32_const(layout.align as i32),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
+    body_stmts.push(linear_free(
+        base(),
+        i32_const(layout.size as i32),
+        i32_const(layout.align as i32),
+    ));
     (params, args, next_local)
 }
 
@@ -1405,14 +1379,7 @@ fn build_export_adapter_params(
         let flat_params: Vec<TirParam> = flat_param_types
             .iter()
             .enumerate()
-            .map(|(i, &vt)| TirParam {
-                name: format!("$p{i}"),
-                type_id: cm_val_type_to_type_id(vt),
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
+            .map(|(i, &vt)| synth_param(&format!("$p{i}"), i as u32, cm_val_type_to_type_id(vt)))
             .collect();
 
         let flat_count = flat_params.len() as u32;
@@ -1452,14 +1419,7 @@ fn build_export_adapter_params(
             .params
             .iter()
             .enumerate()
-            .map(|(i, p)| TirParam {
-                name: p.name.clone(),
-                type_id: p.type_id,
-                local_index: i as u32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            })
+            .map(|(i, p)| synth_param(&p.name, i as u32, p.type_id))
             .collect();
 
         let count = params.len() as u32;
@@ -1723,16 +1683,7 @@ fn push_sync_return_epilogue(
             "$ret_ptr",
             ptr_local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(align as i32),
-                    i32_const(size as i32),
-                ],
-                TypeTable::I32,
-            ),
+            linear_alloc(i32_const(align as i32), i32_const(size as i32)),
         ));
 
         body_stmts.extend(synthesize_lower_wasi_type_to_memory(
@@ -1804,27 +1755,15 @@ pub(super) fn synthesize_post_return(
 
     let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
     let (size, align) = cm_layout_with_registry(ty, env.cm_interface_registry);
-    body.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            addr,
-            i32_const(size as i32),
-            i32_const(align as i32),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
+    body.push(linear_free(
+        addr,
+        i32_const(size as i32),
+        i32_const(align as i32),
+    ));
 
     Some(finalize_export_binding(
         cm_post_return_func_name(export_name),
-        vec![TirParam {
-            name: "$ret_ptr".to_string(),
-            type_id: TypeTable::I32,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }],
+        vec![synth_param("$ret_ptr", 0, TypeTable::I32)],
         TypeTable::UNIT,
         body,
         locals,

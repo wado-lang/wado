@@ -29,10 +29,10 @@ use crate::type_table::TypeTable;
 
 use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, return_stmt,
-    struct_literal, synth_span,
+    alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call, entry_call,
+    expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    linear_alloc, linear_free, local_ref, loop_stmt, option_none, option_some, return_stmt,
+    struct_literal, synth_param, synth_span,
 };
 
 use super::synthesize_lift;
@@ -610,34 +610,11 @@ fn settled(copy: TirExpr, handle_idx: u32) -> TirExpr {
     )
 }
 
-fn free_cm_buffer(
-    ptr_idx: u32,
-    size: i32,
-    align: i32,
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-) -> TirStmt {
-    let freed_idx = alloc_named_local(
-        next_local,
-        locals,
-        Some("$freed".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let_stmt(
-        "$freed",
-        freed_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                local_ref(ptr_idx, "ptr", TypeTable::I32),
-                i32_const(size),
-                i32_const(align),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ),
+fn free_cm_buffer(ptr_idx: u32, size: i32, align: i32) -> TirStmt {
+    linear_free(
+        local_ref(ptr_idx, "ptr", TypeTable::I32),
+        i32_const(size),
+        i32_const(align),
     )
 }
 
@@ -686,7 +663,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -698,16 +674,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(align), i32_const(size)),
     ));
 
     // Lower `value` into the buffer using the shared registry-backed lowerer.
@@ -760,13 +727,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         TypeTable::UNIT,
     ));
     if awaits_reader {
-        stmts.push(free_cm_buffer(
-            ptr_idx,
-            size,
-            align,
-            &mut next_local,
-            &mut locals,
-        ));
+        stmts.push(free_cm_buffer(ptr_idx, size, align));
         stmts.push(drop_end);
     } else {
         // An end whose copy is pending cannot be dropped, and waiting for the
@@ -774,7 +735,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         // host, which delivers the value from the buffer and reports the write
         // `Pending` (WEP: Affine Types, known gaps). A write that finished
         // frees the buffer.
-        let free = free_cm_buffer(ptr_idx, size, align, &mut next_local, &mut locals);
+        let free = free_cm_buffer(ptr_idx, size, align);
         stmts.push(if_stmt(
             is_blocked(written()),
             block(vec![]),
@@ -850,22 +811,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         monomorph_info: None,
         method_info: None,
         params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "value".to_string(),
-                local_index: value_idx,
-                type_id: payload_type_id,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
+            synth_param("handle", handle_idx, TypeTable::I32),
+            synth_param("value", value_idx, payload_type_id),
         ],
         return_type: write_type_id,
         task_return_type: None,
@@ -964,7 +911,6 @@ fn synthesize_future_read_func(
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -976,16 +922,7 @@ fn synthesize_future_read_func(
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(align), i32_const(size)),
     ));
 
     let status_idx = alloc_named_local(
@@ -1060,13 +997,7 @@ fn synthesize_future_read_func(
     ));
 
     // Free the CM buffer (after the lift has read from it).
-    stmts.push(free_cm_buffer(
-        ptr_idx,
-        size,
-        align,
-        &mut next_local,
-        &mut locals,
-    ));
+    stmts.push(free_cm_buffer(ptr_idx, size, align));
 
     // The read consumes the end (WEP: Affine Types); it is done, so it drops.
     stmts.push(expr_stmt(cm_canonical_call(
@@ -1093,14 +1024,7 @@ fn synthesize_future_read_func(
         impl_origin: None,
         monomorph_info: None,
         method_info: None,
-        params: vec![TirParam {
-            name: "handle".to_string(),
-            local_index: handle_idx,
-            type_id: TypeTable::I32,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }],
+        params: vec![synth_param("handle", handle_idx, TypeTable::I32)],
         return_type: option_type_id,
         task_return_type: None,
         effects: vec![],
@@ -1247,16 +1171,7 @@ fn synthesize_stream_read_funcs(
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(elem_align),
-                byte_count(),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(elem_align), byte_count()),
     ));
     let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
     let handle = || local_ref(handle_idx, "handle", TypeTable::I32);

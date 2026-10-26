@@ -17,8 +17,8 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
     generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, struct_literal,
-    synth_span,
+    let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt, option_none, option_some,
+    struct_literal, synth_span,
 };
 
 use super::types::{
@@ -127,11 +127,7 @@ pub(super) fn lift_string_and_free(
     // The lowering side allocates nothing for an empty string.
     stmts.push(if_stmt(
         binary(TirBinaryOp::Gt, len.clone(), i32_const(0), TypeTable::BOOL),
-        block(vec![expr_stmt(builtin_call(
-            "realloc",
-            vec![ptr, len, i32_const(1), i32_const(0)],
-            TypeTable::I32,
-        ))]),
+        block(vec![linear_free(ptr, len, i32_const(1))]),
         None,
     ));
     local_ref(string_local, "$lifted_string", string_type_id)
@@ -752,21 +748,16 @@ impl CmBuffer {
                 i32_const(0),
                 TypeTable::BOOL,
             ),
-            block(vec![expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(self.base, "$base", TypeTable::I32),
-                    binary(
-                        TirBinaryOp::Mul,
-                        self.count_ref(),
-                        i32_const(self.elem_size as i32),
-                        TypeTable::I32,
-                    ),
-                    i32_const(self.elem_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            ))]),
+            block(vec![linear_free(
+                local_ref(self.base, "$base", TypeTable::I32),
+                binary(
+                    TirBinaryOp::Mul,
+                    self.count_ref(),
+                    i32_const(self.elem_size as i32),
+                    TypeTable::I32,
+                ),
+                i32_const(self.elem_align as i32),
+            )]),
             None,
         ));
     }

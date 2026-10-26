@@ -14,7 +14,7 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, expr_stmt, i32_const, if_stmt,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt,
 };
 
 use super::export_adapter::FlatLocal;
@@ -407,11 +407,11 @@ fn free_buffer(
     // for an empty payload, and keeps `debug`'s poison length exact.
     stmts.push(if_stmt(
         binary(TirBinaryOp::Gt, len_ref(), i32_const(0), TypeTable::BOOL),
-        block(vec![expr_stmt(builtin_call(
-            "realloc",
-            vec![ptr_ref(), size, i32_const(elem.align as i32), i32_const(0)],
-            TypeTable::I32,
-        ))]),
+        block(vec![linear_free(
+            ptr_ref(),
+            size,
+            i32_const(elem.align as i32),
+        )]),
         None,
     ));
     stmts

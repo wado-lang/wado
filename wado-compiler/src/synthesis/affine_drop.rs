@@ -32,8 +32,8 @@ use crate::synthesis::common::{
 use crate::tir;
 use crate::tir::{
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
-    TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId,
+    TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
+    TirTemplatePart, TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
@@ -638,14 +638,7 @@ fn build_drop_glue(
     glue: &mut DropGlue,
 ) -> TirFunction {
     let entry = glue.entry.clone();
-    let params = vec![TirParam {
-        name: "value".to_string(),
-        type_id,
-        local_index: 0,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }];
+    let params = vec![common::synth_param("value", 0, type_id)];
     let mut locals = common::locals_from_params(&params);
     let mut local_count = locals.len() as u32;
     let mut cx = Cx {

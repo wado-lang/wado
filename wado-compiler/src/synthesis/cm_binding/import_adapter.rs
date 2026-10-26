@@ -18,9 +18,9 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
     cm_raw_call, deref_expr, expr_stmt, field_access, handle_from_f64, handle_to_f64, i32_const,
-    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
-    option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
-    unreachable_call,
+    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, linear_alloc, linear_free,
+    local_ref, loop_stmt, option_none, option_some, return_stmt, split_packed_ptr_len,
+    struct_literal, synth_param, synth_span, unreachable_call,
 };
 
 use super::cm_free::{
@@ -192,14 +192,7 @@ fn synthesize_async_lift_function(
     let outptr_local = next_local;
     locals.push(TirLocal::synth(outptr_local, TypeTable::I32, false));
     next_local += 1;
-    let params = vec![TirParam {
-        name: "$outptr".to_string(),
-        type_id: TypeTable::I32,
-        local_index: outptr_local,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }];
+    let params = vec![synth_param("$outptr", outptr_local, TypeTable::I32)];
 
     let lifted = if let Some(return_type) = &func_info.return_type {
         let resolved = cm_interface_registry.value_type(return_type);
@@ -356,7 +349,6 @@ fn synthesize_async_wrap_function(
     lift_fn_ref: TirExpr,
     ctx: &LowerContext<'_>,
 ) -> Rc<RefCell<TirFunction>> {
-    let span = synth_span();
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut body_stmts: Vec<TirStmt> = Vec::new();
@@ -368,14 +360,7 @@ fn synthesize_async_wrap_function(
         let vl = next_local;
         locals.push(TirLocal::synth(vl, inner_type_id, false));
         next_local += 1;
-        params.push(TirParam {
-            name: "$value".to_string(),
-            type_id: inner_type_id,
-            local_index: vl,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        });
+        params.push(synth_param("$value", vl, inner_type_id));
         Some(vl)
     };
 
@@ -389,15 +374,9 @@ fn synthesize_async_wrap_function(
             "$outptr",
             outptr_local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(outptr_align as i32),
-                    i32_const(outptr_size as i32),
-                ],
-                TypeTable::I32,
+            linear_alloc(
+                i32_const(outptr_align as i32),
+                i32_const(outptr_size as i32),
             ),
         ));
         let return_type = func_info
@@ -464,16 +443,7 @@ fn lift_flat_struct_return(
         "$flat_buf",
         buf_local,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(byte_width),
-                i32_const(byte_width),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(byte_width), i32_const(byte_width)),
     ));
     body_stmts.push(expr_stmt(builtin_call(
         store_op,
@@ -494,16 +464,11 @@ fn lift_flat_struct_return(
     );
     let lifted = materialize_if_needed(lifted, next_local, body_stmts, locals);
 
-    body_stmts.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            local_ref(buf_local, "$flat_buf", TypeTable::I32),
-            i32_const(byte_width),
-            i32_const(byte_width),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
+    body_stmts.push(linear_free(
+        local_ref(buf_local, "$flat_buf", TypeTable::I32),
+        i32_const(byte_width),
+        i32_const(byte_width),
+    ));
 
     lifted
 }
@@ -775,16 +740,11 @@ fn buffered_arg_frees(
             locals,
         ));
     }
-    frees.push(expr_stmt(builtin_call(
-        "realloc",
-        vec![
-            base.clone(),
-            i32_const(buf.size as i32),
-            i32_const(buf.align as i32),
-            i32_const(0),
-        ],
-        TypeTable::I32,
-    )));
+    frees.push(linear_free(
+        base.clone(),
+        i32_const(buf.size as i32),
+        i32_const(buf.align as i32),
+    ));
     frees
 }
 
@@ -854,14 +814,8 @@ impl<'a> AdapterBuilder<'a> {
     }
 
     fn push_param(&mut self, name: String, type_id: TypeId) {
-        self.params.push(TirParam {
-            name,
-            type_id,
-            local_index: self.next_local,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        });
+        self.params
+            .push(synth_param(&name, self.next_local, type_id));
         self.locals
             .push(TirLocal::synth(self.next_local, type_id, false));
         self.next_local += 1;
@@ -1059,15 +1013,9 @@ impl<'a> AdapterBuilder<'a> {
             "$args",
             record,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(FLAT_RECORD_STRIDE as i32),
-                    i32_const(flat_record_bytes(slot_count)),
-                ],
-                TypeTable::I32,
+            linear_alloc(
+                i32_const(FLAT_RECORD_STRIDE as i32),
+                i32_const(flat_record_bytes(slot_count)),
             ),
         ));
         for (index, slot) in owning.iter().flat_map(|(_, slots)| slots).enumerate() {
@@ -1105,23 +1053,14 @@ impl<'a> AdapterBuilder<'a> {
                     index += 1;
                 }
                 frees.extend(synthesize_free_cm_flat(
-                    ty,
-                    &loaded,
-                    ctx,
-                    next_local,
-                    locals,
+                    ty, &loaded, ctx, next_local, locals,
                 ));
             }
-            frees.push(expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    record,
-                    i32_const(flat_record_bytes(slot_count)),
-                    i32_const(FLAT_RECORD_STRIDE as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            )));
+            frees.push(linear_free(
+                record,
+                i32_const(flat_record_bytes(slot_count)),
+                i32_const(FLAT_RECORD_STRIDE as i32),
+            ));
             frees
         });
         arg_buffer(self.lower_ctx.type_table, Some((record_ref(), release)))
@@ -1148,14 +1087,7 @@ impl<'a> AdapterBuilder<'a> {
         let mut next_local = 0;
         let mut locals = Vec::new();
         let record = alloc_local(&mut next_local, &mut locals, TypeTable::I32);
-        let params = vec![TirParam {
-            name: "$args".to_string(),
-            type_id: TypeTable::I32,
-            local_index: record,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }];
+        let params = vec![synth_param("$args", record, TypeTable::I32)];
         let body = frees(
             local_ref(record, "$args", TypeTable::I32),
             &shape_ctx(&self.lower_ctx),
@@ -1281,18 +1213,12 @@ impl<'a> AdapterBuilder<'a> {
             &format!("${param_name}_base"),
             base_local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(elem_align),
-                    buffer_bytes(
-                        local_ref(len_local, &format!("${param_name}_len"), TypeTable::I32),
-                        elem_size,
-                    ),
-                ],
-                TypeTable::I32,
+            linear_alloc(
+                i32_const(elem_align),
+                buffer_bytes(
+                    local_ref(len_local, &format!("${param_name}_len"), TypeTable::I32),
+                    elem_size,
+                ),
             ),
         ));
 
@@ -1419,16 +1345,7 @@ impl<'a> AdapterBuilder<'a> {
             "$async_outptr",
             local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(align as i32),
-                    i32_const(size as i32),
-                ],
-                TypeTable::I32,
-            ),
+            linear_alloc(i32_const(align as i32), i32_const(size as i32)),
         ));
         Some(OutptrBuffer { local, size, align })
     }
@@ -1459,15 +1376,9 @@ impl<'a> AdapterBuilder<'a> {
             "$params_buf",
             params_buf_local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(buf_max_align as i32),
-                    i32_const(buf_total_size as i32),
-                ],
-                TypeTable::I32,
+            linear_alloc(
+                i32_const(buf_max_align as i32),
+                i32_const(buf_total_size as i32),
             ),
         ));
 
@@ -1553,16 +1464,7 @@ impl<'a> AdapterBuilder<'a> {
             "$outptr",
             local,
             TypeTable::I32,
-            builtin_call(
-                "realloc",
-                vec![
-                    i32_const(0),
-                    i32_const(0),
-                    i32_const(align as i32),
-                    i32_const(size as i32),
-                ],
-                TypeTable::I32,
-            ),
+            linear_alloc(i32_const(align as i32), i32_const(size as i32)),
         ));
         self.flat_args
             .push(local_ref(local, "$outptr", TypeTable::I32));
@@ -1695,16 +1597,11 @@ impl<'a> AdapterBuilder<'a> {
             &mut self.locals,
         );
 
-        self.body_stmts.push(expr_stmt(builtin_call(
-            "realloc",
-            vec![
-                local_ref(outptr.local, "$outptr", TypeTable::I32),
-                i32_const(outptr.size as i32),
-                i32_const(outptr.align as i32),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        )));
+        self.body_stmts.push(linear_free(
+            local_ref(outptr.local, "$outptr", TypeTable::I32),
+            i32_const(outptr.size as i32),
+            i32_const(outptr.align as i32),
+        ));
 
         let lifted_type_id = lifted.type_id;
         self.body_stmts.push(return_stmt(Some(lifted)));
