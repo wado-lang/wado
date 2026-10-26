@@ -265,8 +265,7 @@ release.
 
 `R::from` with a constant argument that fails a clause, such as
 `UserName::from("")`, is a warning where the compiler evaluates the clause on
-it, and the call still traps at run time. It is not yet an error, because niri
-does not evaluate every clause.
+it, and the call still traps at run time.
 
 ### Two refined types of one shape are one type
 
@@ -352,6 +351,14 @@ xs.clear();                                      // and now it does not
 A function value may read state it captured, so a clause calling one has the
 same problem. A resource does too, since its state lives in the host, and so a
 resource is never refined (see [What can be refined](#what-can-be-refined)).
+
+### Whether a refuted `R::from` becomes an error
+
+A refuted `R::from` is a warning today, because niri does not evaluate every
+clause. The call traps whenever it runs, so an error would reject little that
+works. It would still reject a call on a path that never runs, and which calls
+it rejects would grow with what the compiler evaluates, the dependence the rule
+against implicit narrowing avoids.
 
 ### A default for an inline refined field
 
