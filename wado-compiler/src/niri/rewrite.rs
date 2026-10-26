@@ -651,7 +651,10 @@ impl Interpreter<'_> {
     /// The arm is left unreduced for the frame to run: it may read a local it
     /// writes first, and reducing it ahead of the write reads the stale value.
     pub fn select_match_arm_in_place(&mut self, body: &mut Body, e: ExprId) {
-        let ExprKind::Match { expr: scrutinee, .. } = &body.exprs[e].kind else {
+        let ExprKind::Match {
+            expr: scrutinee, ..
+        } = &body.exprs[e].kind
+        else {
             return;
         };
         let scrutinee = *scrutinee;
