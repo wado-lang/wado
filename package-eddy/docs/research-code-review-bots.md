@@ -117,6 +117,44 @@ labelled evaluation of it as a review dispatcher.
   output from its own vendor's agent, though the effect size was small
   ([2608.21311]).
 
+### Model Diversity
+
+Two questions: whether a second model helps at all, and whether one from
+another vendor helps more than another model from the same vendor.
+
+| Source       | Measure                                                 | Result            |
+| ------------ | ------------------------------------------------------- | ----------------- |
+| [2609.22512] | Effective independent judges among ten                  | about 3.5         |
+| [2609.22512] | Comparisons that are significant only if errors ignored | up to 28%         |
+| [2605.29800] | Error correlation φ, same family vs across families     | 0.437 vs 0.389    |
+| [2609.17857] | A judge's advantage for its own family                  | 3.4 to 8.4 points |
+| [2607.21656] | Pass rate, Codex alone vs reviewed by Claude            | 71.6% vs 89.7%    |
+| [2607.21656] | Pass rate, Codex reviewing itself                       | 84.5%             |
+| [2607.21656] | Pass rate, Claude alone vs reviewed by Codex            | 91.4% vs 82.8%    |
+
+- Errors correlate across vendors too. The dependence is strongest among the
+  most accurate judges, including pairs from different providers. Which
+  aggregation works depends on how the errors are shared, so the authors pick
+  it on a small trusted set first ([2609.22512]).
+- A different family decorrelates only a little. Family alone does not restore
+  independence ([2605.29800], before the window), and a vision-language study
+  found 2 to 4 effective voters among 17 models of 8 families ([2603.17111],
+  before the window). Diversity measures mostly track capability; once that is
+  controlled, the rate at which two models fail together still predicts a
+  smaller gain from voting ([2607.20768], before the window).
+- A judge favors its own family, measured on older open-weight families
+  ([2609.17857]). Self-preference disappears when the judge cannot see who
+  wrote what; a label saying "yours" or "another model's" moves the score
+  either way ([2608.18091], submitted before the window, revised in it).
+- In code review the pairing is asymmetric. A reviewer that cannot run tests
+  helped a weaker writer and hurt a stronger one, whichever vendor it came
+  from ([2607.21656], just before the window).
+
+What carries over: another vendor is a modest gain, not independence. What
+pays is measured: the reviewer and verifier whose misses overlap least on the
+project's own evaluation set, no weaker than the code they judge, and blind to
+who wrote it.
+
 ### Context
 
 - Diff-only review misses what lies outside the touched files. On security
@@ -330,10 +368,12 @@ These are directions the findings point to, not decisions.
 - Give `AGENTS.md` only where it is used as written: to the agent that builds
   and runs the project, or as the rules that govern the touched files, naming
   which were applied.
-- Learn into what can be reviewed: an evaluation set grown from missed defects
-  and from comments people rejected, and rules a person can read and delete.
+- Learn into what can be reviewed: an evaluation set grown from missed defects,
+  and rules a person can read and delete.
 - Make disagreement explicit and grounded. Choose models for what they find
-  that the others do not, and aggregate by evidence rather than by vote count.
+  that the others do not, measured as how rarely they miss the same defect,
+  and aggregate by evidence rather than by vote count. Hide authorship from
+  every judge.
 - Post less. Every comment should survive a refutation step against the
   repository and carry its evidence.
 - Keep risk estimation and the accept/block policy in separate stages, with the
@@ -366,6 +406,19 @@ These are directions the findings point to, not decisions.
   MCR-Bench (2026-08-27)
 - [2602.11988] Evaluating AGENTS.md: Are Repository-Level Context Files
   Helpful for Coding Agents? (2026-02, revised 2026-09-29)
+- [2603.17111] Hidden Clones: Exposing and Fixing Family Bias in
+  Vision-Language Model Ensembles (2026-03)
+- [2605.29800] Nine Judges, Two Effective Votes (2026-05)
+- [2607.20768] Are Diversity Metrics Measuring Diversity? A
+  Capability-Controlled Audit of Majority-Vote Gain in LLM Ensembles (2026-07)
+- [2607.21656] Cross-Model LLM Code Review: Should you use Claude to review
+  Codex or vice versa? (2026-07-22)
+- [2608.18091] Self- and Other-Labels Induce Bidirectional Bias in LLM Judges
+  (2026-06-06, revised 2026-10-16)
+- [2609.17857] Who Judges Matters: Measuring Family-Conditioned Preference in
+  LLM-as-Judge Panels (2026-09-15)
+- [2609.22512] Agreement Overstates Evidence: Error Dependence in LLM Judge
+  Consensus (2026-09)
 - [2609.09133] ExecCritic: Learn to Test, Test to Improve for Coding Agents
   (2026-09-08)
 - [2609.15877] Using Agentic AI for contextualized and multifaceted code
@@ -432,6 +485,13 @@ These are directions the findings point to, not decisions.
 [claude-code-review]: https://www.orcarouter.ai/blog/how-the-claude-code-team-does-code-review
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
 [2602.11988]: https://arxiv.org/abs/2602.11988
+[2603.17111]: https://arxiv.org/abs/2603.17111
+[2605.29800]: https://arxiv.org/abs/2605.29800
+[2607.20768]: https://arxiv.org/abs/2607.20768
+[2607.21656]: https://arxiv.org/abs/2607.21656
+[2608.18091]: https://arxiv.org/abs/2608.18091
+[2609.17857]: https://arxiv.org/abs/2609.17857
+[2609.22512]: https://arxiv.org/abs/2609.22512
 [2608.03392]: https://arxiv.org/abs/2608.03392
 [2608.07645]: https://arxiv.org/abs/2608.07645
 [2608.08311]: https://arxiv.org/abs/2608.08311
