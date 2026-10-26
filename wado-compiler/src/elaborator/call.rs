@@ -819,13 +819,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether an `arg` argument converts to the parameter `param` through
     /// `ListArg<T>`, `param` being a `&ListView<T>` and `arg` not already one.
+    /// A `T` still being inferred names no trait to ask, and the argument says
+    /// nothing of it: the call names it.
     pub(super) fn converts_to_list_view(&self, param: TypeId, arg: TypeId) -> bool {
         let list_arg = {
             let tt = self.tysys.type_table.borrow();
             let Some(element) = tt.list_view_ref_element(param) else {
                 return false;
             };
-            if tt.is_compiler_item_type(arg, CompilerItem::ListView) {
+            if tt.is_compiler_item_type(arg, CompilerItem::ListView) || tt.contains_infer_var(element)
+            {
                 return false;
             }
             tt.compiler_trait_fq(CompilerItem::ListArg)
