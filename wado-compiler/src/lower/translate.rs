@@ -1962,8 +1962,8 @@ impl FunctionTranslator<'_, '_> {
             captures,
             ..
         } = &expr.kind
-            && let Some(functor) = self.base.closure.functor_infos.get(*closure_id as usize)
         {
+            let functor = &self.base.closure.functor_infos[*closure_id as usize];
             let nir_struct = self.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,

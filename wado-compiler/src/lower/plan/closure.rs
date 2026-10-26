@@ -557,11 +557,10 @@ impl ClosureLowerer {
         // update its type from function type to struct type
         for (local_idx, closure_id) in &self.local_to_closure {
             if self.specializable.contains(closure_id)
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 && let Some(local) = func.locals.get_mut(*local_idx as usize)
             {
                 // Functors are reference types
-                local.type_id = functor.ref_type_id;
+                local.type_id = self.functor_infos[*closure_id as usize].ref_type_id;
             }
         }
     }
@@ -1597,6 +1596,13 @@ struct ClosureCallSiteLowerer<'a> {
 }
 
 impl ClosureCallSiteLowerer<'_> {
+    /// The functor the specialized fn-param `index` holds, where it is one.
+    fn functor_param(&self, index: u32) -> Option<&ClosureFunctor> {
+        self.functor_param_locals
+            .contains(&index)
+            .then(|| &self.functor_infos[self.local_to_closure[&index] as usize])
+    }
+
     /// `arg_offset` is the count of leading `args` that are not value
     /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
     /// `args[0]`, 0 for a free call and for
@@ -1614,13 +1620,10 @@ impl ClosureCallSiteLowerer<'_> {
         // rewrite.
         let mut functor_types = Vec::new();
         let mut raw_indices = Vec::new();
-        let forwarded = |index: u32| {
-            self.functor_param_locals
-                .contains(&index)
-                .then(|| self.functor_infos[self.local_to_closure[&index] as usize].struct_type_id)
-        };
         for (i, arg) in args.iter().enumerate().skip(arg_offset) {
-            if let Some(functor_type) = functor_arg_type(arg, self.functor_infos, forwarded) {
+            if let Some(functor_type) = functor_arg_type(arg, self.functor_infos, |index| {
+                self.functor_param(index).map(|f| f.struct_type_id)
+            }) {
                 functor_types.push(((i - arg_offset) as u32, functor_type));
                 raw_indices.push(i);
             }
@@ -1657,8 +1660,10 @@ impl ClosureCallSiteLowerer<'_> {
                     arg.expr.type_id = functor.ref_type_id;
                 }
                 TirExprKind::Local { index, .. } => {
-                    arg.expr.type_id =
-                        self.functor_infos[self.local_to_closure[index] as usize].ref_type_id;
+                    arg.expr.type_id = self
+                        .functor_param(*index)
+                        .expect("only a functor param is forwarded")
+                        .ref_type_id;
                 }
                 _ => unreachable!("only a closure or a functor param names a functor type"),
             }
@@ -1705,9 +1710,7 @@ impl ClosureCallSiteLowerer<'_> {
         {
             return;
         }
-        let Some(functor) = self.functor_infos.get(closure_id as usize) else {
-            return;
-        };
+        let functor = &self.functor_infos[closure_id as usize];
 
         let local_name = match &receiver.kind {
             TirExprKind::Unary {
@@ -1814,9 +1817,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
             // ClosureToCanonical.
             if let Some(id) = closure_id
                 && self.specializable.contains(&id)
-                && let Some(functor) = self.functor_infos.get(id as usize)
             {
-                *type_id = functor.ref_type_id;
+                *type_id = self.functor_infos[id as usize].ref_type_id;
             }
             return;
         }
@@ -1845,8 +1847,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 if let TirExprKind::Local { index, .. } = &callee.kind
                     && let Some(closure_id) = self.local_to_closure.get(index)
                     && self.specializable.contains(closure_id)
-                    && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 {
+                    let functor = &self.functor_infos[*closure_id as usize];
                     let mut callee_owned = std::mem::replace(
                         callee.as_mut(),
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
@@ -2013,7 +2015,7 @@ fn functor_arg_type(
         TirExprKind::Closure {
             functor_id: Some(id),
             ..
-        } => functor_infos.get(*id as usize).map(|f| f.struct_type_id),
+        } => Some(functor_infos[*id as usize].struct_type_id),
         TirExprKind::Local { index, .. } => forwarded(*index),
         _ => None,
     }
