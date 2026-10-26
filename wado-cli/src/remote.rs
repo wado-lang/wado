@@ -9,14 +9,17 @@
 //! Fetched bytes live at `{root}/remote/sha256/<hex>`, so a pinned read needs
 //! the network only the first time any project reads them.
 
+use std::error::Error;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
+use std::time::Duration;
 
 use reqwest::header::{CONTENT_RANGE, RANGE};
-use reqwest::{Certificate, Client, StatusCode};
+use reqwest::redirect::Policy;
+use reqwest::{Certificate, Client, Response, StatusCode};
 use wado_compiler::hashmap::IndexMap;
-use wado_compiler::remote::{Integrity, PinnedBy, check_digest};
+use wado_compiler::remote::{Integrity, PinnedBy, check_digest, url_fault};
 use wado_compiler::{SourceError, SourceReader};
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::{joined, lock};
@@ -51,21 +54,40 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
         .map_err(|e| e.to_string())?;
     Client::builder()
         .tls_certs_merge(certs)
+        .redirect(Policy::custom(|attempt| {
+            if let Some(fault) = url_fault(attempt.url().as_str()) {
+                let target = attempt.url().to_string();
+                attempt.error(format!("a redirect to '{target}': {fault}"))
+            } else if attempt.previous().len() >= MAX_REDIRECTS {
+                attempt.error("too many redirects")
+            } else {
+                attempt.follow()
+            }
+        }))
+        .connect_timeout(CONNECT_TIMEOUT)
+        .read_timeout(READ_TIMEOUT)
         .build()
         .map_err(|e| e.to_string())
 });
+
+const MAX_REDIRECTS: usize = 10;
+/// A host that stops answering fails the build rather than hanging it.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Serializes each read-modify-write of a `wado.lock`, as the hosts of one run
 /// record pins at once.
 static LOCK_WRITE: Mutex<()> = Mutex::new(());
 
-/// What one GET answered: the bytes, and the file's whole length where the
-/// server said. `whole` where the bytes are the whole file, as a server that
-/// ignores `Range` sends it, so a caller keeps them rather than asking again.
+/// What one GET answered: the bytes read of it, and the file's whole length
+/// where the server said. `whole` where the server ignored `Range` and sent the
+/// file from its start, read only as far as the range: `rest` then holds the
+/// body past `bytes`, so a caller reads on rather than asking again.
 struct Fetched {
     bytes: Vec<u8>,
     total: Option<u64>,
     whole: bool,
+    rest: Option<Response>,
 }
 
 impl Fetched {
@@ -92,41 +114,58 @@ async fn get(url: String, range: Option<Range<u64>>) -> Result<Fetched, SourceEr
         let range = range.clone();
         RUNTIME.spawn(async move { fetch(&url, range).await })
     };
-    let range = range.as_ref();
-    let (status, bytes, total) = joined(task.await).map_err(network)?;
+    let has_range = range.is_some();
+    let Answer {
+        status,
+        bytes,
+        total,
+        rest,
+    } = joined(task.await).map_err(network)?;
     match status {
         StatusCode::NOT_FOUND | StatusCode::GONE => Err(SourceError::NotFound { path: url }),
-        // A server that ignores `Range` sends the whole file.
+        // A server that ignores `Range` sends the whole file. One that does
+        // not say how long it is was read to its end.
         StatusCode::OK => Ok(Fetched {
-            total: Some(bytes.len() as u64),
+            total: total.or(Some(bytes.len() as u64)),
             bytes,
             whole: true,
+            rest,
         }),
         StatusCode::PARTIAL_CONTENT => Ok(Fetched {
             bytes,
             total,
             whole: false,
+            rest: None,
         }),
         // Past the end: a range the file does not reach holds nothing.
-        StatusCode::RANGE_NOT_SATISFIABLE if range.is_some() => Ok(Fetched {
+        StatusCode::RANGE_NOT_SATISFIABLE if has_range => Ok(Fetched {
             bytes: Vec::new(),
             total,
             whole: false,
+            rest: None,
         }),
         status => Err(network(format!("the server answered {status}"))),
     }
 }
 
-async fn fetch(
-    url: &str,
-    range: Option<Range<u64>>,
-) -> Result<(StatusCode, Vec<u8>, Option<u64>), String> {
+/// A response as [`fetch`] read it.
+struct Answer {
+    status: StatusCode,
+    bytes: Vec<u8>,
+    total: Option<u64>,
+    rest: Option<Response>,
+}
+
+async fn fetch(url: &str, range: Option<Range<u64>>) -> Result<Answer, String> {
+    if let Some(fault) = url_fault(url) {
+        return Err(fault.to_string());
+    }
     let client = CLIENT.as_ref().map_err(Clone::clone)?;
     let mut request = client.get(url);
     if let Some(range) = &range {
         request = request.header(RANGE, format!("bytes={}-{}", range.start, range.end - 1));
     }
-    let response = request.send().await.map_err(|e| e.to_string())?;
+    let response = request.send().await.map_err(|e| reason(&e))?;
     let status = response.status();
     let total = match status {
         StatusCode::PARTIAL_CONTENT | StatusCode::RANGE_NOT_SATISFIABLE => response
@@ -137,8 +176,43 @@ async fn fetch(
             .and_then(|(_, total)| total.parse().ok()),
         _ => response.content_length(),
     };
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    Ok((status, bytes.to_vec(), total))
+    // The whole file sent for a range is read only as far as the range.
+    let upto = match (&range, total) {
+        (Some(range), Some(_)) => range.end,
+        _ => u64::MAX,
+    };
+    let mut bytes = Vec::new();
+    let rest = read_body(response, &mut bytes, upto).await?;
+    Ok(Answer {
+        status,
+        bytes,
+        total,
+        rest,
+    })
+}
+
+/// Read `response`'s body onto `bytes` until they hold `upto` bytes, handing
+/// the response back where its body goes on.
+async fn read_body(
+    mut response: Response,
+    bytes: &mut Vec<u8>,
+    upto: u64,
+) -> Result<Option<Response>, String> {
+    while (bytes.len() as u64) < upto {
+        let Some(chunk) = response.chunk().await.map_err(|e| reason(&e))? else {
+            return Ok(None);
+        };
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(Some(response))
+}
+
+/// `error` with every error under it: reqwest's own message names none.
+fn reason(error: &reqwest::Error) -> String {
+    std::iter::successors(Some(error as &dyn Error), |&e| e.source())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(": ")
 }
 
 /// The first `extent` bytes of `url`, or all of it, held to `use_pin` or to
@@ -352,12 +426,22 @@ fn store(integrity: Integrity, bytes: &[u8]) {
     }
 }
 
-/// A remote file read a range at a time, as a Kiln probe reads one: each
-/// [`BLOCK`] it touches is fetched once.
+/// A remote file read a range at a time, as a Kiln probe reads one.
 pub struct RemoteReader {
     url: String,
     len: u64,
-    blocks: Mutex<IndexMap<u64, Arc<Vec<u8>>>>,
+    blocks: Mutex<Blocks>,
+}
+
+enum Blocks {
+    /// Each [`BLOCK`] a read touches, fetched once.
+    Ranged(IndexMap<u64, Arc<Vec<u8>>>),
+    /// What a server ignoring `Range` sent of the file from its start, its
+    /// body read on only as far as a read reaches.
+    Whole {
+        bytes: Vec<u8>,
+        rest: Option<Response>,
+    },
 }
 
 impl RemoteReader {
@@ -372,39 +456,54 @@ impl RemoteReader {
             url: url.to_string(),
             message: "the server does not say how long the file is".to_string(),
         })?;
-        let reader = Self {
+        let blocks = if first.whole {
+            Blocks::Whole {
+                bytes: first.bytes,
+                rest: first.rest,
+            }
+        } else {
+            Blocks::Ranged(IndexMap::from_iter([(0, Arc::new(first.bytes))]))
+        };
+        Ok(Self {
             url: url.to_string(),
             len,
-            blocks: Mutex::default(),
-        };
-        reader.keep(0, first);
-        Ok(reader)
+            blocks: Mutex::new(blocks),
+        })
     }
 
     fn block(&self, index: u64) -> Result<Arc<Vec<u8>>, SourceError> {
-        if let Some(block) = lock(&self.blocks).get(&index) {
+        if let Blocks::Ranged(blocks) = &*lock(&self.blocks)
+            && let Some(block) = blocks.get(&index)
+        {
             return Ok(Arc::clone(block));
         }
-        let start = index * BLOCK;
-        let fetched =
-            futures::executor::block_on(get(self.url.clone(), Some(start..start + BLOCK)))?;
-        self.keep(index, fetched);
-        Ok(Arc::clone(&lock(&self.blocks)[&index]))
+        let range = index * BLOCK..(index + 1) * BLOCK;
+        let fetched = futures::executor::block_on(get(self.url.clone(), Some(range.clone())))?;
+        let block = Arc::new(fetched.into_range(range));
+        if let Blocks::Ranged(blocks) = &mut *lock(&self.blocks) {
+            blocks.insert(index, Arc::clone(&block));
+        }
+        Ok(block)
     }
 
-    /// Keep what a GET of block `index` answered: every block of the file
-    /// where the server sent all of it.
-    fn keep(&self, index: u64, fetched: Fetched) {
-        let mut blocks = lock(&self.blocks);
-        if !fetched.whole {
-            blocks.insert(index, Arc::new(fetched.bytes));
-            return;
-        }
-        let chunks = fetched.bytes.chunks(BLOCK as usize);
-        for (at, chunk) in (0..).zip(chunks) {
-            blocks.insert(at, Arc::new(chunk.to_vec()));
-        }
-        blocks.entry(index).or_default();
+    /// Read `rest` on until `bytes` hold `upto` bytes or the body ends.
+    fn read_on(
+        &self,
+        rest: Response,
+        bytes: &mut Vec<u8>,
+        upto: u64,
+    ) -> Result<Option<Response>, SourceError> {
+        let mut held = std::mem::take(bytes);
+        let task = RUNTIME.spawn(async move {
+            let rest = read_body(rest, &mut held, upto).await;
+            (held, rest)
+        });
+        let (held, rest) = joined(futures::executor::block_on(task));
+        *bytes = held;
+        rest.map_err(|message| SourceError::NetworkError {
+            url: self.url.clone(),
+            message,
+        })
     }
 }
 
@@ -414,6 +513,18 @@ impl SourceReader for RemoteReader {
     }
 
     fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
+        if let Blocks::Whole { bytes, rest } = &mut *lock(&self.blocks) {
+            let end = start + buf.len() as u64;
+            if (bytes.len() as u64) < end
+                && let Some(response) = rest.take()
+            {
+                *rest = self.read_on(response, bytes, end)?;
+            }
+            let clamp = |at: u64| usize::try_from(at).map_or(bytes.len(), |at| at.min(bytes.len()));
+            let part = &bytes[clamp(start)..clamp(end)];
+            buf[..part.len()].copy_from_slice(part);
+            return Ok(part.len());
+        }
         let mut read = 0;
         while read < buf.len() {
             let at = start + read as u64;

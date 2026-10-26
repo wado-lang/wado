@@ -49,6 +49,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
+use wado_compiler::remote::Integrity;
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
@@ -684,6 +685,15 @@ impl CompilerHost for SilentHost {
 
     fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
         self.inner.package_index(root)
+    }
+
+    fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send {
+        self.inner.load_remote(url, extent, integrity)
     }
 
     fn env_var(&self, name: &str) -> Option<String> {

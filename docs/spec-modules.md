@@ -213,7 +213,7 @@ test "a remote module and the one beside it load" {
 
 The URL starts `https://`. A plain `http://` URL is an error unless its host is
 `localhost`, `127.0.0.1` or `[::1]`, since anything between this machine and
-another could change the bytes.
+another could change the bytes. A redirect is held to the same rule.
 
 Every remote file is pinned to the SHA-256 digest of its content. The pin comes
 from one of two places:

@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::remote::is_remote;
+
 /// Schema version of the `<primary>.kiln.json` file. Bump on any
 /// incompatible change; a file at a different version is treated as a
 /// cache miss rather than migrated.
@@ -73,7 +75,12 @@ pub struct OutputEntry {
 /// `<manifest_root>/<output_dir>` to obtain the full path.
 #[must_use]
 pub fn metadata_filename(primary: &str) -> String {
-    let basename = std::path::Path::new(primary)
+    let path = if is_remote(primary) {
+        primary.split(['?', '#']).next().unwrap_or_default()
+    } else {
+        primary
+    };
+    let basename = std::path::Path::new(path)
         .file_name()
         .map_or_else(|| primary.to_string(), |s| s.to_string_lossy().into_owned());
     format!("{basename}{METADATA_SUFFIX}")
@@ -90,6 +97,14 @@ mod tests {
         assert_eq!(
             metadata_filename("tests/grammars/Calc.g4"),
             "Calc.g4.kiln.json"
+        );
+    }
+
+    #[test]
+    fn metadata_filename_of_a_url_drops_its_query_and_fragment() {
+        assert_eq!(
+            metadata_filename("https://example.com/m/model.onnx?download=true#top"),
+            "model.onnx.kiln.json"
         );
     }
 

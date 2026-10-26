@@ -1609,8 +1609,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         self.logger.span_end(&format!("load {entry_name}"));
 
-        // Load all dependencies iteratively
-        while let Some((module_source, site)) = pending.pop_front() {
+        // A remote module no `use` read so far pins waits until nothing else is
+        // pending, as any module may write the pin that holds its read.
+        let mut unpinned = VecDeque::new();
+        loop {
+            let (module_source, site, deferrable) = match pending.pop_front() {
+                Some((module_source, site)) => (module_source, site, true),
+                None => match unpinned.pop_front() {
+                    Some((module_source, site)) => (module_source, site, false),
+                    None => break,
+                },
+            };
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
                 continue;
@@ -1618,6 +1627,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
+                continue;
+            }
+
+            if deferrable
+                && let ModuleSource::Remote { url, .. } = &module_source
+                && !self.remote_pins.contains_key(url.as_str())
+            {
+                unpinned.push_back((module_source, site));
                 continue;
             }
 
