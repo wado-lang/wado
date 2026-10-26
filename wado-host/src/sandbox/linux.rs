@@ -201,9 +201,8 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let refusals = Refusals::default();
     if let Some(listener_rx) = listener_rx {
         let recorded = refusals.clone();
-        // Started first: under `Trace::Files` the child's own `exec` waits on
-        // it. Detached, since it serves the child's descendants, which may
-        // outlive it.
+        // Started first: the child waits on it before its `exec`. Detached,
+        // since it serves the child's descendants, which may outlive it.
         spawn_detached("sandbox-refusals", move || {
             match receive_listener(&listener_rx) {
                 Received::Listener(listener, pid) => {
@@ -214,7 +213,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
                     });
                     answer_refusals(&listener, &recorded, traced.as_ref());
                 }
-                // Out of descriptors, as the child's spawn then fails.
+                // The spawn fails for the reason the host lost it.
                 Received::Lost => reply(&listener_rx, libc::EMFILE),
                 Received::Nothing => {}
             }
