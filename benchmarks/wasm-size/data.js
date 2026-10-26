@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793013452590,
+  "lastUpdate": 1793019009550,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71313,6 +71313,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295362,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "651e704052590b494bf8c4eb05a9f0ec74bc700d",
+          "message": "Merge pull request #2466 from wado-lang/ccr-52b7fd41-lzjtwq\n\nrefactor(optimize): read every cold marker through one basic-block rule",
+          "timestamp": "2026-10-26T21:36:15+09:00",
+          "tree_id": "2db136b25513aad4a44dbc8799e6d18e359d3d7c",
+          "url": "https://github.com/wado-lang/wado/commit/651e704052590b494bf8c4eb05a9f0ec74bc700d"
+        },
+        "date": 1793019008562,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295381,
             "unit": "bytes"
           }
         ]
