@@ -1016,6 +1016,19 @@ impl CompilerItem {
     /// Total number of variants. `ALL.len()` at compile time.
     pub const COUNT: usize = Self::ALL.len();
 
+    /// The reflection traits: the root and one per reflected kind. A blanket
+    /// bounded on one of them derives over reflection rather than covering
+    /// every type (WEP 2026-06-13).
+    pub const REFLECT_KINDS: [Self; 7] = [
+        Self::Reflect,
+        Self::ReflectStruct,
+        Self::ReflectVariant,
+        Self::ReflectEnum,
+        Self::ReflectFlags,
+        Self::ReflectNewtype,
+        Self::ReflectTemplate,
+    ];
+
     /// Snake-case name used as the argument of
     /// `#[compiler_item("...")]`.
     ///

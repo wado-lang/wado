@@ -1026,18 +1026,6 @@ impl SolverBridge {
         CompilerItem::Shr,
     ];
 
-    /// The reflection kinds. The root holds of every kind, ungated by field
-    /// visibility (WEP 2026-06-13).
-    const REFLECT: [OnBoundTrait; 7] = [
-        OnBoundTrait::Reflect,
-        OnBoundTrait::ReflectStruct,
-        OnBoundTrait::ReflectVariant,
-        OnBoundTrait::ReflectEnum,
-        OnBoundTrait::ReflectFlags,
-        OnBoundTrait::ReflectNewtype,
-        OnBoundTrait::ReflectTemplate,
-    ];
-
     pub(crate) fn build(tysys: &TypeSystem, modules: &[ModuleSource]) -> Self {
         let mut lowering = Lowering::over(&tysys.resolutions);
         let mut program = Program::default();
@@ -1207,12 +1195,9 @@ impl SolverBridge {
     /// with the reflection kind it bounds on: each is the derived body's source,
     /// which [`derive`] answers for per declaration.
     fn derivation_sources(tysys: &TypeSystem) -> IndexMap<DefId, CompilerItem> {
-        let reflect: IndexMap<DefId, CompilerItem> = Self::REFLECT
+        let reflect: IndexMap<DefId, CompilerItem> = CompilerItem::REFLECT_KINDS
             .into_iter()
-            .filter_map(|kind| {
-                let item = kind.compiler_item();
-                Some((tysys.compiler_trait_def(item)?, item))
-            })
+            .filter_map(|item| Some((tysys.compiler_trait_def(item)?, item)))
             .collect();
         Self::DERIVED
             .into_iter()
@@ -1683,10 +1668,12 @@ impl SolverBridge {
         lowering: &Lowering,
         program: &mut Program,
     ) {
-        let kinds: Vec<(TraitDeclId, OnBoundTrait)> = Self::REFLECT
+        let kinds: Vec<(TraitDeclId, OnBoundTrait)> = CompilerItem::REFLECT_KINDS
             .into_iter()
-            .filter_map(|kind| {
-                let def = tysys.compiler_trait_def(kind.compiler_item())?;
+            .filter_map(|item| {
+                let def = tysys.compiler_trait_def(item)?;
+                let kind = OnBoundTrait::of_compiler_item(item)
+                    .expect("every reflection kind drives bound-time synthesis");
                 Some((lowering.known_trait(def)?, kind))
             })
             .collect();
