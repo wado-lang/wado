@@ -3,9 +3,9 @@
 //! refused the interpreter the program needs.
 
 use std::ffi::OsString;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::FileExt;
+use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 /// Linux's `BINPRM_BUF_SIZE`: how much of a `#!` line the kernel reads.
@@ -15,25 +15,34 @@ const SCRIPTS_MAX: usize = 5;
 const PT_INTERP: u64 = 3;
 
 /// The files `exec` of `program` opens after it, in order and at their real
-/// paths: each `#!` interpreter, then the ELF loader the last one names. The
-/// list ends where the host cannot read or resolve the next file.
-pub(super) fn interpreters(program: &Path) -> Vec<PathBuf> {
-    let mut chain = Vec::new();
-    let mut current = program.to_owned();
-    while chain.len() < SCRIPTS_MAX {
-        let Ok(file) = File::open(&current) else {
-            break;
-        };
-        let Some(next) = shebang(&file).or_else(|| elf_interpreter(&file)) else {
-            break;
-        };
-        let Ok(next) = std::fs::canonicalize(next) else {
-            break;
-        };
-        chain.push(next.clone());
-        current = next;
+/// paths: each `#!` interpreter, then the ELF loader the last one names. Each
+/// is read only once the one before it is taken. The chain ends where the
+/// host cannot read or resolve the next file, and before anything but a
+/// regular file, which `exec` refuses before Landlock's hook.
+pub(super) fn interpreters(program: &Path) -> impl Iterator<Item = PathBuf> {
+    std::iter::successors(Some(program.to_owned()), |current| {
+        let file = open_regular(current)?;
+        let next = shebang(&file).or_else(|| elf_interpreter(&file))?;
+        let next = std::fs::canonicalize(next).ok()?;
+        std::fs::metadata(&next).ok()?.is_file().then_some(next)
+    })
+    .skip(1)
+    .take(SCRIPTS_MAX)
+}
+
+/// `path` opened to read, where it is a regular file: a FIFO would hold the
+/// open until a writer came, and a device may act on being opened.
+fn open_regular(path: &Path) -> Option<File> {
+    if !std::fs::metadata(path).ok()?.is_file() {
+        return None;
     }
-    chain
+    let file = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
+        .open(path)
+        .ok()?;
+    // What the path names may have changed since.
+    file.metadata().ok()?.is_file().then_some(file)
 }
 
 /// The interpreter a `#!` line names, where it names one by absolute path:

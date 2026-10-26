@@ -323,12 +323,7 @@ fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
 
 /// The warning for a program at `path`, `real` once resolved, the sandbox
 /// will not execute: `refused` is `real` itself or the interpreter it needs.
-/// The help names the directory of `refused`.
-fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> String {
-    let dir = refused
-        .parent()
-        .expect("a resolved program is absolute")
-        .display();
+pub(super) fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> String {
     let config = config_path().map_or_else(
         || "the user config".to_owned(),
         |config| config.display().to_string(),
@@ -343,7 +338,8 @@ fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> S
     }
     format!(
         "warning: core:process: `{program}` is {at}, outside the guest's grants and the system baseline\n\
-         help: let a child run it with `--process-read {dir}`, or with `read` under `[process]` in {config}"
+         help: let a child run it with `--process-read {}`, or with `read` under `[process]` in {config}",
+        refused.display()
     )
 }
 

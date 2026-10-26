@@ -171,7 +171,6 @@ impl ResolvedPolicy {
     #[must_use]
     pub fn refused_interpreter(&self, program: &Path) -> Option<PathBuf> {
         exec::interpreters(program)
-            .into_iter()
             .find(|interpreter| !self.permits(interpreter, Access::ReadExecute))
     }
 
@@ -292,8 +291,9 @@ pub enum Refusal {
         dir: PathBuf,
         access: Access,
     },
-    /// A path in a process's `/proc` entry: of another process, or one the
-    /// child writes, its own being granted for reading alone. Seen under
+    /// A path in a process's `/proc` entry: of any process but the child,
+    /// a descendant's own included, or one the child writes, its own being
+    /// granted for reading alone. Seen under
     /// [`Trace::Files`], and named without the pid, which no grant can name
     /// ahead of the process.
     ProcessEntry {
@@ -329,7 +329,7 @@ impl fmt::Display for Refusal {
             } => write!(f, "writing {}", path.display()),
             Refusal::ProcessEntry {
                 access: Access::ReadExecute,
-            } => f.write_str("reading the /proc entry of a process other than the child"),
+            } => f.write_str("reading a /proc entry other than the child's own"),
             Refusal::ProcessEntry {
                 access: Access::ReadWrite,
             } => f.write_str("writing a process's /proc entry, which no grant allows"),

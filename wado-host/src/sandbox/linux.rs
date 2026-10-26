@@ -21,7 +21,7 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
@@ -540,8 +540,10 @@ enum Asks {
     /// Execute what the path leads to, or the path itself under
     /// `AT_SYMLINK_NOFOLLOW`.
     Exec(Flags),
-    /// Remove or move the path itself.
-    Change,
+    /// Remove the path itself, a directory under `AT_REMOVEDIR`.
+    Remove(Flags),
+    /// Move the path itself.
+    MoveFrom,
     /// Link to the path itself, or to what it leads to under
     /// `AT_SYMLINK_FOLLOW`.
     LinkFrom(Flags),
@@ -567,9 +569,13 @@ enum Ask {
     Exec {
         follow: bool,
     },
-    Change {
+    Link {
         follow: bool,
     },
+    Unlink,
+    RemoveDir,
+    /// Move the entry away: a rename's source, or either side of an exchange.
+    Move,
     /// `slash`: whether a trailing `/` may name the entry, as it may a
     /// directory made or moved there. Any other fails with `ENOENT`.
     Create {
@@ -588,7 +594,8 @@ const TMPFILE: libc::c_int = libc::O_TMPFILE & !libc::O_DIRECTORY;
 struct Named {
     /// The last component is `.` or `..`.
     dot: bool,
-    /// The path ends in `/`, asking for a directory.
+    /// The path ends in `/`, asking for a directory: a lookup follows a link
+    /// there, and removing or moving anything else fails with `ENOTDIR`.
     slash: bool,
 }
 
@@ -618,16 +625,27 @@ enum Found {
     /// A symbolic link the call does not follow.
     Link,
     Dir,
-    Other,
+    File,
+    /// A FIFO, a device or a socket, which `exec` and `truncate` refuse before
+    /// Landlock's hook.
+    Special,
 }
 
 impl Ask {
-    fn follows(self) -> bool {
+    /// Whether the call follows a link its last component names. A lookup,
+    /// unlike a call that makes, removes or moves an entry, follows one that a
+    /// trailing `/` names whatever its flags.
+    fn follows(self, named: Named) -> bool {
         match self {
             Self::Truncate => true,
-            Self::Exec { follow } | Self::Change { follow } => follow,
-            Self::Create { .. } | Self::Replace => false,
-            Self::Open(flags) => flags & libc::O_NOFOLLOW == 0 && !Self::exclusive(flags),
+            Self::Exec { follow } | Self::Link { follow } => follow || named.slash,
+            Self::Unlink | Self::RemoveDir | Self::Move | Self::Create { .. } | Self::Replace => {
+                false
+            }
+            Self::Open(flags) if flags & libc::O_CREAT != 0 => {
+                flags & libc::O_NOFOLLOW == 0 && !Self::exclusive(flags)
+            }
+            Self::Open(flags) => flags & libc::O_NOFOLLOW == 0 || named.slash,
         }
     }
 
@@ -640,14 +658,24 @@ impl Ask {
     /// `fs/namei.c` orders it. A call that makes, removes or moves an entry is
     /// judged on the directory holding it; one that opens a file, on the file.
     /// No call makes, removes or moves the root, `.` or `..` (`EEXIST`,
-    /// `EBUSY`, `EISDIR`, `EINVAL`, `ENOTEMPTY`), a trailing `/` on a file
-    /// fails with `ENOTDIR`, and so does `O_DIRECTORY`. `O_TMPFILE` makes a
-    /// file in the directory it opens, which is judged as the file.
+    /// `EBUSY`, `EISDIR`, `EINVAL`, `ENOTEMPTY`). A trailing `/` fails
+    /// `unlink` (`EISDIR`, `ENOTDIR`), `rmdir` ignores it, and any other call
+    /// it leaves on what is no directory fails with `ENOTDIR`, as does
+    /// `O_DIRECTORY`. `O_TMPFILE` makes a file in the directory it opens,
+    /// which is judged as the file.
     fn judged(self, path: &Path, found: Found, named: Named) -> Option<(PathBuf, Access)> {
         let entry = !named.dot && path != Path::new("/");
-        let not_dir = found == Found::Other
-            && (named.slash || matches!(self, Self::Open(flags) if flags & libc::O_DIRECTORY != 0));
-        if not_dir {
+        let wants_dir = match self {
+            Self::RemoveDir | Self::Replace => false,
+            Self::Open(flags) => named.slash || flags & libc::O_DIRECTORY != 0,
+            Self::Exec { .. }
+            | Self::Link { .. }
+            | Self::Unlink
+            | Self::Move
+            | Self::Create { .. }
+            | Self::Truncate => named.slash,
+        };
+        if wants_dir && !matches!(found, Found::Dir | Found::Absent) {
             return None;
         }
         let itself = |access| Some((path.to_owned(), access));
@@ -656,17 +684,34 @@ impl Ask {
             Some((parent.to_owned(), Access::ReadWrite))
         };
         match self {
-            Self::Exec { .. } if found == Found::Other => itself(Access::ReadExecute),
-            Self::Truncate if found == Found::Other => itself(Access::ReadWrite),
+            Self::Exec { .. } if found == Found::File => itself(Access::ReadExecute),
+            Self::Truncate if found == Found::File => itself(Access::ReadWrite),
             Self::Exec { .. } | Self::Truncate => None,
             Self::Create { slash }
                 if entry && found == Found::Absent && (slash || !named.slash) =>
             {
                 parent()
             }
-            Self::Change { .. } if entry && found != Found::Absent => parent(),
+            Self::Unlink if named.slash => None,
+            Self::Link { .. } | Self::Unlink | Self::RemoveDir | Self::Move
+                if entry && found != Found::Absent =>
+            {
+                parent()
+            }
             Self::Replace if entry => parent(),
-            Self::Create { .. } | Self::Change { .. } | Self::Replace => None,
+            Self::Create { .. }
+            | Self::Link { .. }
+            | Self::Unlink
+            | Self::RemoveDir
+            | Self::Move
+            | Self::Replace => None,
+            // Asking both fails with `EINVAL`, and a trailing `/` with `EISDIR`.
+            Self::Open(flags)
+                if flags & libc::O_CREAT != 0
+                    && (flags & libc::O_DIRECTORY != 0 || named.slash) =>
+            {
+                None
+            }
             Self::Open(flags) if flags & TMPFILE != 0 => {
                 // Anything but `O_TMPFILE` for writing fails with `EINVAL`.
                 let valid = flags & (libc::O_TMPFILE | libc::O_CREAT) == libc::O_TMPFILE
@@ -678,15 +723,17 @@ impl Ask {
                 }
             }
             Self::Open(flags) => match found {
-                Found::Absent if flags & libc::O_CREAT != 0 && !named.slash => parent(),
+                Found::Absent if flags & libc::O_CREAT != 0 => parent(),
                 Found::Absent | Found::Link => None,
                 Found::Dir if flags & libc::O_CREAT != 0 || Self::opens_to_write(flags) => None,
-                Found::Other if Self::exclusive(flags) => None,
-                Found::Dir | Found::Other => itself(if Self::opens_to_write(flags) {
-                    Access::ReadWrite
-                } else {
-                    Access::ReadExecute
-                }),
+                Found::File | Found::Special if Self::exclusive(flags) => None,
+                Found::Dir | Found::File | Found::Special => {
+                    itself(if Self::opens_to_write(flags) {
+                        Access::ReadWrite
+                    } else {
+                        Access::ReadExecute
+                    })
+                }
             },
         }
     }
@@ -720,14 +767,23 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
     #[cfg(target_arch = "x86_64")]
     (libc::SYS_mknod, &[(PathArg::Path(0), Asks::MakeNode(1))]),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_unlink, &[(PathArg::Path(0), Asks::Change)]),
+    (
+        libc::SYS_unlink,
+        &[(PathArg::Path(0), Asks::Remove(Flags::Fixed(0)))],
+    ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_rmdir, &[(PathArg::Path(0), Asks::Change)]),
+    (
+        libc::SYS_rmdir,
+        &[(
+            PathArg::Path(0),
+            Asks::Remove(Flags::Fixed(libc::AT_REMOVEDIR)),
+        )],
+    ),
     #[cfg(target_arch = "x86_64")]
     (
         libc::SYS_rename,
         &[
-            (PathArg::Path(0), Asks::Change),
+            (PathArg::Path(0), Asks::MoveFrom),
             (PathArg::Path(1), Asks::RenameTo(Flags::Fixed(0))),
         ],
     ),
@@ -735,7 +791,7 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
     (
         libc::SYS_renameat,
         &[
-            (PathArg::At { dir: 0, path: 1 }, Asks::Change),
+            (PathArg::At { dir: 0, path: 1 }, Asks::MoveFrom),
             (
                 PathArg::At { dir: 2, path: 3 },
                 Asks::RenameTo(Flags::Fixed(0)),
@@ -785,12 +841,12 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
     ),
     (
         libc::SYS_unlinkat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Change)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Remove(Flags::Arg(2)))],
     ),
     (
         libc::SYS_renameat2,
         &[
-            (PathArg::At { dir: 0, path: 1 }, Asks::Change),
+            (PathArg::At { dir: 0, path: 1 }, Asks::MoveFrom),
             (
                 PathArg::At { dir: 2, path: 3 },
                 Asks::RenameTo(Flags::Arg(4)),
@@ -865,19 +921,21 @@ fn refused_paths(
         .into_iter()
         .map(|(path, ask)| {
             let named = Named::of(&path);
-            let (path, found) = caller.resolve(&path, ask.follows())?;
+            let (path, found) = caller.resolve(&path, ask.follows(named))?;
             Some((path, found, named, ask))
         })
         .collect::<Option<Vec<_>>>()
     else {
         return Ok(Vec::new());
     };
-    if let [(_, from, _, _), (_, _, to, _)] = resolved.as_slice()
+    if let [(_, from, _, _), (_, _, to, to_ask)] = resolved.as_slice()
         && *from != Found::Dir
         && to.slash
+        && !matches!(to_ask, Ask::Move)
     {
         // Moving anything but a directory onto a path ending in `/` fails
-        // with `ENOTDIR`, and linking it there with `ENOENT`.
+        // with `ENOTDIR`, and linking it there with `ENOENT`; an exchange
+        // asks that of each side alone.
         return Ok(Vec::new());
     }
     let Some(judged) = resolved
@@ -982,20 +1040,24 @@ impl Caller {
     fn resolve(&self, path: &Path, follow: bool) -> Option<(PathBuf, Found)> {
         /// Linux's `MAXSYMLINKS`, past which a resolution fails with `ELOOP`.
         const MAX_LINKS: usize = 40;
+        // Every component as spelled, `.` included: a component before it is
+        // looked up as a directory, which `Path::components` would forget.
         let names = |path: &Path| -> Vec<OsString> {
-            path.components()
+            path.as_os_str()
+                .as_bytes()
+                .split(|&byte| byte == b'/')
+                .filter(|name| !name.is_empty())
                 .rev()
-                .filter_map(|part| match part {
-                    Component::Normal(name) => Some(name.to_owned()),
-                    Component::ParentDir => Some(OsString::from("..")),
-                    Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
-                })
+                .map(|name| OsString::from_vec(name.to_vec()))
                 .collect()
         };
         let mut pending = names(path);
         let mut real = PathBuf::from("/");
         let mut links = 0;
         while let Some(name) = pending.pop() {
+            if name == "." {
+                continue;
+            }
             if name == ".." {
                 real.pop();
                 continue;
@@ -1013,10 +1075,16 @@ impl Caller {
                 if last {
                     let found = if meta.is_dir() {
                         Found::Dir
+                    } else if meta.is_file() {
+                        Found::File
                     } else {
-                        Found::Other
+                        Found::Special
                     };
                     return Some((next, found));
+                }
+                // A component that leads on must be a directory (`ENOTDIR`).
+                if !meta.is_dir() {
+                    return None;
                 }
                 real = next;
                 continue;
@@ -1081,9 +1149,16 @@ impl Caller {
                     follow: flags(exec) & libc::AT_SYMLINK_NOFOLLOW == 0,
                 }));
             }
-            Asks::Change => return Ok(Some(Ask::Change { follow: false })),
+            Asks::Remove(remove) => {
+                return Ok(Some(if flags(remove) & libc::AT_REMOVEDIR != 0 {
+                    Ask::RemoveDir
+                } else {
+                    Ask::Unlink
+                }));
+            }
+            Asks::MoveFrom => return Ok(Some(Ask::Move)),
             Asks::LinkFrom(link) => {
-                return Ok(Some(Ask::Change {
+                return Ok(Some(Ask::Link {
                     follow: flags(link) & libc::AT_SYMLINK_FOLLOW != 0,
                 }));
             }
@@ -1108,7 +1183,7 @@ impl Caller {
                 return Ok(Some(if rename & libc::RENAME_NOREPLACE != 0 {
                     Ask::Create { slash: true }
                 } else if rename & libc::RENAME_EXCHANGE != 0 {
-                    Ask::Change { follow: false }
+                    Ask::Move
                 } else {
                     Ask::Replace
                 }));

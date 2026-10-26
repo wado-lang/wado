@@ -260,6 +260,24 @@ fn probe() {
             unsafe { libc::rename(c_path(from).as_ptr(), c_path(to).as_ptr()) }
         }
         #[cfg(target_os = "linux")]
+        "open" => {
+            let (flags, path) = arg.split_once(':').unwrap();
+            // SAFETY: a plain system call on a NUL-terminated path.
+            unsafe { libc::open(c_path(path).as_ptr(), flags.parse().unwrap(), 0o600) }
+        }
+        #[cfg(target_os = "linux")]
+        "unlink" => {
+            // SAFETY: a plain system call on a NUL-terminated path.
+            unsafe { libc::unlink(c_path(arg).as_ptr()) }
+        }
+        #[cfg(target_os = "linux")]
+        "rmdir" => {
+            // SAFETY: a plain system call on a NUL-terminated path.
+            unsafe { libc::rmdir(c_path(arg).as_ptr()) }
+        }
+        #[cfg(target_os = "linux")]
+        "exec" => execveat(libc::AT_FDCWD, arg, 0),
+        #[cfg(target_os = "linux")]
         "exec_nofollow" => execveat(libc::AT_FDCWD, arg, libc::AT_SYMLINK_NOFOLLOW),
         #[cfg(target_os = "linux")]
         "exec_fd" => {
@@ -463,6 +481,9 @@ fn probe_reported(mut policy: Policy, trace: Trace, act: &str) -> (ExitStatus, R
 
 const OK: ExitStatus = ExitStatus::Exited(0);
 const REFUSED: ExitStatus = ExitStatus::Exited(DENIED);
+/// A probe whose act failed with an error but `EPERM` or `EACCES`.
+#[cfg(target_os = "linux")]
+const FAILED: ExitStatus = ExitStatus::Exited(2);
 
 #[test]
 fn the_probe_runs_confined() {
@@ -688,6 +709,100 @@ fn a_traced_call_is_judged_as_its_flags_and_spelling_say() {
         ),
         "{refusals:?}"
     );
+}
+
+/// A trailing `/` or `.` asks the call to follow a link and reach a directory,
+/// or, removing an entry, fails or is ignored as the call says. Each case
+/// states how the kernel ended the call, so the report is held to what Landlock
+/// did.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_path_ends_as_its_call_resolves_it() {
+    assert_available();
+    let tree = Tree::new();
+    let outside = tree.outside().canonicalize().unwrap();
+    let sub = outside.join("sub");
+    fs::create_dir(&sub).unwrap();
+    fs::write(outside.join("file"), "").unwrap();
+    symlink(&sub, outside.join("dirlink")).unwrap();
+    let o = outside.display();
+    let judged = |act: String| {
+        let (status, refusals) = probe_refused(tree.policy(Network::Denied), Trace::Files, &act);
+        let refusals: BTreeSet<Refusal> = refusals
+            .into_iter()
+            .filter(|refusal| matches!(refusal, Refusal::Path { path, .. } if path.starts_with(&outside)))
+            .collect();
+        (status, refusals)
+    };
+    let none = || (FAILED, BTreeSet::new());
+    let read_sub = || {
+        (
+            REFUSED,
+            BTreeSet::from([refused_path(&sub, Access::ReadExecute)]),
+        )
+    };
+    let write = |name: &str| {
+        (
+            REFUSED,
+            BTreeSet::from([refused_path(&outside.join(name), Access::ReadWrite)]),
+        )
+    };
+    let nofollow = libc::O_RDONLY | libc::O_NOFOLLOW;
+    let create = libc::O_WRONLY | libc::O_CREAT;
+    assert_eq!(judged(format!("open:{nofollow}:{o}/dirlink")), none());
+    assert_eq!(judged(format!("open:{nofollow}:{o}/dirlink/")), read_sub());
+    assert_eq!(judged(format!("open:0:{o}/sub/.")), read_sub());
+    assert_eq!(judged(format!("open:0:{o}/file/..")), none());
+    assert_eq!(judged(format!("open:{create}:{o}/missing/.")), none());
+    assert_eq!(judged(format!("unlink:{o}/file")), write("file"));
+    assert_eq!(judged(format!("unlink:{o}/file/")), none());
+    assert_eq!(judged(format!("unlink:{o}/dirlink/")), none());
+    assert_eq!(judged(format!("rmdir:{o}/file/")), write("file"));
+    assert_eq!(judged(format!("rename:{o}/dirlink/:{o}/moved")), none());
+}
+
+/// What `exec` cannot run fails before Landlock judges it, and the host reads
+/// nothing that could hold it up: a FIFO opens only once a writer comes.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_exec_of_what_cannot_run_is_no_refusal() {
+    assert_available();
+    let tree = Tree::new();
+    let granted = tree.granted().canonicalize().unwrap();
+    let outside = tree.outside().canonicalize().unwrap();
+    for dir in [&granted, &outside] {
+        let fifo = c_path(dir.join("fifo").to_str().unwrap());
+        // SAFETY: a plain system call on a NUL-terminated path.
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o755) }, 0);
+    }
+    for (name, interpreter) in [
+        ("root", PathBuf::from("/")),
+        ("piped", granted.join("fifo")),
+    ] {
+        let script = granted.join(name);
+        fs::write(&script, format!("#!{}\n", interpreter.display())).unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let policy = tree.policy(Network::Denied);
+    for program in [
+        granted.join("fifo"),
+        outside.join("fifo"),
+        granted.join("root"),
+        granted.join("piped"),
+    ] {
+        assert_eq!(policy.resolved().refused_interpreter(&program), None);
+        assert_eq!(
+            probe_refused(
+                tree.policy(Network::Denied),
+                Trace::Files,
+                &format!("exec:{}", program.display())
+            ),
+            // `EACCES`, as Landlock would have answered.
+            (REFUSED, BTreeSet::new()),
+            "{}",
+            program.display()
+        );
+    }
 }
 
 /// A refused path, with the directory a grant must cover: the path itself

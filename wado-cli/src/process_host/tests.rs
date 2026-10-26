@@ -1,14 +1,14 @@
 #[cfg(unix)]
 use std::collections::BTreeSet;
 #[cfg(unix)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use wado_host::sandbox::Trace;
 #[cfg(unix)]
 use wado_host::sandbox::{Access as Reach, Refusal};
 
 #[cfg(unix)]
-use super::posix::refusals_warning;
+use super::posix::{refusals_warning, refused_warning};
 #[cfg(unix)]
 use super::types::ExitStatus;
 use super::{Answer, ProcessGrant, answer, unsupported_reason};
@@ -74,4 +74,20 @@ fn a_refused_write_is_granted_on_the_directory_judged() {
     }]);
     let warning = refusals_warning("job", &ExitStatus::Exited(1), &refusals, Trace::Off).unwrap();
     assert!(warning.contains("with `--dir /`"), "{warning}");
+}
+
+/// The spawn's help grants the file refused, as the trace's does, whatever
+/// the guest named: the root has no directory above it.
+#[cfg(unix)]
+#[test]
+fn a_refused_program_is_granted_as_the_file_refused() {
+    let interpreter = Path::new("/opt/interp/bin/sh");
+    let script = Path::new("/opt/tool");
+    let warning = refused_warning("tool", script, script, interpreter);
+    assert!(
+        warning.contains("`--process-read /opt/interp/bin/sh`"),
+        "{warning}"
+    );
+    let root = Path::new("/");
+    assert!(refused_warning("x", root, root, root).contains("`--process-read /`"));
 }
