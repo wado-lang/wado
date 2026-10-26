@@ -155,6 +155,42 @@ pays is measured: the reviewer and verifier whose misses overlap least on the
 project's own evaluation set, no weaker than the code they judge, and blind to
 who wrote it.
 
+### The Coordinator
+
+A coordinator splits the work, hands it to subagents, and merges what comes
+back. Its quality matters most at the merge.
+
+| Source       | Measure                                                          | Result         |
+| ------------ | ---------------------------------------------------------------- | -------------- |
+| [2608.30661] | Average score, ten orchestrators over one subagent pool          | 25.15 to 50.49 |
+| [2608.30661] | Haiku 4.5 alone vs orchestrating                                 | 23.76 vs 33.05 |
+| [2608.30661] | Gain from replaying past orchestration experience, per task      | +0.25 to +6.46 |
+| [2406.04692] | Regression weight on final quality, aggregator vs proposer       | 0.588 vs 0.281 |
+| [2512.08296] | Weak orchestrator with strong subagents vs all strong, one setup | 0.42 vs 0.32   |
+
+- With the subagents fixed, the choice of orchestrator alone halves or doubles
+  the score. Merging the subagents' results is the most consistent
+  bottleneck, and weaker orchestrators suffer most there. They also spend more
+  rounds and repeat work without scoring better, so a cheap coordinator is not
+  a cheap system ([2608.30661]).
+- Debate beats voting only when the readout uses evidence to pick a correct
+  proposal the majority missed. Supplying correct proposals and reading them
+  out are separate conditions ([2610.04686]).
+- Before the window: in Mixture-of-Agents the aggregator's quality weighed
+  twice the proposers' ([2406.04692]). Teams often score below their strongest
+  member, even when told who it is ([2602.01011]). A reasoning-heavy model can
+  fail as an orchestrator because its context fills with subagent output
+  ([2606.01351]). One setup did better with a weak orchestrator over strong
+  subagents than with strong models everywhere, and the effect differed by
+  model family ([2512.08296]).
+- Anthropic's Code Review has no single chief: a separate group votes on each
+  finding ([claude-code-review]).
+
+What carries over: the coordinator's judgment is worth the most where it
+merges, and it is spent best on evidence rather than on prose. Two things
+shrink what it has to judge: dispatch done in code, and findings that arrive
+already verified or reproduced.
+
 ### Context
 
 - Diff-only review misses what lies outside the touched files. On security
@@ -374,6 +410,9 @@ These are directions the findings point to, not decisions.
   that the others do not, measured as how rarely they miss the same defect,
   and aggregate by evidence rather than by vote count. Hide authorship from
   every judge.
+- Put the strongest model where findings merge, not where work is split, and
+  hand it structured, verified findings so that its context holds evidence
+  rather than transcripts.
 - Post less. Every comment should survive a refutation step against the
   repository and carry its evidence.
 - Keep risk estimation and the accept/block policy in separate stages, with the
@@ -404,8 +443,16 @@ These are directions the findings point to, not decisions.
   Requests (2026-08-26)
 - [2608.27442] From Static to Dynamic: Benchmarking Real-World Code Review with
   MCR-Bench (2026-08-27)
+- [2406.04692] Mixture-of-Agents Enhances Large Language Model Capabilities
+  (2024-06)
+- [2512.08296] Towards a Science of Scaling Agent Systems (2025-12)
+- [2602.01011] Multi-Agent Teams Hold Experts Back (2026-02)
 - [2602.11988] Evaluating AGENTS.md: Are Repository-Level Context Files
   Helpful for Coding Agents? (2026-02, revised 2026-09-29)
+- [2606.01351] Recognize Your Orchestrator: An Entropy Dynamics Perspective
+  for LLM Multi-Agent Systems (2026-06)
+- [2608.30661] SwarmBench: Can Large Language Models Act as Agent Swarm
+  Orchestrators? (2026-08-31)
 - [2603.17111] Hidden Clones: Exposing and Fixing Family Bias in
   Vision-Language Model Ensembles (2026-03)
 - [2605.29800] Nine Judges, Two Effective Votes (2026-05)
@@ -484,7 +531,12 @@ These are directions the findings point to, not decisions.
 [reviewbench]: https://github.blog/ai-and-ml/github-copilot/reviewbench-an-open-benchmark-for-ai-code-review/
 [claude-code-review]: https://www.orcarouter.ai/blog/how-the-claude-code-team-does-code-review
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
+[2406.04692]: https://arxiv.org/abs/2406.04692
+[2512.08296]: https://arxiv.org/abs/2512.08296
+[2602.01011]: https://arxiv.org/abs/2602.01011
 [2602.11988]: https://arxiv.org/abs/2602.11988
+[2606.01351]: https://arxiv.org/abs/2606.01351
+[2608.30661]: https://arxiv.org/abs/2608.30661
 [2603.17111]: https://arxiv.org/abs/2603.17111
 [2605.29800]: https://arxiv.org/abs/2605.29800
 [2607.20768]: https://arxiv.org/abs/2607.20768
