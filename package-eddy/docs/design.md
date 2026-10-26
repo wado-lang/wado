@@ -49,6 +49,11 @@ them is in [the research](./research-code-review-bots.md).
 - [x] Every model call uses prompt caching.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
   guesses and are tuned in operation, on outcomes outside the held-out set.
+- [x] The reproduction agent reads `AGENTS.md` from the base revision, inside
+  its sandbox. A pull request can rewrite the file, and the agent runs what it
+  says.
+- [x] An outcome is tied to a finding by the symbol the language service
+  resolves, with line overlap as supporting evidence.
 
 ## Leanings
 
@@ -75,10 +80,12 @@ Each signal has a failure mode, and the counting rule guards against it.
 
 - "Addressed" can be gamed: a reviewer learns to post findings that are cheap
   to address. Weight it by severity, and count a finding addressed only when
-  the follow-up commit touches the lines it named.
+  the follow-up commit changes the symbol it named. Matching lines instead
+  misses a fix in a caller or a moved function, and credits an unrelated edit
+  that happens to overlap.
 - A revert has many causes. Count one against a review only when the reverted
-  or fixed lines overlap what the review saw, and as a miss when no finding
-  named them.
+  or fixed symbols are among those the review saw, and as a miss when no
+  finding named them.
 - The threshold time trades signal delay against attribution: a short one
   misses late regressions, a long one blames the review for later changes.
 
