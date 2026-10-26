@@ -2467,20 +2467,14 @@ impl SolverBridge {
         move |block| {
             table.impl_reaches_instance(block, instance)
                 && self
-                    .block_applies(table, block, ty.as_ref())
+                    .block_applies(block, ty.as_ref())
                     .is_none_or(|applies| applies)
         }
     }
 
-    fn block_applies(
-        &self,
-        table: &TypeTable,
-        block: DefId,
-        ty: Option<&SolverType>,
-    ) -> Option<bool> {
+    fn block_applies(&self, block: DefId, ty: Option<&SolverType>) -> Option<bool> {
         let impl_ = *self.lowering.written_impls.get(&block)?;
-        let scope = self.lowering.known_module(table.def_module(block))?;
-        Some(applies(&self.program, &Env::default(), scope, impl_, ty?))
+        Some(applies(&self.program, &Env::default(), impl_, ty?))
     }
 
     /// The impl block a candidate names: the one it was lowered from, or for a

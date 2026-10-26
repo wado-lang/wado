@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
-    RefRule, SolverType, TraitDeclId, TypeDeclId,
+    Asker, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
+    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -74,7 +74,7 @@ pub fn holds_with_args(
     Query {
         program,
         env,
-        scope,
+        asker: Asker::Module(scope),
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
@@ -171,7 +171,7 @@ struct Open {
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
-    scope: ModuleId,
+    asker: Asker,
     asking: Vec<Open>,
     /// Whether the next question asks about a member of the type a pin
     /// bound it from, rather than about a bound's subject.
@@ -293,7 +293,10 @@ impl Query<'_> {
             && fact
                 .visible_from
                 .as_ref()
-                .is_none_or(|modules| modules.contains(&self.scope))
+                .is_none_or(|modules| match self.asker {
+                    Asker::Module(module) => modules.contains(&module),
+                    Asker::Instance => true,
+                })
         {
             let matched = || -> Vec<Option<SolverType>> {
                 let SolverType::Decl(_, args) = ty else {
@@ -751,7 +754,7 @@ struct Answer {
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,
-    scope: ModuleId,
+    asker: Asker,
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
@@ -760,7 +763,7 @@ pub(super) fn impl_applies(
         Query {
             program,
             env,
-            scope,
+            asker,
             asking: Vec::new(),
             member_next: false,
             at_itself: Some(ty.clone()),

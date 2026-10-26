@@ -751,7 +751,9 @@ test "a free function takes the bound and its caller names neither parameter" {
 ## Visibility
 
 A kind trait (`ReflectStruct` and its siblings) holds only where every member
-of the subject is visible at the use site. The root `Reflect` names the type and
+of the subject is visible at the use site. A generic body instantiated from
+there keeps that answer, so a derivation recurses through a field whose type
+its own module cannot see. The root `Reflect` names the type and
 no member, so it holds anywhere, a type whose fields are private included. The
 impls derived where the type is declared still see every field:
 

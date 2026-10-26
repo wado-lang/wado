@@ -5,7 +5,7 @@
 use super::holds::{
     answers_args, impl_applies, newtype_base, peels_to_never, withheld_at, written_only_at,
 };
-use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
+use super::program::{Asker, Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
 use super::rank::{Candidate, Generality};
 
 /// The candidates at one call site, and what the diagnostic needs where there
@@ -85,9 +85,10 @@ pub fn bound_candidates(
 /// Whether impl `id` applies to `ty`, its bounds included: what an instance of
 /// a generic body selects by once its parameters are settled. It reaches `ty`
 /// at any level of the newtype chain a call on `ty` walks, so a `&W` of a
-/// newtype over `List<u8>` reaches `impl<T> IntoIterator for &List<T>`.
+/// newtype over `List<u8>` reaches `impl<T> IntoIterator for &List<T>`. The
+/// instance asks, so every member is visible to it.
 #[must_use]
-pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
+pub fn applies(program: &Program, env: &Env, id: ImplId, ty: &SolverType) -> bool {
     let def = &program.impls()[&id];
     let levels = chain(program, ty);
     let reached = if program.not_inherited.contains(&id) {
@@ -97,7 +98,7 @@ pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &S
     };
     reached
         .iter()
-        .any(|level| impl_applies(program, env, scope, id, def, level).is_some())
+        .any(|level| impl_applies(program, env, Asker::Instance, id, def, level).is_some())
 }
 
 /// The impls whose trait or own body `declares` the method.
@@ -138,7 +139,8 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
+            let Some(trait_args) = impl_applies(program, env, Asker::Module(scope), impl_, def, ty)
+            else {
                 continue;
             };
             let candidate = Candidate {
