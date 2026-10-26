@@ -2956,10 +2956,11 @@ impl Monomorphizer {
             None
         };
         let blanket_module = blanket.as_ref().map(|b| b.module.clone());
+        // Unpeeled: an impl written on the reference is found through it.
         let template = self.served_template(
             blanket.as_ref(),
             &new_info,
-            type_table.peel_refs(receiver_type_id),
+            receiver_type_id,
             receiver_module.as_ref().unwrap_or(&module_source),
             type_table,
         );
