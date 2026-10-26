@@ -67,20 +67,15 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
     }
 
     let lock_path = project.root.join(LOCK_FILENAME);
-    // A remote pin records what a build first read, which no resolution
-    // re-derives, so it carries over.
-    let remotes = fs::read_to_string(&lock_path)
-        .ok()
-        .and_then(|text| text.parse::<LockFile>().ok())
-        .map(|lock| lock.remotes)
-        .unwrap_or_default();
     let count = packages.len() + build_dependencies.len();
+    // A remote pin is dropped: the next build records what it reads then, as
+    // only a build knows how far a Kiln probe reads.
     let lock = LockFile {
         version: 1,
         deps_hash: project.manifest.deps_hash(),
         packages,
         build_dependencies,
-        remotes,
+        remotes: Vec::new(),
     };
     fs::write(&lock_path, lock.to_toml())
         .map_err(|e| CliExit::error(format!("writing wado.lock: {e}")))?;

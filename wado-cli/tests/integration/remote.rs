@@ -192,7 +192,19 @@ fn the_lock_pins_a_remote_module_on_its_first_read() {
         .failure()
         .stderr(predicate::str::contains(
             "does not match its integrity: `wado.lock` pins",
-        ));
+        ))
+        .stderr(predicate::str::contains("run `wado update`"));
+
+    // `wado update` drops the pin, so the next build records the new content.
+    wado(project.path(), cold_root.path())
+        .arg("update")
+        .assert()
+        .success();
+    wado(project.path(), cold_root.path())
+        .args(["run", "--no-cache", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("remote\n");
 }
 
 /// A file in no package has no lock to record in, so its `use` must pin the

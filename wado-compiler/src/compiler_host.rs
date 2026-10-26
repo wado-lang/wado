@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::ast::AstIdSpace;
 use crate::hashmap;
 use crate::kiln::options_check::CanonicalOptions;
-use crate::remote::{Integrity, PinMismatch, held_to_use, is_remote};
+use crate::remote::{Integrity, PinMismatch, PinnedBy, held_to_use, is_remote};
 use crate::token::Span;
 
 /// Log level for filtering diagnostics and log messages
@@ -489,10 +489,14 @@ impl std::fmt::Display for SourceError {
                     actual,
                     pinned_by,
                 } = mismatch.as_ref();
+                let accept = match pinned_by {
+                    PinnedBy::Use => format!("write `integrity: \"{actual}\"`"),
+                    PinnedBy::Lock => "run `wado update`".to_string(),
+                };
                 write!(
                     f,
                     "'{url}' does not match its integrity: {pinned_by} pins {expected}, \
-                     and the content is {actual}"
+                     and the content is {actual}; to accept the content, {accept}"
                 )
             }
             SourceError::Unpinned { url, actual } => write!(
