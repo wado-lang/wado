@@ -273,9 +273,10 @@ pub struct Spawned {
 /// What the sandbox refused a child. Linux alone reports one.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Refusal {
-    /// A path the policy does not grant `access` to, at its real path, seen
-    /// under [`Trace::Files`]. Landlock refuses the call, which the child sees
-    /// fail with `EACCES`.
+    /// A path, at its real path, whose call asks `access` where the policy
+    /// grants it not: of the file an open names, of the directory holding an
+    /// entry made, removed or moved. Seen under [`Trace::Files`]. Landlock
+    /// refuses the call, which the child sees fail with `EACCES`.
     Path {
         path: PathBuf,
         access: Access,
