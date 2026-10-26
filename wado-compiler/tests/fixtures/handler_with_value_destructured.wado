@@ -1,0 +1,46 @@
+// A `with` block's value leaves through a slot it is moved out of. A pattern
+// destructuring a copyable value reads it without consuming it, which takes
+// that move as the copy it is. The affine temporary is what puts the function
+// under drop elaboration.
+struct Counter {
+    n: i32,
+}
+
+interface Tick {
+    fn tick() -> i32;
+}
+
+impl Tick for Counter {
+    fn tick(&mut self) -> i32 {
+        self.n += 1;
+        resume self.n
+    }
+}
+
+affine struct Token {
+    end: StreamWritable<u8>,
+    v: i32,
+}
+
+impl Token {
+    fn get(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn token() -> Token with Stream {
+    let [r, w] = Stream::<u8>::new();
+    r.drop();
+    return Token { end: w, v: 3 };
+}
+
+test "a with block's tuple destructures" {
+    let mut c = Counter { n: 0 };
+    let [a, b] = with Tick => &mut c do {
+        [Tick::tick(), token().get()]
+    };
+    assert a + b == 4;
+}
+
+__DATA__
+{"test": {}}

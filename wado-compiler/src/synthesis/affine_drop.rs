@@ -1579,8 +1579,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let mut moving = None;
     match &mut expr.kind {
         TirExprKind::Move { .. } => {
+            // A copyable value's move is a copy, which any position may read.
             assert!(
-                consuming,
+                consuming || !cx.carries_affine(type_id),
                 "a move sits where its value is consumed: {span:?}"
             );
             unwrap_move(expr);
