@@ -317,8 +317,9 @@ forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
 the path from the child's memory and resolves it as the kernel does for the
 child: against its working directory or the descriptor the call names, one
 component at a time, with `/proc/self` naming the child. It leaves out a call
-that fails on the path's existence or kind before Landlock judges it, and
-checks the rest against the policy.
+that fails before Landlock's hook, and checks the rest against the policy
+where Landlock does: a call that makes, removes or moves an entry on the
+directory holding it, an open on the file.
 The kernel then runs the call, and Landlock judges it as it would have. Moving
 enforcement itself to seccomp was rejected: the path a call names can change
 after the host reads it, and no filter can emulate `execve`.
@@ -563,13 +564,17 @@ cannot be taken back.
   meets any descendant that calls `setsid` or `setpgid` itself: a shell with job
   control, or a program that detaches into the background. A plain `fork` and
   `exec`, which is how `git` runs its hooks and helpers, is not refused.
+- A child cannot take a seccomp listener of its own: the kernel allows one per
+  chain of filters, and the host holds it. A container runtime using seccomp
+  notify, run as a child, fails with `EBUSY`.
 - Without `--process-trace`, a file or directory the sandbox refused a child
   is not reported, so the child's own message is all there is. Under it, the
   host predicts the refusal from the policy rather than observing Landlock's.
-  It resolves the path as the child does, and leaves out a call that fails
-  first on the path's existence or kind. It does not model the file
-  permissions, which may refuse the call first, or `openat2`'s `RESOLVE_*`
-  flags, so such a call may be reported though Landlock never judged it.
+  It resolves the path as the child does, and leaves out a call that
+  `fs/namei.c` fails before Landlock's hook. It does not model the file
+  permissions, which may refuse the call first, `openat2`'s `RESOLVE_*` flags,
+  or a rename between two mounts of one filesystem, which fails with `EXDEV`,
+  so such a call may be reported though Landlock never judged it.
 - Of the per-process entries of `/proc`, a child reads only its own. A process
   it starts in turn cannot read its own `/proc/self`: Landlock rules name a
   path when the rule is made, and that process's pid does not exist yet.

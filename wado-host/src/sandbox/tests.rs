@@ -270,6 +270,7 @@ fn run_refused(
 }
 
 /// `sh -c script` under `policy`, watching its file calls.
+#[cfg(target_os = "linux")]
 fn sh_traced(policy: &Policy, script: &str) -> (ExitStatus, BTreeSet<Refusal>) {
     run_refused(
         policy,
@@ -551,7 +552,8 @@ fn a_traced_child_reports_only_what_landlock_judges() {
     let policy = tree.policy(Network::Denied);
     let script = format!(
         "{{ echo x > /dev/stdout; }} | cat; mkdir {o}; mkdir -p {o}; rm -f {o}/missing.txt; \
-         touch /; rmdir /; ln -s {o}/linked.txt {g}/link && rm {g}/link; rm {o}/out.txt",
+         touch /; rmdir /; rmdir {g}/.; ln -s {o}/linked.txt {g}/link && rm {g}/link; \
+         cat {o}/out.txt/; mv {o}/missing.txt {o}/moved.txt; rm {o}/out.txt; rmdir {g}",
         o = outside.display(),
         g = granted.display(),
     );
@@ -559,16 +561,30 @@ fn a_traced_child_reports_only_what_landlock_judges() {
     let refused: BTreeSet<Refusal> = sh_traced(&policy, &script)
         .1
         .into_iter()
-        .filter(
-            |refusal| !matches!(refusal, Refusal::Path { path, .. } if path.starts_with("/proc")),
-        )
+        .filter(|refusal| *refusal != Refusal::ProcessEntry)
         .collect();
+    // Removing the grant itself takes a right on the directory above it.
+    let removed = |path: PathBuf| Refusal::Path {
+        path,
+        access: Access::ReadWrite,
+    };
     assert_eq!(
         refused,
-        BTreeSet::from([Refusal::Path {
-            path: outside.join("out.txt"),
-            access: Access::ReadWrite,
-        }])
+        BTreeSet::from([removed(outside.join("out.txt")), removed(granted)])
+    );
+}
+
+/// A per-process entry of `/proc` is reported without its pid, which changes
+/// with every run, so no grant names it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_descendant_s_own_proc_entry_is_reported_without_its_pid() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    assert_eq!(
+        sh_traced(&policy, "sh -c 'read l < /proc/self/status'").1,
+        BTreeSet::from([Refusal::ProcessEntry])
     );
 }
 

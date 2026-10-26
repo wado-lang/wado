@@ -18,8 +18,8 @@ use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
-use std::os::unix::ffi::OsStringExt;
-use std::os::unix::fs::OpenOptionsExt;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::os::unix::process::CommandExt;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio as StdStdio};
@@ -170,9 +170,12 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let filter = seccomp_filter(command.policy.network(), trace, refer);
     let traced = match trace {
         Trace::Off => None,
-        Trace::Files => Some(command.policy.resolved()),
+        Trace::Files => Some(command.policy.resolved().clone()),
     };
-    let [listener_tx, listener_rx] = socket_pair()?;
+    let (listener_tx, listener_rx) = match listens.then(socket_pair).transpose()? {
+        Some([tx, rx]) => (Some(tx), Some(rx)),
+        None => (None, None),
+    };
     let cwd = command.cwd.map(File::try_clone).transpose()?;
 
     let mut std_command = StdCommand::new(command.program);
@@ -191,25 +194,35 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
                 &ruleset,
                 &filter,
                 cwd.as_ref(),
-                listens.then(|| listener_tx.as_raw_fd()),
+                listener_tx.as_ref().map(AsRawFd::as_raw_fd),
             )
         });
     }
     let refusals = Refusals::default();
-    let recorded = refusals.clone();
-    // Started first: under `Trace::Files` the child's own `exec` waits on it.
-    // Detached, since it serves the child's descendants, which may outlive it.
-    spawn_detached("sandbox-refusals", move || {
-        // `None` once every sender is closed: the spawn failed before the
-        // child confined itself.
-        if let Some((listener, pid)) = receive_listener(&listener_rx) {
-            let traced = traced.map(|mut policy| {
-                policy.grant_own_proc(pid);
-                policy
-            });
-            answer_refusals(&listener, &recorded, traced.as_ref());
-        }
-    })?;
+    if let Some(listener_rx) = listener_rx {
+        let recorded = refusals.clone();
+        // Started first: under `Trace::Files` the child's own `exec` waits on
+        // it. Detached, since it serves the child's descendants, which may
+        // outlive it.
+        spawn_detached("sandbox-refusals", move || {
+            match receive_listener(&listener_rx) {
+                Received::Listener(listener, pid) => {
+                    let traced = traced.map(|mut policy| {
+                        policy.grant_own_proc(pid);
+                        policy
+                    });
+                    answer_refusals(&listener, &recorded, traced.as_ref());
+                }
+                Received::Lost(pid) => {
+                    recorded.record(Refusal::Unsupervised);
+                    // SAFETY: a plain system call. The child leads its group,
+                    // whose descendants share the filter.
+                    unsafe { libc::kill(-pid, libc::SIGKILL) };
+                }
+                Received::Nothing => {}
+            }
+        })?;
+    }
     let spawned = std_command.spawn();
     // Closes the host's copy of the sender, which the closure holds.
     drop(std_command);
@@ -301,8 +314,17 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-/// The listener the child sends, and its pid, or `None` once no sender is left.
-fn receive_listener(socket: &OwnedFd) -> Option<(OwnedFd, libc::pid_t)> {
+/// What the child sent over the socket pair.
+enum Received {
+    Listener(OwnedFd, libc::pid_t),
+    /// The child sent its listener, which a host out of descriptors could not
+    /// take.
+    Lost(libc::pid_t),
+    /// Every sender closed: the spawn failed before the child confined itself.
+    Nothing,
+}
+
+fn receive_listener(socket: &OwnedFd) -> Received {
     let mut message = FdMessage::new();
     let header = message.header();
     let received = loop {
@@ -315,16 +337,19 @@ fn receive_listener(socket: &OwnedFd) -> Option<(OwnedFd, libc::pid_t)> {
         assert_eq!(err.kind(), io::ErrorKind::Interrupted, "recvmsg: {err}");
     };
     if received == 0 {
-        return None;
+        return Received::Nothing;
     }
     // SAFETY: the kernel filled the control buffer `header` points to.
     let control = unsafe { libc::CMSG_FIRSTHDR(header) };
-    assert!(!control.is_null(), "the child sends its listener");
+    // SAFETY: `header` points into `message`, which the kernel wrote.
+    if control.is_null() || unsafe { (*header).msg_flags } & libc::MSG_CTRUNC != 0 {
+        return Received::Lost(message.pid);
+    }
     // SAFETY: a header the kernel wrote, holding the one descriptor sent, which
     // `SCM_RIGHTS` installed in our table for us alone.
     let listener =
         unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) };
-    Some((listener, message.pid))
+    Received::Listener(listener, message.pid)
 }
 
 /// Answer each call the filter refers to the host, until no task uses the
@@ -506,6 +531,29 @@ enum Ask {
     Open(libc::c_int),
 }
 
+/// How a call spelled the end of its path, which resolution forgets.
+#[derive(Clone, Copy)]
+struct Named {
+    /// The last component is `.` or `..`.
+    dot: bool,
+    /// The path ends in `/`, asking for a directory.
+    slash: bool,
+}
+
+impl Named {
+    fn of(path: &Path) -> Self {
+        let bytes = path.as_os_str().as_bytes();
+        let last = bytes
+            .rsplit(|&byte| byte == b'/')
+            .next()
+            .unwrap_or_default();
+        Self {
+            dot: matches!(last, b"." | b".."),
+            slash: bytes.len() > 1 && bytes.ends_with(b"/"),
+        }
+    }
+}
+
 /// What a path names once resolved.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Found {
@@ -530,33 +578,45 @@ impl Ask {
         flags & (libc::O_CREAT | libc::O_EXCL) == libc::O_CREAT | libc::O_EXCL
     }
 
-    /// The access Landlock judges `path` for, or `None` where the call fails
-    /// before Landlock does: `ENOENT`, `EEXIST`, `EISDIR`, `ELOOP`, and `EBUSY`
-    /// for the root, which no call removes, replaces or opens for writing.
-    fn access(self, path: &Path, found: Found) -> Option<Access> {
-        let root = path == Path::new("/");
-        let judged = match self {
-            Self::Exec | Self::Truncate => found == Found::Other,
-            Self::Create => found == Found::Absent,
-            Self::Change { .. } => !root && found != Found::Absent,
-            Self::Replace => !root,
+    /// The directory or file Landlock judges the call on and the access it
+    /// asks there, or `None` where the call fails before Landlock's hook, as
+    /// `fs/namei.c` orders it. A call that makes, removes or moves an entry is
+    /// judged on the directory holding it; one that opens a file, on the file.
+    /// No call makes, removes or moves the root, `.` or `..` (`EEXIST`,
+    /// `EBUSY`, `EISDIR`, `EINVAL`, `ENOTEMPTY`), a trailing `/` on a file
+    /// fails with `ENOTDIR`, and so does `O_DIRECTORY`.
+    fn judged(self, path: &Path, found: Found, named: Named) -> Option<(PathBuf, Access)> {
+        let entry = !named.dot && path != Path::new("/");
+        let not_dir = found == Found::Other
+            && (named.slash || matches!(self, Self::Open(flags) if flags & libc::O_DIRECTORY != 0));
+        if not_dir {
+            return None;
+        }
+        let itself = |access| Some((path.to_owned(), access));
+        let parent = || {
+            let parent = path.parent().expect("an entry has a parent");
+            Some((parent.to_owned(), Access::ReadWrite))
+        };
+        match self {
+            Self::Exec if found == Found::Other => itself(Access::ReadExecute),
+            Self::Truncate if found == Found::Other => itself(Access::ReadWrite),
+            Self::Exec | Self::Truncate => None,
+            Self::Create if entry && found == Found::Absent => parent(),
+            Self::Change { .. } if entry && found != Found::Absent => parent(),
+            Self::Replace if entry => parent(),
+            Self::Create | Self::Change { .. } | Self::Replace => None,
             Self::Open(flags) => match found {
-                Found::Absent => flags & libc::O_CREAT != 0,
-                Found::Link => false,
-                Found::Dir => flags & libc::O_CREAT == 0 && !Self::opens_to_write(flags),
-                Found::Other => !Self::exclusive(flags),
+                Found::Absent if flags & libc::O_CREAT != 0 && !named.slash => parent(),
+                Found::Absent | Found::Link => None,
+                Found::Dir if flags & libc::O_CREAT != 0 || Self::opens_to_write(flags) => None,
+                Found::Other if Self::exclusive(flags) => None,
+                Found::Dir | Found::Other => itself(if Self::opens_to_write(flags) {
+                    Access::ReadWrite
+                } else {
+                    Access::ReadExecute
+                }),
             },
-        };
-        let reads = match self {
-            Self::Exec => true,
-            Self::Open(flags) => found != Found::Absent && !Self::opens_to_write(flags),
-            Self::Change { .. } | Self::Create | Self::Replace | Self::Truncate => false,
-        };
-        judged.then_some(if reads {
-            Access::ReadExecute
-        } else {
-            Access::ReadWrite
-        })
+        }
     }
 
     /// Whether an open of an existing file asks to write, as Landlock judges
@@ -693,10 +753,14 @@ fn refused_paths(
         pid: notif.pid as libc::pid_t,
         args: notif.data.args,
     };
-    let asked: Vec<(PathBuf, Ask)> = paths
+    // A path that cannot be read, or an `O_PATH` open, leaves nothing to judge.
+    let Some(asked) = paths
         .iter()
-        .filter_map(|&(arg, asks)| Some((caller.path(arg)?, caller.ask(asks)?)))
-        .collect();
+        .map(|&(arg, asks)| Some((caller.path(arg)?, caller.ask(asks)?)))
+        .collect::<Option<Vec<(PathBuf, Ask)>>>()
+    else {
+        return Vec::new();
+    };
     // The caller may have died and its pid passed on while we read its memory.
     // SAFETY: `notif.id` outlives the call.
     if unsafe {
@@ -709,14 +773,42 @@ fn refused_paths(
     {
         return Vec::new();
     }
-    asked
+    // Landlock judges a call once, on all its paths, so a call that fails on
+    // any of them first is judged on none.
+    let Some(judged) = asked
         .into_iter()
-        .filter_map(|(path, ask)| {
+        .map(|(path, ask)| {
+            let named = Named::of(&path);
             let (path, found) = caller.resolve(&path, ask.follows())?;
-            let access = ask.access(&path, found)?;
-            (!policy.permits(&path, access)).then_some(Refusal::Path { path, access })
+            let (at, access) = ask.judged(&path, found, named)?;
+            Some((path, at, access))
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Vec::new();
+    };
+    if let [(_, from, _), (_, to, _)] = judged.as_slice()
+        && !same_filesystem(from, to)
+    {
+        // A rename or link between filesystems fails with `EXDEV`.
+        return Vec::new();
+    }
+    judged
+        .into_iter()
+        .filter(|(_, at, access)| !policy.permits(at, *access))
+        .map(|(path, _, access)| {
+            if is_process_entry(&path) {
+                Refusal::ProcessEntry
+            } else {
+                Refusal::Path { path, access }
+            }
         })
         .collect()
+}
+
+fn same_filesystem(a: &Path, b: &Path) -> bool {
+    let device = |path: &Path| std::fs::metadata(path).map(|meta| meta.dev()).ok();
+    device(a) == device(b)
 }
 
 /// A task stopped in a file call the filter referred to the host.

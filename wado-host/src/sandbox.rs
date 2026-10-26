@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use crate::sync::lock;
 
@@ -74,6 +74,8 @@ pub struct Rule {
 pub struct Policy {
     rules: Vec<Rule>,
     network: Network,
+    /// [`Policy::resolved`], once asked for, until a rule is added.
+    resolved: OnceLock<ResolvedPolicy>,
 }
 
 impl Policy {
@@ -83,6 +85,7 @@ impl Policy {
         let mut policy = Self {
             rules: Vec::new(),
             network,
+            resolved: OnceLock::new(),
         };
         for path in BASELINE_READ {
             policy.grant_path(path, Access::ReadExecute);
@@ -94,6 +97,7 @@ impl Policy {
     /// A directory the guest was granted, through the descriptor its preopen
     /// holds.
     pub fn grant_dir(&mut self, path: impl Into<PathBuf>, dir: Arc<File>) {
+        self.resolved.take();
         self.rules.push(Rule {
             path: path.into(),
             access: Access::ReadWrite,
@@ -104,6 +108,7 @@ impl Policy {
     /// A path the host names itself: a private `HOME`, a toolchain the user
     /// adds to the baseline.
     pub fn grant_path(&mut self, path: impl Into<PathBuf>, access: Access) {
+        self.resolved.take();
         self.rules.push(Rule {
             path: path.into(),
             access,
@@ -126,13 +131,15 @@ impl Policy {
 
     /// The rules at the real paths they name, as the sandbox matches them.
     #[must_use]
-    pub fn resolved(&self) -> ResolvedPolicy {
-        ResolvedPolicy(
-            self.rules
-                .iter()
-                .filter_map(|rule| Some((std::fs::canonicalize(&rule.path).ok()?, rule.access)))
-                .collect(),
-        )
+    pub fn resolved(&self) -> &ResolvedPolicy {
+        self.resolved.get_or_init(|| {
+            ResolvedPolicy(
+                self.rules
+                    .iter()
+                    .filter_map(|rule| Some((std::fs::canonicalize(&rule.path).ok()?, rule.access)))
+                    .collect(),
+            )
+        })
     }
 
     #[must_use]
@@ -147,6 +154,7 @@ impl Policy {
 }
 
 /// A [`Policy`]'s rules at their real paths, a rule naming no file left out.
+#[derive(Clone, Debug)]
 pub struct ResolvedPolicy(Vec<(PathBuf, Access)>);
 
 impl ResolvedPolicy {
@@ -272,6 +280,13 @@ pub enum Refusal {
         path: PathBuf,
         access: Access,
     },
+    /// A path in a process's `/proc` entry, which the child alone is granted
+    /// of its own, seen under [`Trace::Files`]. Named without the pid, which no
+    /// grant can name ahead of the process.
+    ProcessEntry,
+    /// Any call at all: the host lost the listener the filter refers calls
+    /// to, so it killed the child rather than leave its calls unanswered.
+    Unsupervised,
     // The rest are calls the filter refuses, which the child sees fail with
     // `EPERM`.
     /// A socket, with the network not granted.
@@ -298,6 +313,12 @@ impl fmt::Display for Refusal {
                 path,
                 access: Access::ReadWrite,
             } => write!(f, "writing {}", path.display()),
+            Refusal::ProcessEntry => f.write_str(
+                "reading a process's /proc entry, which only the child it started may read",
+            ),
+            Refusal::Unsupervised => f.write_str(
+                "running once the host lost its seccomp listener, out of file descriptors",
+            ),
             Refusal::Network => f.write_str("a network socket, with no network granted"),
             Refusal::UnixSocket => {
                 f.write_str("a UNIX socket, which can reach a service outside the sandbox")
@@ -324,6 +345,7 @@ impl Refusals {
         lock(&self.0).clone()
     }
 
+    #[cfg(target_os = "linux")]
     fn record(&self, refusal: Refusal) {
         lock(&self.0).insert(refusal);
     }
