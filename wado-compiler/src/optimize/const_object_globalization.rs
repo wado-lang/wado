@@ -23,8 +23,8 @@ use crate::type_table::TypeTable;
 
 use super::arena_query::{
     ColdRuns, bare_promoted_local, bare_promoted_reads, buried_promoted_reads, cold_functions_of,
-    collect_reads, expr_mentions_local, is_local, promoted_local_reads,
-    reachable_nodes, strip_refs,
+    collect_reads, expr_mentions_local, is_local, promoted_local_reads, reachable_nodes,
+    strip_refs,
 };
 use crate::ast::Visibility;
 use crate::name::{

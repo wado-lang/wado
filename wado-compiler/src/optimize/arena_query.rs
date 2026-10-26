@@ -510,8 +510,8 @@ fn is_cold_marker(body: &Body, stmt: StmtId, cold: FuncId) -> bool {
 
 /// What the `cold_path()` markers of one body make cold: per block, the
 /// position from which its statements, and everything under them, run only on
-/// a path through a marker. That is the marker's basic block, which in nested
-/// IR is a point every path through which passes the marker: the statements
+/// a path through a marker. That is the marker's basic block, read in nested IR
+/// as the points every path through which passes the marker: the statements
 /// after it, and the ones ahead of it that cannot leave the block first. A
 /// statement covers its block as a marker does when every path through it
 /// passes one: a loop or a labeled block whose block is cold from its start,
@@ -525,28 +525,29 @@ pub(crate) struct ColdRuns {
 impl ColdRuns {
     /// The runs of `body`, or none when the program names no marker.
     pub(crate) fn of(body: &Body, marker: Option<FuncId>) -> Self {
-        let mut starts = IndexMap::default();
-        if let Some(marker) = marker {
-            RunScan {
-                body,
-                marker,
-                starts: &mut starts,
-            }
-            .block(body.root());
+        let mut runs = Self {
+            marker,
+            starts: IndexMap::default(),
+        };
+        if let Some(mut scan) = runs.scan(body) {
+            scan.block(body.root());
         }
-        Self { marker, starts }
+        runs
     }
 
     /// Record the runs under `e`, a subtree spliced in since.
     pub(crate) fn add_under(&mut self, body: &Body, e: ExprId) {
-        if let Some(marker) = self.marker {
-            RunScan {
-                body,
-                marker,
-                starts: &mut self.starts,
-            }
-            .expr(e);
+        if let Some(mut scan) = self.scan(body) {
+            scan.expr(e);
         }
+    }
+
+    fn scan<'a>(&'a mut self, body: &'a Body) -> Option<RunScan<'a>> {
+        Some(RunScan {
+            body,
+            marker: self.marker?,
+            starts: &mut self.starts,
+        })
     }
 
     /// Whether `stmt` is a marker, which emits nothing.
@@ -574,22 +575,17 @@ impl ColdRuns {
             .map(|(&block, &start)| body.blocks[block].stmts[start])
     }
 
-    /// Every statement a cold run holds, those nested under them aside.
-    fn cold_stmts<'b>(&'b self, body: &'b Body) -> impl Iterator<Item = StmtId> + 'b {
-        self.starts
-            .iter()
-            .flat_map(|(&block, &start)| body.blocks[block].stmts[start..].iter().copied())
-    }
-
     /// Every expression a cold run holds.
     pub(crate) fn exprs(&self, body: &Body) -> IndexSet<ExprId> {
         let mut out = IndexSet::default();
-        for stmt in self.cold_stmts(body) {
-            body.for_each_node_under(NodeRef::Stmt(stmt), |n| {
-                if let NodeRef::Expr(e) = n {
-                    out.insert(e);
-                }
-            });
+        for (&block, &start) in &self.starts {
+            for &stmt in &body.blocks[block].stmts[start..] {
+                body.for_each_node_under(NodeRef::Stmt(stmt), |n| {
+                    if let NodeRef::Expr(e) = n {
+                        out.insert(e);
+                    }
+                });
+            }
         }
         out
     }

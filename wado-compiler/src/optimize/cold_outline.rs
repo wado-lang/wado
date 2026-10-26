@@ -160,16 +160,11 @@ fn find_region(
         // The marker stays behind, ahead of the call, to hint the branch; a run
         // a nested construct covers has none of its own to keep, and its
         // markers are reached inside it.
-        let stmts = &body.blocks[block].stmts;
-        let Some(marker) = stmts[start..].iter().position(|&s| runs.is_marker(body, s)) else {
+        let run = &body.blocks[block].stmts[start..];
+        let Some(&marker) = run.iter().find(|&&s| runs.is_marker(body, s)) else {
             continue;
         };
-        let marker = stmts[start + marker];
-        let region: Vec<StmtId> = stmts[start..]
-            .iter()
-            .copied()
-            .filter(|&s| s != marker)
-            .collect();
+        let region: Vec<StmtId> = run.iter().copied().filter(|&s| s != marker).collect();
         if buys_nothing(body, &type_table, &runs, &region, params) {
             continue;
         }

@@ -2355,7 +2355,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Open the cold tail of a block at its first statement that cannot return.
+    /// Mark a block cold ahead of its first statement that cannot return.
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
@@ -2369,10 +2369,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return stmts;
         }
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
-        // A marker makes the rest of its block cold, which is where `block_cut`
-        // stops pricing and where `cold_outline`'s region starts, so the first
-        // one in a block is the only one worth placing — and a synthesis site
-        // that placed its own ahead of the statements it built keeps it.
+        // A marker makes its whole basic block cold, so one per block is all
+        // there is to place, and a synthesis site that placed its own keeps it.
         let mut marked = false;
         for s in stmts {
             marked = marked || is_cold_marker_stmt(&s);

@@ -5,14 +5,14 @@
 The optimizer already leans on cold paths. `builtin::cold_path()` marks code
 that rarely runs, and every pass that reads the marker acts on it:
 
-- `nir/cold_outline` moves the marked region into a function of its own.
-- `nir/inline` prices a callee without its cold tail. It does not inline at a
+- `nir/cold_outline` moves the marker's basic block into a function of its own.
+- `nir/inline` prices a callee without its cold code. It does not inline at a
   cold call site, nor anywhere in a function that runs only once a cold path
   is taken.
 - `param_spec` mints no specialized clone for a cold call site, and
   `const_object_globalization` skips a function that runs only on a cold path.
-- `infer_branch_hints` turns the marker into a Wasm branch hint, and wasmtime
-  lays out the cold side out of line.
+- `wir_build` turns the marker into a Wasm branch hint, and wasmtime lays out
+  the cold side out of line.
 
 An author's marker is a guess: it goes where they believe a path is rare. Only
 a path that ends in a trap is known to be cold. `infer_branch_hints` hints

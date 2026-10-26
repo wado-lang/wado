@@ -277,7 +277,7 @@ measured slower. The lever is a price that matches what the spliced code costs.
 A split that is right on its own stays. A slow path that is not rare is one: a
 `width > 0` branch runs every time a width is set, so it is hot when taken and
 no `cold_path()` marker should claim otherwise. A rare heavy sub-case needs no
-hand-split at all: `nir/cold_outline` moves what the marker opens into a
+hand-split at all: `nir/cold_outline` moves the marker's cold run into a
 function of its own, so the leaf inlines at its hot-path size. A marker
 `cold_outline` cannot take (mid-loop-body, see that pass's module doc) is a gap
 in that pass, per §2.
