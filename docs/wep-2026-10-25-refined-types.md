@@ -94,7 +94,8 @@ ship under this name.
 
 The share decided at compile time grows as the compiler learns to evaluate more
 clauses, as in hybrid type checking. A conversion the compiler proves needs no
-check at run time, and one it refutes is reported (see
+check at run time, and an `R::from` it refutes, which can only trap, is
+reported (see
 [the explicit conversions](#a-value-enters-a-refined-type-only-by-an-explicit-conversion)).
 Either way the conversion stays written: proving more removes checks and
 reports more failures, but never lets a narrowing go unwritten.
@@ -312,10 +313,8 @@ the library can report what it cannot describe. `TypeInfo`
 ([Total Reflection](./wep-2026-09-05-total-reflection.md)) gains a `Refined`
 case.
 
-This is what Jade reads. `Length { min: 1, max: 64 }` becomes
-`minLength: 1, maxLength: 64` through Jade's own impl for `Length`, and a
-clause type that Jade does not know fails the derivation at compile time,
-rather than quietly leaving the keyword out.
+This is what Jade reads. `0..=150` becomes `minimum: 0, maximum: 150` through
+Jade's own impl for a range.
 
 ### Syntax
 
@@ -327,8 +326,10 @@ as the function's own `contract` clause. Any other place where a clause's end
 is ambiguous is resolved the same way.
 
 A function's clause is parsed as an `if` condition is, with no struct literal,
-because the body's `{` follows it. A type's clause is not followed by a body, so
-a value clause such as `Length { max: 3 }` needs no parentheses.
+because the body's `{` follows it. So is a clause in an `impl` head, for the
+same reason: `impl Display for (String contract Length { max: 3 }) { … }`. A
+type's clause anywhere else is not followed by a body, so a value clause such as
+`Length { max: 3 }` needs no parentheses.
 
 ## Known gaps
 
@@ -360,6 +361,18 @@ type pattern is not an expression. `bio: String contract Length { max: 200 } = "
 is a narrowing the rules refuse, so such a field takes no default unless its
 type is named by a newtype.
 
+### A message on a type's clause
+
+A function's clause takes an optional message after a comma. Nothing states
+whether a type's clause takes one. Where a type is followed by a comma, as a
+field's or a parameter's is, a message would read as the next field.
+
+### What a clause in a parameter's type may name
+
+In `fn m(&self, x: i32 contract self > 0)`, `self` is both the receiver and the
+value the clause checks. Nothing states which it means, nor whether a clause in
+a parameter's type may name another parameter.
+
 ### What makes two clauses the same
 
 A refined type's identity is its base and its clauses. Nothing states yet
@@ -370,8 +383,8 @@ clauses matters.
 ### The common clause types
 
 `Length`, the ranges and a pattern match are the clauses most programs write.
-Which of them the standard library provides, and the module that holds them,
-are open. A pattern clause needs a regular expression engine, which the standard
+Which of them the standard library provides, and which module outside the
+prelude holds them, are open. A pattern clause needs a regular expression engine, which the standard
 library does not have. `Length` must also say what it counts: `String::len()`
 counts bytes, and JSON Schema's `minLength` counts code points.
 
