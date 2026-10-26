@@ -127,8 +127,9 @@ outside the prelude.
 
 A function's contract takes the `bool` form only. It has no subject: a value
 clause there would not say which argument it binds. A condition on one argument
-is a refinement of that argument's type, and only a condition relating several
-arguments stays on the function:
+can be written either way, and the two differ in who checks it. A `contract`
+clause is checked at the call. A refined parameter type is checked where the
+caller made the value, so the caller passes one it has already refined:
 
 ```text
 fn rename(user: &mut User, name: String contract Length { min: 1, max: 64 }) { ... }
@@ -171,7 +172,7 @@ Everything else follows from these two:
 Refined types also make immutability something a program can ask for: a refined
 `List` exposes every reading method and no mutating one.
 
-### A value enters a refined type through `from` or `try_from`
+### A value enters a refined type only by an explicit conversion
 
 The compiler provides two conversions from the base, and nothing else produces
 a refined value from an unrefined one:
@@ -183,17 +184,26 @@ a refined value from an unrefined one:
 - `R::try_from(b)` returns a `Result`. Its error names the clause that failed,
   through `Refine::describe` or the condition's text.
 
-A constant that fails a clause, such as `let n: UserName = "";`, is a warning
-where the compiler evaluates the clause on it, and its check still traps at run
-time. It is not yet an error, because niri does not evaluate every clause.
+Narrowing is never implicit. A `B` where an `R` is expected is a type error, in
+an assignment, an argument, a field initializer, a `return` and a literal
+coercion alike. An implicit narrowing could only trap on a failed clause, and a
+program cannot handle a trap: it ends the instance. A form field that fails its
+clause would turn an HTTP handler's validation into a crashed request. The
+fallible path has to be the one a program writes, so every narrowing is written
+where the reader sees it.
+
+`R::from` with a constant argument that fails a clause, such as
+`UserName::from("")`, is a warning where the compiler evaluates the clause on
+it, and the call still traps at run time. It is not yet an error, because niri
+does not evaluate every clause.
 
 ### Two refined types of one shape are one type
 
 Two refined types are the same type when they have the same base and the same
 clauses. `String contract Length { max: 200 }` written on two fields is one
 type, so a value moves between the fields with no check. Between two refined
-types that differ, a value converts by widening to the base and entering the
-other type, so the second type's clauses are checked.
+types that differ, a value widens to the base and enters the other type through
+`from` or `try_from`, as any base value does.
 
 Two newtypes over one refined type are still two types, as two newtypes over
 one base are.
@@ -252,14 +262,20 @@ a value clause such as `Length { max: 3 }` needs no parentheses.
 
 ## Known gaps
 
-### Whether a value narrows implicitly
+### Naming an inline refined type to convert into it
 
-A struct literal `CreateUser { bio: s, … }` with `s: String` has to enter the
-refined field type, and that type has no name to call `from` on. Resource
-narrowing is never implicit; it is written as a type pattern. Nothing states yet
-whether a refined type narrows wherever a value is expected, as an unmarked
-contract call would, or whether a type pattern (`let n: UserName = s else { … }`)
-narrows into one.
+A struct literal `CreateUser { bio: …, … }` built from `s: String` has to call
+`try_from` on the field's type, `String contract Length { max: 200 }`, and that
+type has no name. Nothing states yet how a program spells the conversion into a
+refined type it wrote inline. A derived `Deserialize` is unaffected, since the
+compiler writes its call.
+
+### Whether a type pattern narrows
+
+Resource narrowing is written as a type pattern
+(`let w: Widget = el else { … }`). Nothing states yet whether a type pattern
+narrows into a refined type as well, as a third explicit form beside `from` and
+`try_from`.
 
 ### What a type parameter is solved to, and which bounds a refined type meets
 
