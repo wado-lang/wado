@@ -60,7 +60,7 @@ them is in [the research](./research-code-review-bots.md).
 - How models of different providers exchange findings is worked out by trial
   during implementation.
 - How learnings are stored is decided later.
-- What the code search tool answers.
+- What the code search tool answers is decided later.
 
 ## Outcome Signals
 

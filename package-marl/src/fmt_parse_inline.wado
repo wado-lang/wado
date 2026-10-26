@@ -19,7 +19,7 @@ use {
     COMMENT_OPEN,
     COMMENT_CLOSE,
 } from "./fmt_ast.wado";
-use { RefTable, ref_table_get, scan_dest_and_title } from "./fmt_links.wado";
+use { RefTable, ref_table_get, scan_dest_and_title, is_ascii_punct } from "./fmt_links.wado";
 use { StrCursor } from "./str_cursor.wado";
 
 /// A flat inline token. Resolved nodes (text runs, code spans, links, images,
@@ -781,13 +781,6 @@ fn opt_is_alnum(o: Option<char>) -> bool {
 
 fn is_space(c: char) -> bool {
     return c matches { ' ' | '\t' | '\n' };
-}
-
-/// A backslash-escapable character, per CommonMark. `fmt_html.wado` shares
-/// this to reverse the escapes the tokenizer keeps in `Text` nodes, so the
-/// escapable set has a single definition.
-internal fn is_ascii_punct(c: char) -> bool {
-    return c matches { '!'..='/' | ':'..='@' | '['..='`' | '{'..='~' };
 }
 
 fn is_scheme_char(c: char) -> bool {
