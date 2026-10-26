@@ -82,18 +82,15 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     // show their metadata and nothing else.
     let mut ancestors = BTreeSet::new();
     for rule in policy.rules() {
-        let real = match &rule.dir {
-            Some(dir) => descriptor_path(dir)?,
-            None => match std::fs::canonicalize(&rule.path) {
-                Ok(real) => real,
-                Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
-                Err(err) => {
-                    return Err(io::Error::new(
-                        err.kind(),
-                        format!("{}: {err}", rule.path.display()),
-                    ));
-                }
-            },
+        let real = match rule.real_path() {
+            Ok(real) => real,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => {
+                return Err(io::Error::new(
+                    err.kind(),
+                    format!("{}: {err}", rule.path.display()),
+                ));
+            }
         };
         let operations = match rule.access {
             Access::ReadExecute => "file-read* process-exec",

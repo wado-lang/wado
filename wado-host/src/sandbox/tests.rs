@@ -34,22 +34,11 @@ const ENCLOSED_VAR: &str = "WADO_SANDBOX_ENCLOSED";
 #[cfg(target_os = "linux")]
 #[test]
 fn under_an_enclosing_listener_a_child_runs_unobserved() {
-    use std::os::unix::process::CommandExt;
-
     assert_available();
-    let mut enclosed = std::process::Command::new(std::env::current_exe().unwrap());
-    enclosed
-        .args([
-            "--exact",
-            "sandbox::tests::enclosed",
-            "--test-threads=1",
-            "--quiet",
-        ])
-        .env(ENCLOSED_VAR, "1");
     // SAFETY: the closure makes only system calls on memory built before the
     // fork.
-    unsafe {
-        enclosed.pre_exec(|| {
+    let passed = unsafe {
+        reexecute("sandbox::tests::enclosed", ENCLOSED_VAR, || {
             let allow = [libc::sock_filter {
                 code: (libc::BPF_RET | libc::BPF_K) as u16,
                 jt: 0,
@@ -75,9 +64,73 @@ fn under_an_enclosing_listener_a_child_runs_unobserved() {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
-        });
+        })
+    };
+    assert!(passed);
+}
+
+/// Whether the test `test` passes in this binary re-executed with `var` set,
+/// after `setup` runs between `fork` and `exec`.
+///
+/// # Safety
+///
+/// `setup` must be safe in the child of a multithreaded process: system calls
+/// on memory built before the fork alone.
+#[cfg(target_os = "linux")]
+unsafe fn reexecute(
+    test: &str,
+    var: &str,
+    setup: impl FnMut() -> std::io::Result<()> + Send + Sync + 'static,
+) -> bool {
+    use std::os::unix::process::CommandExt;
+
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command
+        .args(["--exact", test, "--test-threads=1", "--quiet"])
+        .env(var, "1");
+    // SAFETY: as the caller vouches.
+    unsafe { command.pre_exec(setup) };
+    command.status().unwrap().success()
+}
+
+/// Set in a re-execution that may not read a non-dumpable child's memory.
+#[cfg(target_os = "linux")]
+const BLIND_VAR: &str = "WADO_SANDBOX_BLIND";
+
+/// A child that hides its memory from the host keeps the trace from reading a
+/// path, which the trace says rather than leaving the call out.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_path_the_host_cannot_read_is_reported_unseen() {
+    /// `CAP_SYS_PTRACE`, which reads a non-dumpable process's memory.
+    const CAP_SYS_PTRACE: libc::c_ulong = 19;
+    assert_available();
+    // A root host drops the capability from what its `exec` grants it; any
+    // other host never held it, and fails to drop it with `EPERM`.
+    // SAFETY: the closure makes one system call.
+    let passed = unsafe {
+        reexecute("sandbox::tests::blind", BLIND_VAR, || {
+            libc::prctl(libc::PR_CAPBSET_DROP, CAP_SYS_PTRACE, 0, 0, 0);
+            Ok(())
+        })
+    };
+    assert!(passed);
+}
+
+/// Not a test of its own: the half of the test above that runs blind.
+#[cfg(target_os = "linux")]
+#[test]
+fn blind() {
+    if std::env::var_os(BLIND_VAR).is_none() {
+        return;
     }
-    assert!(enclosed.status().unwrap().success());
+    let tree = Tree::new();
+    let (_, refused) = probe_refused(
+        tree.policy(Network::Denied),
+        Trace::Files,
+        "undumpable:/etc/passwd",
+    );
+    assert!(refused.contains(&Refusal::Unseen), "{refused:?}");
 }
 
 /// Not a test of its own: the half of the test above that runs enclosed.
@@ -180,6 +233,48 @@ fn probe() {
             unsafe { libc::read(fd, (&raw mut byte).cast(), 1) as libc::c_int }
         }
         #[cfg(target_os = "linux")]
+        "tmpfile" => {
+            // SAFETY: a plain system call on a NUL-terminated path.
+            unsafe {
+                libc::open(
+                    c_path(arg).as_ptr(),
+                    libc::O_TMPFILE | libc::O_WRONLY,
+                    0o600,
+                )
+            }
+        }
+        #[cfg(target_os = "linux")]
+        "mknod" => {
+            let (mode, path) = arg.split_once(':').unwrap();
+            let mode = libc::mode_t::from_str_radix(mode, 8).unwrap();
+            // SAFETY: a plain system call on a NUL-terminated path.
+            unsafe { libc::mknod(c_path(path).as_ptr(), mode, 0) }
+        }
+        #[cfg(target_os = "linux")]
+        "rename" => {
+            let (from, to) = arg.split_once(':').unwrap();
+            // SAFETY: a plain system call on NUL-terminated paths.
+            unsafe { libc::rename(c_path(from).as_ptr(), c_path(to).as_ptr()) }
+        }
+        #[cfg(target_os = "linux")]
+        "exec_nofollow" => execveat(libc::AT_FDCWD, arg, libc::AT_SYMLINK_NOFOLLOW),
+        #[cfg(target_os = "linux")]
+        "exec_fd" => {
+            let (flags, path) = arg.split_once(':').unwrap();
+            // SAFETY: a plain system call on a NUL-terminated path.
+            let fd = unsafe { libc::open(c_path(path).as_ptr(), libc::O_PATH) };
+            assert!(fd >= 0);
+            execveat(fd, "", flags.parse().unwrap())
+        }
+        #[cfg(target_os = "linux")]
+        "undumpable" => {
+            // SAFETY: plain system calls on a NUL-terminated path.
+            unsafe {
+                libc::prctl(libc::PR_SET_DUMPABLE, 0, 0, 0, 0);
+                libc::open(c_path(arg).as_ptr(), libc::O_RDONLY)
+            }
+        }
+        #[cfg(target_os = "linux")]
         "io_uring" => {
             // SAFETY: the kernel writes the params it reads.
             let mut params = [0u8; 120];
@@ -193,6 +288,30 @@ fn probe() {
         exit_with(&std::io::Error::last_os_error());
     }
     std::process::exit(0);
+}
+
+#[cfg(target_os = "linux")]
+fn c_path(path: &str) -> std::ffi::CString {
+    std::ffi::CString::new(path).unwrap()
+}
+
+/// `execveat(dir, path, [path], [], flags)`, returning only on failure.
+#[cfg(target_os = "linux")]
+fn execveat(dir: libc::c_int, path: &str, flags: libc::c_int) -> libc::c_int {
+    let path = c_path(path);
+    let argv = [path.as_ptr(), std::ptr::null()];
+    let envp = [std::ptr::null::<libc::c_char>()];
+    // SAFETY: `path`, `argv` and `envp` are NUL-terminated and outlive the call.
+    unsafe {
+        libc::syscall(
+            libc::SYS_execveat,
+            dir,
+            path.as_ptr(),
+            argv.as_ptr(),
+            envp.as_ptr(),
+            flags,
+        ) as libc::c_int
+    }
 }
 
 fn exit_with(err: &std::io::Error) -> ! {
@@ -293,15 +412,15 @@ fn sh(policy: &Policy, script: &str) -> ExitStatus {
 /// This test binary under `policy`, with its own directory readable, performing
 /// `act`.
 fn probe_under(policy: Policy, act: &str) -> ExitStatus {
-    probe_refused(policy, act).0
+    probe_refused(policy, Trace::Off, act).0
 }
 
-fn probe_refused(mut policy: Policy, act: &str) -> (ExitStatus, BTreeSet<Refusal>) {
+fn probe_refused(mut policy: Policy, trace: Trace, act: &str) -> (ExitStatus, BTreeSet<Refusal>) {
     let exe = std::env::current_exe().unwrap();
     policy.grant_path(exe.parent().unwrap(), Access::ReadExecute);
     run_refused(
         &policy,
-        Trace::Off,
+        trace,
         &exe,
         &[
             "--exact",
@@ -469,15 +588,71 @@ fn the_host_learns_each_call_the_filter_refused() {
         ),
     ] {
         assert_eq!(
-            probe_refused(tree.policy(network), &act),
+            probe_refused(tree.policy(network), Trace::Off, &act),
             (REFUSED, BTreeSet::from([refusal])),
             "{act}"
         );
     }
     assert_eq!(
-        probe_refused(tree.policy(Network::Granted), "tcp"),
+        probe_refused(tree.policy(Network::Granted), Trace::Off, "tcp"),
         (OK, BTreeSet::new())
     );
+}
+
+/// A call the kernel fails before Landlock judges it is no refusal, however
+/// its flags or its path spell that; beside each, a spelling Landlock judges.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_call_is_judged_as_its_flags_and_spelling_say() {
+    assert_available();
+    let tree = Tree::new();
+    let outside = tree.outside().canonicalize().unwrap();
+    let script = write_script(&outside);
+    fs::write(outside.join("file"), "").unwrap();
+    symlink(&script, outside.join("link")).unwrap();
+    let refused = |act: String| -> BTreeSet<Refusal> {
+        probe_refused(tree.policy(Network::Denied), Trace::Files, &act)
+            .1
+            .into_iter()
+            .filter(|refusal| matches!(refusal, Refusal::Path { path, .. } if path.starts_with(&outside)))
+            .collect()
+    };
+    let paths = |paths: &[(PathBuf, Access)]| -> BTreeSet<Refusal> {
+        paths
+            .iter()
+            .map(|(path, access)| Refusal::Path {
+                path: path.clone(),
+                access: *access,
+            })
+            .collect()
+    };
+    let o = outside.display();
+    let write = |name: &str| (outside.join(name), Access::ReadWrite);
+    // `O_TMPFILE` makes an unnamed file in the directory it opens.
+    assert_eq!(
+        refused(format!("tmpfile:{o}")),
+        paths(&[(outside.clone(), Access::ReadWrite)])
+    );
+    assert_eq!(
+        refused(format!("mknod:100644:{o}/node")),
+        paths(&[write("node")])
+    );
+    assert_eq!(refused(format!("mknod:40755:{o}/node")), paths(&[]));
+    assert_eq!(refused(format!("mknod:100644:{o}/node/")), paths(&[]));
+    assert_eq!(
+        refused(format!("rename:{o}/file:{o}/moved")),
+        paths(&[write("file"), write("moved")])
+    );
+    assert_eq!(refused(format!("rename:{o}/file:{o}/moved/")), paths(&[]));
+    let exec = paths(&[(script.clone(), Access::ReadExecute)]);
+    let s = script.display();
+    assert_eq!(refused(format!("exec_nofollow:{s}")), exec);
+    assert_eq!(refused(format!("exec_nofollow:{o}/link")), paths(&[]));
+    assert_eq!(
+        refused(format!("exec_fd:{}:{s}", libc::AT_EMPTY_PATH)),
+        exec
+    );
+    assert_eq!(refused(format!("exec_fd:0:{s}")), paths(&[]));
 }
 /// `sh` reads with a builtin, so the child itself opens each file: a
 /// descendant's `/proc/self` is not the child's.
@@ -776,18 +951,24 @@ fn a_program_outside_the_grants_never_runs() {
 }
 
 #[test]
-fn the_policy_answers_what_the_sandbox_executes() {
+fn the_resolved_policy_answers_what_the_sandbox_executes() {
     let tree = Tree::new();
     let policy = tree.policy(Network::Denied);
-    let granted = write_script(&tree.granted());
     let outside = write_script(&tree.outside());
     let linked = tree.granted().join("linked");
     symlink(&outside, &linked).unwrap();
-    assert!(policy.executes(&granted));
-    assert!(policy.executes(Path::new("/bin/sh")));
-    assert!(!policy.executes(&outside));
+    // The sandbox confines through the descriptor, wherever its path moved.
+    let moved = tree.root.path().join("moved");
+    fs::rename(tree.granted(), &moved).unwrap();
+    let granted = write_script(&moved);
+    let resolved = policy.resolved();
+    let executes =
+        |program: &Path| resolved.permits(&fs::canonicalize(program).unwrap(), Access::ReadExecute);
+    assert!(executes(&granted));
+    assert!(executes(Path::new("/bin/sh")));
+    assert!(!executes(&outside));
     // The sandbox follows the link to what it names.
-    assert!(!policy.executes(&linked));
+    assert!(!executes(&moved.join("linked")));
 }
 
 #[test]

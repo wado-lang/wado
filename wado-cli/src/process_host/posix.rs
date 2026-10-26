@@ -83,6 +83,7 @@ struct Started {
     stdout: Route,
     stderr: Route,
     scratch: TempDir,
+    trace: Trace,
 }
 
 pub(super) fn spawn<U>(
@@ -113,6 +114,7 @@ pub(super) fn spawn<U>(
         stdout,
         stderr,
         scratch,
+        trace,
     } = match started {
         Ok(started) => started,
         Err(code) => {
@@ -137,7 +139,7 @@ pub(super) fn spawn<U>(
             refusals: spawned.refusals,
             program,
             spawning: store.get().ctx.spawning.clone(),
-            trace: store.get().ctx.grants()?.trace,
+            trace,
         },
         timeout.map(Duration::from_nanos),
         scratch,
@@ -211,7 +213,7 @@ fn start(
             policy.grant_terminal();
         }
         if let Ok(real) = fs::canonicalize(&path)
-            && !policy.executes(&real)
+            && !policy.resolved().permits(&real, Reach::ReadExecute)
         {
             view.ctx
                 .spawning
@@ -244,6 +246,7 @@ fn start(
             stdout,
             stderr,
             scratch: scratch.0,
+            trace: grants.trace,
         }),
         Err(err) => Err(error_code(&err)),
     })

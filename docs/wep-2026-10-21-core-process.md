@@ -296,7 +296,9 @@ more, and says it on its own stderr, with the fix where one exists:
   why it failed, so the warning puts the two side by side and claims no cause.
   Linux alone reports this: the filter refers each such call to the host
   through a seccomp listener, and a host thread records it and answers `EPERM`,
-  so the child sees what a plain `SECCOMP_RET_ERRNO` would give it. The kernel
+  so the child sees what a plain `SECCOMP_RET_ERRNO` would give it. The child
+  waits to `exec` until the host holds its listener, so a host out of
+  descriptors fails the spawn rather than leave a call unanswered. The kernel
   allows one listener per chain of filters, so under an enclosing sandbox that
   holds one, the filter answers `EPERM` itself and nothing is reported.
 - `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
@@ -317,9 +319,12 @@ forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
 the path from the child's memory and resolves it as the kernel does for the
 child: against its working directory or the descriptor the call names, one
 component at a time, with `/proc/self` naming the child. It leaves out a call
-that fails before Landlock's hook, and checks the rest against the policy
-where Landlock does: a call that makes, removes or moves an entry on the
-directory holding it, an open on the file.
+that fails before Landlock's hook, as its flags and the spelling of its path
+decide, and checks the rest against the policy where Landlock does: a call
+that makes, removes or moves an entry on the directory holding it, an open on
+the file. A call whose path the host may not read, under Yama's
+`ptrace_scope` or from a non-dumpable process, is reported as unseen rather
+than left out.
 The kernel then runs the call, and Landlock judges it as it would have. Moving
 enforcement itself to seccomp was rejected: the path a call names can change
 after the host reads it, and no filter can emulate `execve`.

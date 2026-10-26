@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 
 use crate::sync::lock;
 
@@ -68,14 +68,23 @@ pub struct Rule {
     pub dir: Option<Arc<File>>,
 }
 
+impl Rule {
+    /// The real path the sandbox matches: a directory's is the one its
+    /// descriptor holds, however `path` has moved since.
+    fn real_path(&self) -> io::Result<PathBuf> {
+        match &self.dir {
+            Some(dir) => backend::descriptor_path(dir),
+            None => std::fs::canonicalize(&self.path),
+        }
+    }
+}
+
 /// Everything a child may reach: the baseline, the guest's grants, and the
 /// network all or none.
 #[derive(Clone, Debug)]
 pub struct Policy {
     rules: Vec<Rule>,
     network: Network,
-    /// [`Policy::resolved`], once asked for, until a rule is added.
-    resolved: OnceLock<ResolvedPolicy>,
 }
 
 impl Policy {
@@ -85,7 +94,6 @@ impl Policy {
         let mut policy = Self {
             rules: Vec::new(),
             network,
-            resolved: OnceLock::new(),
         };
         for path in BASELINE_READ {
             policy.grant_path(path, Access::ReadExecute);
@@ -97,7 +105,6 @@ impl Policy {
     /// A directory the guest was granted, through the descriptor its preopen
     /// holds.
     pub fn grant_dir(&mut self, path: impl Into<PathBuf>, dir: Arc<File>) {
-        self.resolved.take();
         self.rules.push(Rule {
             path: path.into(),
             access: Access::ReadWrite,
@@ -108,7 +115,6 @@ impl Policy {
     /// A path the host names itself: a private `HOME`, a toolchain the user
     /// adds to the baseline.
     pub fn grant_path(&mut self, path: impl Into<PathBuf>, access: Access) {
-        self.resolved.take();
         self.rules.push(Rule {
             path: path.into(),
             access,
@@ -121,25 +127,15 @@ impl Policy {
         self.grant_path("/dev/tty", Access::ReadWrite);
     }
 
-    /// Whether a child may execute `program`: what it resolves to lies beneath
-    /// a rule, as the sandbox resolves both. Every rule grants execute.
-    #[must_use]
-    pub fn executes(&self, program: &Path) -> bool {
-        std::fs::canonicalize(program)
-            .is_ok_and(|program| self.resolved().permits(&program, Access::ReadExecute))
-    }
-
     /// The rules at the real paths they name, as the sandbox matches them.
     #[must_use]
-    pub fn resolved(&self) -> &ResolvedPolicy {
-        self.resolved.get_or_init(|| {
-            ResolvedPolicy(
-                self.rules
-                    .iter()
-                    .filter_map(|rule| Some((std::fs::canonicalize(&rule.path).ok()?, rule.access)))
-                    .collect(),
-            )
-        })
+    pub fn resolved(&self) -> ResolvedPolicy {
+        ResolvedPolicy(
+            self.rules
+                .iter()
+                .filter_map(|rule| Some((rule.real_path().ok()?, rule.access)))
+                .collect(),
+        )
     }
 
     #[must_use]
@@ -285,9 +281,9 @@ pub enum Refusal {
     /// of its own, seen under [`Trace::Files`]. Named without the pid, which no
     /// grant can name ahead of the process.
     ProcessEntry,
-    /// Any call at all: the host lost the listener the filter refers calls
-    /// to, so it killed the child rather than leave its calls unanswered.
-    Unsupervised,
+    /// A file call whose path the host may not read, under [`Trace::Files`],
+    /// so whether Landlock refused it goes unsaid.
+    Unseen,
     // The rest are calls the filter refuses, which the child sees fail with
     // `EPERM`.
     /// A socket, with the network not granted.
@@ -317,8 +313,10 @@ impl fmt::Display for Refusal {
             Refusal::ProcessEntry => f.write_str(
                 "reading a process's /proc entry, which only the child it started may read",
             ),
-            Refusal::Unsupervised => f.write_str(
-                "running once the host lost its seccomp listener, out of file descriptors",
+            Refusal::Unseen => f.write_str(
+                "a file call whose path the host may not read (Yama's `ptrace_scope`, or a \
+                 process that made itself non-dumpable), so `--process-trace` cannot say \
+                 whether it was refused",
             ),
             Refusal::Network => f.write_str("a network socket, with no network granted"),
             Refusal::UnixSocket => {

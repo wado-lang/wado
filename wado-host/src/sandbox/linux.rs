@@ -170,7 +170,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let filter = seccomp_filter(command.policy.network(), trace, refer);
     let traced = match trace {
         Trace::Off => None,
-        Trace::Files => Some(command.policy.resolved().clone()),
+        Trace::Files => Some(command.policy.resolved()),
     };
     let (listener_tx, listener_rx) = match listens.then(socket_pair).transpose()? {
         Some([tx, rx]) => (Some(tx), Some(rx)),
@@ -207,18 +207,15 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         spawn_detached("sandbox-refusals", move || {
             match receive_listener(&listener_rx) {
                 Received::Listener(listener, pid) => {
+                    reply(&listener_rx, 0);
                     let traced = traced.map(|mut policy| {
                         policy.grant_own_proc(pid);
                         policy
                     });
                     answer_refusals(&listener, &recorded, traced.as_ref());
                 }
-                Received::Lost(pid) => {
-                    recorded.record(Refusal::Unsupervised);
-                    // SAFETY: a plain system call. The child leads its group,
-                    // whose descendants share the filter.
-                    unsafe { libc::kill(-pid, libc::SIGKILL) };
-                }
+                // Out of descriptors, as the child's spawn then fails.
+                Received::Lost => reply(&listener_rx, libc::EMFILE),
                 Received::Nothing => {}
             }
         })?;
@@ -290,7 +287,9 @@ impl FdMessage {
     }
 }
 
-/// Runs in the child between `fork` and `exec`.
+/// Runs in the child between `fork` and `exec`, and returns once the host
+/// holds the listener, so no call the filter refers goes unanswered: the
+/// error is the host's, where it could not take it.
 fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     let mut message = FdMessage::new();
     // SAFETY: a plain system call.
@@ -311,7 +310,34 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     if sent == -1 {
         return Err(io::Error::last_os_error());
     }
-    Ok(())
+    let mut errno = 0u8;
+    // SAFETY: reads one byte into `errno`, which outlives the call.
+    match unsafe { libc::recv(socket, (&raw mut errno).cast(), 1, 0) } {
+        -1 => Err(io::Error::last_os_error()),
+        0 => Err(io::ErrorKind::BrokenPipe.into()),
+        _ if errno == 0 => Ok(()),
+        _ => Err(io::Error::from_raw_os_error(i32::from(errno))),
+    }
+}
+
+/// Answer the child waiting in [`send_listener`]: 0 to go on, or the error
+/// its spawn fails with.
+fn reply(socket: &OwnedFd, errno: libc::c_int) {
+    let errno = u8::try_from(errno).expect("an errno fits in a byte");
+    // SAFETY: sends the one byte `errno` holds.
+    let sent = unsafe {
+        libc::send(
+            socket.as_raw_fd(),
+            (&raw const errno).cast(),
+            1,
+            libc::MSG_NOSIGNAL,
+        )
+    };
+    if sent == -1 {
+        let err = io::Error::last_os_error();
+        // The child died while it waited.
+        assert_eq!(err.raw_os_error(), Some(libc::EPIPE), "send: {err}");
+    }
 }
 
 /// What the child sent over the socket pair.
@@ -319,7 +345,7 @@ enum Received {
     Listener(OwnedFd, libc::pid_t),
     /// The child sent its listener, which a host out of descriptors could not
     /// take.
-    Lost(libc::pid_t),
+    Lost,
     /// Every sender closed: the spawn failed before the child confined itself.
     Nothing,
 }
@@ -343,7 +369,7 @@ fn receive_listener(socket: &OwnedFd) -> Received {
     let control = unsafe { libc::CMSG_FIRSTHDR(header) };
     // SAFETY: `header` points into `message`, which the kernel wrote.
     if control.is_null() || unsafe { (*header).msg_flags } & libc::MSG_CTRUNC != 0 {
-        return Received::Lost(message.pid);
+        return Received::Lost;
     }
     // SAFETY: a header the kernel wrote, holding the one descriptor sent, which
     // `SCM_RIGHTS` installed in our table for us alone.
@@ -487,7 +513,17 @@ fn refusal(call: &libc::seccomp_data) -> Refusal {
 #[derive(Clone, Copy)]
 enum PathArg {
     Path(usize),
-    At { dir: usize, path: usize },
+    At {
+        dir: usize,
+        path: usize,
+    },
+    /// As `At`, naming the descriptor itself where the path is empty and the
+    /// flags at `flags` hold `AT_EMPTY_PATH`.
+    AtOrDir {
+        dir: usize,
+        path: usize,
+        flags: usize,
+    },
 }
 
 /// Where a call takes its flags: an argument, or nowhere, for a call whose
@@ -501,15 +537,20 @@ enum Flags {
 /// What a file call does with a path, as the table states it.
 #[derive(Clone, Copy)]
 enum Asks {
-    /// Execute what the path leads to.
-    Exec,
+    /// Execute what the path leads to, or the path itself under
+    /// `AT_SYMLINK_NOFOLLOW`.
+    Exec(Flags),
     /// Remove or move the path itself.
     Change,
     /// Link to the path itself, or to what it leads to under
     /// `AT_SYMLINK_FOLLOW`.
     LinkFrom(Flags),
-    /// Make the path.
-    Create,
+    /// Make the path a directory.
+    MakeDir,
+    /// Make the path a link.
+    MakeLink,
+    /// Make the path a node of the type the mode at this argument names.
+    MakeNode(usize),
     /// Move onto the path, as the `renameat2` flags say.
     RenameTo(Flags),
     /// Truncate what the path leads to.
@@ -523,13 +564,24 @@ enum Asks {
 /// What a file call does with a path, its flags read.
 #[derive(Clone, Copy)]
 enum Ask {
-    Exec,
-    Change { follow: bool },
-    Create,
+    Exec {
+        follow: bool,
+    },
+    Change {
+        follow: bool,
+    },
+    /// `slash`: whether a trailing `/` may name the entry, as it may a
+    /// directory made or moved there. Any other fails with `ENOENT`.
+    Create {
+        slash: bool,
+    },
     Replace,
     Truncate,
     Open(libc::c_int),
 }
+
+/// `O_TMPFILE` without the `O_DIRECTORY` it carries: the bit that asks for one.
+const TMPFILE: libc::c_int = libc::O_TMPFILE & !libc::O_DIRECTORY;
 
 /// How a call spelled the end of its path, which resolution forgets.
 #[derive(Clone, Copy)]
@@ -567,9 +619,9 @@ enum Found {
 impl Ask {
     fn follows(self) -> bool {
         match self {
-            Self::Exec | Self::Truncate => true,
-            Self::Change { follow } => follow,
-            Self::Create | Self::Replace => false,
+            Self::Truncate => true,
+            Self::Exec { follow } | Self::Change { follow } => follow,
+            Self::Create { .. } | Self::Replace => false,
             Self::Open(flags) => flags & libc::O_NOFOLLOW == 0 && !Self::exclusive(flags),
         }
     }
@@ -584,7 +636,8 @@ impl Ask {
     /// judged on the directory holding it; one that opens a file, on the file.
     /// No call makes, removes or moves the root, `.` or `..` (`EEXIST`,
     /// `EBUSY`, `EISDIR`, `EINVAL`, `ENOTEMPTY`), a trailing `/` on a file
-    /// fails with `ENOTDIR`, and so does `O_DIRECTORY`.
+    /// fails with `ENOTDIR`, and so does `O_DIRECTORY`. `O_TMPFILE` makes a
+    /// file in the directory it opens, which is judged as the file.
     fn judged(self, path: &Path, found: Found, named: Named) -> Option<(PathBuf, Access)> {
         let entry = !named.dot && path != Path::new("/");
         let not_dir = found == Found::Other
@@ -598,13 +651,27 @@ impl Ask {
             Some((parent.to_owned(), Access::ReadWrite))
         };
         match self {
-            Self::Exec if found == Found::Other => itself(Access::ReadExecute),
+            Self::Exec { .. } if found == Found::Other => itself(Access::ReadExecute),
             Self::Truncate if found == Found::Other => itself(Access::ReadWrite),
-            Self::Exec | Self::Truncate => None,
-            Self::Create if entry && found == Found::Absent => parent(),
+            Self::Exec { .. } | Self::Truncate => None,
+            Self::Create { slash }
+                if entry && found == Found::Absent && (slash || !named.slash) =>
+            {
+                parent()
+            }
             Self::Change { .. } if entry && found != Found::Absent => parent(),
             Self::Replace if entry => parent(),
-            Self::Create | Self::Change { .. } | Self::Replace => None,
+            Self::Create { .. } | Self::Change { .. } | Self::Replace => None,
+            Self::Open(flags) if flags & TMPFILE != 0 => {
+                // Anything but `O_TMPFILE` for writing fails with `EINVAL`.
+                let valid = flags & (libc::O_TMPFILE | libc::O_CREAT) == libc::O_TMPFILE
+                    && flags & libc::O_ACCMODE != libc::O_RDONLY;
+                if valid && found == Found::Dir {
+                    itself(Access::ReadWrite)
+                } else {
+                    None
+                }
+            }
             Self::Open(flags) => match found {
                 Found::Absent if flags & libc::O_CREAT != 0 && !named.slash => parent(),
                 Found::Absent | Found::Link => None,
@@ -644,9 +711,9 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
         )],
     ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_mkdir, &[(PathArg::Path(0), Asks::Create)]),
+    (libc::SYS_mkdir, &[(PathArg::Path(0), Asks::MakeDir)]),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_mknod, &[(PathArg::Path(0), Asks::Create)]),
+    (libc::SYS_mknod, &[(PathArg::Path(0), Asks::MakeNode(1))]),
     #[cfg(target_arch = "x86_64")]
     (libc::SYS_unlink, &[(PathArg::Path(0), Asks::Change)]),
     #[cfg(target_arch = "x86_64")]
@@ -675,11 +742,11 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
         libc::SYS_link,
         &[
             (PathArg::Path(0), Asks::LinkFrom(Flags::Fixed(0))),
-            (PathArg::Path(1), Asks::Create),
+            (PathArg::Path(1), Asks::MakeLink),
         ],
     ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_symlink, &[(PathArg::Path(1), Asks::Create)]),
+    (libc::SYS_symlink, &[(PathArg::Path(1), Asks::MakeLink)]),
     (
         libc::SYS_openat,
         &[(PathArg::At { dir: 0, path: 1 }, Asks::Open(Flags::Arg(2)))],
@@ -688,18 +755,28 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
         libc::SYS_openat2,
         &[(PathArg::At { dir: 0, path: 1 }, Asks::OpenHow(2))],
     ),
-    (libc::SYS_execve, &[(PathArg::Path(0), Asks::Exec)]),
+    (
+        libc::SYS_execve,
+        &[(PathArg::Path(0), Asks::Exec(Flags::Fixed(0)))],
+    ),
     (
         libc::SYS_execveat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Exec)],
+        &[(
+            PathArg::AtOrDir {
+                dir: 0,
+                path: 1,
+                flags: 4,
+            },
+            Asks::Exec(Flags::Arg(4)),
+        )],
     ),
     (
         libc::SYS_mkdirat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Create)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::MakeDir)],
     ),
     (
         libc::SYS_mknodat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Create)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::MakeNode(2))],
     ),
     (
         libc::SYS_unlinkat,
@@ -719,15 +796,19 @@ const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
         libc::SYS_linkat,
         &[
             (
-                PathArg::At { dir: 0, path: 1 },
+                PathArg::AtOrDir {
+                    dir: 0,
+                    path: 1,
+                    flags: 4,
+                },
                 Asks::LinkFrom(Flags::Arg(4)),
             ),
-            (PathArg::At { dir: 2, path: 3 }, Asks::Create),
+            (PathArg::At { dir: 2, path: 3 }, Asks::MakeLink),
         ],
     ),
     (
         libc::SYS_symlinkat,
-        &[(PathArg::At { dir: 1, path: 2 }, Asks::Create)],
+        &[(PathArg::At { dir: 1, path: 2 }, Asks::MakeLink)],
     ),
     (libc::SYS_truncate, &[(PathArg::Path(0), Asks::Truncate)]),
 ];
@@ -742,7 +823,7 @@ fn file_call(nr: libc::c_long) -> Option<&'static [(PathArg, Asks)]> {
 /// The paths of a file call the policy does not grant the access it asks.
 /// A path the call fails on before Landlock judges it is left out, as [`Ask`]
 /// says. So is one the caller's memory no longer holds, which a child that
-/// exits mid-call leaves.
+/// exits mid-call leaves. One the host may not read is [`Refusal::Unseen`].
 fn refused_paths(
     listener: &OwnedFd,
     notif: &libc::seccomp_notif,
@@ -753,14 +834,10 @@ fn refused_paths(
         pid: notif.pid as libc::pid_t,
         args: notif.data.args,
     };
-    // A path that cannot be read, or an `O_PATH` open, leaves nothing to judge.
-    let Some(asked) = paths
+    let asked = paths
         .iter()
-        .map(|&(arg, asks)| Some((caller.path(arg)?, caller.ask(asks)?)))
-        .collect::<Option<Vec<(PathBuf, Ask)>>>()
-    else {
-        return Vec::new();
-    };
+        .map(|&(arg, asks)| Ok(caller.path(arg)?.zip(caller.ask(asks)?)))
+        .collect::<Result<Option<Vec<(PathBuf, Ask)>>, Unseen>>();
     // The caller may have died and its pid passed on while we read its memory.
     // SAFETY: `notif.id` outlives the call.
     if unsafe {
@@ -773,13 +850,37 @@ fn refused_paths(
     {
         return Vec::new();
     }
+    let asked = match asked {
+        Ok(Some(asked)) => asked,
+        // A path the call fails on, or an `O_PATH` open, leaves nothing to
+        // judge.
+        Ok(None) => return Vec::new(),
+        Err(Unseen) => return vec![Refusal::Unseen],
+    };
     // Landlock judges a call once, on all its paths, so a call that fails on
     // any of them first is judged on none.
-    let Some(judged) = asked
+    let Some(resolved) = asked
         .into_iter()
         .map(|(path, ask)| {
             let named = Named::of(&path);
             let (path, found) = caller.resolve(&path, ask.follows())?;
+            Some((path, found, named, ask))
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Vec::new();
+    };
+    if let [(_, from, _, _), (_, _, to, _)] = resolved.as_slice()
+        && *from != Found::Dir
+        && to.slash
+    {
+        // Moving anything but a directory onto a path ending in `/` fails
+        // with `ENOTDIR`, and linking it there with `ENOENT`.
+        return Vec::new();
+    }
+    let Some(judged) = resolved
+        .into_iter()
+        .map(|(path, found, named, ask)| {
             let (at, access) = ask.judged(&path, found, named)?;
             Some((path, at, access))
         })
@@ -819,21 +920,44 @@ struct Caller {
 
 impl Caller {
     /// The path `arg` names, made absolute against the caller's working
-    /// directory or the descriptor it names.
-    fn path(&self, arg: PathArg) -> Option<PathBuf> {
-        let (dir, path) = match arg {
-            PathArg::Path(path) => (libc::AT_FDCWD, path),
-            PathArg::At { dir, path } => (self.args[dir] as libc::c_int, path),
+    /// directory or the descriptor it names. `None` where the call fails on
+    /// it, and for a descriptor that names no path (a pipe, a socket), which
+    /// Landlock does not mediate.
+    fn path(&self, arg: PathArg) -> Result<Option<PathBuf>, Unseen> {
+        let (dir, path, empty) = match arg {
+            PathArg::Path(path) => (libc::AT_FDCWD, path, false),
+            PathArg::At { dir, path } => (self.args[dir] as libc::c_int, path, false),
+            PathArg::AtOrDir { dir, path, flags } => (
+                self.args[dir] as libc::c_int,
+                path,
+                self.args[flags] as libc::c_int & libc::AT_EMPTY_PATH != 0,
+            ),
         };
-        let path = PathBuf::from(OsString::from_vec(self.read_c_string(self.args[path])?));
+        let Some(path) = self.read_c_string(self.args[path])? else {
+            return Ok(None);
+        };
+        let path = PathBuf::from(OsString::from_vec(path));
         if path.is_absolute() {
-            return Some(path);
+            return Ok(Some(path));
+        }
+        // An empty path fails with `ENOENT` unless it names the descriptor.
+        if path.as_os_str().is_empty() && !empty {
+            return Ok(None);
         }
         let base = match dir {
             libc::AT_FDCWD => format!("/proc/{}/cwd", self.pid),
             fd => format!("/proc/{}/fd/{fd}", self.pid),
         };
-        Some(std::fs::read_link(base).ok()?.join(path))
+        let Some(base) = seen(std::fs::read_link(base))? else {
+            return Ok(None);
+        };
+        Ok(base.is_absolute().then(|| {
+            if path.as_os_str().is_empty() {
+                base
+            } else {
+                base.join(path)
+            }
+        }))
     }
 
     /// `path` resolved one component at a time, as the kernel resolves it for
@@ -929,56 +1053,80 @@ impl Caller {
             .ok()
     }
 
-    /// What `asks` does, its flags read, or `None` for an `O_PATH` open, which
-    /// Landlock lets through.
-    fn ask(&self, asks: Asks) -> Option<Ask> {
+    /// What `asks` does, its flags read, or `None` where the call fails on
+    /// them first, and for an `O_PATH` open, which Landlock lets through.
+    fn ask(&self, asks: Asks) -> Result<Option<Ask>, Unseen> {
         let flags = |flags: Flags| match flags {
             Flags::Arg(arg) => self.args[arg] as libc::c_int,
             Flags::Fixed(flags) => flags,
         };
         let open_flags = match asks {
-            Asks::Exec => return Some(Ask::Exec),
-            Asks::Change => return Some(Ask::Change { follow: false }),
-            Asks::LinkFrom(link) => {
-                return Some(Ask::Change {
-                    follow: flags(link) & libc::AT_SYMLINK_FOLLOW != 0,
-                });
+            Asks::Exec(exec) => {
+                return Ok(Some(Ask::Exec {
+                    follow: flags(exec) & libc::AT_SYMLINK_NOFOLLOW == 0,
+                }));
             }
-            Asks::Create => return Some(Ask::Create),
+            Asks::Change => return Ok(Some(Ask::Change { follow: false })),
+            Asks::LinkFrom(link) => {
+                return Ok(Some(Ask::Change {
+                    follow: flags(link) & libc::AT_SYMLINK_FOLLOW != 0,
+                }));
+            }
+            Asks::MakeDir => return Ok(Some(Ask::Create { slash: true })),
+            Asks::MakeLink => return Ok(Some(Ask::Create { slash: false })),
+            // A directory, or a type that names none, fails with `EPERM` or
+            // `EINVAL`.
+            Asks::MakeNode(arg) => {
+                let kind = self.args[arg] as libc::mode_t & libc::S_IFMT;
+                let made = matches!(
+                    kind,
+                    0 | libc::S_IFREG
+                        | libc::S_IFCHR
+                        | libc::S_IFBLK
+                        | libc::S_IFIFO
+                        | libc::S_IFSOCK
+                );
+                return Ok(made.then_some(Ask::Create { slash: false }));
+            }
             Asks::RenameTo(rename) => {
                 let rename = flags(rename) as libc::c_uint;
-                return Some(if rename & libc::RENAME_NOREPLACE != 0 {
-                    Ask::Create
+                return Ok(Some(if rename & libc::RENAME_NOREPLACE != 0 {
+                    Ask::Create { slash: true }
                 } else if rename & libc::RENAME_EXCHANGE != 0 {
                     Ask::Change { follow: false }
                 } else {
                     Ask::Replace
-                });
+                }));
             }
-            Asks::Truncate => return Some(Ask::Truncate),
+            Asks::Truncate => return Ok(Some(Ask::Truncate)),
             Asks::Open(open) => flags(open),
             Asks::OpenHow(arg) => {
                 let mut how = [0u8; size_of::<u64>()];
-                self.read(self.args[arg], &mut how)?;
+                if seen(self.read(self.args[arg], &mut how))?.is_none() {
+                    return Ok(None);
+                }
                 u64::from_ne_bytes(how) as libc::c_int
             }
         };
-        (open_flags & libc::O_PATH == 0).then_some(Ask::Open(open_flags))
+        Ok((open_flags & libc::O_PATH == 0).then_some(Ask::Open(open_flags)))
     }
 
     /// The NUL-terminated string at `addr` in the caller's memory, up to
     /// `PATH_MAX`, the longest path a call accepts.
-    fn read_c_string(&self, addr: u64) -> Option<Vec<u8>> {
+    fn read_c_string(&self, addr: u64) -> Result<Option<Vec<u8>>, Unseen> {
         let mut bytes = vec![0u8; libc::PATH_MAX as usize];
-        let read = self.read(addr, &mut bytes)?;
-        let end = bytes[..read].iter().position(|&byte| byte == 0)?;
-        bytes.truncate(end);
-        Some(bytes)
+        let Some(read) = seen(self.read(addr, &mut bytes))? else {
+            return Ok(None);
+        };
+        Ok(bytes[..read].iter().position(|&byte| byte == 0).map(|end| {
+            bytes.truncate(end);
+            bytes
+        }))
     }
 
     /// Read from `addr` in the caller's memory into `buf`, returning how many
     /// bytes were read: a read that reaches an unmapped page stops there.
-    fn read(&self, addr: u64, buf: &mut [u8]) -> Option<usize> {
+    fn read(&self, addr: u64, buf: &mut [u8]) -> io::Result<usize> {
         let local = libc::iovec {
             iov_base: buf.as_mut_ptr().cast(),
             iov_len: buf.len(),
@@ -992,7 +1140,21 @@ impl Caller {
         let read = unsafe {
             libc::process_vm_readv(self.pid, &raw const local, 1, &raw const remote, 1, 0)
         };
-        usize::try_from(read).ok()
+        usize::try_from(read).map_err(|_| io::Error::last_os_error())
+    }
+}
+
+/// A caller the host may not inspect: Yama's `ptrace_scope`, or a process
+/// that made itself non-dumpable.
+struct Unseen;
+
+/// What a look into the caller found, `None` where the caller's state ended
+/// it (a fault, a closed descriptor, an exit).
+fn seen<T>(result: io::Result<T>) -> Result<Option<T>, Unseen> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(err) if matches!(err.raw_os_error(), Some(libc::EPERM | libc::EACCES)) => Err(Unseen),
+        Err(_) => Ok(None),
     }
 }
 

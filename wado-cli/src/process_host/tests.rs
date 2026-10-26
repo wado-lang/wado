@@ -1,5 +1,14 @@
+#[cfg(unix)]
+use std::collections::BTreeSet;
+
+#[cfg(unix)]
+use wado_host::sandbox::Refusal;
 use wado_host::sandbox::Trace;
 
+#[cfg(unix)]
+use super::posix::refusals_warning;
+#[cfg(unix)]
+use super::types::ExitStatus;
 use super::{Answer, ProcessGrant, answer, unsupported_reason};
 
 fn grants(dirs: &[(&std::path::Path, &str)]) -> Answer {
@@ -43,13 +52,6 @@ fn dot_names_the_childs_directory_only_as_the_first_grant() {
 #[cfg(unix)]
 #[test]
 fn a_timed_out_child_reports_what_the_sandbox_refused_it() {
-    use std::collections::BTreeSet;
-
-    use wado_host::sandbox::Refusal;
-
-    use super::posix::refusals_warning;
-    use super::types::ExitStatus;
-
     let refusals = BTreeSet::from([Refusal::LeaveGroup]);
     let warning = refusals_warning("job", &ExitStatus::TimedOut, &refusals, Trace::Off);
     assert!(
