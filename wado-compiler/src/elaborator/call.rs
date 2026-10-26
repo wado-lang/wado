@@ -3842,10 +3842,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
+        self.resolve_assoc_bounds_in(params, 0, &names, args);
+    }
+
+    /// [`Self::resolve_assoc_bound_args`] where the bounds' owners `params`
+    /// fill `args` from `offset` on, and a target may name any slot of `names`:
+    /// a static method's bound settles its block's slot as well as its own.
+    fn resolve_assoc_bounds_in(
+        &mut self,
+        params: &[ast::GenericParam],
+        offset: usize,
+        names: &[String],
+        args: &mut [TypeId],
+    ) {
+        assert_eq!(names.len(), args.len(), "every slot is named");
+        assert!(offset + params.len() <= args.len(), "the owners are slots");
         let scope_params = self.scope_type_param_ids();
         loop {
             let mut progressed = false;
-            for (owner_idx, param) in params.iter().enumerate() {
+            for (own_idx, param) in params.iter().enumerate() {
+                let owner_idx = offset + own_idx;
                 let owner_ty = args[owner_idx];
                 let forwarded = scope_params.contains(&owner_ty);
                 if !forwarded && self.tysys.is_unbound_type_param(owner_ty) {
@@ -3860,7 +3876,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .filter_map(|assoc| {
                             let target_name = assoc_bound_target_param(&assoc.ty)?;
-                            let target_idx = params.iter().position(|p| p.name == target_name)?;
+                            let target_idx = names.iter().position(|n| *n == target_name)?;
                             self.tysys
                                 .is_unbound_type_param(args[target_idx])
                                 .then_some((target_idx, assoc))
@@ -3871,14 +3887,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     let trait_ = self.tysys.resolutions.bound_decl(bound);
                     let BoundArgsAtCall::Read(trait_args) =
-                        self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
+                        self.bound_args_at_call(bound, trait_, owner_ty, names, args)
                     else {
                         continue;
                     };
                     for (target_idx, assoc) in targets {
                         let resolved = if forwarded {
+                            // A block's slot carries no declaration here; its
+                            // open value is a pack where the slot is one.
+                            let is_pack = match target_idx.checked_sub(offset) {
+                                Some(own) if own < params.len() => params[own].is_pack,
+                                _ => self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .contains_type_pack(args[target_idx]),
+                            };
                             trait_
-                                .filter(|_| !params[target_idx].is_pack)
+                                .filter(|_| !is_pack)
                                 .map(|trait_| {
                                     self.forwarded_projection(
                                         owner_ty,
@@ -4429,6 +4455,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
+        // A slot the arguments reach only through a bound's associated type
+        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
+        // off the owner the arguments did settle.
+        let names: Vec<String> = sig.decl.type_params.iter().map(|(n, _)| n.clone()).collect();
+        self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),
