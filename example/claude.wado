@@ -1,0 +1,124 @@
+// Call Anthropic's Messages API with a fixed prompt.
+//
+// Requires CLAUDE_API_KEY in the environment.
+//
+// Usage:
+//   export CLAUDE_API_KEY=sk-ant-...
+//   wado run example/claude.wado
+
+use { println, env, Stdout, Stderr, Environment } from "core:cli";
+use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
+use { Client } from "wasi:http";
+use { Serialize, Deserialize } from "core:serde";
+use { to_bytes, from_bytes } from "core:json";
+
+struct Message {
+    role: String,
+    content: String,
+}
+
+struct MessagesRequest {
+    model: String,
+    max_tokens: i32,
+    messages: List<Message>,
+}
+impl Serialize for MessagesRequest;
+
+// A response holds `thinking` blocks as well as `text` ones; only `text` carries `text`.
+struct ContentBlock {
+    #[wire(name = "type")]
+    kind: String,
+    text: Option<String> = null,
+}
+
+struct MessagesResponse {
+    content: List<ContentBlock>,
+}
+impl Deserialize for MessagesResponse;
+
+global MODEL_NAME: String = "claude-opus-5-5";
+
+fn append_header(headers: &Headers, name: String, value: String) {
+    headers.append(name as FieldName, value.bytes().collect() as FieldValue);
+}
+
+fn send_post<B: AsByteSlice>(api_key: String, body: B) -> Response with Client {
+    let [body_rx, body_tx] = Stream::<u8>::new();
+    let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+
+    let headers = Headers::new();
+    append_header(&headers, "x-api-key", api_key);
+    append_header(&headers, "anthropic-version", "2023-06-01");
+    append_header(&headers, "content-type", "application/json");
+    append_header(&headers, "user-agent", #file);
+
+    let [req, _req_future] = Request::new(
+        headers,
+        Option::<Stream<u8>>::Some(body_rx),
+        trailers_rx,
+        null,
+    );
+    req.set_method(Method::Post);
+    req.set_scheme(Option::<Scheme>::Some(Scheme::Https));
+    req.set_authority(Option::<String>::Some("api.anthropic.com"));
+    req.set_path_with_query(Option::<String>::Some("/v1/messages"));
+
+    // Start the send before writing the body, so the host is already
+    // consuming the stream when `body_tx.write` rendezvous with it.
+    let subtask = Client::send(req);
+    body_tx.write_raw_all(body.as_byte_slice() as Slice<u8>);
+    body_tx.drop();
+    trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+
+    return match subtask.wait() {
+        Ok(resp) => resp,
+        Err(e) => panic(`HTTP request failed: ${e:?}`),
+    };
+}
+
+fn read_body(resp: Response) -> ByteList {
+    let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
+    let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
+
+    let buf = body_stream_rx.read_to_end_bytes();
+    body_stream_rx.drop();
+    res_tx.write(Result::Ok(()));
+    return buf;
+}
+
+export fn run() with (Stdout, Stderr, Environment, Client) {
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+
+    let messages: List<Message> = [
+        Message {
+            role: "user",
+            content: "Explain WebAssembly briefly",
+        },
+    ];
+    let resp = send_post(api_key, to_bytes(&MessagesRequest {
+        model: MODEL_NAME,
+        max_tokens: 16000,
+        messages,
+    }).unwrap());
+    let status = resp.get_status_code();
+    let body = read_body(resp);
+
+    if status != 200 {
+        panic(`HTTP ${status as i32}: ${String::from_utf8_lossy(body)}`);
+    }
+
+    let parsed = match from_bytes::<MessagesResponse, ByteList>(body) {
+        Ok(r) => r,
+        Err(e) => {
+            panic(`failed to parse JSON response: ${e:?}`);
+        },
+    };
+
+    for let block of parsed.content {
+        if let Some(text) = block.text && block.kind == "text" {
+            println(text);
+        }
+    }
+}
