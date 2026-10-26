@@ -227,14 +227,15 @@ pub fn diagnostic_function_name(name: &str) -> String {
 }
 
 /// `name` with every module path (`core:prelude/string.wado/`) dropped: the
-/// one ahead of the item, and each inside its type arguments and trait.
+/// one ahead of the item, each inside its type arguments and trait, and the
+/// one a minted name carries after its `$`.
 fn without_module_paths(name: &str) -> String {
     let mut out = String::with_capacity(name.len());
     let mut segment = 0;
     for c in name.chars() {
         match c {
             '/' => out.truncate(segment),
-            '<' | '>' | ',' | '^' | '[' | ']' | '(' | ')' | '&' | ' ' => {
+            '<' | '>' | ',' | '^' | '[' | ']' | '(' | ')' | '&' | ' ' | '$' => {
                 out.push(c);
                 segment = out.len();
             }
@@ -2844,6 +2845,10 @@ mod tests {
                  ^core:prelude/traits.wado/IndexRef<i32>::index_ref$contract_report0"
             ),
             "List<String>^IndexRef<i32>::index_ref"
+        );
+        assert_eq!(
+            diagnostic_function_name(&value_copy_helper_name("core:prelude/string.wado/String")),
+            "$value_copy"
         );
     }
 
