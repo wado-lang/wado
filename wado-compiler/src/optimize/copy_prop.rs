@@ -683,7 +683,8 @@ fn can_propagate_copy(
             }
             let is_value_type = needs_value_copy(binding.type_id, type_table);
             // Neither binding is ever written — the target is already known
-            // unassigned and not address-taken, and the source is neither
+            // unassigned and, if address-taken, one value with the source
+            // (`names_one_value`), and the source is neither
             // assigned, field-mutated, nor address-taken — so the copy only
             // names a second, permanently identical object. Nothing can observe
             // the sharing, whatever the read counts, so the coarse value-type
