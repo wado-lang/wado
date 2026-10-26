@@ -15,9 +15,11 @@ instead, which `loop_version_bce` deletes in a loop that keeps the index in
 range.
 
 The array is affine, so one block has one owner, and no reference into it
-outlives that owner. Its address is never handed out, every element is
-written before anything reads it, and it never crosses a component
-boundary: `to_list` copies it into one that can. See WEP: Linear Arrays.
+outlives that owner. Its address is never handed out, and every element is
+written before anything reads it. It crosses a component boundary only as a
+`ListView<T>`, which a synchronous import's `list<T>` parameter takes and any
+`ListArg` converts to: there it lends its own block for the call. See WEP:
+Linear Arrays.
 
 ## Synopsis
 
@@ -28,7 +30,49 @@ assert weights[2] == 1.5;
 assert weights.to_list() == [0.0, 0.0, 1.5, 0.0];
 ```
 
+## Traits
+
+### `pub affine trait ListArg<T: AnyBits> with ()`
+
+What converts to a `&ListView<T>` argument: `List<T>` by copying its
+elements into a block of the view's own, `&LinearArray<T>` by lending its
+block.
+
+#### `fn lowered(&self) -> ListView<T>`
+
 ## Structs
+
+### `pub affine struct ListView<T: AnyBits>`
+
+`T`s lying in linear memory in the layout the Canonical ABI gives a
+`list<T>`, read-only. A call argument converts to a `&ListView<T>`
+parameter from any `ListArg<T>`, and the view drops when the statement
+holding the call ends. Only `core:*` writes one, so a view frees no block it
+did not allocate.
+
+_Fields are private._
+
+#### `pub fn len(&self) -> i32`
+
+#### `pub fn is_empty(&self) -> bool`
+
+#### `pub fn at(&self, index: i32) -> T`
+
+- `contract 0 <= index < self.len`
+
+The element at `index`.
+
+#### `pub fn to_list(&self) -> List<T>`
+
+The elements, copied into a `List`.
+
+#### `impl Drop for ListView<T>`
+
+##### `fn drop(self)`
+
+#### `impl IndexValue<i32> for ListView<T>`
+
+##### `fn index_value(&self, index: i32) -> Self::Output`
 
 ### `pub affine struct LinearArray<T: AnyBits>`
 
@@ -76,6 +120,15 @@ The elements, copied into a `List`.
 
 The same bytes as an array of `U`, read little-endian, with no element
 copied. The array moves, so its bytes are never seen as two types at once.
+
+#### `pub fn to_list_of<U: AnyBits>(&self, start: i32, end: i32) -> List<U>`
+
+- `contract 0 <= start <= end <= self.len()`
+- `contract (end - start) % builtin::size_of::<U>() == 0`
+
+The bytes from `start` to `end` as `U`s, read little-endian at any
+alignment, copied into a `List`: a part of a file `read_linear` read,
+decoded with no copy of the bytes before it.
 
 #### `impl IndexValue<i32> for LinearArray<T>`
 

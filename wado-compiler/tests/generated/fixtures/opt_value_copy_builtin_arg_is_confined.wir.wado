@@ -80,7 +80,6 @@ fn "opt_value_copy_builtin_arg_is_confined.wado/run"() with Stdout {
     let q: u64;
     let sum: i32;
     let i_50: i32;
-    let $licm_repr_19: ref "Array<opt_value_copy_builtin_arg_is_confined.wado/Rule>";
     let probe: ref "core:prelude/string.wado//String";
     let best: i32;
     let i_70: i32;
@@ -91,10 +90,10 @@ fn "opt_value_copy_builtin_arg_is_confined.wado/run"() with Stdout {
     let $licm_repr_31: ref Array<u8>;
     let $licm_used_32: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    i_94 = local.tee sum(sum = 0; i_50 = 0; $licm_repr_19 = global:opt_value_copy_builtin_arg_is_confined.wado::$const_obj_1; b0: block {
+    i_94 = local.tee sum(sum = 0; i_50 = 0; b0: block {
         l1: loop {
             break_if b0 i_50 >= 2;
-            sum = sum + probe = builtin::array_get_value<ref "opt_value_copy_builtin_arg_is_confined.wado//Rule">($licm_repr_19, i_50).name; best = 0; i_70 = 0; $licm_repr_31 = probe.repr; $licm_used_32 = probe.used; b2: block {
+            sum = sum + probe = builtin::array_get_value<ref "opt_value_copy_builtin_arg_is_confined.wado//Rule">(global:opt_value_copy_builtin_arg_is_confined.wado::$const_obj_1, i_50).name; best = 0; i_70 = 0; $licm_repr_31 = probe.repr; $licm_used_32 = probe.used; b2: block {
                 l3: loop {
                     break_if b2 i_70 >= 3;
                     self_78 = builtin::array_get_value<ref "core:prelude/string.wado//String">(global:opt_value_copy_builtin_arg_is_confined.wado::$const_obj_0, i_70);
@@ -106,12 +105,34 @@ fn "opt_value_copy_builtin_arg_is_confined.wado/run"() with Stdout {
                         i_94 = 0;
                         b6: block {
                             l7: loop {
-                                break_if b6 i_94 >= a_end;
+                                break_if b6 (((i_94 >= a_end) | ((i_94 + 1) >= a_end)) | (((i_94 + 1) + 1) >= a_end)) | ((((i_94 + 1) + 1) + 1) >= a_end);
+                                if builtin::array_get_value<u8>(a, i_94) != builtin::array_get_value<u8>($licm_repr_31, i_94) {
+                                    break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                                }
+                                i_94 = i_94 + 1;
+                                if builtin::array_get_value<u8>(a, i_94) != builtin::array_get_value<u8>($licm_repr_31, i_94) {
+                                    break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                                }
+                                i_94 = i_94 + 1;
+                                if builtin::array_get_value<u8>(a, i_94) != builtin::array_get_value<u8>($licm_repr_31, i_94) {
+                                    break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                                }
+                                i_94 = i_94 + 1;
                                 if builtin::array_get_value<u8>(a, i_94) != builtin::array_get_value<u8>($licm_repr_31, i_94) {
                                     break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
                                 }
                                 i_94 = i_94 + 1;
                                 continue l7;
+                            };
+                        };
+                        b12: block {
+                            l13: loop {
+                                break_if b12 i_94 >= a_end;
+                                if builtin::array_get_value<u8>(a, i_94) != builtin::array_get_value<u8>($licm_repr_31, i_94) {
+                                    break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                                }
+                                i_94 = i_94 + 1;
+                                continue l13;
                             };
                         };
                         break $inline_total_0__$inline_longest_0__$inline_core_prelude_array_wado_seq_eq_u8__4: 1;
@@ -206,16 +227,16 @@ fn "opt_value_copy_builtin_arg_is_confined.wado/run"() with Stdout {
     $local_2.used = a_end;
     a = $local_2.repr;
     sum = i_94 + sum;
-    b31: block {
-        l32: loop {
-            break_if b31 (sum - i_94) < 2;
+    b37: block {
+        l38: loop {
+            break_if b37 (sum - i_94) < 2;
             q = x /u 100_i64;
             $licm_used_32 = local.tee a_end(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(a, sum - 1, ((48 + a_end) - ($licm_used_32 * 10)) & 255);
             builtin::array_set_u8(a, sum - 2, (48 + $licm_used_32) & 255);
             sum = sum - 2;
             x = q;
-            continue l32;
+            continue l38;
         };
     };
     if sum > i_94 {
@@ -260,58 +281,94 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_13: i32;
-    let i: i32;
-    let ptr_24: i32;
-    let count_25: i32;
-    let ws: i32;
-    let evt_ptr: i32;
+    let ptr_19: i32;
+    let count_20: i32;
     let status: i32;
+    let i: i32;
+    let at: i32;
+    let w: i64;
+    let $licm_arith_7: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b36: block {
-        l37: loop {
-            break_if b36 i >= $mv$data$end;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b42: block {
+        l43: loop {
+            break_if b42 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l43;
+        };
+    }; b44: block {
+        l45: loop {
+            break_if b44 i > $licm_arith_7;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l45;
+        };
+    }; b46: block {
+        l47: loop {
+            break_if b46 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l37;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l47;
+        };
+    }; b48: block {
+        l49: loop {
+            break_if b48 i >= $mv$data$end;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l49;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l39: loop {
-            ptr_24 = ptr_13 + i;
-            count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_7: $mv$data$start;
+        l51: loop {
+            ptr_19 = ptr_13 + i;
+            count_20 = $mv$data$end - i;
+            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: $mv$data$start;
                 }
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                at = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, at);
+                $licm_arith_7 = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(at, $licm_arith_7));
+                status = builtin::load_i32($licm_arith_7 + 4);
+                drop("mem/realloc"($licm_arith_7, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_7: status;
+                "wasi/waitable-set-drop"(at);
+                break $inline_cm_await_blocked_6: status;
             }) >>u 4;
-            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_19 = (if local.tee ptr_19(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_25;
-            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_20;
+            if ((ptr_19 != 0) | (count_20 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return ptr_24;
+                return ptr_19;
             }
-            continue l39;
+            continue l51;
         };
     };
 }
