@@ -482,9 +482,9 @@ impl Interpreter<'_> {
             let (key, value) = ((module_source.clone(), name.clone()), *value);
             return self.exec_global_materialize(body, key, value);
         }
-        // A `match` this frame settles reduces to the block of its arm.
+        // A `match` or `if` this frame settles reduces to the block it selects.
         if let Some(e) = op.as_expr() {
-            self.select_match_arm_in_place(body, e);
+            self.select_branch_in_place(body, e);
         }
         // A block at statement position is run for what it performs. Inlining
         // leaves one where a call stood, and a unit-typed one — every `push`
