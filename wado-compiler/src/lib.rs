@@ -2317,6 +2317,9 @@ fn compile_after_load<H: CompilerHost>(
                 panic_on_invalid_artifact(logger.host(), &invalid)
             }
             Err(EmitFailure::Provider(mismatch)) => {
+                // TODO: room for improvement: this reports without a position.
+                // Pointing at the provider path in the `use` needs
+                // `ProviderComponent` to carry that path's span.
                 return Err(bail_with(
                     logger,
                     Code::EffectHandlerInvalid,
