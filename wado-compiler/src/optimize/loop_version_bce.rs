@@ -391,9 +391,8 @@ fn parse_versionable_check(
     let limit = limit?;
     let mut floor = i64::MIN;
     for (shift, f) in floors {
-        let below_index = shift.stride.is_none()
-            && shift.local.is_none()
-            && shift.konst <= limit.shift.konst;
+        let below_index =
+            shift.stride.is_none() && shift.local.is_none() && shift.konst <= limit.shift.konst;
         if shift != limit.shift && !below_index {
             return None;
         }

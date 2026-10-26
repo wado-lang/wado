@@ -208,11 +208,23 @@ In order:
   loop of a product indexing two arrays losing every check in its fast
   version.
 - [x] `fs::read_linear`.
-- [ ] Loam's `Cpu` backend keeps `Packed` in a `LinearArray<f32x4>` and loads
+- [x] Loam's `Cpu` backend keeps `Packed` in a `LinearArray<f32x4>` and loads
   weights through `read_linear`. `Backend` declares
   `affine type Rhs<K, N>`, so `Prepared<Cpu>` and `Model<Cpu>` become
   affine by instantiation, as `Model<WebGpuBackend>` already is. Done when
   Gemma 3's next token is measured against what it is now.
+
+Gemma 3 (270M) before and after that item, both run by one `wado` from
+`package-loam/example/gemma3-270m` with
+`wado run -O2 --collector <collector> gemma3.wado`. The two figures in a cell
+are the two prompts `generate.json` records.
+
+| Collector | Measured          | `Packed` in an `Array<f32x4>` | `Packed` in a `LinearArray<f32x4>` |
+| --------- | ----------------- | ----------------------------- | ---------------------------------- |
+| `drc`     | ms a token        | 104.1 / 105.2                 | 80.7 / 83.6                        |
+| `drc`     | ms for the prompt | 236 / 444                     | 278 / 549                          |
+| `copying` | ms a token        | runs out of GC heap           | 73.4 / 74.3                        |
+| `copying` | ms for the prompt | runs out of GC heap           | 171 / 315                          |
 
 ## Known gaps
 
@@ -225,6 +237,11 @@ In order:
   several arrays.
 - There is no view over part of a `LinearArray`. A kernel indexes the whole
   array with its own offset.
+- Under `drc`, Gemma 3's prompt reads slower with `Packed` in a `LinearArray`
+  than in an `Array`, while each token after it reads faster. Nothing explains
+  it yet. A harness timing `next_token` alone on the same ids reads the
+  `LinearArray` faster on the prompt too, the GC heap's initial size does not
+  move it, and the model's code compiles the same under both harnesses.
 - The rules in
   [References into Affine Values](./spec-affine.md#references-into-affine-values)
   are what rule out a use after free. A gap in them is a use after free here,
