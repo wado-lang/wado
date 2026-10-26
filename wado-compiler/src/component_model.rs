@@ -14,8 +14,8 @@ use wasm_encoder::ValType;
 
 use crate::ast;
 use crate::ast::{
-    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericParam, GenericType, InterfaceDecl,
-    Item, Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
+    AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
+    Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
     cm_import_of, declares_unrestricted, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
@@ -631,20 +631,19 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
 
-/// `core:linear`'s trait a sync import's `list<T>` parameter is declared
-/// through, as `L: ListArg<Elem = T>`.
-const LIST_ARG: &str = "ListArg";
+/// `core:linear`'s view a sync import's `list<T>` parameter of numbers is
+/// declared as, `&ListView<T>`.
+const LIST_VIEW: &str = "ListView";
 
-/// The `E` of `ty` when it names a type parameter of `type_params` bounded
-/// `ListArg<Elem = E>`.
-fn list_arg_elem<'t>(type_params: &'t [GenericParam], ty: &Type) -> Option<&'t Type> {
-    let Type::Named(named) = ty else {
+/// The `E` of `ty` when it is a `&ListView<E>`.
+fn list_view_elem(ty: &Type) -> Option<&Type> {
+    let Type::Reference(inner) = ty else {
         return None;
     };
-    let param = type_params.iter().find(|p| p.name == named.name)?;
-    let bound = param.bounds.iter().find(|b| b.name == LIST_ARG)?;
-    let elem = bound.assoc_types.iter().find(|a| a.name == "Elem")?;
-    Some(&elem.ty)
+    match inner.as_ref() {
+        Type::Generic(g) if g.name == LIST_VIEW && g.args.len() == 1 => Some(&g.args[0]),
+        _ => None,
+    }
 }
 
 /// The prelude's `type ByteList = List<u8>`, which a binding names for a WIT
@@ -693,6 +692,15 @@ pub fn one_per_cm_name<'a>(
         .collect()
 }
 
+/// What [`CmInterfaceRegistry::value_params`] answers.
+struct ValueParams {
+    params: Vec<(String, String, Type)>,
+    /// The closures among `params`, by index and declared type.
+    callbacks: Vec<(usize, Type)>,
+    /// See [`CmFunctionInfo::list_args`].
+    list_args: Vec<usize>,
+}
+
 /// Information about a CM function from an interface method
 #[derive(Debug, Clone)]
 pub struct CmFunctionInfo {
@@ -710,9 +718,8 @@ pub struct CmFunctionInfo {
     pub is_async: bool,
     /// Parameter names and types: (`wado_name`, `cm_name`, type)
     pub params: Vec<(String, String, Type)>,
-    /// The indices of `params` declared `L: ListArg<Elem = E>`, recorded at
-    /// the `list<E>` they cross as. Each call site lowers its argument
-    /// through `ListArg::lowered`.
+    /// The indices of `params` declared `&ListView<E>`, recorded at the
+    /// `List<E>` they cross as: the adapter passes the block the view lies in.
     pub list_args: Vec<usize>,
     /// The closures among `params`, by index and declared type. Each crosses as its `u32` key.
     pub callbacks: Vec<(usize, Type)>,
@@ -1973,20 +1980,17 @@ impl CmInterfaceRegistry {
             .unwrap_or_else(|| resolve_type(ty, &self.newtypes, &self.source_interfaces))
     }
 
-    /// `func`'s parameters as `(wado_name, cm_name, type)`, and the indices of
-    /// those declared `L: ListArg<Elem = E>`, each recorded as the `List<E>`
-    /// it crosses as. `fallback` names a parameter `#[cm_params]` leaves out,
-    /// and `rewrite` maps a declared type before it is resolved.
+    /// `func`'s parameters as `(wado_name, cm_name, type)`. `fallback` names a
+    /// parameter `#[cm_params]` leaves out, and `rewrite` maps a declared type
+    /// before it is resolved.
     fn cm_params_of(
         &self,
         func: &ast::Function,
         fallback: impl Fn(&str) -> String,
         rewrite: impl Fn(&Type) -> Type,
-    ) -> (Vec<(String, String, Type)>, Vec<usize>) {
+    ) -> Vec<(String, String, Type)> {
         let cm_param_names = extract_cm_params_attr(&func.attrs);
-        let mut list_args = Vec::new();
-        let params = func
-            .params
+        func.params
             .iter()
             .enumerate()
             .map(|(i, p)| {
@@ -1994,22 +1998,9 @@ impl CmInterfaceRegistry {
                     .get(i)
                     .cloned()
                     .unwrap_or_else(|| fallback(&p.name));
-                let ty = match list_arg_elem(&func.type_params, &p.ty) {
-                    Some(elem) => {
-                        list_args.push(i);
-                        Type::Generic(GenericType {
-                            id: AstId::fresh(),
-                            name: "List".to_string(),
-                            args: vec![elem.clone()],
-                            span: p.ty.span(),
-                        })
-                    }
-                    None => rewrite(&p.ty),
-                };
-                (p.name.clone(), cm_name, self.cm_param_type(&ty))
+                (p.name.clone(), cm_name, self.cm_param_type(&rewrite(&p.ty)))
             })
-            .collect();
-        (params, list_args)
+            .collect()
     }
 
     /// Drop the reference around an extern-handle: the handle is a value, so
@@ -2362,7 +2353,7 @@ impl CmInterfaceRegistry {
                 }
                 for method in &resource.methods {
                     if let Some(wasi) = cm_import_of(&method.attrs) {
-                        let (params, _) = self.cm_params_of(
+                        let params = self.cm_params_of(
                             method,
                             |param| scope.param_fallback(param, &resource.name, &method.name),
                             |ty| {
@@ -2519,7 +2510,7 @@ impl CmInterfaceRegistry {
                 let Some(wasi) = cm_import_of(&method.attrs) else {
                     continue;
                 };
-                let (params, _) = self.cm_params_of(
+                let params = self.cm_params_of(
                     method,
                     |param| scope.param_fallback(param, &effect.name, &method.name),
                     Type::clone,
@@ -3514,9 +3505,6 @@ impl CmInterfaceRegistry {
     /// * `params` - Parameter names and types
     /// * `return_type` - Return type (if any)
     ///
-    /// An operation takes no [`CmFunctionInfo::list_args`]: it declares no
-    /// type parameters.
-    ///
     /// `Err` when the CM function is already bound with another signature.
     pub fn register(
         &mut self,
@@ -3528,7 +3516,11 @@ impl CmInterfaceRegistry {
         return_type: Option<Type>,
     ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
-        let (params, callbacks) = self.value_params(params);
+        let ValueParams {
+            params,
+            callbacks,
+            list_args,
+        } = self.value_params(params);
         let func_info = CmFunctionInfo {
             interface_name: interface_name.to_string(),
             method_name: method_name.to_string(),
@@ -3537,7 +3529,7 @@ impl CmInterfaceRegistry {
             package: wasi.package.clone(),
             is_async,
             params,
-            list_args: Vec::new(),
+            list_args,
             callbacks,
             return_type,
             world: None,
@@ -3552,17 +3544,25 @@ impl CmInterfaceRegistry {
         Ok(())
     }
 
-    /// `params` at their GC-level value types, closures as `u32` keys, and the
-    /// closures by index.
-    fn value_params(
-        &self,
-        params: Vec<(String, String, Type)>,
-    ) -> (Vec<(String, String, Type)>, Vec<(usize, Type)>) {
+    /// `params` at their GC-level value types, closures as `u32` keys and a
+    /// `&ListView<E>` as the `List<E>` it crosses as.
+    fn value_params(&self, params: Vec<(String, String, Type)>) -> ValueParams {
         let mut callbacks = Vec::new();
+        let mut list_args = Vec::new();
         let params = params
             .into_iter()
             .enumerate()
             .map(|(i, (name, cm_name, ty))| {
+                if let Some(elem) = list_view_elem(&ty) {
+                    list_args.push(i);
+                    let list = Type::Generic(GenericType {
+                        id: AstId::fresh(),
+                        name: "List".to_string(),
+                        args: vec![elem.clone()],
+                        span: ty.span(),
+                    });
+                    return (name, cm_name, self.value_type(&list));
+                }
                 if !matches!(ty, Type::Function(_)) {
                     return (name, cm_name, self.value_type(&ty));
                 }
@@ -3571,7 +3571,11 @@ impl CmInterfaceRegistry {
                 (name, cm_name, Type::Named(key))
             })
             .collect();
-        (params, callbacks)
+        ValueParams {
+            params,
+            callbacks,
+            list_args,
+        }
     }
 
     /// Binds `func_info`'s CM function; `Ok(false)` when it is already bound
@@ -3614,7 +3618,7 @@ impl CmInterfaceRegistry {
             let Some(cm_func_name) = world_import_of(&func.attrs) else {
                 continue;
             };
-            let (params, list_args) = self.cm_params_of(
+            let params = self.cm_params_of(
                 func,
                 |param| {
                     panic!(
@@ -3624,7 +3628,11 @@ impl CmInterfaceRegistry {
                 },
                 Type::clone,
             );
-            let (params, callbacks) = self.value_params(params);
+            let ValueParams {
+                params,
+                callbacks,
+                list_args,
+            } = self.value_params(params);
             let namespace = component
                 .wasm_canonical_namespace()
                 .expect("a world function comes from a component asset");

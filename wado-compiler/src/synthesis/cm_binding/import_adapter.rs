@@ -17,9 +17,10 @@ use crate::type_table::TypeTable;
 
 use crate::synthesis::common::{
     affine_handle, alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast,
-    cm_raw_call, compiler_function_call, expr_stmt, handle_from_f64, handle_to_f64, i32_const,
-    if_stmt, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none,
-    option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
+    cm_raw_call, deref_expr, expr_stmt, field_access, handle_from_f64, handle_to_f64, i32_const,
+    if_stmt, internal_call, is_affine_resource, let_mut_stmt, let_stmt, local_ref, loop_stmt,
+    option_none, option_some, return_stmt, split_packed_ptr_len, struct_literal, synth_span,
+    unreachable_call,
 };
 
 use super::cm_free::{
@@ -37,7 +38,7 @@ use super::types::{
 };
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, ListViewField};
 use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
 use crate::tir;
 
@@ -592,9 +593,10 @@ enum ParamLowering<'a> {
     /// General List<T>: single placeholder param; elements are lowered into a
     /// realloc'd linear-memory buffer passed as (ptr, len).
     ListBuffer { elem: &'a Type },
-    /// A `ListArg` (see [`CmFunctionInfo::list_args`]): the `LoweredList` the
-    /// call site made, passed as its (ptr, len) and released after the call.
-    ListArg,
+    /// A `&ListView<T>` (see [`CmFunctionInfo::list_args`]), passed as the
+    /// (ptr, len) of the block it views. The view frees what it copied where
+    /// it drops.
+    ListView { elem: &'a Type },
     /// Record, variant, option, result, tuple, or map: a single GC-ref param,
     /// flattened into flat slots or, on a params-buffer call, lowered there.
     Aggregate,
@@ -622,6 +624,14 @@ pub(super) fn is_gc_passthrough_param(
 ) -> bool {
     !flatten_param_type(ty, registry, names).is_empty()
         && !matches!(classify_param(ty, registry, names), ParamLowering::Direct)
+}
+
+/// The `E` of the `List<E>` the registry records a list argument at.
+fn list_elem(param_type: &Type) -> &Type {
+    match param_type {
+        Type::Generic(g) if g.args.len() == 1 => &g.args[0],
+        other => unreachable!("a list argument is recorded as a `List<E>`, not {other:?}"),
+    }
 }
 
 fn classify_param<'t>(
@@ -788,7 +798,9 @@ impl<'a> AdapterBuilder<'a> {
             let lowering = if flat_tys.is_empty() {
                 ParamLowering::Unit
             } else if func_info.list_args.contains(&index) {
-                ParamLowering::ListArg
+                ParamLowering::ListView {
+                    elem: list_elem(param_type),
+                }
             } else {
                 classify_param(
                     param_type,
@@ -802,10 +814,10 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::PackedPtrLen { .. } | ParamLowering::ListBuffer { .. } => {
                     self.push_param(param_name.clone(), TypeTable::I32);
                 }
-                ParamLowering::ListArg => {
-                    let lowered = (self.lower_ctx.type_table.borrow_mut())
-                        .make_compiler_struct(CompilerItem::LoweredList);
-                    self.push_param(param_name.clone(), lowered);
+                ParamLowering::ListView { elem } => {
+                    let view = self.list_view_type(elem);
+                    let view_ref = self.lower_ctx.type_table.borrow_mut().make_ref(view);
+                    self.push_param(param_name.clone(), view_ref);
                 }
                 ParamLowering::Aggregate => {
                     let type_id = self.cm_type_id(param_type);
@@ -863,9 +875,7 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::PackedPtrLen { helper } => {
                     self.emit_packed_ptr_len(plan, helper);
                 }
-                ParamLowering::ListArg => {
-                    self.emit_packed_ptr_len(plan, CompilerItem::CmLowerListArg);
-                }
+                ParamLowering::ListView { elem } => self.emit_list_view(plan, elem),
                 ParamLowering::ListBuffer { elem } => {
                     let param_local = self.params[plan.first_param].local_index;
                     self.emit_list_buffer(plan.name, param_local, elem);
@@ -910,11 +920,7 @@ impl<'a> AdapterBuilder<'a> {
     fn flat_arg_frees(&mut self, plans: &[ParamPlan<'a>], ranges: &[Range<usize>]) -> Vec<TirStmt> {
         let mut frees = Vec::new();
         for (plan, range) in plans.iter().zip(ranges) {
-            if matches!(plan.lowering, ParamLowering::ListArg) {
-                frees.push(self.release_list_arg(plan));
-                continue;
-            }
-            if !cm_shape(plan.ty, &shape_ctx(&self.lower_ctx)).owns_memory() {
+            if !self.owns_lowered(plan) {
                 continue;
             }
             let mut slots = Vec::with_capacity(range.len());
@@ -949,8 +955,7 @@ impl<'a> AdapterBuilder<'a> {
             layout_tuple_with_registry(&param_types, self.lower_ctx.cm_interface_registry).offsets;
         let mut frees = Vec::new();
         for (plan, offset) in plans.iter().zip(offsets) {
-            if matches!(plan.lowering, ParamLowering::ListArg) {
-                frees.push(self.release_list_arg(plan));
+            if !self.owns_lowered(plan) {
                 continue;
             }
             let shape = cm_shape(plan.ty, &shape_ctx(&self.lower_ctx));
@@ -974,17 +979,48 @@ impl<'a> AdapterBuilder<'a> {
         frees
     }
 
-    /// Gives back the block `plan`'s `LoweredList` copied its elements into,
-    /// if it did; a borrowed block stays with its owner.
-    fn release_list_arg(&self, plan: &ParamPlan<'a>) -> TirStmt {
-        let release = CompilerItem::CmReleaseListArg;
-        expr_stmt(self.helper_call(release, self.param_ref(plan), TypeTable::UNIT))
+    /// Whether the call frees the memory `plan`'s argument was lowered into
+    /// once it returns. A view's block is the view's to free.
+    fn owns_lowered(&self, plan: &ParamPlan<'a>) -> bool {
+        !matches!(plan.lowering, ParamLowering::ListView { .. })
+            && cm_shape(plan.ty, &shape_ctx(&self.lower_ctx)).owns_memory()
     }
 
-    /// A call of the compiler-item function `helper` on `arg`.
-    fn helper_call(&self, helper: CompilerItem, arg: TirExpr, return_type: TypeId) -> TirExpr {
-        let tt = self.lower_ctx.type_table.borrow();
-        compiler_function_call(tt.compiler_items(), helper, vec![arg], return_type)
+    /// The `ListView<T>` a `list<T>` parameter of `elem`s is viewed through.
+    fn list_view_type(&self, elem: &Type) -> TypeId {
+        let mut tt = self.lower_ctx.type_table.borrow_mut();
+        let registry = self.lower_ctx.cm_interface_registry;
+        let elem = cm_held_type_to_type_id(elem, &mut tt, registry, &self.func_info.package);
+        tt.make_list_view(elem)
+    }
+
+    /// `&ListView<T>`: the (ptr, len) of the block it views, after a check that
+    /// it has not dropped.
+    fn emit_list_view(&mut self, plan: &ParamPlan<'a>, elem: &Type) {
+        let view_type = self.list_view_type(elem);
+        let field = |this: &Self, field: ListViewField, ty: TypeId| {
+            let view = deref_expr(this.param_ref(plan), view_type, synth_span());
+            field_access(view, field.index(), field.field_name(), ty, synth_span())
+        };
+        let cell = self
+            .lower_ctx
+            .type_table
+            .borrow_mut()
+            .make_mut_ref(TypeTable::BOOL);
+        let released = deref_expr(
+            field(self, ListViewField::Released, cell),
+            TypeTable::BOOL,
+            synth_span(),
+        );
+        let trap = block(vec![expr_stmt(unreachable_call(
+            TypeTable::UNIT,
+            synth_span(),
+        ))]);
+        self.body_stmts.push(if_stmt(released, trap, None));
+        self.flat_args
+            .push(field(self, ListViewField::Ptr, TypeTable::I32));
+        self.flat_args
+            .push(field(self, ListViewField::Len, TypeTable::I32));
     }
 
     /// Call the packing helper on `plan`'s param (→ packed i64) and split it
@@ -992,7 +1028,11 @@ impl<'a> AdapterBuilder<'a> {
     fn emit_packed_ptr_len(&mut self, plan: &ParamPlan<'a>, helper: CompilerItem) {
         let packed_name = format!("${}_packed", plan.name);
         let packed_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I64);
-        let packed = self.helper_call(helper, self.param_ref(plan), TypeTable::I64);
+        let packed = internal_call(
+            helper.attr_name(),
+            vec![self.param_ref(plan)],
+            TypeTable::I64,
+        );
         self.body_stmts
             .push(let_stmt(&packed_name, packed_local, TypeTable::I64, packed));
 
@@ -1235,7 +1275,7 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::Unit
                 | ParamLowering::PackedPtrLen { .. }
                 | ParamLowering::ListBuffer { .. }
-                | ParamLowering::ListArg
+                | ParamLowering::ListView { .. }
                 | ParamLowering::Direct => {
                     let stores = cm_param_store_plan(plan.ty, registry, &self.lower_ctx.names);
                     for (sub_offset, store_name) in &stores {

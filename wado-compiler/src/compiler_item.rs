@@ -121,6 +121,33 @@ impl FormatterField {
     }
 }
 
+/// The fields of `core:linear::ListView` an import adapter reads, each at its
+/// declaration index.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ListViewField {
+    Ptr = 0,
+    Len = 1,
+    Released = 3,
+}
+
+impl ListViewField {
+    /// The Wado-side field name.
+    #[must_use]
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::Ptr => "ptr",
+            Self::Len => "len",
+            Self::Released => "released",
+        }
+    }
+
+    /// The field's positional index within the struct.
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self as u32
+    }
+}
+
 /// Every compiler-recognized stdlib item. Each variant's canonical
 /// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
 /// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
@@ -185,12 +212,12 @@ pub enum CompilerItem {
     /// `CopyBuffer` — the linear memory a started stream copy moves through,
     /// with the copy it belongs to.
     CopyBuffer,
-    /// `core:linear::ListArg` — what a sync import's `list<T>` parameter of
-    /// numbers takes; each call site lowers its argument through it.
+    /// `core:linear::ListArg<T>` — what converts to a `&ListView<T>` argument,
+    /// through its `lowered`.
     ListArg,
-    /// `core:linear::LoweredList` — where a `ListArg`'s elements lie for one
-    /// call, and what the call frees after it.
-    LoweredList,
+    /// `core:linear::ListView<T>` — what a sync import's `list<T>` parameter
+    /// of numbers takes.
+    ListView,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -703,10 +730,6 @@ pub enum CompilerItem {
     CmLowerString,
     /// `core:rt::cm_lower_array_u8`.
     CmLowerArrayU8,
-    /// `core:linear::cm_lower_list_arg`.
-    CmLowerListArg,
-    /// `core:linear::cm_release_list_arg`.
-    CmReleaseListArg,
     /// `core:rt::cm_callback_key`.
     CmCallbackKey,
     /// `core:rt::cm_callback`.
@@ -817,7 +840,7 @@ impl CompilerItem {
         Self::ResultBuffer,
         Self::CopyBuffer,
         Self::ListArg,
-        Self::LoweredList,
+        Self::ListView,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -1003,8 +1026,6 @@ impl CompilerItem {
         Self::MemoryToGcString,
         Self::CmLowerString,
         Self::CmLowerArrayU8,
-        Self::CmLowerListArg,
-        Self::CmReleaseListArg,
         Self::CmCallbackKey,
         Self::CmCallback,
         Self::CmAwaitBlocked,
@@ -1078,7 +1099,7 @@ impl CompilerItem {
             Self::ResultBuffer => "result_buffer",
             Self::CopyBuffer => "copy_buffer",
             Self::ListArg => "list_arg",
-            Self::LoweredList => "lowered_list",
+            Self::ListView => "list_view",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1206,8 +1227,6 @@ impl CompilerItem {
             Self::MemoryToGcString => "memory_to_gc_string",
             Self::CmLowerString => "cm_lower_string",
             Self::CmLowerArrayU8 => "cm_lower_array_u8",
-            Self::CmLowerListArg => "cm_lower_list_arg",
-            Self::CmReleaseListArg => "cm_release_list_arg",
             Self::CmCallbackKey => "cm_callback_key",
             Self::CmCallback => "cm_callback",
             Self::CmAwaitBlocked => "cm_await_blocked",
@@ -1512,10 +1531,8 @@ impl CompilerItem {
             // Kiln generator world only.
             Self::KilnRequest | Self::KilnNoOptions => generator_world,
             // Loaded only when a module imports `core:linear`, which every one
-            // declaring a `ListArg` parameter does.
-            Self::ListArg | Self::LoweredList | Self::CmLowerListArg | Self::CmReleaseListArg => {
-                false
-            }
+            // declaring a `&ListView<T>` parameter does.
+            Self::ListArg | Self::ListView => false,
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
             | Self::MapEntriesIter
@@ -1601,8 +1618,7 @@ impl CompilerItem {
                 | Self::Member
                 // Called by every drop `synthesis::affine_drop` writes.
                 | Self::Drop
-                // Called at every `list<T>` argument `synthesis::cm_binding`
-                // lowers.
+                // Called at every argument converted to a `&ListView<T>`.
                 | Self::ListArg
         )
     }
@@ -1626,8 +1642,6 @@ impl CompilerItem {
             | Self::MemoryToGcString
             | Self::CmLowerString
             | Self::CmLowerArrayU8
-            | Self::CmLowerListArg
-            | Self::CmReleaseListArg
             | Self::CmCallbackKey
             | Self::CmCallback
             | Self::CmAwaitBlocked
@@ -1670,7 +1684,7 @@ impl CompilerItem {
             | Self::AsyncCall
             | Self::ResultBuffer
             | Self::CopyBuffer
-            | Self::LoweredList => CompilerItemKind::Struct,
+            | Self::ListView => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream

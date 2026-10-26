@@ -1363,6 +1363,13 @@ pub enum TirExprKind {
         parts: Vec<TirTemplatePart>,
     },
 
+    /// A call argument converted to the `&ListView<T>` parameter it meets
+    /// (the node's type) from a `ListArg<T>`. The synthesis phase
+    /// (pre-monomorphize) expands it to `&ListArg::lowered(&value)`.
+    ListViewOf {
+        value: Box<TirExpr>,
+    },
+
     /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///

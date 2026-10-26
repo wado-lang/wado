@@ -778,6 +778,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_expr(arg, ctx, None);
         };
         let expected = self.apply_infer_holes(param.checked);
+        let element = self
+            .tysys
+            .type_table
+            .borrow()
+            .list_view_ref_element(expected);
+        if let Some(element) = element {
+            return self.resolve_list_view_arg(arg, ctx, expected, element);
+        }
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
@@ -786,6 +794,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.solve_own_infer_holes_against(declared, resolved, &answerable);
         }
         resolved
+    }
+
+    /// An argument meeting a `&ListView<T>` parameter. A view passes as it is;
+    /// any other argument implementing `ListArg<T>` converts, a sequence
+    /// literal read as a `List<T>` first. Anything else is left for the
+    /// argument check to report.
+    fn resolve_list_view_arg(
+        &mut self,
+        arg: &ast::Expr,
+        ctx: &mut FunctionContext,
+        view: TypeId,
+        element: TypeId,
+    ) -> TypeId {
+        let literal_list = matches!(arg, Expr::TupleLiteral(_))
+            .then(|| self.tysys.type_table.borrow_mut().make_list(element));
+        let resolved = self.resolve_expr(arg, ctx, literal_list);
+        let (is_view, list_arg) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.is_compiler_item_type(resolved, CompilerItem::ListView),
+                tt.compiler_trait_fq(CompilerItem::ListArg)
+                    .with_args(vec![tt.fq_type_name(element)]),
+            )
+        };
+        if is_view
+            || !self.tysys.type_implements_trait(
+                &self.annotate_ctx,
+                &self.type_lookup(),
+                resolved,
+                &list_arg,
+            )
+        {
+            return resolved;
+        }
+        self.sem.types.list_view_conversions.insert(arg.id(), view);
+        view
     }
 }
 

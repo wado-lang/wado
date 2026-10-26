@@ -4909,6 +4909,30 @@ impl TypeTable {
         self.make_generic_instance(def, vec![element])
     }
 
+    /// Create a `core:linear::ListView<T>` type.
+    pub fn make_list_view(&mut self, element: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::ListView)
+            .expect("a `&ListView<T>` parameter's module imports `core:linear`");
+        self.make_generic_instance(def, vec![element])
+    }
+
+    /// The `T` of a `&ListView<T>`, the parameter type a `ListArg<T>` argument
+    /// converts to, or `None` for any other type.
+    pub fn list_view_ref_element(&self, id: TypeId) -> Option<TypeId> {
+        let ResolvedType::Ref(view) = *self.get(id) else {
+            return None;
+        };
+        if !self.is_compiler_item_type(view, CompilerItem::ListView) {
+            return None;
+        }
+        let args = self.declared_type_args(view)?;
+        let [element] = args[..] else {
+            unreachable!("`ListView` declares one type parameter");
+        };
+        Some(element)
+    }
+
     /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
     pub fn make_tree_map(&mut self, key: TypeId, value: TypeId) -> TypeId {
         let def = self

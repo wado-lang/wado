@@ -11,9 +11,10 @@
 //!
 //! The array is affine, so one block has one owner, and no reference into it
 //! outlives that owner. Its address is never handed out, and every element is
-//! written before anything reads it. It crosses a component boundary only into a
-//! synchronous world function's `list<T>` parameter, which takes any `ListArg`:
-//! there it lends its own block for the call. See WEP: Linear Arrays.
+//! written before anything reads it. It crosses a component boundary only as a
+//! `ListView<T>`, which a synchronous import's `list<T>` parameter takes and any
+//! `ListArg` converts to: there it lends its own block for the call. See WEP:
+//! Linear Arrays.
 
 #[synopsis]
 test {
@@ -25,44 +26,80 @@ test {
 
 use { CopyResult } from "core:prelude/types.wado";
 use { copy_result, cm_packed_upper, STREAM_CHUNK_ELEMENTS } from "core:prelude/types.wado";
-use { cm_await_blocked, cm_copy_count, cm_lower_list_u8, pack_ptr_len } from "core:rt";
+use { cm_await_blocked, cm_copy_count, cm_lower_list_u8 } from "core:rt";
 
-/// A `list<T>` argument of a synchronous world function, for `T` a Component Model
-/// number type. `List<T>` copies its elements into a block the call frees once
-/// it returns, and `&LinearArray<T>` lends its own block for the call.
+/// What converts to a `&ListView<T>` argument: `List<T>` by copying its
+/// elements into a block of the view's own, `&LinearArray<T>` by lending its
+/// block.
 #[compiler_item("list_arg")]
-pub affine trait ListArg with () {
-    type Elem: AnyBits;
-
-    fn lowered(&self) -> LoweredList;
+pub affine trait ListArg<T: AnyBits> with () {
+    fn lowered(&self) -> ListView<T>;
 }
 
-/// Where a `ListArg`'s elements lie for one call. Only `core:*` writes one, so
-/// the call frees no block it did not allocate.
-#[compiler_item("lowered_list")]
-pub struct LoweredList {
+/// `T`s lying in linear memory in the layout the Canonical ABI gives a
+/// `list<T>`, read-only. A call argument converts to a `&ListView<T>`
+/// parameter from any `ListArg<T>`, and the view drops when the statement
+/// holding the call ends. Only `core:*` writes one, so a view frees no block it
+/// did not allocate.
+#[compiler_item("list_view")]
+pub affine struct ListView<T: AnyBits> {
     internal ptr: i32,
     internal len: i32,
-    /// What the call frees once it returns; 0 for a block it borrows.
+    /// What dropping the view frees; 0 for a block it borrows.
     internal owned_bytes: i32,
+    /// Set where the view drops, so a reference kept past it traps on a read.
+    /// A cell rather than a field, since `drop` takes the view by value.
+    internal released: &mut bool,
 }
 
-/// The `(ptr | len << 32)` a lowered list crosses as.
-#[compiler_item("cm_lower_list_arg")]
-internal fn cm_lower_list_arg(list: LoweredList) -> i64 {
-    return pack_ptr_len(list.ptr, list.len);
-}
+impl<T: AnyBits> ListView<T> {
+    pub fn len(&self) -> i32 {
+        return self.len;
+    }
 
-/// Gives back the block the call copied `list` into, if it did.
-#[compiler_item("cm_release_list_arg")]
-internal fn cm_release_list_arg(list: LoweredList) {
-    if list.owned_bytes > 0 {
-        let _ = builtin::realloc(list.ptr, list.owned_bytes, 1, 0);
+    pub fn is_empty(&self) -> bool {
+        return self.len == 0;
+    }
+
+    /// The element at `index`.
+    pub fn at(&self, index: i32) -> T
+        contract 0 <= index < self.len
+    {
+        assert !*self.released, "a view is read only while it lives";
+        return builtin::load::<T>(self.ptr + index * builtin::size_of::<T>());
+    }
+
+    /// The elements, copied into a `List`.
+    pub fn to_list(&self) -> List<T> {
+        let mut list = List::<T>::with_capacity(self.len);
+        for let i of 0..<self.len {
+            list.push(self.at(i));
+        }
+        return list;
     }
 }
 
-/// `list`'s elements, copied into a block of their own.
-fn copied<T: AnyBits>(list: &List<T>) -> LoweredList {
+impl<T: AnyBits> Drop for ListView<T> {
+    fn drop(self) {
+        *self.released = true;
+        if self.owned_bytes > 0 {
+            let _ = builtin::realloc(self.ptr, self.owned_bytes, 1, 0);
+        }
+    }
+}
+
+impl<T: AnyBits> IndexValue<i32> for ListView<T> {
+    type Output = T;
+
+    fn index_value(&self, index: i32) -> Self::Output
+        contract 0 <= index < self.len
+    {
+        return self.at(index);
+    }
+}
+
+/// `list`'s elements, copied into a block of the view's own.
+fn copied<T: AnyBits>(list: &List<T>) -> ListView<T> {
     let width = builtin::size_of::<T>();
     assert list.len() <= i32::MAX / width, "a list argument fits in linear memory";
     let bytes = list.len() * width;
@@ -70,96 +107,80 @@ fn copied<T: AnyBits>(list: &List<T>) -> LoweredList {
     for let i of 0..<list.len() {
         builtin::store(ptr + i * width, list[i]);
     }
-    return LoweredList { ptr, len: list.len(), owned_bytes: bytes };
+    return view_of(ptr, list.len(), bytes);
 }
 
-impl ListArg for List<u8> {
-    type Elem = u8;
+/// A live view of `len` `T`s at `ptr`, freeing `owned_bytes` where it drops.
+fn view_of<T: AnyBits>(ptr: i32, len: i32, owned_bytes: i32) -> ListView<T> {
+    let mut released = false;
+    return ListView::<T> { ptr, len, owned_bytes, released: &mut released };
+}
 
-    fn lowered(&self) -> LoweredList {
+impl ListArg<u8> for List<u8> {
+    fn lowered(&self) -> ListView<u8> {
         let len = self.len();
-        let packed = cm_lower_list_u8(self.internal_raw_data_ref(), 0, len);
-        return LoweredList { ptr: packed as i32, len, owned_bytes: len };
+        let ptr = cm_lower_list_u8(self.internal_raw_data_ref(), 0, len) as i32;
+        return view_of(ptr, len, len);
     }
 }
 
-impl ListArg for List<i8> {
-    type Elem = i8;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<i8> for List<i8> {
+    fn lowered(&self) -> ListView<i8> {
         return copied(self);
     }
 }
 
-impl ListArg for List<u16> {
-    type Elem = u16;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<u16> for List<u16> {
+    fn lowered(&self) -> ListView<u16> {
         return copied(self);
     }
 }
 
-impl ListArg for List<i16> {
-    type Elem = i16;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<i16> for List<i16> {
+    fn lowered(&self) -> ListView<i16> {
         return copied(self);
     }
 }
 
-impl ListArg for List<u32> {
-    type Elem = u32;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<u32> for List<u32> {
+    fn lowered(&self) -> ListView<u32> {
         return copied(self);
     }
 }
 
-impl ListArg for List<i32> {
-    type Elem = i32;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<i32> for List<i32> {
+    fn lowered(&self) -> ListView<i32> {
         return copied(self);
     }
 }
 
-impl ListArg for List<u64> {
-    type Elem = u64;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<u64> for List<u64> {
+    fn lowered(&self) -> ListView<u64> {
         return copied(self);
     }
 }
 
-impl ListArg for List<i64> {
-    type Elem = i64;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<i64> for List<i64> {
+    fn lowered(&self) -> ListView<i64> {
         return copied(self);
     }
 }
 
-impl ListArg for List<f32> {
-    type Elem = f32;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<f32> for List<f32> {
+    fn lowered(&self) -> ListView<f32> {
         return copied(self);
     }
 }
 
-impl ListArg for List<f64> {
-    type Elem = f64;
-
-    fn lowered(&self) -> LoweredList {
+impl ListArg<f64> for List<f64> {
+    fn lowered(&self) -> ListView<f64> {
         return copied(self);
     }
 }
 
-impl<T: AnyBits> ListArg for &LinearArray<T> {
-    type Elem = T;
-
-    fn lowered(&self) -> LoweredList {
-        return LoweredList { ptr: self.block.ptr, len: self.len, owned_bytes: 0 };
+impl<T: AnyBits> ListArg<T> for &LinearArray<T> {
+    fn lowered(&self) -> ListView<T> {
+        return view_of(self.block.ptr, self.len, 0);
     }
 }
 

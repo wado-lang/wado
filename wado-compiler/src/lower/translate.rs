@@ -2329,6 +2329,9 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::TemplateString { .. } => unreachable!(
                 "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
             ),
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
+            }
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),

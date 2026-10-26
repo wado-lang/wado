@@ -1599,6 +1599,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 "a place an affine value moves out of is marked `Move`: {span:?}"
             );
         }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before drops")
+        }
 
         TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,

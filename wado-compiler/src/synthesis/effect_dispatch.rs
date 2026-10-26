@@ -1285,6 +1285,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
+        | TirExprKind::ListViewOf { value: expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
@@ -2042,6 +2043,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Move { expr: inner }
+            | TirExprKind::ListViewOf { value: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -2873,6 +2875,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
+        | TirExprKind::ListViewOf { value: expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }

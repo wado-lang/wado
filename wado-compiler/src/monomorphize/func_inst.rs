@@ -2145,6 +2145,9 @@ impl Monomorphizer {
             TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Move { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
+            }
             TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
             }

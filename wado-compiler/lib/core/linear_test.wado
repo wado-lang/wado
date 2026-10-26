@@ -1,4 +1,4 @@
-use { LinearArray } from "core:linear";
+use { LinearArray, ListArg } from "core:linear";
 use { f32x4 } from "core:simd";
 
 type Meters = f64;
@@ -130,4 +130,50 @@ test "an index read traps past the end" {
 test "an index assignment traps past the end" {
     let mut array = LinearArray::<i32>::filled(2, 0);
     array[2] = 1;
+}
+
+test "a list lowers to a view of a copy, at each width" {
+    let bytes: List<u8> = [1, 2];
+    assert bytes.lowered().to_list() == bytes;
+    let signed_bytes: List<i8> = [-1, 2];
+    assert signed_bytes.lowered().to_list() == signed_bytes;
+    let halves: List<u16> = [1, u16::MAX];
+    assert halves.lowered().to_list() == halves;
+    let signed_halves: List<i16> = [-1, i16::MIN];
+    assert signed_halves.lowered().to_list() == signed_halves;
+    let words: List<u32> = [1, u32::MAX];
+    assert words.lowered().to_list() == words;
+    let signed_words: List<i32> = [-1, i32::MIN];
+    assert signed_words.lowered().to_list() == signed_words;
+    let wide: List<u64> = [1, u64::MAX];
+    assert wide.lowered().to_list() == wide;
+    let signed_wide: List<i64> = [-1, i64::MIN];
+    assert signed_wide.lowered().to_list() == signed_wide;
+    let floats: List<f32> = [0.5, -1.5];
+    assert floats.lowered().to_list() == floats;
+    let doubles: List<f64> = [0.25, f64::MAX];
+    assert doubles.lowered().to_list() == doubles;
+}
+
+test "an array lowers to a view of its own block" {
+    let mut array = LinearArray::<u16>::filled(3, 7);
+    let view = (&array).lowered();
+    array[1] = 9;
+    assert view.len() == 3;
+    assert view.at(1) == 9;
+    assert view[2] == 7;
+}
+
+test "an empty view holds nothing" {
+    let empty: List<f32> = [];
+    let view = empty.lowered();
+    assert view.is_empty();
+    assert view.to_list() == empty;
+    assert !(&LinearArray::<u8>::filled(1, 0)).lowered().is_empty();
+}
+
+#[expect_trap]
+test "a view read traps past the end" {
+    let bytes: List<u8> = [1];
+    let _ = bytes.lowered()[1];
 }

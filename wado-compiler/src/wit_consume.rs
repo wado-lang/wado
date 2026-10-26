@@ -9,11 +9,10 @@
 //! cannot drift on how `option`/`list`/`tuple`/`result` are structured.
 
 use crate::ast::{
-    AssocTypeBound, AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource,
-    EnumCase, EnumDecl, FlagsDecl, FlagsVariant, Function, GenericParam, GenericType,
-    InnerAttribute, InterfaceDecl, Item, Module, NamedType, Newtype, Param, SelfKind, StrLit,
-    StructDecl, StructField, TraitBound, Type, UseDecl, UseItem, UseNameSpelling, VariantCase,
-    VariantDecl, Visibility, cm_import_of,
+    AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
+    FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
+    NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
+    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_import_of,
 };
 use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -216,9 +215,9 @@ pub fn build_bindings(
         let tree_map_use = b.use_item("core:collections", "TreeMap");
         b.items.insert(0, tree_map_use);
     }
-    if b.uses_list_arg {
-        let list_arg_use = b.use_item("core:linear", "ListArg");
-        b.items.insert(0, list_arg_use);
+    if b.uses_list_view {
+        let list_view_use = b.use_item("core:linear", "ListView");
+        b.items.insert(0, list_view_use);
     }
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
@@ -328,7 +327,7 @@ struct Builder {
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
     uses_tree_map: bool,
-    uses_list_arg: bool,
+    uses_list_view: bool,
     names: InterfaceNames,
     /// Each interface the component exports -> the one the program imports it
     /// as ([`cm_dependency_interface`]).
@@ -344,7 +343,7 @@ impl Builder {
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
             uses_tree_map: false,
-            uses_list_arg: false,
+            uses_list_view: false,
             names,
             exports,
         }
@@ -449,9 +448,7 @@ impl Builder {
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
-            // An operation declares no type parameters: a handler serves it at
-            // one type.
-            let signature = self.signature(resolve, func, fq, false);
+            let signature = self.signature(resolve, func, fq);
             let is_async = is_async_func(func);
             let return_type = self.func_return_type(resolve, func, fq);
             let attrs = vec![self.cm_import_attr(fq, Some(fname)), signature.cm_params];
@@ -463,7 +460,7 @@ impl Builder {
                 is_export: false,
                 export_targets: Vec::new(),
                 is_async,
-                type_params: signature.type_params,
+                type_params: Vec::new(),
                 attrs,
                 params: signature.params,
                 params_span: syn(),
@@ -497,17 +494,12 @@ impl Builder {
         }));
     }
 
-    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT.
-    /// `lends_lists` declares each `list<T>` of numbers as a type parameter
-    /// `L: ListArg<Elem = T>`, so a `LinearArray` lends its own block
-    /// (WEP: Linear Arrays).
-    fn signature(
-        &mut self,
-        resolve: &Resolve,
-        func: &wit_parser::Function,
-        fq: &str,
-        lends_lists: bool,
-    ) -> Signature {
+    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT. A
+    /// synchronous function takes each `list<T>` of numbers as a
+    /// `&ListView<T>`, so a `LinearArray` lends its own block (WEP: Linear
+    /// Arrays). An async one has not read its arguments by the time it
+    /// returns, so it keeps the `List`.
+    fn signature(&mut self, resolve: &Resolve, func: &wit_parser::Function, fq: &str) -> Signature {
         let cm_params = Attribute {
             name: CM_PARAMS.to_string(),
             args: func
@@ -518,19 +510,14 @@ impl Builder {
             cm_boundary: None,
             span: syn(),
         };
-        let mut type_params = Vec::new();
+        let lends_lists = !is_async_func(func);
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
-            let ty = match list_arg_elem(resolve, p.ty).filter(|_| lends_lists) {
+            let ty = match list_view_elem(resolve, p.ty).filter(|_| lends_lists) {
                 Some(elem) => {
-                    let name = match type_params.len() {
-                        0 => "L".to_string(),
-                        n => format!("L{}", n + 1),
-                    };
                     let elem = self.map_leaf(resolve, elem, fq);
-                    type_params.push(self.list_arg_param(&name, elem));
-                    self.uses_list_arg = true;
-                    self.named(&name, None)
+                    self.uses_list_view = true;
+                    Type::Reference(Box::new(self.generic("ListView", vec![elem])))
                 }
                 None => self.map_type(resolve, p.ty, fq),
             };
@@ -546,41 +533,7 @@ impl Builder {
                 span: syn(),
             });
         }
-        Signature {
-            params,
-            type_params,
-            cm_params,
-        }
-    }
-
-    /// `affine name: ListArg<Elem = elem>`.
-    fn list_arg_param(&mut self, name: &str, elem: Type) -> GenericParam {
-        let bound = TraitBound {
-            id: self.id(),
-            name: "ListArg".to_string(),
-            type_args: Vec::new(),
-            assoc_types: vec![AssocTypeBound {
-                id: self.id(),
-                name: "Elem".to_string(),
-                ty: elem,
-                span: syn(),
-            }],
-            span: syn(),
-            fn_signature: None,
-            resolved: None,
-        };
-        GenericParam {
-            id: self.id(),
-            attrs: Vec::new(),
-            name: name.to_string(),
-            name_span: syn(),
-            is_effect: false,
-            is_affine: true,
-            is_pack: false,
-            bounds: vec![bound],
-            default: None,
-            span: syn(),
-        }
+        Signature { params, cm_params }
     }
 
     /// A WIT result, wrapped in `AsyncCall<T>` for an `async func` — the shape
@@ -604,9 +557,7 @@ impl Builder {
     /// synthesizes the CM import trampoline from the `#[cm]` boundary.
     fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
         let is_async = is_async_func(func);
-        // A sync call has read its arguments by the time it returns; an async
-        // one has not, so it keeps the `List`.
-        let signature = self.signature(resolve, func, "", !is_async);
+        let signature = self.signature(resolve, func, "");
         let return_type = self.func_return_type(resolve, func, "");
         let attrs = vec![self.cm_world_import_attr(&func.name), signature.cm_params];
         let id = self.id();
@@ -618,7 +569,7 @@ impl Builder {
             is_export: false,
             export_targets: Vec::new(),
             is_async,
-            type_params: signature.type_params,
+            type_params: Vec::new(),
             attrs,
             params: signature.params,
             params_span: syn(),
@@ -902,14 +853,13 @@ impl Builder {
 /// A function's parameters as the bindings declare them.
 struct Signature {
     params: Vec<Param>,
-    type_params: Vec<GenericParam>,
     /// `#[cm_params]`, the WIT name of each parameter.
     cm_params: Attribute,
 }
 
 /// The `T` of `ty` when it is a `list<T>` of a Component Model number type,
-/// which a `LinearArray<T>` lays out as the Canonical ABI does.
-fn list_arg_elem(resolve: &Resolve, ty: WitType) -> Option<WitType> {
+/// which a `ListView<T>` lays out as the Canonical ABI does.
+fn list_view_elem(resolve: &Resolve, ty: WitType) -> Option<WitType> {
     let CmShape::List(elem) = classify_wit(resolve, ty) else {
         return None;
     };

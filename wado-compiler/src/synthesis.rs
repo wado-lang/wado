@@ -8,6 +8,7 @@ pub mod affine_drop;
 pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
+pub mod list_view;
 pub mod reflect_bridge;
 pub mod serde_synth;
 pub mod template;
@@ -118,6 +119,7 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
         // same per-specifier dispatch as the direct untagged lowering, so its
         // bridge is minted here, by that lowering's code.
         template::synthesize_hole_fmt_helpers(module, &tt, &trait_env);
+        list_view::expand_list_views(module, &tt, &trait_env);
     }
 
     // Effect-dispatch wrapper synthesis and call-site rewriting run before

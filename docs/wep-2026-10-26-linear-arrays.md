@@ -170,32 +170,48 @@ Canonical ABI gives a `list<T>`. So such an import takes the array's own block,
 with no copy:
 
 ```wado
-use { ListArg } from "core:linear";
+use { ListView } from "core:linear";
 
-// What a component import declares for `sum: func(data: list<u8>) -> u32`.
-fn sum<affine L: ListArg<Elem = u8>>(data: L) -> u32;
+// What the bindings generator writes for `write-buffer-with-copy`.
+fn write_buffer_with_copy(
+    &self,
+    buffer: &GpuBuffer,
+    buffer_offset: GpuSize64,
+    data: &ListView<u8>,
+    data_offset: Option<GpuSize64>,
+    size: Option<GpuSize64>,
+) -> Result<(), WriteBufferError>;
 
-sum(&weights);   // no copy
-sum(bytes);      // copied, as before
+queue.write_buffer_with_copy(&buffer, 0, &weights, null, null);   // no copy
+queue.write_buffer_with_copy(&buffer, 0, bytes, null, null);      // copied, as before
 ```
 
-`ListArg` is what a `list<T>` argument is, for `T` a Component Model number
-type. `List<T>`, and so `ByteList`, implement it by copying the elements into a
-block for the call, as every list argument is lowered today. `&LinearArray<T>`
-implements it by handing over its own block, which the borrow keeps alive for
-the whole call. A call site never chooses between two functions. A list literal
-no longer coerces to such a parameter, since nothing tells it which `ListArg`
-to be: `sum([1, 2] as ByteList)` names it.
+A `ListView<T>` is a read-only view of `T`s lying in linear memory in the
+layout the Canonical ABI gives a `list<T>`, for `T` a Component Model number
+type. Both generators declare every synchronous `list<T>` parameter of numbers
+as a `&ListView<T>`, the WIT bindings of the standard library and the
+declarations a component import produces. The parameter has one type, so an
+operation keeps one dispatch slot, and a handler installed for it reads the
+view.
 
-Only a world function takes one. An operation, of an interface or of a
-resource, declares no type parameters, because a handler installed for it
-serves it at one type. So every WASI binding keeps its `List<T>`, and
-`write-buffer-with-copy`, the call Loam uploads weights through, copies them.
+A call argument converts to a `&ListView<T>` parameter from any type
+implementing `ListArg<Elem = T>`, as a `&mut T` converts to a `&T`. The call
+site writes `&arg.lowered()`. `List<T>`, and so `ByteList`, implement it by
+copying the elements into a block of the view's own, as every list argument is
+lowered today. `&LinearArray<T>` implements it by lending its own block. A
+list literal is typed as a `List<T>` first, so it converts too. A call site
+never chooses between two functions.
 
-`ListArg::lowered` answers a `LoweredList`, whose fields only `core:*` can
-write. An implementation outside it can only delegate to one of these two, so
-no implementation hands the host a block it does not own or frees one it did
-not allocate.
+The view is affine, and the temporary the conversion makes drops when the
+statement holding the call ends, as any temporary does. Dropping it frees the
+block it copied into and marks it released. A handler that keeps the reference
+past the call then traps on its next read, rather than reading memory that was
+given back; one that needs the elements later copies them with `to_list()`.
+
+`ListArg::lowered` answers a `ListView`, whose fields only `core:*` can write.
+An implementation outside it can only delegate to one of these two, so no
+implementation hands the host a block it does not own or frees one it did not
+allocate.
 
 An asynchronous import is left as it is. Its call returns before the host has
 read the argument, and nothing holds a borrow past the call that made it.
@@ -258,8 +274,7 @@ In order:
   in the standard library's WIT bindings and in a component import's
   declarations. Done when Loam's WebGPU backend uploads weights from a
   `LinearArray` with no copy, and Gemma 3's load on WebGPU is measured against
-  what it is now. A component's world function takes one; an operation cannot
-  yet, since it declares no type parameters.
+  what it is now.
 
 Gemma 3 (270M) before and after the `Cpu` item, both run by one `wado` from
 `package-loam/example/gemma3-270m` with
