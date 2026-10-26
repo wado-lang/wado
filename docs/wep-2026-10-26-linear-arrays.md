@@ -271,7 +271,7 @@ In order:
   affine by instantiation, as `Model<WebGpuBackend>` already is. Done when
   Gemma 3's next token is measured against what it is now.
 
-- [ ] A synchronous import's `list<T>` parameter is a `&ListView<T>`, which any
+- [x] A synchronous import's `list<T>` parameter is a `&ListView<T>`, which any
   `ListArg<T>` converts to, in the standard library's WIT bindings and in a
   component import's declarations. Done when Loam's WebGPU backend uploads weights from a
   `LinearArray` with no copy, and Gemma 3's load on WebGPU is measured against
@@ -288,6 +288,22 @@ are the two prompts `generate.json` records.
 | `drc`     | ms for the prompt | 236 / 444                     | 278 / 549                          |
 | `copying` | ms a token        | runs out of GC heap           | 73.4 / 74.3                        |
 | `copying` | ms for the prompt | runs out of GC heap           | 171 / 315                          |
+
+Gemma 3 (270M) on WebGPU before and after the `&ListView<T>` item. A harness
+times `Model::load` and then 200 `next_token` calls in two halves of 100, run
+by `wado run-webgpu` from `package-loam/example/gemma3-270m`. The two figures
+in a cell are two runs, the arms alternated.
+
+| Measured                   | `write` copies a `ByteList` | `write` lends a `LinearArray` |
+| -------------------------- | --------------------------- | ----------------------------- |
+| ms to load                 | 14166 / 14173               | 13251 / 13168                 |
+| ms a token, tokens 1–100   | 3.74 / 3.72                 | 4.42 / 4.45                   |
+| ms a token, tokens 101–200 | 3.80 / 3.82                 | 3.81 / 3.77                   |
+
+The first hundred tokens are slower after a lent load only once. Copying built
+a `ByteList` per write, which touched the GC heap's pages during the load. A
+lent load touches almost none, so the first tokens fault those pages in: 746
+page faults while decoding against 30, all from guest code.
 
 ## Known gaps
 
