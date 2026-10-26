@@ -771,7 +771,12 @@ impl RunScan<'_> {
             | ExprKind::VariantTest { .. }
             | ExprKind::VariantPayload { .. } => {
                 let mut operands = Vec::new();
-                body.for_each_child(NodeRef::Expr(e), |child| operands.push(child));
+                body.for_each_child(NodeRef::Expr(e), |child| {
+                    let NodeRef::Expr(operand) = child else {
+                        unreachable!("an operand is an expression");
+                    };
+                    operands.push(operand);
+                });
                 self.in_order(operands)
             }
         }
@@ -779,17 +784,14 @@ impl RunScan<'_> {
 
     /// Whether every path through operands evaluated one after another passes
     /// a marker: one of them covers, and none ahead of it can leave first.
-    fn in_order(&mut self, operands: Vec<NodeRef>) -> bool {
+    fn in_order(&mut self, operands: Vec<ExprId>) -> bool {
         let mut covered = false;
-        let mut left = false;
+        let mut escaped = false;
         for operand in operands {
-            let NodeRef::Expr(e) = operand else {
-                unreachable!("an operand is an expression");
-            };
             // Visited whatever the answer, so the runs under it are recorded.
-            let covers = self.expr(e);
-            covered |= covers && !left;
-            left = left || (!covered && node_escapes(self.body, operand));
+            let covers = self.expr(operand);
+            covered |= covers && !escaped;
+            escaped = escaped || (!covered && node_escapes(self.body, NodeRef::Expr(operand)));
         }
         covered
     }
