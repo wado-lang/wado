@@ -37,3 +37,23 @@ fn dot_names_the_childs_directory_only_as_the_first_grant() {
         Answer::Denied(_)
     ));
 }
+
+/// A child the host killed at its timeout failed, so what the sandbox refused
+/// it may be why it hung.
+#[cfg(unix)]
+#[test]
+fn a_timed_out_child_reports_what_the_sandbox_refused_it() {
+    use std::collections::BTreeSet;
+
+    use wado_host::sandbox::Refusal;
+
+    use super::posix::refusals_warning;
+    use super::types::ExitStatus;
+
+    let refusals = BTreeSet::from([Refusal::LeaveGroup]);
+    let warning = refusals_warning("job", &ExitStatus::TimedOut, &refusals, Trace::Off);
+    assert!(
+        warning
+            .is_some_and(|warning| warning.contains("`job` timed out after the sandbox refused"))
+    );
+}

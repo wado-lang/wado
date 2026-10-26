@@ -237,6 +237,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         stdout,
         stderr,
         refusals: Refusals::default(),
+        unobserved: Some("Seatbelt reports nothing it refuses to the host"),
     })
 }
 

@@ -14,6 +14,11 @@
 //! thread checks its paths against the policy and lets it continue, so Landlock
 //! still decides.
 
+use super::{
+    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
+    Spawned, Stdio, Trace,
+};
+use crate::sync::spawn_detached;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -21,16 +26,10 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
-use std::thread;
-
-use super::{
-    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
-    Spawned, Stdio, Trace,
-};
 
 /// ABI 6 adds the scopes that isolate signals and abstract UNIX sockets.
 const LANDLOCK_ABI_REQUIRED: libc::c_long = 6;
@@ -121,10 +120,63 @@ fn probe_availability() -> Availability {
     Availability::Available
 }
 
+/// Whether a child may take a seccomp listener. The kernel allows one per
+/// chain of filters, so under an enclosing sandbox that holds one (LXD's
+/// system call interception, Sysbox) installing ours fails with `EBUSY`.
+fn listens() -> io::Result<bool> {
+    static ANSWER: OnceLock<bool> = OnceLock::new();
+    if let Some(&answer) = ANSWER.get() {
+        return Ok(answer);
+    }
+    let answer = probe_listener()?;
+    Ok(*ANSWER.get_or_init(|| answer))
+}
+
+fn probe_listener() -> io::Result<bool> {
+    let mut asm = Assembler::default();
+    asm.ret(libc::SECCOMP_RET_ALLOW);
+    let filter = asm.finish();
+    let program = libc::sock_fprog {
+        len: 1,
+        filter: filter.as_ptr().cast_mut(),
+    };
+    // SAFETY: the child makes only system calls, on memory built before the
+    // fork, and exits without returning.
+    let pid = unsafe { libc::fork() };
+    if pid == 0 {
+        unsafe {
+            let listens = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
+                && libc::syscall(
+                    libc::SYS_seccomp,
+                    libc::SECCOMP_SET_MODE_FILTER,
+                    libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
+                    &raw const program,
+                ) >= 0;
+            libc::_exit(i32::from(!listens));
+        }
+    }
+    check(pid)?;
+    let mut status = 0;
+    // SAFETY: `status` outlives the call.
+    while unsafe { libc::waitpid(pid, &raw mut status, 0) } == -1 {
+        let err = io::Error::last_os_error();
+        if err.kind() != io::ErrorKind::Interrupted {
+            return Err(err);
+        }
+    }
+    Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
+}
+
 pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let ruleset = ruleset(command.policy)?;
-    let filter = seccomp_filter(command.policy.network(), command.trace);
-    let traced = match command.trace {
+    let listens = listens()?;
+    let (refer, trace) = if listens {
+        (libc::SECCOMP_RET_USER_NOTIF, command.trace)
+    } else {
+        (libc::SECCOMP_RET_ERRNO | libc::EPERM as u32, Trace::Off)
+    };
+    let filter = seccomp_filter(command.policy.network(), trace, refer);
+    let traced = match trace {
         Trace::Off => None,
         Trace::Files => Some(command.policy.resolved()),
     };
@@ -143,25 +195,29 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     // fork, so it is safe in the child of a multithreaded process.
     unsafe {
         std_command.pre_exec(move || {
-            confine_self(&ruleset, &filter, cwd.as_ref(), listener_tx.as_raw_fd())
+            confine_self(
+                &ruleset,
+                &filter,
+                cwd.as_ref(),
+                listens.then(|| listener_tx.as_raw_fd()),
+            )
         });
     }
     let refusals = Refusals::default();
     let recorded = refusals.clone();
     // Started first: under `Trace::Files` the child's own `exec` waits on it.
-    thread::Builder::new()
-        .name("sandbox-refusals".to_owned())
-        .spawn(move || {
-            // `None` once every sender is closed: the spawn failed before the
-            // child confined itself.
-            if let Some((listener, pid)) = receive_listener(&listener_rx) {
-                let traced = traced.map(|mut policy| {
-                    policy.grant_own_proc(pid);
-                    policy
-                });
-                answer_refusals(&listener, &recorded, traced.as_ref());
-            }
-        })?;
+    // Detached, since it serves the child's descendants, which may outlive it.
+    spawn_detached("sandbox-refusals", move || {
+        // `None` once every sender is closed: the spawn failed before the
+        // child confined itself.
+        if let Some((listener, pid)) = receive_listener(&listener_rx) {
+            let traced = traced.map(|mut policy| {
+                policy.grant_own_proc(pid);
+                policy
+            });
+            answer_refusals(&listener, &recorded, traced.as_ref());
+        }
+    })?;
     let spawned = std_command.spawn();
     // Closes the host's copy of the sender, which the closure holds.
     drop(std_command);
@@ -172,6 +228,8 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         stdout: child.stdout.take().map(OwnedFd::from),
         stderr: child.stderr.take().map(OwnedFd::from),
         refusals,
+        unobserved: (!listens)
+            .then_some("an enclosing sandbox holds the one seccomp listener the kernel allows"),
     })
 }
 
@@ -415,15 +473,105 @@ enum PathArg {
     At { dir: usize, path: usize },
 }
 
-/// The access a file call asks of its path.
+/// Where a call takes its flags: an argument, or nowhere, for a call whose
+/// flags are fixed.
+#[derive(Clone, Copy)]
+enum Flags {
+    Arg(usize),
+    Fixed(libc::c_int),
+}
+
+/// What a file call does with a path, as the table states it.
 #[derive(Clone, Copy)]
 enum Asks {
-    Read,
-    Write,
-    /// As the `open` flags in this argument say.
-    OpenFlags(usize),
+    /// Execute what the path leads to.
+    Exec,
+    /// Remove or move the path itself.
+    Change,
+    /// Link to the path itself, or to what it leads to under
+    /// `AT_SYMLINK_FOLLOW`.
+    LinkFrom(Flags),
+    /// Make the path.
+    Create,
+    /// Move onto the path, as the `renameat2` flags say.
+    RenameTo(Flags),
+    /// Truncate what the path leads to.
+    Truncate,
+    /// As the `open` flags say.
+    Open(Flags),
     /// As the flags of the `open_how` this argument points to say.
     OpenHow(usize),
+}
+
+/// What a file call does with a path, its flags read.
+#[derive(Clone, Copy)]
+enum Ask {
+    Exec,
+    Change { follow: bool },
+    Create,
+    Replace,
+    Truncate,
+    Open(libc::c_int),
+}
+
+/// What a path names once resolved.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Found {
+    Absent,
+    /// A symbolic link the call does not follow.
+    Link,
+    Dir,
+    Other,
+}
+
+impl Ask {
+    fn follows(self) -> bool {
+        match self {
+            Self::Exec | Self::Truncate => true,
+            Self::Change { follow } => follow,
+            Self::Create | Self::Replace => false,
+            Self::Open(flags) => flags & libc::O_NOFOLLOW == 0 && !Self::exclusive(flags),
+        }
+    }
+
+    fn exclusive(flags: libc::c_int) -> bool {
+        flags & (libc::O_CREAT | libc::O_EXCL) == libc::O_CREAT | libc::O_EXCL
+    }
+
+    /// The access Landlock judges `path` for, or `None` where the call fails
+    /// before Landlock does: `ENOENT`, `EEXIST`, `EISDIR`, `ELOOP`, and `EBUSY`
+    /// for the root, which no call removes, replaces or opens for writing.
+    fn access(self, path: &Path, found: Found) -> Option<Access> {
+        let root = path == Path::new("/");
+        let judged = match self {
+            Self::Exec | Self::Truncate => found == Found::Other,
+            Self::Create => found == Found::Absent,
+            Self::Change { .. } => !root && found != Found::Absent,
+            Self::Replace => !root,
+            Self::Open(flags) => match found {
+                Found::Absent => flags & libc::O_CREAT != 0,
+                Found::Link => false,
+                Found::Dir => flags & libc::O_CREAT == 0 && !Self::opens_to_write(flags),
+                Found::Other => !Self::exclusive(flags),
+            },
+        };
+        let reads = match self {
+            Self::Exec => true,
+            Self::Open(flags) => found != Found::Absent && !Self::opens_to_write(flags),
+            Self::Change { .. } | Self::Create | Self::Replace | Self::Truncate => false,
+        };
+        judged.then_some(if reads {
+            Access::ReadExecute
+        } else {
+            Access::ReadWrite
+        })
+    }
+
+    /// Whether an open of an existing file asks to write, as Landlock judges
+    /// it: `O_TRUNC` takes the truncate right.
+    fn opens_to_write(flags: libc::c_int) -> bool {
+        flags & libc::O_ACCMODE != libc::O_RDONLY || flags & libc::O_TRUNC != 0
+    }
 }
 
 /// The calls whose paths Landlock mediates, each with the paths it names.
@@ -431,87 +579,105 @@ enum Asks {
 /// counts.
 const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_open, &[(PathArg::Path(0), Asks::OpenFlags(1))]),
+    (
+        libc::SYS_open,
+        &[(PathArg::Path(0), Asks::Open(Flags::Arg(1)))],
+    ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_creat, &[(PathArg::Path(0), Asks::Write)]),
+    (
+        libc::SYS_creat,
+        &[(
+            PathArg::Path(0),
+            Asks::Open(Flags::Fixed(libc::O_CREAT | libc::O_WRONLY | libc::O_TRUNC)),
+        )],
+    ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_mkdir, &[(PathArg::Path(0), Asks::Write)]),
+    (libc::SYS_mkdir, &[(PathArg::Path(0), Asks::Create)]),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_mknod, &[(PathArg::Path(0), Asks::Write)]),
+    (libc::SYS_mknod, &[(PathArg::Path(0), Asks::Create)]),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_unlink, &[(PathArg::Path(0), Asks::Write)]),
+    (libc::SYS_unlink, &[(PathArg::Path(0), Asks::Change)]),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_rmdir, &[(PathArg::Path(0), Asks::Write)]),
+    (libc::SYS_rmdir, &[(PathArg::Path(0), Asks::Change)]),
     #[cfg(target_arch = "x86_64")]
     (
         libc::SYS_rename,
         &[
-            (PathArg::Path(0), Asks::Write),
-            (PathArg::Path(1), Asks::Write),
+            (PathArg::Path(0), Asks::Change),
+            (PathArg::Path(1), Asks::RenameTo(Flags::Fixed(0))),
         ],
     ),
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     (
         libc::SYS_renameat,
         &[
-            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
-            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+            (PathArg::At { dir: 0, path: 1 }, Asks::Change),
+            (
+                PathArg::At { dir: 2, path: 3 },
+                Asks::RenameTo(Flags::Fixed(0)),
+            ),
         ],
     ),
     #[cfg(target_arch = "x86_64")]
     (
         libc::SYS_link,
         &[
-            (PathArg::Path(0), Asks::Write),
-            (PathArg::Path(1), Asks::Write),
+            (PathArg::Path(0), Asks::LinkFrom(Flags::Fixed(0))),
+            (PathArg::Path(1), Asks::Create),
         ],
     ),
     #[cfg(target_arch = "x86_64")]
-    (libc::SYS_symlink, &[(PathArg::Path(1), Asks::Write)]),
+    (libc::SYS_symlink, &[(PathArg::Path(1), Asks::Create)]),
     (
         libc::SYS_openat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::OpenFlags(2))],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Open(Flags::Arg(2)))],
     ),
     (
         libc::SYS_openat2,
         &[(PathArg::At { dir: 0, path: 1 }, Asks::OpenHow(2))],
     ),
-    (libc::SYS_execve, &[(PathArg::Path(0), Asks::Read)]),
+    (libc::SYS_execve, &[(PathArg::Path(0), Asks::Exec)]),
     (
         libc::SYS_execveat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Read)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Exec)],
     ),
     (
         libc::SYS_mkdirat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Create)],
     ),
     (
         libc::SYS_mknodat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Create)],
     ),
     (
         libc::SYS_unlinkat,
-        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Change)],
     ),
     (
         libc::SYS_renameat2,
         &[
-            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
-            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+            (PathArg::At { dir: 0, path: 1 }, Asks::Change),
+            (
+                PathArg::At { dir: 2, path: 3 },
+                Asks::RenameTo(Flags::Arg(4)),
+            ),
         ],
     ),
     (
         libc::SYS_linkat,
         &[
-            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
-            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+            (
+                PathArg::At { dir: 0, path: 1 },
+                Asks::LinkFrom(Flags::Arg(4)),
+            ),
+            (PathArg::At { dir: 2, path: 3 }, Asks::Create),
         ],
     ),
     (
         libc::SYS_symlinkat,
-        &[(PathArg::At { dir: 1, path: 2 }, Asks::Write)],
+        &[(PathArg::At { dir: 1, path: 2 }, Asks::Create)],
     ),
-    (libc::SYS_truncate, &[(PathArg::Path(0), Asks::Write)]),
+    (libc::SYS_truncate, &[(PathArg::Path(0), Asks::Truncate)]),
 ];
 
 fn file_call(nr: libc::c_long) -> Option<&'static [(PathArg, Asks)]> {
@@ -522,9 +688,9 @@ fn file_call(nr: libc::c_long) -> Option<&'static [(PathArg, Asks)]> {
 }
 
 /// The paths of a file call the policy does not grant the access it asks.
-/// A path that cannot exist for the call is left out: the call fails with
-/// `ENOENT` before Landlock judges it. So is one the caller's memory no longer
-/// holds, which a child that exits mid-call leaves.
+/// A path the call fails on before Landlock judges it is left out, as [`Ask`]
+/// says. So is one the caller's memory no longer holds, which a child that
+/// exits mid-call leaves.
 fn refused_paths(
     listener: &OwnedFd,
     notif: &libc::seccomp_notif,
@@ -535,9 +701,9 @@ fn refused_paths(
         pid: notif.pid as libc::pid_t,
         args: notif.data.args,
     };
-    let asked: Vec<(PathBuf, Access)> = paths
+    let asked: Vec<(PathBuf, Ask)> = paths
         .iter()
-        .filter_map(|&(arg, asks)| Some((caller.path(arg)?, caller.access(asks)?)))
+        .filter_map(|&(arg, asks)| Some((caller.path(arg)?, caller.ask(asks)?)))
         .collect();
     // The caller may have died and its pid passed on while we read its memory.
     // SAFETY: `notif.id` outlives the call.
@@ -553,8 +719,9 @@ fn refused_paths(
     }
     asked
         .into_iter()
-        .filter_map(|(path, access)| {
-            let path = real_path(&path, access)?;
+        .filter_map(|(path, ask)| {
+            let (path, found) = caller.resolve(&path, ask.follows())?;
+            let access = ask.access(&path, found)?;
             (!policy.permits(&path, access)).then_some(Refusal::Path { path, access })
         })
         .collect()
@@ -576,43 +743,94 @@ impl Caller {
         };
         let path = PathBuf::from(OsString::from_vec(self.read_c_string(self.args[path])?));
         if path.is_absolute() {
-            return self.own_proc(path);
+            return Some(path);
         }
         let base = match dir {
             libc::AT_FDCWD => format!("/proc/{}/cwd", self.pid),
             fd => format!("/proc/{}/fd/{fd}", self.pid),
         };
-        self.own_proc(std::fs::read_link(base).ok()?.join(path))
+        Some(std::fs::read_link(base).ok()?.join(path))
     }
 
-    /// `path` with an entry of `/proc` that leads through `self` or
-    /// `thread-self` (`/proc/mounts` is `self/mounts`) naming the caller, as it
-    /// does for the caller, rather than the host that resolves the path.
-    fn own_proc(&self, path: PathBuf) -> Option<PathBuf> {
-        let Ok(under_proc) = path.strip_prefix("/proc") else {
-            return Some(path);
+    /// `path` resolved one component at a time, as the kernel resolves it for
+    /// the caller rather than for the host: `/proc/self` and the links through
+    /// it (`/dev/stdout`, `/proc/mounts`) name the caller. The final component
+    /// is followed only where `follow` says. `None` where resolution fails
+    /// before Landlock judges the call, and for a descriptor that names no
+    /// path (a pipe, a socket), which Landlock does not mediate.
+    fn resolve(&self, path: &Path, follow: bool) -> Option<(PathBuf, Found)> {
+        /// Linux's `MAXSYMLINKS`, past which a resolution fails with `ELOOP`.
+        const MAX_LINKS: usize = 40;
+        let names = |path: &Path| -> Vec<OsString> {
+            path.components()
+                .rev()
+                .filter_map(|part| match part {
+                    Component::Normal(name) => Some(name.to_owned()),
+                    Component::ParentDir => Some(OsString::from("..")),
+                    Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
+                })
+                .collect()
         };
-        let mut parts = under_proc.components();
-        let Some(entry) = parts.next() else {
-            return Some(path);
-        };
-        let entry = Path::new(entry.as_os_str());
-        let target = if entry == "self" || entry == "thread-self" {
-            entry.to_path_buf()
-        } else {
-            let Ok(target) = std::fs::read_link(Path::new("/proc").join(entry)) else {
-                return Some(path);
+        let mut pending = names(path);
+        let mut real = PathBuf::from("/");
+        let mut links = 0;
+        while let Some(name) = pending.pop() {
+            if name == ".." {
+                real.pop();
+                continue;
+            }
+            let last = pending.is_empty();
+            let next = self.entry(&real, &name)?;
+            let meta = match std::fs::symlink_metadata(&next) {
+                Ok(meta) => meta,
+                Err(err) if last && err.kind() == io::ErrorKind::NotFound => {
+                    return Some((next, Found::Absent));
+                }
+                Err(_) => return None,
             };
-            target
-        };
-        let own = if let Ok(rest) = target.strip_prefix("thread-self") {
-            Path::new(&format!("/proc/{}/task/{}", self.tgid()?, self.pid)).join(rest)
-        } else if let Ok(rest) = target.strip_prefix("self") {
-            Path::new(&format!("/proc/{}", self.tgid()?)).join(rest)
-        } else {
-            return Some(path);
-        };
-        Some(own.join(parts.as_path()))
+            if !meta.is_symlink() {
+                if last {
+                    let found = if meta.is_dir() {
+                        Found::Dir
+                    } else {
+                        Found::Other
+                    };
+                    return Some((next, found));
+                }
+                real = next;
+                continue;
+            }
+            if last && !follow {
+                return Some((next, Found::Link));
+            }
+            links += 1;
+            if links > MAX_LINKS {
+                return None;
+            }
+            let target = std::fs::read_link(&next).ok()?;
+            if target.is_absolute() {
+                real = PathBuf::from("/");
+            } else if is_process_entry(&next) {
+                return None;
+            }
+            pending.extend(names(&target));
+        }
+        Some((real, Found::Dir))
+    }
+
+    /// `name` beneath the resolved directory `dir`, with `/proc/self` and
+    /// `/proc/thread-self` naming the caller.
+    fn entry(&self, dir: &Path, name: &OsString) -> Option<PathBuf> {
+        if dir != Path::new("/proc") {
+            return Some(dir.join(name));
+        }
+        Some(match name.to_str() {
+            Some("self") => PathBuf::from(format!("/proc/{}", self.tgid()?)),
+            Some("thread-self") => {
+                PathBuf::from(format!("/proc/{}/task/{}", self.tgid()?, self.pid))
+            }
+            _ => dir.join(name),
+        })
     }
 
     /// The process the calling thread belongs to: the notification names the
@@ -627,29 +845,41 @@ impl Caller {
             .ok()
     }
 
-    /// The access `asks` names, or `None` for an `O_PATH` open, which Landlock
-    /// lets through.
-    fn access(&self, asks: Asks) -> Option<Access> {
-        let flags = match asks {
-            Asks::Read => return Some(Access::ReadExecute),
-            Asks::Write => return Some(Access::ReadWrite),
-            Asks::OpenFlags(arg) => self.args[arg] as libc::c_int,
+    /// What `asks` does, its flags read, or `None` for an `O_PATH` open, which
+    /// Landlock lets through.
+    fn ask(&self, asks: Asks) -> Option<Ask> {
+        let flags = |flags: Flags| match flags {
+            Flags::Arg(arg) => self.args[arg] as libc::c_int,
+            Flags::Fixed(flags) => flags,
+        };
+        let open_flags = match asks {
+            Asks::Exec => return Some(Ask::Exec),
+            Asks::Change => return Some(Ask::Change { follow: false }),
+            Asks::LinkFrom(link) => {
+                return Some(Ask::Change {
+                    follow: flags(link) & libc::AT_SYMLINK_FOLLOW != 0,
+                });
+            }
+            Asks::Create => return Some(Ask::Create),
+            Asks::RenameTo(rename) => {
+                let rename = flags(rename) as libc::c_uint;
+                return Some(if rename & libc::RENAME_NOREPLACE != 0 {
+                    Ask::Create
+                } else if rename & libc::RENAME_EXCHANGE != 0 {
+                    Ask::Change { follow: false }
+                } else {
+                    Ask::Replace
+                });
+            }
+            Asks::Truncate => return Some(Ask::Truncate),
+            Asks::Open(open) => flags(open),
             Asks::OpenHow(arg) => {
                 let mut how = [0u8; size_of::<u64>()];
                 self.read(self.args[arg], &mut how)?;
                 u64::from_ne_bytes(how) as libc::c_int
             }
         };
-        if flags & libc::O_PATH != 0 {
-            return None;
-        }
-        let writes = flags & libc::O_ACCMODE != libc::O_RDONLY
-            || flags & (libc::O_CREAT | libc::O_TRUNC) != 0;
-        Some(if writes {
-            Access::ReadWrite
-        } else {
-            Access::ReadExecute
-        })
+        (open_flags & libc::O_PATH == 0).then_some(Ask::Open(open_flags))
     }
 
     /// The NUL-terminated string at `addr` in the caller's memory, up to
@@ -682,21 +912,17 @@ impl Caller {
     }
 }
 
-/// `path` at its real path, as Landlock judges it, or `None` where the call
-/// fails before Landlock does: a read of a path that does not exist, or a
-/// write beneath a directory that does not.
-fn real_path(path: &Path, access: Access) -> Option<PathBuf> {
-    if let Ok(real) = std::fs::canonicalize(path) {
-        return Some(real);
-    }
-    if access == Access::ReadExecute {
-        return None;
-    }
-    Some(
-        std::fs::canonicalize(path.parent()?)
-            .ok()?
-            .join(path.file_name()?),
-    )
+/// Whether `path` lies in a process's `/proc` entry, where a link whose target
+/// is not absolute (`pipe:[…]`, `net:[…]`) names an object rather than a path.
+fn is_process_entry(path: &Path) -> bool {
+    path.strip_prefix("/proc")
+        .ok()
+        .and_then(|rest| rest.components().next())
+        .is_some_and(|pid| {
+            pid.as_os_str()
+                .to_str()
+                .is_some_and(|pid| pid.parse::<libc::pid_t>().is_ok())
+        })
 }
 
 pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
@@ -716,7 +942,7 @@ fn confine_self(
     ruleset: &OwnedFd,
     filter: &[libc::sock_filter],
     cwd: Option<&File>,
-    listener_tx: RawFd,
+    listener_tx: Option<RawFd>,
 ) -> io::Result<()> {
     // A group of its own, so the host's kill reaches every descendant; the
     // filter below keeps them from leaving it.
@@ -734,17 +960,23 @@ fn confine_self(
         len: u16::try_from(filter.len()).expect("the filter is built short"),
         filter: filter.as_ptr().cast_mut(),
     };
+    let flags = match listener_tx {
+        Some(_) => libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
+        None => 0,
+    };
     let listener = unsafe {
         libc::syscall(
             libc::SYS_seccomp,
             libc::SECCOMP_SET_MODE_FILTER,
-            libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
+            flags,
             &raw const program,
         )
     };
     check_long(listener)?;
-    send_listener(listener_tx, listener as RawFd)?;
-    check(unsafe { libc::close(listener as RawFd) })?;
+    if let Some(listener_tx) = listener_tx {
+        send_listener(listener_tx, listener as RawFd)?;
+        check(unsafe { libc::close(listener as RawFd) })?;
+    }
     // Confinement mediates what the child opens, never what it already holds.
     // Marked close-on-exec rather than closed, so the descriptor the standard
     // library reports a failed `exec` through survives until the `exec`.
@@ -887,9 +1119,10 @@ const fn seccomp_data_arg(index: u32) -> u32 {
     16 + 8 * index
 }
 
-fn seccomp_filter(network: Network, trace: Trace) -> Vec<libc::sock_filter> {
+/// The filter, answering what it refuses with `refer`: a referral to the
+/// host's listener, or `EPERM` where the child takes none.
+fn seccomp_filter(network: Network, trace: Trace, refer: u32) -> Vec<libc::sock_filter> {
     let arch = AUDIT_ARCH.expect("availability refuses an architecture without a filter");
-    let refer = libc::SECCOMP_RET_USER_NOTIF;
     let mut asm = Assembler::default();
     asm.load(SECCOMP_DATA_ARCH);
     asm.jump_if_eq(arch, Label::ArchOk);

@@ -1857,7 +1857,8 @@ fn test_run_process_read_opens_a_path_to_the_child() {
 }
 
 /// A program the sandbox would refuse to execute is named, with the grant
-/// that lets it run, once however often the guest tries it.
+/// that lets it run, once however often the guest tries it. Run through a
+/// link, it is judged where the link leads.
 #[cfg(unix)]
 #[test]
 fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
@@ -1868,19 +1869,23 @@ fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
     }
     let work = tempfile::tempdir().unwrap();
     let tool = tempfile::tempdir().unwrap();
-    let tool_dir = tool.path().canonicalize().unwrap();
-    let program = tool_dir.join("tool.sh");
-    std::fs::write(&program, "#!/bin/sh\necho tool\n").unwrap();
-    std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let tool_dir = tool.path().canonicalize().unwrap().join("real");
+    let real = tool_dir.join("tool.sh");
+    std::fs::create_dir(&tool_dir).unwrap();
+    std::fs::write(&real, "#!/bin/sh\necho tool\n").unwrap();
+    std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let program = tool.path().canonicalize().unwrap().join("tool");
+    std::os::unix::fs::symlink(&real, &program).unwrap();
     std::fs::write(
         work.path().join("main.wado"),
         "use { args, Environment } from \"core:cli\";\nuse { Command, Process } from \"core:process\";\n\nexport fn run() with (Environment, Process) {\n    for let _ of 0..<2 {\n        let _ = Command::new(args()[0]).status();\n    }\n}\n",
     )
     .unwrap();
     let warning = format!(
-        "warning: core:process: `{}` is {}, outside the guest's grants and the system baseline\nhelp: let a child run it with `--process-read {}`",
+        "warning: core:process: `{}` is {}, a link to {}, outside the guest's grants and the system baseline\nhelp: let a child run it with `--process-read {}`",
         program.display(),
         program.display(),
+        real.display(),
         tool_dir.display()
     );
     let refused = wado_in(work.path())

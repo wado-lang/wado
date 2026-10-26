@@ -291,18 +291,21 @@ more, and says it on its own stderr, with the fix where one exists:
   resolved path, and names the `--process-read` grant and the user config entry
   that would let it run. A program that does not exist stays silent: a guest
   that probes for an optional tool expects `not-found`.
-- A child that fails, with a nonzero status or a signal, after the filter
-  refused it a call warns with the calls refused. The refusal may not be why it
-  failed, so the warning puts the two side by side and claims no cause. Linux
-  alone reports this: the filter refers each such call to the host through a
-  seccomp listener, and a host thread records it and answers `EPERM`, so the
-  child sees what a plain `SECCOMP_RET_ERRNO` would give it.
+- A child that fails, with a nonzero status, a signal or its timeout, after the
+  filter refused it a call warns with the calls refused. The refusal may not be
+  why it failed, so the warning puts the two side by side and claims no cause.
+  Linux alone reports this: the filter refers each such call to the host
+  through a seccomp listener, and a host thread records it and answers `EPERM`,
+  so the child sees what a plain `SECCOMP_RET_ERRNO` would give it. The kernel
+  allows one listener per chain of filters, so under an enclosing sandbox that
+  holds one, the filter answers `EPERM` itself and nothing is reported.
 - `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
   refused a child, with the grant that would allow it: `--process-read` for a
   read, `--dir` for a write, which the guest gains too. It reports whatever the
   child's end, since a child can carry on past a refusal and still go wrong.
-  Linux alone offers it, and only on request, because each call that names a
-  path then waits on the host.
+  It needs the listener, so Linux alone offers it, and only on request, because
+  each call that names a path then waits on the host. Where it cannot see, the
+  first spawn under it warns why.
 
 Each warning prints once per run however often the guest repeats the spawn.
 
@@ -311,8 +314,11 @@ can read; its audit log needs `CAP_AUDIT_READ`. So the trace watches the calls
 rather than the refusals. The filter refers each call Landlock mediates (`open`,
 `execve`, `mkdir`, `unlink`, `rename`, `link`, `truncate` and their `at`
 forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
-the path from the child's memory, resolves it against the child's working
-directory or the descriptor the call names, and checks it against the policy.
+the path from the child's memory and resolves it as the kernel does for the
+child: against its working directory or the descriptor the call names, one
+component at a time, with `/proc/self` naming the child. It leaves out a call
+that fails on the path's existence or kind before Landlock judges it, and
+checks the rest against the policy.
 The kernel then runs the call, and Landlock judges it as it would have. Moving
 enforcement itself to seccomp was rejected: the path a call names can change
 after the host reads it, and no filter can emulate `execve`.
@@ -559,9 +565,11 @@ cannot be taken back.
   `exec`, which is how `git` runs its hooks and helpers, is not refused.
 - Without `--process-trace`, a file or directory the sandbox refused a child
   is not reported, so the child's own message is all there is. Under it, the
-  host predicts the refusal from the policy rather than observing Landlock's:
-  a path whose final component is a symbolic link is judged at its target
-  even for a call, such as `unlink`, that acts on the link itself.
+  host predicts the refusal from the policy rather than observing Landlock's.
+  It resolves the path as the child does, and leaves out a call that fails
+  first on the path's existence or kind. It does not model the file
+  permissions, which may refuse the call first, or `openat2`'s `RESOLVE_*`
+  flags, so such a call may be reported though Landlock never judged it.
 - Of the per-process entries of `/proc`, a child reads only its own. A process
   it starts in turn cannot read its own `/proc/self`: Landlock rules name a
   path when the rule is made, and that process's pid does not exist yet.

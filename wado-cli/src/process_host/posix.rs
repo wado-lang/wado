@@ -210,8 +210,12 @@ fn start(
         if inherits {
             policy.grant_terminal();
         }
-        if path.exists() && !policy.executes(&path) {
-            view.ctx.spawning.warn(refused_warning(program, &path));
+        if let Ok(real) = fs::canonicalize(&path)
+            && !policy.executes(&real)
+        {
+            view.ctx
+                .spawning
+                .warn(refused_warning(program, &path, &real));
         }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
@@ -225,6 +229,13 @@ fn start(
             policy: &policy,
             trace: grants.trace,
         })?;
+        if grants.trace == Trace::Files
+            && let Some(reason) = spawned.unobserved
+        {
+            view.ctx.spawning.warn(format!(
+                "warning: core:process: `--process-trace` sees nothing here: {reason}"
+            ));
+        }
         io::Result::Ok((spawned, scratch))
     })();
     Ok(match launched {
@@ -251,13 +262,13 @@ impl Spawning {
 /// What the sandbox refused a child, once it failed, or whatever its end
 /// under `Trace::Files`, which asked. A refusal may not be why the child
 /// failed, so the warning states the two side by side.
-fn refusals_warning(
+pub(super) fn refusals_warning(
     program: &str,
     status: &ExitStatus,
     refusals: &BTreeSet<sandbox::Refusal>,
     trace: Trace,
 ) -> Option<String> {
-    let failed = !matches!(status, ExitStatus::Exited(0) | ExitStatus::TimedOut);
+    let failed = !matches!(status, ExitStatus::Exited(0));
     if refusals.is_empty() || (!failed && trace == Trace::Off) {
         return None;
     }
@@ -294,7 +305,9 @@ fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
             path.display()
         ),
         Reach::ReadWrite => {
-            let dir = path.parent().expect("a refused path is absolute");
+            let dir = path
+                .parent()
+                .expect("every write naming the root fails before Landlock judges it");
             format!(
                 "let the guest and its children write {} with `--dir {}`",
                 path.display(),
@@ -304,8 +317,10 @@ fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
     })
 }
 
-fn refused_warning(program: &str, path: &Path) -> String {
-    let dir = path
+/// The warning for a program at `path` the sandbox will not execute. The help
+/// names the directory of `real`, which the sandbox judges.
+fn refused_warning(program: &str, path: &Path, real: &Path) -> String {
+    let dir = real
         .parent()
         .expect("a resolved program is absolute")
         .display();
@@ -313,10 +328,14 @@ fn refused_warning(program: &str, path: &Path) -> String {
         || "the user config".to_owned(),
         |config| config.display().to_string(),
     );
+    let at = if path == real {
+        path.display().to_string()
+    } else {
+        format!("{}, a link to {}", path.display(), real.display())
+    };
     format!(
-        "warning: core:process: `{program}` is {}, outside the guest's grants and the system baseline\n\
-         help: let a child run it with `--process-read {dir}`, or with `read` under `[process]` in {config}",
-        path.display()
+        "warning: core:process: `{program}` is {at}, outside the guest's grants and the system baseline\n\
+         help: let a child run it with `--process-read {dir}`, or with `read` under `[process]` in {config}"
     )
 }
 

@@ -25,6 +25,87 @@ const PROBE_VAR: &str = "WADO_SANDBOX_PROBE";
 /// `EACCES`.
 const DENIED: u8 = 13;
 
+/// Set in a re-execution that runs under a filter holding a listener.
+#[cfg(target_os = "linux")]
+const ENCLOSED_VAR: &str = "WADO_SANDBOX_ENCLOSED";
+
+/// A host under a sandbox that holds the one seccomp listener the kernel
+/// allows still confines a child, and says it observes none of its refusals.
+#[cfg(target_os = "linux")]
+#[test]
+fn under_an_enclosing_listener_a_child_runs_unobserved() {
+    use std::os::unix::process::CommandExt;
+
+    assert_available();
+    let mut enclosed = std::process::Command::new(std::env::current_exe().unwrap());
+    enclosed
+        .args([
+            "--exact",
+            "sandbox::tests::enclosed",
+            "--test-threads=1",
+            "--quiet",
+        ])
+        .env(ENCLOSED_VAR, "1");
+    // SAFETY: the closure makes only system calls on memory built before the
+    // fork.
+    unsafe {
+        enclosed.pre_exec(|| {
+            let allow = [libc::sock_filter {
+                code: (libc::BPF_RET | libc::BPF_K) as u16,
+                jt: 0,
+                jf: 0,
+                k: libc::SECCOMP_RET_ALLOW,
+            }];
+            let program = libc::sock_fprog {
+                len: 1,
+                filter: allow.as_ptr().cast_mut(),
+            };
+            if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let listener = libc::syscall(
+                libc::SYS_seccomp,
+                libc::SECCOMP_SET_MODE_FILTER,
+                libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
+                &raw const program,
+            );
+            // Kept open across the `exec`: the filter holds its listener only
+            // while one is open.
+            if listener < 0 || libc::fcntl(listener as libc::c_int, libc::F_SETFD, 0) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    assert!(enclosed.status().unwrap().success());
+}
+
+/// Not a test of its own: the half of the test above that runs enclosed.
+#[cfg(target_os = "linux")]
+#[test]
+fn enclosed() {
+    if std::env::var_os(ENCLOSED_VAR).is_none() {
+        return;
+    }
+    let tree = Tree::new();
+    let args = [OsString::from("-c"), OsString::from("exit 3")];
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[],
+        cwd: None,
+        stdin: Stdio::Null,
+        stdout: Stdio::Null,
+        stderr: Stdio::Null,
+        policy: &tree.policy(Network::Denied),
+        trace: Trace::Files,
+    })
+    .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), ExitStatus::Exited(3));
+    assert!(spawned.refusals.collect().is_empty());
+    assert!(spawned.unobserved.is_some());
+}
+
 /// Not a test of its own: the act a sandboxed re-execution performs.
 #[test]
 fn probe() {
@@ -453,6 +534,41 @@ fn a_traced_child_reports_each_path_outside_its_grants() {
         )
         .1,
         BTreeSet::new()
+    );
+}
+
+/// A call that fails before Landlock judges it, or names no path Landlock
+/// mediates, is no refusal, and a path resolves as the caller sees it.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_child_reports_only_what_landlock_judges() {
+    assert_available();
+    let tree = Tree::new();
+    let outside = tree.outside().canonicalize().unwrap();
+    let granted = tree.granted().canonicalize().unwrap();
+    fs::write(outside.join("out.txt"), "out").unwrap();
+    fs::write(outside.join("linked.txt"), "linked").unwrap();
+    let policy = tree.policy(Network::Denied);
+    let script = format!(
+        "{{ echo x > /dev/stdout; }} | cat; mkdir {o}; mkdir -p {o}; rm -f {o}/missing.txt; \
+         touch /; rmdir /; ln -s {o}/linked.txt {g}/link && rm {g}/link; rm {o}/out.txt",
+        o = outside.display(),
+        g = granted.display(),
+    );
+    // `mkdir` and `rm` run as grandchildren, refused their own `/proc` entry.
+    let refused: BTreeSet<Refusal> = sh_traced(&policy, &script)
+        .1
+        .into_iter()
+        .filter(
+            |refusal| !matches!(refusal, Refusal::Path { path, .. } if path.starts_with("/proc")),
+        )
+        .collect();
+    assert_eq!(
+        refused,
+        BTreeSet::from([Refusal::Path {
+            path: outside.join("out.txt"),
+            access: Access::ReadWrite,
+        }])
     );
 }
 

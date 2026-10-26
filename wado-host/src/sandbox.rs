@@ -257,6 +257,9 @@ pub struct Spawned {
     pub stdout: Option<OwnedFd>,
     pub stderr: Option<OwnedFd>,
     pub refusals: Refusals,
+    /// Why `refusals` stays empty whatever the sandbox refuses the child,
+    /// where it does.
+    pub unobserved: Option<&'static str>,
 }
 
 /// What the sandbox refused a child. Linux alone reports one.
