@@ -1,10 +1,12 @@
 // Call Anthropic's Messages API with a fixed prompt.
 //
-// Requires CLAUDE_API_KEY in the environment.
+// Requires CLAUDE_API_KEY in the environment. The model is a build input:
+// CLAUDE_MODEL in the environment, or `-D CLAUDE_MODEL=...`.
 //
 // Usage:
 //   export CLAUDE_API_KEY=sk-ant-...
 //   wado run example/claude.wado
+//   wado run -D CLAUDE_MODEL=claude-haiku-5-5 example/claude.wado
 
 use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Client } from "wasi:http";
@@ -31,7 +33,8 @@ struct MessagesResponse {
     content: List<ContentBlock>,
 }
 
-global MODEL_NAME: String = "claude-opus-5-5";
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
 
 export fn run() with (Stdout, Stderr, Environment, Client) {
     let Some(api_key) = env("CLAUDE_API_KEY") else {
@@ -39,7 +42,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     };
 
     let request = MessagesRequest {
-        model: MODEL_NAME,
+        model: CLAUDE_MODEL,
         max_tokens: 16000,
         messages: [
             Message { role: "user", content: "Explain WebAssembly briefly" },

@@ -1,10 +1,12 @@
 // Call OpenRouter's chat completions API with a fixed prompt.
 //
-// Requires OPENROUTER_API_KEY in the environment.
+// Requires OPENROUTER_API_KEY in the environment. The model is a build input:
+// OPENROUTER_MODEL in the environment, or `-D OPENROUTER_MODEL=...`.
 //
 // Usage:
 //   export OPENROUTER_API_KEY=sk-or-...
 //   wado run example/llm.wado
+//   wado run -D OPENROUTER_MODEL=<model-id> example/llm.wado
 
 use { println, env, Stdout, Stderr, Environment } from "core:cli";
 use { Client } from "wasi:http";
@@ -29,7 +31,8 @@ struct ChatResponse {
     choices: List<ChatChoice>,
 }
 
-global MODEL_NAME: String = "google/gemma-4-26b-a4b-it:free";
+#[param(from_env = "OPENROUTER_MODEL")]
+global OPENROUTER_MODEL: String = "google/gemma-4-26b-a4b-it:free";
 
 export fn run() with (Stdout, Stderr, Environment, Client) {
     let Some(api_key) = env("OPENROUTER_API_KEY") else {
@@ -37,7 +40,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     };
 
     let request = ChatRequest {
-        model: MODEL_NAME,
+        model: OPENROUTER_MODEL,
         messages: [
             ChatMessage { role: "user", content: "Explain WebAssembly briefly" },
         ],
