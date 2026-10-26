@@ -38,6 +38,12 @@ them is in [the research](./research-code-review-bots.md).
   own service: `wado query` for Wado, rust-analyzer for Rust, which much of
   the repository is written in. The method carries to any language with a
   language server.
+- [x] The strongest model sits where findings merge, not where work is split.
+  It receives structured, verified findings, so that its context holds
+  evidence rather than transcripts.
+- [x] Part of the offline evaluation set stays out of learning's reach. The
+  outcomes learning feeds on are what the metrics count, so only a set the
+  learning never saw tells improvement from fitting.
 - [x] Eddy points at problems and proposes no fixes.
 - [x] Every model call uses prompt caching.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
