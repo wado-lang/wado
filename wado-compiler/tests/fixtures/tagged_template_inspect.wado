@@ -1,0 +1,89 @@
+// A template value inspects as the template it was written as: the literal
+// text raw, each hole's value inspected, and its specifier as written. The text
+// is the value's, and `==` compares it, so the form shows all that `==` reads.
+// See docs/spec-literals.md § Tagged Template Literals.
+
+fn id<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> T {
+    return t;
+}
+
+fn inspected<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:?}`;
+}
+
+fn inspected_alternate<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:#?}`;
+}
+
+struct Point {
+    x: i32,
+}
+
+affine struct Counter {
+    n: i32,
+}
+
+impl Drop for Counter {
+    fn drop(self) {}
+}
+
+test "literal text, holes and specifiers" {
+    let n = 7;
+    let s = "a";
+    assert inspected`n=${n:04}, s=${s}\n\`` == "`n=${7:04}, s=${\"a\"}\\n\\``";
+}
+
+test "a template without holes" {
+    assert inspected`plain` == "`plain`";
+}
+
+test "the alternate form reaches the holes" {
+    let p = Point { x: 1 };
+    assert inspected_alternate`p=${p:?}` == "`p=${Point {\n  x: 1,\n}:?}`";
+}
+
+test "an affine hole is inspected in place" {
+    let c = Counter { n: 1 };
+    assert inspected`c=${c:?}` == "`c=${Counter { n: 1 }:?}`";
+}
+
+fn inspected_padded<T: ReflectTemplate<Holes = [..V]> + Inspect, affine ..V>(t: T) -> String {
+    return `${t:>4?}`;
+}
+
+test "a width pads each hole, not the template" {
+    let n = 1;
+    let s = "a";
+    assert inspected_padded`n=${n}, s=${s}` == "`n=${   1}, s=${\"a\"}`";
+}
+
+fn inspected_generic<X: Inspect>(x: X) -> String {
+    return inspected`x=${x:?}`;
+}
+
+test "a hole whose type is a parameter is read once substituted" {
+    assert inspected_generic(3) == "`x=${3:?}`";
+    assert inspected_generic("a") == "`x=${\"a\":?}`";
+}
+
+fn inspected_holes<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
+    let mut out = "";
+    for let h of ReflectTemplate::<T>::members() {
+        out.push_str(&`${h:?}`);
+    }
+    return out;
+}
+
+test "a hole handle inspects as its fields" {
+    let n = 1;
+    assert inspected_holes`a${n:04}${n}` == "TemplateHole { index: 0, spec: Option::Some(\"04\") }TemplateHole { index: 1, spec: Option::None }";
+}
+
+test "an assert captures a template value" {
+    let n = 1;
+    let m = 1;
+    assert id`n=${n}` == id`n=${m}`;
+}
+
+__DATA__
+{"test": {}}

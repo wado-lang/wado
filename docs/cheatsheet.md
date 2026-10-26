@@ -412,8 +412,9 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToParam>(t: T) -> Query {
 }
 let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 
-// A hole handle also answers raw(&t) / has_spec() / index(), and
-// fmt(&t, f) renders through the trait the specifier selects.
+// A hole handle also answers raw(&t) / get_ref(&t) / spec() / has_spec() /
+// index(), and fmt(&t, f) renders through the trait the specifier selects.
+// `${t:?}` on a template value renders it as written, backticks included.
 String::format`x=${x:04}`  // what `x=${x:04}` is sugar for
 String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x
 ```

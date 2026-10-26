@@ -883,17 +883,8 @@ pub(crate) fn ranked_value_blanket<'a>(
 
 /// The reflection trait `bound` names, or `None` for any other bound.
 fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerItem> {
-    tt.compiler_items().trait_among(
-        bound.decl()?,
-        &[
-            CompilerItem::Reflect,
-            CompilerItem::ReflectStruct,
-            CompilerItem::ReflectVariant,
-            CompilerItem::ReflectEnum,
-            CompilerItem::ReflectFlags,
-            CompilerItem::ReflectNewtype,
-        ],
-    )
+    tt.compiler_items()
+        .trait_among(bound.decl()?, &CompilerItem::REFLECT_KINDS)
 }
 
 /// Whether a blanket derives over reflection: one of its receiver-param bounds
