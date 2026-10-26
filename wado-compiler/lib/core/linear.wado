@@ -12,8 +12,8 @@
 //! The array is affine, so one block has one owner, and no reference into it
 //! outlives that owner. Its address is never handed out, and every element is
 //! written before anything reads it. It crosses a component boundary only into a
-//! synchronous import's `list<T>` parameter, which takes any `ListArg`: there it
-//! lends its own block for the call. See WEP: Linear Arrays.
+//! synchronous world function's `list<T>` parameter, which takes any `ListArg`:
+//! there it lends its own block for the call. See WEP: Linear Arrays.
 
 #[synopsis]
 test {
@@ -27,7 +27,7 @@ use { CopyResult } from "core:prelude/types.wado";
 use { copy_result, cm_packed_upper, STREAM_CHUNK_ELEMENTS } from "core:prelude/types.wado";
 use { cm_await_blocked, cm_copy_count, cm_lower_list_u8, pack_ptr_len } from "core:rt";
 
-/// A `list<T>` argument of a synchronous import, for `T` a Component Model
+/// A `list<T>` argument of a synchronous world function, for `T` a Component Model
 /// number type. `List<T>` copies its elements into a block the call frees once
 /// it returns, and `&LinearArray<T>` lends its own block for the call.
 #[compiler_item("list_arg")]

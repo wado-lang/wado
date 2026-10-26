@@ -172,35 +172,25 @@ with no copy:
 ```wado
 use { ListArg } from "core:linear";
 
-// What the bindings generator writes for `write-buffer-with-copy`.
-fn write_buffer_with_copy<affine L: ListArg<Elem = u8>>(
-    &self,
-    buffer: &GpuBuffer,
-    buffer_offset: GpuSize64,
-    data: L,
-    data_offset: Option<GpuSize64>,
-    size: Option<GpuSize64>,
-) -> Result<(), WriteBufferError>;
+// What a component import declares for `sum: func(data: list<u8>) -> u32`.
+fn sum<affine L: ListArg<Elem = u8>>(data: L) -> u32;
 
-queue.write_buffer_with_copy(&buffer, 0, &weights, null, null);   // no copy
-queue.write_buffer_with_copy(&buffer, 0, bytes, null, null);      // copied, as before
+sum(&weights);   // no copy
+sum(bytes);      // copied, as before
 ```
 
 `ListArg` is what a `list<T>` argument is, for `T` a Component Model number
 type. `List<T>`, and so `ByteList`, implement it by copying the elements into a
 block for the call, as every list argument is lowered today. `&LinearArray<T>`
 implements it by handing over its own block, which the borrow keeps alive for
-the whole call. Both generators write such a parameter this way, the WIT
-bindings of the standard library and the declarations a component import
-produces, so a call site never chooses between two functions. A list literal
+the whole call. A call site never chooses between two functions. A list literal
 no longer coerces to such a parameter, since nothing tells it which `ListArg`
-to be: `write_buffer_with_copy(&buffer, 0, [1, 2] as ByteList, null, null)`
-names it.
+to be: `sum([1, 2] as ByteList)` names it.
 
-The generators write it on a resource method and on a world function, but not
-on an interface's operation. An operation declares no type parameters, because
-a handler installed for it serves it at one type, so an operation keeps its
-`List<T>`.
+Only a world function takes one. An operation, of an interface or of a
+resource, declares no type parameters, because a handler installed for it
+serves it at one type. So every WASI binding keeps its `List<T>`, and
+`write-buffer-with-copy`, the call Loam uploads weights through, copies them.
 
 `ListArg::lowered` answers a `LoweredList`, whose fields only `core:*` can
 write. An implementation outside it can only delegate to one of these two, so
@@ -268,7 +258,8 @@ In order:
   in the standard library's WIT bindings and in a component import's
   declarations. Done when Loam's WebGPU backend uploads weights from a
   `LinearArray` with no copy, and Gemma 3's load on WebGPU is measured against
-  what it is now.
+  what it is now. A component's world function takes one; an operation cannot
+  yet, since it declares no type parameters.
 
 Gemma 3 (270M) before and after the `Cpu` item, both run by one `wado` from
 `package-loam/example/gemma3-270m` with
