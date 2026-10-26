@@ -159,7 +159,7 @@ impl ResolvedPolicy {
     }
 
     /// What Linux grants the child `pid` beyond its policy: its own `/proc`
-    /// entry, which only the child can open.
+    /// entry.
     #[cfg(target_os = "linux")]
     fn grant_own_proc(&mut self, pid: libc::pid_t) {
         self.0

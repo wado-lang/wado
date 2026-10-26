@@ -860,9 +860,10 @@ fn grant_own_proc(ruleset: &OwnedFd) -> io::Result<()> {
     };
     if own == -1 {
         let err = io::Error::last_os_error();
-        return match err.kind() {
-            io::ErrorKind::NotFound => Ok(()),
-            _ => Err(err),
+        return if err.kind() == io::ErrorKind::NotFound {
+            Ok(())
+        } else {
+            Err(err)
         };
     }
     let added = add_rule(ruleset, own, ACCESS_FS_READ);
