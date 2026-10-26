@@ -2,7 +2,6 @@
 //! into `main`, and the census they exchange as JSON.
 
 use { Command, Process, ProcessError } from "core:process";
-use { TreeMap } from "core:collections";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -14,7 +13,12 @@ pub struct Merge {
 
 pub struct Blamed {
     pub pr: i32,
+    /// The merge that landed it, empty for pull request 0.
+    pub sha: String,
     pub n: i32,
+    /// The names the lines had in it: blame follows a rename the fix's own
+    /// paths do not.
+    pub paths: List<String>,
 }
 
 /// One `fix` pull request: the pull requests that last wrote the lines it
@@ -23,6 +27,7 @@ pub struct Blamed {
 #[wire(name_policy = "camelCase")]
 pub struct FixResult {
     pub pr: i32,
+    pub sha: String,
     pub date: String,
     pub title: String,
     pub adds_test: bool,
@@ -58,6 +63,9 @@ fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
 /// subject names the number (`Merge pull request #12 from …`), and the first
 /// line of its body is the pull request's title.
 pub fn merged_prs() -> List<Merge> with Process {
+    // A shallow clone hides the merges past its depth, and blame credits their
+    // lines to the boundary commit.
+    assert git(["rev-parse", "--is-shallow-repository"]).trim() == "false", "main's whole history must be here: git fetch --unshallow origin main";
     let log = git([
         "log", "--first-parent", "--merges", "--reverse", "--date=short", "--format=%H%x00%ad%x00%s%x00%b%x1e",
         "origin/main",
@@ -69,22 +77,26 @@ pub fn merged_prs() -> List<Merge> with Process {
             continue;
         }
         let fields: List<String> = record.split("\u{0}").map(|f| f.to_string()).collect();
-        let title = match fields[3].lines().next() {
-            Some(line) => line.trim().to_string(),
-            None => "",
-        };
-        merges.push(Merge { sha: fields[0], date: fields[1], num: pr_number(&fields[2]), title });
+        merges.push(Merge {
+            sha: fields[0],
+            date: fields[1],
+            num: pr_number(&fields[2]),
+            title: first_line(&fields[3]),
+        });
     }
     return merges;
 }
 
-/// The merges keyed by pull request number.
-pub fn merges_by_pr(merges: &List<Merge>) -> TreeMap<i32, Merge> {
-    let mut by_pr = TreeMap::<i32, Merge>::new();
-    for let m of merges {
-        by_pr.try_insert(m.num, *m);
-    }
-    return by_pr;
+/// The title of the pull request `sha` merged.
+pub fn merge_title(sha: &String) -> String with Process {
+    return first_line(&git(["log", "-1", "--format=%b", *sha]));
+}
+
+fn first_line(body: &String) -> String {
+    return match body.lines().next() {
+        Some(line) => line.trim().to_string(),
+        None => "",
+    };
 }
 
 /// The digits after the first `#`, or 0 without one.

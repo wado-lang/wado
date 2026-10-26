@@ -64,13 +64,13 @@ fn commit_prs(merges: &List<Merge>) -> TreeMap<String, i32> with Process {
     return by_commit;
 }
 
-/// The paths `.gitattributes` marks generated or vendored.
-fn generated(paths: &List<String>) -> List<String> with Process {
+/// The paths `.gitattributes` marked generated or vendored at `rev`.
+fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
     let mut marked: List<String> = [];
     if paths.is_empty() {
         return marked;
     }
-    let mut check = ["check-attr", "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    let mut check = ["check-attr", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
     check.extend(paths);
     for let line of git(check).lines() {
         if !(line.ends_with(": set") || line.ends_with(": true")) {
@@ -139,16 +139,17 @@ fn header_commit(line: StrSlice) -> Option<String> {
     return Some(sha.to_string());
 }
 
-fn census(m: &Merge, commit_pr: &TreeMap<String, i32>) -> FixResult with Process {
+fn census(m: &Merge, commit_pr: &TreeMap<String, i32>, pr_sha: &TreeMap<i32, String>) -> FixResult with Process {
     let base = `${m.sha}^1`;
     let all = changes(&base, &m.sha);
     let mut paths: List<String> = [];
     for let c of &all {
         paths.push(c.new_path);
     }
-    let gen = generated(&paths);
+    // The attributes the fix was made under: a rule since dropped still counts.
+    let gen = generated(&base, &paths);
     let mut adds_test = false;
-    let mut blamed = TreeMap::<i32, i32>::new();
+    let mut blamed = TreeMap::<i32, Blamed>::new();
     let mut old_lines = 0;
     for let c of &all {
         if gen.contains_str(&c.new_path) {
@@ -178,21 +179,31 @@ fn census(m: &Merge, commit_pr: &TreeMap<String, i32>) -> FixResult with Process
         let Some(out) = try_git(blame) else {
             continue;
         };
+        // Each header line is followed by a `filename` line naming the path
+        // the line had in that commit.
+        let mut pr = 0;
         for let line of out.lines() {
-            let Some(sha) = header_commit(line.as_str_slice()) else {
-                continue;
-            };
-            old_lines += 1;
-            let pr = commit_pr.get(sha).unwrap_or(0);
-            blamed[pr] = blamed.get(pr).unwrap_or(0) + 1;
+            if let Some(sha) = header_commit(line.as_str_slice()) {
+                old_lines += 1;
+                pr = commit_pr.get(sha).unwrap_or(0);
+                let mut b = blamed.get(pr).unwrap_or(Blamed { pr, sha: pr_sha.get(pr).unwrap_or(""), n: 0, paths: [] });
+                b.n += 1;
+                blamed[pr] = b;
+            } else if let Some(path) = line.strip_prefix("filename ") {
+                let mut b = blamed.get(pr).unwrap();
+                if !b.paths.contains_str(path) {
+                    b.paths.push(path.to_string());
+                    blamed[pr] = b;
+                }
+            }
         }
     }
     let mut ranked: List<Blamed> = [];
-    for let [pr, n] of blamed.entries() {
-        ranked.push(Blamed { pr: *pr, n: *n });
+    for let b of blamed.values() {
+        ranked.push(*b);
     }
     ranked.sort_by(|a, b| b.n.cmp(&a.n));
-    return FixResult { pr: m.num, date: m.date, title: m.title, adds_test, old_lines, blamed: ranked };
+    return FixResult { pr: m.num, sha: m.sha, date: m.date, title: m.title, adds_test, old_lines, blamed: ranked };
 }
 
 export fn run() with (Stderr, Environment, Preopens, Process) {
@@ -201,6 +212,10 @@ export fn run() with (Stderr, Environment, Preopens, Process) {
     let merges = merged_prs();
     eprintln(`PRs: ${merges.len()}`);
     let commit_pr = commit_prs(&merges);
+    let mut pr_sha = TreeMap::<i32, String>::new();
+    for let m of &merges {
+        pr_sha.try_insert(m.num, m.sha);
+    }
     let mut fixes: List<Merge> = [];
     for let m of &merges {
         if is_fix_title(&m.title) {
@@ -210,7 +225,7 @@ export fn run() with (Stderr, Environment, Preopens, Process) {
     eprintln(`fix PRs: ${fixes.len()}`);
     let mut results: List<FixResult> = [];
     for let m of &fixes {
-        results.push(census(m, &commit_pr));
+        results.push(census(m, &commit_pr, &pr_sha));
         if results.len() % 50 == 0 {
             eprintln(`${results.len()}/${fixes.len()}`);
         }

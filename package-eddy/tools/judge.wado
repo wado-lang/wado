@@ -16,7 +16,8 @@ use { Preopens } from "core:fs";
 use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { to_bytes_pretty, from_string } from "core:json";
-use { git, merged_prs, merges_by_pr, Census, FixResult } from "./eval.wado";
+use { TreeMap } from "core:collections";
+use { git, merge_title, Census, FixResult } from "./eval.wado";
 use { ask } from "../src/anthropic.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
@@ -67,18 +68,17 @@ fn clip(s: String) -> String {
 }
 
 /// The diffs the model reads: the whole fix, Markdown aside, and the culprit
-/// restricted to the files the fix touched.
-fn prompt(r: &FixResult, fix_sha: &String, culprit_sha: &String, culprit_title: &String) -> String with Process {
-    let files = git(["diff", "--name-only", `${fix_sha}^1`, *fix_sha]);
-    let mut fix_args = ["diff", "-w", `${fix_sha}^1`, *fix_sha, "--"] as List<String>;
-    let mut culprit_args = ["diff", "-w", `${culprit_sha}^1`, *culprit_sha, "--"] as List<String>;
-    for let f of files.lines() {
-        let f = f.to_string();
+/// restricted to the files the blamed lines were in.
+fn prompt(r: &FixResult) -> String with Process {
+    let culprit = &r.blamed[0];
+    let mut fix_args = ["diff", "-w", `${r.sha}^1`, r.sha, "--"] as List<String>;
+    for let f of git(["diff", "--name-only", `${r.sha}^1`, r.sha]).lines() {
         if !f.ends_with(".md") {
-            fix_args.push(f);
+            fix_args.push(f.to_string());
         }
-        culprit_args.push(f);
     }
+    let mut culprit_args = ["diff", "-w", `${culprit.sha}^1`, culprit.sha, "--"] as List<String>;
+    culprit_args.extend(&culprit.paths);
     let fix_diff = clip(git(fix_args));
     let culprit_diff = clip(git(culprit_args));
     return `FIX PR #${r.pr}: ${r.title}
@@ -87,8 +87,8 @@ fn prompt(r: &FixResult, fix_sha: &String, culprit_sha: &String, culprit_title: 
 ${fix_diff}
 </fix_diff>
 
-CULPRIT PR #${r.blamed[0].pr}: ${culprit_title}
-(diff restricted to the files the fix touched)
+CULPRIT PR #${culprit.pr}: ${merge_title(&culprit.sha)}
+(diff restricted to the files the blamed lines were in)
 
 <culprit_diff>
 ${culprit_diff}
@@ -103,6 +103,9 @@ fn verdict_of(text: &String) -> Result<Verdict, String> {
     ] else {
         return Err(`unparsed: ${text}`);
     };
+    if end < start {
+        return Err(`unparsed: ${text}`);
+    }
     return match from_string::<Verdict, String>(text.substr_bytes(start, end + 1)) {
         Ok(v) => Ok(v),
         Err(e) => Err(`unparsed: ${e:?}: ${text}`),
@@ -117,9 +120,10 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     };
     let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
     let min_share = f64::from_str(&arguments[1]).unwrap();
-    let merges = merges_by_pr(&merged_prs());
+    let out_path = arguments[2];
+    let judged = earlier_verdicts(&out_path);
 
-    let mut pairs: List<Pair> = [];
+    let mut out = Judged { model: CLAUDE_MODEL, min_share, pairs: [] };
     for let r of &census.results {
         if r.old_lines == 0 || r.blamed[0].pr == 0 {
             continue;
@@ -136,27 +140,44 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             adds_test: r.adds_test,
             title: r.title,
         };
-        match [
-            merges.get(r.pr),
-            merges.get(r.blamed[0].pr),
-        ] {
-            [Some(fix), Some(culprit)] => {
-                let user = prompt(r, &fix.sha, &culprit.sha, &culprit.title);
-                match ask(api_key, CLAUDE_MODEL, SYSTEM, user, 2000) {
-                    Ok(text) => match verdict_of(&text) {
-                        Ok(v) => pair.verdict = Some(v),
-                        Err(e) => pair.error = Some(e),
-                    },
-                    Err(e) => pair.error = Some(e),
-                }
-            },
-            _ => pair.error = Some("merge not found"),
+        if let Some(earlier) = judged.get(pair_key(pair.fix, pair.culprit)) {
+            pair.verdict = Some(earlier);
+            out.pairs.push(pair);
+            continue;
         }
-        pairs.push(pair);
-        eprintln(`${pairs.len()} #${r.pr}`);
+        match ask(api_key, CLAUDE_MODEL, SYSTEM, prompt(r), 2000) {
+            Ok(text) => match verdict_of(&text) {
+                Ok(v) => pair.verdict = Some(v),
+                Err(e) => pair.error = Some(e),
+            },
+            Err(e) => pair.error = Some(e),
+        }
+        out.pairs.push(pair);
+        // Written after every pair, so a run that dies keeps what it paid for.
+        fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+        eprintln(`${out.pairs.len()} #${r.pr}`);
     }
-    let out = Judged { model: CLAUDE_MODEL, min_share, pairs };
-    fs::write(&arguments[2], &to_bytes_pretty(&out).unwrap()).unwrap();
+    fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+}
+
+/// The verdicts an earlier run left at `path`, by pair. A rerun judges only
+/// the pairs it did not settle, and a fix the census now blames on another
+/// pull request is a new pair.
+fn earlier_verdicts(path: &String) -> TreeMap<String, Verdict> with Preopens {
+    let mut by_pair = TreeMap::<String, Verdict>::new();
+    let Ok(text) = fs::read_to_string(path) else {
+        return by_pair;
+    };
+    for let p of from_string::<Judged, String>(text).unwrap().pairs {
+        if let Some(v) = p.verdict {
+            by_pair[pair_key(p.fix, p.culprit)] = v;
+        }
+    }
+    return by_pair;
+}
+
+fn pair_key(fix: i32, culprit: i32) -> String {
+    return `${fix}<-${culprit}`;
 }
 
 test "the verdict is the object in the reply" {
@@ -165,4 +186,5 @@ test "the verdict is the object in the reply" {
     ).unwrap();
     assert v.is_defect_fix && !v.introduced_by_culprit;
     assert verdict_of(&"no json").is_err();
+    assert verdict_of(&"a } before { the object").is_err();
 }

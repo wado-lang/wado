@@ -46,9 +46,9 @@ pub fn ask(
         ["x-api-key", api_key],
         ["anthropic-version", "2023-06-01"],
         ["content-type", "application/json"],
-    ], to_bytes(&request).unwrap());
+    ], to_bytes(&request).unwrap())?;
     let status = resp.get_status_code() as i32;
-    let body = read_body(resp);
+    let body = read_body(resp)?;
     if status != 200 {
         return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
     }
@@ -72,7 +72,7 @@ fn send<B: AsByteSlice>(
     path: String,
     headers: List<[String, String]>,
     body: B,
-) -> Response with Client {
+) -> Result<Response, String> with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let fields = Headers::new();
@@ -93,27 +93,30 @@ fn send<B: AsByteSlice>(
     trailers_tx.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
     let resp = match subtask.wait() {
         Ok(resp) => resp,
-        Err(e) => panic(`HTTP request failed: ${e:?}`),
+        Err(e) => {
+            return Err(`HTTP request failed: ${e:?}`);
+        },
     };
-    expect_done(sent, "HTTP request");
-    return resp;
+    done(sent, "HTTP request")?;
+    return Ok(resp);
 }
 
-fn read_body(resp: Response) -> ByteList {
+fn read_body(resp: Response) -> Result<ByteList, String> {
     let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
     let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
     let buf = body_stream_rx.read_to_end_bytes();
     body_stream_rx.drop();
     res_tx.write(Result::Ok(()));
-    expect_done(received, "HTTP response body");
-    return buf;
+    done(received, "HTTP response body")?;
+    return Ok(buf);
 }
 
-/// Panics unless `done`, the future a `wasi:http` transfer resolves once it
+/// Whether `transfer`, the future a `wasi:http` transfer resolves once it
 /// ends, reports success.
-fn expect_done<affine T>(done: Future<Result<T, ErrorCode>>, what: String) {
-    let outcome = done.read();
+fn done<affine T>(transfer: Future<Result<T, ErrorCode>>, what: String) -> Result<(), String> {
+    let outcome = transfer.read();
     if !outcome matches { Some(Ok(_)) } {
-        panic(`${what} failed: ${outcome:?}`);
+        return Err(`${what} failed: ${outcome:?}`);
     }
+    return Ok(());
 }
