@@ -1930,6 +1930,40 @@ fn test_run_names_what_the_sandbox_refused_a_failing_child() {
     assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
 }
 
+/// `--process-trace` names a file the sandbox refused a child, and the grant
+/// that would let it through; without it, `cat`'s failure is all there is.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_process_trace_names_a_refused_file_and_its_grant() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().canonicalize().unwrap().join("secret.txt");
+    std::fs::write(&secret, "secret").unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { args, Environment } from \"core:cli\";\nuse { Command, Process } from \"core:process\";\n\nexport fn run() with (Environment, Process) {\n    let _ = Command::new(\"cat\").arg(args()[0]).status();\n}\n",
+    )
+    .unwrap();
+    let path = secret.display();
+    wado_in(work.path())
+        .args(["run", "--process-trace", "main.wado"])
+        .arg(&secret)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(format!(
+            "warning: core:process: `cat` exited with status 1 after the sandbox refused it reading {path}\nhelp: let a child read {path} with `--process-read {path}`"
+        )));
+    wado_in(work.path())
+        .args(["run", "main.wado"])
+        .arg(&secret)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("core:process").not());
+}
+
 #[test]
 fn test_run_unavailable_spawning_names_its_fix() {
     let tmp = tempfile::tempdir().unwrap();

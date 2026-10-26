@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
+use wado_host::sandbox::Trace;
 use wasmtime::component::{Access, HasData, Resource, ResourceTable};
 use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
@@ -88,6 +89,7 @@ struct Grants {
     /// Read and execute only, from `--process-read`. The user config's
     /// `[process] read` joins them at the spawn.
     read: Vec<PathBuf>,
+    trace: Trace,
 }
 
 struct Grant {
@@ -95,11 +97,11 @@ struct Grant {
     dir: Arc<File>,
 }
 
-/// Whether `--deny-process` turned spawning off, and the paths
-/// `--process-read` opens to every child.
+/// Whether `--deny-process` turned spawning off, the paths `--process-read`
+/// opens to every child, and whether `--process-trace` watches their files.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ProcessGrant {
-    Offered { read: Vec<PathBuf> },
+    Offered { read: Vec<PathBuf>, trace: Trace },
     Denied,
 }
 
@@ -119,7 +121,7 @@ impl Spawning {
 }
 
 fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<Answer> {
-    let ProcessGrant::Offered { read } = grant else {
+    let ProcessGrant::Offered { read, trace } = grant else {
         return Ok(Answer::Denied(Unavailable {
             reason: "spawning is turned off by --deny-process".to_owned(),
             fix: Some("run without `--deny-process`".to_owned()),
@@ -148,7 +150,7 @@ fn answer(preopened_dirs: &[(String, String)], grant: ProcessGrant) -> Result<An
         let dir = Arc::new(File::open(&path)?);
         dirs.push(Grant { path, dir });
     }
-    Ok(Answer::Available(Grants { dirs, read }))
+    Ok(Answer::Available(Grants { dirs, read, trace }))
 }
 
 #[cfg(unix)]

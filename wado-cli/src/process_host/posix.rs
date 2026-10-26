@@ -27,7 +27,7 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
+use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
 use wado_host::sync::{join, lock};
 
 use super::types::{ExitStatus, Input, Output};
@@ -83,6 +83,7 @@ struct Started {
     stdout: Route,
     stderr: Route,
     scratch: TempDir,
+    trace: Trace,
 }
 
 pub(super) fn spawn<U>(
@@ -113,6 +114,7 @@ pub(super) fn spawn<U>(
         stdout,
         stderr,
         scratch,
+        trace,
     } = match started {
         Ok(started) => started,
         Err(code) => {
@@ -137,6 +139,7 @@ pub(super) fn spawn<U>(
             refusals: spawned.refusals,
             program,
             spawning: store.get().ctx.spawning.clone(),
+            trace,
         },
         timeout.map(Duration::from_nanos),
         scratch,
@@ -222,6 +225,7 @@ fn start(
             stdout: stdout.stdio(),
             stderr: stderr.stdio(),
             policy: &policy,
+            trace: grants.trace,
         })?;
         io::Result::Ok((spawned, scratch))
     })();
@@ -231,6 +235,7 @@ fn start(
             stdout,
             stderr,
             scratch: scratch.0,
+            trace: grants.trace,
         }),
         Err(err) => Err(error_code(&err)),
     })
@@ -246,26 +251,60 @@ impl Spawning {
     }
 }
 
-/// What the filter refused a child that then failed. It may not be why the
-/// child failed, so the warning states the two side by side.
+/// What the sandbox refused a child, once it failed, or whatever its end
+/// under `Trace::Files`, which asked. A refusal may not be why the child
+/// failed, so the warning states the two side by side.
 fn refusals_warning(
     program: &str,
     status: &ExitStatus,
     refusals: &BTreeSet<sandbox::Refusal>,
+    trace: Trace,
 ) -> Option<String> {
-    let ended = match status {
-        ExitStatus::Exited(0) | ExitStatus::TimedOut => return None,
-        ExitStatus::Exited(code) => format!("exited with status {code}"),
-        ExitStatus::Signaled(signal) => format!("was killed by signal {signal}"),
-    };
-    if refusals.is_empty() {
+    let failed = !matches!(status, ExitStatus::Exited(0) | ExitStatus::TimedOut);
+    if refusals.is_empty() || (!failed && trace == Trace::Off) {
         return None;
     }
+    let ended = match status {
+        ExitStatus::Exited(code) => format!("exited with status {code}"),
+        ExitStatus::Signaled(signal) => format!("was killed by signal {signal}"),
+        ExitStatus::TimedOut => "timed out".to_owned(),
+    };
     let refused: Vec<String> = refusals.iter().map(ToString::to_string).collect();
-    Some(format!(
+    let mut warning = format!(
         "warning: core:process: `{program}` {ended} after the sandbox refused it {}",
         refused.join("; ")
-    ))
+    );
+    for refusal in refusals {
+        if let Some(fix) = path_fix(refusal) {
+            warning.push_str("\nhelp: ");
+            warning.push_str(&fix);
+        }
+    }
+    Some(warning)
+}
+
+/// The grant that would let a child reach a path it was refused. Writing
+/// takes a directory the guest is granted too: nothing grants a child more
+/// than its guest but reading.
+fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
+    let sandbox::Refusal::Path { path, access } = refusal else {
+        return None;
+    };
+    Some(match access {
+        Reach::ReadExecute => format!(
+            "let a child read {} with `--process-read {}`",
+            path.display(),
+            path.display()
+        ),
+        Reach::ReadWrite => {
+            let dir = path.parent().expect("a refused path is absolute");
+            format!(
+                "let the guest and its children write {} with `--dir {}`",
+                path.display(),
+                dir.display()
+            )
+        }
+    })
 }
 
 fn refused_warning(program: &str, path: &Path) -> String {
@@ -403,6 +442,7 @@ struct Supervised {
     /// As the guest named it.
     program: String,
     spawning: Spawning,
+    trace: Trace,
 }
 
 /// Wait for the child on a thread of its own, enforcing `timeout`, and remove
@@ -423,6 +463,7 @@ fn supervise(
                 refusals,
                 program,
                 spawning,
+                trace,
             } = supervised;
             let (alive, deadline) = mpsc::channel::<()>();
             let timer = timeout.map(|timeout| {
@@ -441,7 +482,8 @@ fn supervise(
                 Ok(sandbox::ExitStatus::Signaled(signal)) => Ok(ExitStatus::Signaled(signal)),
             };
             if let Ok(status) = &status
-                && let Some(warning) = refusals_warning(&program, status, &refusals.collect())
+                && let Some(warning) =
+                    refusals_warning(&program, status, &refusals.collect(), trace)
             {
                 spawning.warn(warning);
             }

@@ -1,3 +1,5 @@
+use wado_host::sandbox::Trace;
+
 use super::{Answer, ProcessGrant, answer, unsupported_reason};
 
 fn grants(dirs: &[(&std::path::Path, &str)]) -> Answer {
@@ -5,7 +7,14 @@ fn grants(dirs: &[(&std::path::Path, &str)]) -> Answer {
         .iter()
         .map(|(host, guest)| (host.display().to_string(), (*guest).to_owned()))
         .collect();
-    answer(&dirs, ProcessGrant::Offered { read: Vec::new() }).unwrap()
+    answer(
+        &dirs,
+        ProcessGrant::Offered {
+            read: Vec::new(),
+            trace: Trace::Off,
+        },
+    )
+    .unwrap()
 }
 
 #[test]

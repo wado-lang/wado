@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::{
-    Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Spawned, Stdio,
+    Access, Availability, Command, ExitStatus, Network, Policy, Refusal, Spawned, Stdio, Trace,
     availability, spawn,
 };
 
@@ -156,12 +156,13 @@ fn assert_available() {
 }
 
 fn run(policy: &Policy, program: &Path, args: &[&str], env: &[(&str, &str)]) -> ExitStatus {
-    run_refused(policy, program, args, env).0
+    run_refused(policy, Trace::Off, program, args, env).0
 }
 
-/// How the child ended, and what the filter refused it on the way.
+/// How the child ended, and what the sandbox refused it on the way.
 fn run_refused(
     policy: &Policy,
+    trace: Trace,
     program: &Path,
     args: &[&str],
     env: &[(&str, &str)],
@@ -180,10 +181,22 @@ fn run_refused(
         stdout: Stdio::Null,
         stderr: Stdio::Inherit,
         policy,
+        trace,
     })
     .unwrap();
     let status = spawned.child.wait().unwrap();
     (status, spawned.refusals.collect())
+}
+
+/// `sh -c script` under `policy`, watching its file calls.
+fn sh_traced(policy: &Policy, script: &str) -> (ExitStatus, BTreeSet<Refusal>) {
+    run_refused(
+        policy,
+        Trace::Files,
+        Path::new("/bin/sh"),
+        &["-c", script],
+        &[("PATH", "/usr/bin:/bin")],
+    )
 }
 
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
@@ -206,6 +219,7 @@ fn probe_refused(mut policy: Policy, act: &str) -> (ExitStatus, BTreeSet<Refusal
     policy.grant_path(exe.parent().unwrap(), Access::ReadExecute);
     run_refused(
         &policy,
+        Trace::Off,
         &exe,
         &[
             "--exact",
@@ -383,6 +397,49 @@ fn the_host_learns_each_call_the_filter_refused() {
         (OK, BTreeSet::new())
     );
 }
+/// A path counts once it exists for the call: a read of a missing file fails
+/// with `ENOENT` whatever the grants.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_traced_child_reports_each_path_outside_its_grants() {
+    assert_available();
+    let tree = Tree::new();
+    let outside = tree.outside().canonicalize().unwrap();
+    let granted = tree.granted().canonicalize().unwrap();
+    fs::write(outside.join("out.txt"), "out").unwrap();
+    fs::write(outside.join("rel.txt"), "rel").unwrap();
+    let policy = tree.policy(Network::Denied);
+    let script = format!(
+        "cat {o}/out.txt; echo x > {o}/new.txt; cat {o}/missing.txt; \
+         echo x > {g}/in.txt; cat {g}/in.txt; cd {o} && cat rel.txt",
+        o = outside.display(),
+        g = granted.display(),
+    );
+    let path = |name: &str, access| Refusal::Path {
+        path: outside.join(name),
+        access,
+    };
+    assert_eq!(
+        sh_traced(&policy, &script).1,
+        BTreeSet::from([
+            path("out.txt", Access::ReadExecute),
+            path("new.txt", Access::ReadWrite),
+            path("rel.txt", Access::ReadExecute),
+        ])
+    );
+    assert_eq!(
+        run_refused(
+            &policy,
+            Trace::Off,
+            Path::new("/bin/sh"),
+            &["-c", &script],
+            &[]
+        )
+        .1,
+        BTreeSet::new()
+    );
+}
+
 #[test]
 fn no_escape_through_a_symbolic_link_or_dot_dot() {
     assert_available();
@@ -444,6 +501,7 @@ fn starts_in_the_directory_it_is_given() {
         stdout: Stdio::Piped,
         stderr: Stdio::Inherit,
         policy: &policy,
+        trace: Trace::Off,
     })
     .unwrap();
     let mut out = String::new();
@@ -472,6 +530,7 @@ fn a_group_kill_ends_every_descendant() {
         stdout: Stdio::Piped,
         stderr: Stdio::Inherit,
         policy: &policy,
+        trace: Trace::Off,
     })
     .unwrap();
     spawned.child.signal_group(libc::SIGKILL).unwrap();
@@ -503,6 +562,7 @@ fn no_descendant_outlives_the_child() {
         stdout: Stdio::Piped,
         stderr: Stdio::Inherit,
         policy: &policy,
+        trace: Trace::Off,
     })
     .unwrap();
     assert_eq!(spawned.child.wait().unwrap(), OK);
@@ -526,6 +586,7 @@ fn a_missing_program_reports_not_found() {
         stdout: Stdio::Null,
         stderr: Stdio::Null,
         policy: &policy,
+        trace: Trace::Off,
     });
     assert_eq!(result.err().unwrap().kind(), std::io::ErrorKind::NotFound);
 }
@@ -543,6 +604,7 @@ fn spawn_outside_the_grants(tree: &Tree) -> std::io::Result<Spawned> {
         stdout: Stdio::Null,
         stderr: Stdio::Null,
         policy: &policy,
+        trace: Trace::Off,
     })
 }
 

@@ -296,8 +296,25 @@ more, and says it on its own stderr, with the fix where one exists:
   alone reports this: the filter refers each such call to the host through a
   seccomp listener, and a host thread records it and answers `EPERM`, so the
   child sees what a plain `SECCOMP_RET_ERRNO` would give it.
+- `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
+  refused a child, with the grant that would allow it: `--process-read` for a
+  read, `--dir` for a write, which the guest gains too. It reports whatever the
+  child's end, since a child can carry on past a refusal and still go wrong.
+  Linux alone offers it, and only on request, because each call that names a
+  path then waits on the host.
 
 Each warning prints once per run however often the guest repeats the spawn.
+
+Landlock answers a refused path with `EACCES` and leaves no record the host
+can read; its audit log needs `CAP_AUDIT_READ`. So the trace watches the calls
+rather than the refusals. The filter refers each call Landlock mediates (`open`,
+`execve`, `mkdir`, `unlink`, `rename`, `link`, `truncate` and their `at`
+forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
+the path from the child's memory, resolves it against the child's working
+directory or the descriptor the call names, and checks it against the policy.
+The kernel then runs the call, and Landlock judges it as it would have. Moving
+enforcement itself to seccomp was rejected: the path a call names can change
+after the host reads it, and no filter can emulate `execve`.
 
 ### WIT
 
@@ -539,9 +556,14 @@ cannot be taken back.
   meets any descendant that calls `setsid` or `setpgid` itself: a shell with job
   control, or a program that detaches into the background. A plain `fork` and
   `exec`, which is how `git` runs its hooks and helpers, is not refused.
-- A file or directory the sandbox refused a child is not reported. Landlock
-  answers `EACCES` and leaves no record the host can read, so the child's own
-  message is all there is.
+- Without `--process-trace`, a file or directory the sandbox refused a child
+  is not reported, so the child's own message is all there is. Under it, the
+  host predicts the refusal from the policy rather than observing Landlock's:
+  a path whose final component is a symbolic link is judged at its target
+  even for a call, such as `unlink`, that acts on the link itself.
+- `/proc` is outside the baseline, so a child reads nothing there, its own
+  entries (`/proc/self/status`) and `/proc/cpuinfo` included. `--process-trace`
+  then suggests `--process-read` for a path that names one process.
 
 ## Related WEPs
 

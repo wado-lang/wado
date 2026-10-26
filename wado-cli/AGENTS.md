@@ -14,7 +14,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   / `CompileKnobOpt` carry what the compiler is told: `-O`, `--log-level`,
   `--allocator`, `-f`, `--no-cache`. `RuntimeKnobs` / `RuntimeKnobOpt` carry
   what the wasmtime engine is built with: `--collector`, `--gc-heap-initial`,
-  `--report-fuel`, `--deny-process`, `--process-read`.
+  `--report-fuel`, `--deny-process`, `--process-read`, `--process-trace`.
   A subcommand lists the subset it accepts and holds one field per family it
   uses. It declares no field, parse arm, or spec of its own for a shared knob,
   and a new one is added in `knobs.rs` only.

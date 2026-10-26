@@ -11,19 +11,22 @@
 //! A thread records the call as a [`Refusal`] and answers `EPERM`, so the child
 //! sees what a plain `SECCOMP_RET_ERRNO` would have given it.
 
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
 use std::thread;
 
 use super::{
-    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, Spawned, Stdio,
+    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
+    Spawned, Stdio, Trace,
 };
 
 /// ABI 6 adds the scopes that isolate signals and abstract UNIX sockets.
@@ -115,7 +118,11 @@ fn probe_availability() -> Availability {
 
 pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     let ruleset = ruleset(command.policy)?;
-    let filter = seccomp_filter(command.policy.network());
+    let filter = seccomp_filter(command.policy.network(), command.trace);
+    let traced = match command.trace {
+        Trace::Off => None,
+        Trace::Files => Some(command.policy.resolved()),
+    };
     let [listener_tx, listener_rx] = socket_pair()?;
     let cwd = command.cwd.map(File::try_clone).transpose()?;
 
@@ -134,14 +141,22 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
             confine_self(&ruleset, &filter, cwd.as_ref(), listener_tx.as_raw_fd())
         });
     }
-    let mut child = std_command.spawn()?;
-    // The child sent it before the `exec` that `spawn` waited for.
-    let listener = receive_listener(&listener_rx).expect("the child sends its listener");
     let refusals = Refusals::default();
     let recorded = refusals.clone();
+    // Started first: under `Trace::Files` the child's own `exec` waits on it.
     thread::Builder::new()
         .name("sandbox-refusals".to_owned())
-        .spawn(move || answer_refusals(&listener, &recorded))?;
+        .spawn(move || {
+            // `None` once every sender is closed: the spawn failed before the
+            // child confined itself.
+            if let Some(listener) = receive_listener(&listener_rx) {
+                answer_refusals(&listener, &recorded, traced.as_ref());
+            }
+        })?;
+    let spawned = std_command.spawn();
+    // Closes the host's copy of the sender, which the closure holds.
+    drop(std_command);
+    let mut child = spawned?;
     Ok(Spawned {
         child: Child::new(child.id() as libc::pid_t),
         stdin: child.stdin.take().map(OwnedFd::from),
@@ -225,25 +240,35 @@ fn send_listener(socket: RawFd, listener: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-fn receive_listener(socket: &OwnedFd) -> io::Result<OwnedFd> {
+/// The listener the child sends, or `None` once no sender is left.
+fn receive_listener(socket: &OwnedFd) -> Option<OwnedFd> {
     let mut message = FdMessage::new();
     let header = message.header();
-    // SAFETY: `message` outlives the call.
-    let received = unsafe { libc::recvmsg(socket.as_raw_fd(), header, libc::MSG_CMSG_CLOEXEC) };
-    if received == -1 {
-        return Err(io::Error::last_os_error());
+    let received = loop {
+        // SAFETY: `message` outlives the call.
+        let received = unsafe { libc::recvmsg(socket.as_raw_fd(), header, libc::MSG_CMSG_CLOEXEC) };
+        if received != -1 {
+            break received;
+        }
+        let err = io::Error::last_os_error();
+        assert_eq!(err.kind(), io::ErrorKind::Interrupted, "recvmsg: {err}");
+    };
+    if received == 0 {
+        return None;
     }
     // SAFETY: the kernel filled the control buffer `header` points to.
     let control = unsafe { libc::CMSG_FIRSTHDR(header) };
     assert!(!control.is_null(), "the child sends its listener");
     // SAFETY: a header the kernel wrote, holding the one descriptor sent, which
     // `SCM_RIGHTS` installed in our table for us alone.
-    Ok(unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) })
+    Some(unsafe { OwnedFd::from_raw_fd(libc::CMSG_DATA(control).cast::<RawFd>().read_unaligned()) })
 }
 
-/// Answer each call the filter refers to the host with `EPERM`, recording it
-/// first, until no task uses the filter any more.
-fn answer_refusals(listener: &OwnedFd, refusals: &Refusals) {
+/// Answer each call the filter refers to the host, until no task uses the
+/// filter any more. A refused call is recorded and answered `EPERM`. A file
+/// call, referred only under `traced`, is let through for Landlock to judge,
+/// its paths recorded where `traced` grants them not.
+fn answer_refusals(listener: &OwnedFd, refusals: &Refusals, traced: Option<&ResolvedPolicy>) {
     let sizes = notif_sizes();
     let mut call = notif_buffer(sizes.seccomp_notif, size_of::<libc::seccomp_notif>());
     let mut answer = notif_buffer(
@@ -285,19 +310,33 @@ fn answer_refusals(listener: &OwnedFd, refusals: &Refusals) {
         }
         // SAFETY: the kernel wrote a `seccomp_notif` at the start of `call`.
         let notif = unsafe { call.as_ptr().cast::<libc::seccomp_notif>().read() };
-        refusals.record(refusal(&notif.data));
+        let reply = if let Some(paths) = file_call(libc::c_long::from(notif.data.nr)) {
+            let policy = traced.expect("the filter refers a file call only when traced");
+            for refusal in refused_paths(listener, &notif, paths, policy) {
+                refusals.record(refusal);
+            }
+            libc::seccomp_notif_resp {
+                id: notif.id,
+                val: 0,
+                error: 0,
+                flags: libc::SECCOMP_USER_NOTIF_FLAG_CONTINUE as u32,
+            }
+        } else {
+            refusals.record(refusal(&notif.data));
+            libc::seccomp_notif_resp {
+                id: notif.id,
+                val: 0,
+                error: -libc::EPERM,
+                flags: 0,
+            }
+        };
         answer.fill(0);
         // SAFETY: `answer` is at least the size of a `seccomp_notif_resp`.
         unsafe {
             answer
                 .as_mut_ptr()
                 .cast::<libc::seccomp_notif_resp>()
-                .write(libc::seccomp_notif_resp {
-                    id: notif.id,
-                    val: 0,
-                    error: -libc::EPERM,
-                    flags: 0,
-                });
+                .write(reply);
         }
         // SAFETY: as above, `answer` is large enough.
         if unsafe {
@@ -353,6 +392,256 @@ fn refusal(call: &libc::seccomp_data) -> Refusal {
         libc::SYS_ioctl => Refusal::TerminalInput,
         nr => unreachable!("the filter refers no other call: {nr}"),
     }
+}
+
+/// Where a file call takes a path: alone, relative to the working directory,
+/// or after the directory descriptor it is relative to.
+#[derive(Clone, Copy)]
+enum PathArg {
+    Path(usize),
+    At { dir: usize, path: usize },
+}
+
+/// The access a file call asks of its path.
+#[derive(Clone, Copy)]
+enum Asks {
+    Read,
+    Write,
+    /// As the `open` flags in this argument say.
+    OpenFlags(usize),
+    /// As the flags of the `open_how` this argument points to say.
+    OpenHow(usize),
+}
+
+/// The calls whose paths Landlock mediates, each with the paths it names.
+/// `symlink` names its target as text, never resolved, so only its link
+/// counts.
+const FILE_CALLS: &[(libc::c_long, &[(PathArg, Asks)])] = &[
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_open, &[(PathArg::Path(0), Asks::OpenFlags(1))]),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_creat, &[(PathArg::Path(0), Asks::Write)]),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_mkdir, &[(PathArg::Path(0), Asks::Write)]),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_mknod, &[(PathArg::Path(0), Asks::Write)]),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_unlink, &[(PathArg::Path(0), Asks::Write)]),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_rmdir, &[(PathArg::Path(0), Asks::Write)]),
+    #[cfg(target_arch = "x86_64")]
+    (
+        libc::SYS_rename,
+        &[
+            (PathArg::Path(0), Asks::Write),
+            (PathArg::Path(1), Asks::Write),
+        ],
+    ),
+    #[cfg(target_arch = "x86_64")]
+    (
+        libc::SYS_renameat,
+        &[
+            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
+            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+        ],
+    ),
+    #[cfg(target_arch = "x86_64")]
+    (
+        libc::SYS_link,
+        &[
+            (PathArg::Path(0), Asks::Write),
+            (PathArg::Path(1), Asks::Write),
+        ],
+    ),
+    #[cfg(target_arch = "x86_64")]
+    (libc::SYS_symlink, &[(PathArg::Path(1), Asks::Write)]),
+    (
+        libc::SYS_openat,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::OpenFlags(2))],
+    ),
+    (
+        libc::SYS_openat2,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::OpenHow(2))],
+    ),
+    (libc::SYS_execve, &[(PathArg::Path(0), Asks::Read)]),
+    (
+        libc::SYS_execveat,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Read)],
+    ),
+    (
+        libc::SYS_mkdirat,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+    ),
+    (
+        libc::SYS_mknodat,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+    ),
+    (
+        libc::SYS_unlinkat,
+        &[(PathArg::At { dir: 0, path: 1 }, Asks::Write)],
+    ),
+    (
+        libc::SYS_renameat2,
+        &[
+            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
+            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+        ],
+    ),
+    (
+        libc::SYS_linkat,
+        &[
+            (PathArg::At { dir: 0, path: 1 }, Asks::Write),
+            (PathArg::At { dir: 2, path: 3 }, Asks::Write),
+        ],
+    ),
+    (
+        libc::SYS_symlinkat,
+        &[(PathArg::At { dir: 1, path: 2 }, Asks::Write)],
+    ),
+    (libc::SYS_truncate, &[(PathArg::Path(0), Asks::Write)]),
+];
+
+fn file_call(nr: libc::c_long) -> Option<&'static [(PathArg, Asks)]> {
+    FILE_CALLS
+        .iter()
+        .find(|(call, _)| *call == nr)
+        .map(|(_, paths)| *paths)
+}
+
+/// The paths of a file call the policy does not grant the access it asks.
+/// A path that cannot exist for the call is left out: the call fails with
+/// `ENOENT` before Landlock judges it. So is one the caller's memory no longer
+/// holds, which a child that exits mid-call leaves.
+fn refused_paths(
+    listener: &OwnedFd,
+    notif: &libc::seccomp_notif,
+    paths: &[(PathArg, Asks)],
+    policy: &ResolvedPolicy,
+) -> Vec<Refusal> {
+    let caller = Caller {
+        pid: notif.pid as libc::pid_t,
+        args: notif.data.args,
+    };
+    let asked: Vec<(PathBuf, Access)> = paths
+        .iter()
+        .filter_map(|&(arg, asks)| Some((caller.path(arg)?, caller.access(asks)?)))
+        .collect();
+    // The caller may have died and its pid passed on while we read its memory.
+    // SAFETY: `notif.id` outlives the call.
+    if unsafe {
+        libc::ioctl(
+            listener.as_raw_fd(),
+            libc::SECCOMP_IOCTL_NOTIF_ID_VALID,
+            &raw const notif.id,
+        )
+    } == -1
+    {
+        return Vec::new();
+    }
+    asked
+        .into_iter()
+        .filter_map(|(path, access)| {
+            let path = real_path(&path, access)?;
+            (!policy.permits(&path, access)).then_some(Refusal::Path { path, access })
+        })
+        .collect()
+}
+
+/// A task stopped in a file call the filter referred to the host.
+struct Caller {
+    pid: libc::pid_t,
+    args: [u64; 6],
+}
+
+impl Caller {
+    /// The path `arg` names, made absolute against the caller's working
+    /// directory or the descriptor it names.
+    fn path(&self, arg: PathArg) -> Option<PathBuf> {
+        let (dir, path) = match arg {
+            PathArg::Path(path) => (libc::AT_FDCWD, path),
+            PathArg::At { dir, path } => (self.args[dir] as libc::c_int, path),
+        };
+        let path = PathBuf::from(OsString::from_vec(self.read_c_string(self.args[path])?));
+        if path.is_absolute() {
+            return Some(path);
+        }
+        let base = match dir {
+            libc::AT_FDCWD => format!("/proc/{}/cwd", self.pid),
+            fd => format!("/proc/{}/fd/{fd}", self.pid),
+        };
+        Some(std::fs::read_link(base).ok()?.join(path))
+    }
+
+    /// The access `asks` names, or `None` for an `O_PATH` open, which Landlock
+    /// lets through.
+    fn access(&self, asks: Asks) -> Option<Access> {
+        let flags = match asks {
+            Asks::Read => return Some(Access::ReadExecute),
+            Asks::Write => return Some(Access::ReadWrite),
+            Asks::OpenFlags(arg) => self.args[arg] as libc::c_int,
+            Asks::OpenHow(arg) => {
+                let mut how = [0u8; size_of::<u64>()];
+                self.read(self.args[arg], &mut how)?;
+                u64::from_ne_bytes(how) as libc::c_int
+            }
+        };
+        if flags & libc::O_PATH != 0 {
+            return None;
+        }
+        let writes = flags & libc::O_ACCMODE != libc::O_RDONLY
+            || flags & (libc::O_CREAT | libc::O_TRUNC) != 0;
+        Some(if writes {
+            Access::ReadWrite
+        } else {
+            Access::ReadExecute
+        })
+    }
+
+    /// The NUL-terminated string at `addr` in the caller's memory, up to
+    /// `PATH_MAX`, the longest path a call accepts.
+    fn read_c_string(&self, addr: u64) -> Option<Vec<u8>> {
+        let mut bytes = vec![0u8; libc::PATH_MAX as usize];
+        let read = self.read(addr, &mut bytes)?;
+        let end = bytes[..read].iter().position(|&byte| byte == 0)?;
+        bytes.truncate(end);
+        Some(bytes)
+    }
+
+    /// Read from `addr` in the caller's memory into `buf`, returning how many
+    /// bytes were read: a read that reaches an unmapped page stops there.
+    fn read(&self, addr: u64, buf: &mut [u8]) -> Option<usize> {
+        let local = libc::iovec {
+            iov_base: buf.as_mut_ptr().cast(),
+            iov_len: buf.len(),
+        };
+        let remote = libc::iovec {
+            iov_base: addr as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        // SAFETY: `local` covers `buf`, which outlives the call; the kernel
+        // checks `remote` against the caller's own mappings.
+        let read = unsafe {
+            libc::process_vm_readv(self.pid, &raw const local, 1, &raw const remote, 1, 0)
+        };
+        usize::try_from(read).ok()
+    }
+}
+
+/// `path` at its real path, as Landlock judges it, or `None` where the call
+/// fails before Landlock does: a read of a path that does not exist, or a
+/// write beneath a directory that does not.
+fn real_path(path: &Path, access: Access) -> Option<PathBuf> {
+    if let Ok(real) = std::fs::canonicalize(path) {
+        return Some(real);
+    }
+    if access == Access::ReadExecute {
+        return None;
+    }
+    Some(
+        std::fs::canonicalize(path.parent()?)
+            .ok()?
+            .join(path.file_name()?),
+    )
 }
 
 pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
@@ -511,9 +800,9 @@ const fn seccomp_data_arg(index: u32) -> u32 {
     16 + 8 * index
 }
 
-fn seccomp_filter(network: Network) -> Vec<libc::sock_filter> {
+fn seccomp_filter(network: Network, trace: Trace) -> Vec<libc::sock_filter> {
     let arch = AUDIT_ARCH.expect("availability refuses an architecture without a filter");
-    let deny = libc::SECCOMP_RET_USER_NOTIF;
+    let refer = libc::SECCOMP_RET_USER_NOTIF;
     let mut asm = Assembler::default();
     asm.load(SECCOMP_DATA_ARCH);
     asm.jump_if_eq(arch, Label::ArchOk);
@@ -524,7 +813,15 @@ fn seccomp_filter(network: Network) -> Vec<libc::sock_filter> {
         asm.jump_if_ge(bit, Label::Kill);
     }
     for &nr in ALWAYS_DENIED {
-        asm.jump_if_eq(nr as u32, Label::Deny);
+        asm.jump_if_eq(nr as u32, Label::Refer);
+    }
+    match trace {
+        Trace::Off => {}
+        Trace::Files => {
+            for &(nr, _) in FILE_CALLS {
+                asm.jump_if_eq(nr as u32, Label::Refer);
+            }
+        }
     }
     asm.jump_if_eq(libc::SYS_socket as u32, Label::Socket);
     asm.jump_if_eq(libc::SYS_ioctl as u32, Label::Ioctl);
@@ -532,24 +829,26 @@ fn seccomp_filter(network: Network) -> Vec<libc::sock_filter> {
 
     asm.label(Label::Socket);
     match network {
-        Network::Denied => asm.ret(deny),
+        Network::Denied => asm.ret(refer),
         Network::Granted => {
             // A UNIX socket named by a path reaches a service outside the
             // sandbox; `socketpair` stays, reaching nothing outside the child.
             asm.load(seccomp_data_arg(0));
-            asm.jump_if_eq(libc::AF_UNIX as u32, Label::Deny);
+            asm.jump_if_eq(libc::AF_UNIX as u32, Label::Refer);
             asm.ret(libc::SECCOMP_RET_ALLOW);
         }
     }
 
     asm.label(Label::Ioctl);
     asm.load(seccomp_data_arg(1));
-    asm.jump_if_eq(libc::TIOCSTI as u32, Label::Deny);
-    asm.jump_if_eq(libc::TIOCLINUX as u32, Label::Deny);
+    asm.jump_if_eq(libc::TIOCSTI as u32, Label::Refer);
+    asm.jump_if_eq(libc::TIOCLINUX as u32, Label::Refer);
     asm.ret(libc::SECCOMP_RET_ALLOW);
 
-    asm.label(Label::Deny);
-    asm.ret(deny);
+    // The host refuses the call, or under `Trace::Files` lets a file call
+    // through for Landlock to judge.
+    asm.label(Label::Refer);
+    asm.ret(refer);
     asm.label(Label::Kill);
     asm.ret(libc::SECCOMP_RET_KILL_PROCESS);
     asm.finish()
@@ -560,7 +859,7 @@ enum Label {
     ArchOk,
     Socket,
     Ioctl,
-    Deny,
+    Refer,
     Kill,
 }
 

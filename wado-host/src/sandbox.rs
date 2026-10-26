@@ -44,8 +44,8 @@ pub fn availability() -> Availability {
     backend::availability()
 }
 
-/// What a child may do beneath one subtree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What a child may do beneath one subtree, the lesser first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Access {
     ReadExecute,
     /// Read, write, create, remove, and execute.
@@ -120,13 +120,19 @@ impl Policy {
     /// a rule, as the sandbox resolves both. Every rule grants execute.
     #[must_use]
     pub fn executes(&self, program: &Path) -> bool {
-        let Ok(program) = std::fs::canonicalize(program) else {
-            return false;
-        };
-        self.rules
-            .iter()
-            .filter_map(|rule| std::fs::canonicalize(&rule.path).ok())
-            .any(|root| program.starts_with(root))
+        std::fs::canonicalize(program)
+            .is_ok_and(|program| self.resolved().permits(&program, Access::ReadExecute))
+    }
+
+    /// The rules at the real paths they name, as the sandbox matches them.
+    #[must_use]
+    pub fn resolved(&self) -> ResolvedPolicy {
+        ResolvedPolicy(
+            self.rules
+                .iter()
+                .filter_map(|rule| Some((std::fs::canonicalize(&rule.path).ok()?, rule.access)))
+                .collect(),
+        )
     }
 
     #[must_use]
@@ -137,6 +143,19 @@ impl Policy {
     #[must_use]
     pub fn network(&self) -> Network {
         self.network
+    }
+}
+
+/// A [`Policy`]'s rules at their real paths, a rule naming no file left out.
+pub struct ResolvedPolicy(Vec<(PathBuf, Access)>);
+
+impl ResolvedPolicy {
+    /// Whether a rule grants `access` to `path`, itself a real path.
+    #[must_use]
+    pub fn permits(&self, path: &Path, access: Access) -> bool {
+        self.0
+            .iter()
+            .any(|(root, granted)| path.starts_with(root) && *granted >= access)
     }
 }
 
@@ -200,6 +219,17 @@ pub struct Command<'a> {
     pub stdout: Stdio,
     pub stderr: Stdio,
     pub policy: &'a Policy,
+    pub trace: Trace,
+}
+
+/// What the host watches a child do, beyond the calls the filter refuses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trace {
+    Off,
+    /// Each call that names a path the sandbox mediates, recording a path the
+    /// policy does not grant as a [`Refusal::Path`]. Every such call waits on
+    /// the host, so a child runs slower. Linux alone watches.
+    Files,
 }
 
 /// A child that started, with the host's ends of its piped streams.
@@ -211,10 +241,18 @@ pub struct Spawned {
     pub refusals: Refusals,
 }
 
-/// A system call the filter refused a child, which saw it fail with `EPERM`.
-/// Linux alone reports one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// What the sandbox refused a child. Linux alone reports one.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Refusal {
+    /// A path the policy does not grant `access` to, at its real path, seen
+    /// under [`Trace::Files`]. Landlock refuses the call, which the child sees
+    /// fail with `EACCES`.
+    Path {
+        path: PathBuf,
+        access: Access,
+    },
+    // The rest are calls the filter refuses, which the child sees fail with
+    // `EPERM`.
     /// A socket, with the network not granted.
     Network,
     /// A UNIX socket, which a path can connect to a service outside.
@@ -231,6 +269,14 @@ pub enum Refusal {
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Refusal::Path {
+                path,
+                access: Access::ReadExecute,
+            } => return write!(f, "reading {}", path.display()),
+            Refusal::Path {
+                path,
+                access: Access::ReadWrite,
+            } => return write!(f, "writing {}", path.display()),
             Refusal::Network => "a network socket, with no network granted",
             Refusal::UnixSocket => "a UNIX socket, which can reach a service outside the sandbox",
             Refusal::LeaveGroup => "leaving its process group",
