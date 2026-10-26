@@ -1542,9 +1542,8 @@ fn generate_type_name_fn(
 /// Generate the `ReflectTemplate` impl of every tagged template shape
 /// (WEP 2026-01-10): `type_name()`, `wire_name_policy()`, `members()`,
 /// `tail()`, `raw_tail()`, plus the per-hole-type `$hole_get` and `$hole_ref`
-/// bridges. The
-/// `$hole_fmt` bridge is minted by `synthesis::template`, beside the
-/// specifier lowering it reuses.
+/// bridges. The `$hole_fmt` bridge is minted by `synthesis::template`, beside
+/// the specifier lowering it reuses.
 pub fn synthesize_reflect_template(project: &mut Package) {
     let trait_name = reflect_trait_fq(project, CompilerItem::ReflectTemplate);
     run_reflect_synthesis(
