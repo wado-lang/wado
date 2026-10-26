@@ -316,6 +316,9 @@ faults while decoding against 30, all from guest code.
   several arrays.
 - There is no view over part of a `LinearArray`. A kernel indexes the whole
   array with its own offset.
+- A converting argument does not answer a generic `&ListView<T>` parameter's
+  `T`, since `ListArg<T>` takes `T` as a parameter rather than an associated
+  type. The call names it (`count::<u8>(&array)`), or passes a view.
 - Under `drc`, Gemma 3's prompt reads slower with `Packed` in a `LinearArray`
   than in an `Array`, while each token after it reads faster. Nothing explains
   it yet. A harness timing `next_token` alone on the same ids reads the
