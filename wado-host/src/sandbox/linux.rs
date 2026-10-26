@@ -14,11 +14,6 @@
 //! thread checks its paths against the policy and lets it continue, so Landlock
 //! still decides.
 
-use super::{
-    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
-    Spawned, Stdio, Trace,
-};
-use crate::sync::spawn_detached;
 use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -30,6 +25,12 @@ use std::path::{Component, Path, PathBuf};
 use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
+
+use super::{
+    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
+    Spawned, Stdio, Trace,
+};
+use crate::sync::spawn_detached;
 
 /// ABI 6 adds the scopes that isolate signals and abstract UNIX sockets.
 const LANDLOCK_ABI_REQUIRED: libc::c_long = 6;
@@ -136,24 +137,15 @@ fn probe_listener() -> io::Result<bool> {
     let mut asm = Assembler::default();
     asm.ret(libc::SECCOMP_RET_ALLOW);
     let filter = asm.finish();
-    let program = libc::sock_fprog {
-        len: 1,
-        filter: filter.as_ptr().cast_mut(),
-    };
     // SAFETY: the child makes only system calls, on memory built before the
     // fork, and exits without returning.
     let pid = unsafe { libc::fork() };
     if pid == 0 {
-        unsafe {
-            let listens = libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == 0
-                && libc::syscall(
-                    libc::SYS_seccomp,
-                    libc::SECCOMP_SET_MODE_FILTER,
-                    libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
-                    &raw const program,
-                ) >= 0;
-            libc::_exit(i32::from(!listens));
-        }
+        // SAFETY: as above.
+        let listens = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } == 0
+            && install_filter(&filter, libc::SECCOMP_FILTER_FLAG_NEW_LISTENER).is_ok();
+        // SAFETY: as above.
+        unsafe { libc::_exit(i32::from(!listens)) };
     }
     check(pid)?;
     let mut status = 0;
@@ -956,26 +948,14 @@ fn confine_self(
     check_long(unsafe {
         libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0u32)
     })?;
-    let program = libc::sock_fprog {
-        len: u16::try_from(filter.len()).expect("the filter is built short"),
-        filter: filter.as_ptr().cast_mut(),
-    };
     let flags = match listener_tx {
         Some(_) => libc::SECCOMP_FILTER_FLAG_NEW_LISTENER,
         None => 0,
     };
-    let listener = unsafe {
-        libc::syscall(
-            libc::SYS_seccomp,
-            libc::SECCOMP_SET_MODE_FILTER,
-            flags,
-            &raw const program,
-        )
-    };
-    check_long(listener)?;
+    let listener = install_filter(filter, flags)?;
     if let Some(listener_tx) = listener_tx {
-        send_listener(listener_tx, listener as RawFd)?;
-        check(unsafe { libc::close(listener as RawFd) })?;
+        send_listener(listener_tx, listener)?;
+        check(unsafe { libc::close(listener) })?;
     }
     // Confinement mediates what the child opens, never what it already holds.
     // Marked close-on-exec rather than closed, so the descriptor the standard
@@ -1003,6 +983,26 @@ fn check_long(ret: libc::c_long) -> io::Result<()> {
         return Err(io::Error::last_os_error());
     }
     Ok(())
+}
+
+/// Confine the calling thread with `filter`, returning the listener
+/// `SECCOMP_FILTER_FLAG_NEW_LISTENER` asks for. Safe between `fork` and `exec`.
+fn install_filter(filter: &[libc::sock_filter], flags: libc::c_ulong) -> io::Result<RawFd> {
+    let program = libc::sock_fprog {
+        len: u16::try_from(filter.len()).expect("the filter is built short"),
+        filter: filter.as_ptr().cast_mut(),
+    };
+    // SAFETY: `program` points into `filter`, which outlives the call.
+    let ret = unsafe {
+        libc::syscall(
+            libc::SYS_seccomp,
+            libc::SECCOMP_SET_MODE_FILTER,
+            flags,
+            &raw const program,
+        )
+    };
+    check_long(ret)?;
+    Ok(ret as RawFd)
 }
 
 fn ruleset(policy: &Policy) -> io::Result<OwnedFd> {
