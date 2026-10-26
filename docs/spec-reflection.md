@@ -363,10 +363,12 @@ payload types, and a case without a payload contributes `()`.
 `VariantCase<T, P>` per case.
 
 A case handle answers `name()`, `wire_name_override()`, `discriminant()`,
-`is_unit()`, and four value bridges:
+`is_unit()`, and five value bridges:
 
 - `holds(&v)` tells whether `v`'s live case is this case.
 - `extract(&v)` returns the payload. It traps unless `holds(&v)`.
+- `extract_ref(&v)` returns a reference to the payload, so an affine payload
+  is read in place. It traps unless `holds(&v)`.
 - `construct(payload)` builds this case around a payload.
 - `make()` builds a case without a payload. It traps unless `is_unit()`.
 

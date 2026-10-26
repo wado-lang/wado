@@ -3636,7 +3636,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// yields no value or already failed, a newtype step, or one a
     /// `ReflectNewtype` bound proves for every type that settles it.
     fn cast_needs_no_judgment(&mut self, source: TypeId, target: TypeId) -> bool {
-        {
+        let referents = {
             let tt = self.tysys.type_table.borrow();
             if imposes_no_representation(&tt, source)
                 || imposes_no_representation(&tt, target)
@@ -3644,6 +3644,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return true;
             }
+            let referent = |id| match tt.get(tt.representation_head(id)) {
+                ResolvedType::Ref(referent) => Some((false, *referent)),
+                ResolvedType::MutRef(referent) => Some((true, *referent)),
+                _ => None,
+            };
+            (referent(source), referent(target))
+        };
+        // A newtype step a bound proves holds behind a reference too, which
+        // `&mut` narrows to `&` across.
+        if let (Some((from_mut, from)), Some((to_mut, to))) = referents
+            && (from_mut || !to_mut)
+        {
+            return self.cast_needs_no_judgment(from, to);
         }
         [(source, target), (target, source)]
             .into_iter()
