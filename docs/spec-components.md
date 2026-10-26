@@ -58,7 +58,8 @@ value such as a `List<T>` or a `String` instead.
 A signature that names one of them, anywhere within it, is a compile error at
 that parameter, or at the function's declaration for its result. This holds for
 every `export fn`, not only a world's entry point, because each one lands on the
-component's surface, and for every imported operation.
+component's surface, and for every imported operation, but for the
+`&ListView<T>` of a [list argument](#list-arguments).
 
 An anonymous struct never crosses either: no signature can name one yet
 ([Anonymous Structs](./spec-types.md#anonymous-structs)).
@@ -67,16 +68,17 @@ Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-prim
 
 ### List Arguments
 
-A synchronous world function imported from a component takes a `list<T>`
-parameter, for `T` a number type (`u8`…`u64`, `s8`…`s64`, `f32`, `f64`), as a
-type parameter `affine L: ListArg<Elem = T>` from `core:linear`. A `List<T>`, or
-a newtype over one such as `ByteList`, copies its elements for the call. A
-`&LinearArray<T>` lends its own block, which the callee reads in place. Either
-way, what the call copied is freed once it returns.
+A synchronous import takes a `list<T>` parameter, for `T` a number type
+(`u8`…`u64`, `s8`…`s64`, `f32`, `f64`), as a `&ListView<T>` from `core:linear`:
+a component's world function and an operation of an interface or a resource
+alike. The reference crosses as the `list<T>` it views. An
+argument converts to it from any `ListArg<T>`
+([List View Arguments](./spec-functions.md#list-view-arguments)), so a
+`&LinearArray<T>` lends its own block, which the callee reads in place. A
+handler serving such an operation reads the view it is handed.
 
 An asynchronous import takes the `List<T>`, since the host reads its arguments
-after it returns. So does an operation of an interface or a resource, since an
-operation declares no type parameters.
+after it returns.
 
 Rationale: [WEP: Linear Arrays](./wep-2026-10-26-linear-arrays.md).
 

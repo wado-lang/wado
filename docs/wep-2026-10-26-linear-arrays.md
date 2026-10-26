@@ -195,8 +195,8 @@ operation keeps one dispatch slot, and a handler installed for it reads the
 view.
 
 A call argument converts to a `&ListView<T>` parameter from any type
-implementing `ListArg<Elem = T>`, as a `&mut T` converts to a `&T`. The call
-site writes `&arg.lowered()`. `List<T>`, and so `ByteList`, implement it by
+implementing `ListArg<T>`, as a `&mut T` converts to a `&T`. The call site
+writes `&arg.lowered()`. `List<T>`, and so `ByteList`, implement it by
 copying the elements into a block of the view's own, as every list argument is
 lowered today. `&LinearArray<T>` implements it by lending its own block. A
 list literal is typed as a `List<T>` first, so it converts too. A call site
@@ -204,7 +204,8 @@ never chooses between two functions.
 
 The view is affine, and the temporary the conversion makes drops when the
 statement holding the call ends, as any temporary does. Dropping it frees the
-block it copied into and marks it released. A handler that keeps the reference
+block it copied into and marks it released, through a `&mut bool` cell the
+view holds, since `drop` takes the view by value. A handler that keeps the reference
 past the call then traps on its next read, rather than reading memory that was
 given back; one that needs the elements later copies them with `to_list()`.
 
@@ -270,9 +271,9 @@ In order:
   affine by instantiation, as `Model<WebGpuBackend>` already is. Done when
   Gemma 3's next token is measured against what it is now.
 
-- [ ] A synchronous import's `list<T>` parameter takes any `ListArg<Elem = T>`,
-  in the standard library's WIT bindings and in a component import's
-  declarations. Done when Loam's WebGPU backend uploads weights from a
+- [ ] A synchronous import's `list<T>` parameter is a `&ListView<T>`, which any
+  `ListArg<T>` converts to, in the standard library's WIT bindings and in a
+  component import's declarations. Done when Loam's WebGPU backend uploads weights from a
   `LinearArray` with no copy, and Gemma 3's load on WebGPU is measured against
   what it is now.
 

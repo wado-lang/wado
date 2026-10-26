@@ -11,6 +11,18 @@ fn sum(data: &ListView<u8>) -> i32 {
     return total;
 }
 
+test "a List, a ByteList, a LinearArray and a list literal convert" {
+    let list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let mut linear = LinearArray::<u8>::filled(4, 2);
+    assert sum(list) == 6;
+    assert sum(bytes) == 3;
+    assert sum(&linear) == 8;
+    linear[0] = 10;
+    assert sum(&linear) == 16;
+    assert sum([4, 5]) == 9;
+}
+
 fn pass_on(data: &ListView<u8>) -> i32 {
     return sum(data);
 }
@@ -23,19 +35,7 @@ fn sum_floats(data: &ListView<f32>) -> f32 {
     return total;
 }
 
-test "a List, a ByteList and a LinearArray convert" {
-    let list: List<u8> = [1, 2, 3];
-    let bytes: ByteList = b"\x01\x02";
-    let mut linear = LinearArray::<u8>::filled(4, 2);
-    assert sum(list) == 6;
-    assert sum(bytes) == 3;
-    assert sum(&linear) == 8;
-    linear[0] = 10;
-    assert sum(&linear) == 16;
-}
-
-test "a list literal is a List first" {
-    assert sum([4, 5]) == 9;
+test "a list literal is a List first, at each element type" {
     assert sum_floats([0.5, 1.5]) == 2.0;
 }
 

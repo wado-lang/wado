@@ -41,13 +41,10 @@ struct ListViewExpander<'a> {
 impl TirOptVisitor for ListViewExpander<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) -> bool {
         let changed = opt_walk_expr(self, expr);
-        if !matches!(expr.kind, TirExprKind::ListViewOf { .. }) {
+        let kind = std::mem::replace(&mut expr.kind, TirExprKind::Unit);
+        let TirExprKind::ListViewOf { value } = kind else {
+            expr.kind = kind;
             return changed;
-        }
-        let TirExprKind::ListViewOf { value } =
-            std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-        else {
-            unreachable!();
         };
         let mut tt = self.tt.borrow_mut();
         let element = tt
