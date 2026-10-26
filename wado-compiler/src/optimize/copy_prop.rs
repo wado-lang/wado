@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FuncParts, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -616,15 +616,25 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
 /// source instead, since no write can tell the two places apart and `ref_eq`
 /// leaves open whether two places are one. An inlined `fn f(xs: Array<T>)`
 /// reading `&xs` leaves that shape (`core:simd`'s `lane(&lanes, k)`).
+///
+/// Both must be declared immutable as well. A `&mut xs[i]` on a list of
+/// variants lowers to a shared read whose payload the caller then writes
+/// (`mut_ref_variant_element`), so a `mut` binding is written where no write
+/// to it shows.
 fn names_one_value(
     binding: &CopyBinding,
     target_usage: &LocalUsage,
     usage: &IndexMap<u32, LocalUsage>,
+    locals: &[NirLocal],
 ) -> bool {
     let CopySource::Local { index, .. } = &binding.source else {
         return false;
     };
-    target_usage.never_written() && usage.get(index).is_none_or(LocalUsage::never_written)
+    let declared_immutable = |local: u32| !locals[local as usize].is_mut;
+    declared_immutable(binding.target_local)
+        && declared_immutable(*index)
+        && target_usage.never_written()
+        && usage.get(index).is_none_or(LocalUsage::never_written)
 }
 
 fn can_propagate_copy(
@@ -632,6 +642,7 @@ fn can_propagate_copy(
     usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
     promoted_reads: &IndexSet<u32>,
+    locals: &[NirLocal],
 ) -> bool {
     if promoted_reads.contains(&binding.target_local) && !binding.promoted_reads_substitutable {
         return false;
@@ -650,7 +661,7 @@ fn can_propagate_copy(
     if target_usage.has_field_mutation && needs_value_copy(binding.type_id, type_table) {
         return false;
     }
-    if target_usage.address_taken && !names_one_value(binding, target_usage, usage) {
+    if target_usage.address_taken && !names_one_value(binding, target_usage, usage, locals) {
         return false;
     }
 
@@ -660,10 +671,8 @@ fn can_propagate_copy(
             // the target (the target's reads are confined to the binding's
             // scope), so the coarse whole-function source gates below — which
             // would otherwise reject e.g. a loop counter copied inside the loop
-            // — do not apply. Nor do they to two bindings nothing writes: nothing
-            // can observe the sharing, whatever the read counts, and the gates
-            // exist to keep two mutable views apart.
-            if binding.source_scope_stable || names_one_value(binding, target_usage, usage) {
+            // — do not apply.
+            if binding.source_scope_stable {
                 return true;
             }
             let source_usage = usage.get(index);
@@ -673,6 +682,20 @@ fn can_propagate_copy(
                 return false;
             }
             let is_value_type = needs_value_copy(binding.type_id, type_table);
+            // Neither binding is ever written — the target is already known
+            // unassigned and not address-taken, and the source is neither
+            // assigned, field-mutated, nor address-taken — so the copy only
+            // names a second, permanently identical object. Nothing can observe
+            // the sharing, whatever the read counts, so the coarse value-type
+            // gates below (which exist to keep two mutable views apart) do not
+            // apply.
+            if is_value_type
+                && !target_usage.has_field_mutation
+                && source_usage
+                    .is_none_or(|su| !su.is_assigned && !su.has_field_mutation && !su.address_taken)
+            {
+                return true;
+            }
             if is_value_type
                 && target_usage.read_count == 1
                 && let Some(su) = source_usage
@@ -930,7 +953,15 @@ fn propagate_at_root(
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
-            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table, &promoted_reads))
+            .filter(|b| {
+                can_propagate_copy(
+                    b,
+                    &analysis.usage,
+                    type_table,
+                    &promoted_reads,
+                    engine.locals(),
+                )
+            })
             .collect();
         if eliminable.is_empty() {
             break;
