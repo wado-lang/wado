@@ -121,7 +121,9 @@ pub trait Refine<T> with () {
 ```
 
 A range is such a value already: `RangeInclusive<i32>` implements
-`Refine<i32>`, so `i32 contract 0..=150` reads as Ada's `range 0 .. 150`.
+`Refine<i32>`, so `i32 contract 0..=150` reads as Ada's `range 0 .. 150`. The
+other common clause types, such as `Length`, live in a standard library module
+outside the prelude.
 
 A function's contract takes the `bool` form only. It has no subject: a value
 clause there would not say which argument it binds. A condition on one argument
@@ -181,9 +183,20 @@ a refined value from an unrefined one:
 - `R::try_from(b)` returns a `Result`. Its error names the clause that failed,
   through `Refine::describe` or the condition's text.
 
-Between two refined types over one base, a value converts by widening to the
-base and entering the other type, so the second type's clauses are always
-checked.
+A constant that fails a clause, such as `let n: UserName = "";`, is a warning
+where the compiler evaluates the clause on it, and its check still traps at run
+time. It is not yet an error, because niri does not evaluate every clause.
+
+### Two refined types of one shape are one type
+
+Two refined types are the same type when they have the same base and the same
+clauses. `String contract Length { max: 200 }` written on two fields is one
+type, so a value moves between the fields with no check. Between two refined
+types that differ, a value converts by widening to the base and entering the
+other type, so the second type's clauses are checked.
+
+Two newtypes over one refined type are still two types, as two newtypes over
+one base are.
 
 ### Serialization enforces the clauses
 
@@ -244,29 +257,37 @@ refinement through every generic call.
 
 ### A base that reaches shared state
 
-A clause is checked when a value enters the type. A base that holds a `&mut`,
-a resource or a function value can change through another path afterwards, and
-the clause does not see the change.
+A clause is checked when a value enters the type. The `&mut` rule keeps a
+refined value from changing through itself, and value semantics keep a copy
+from changing through anything else. What a reference reaches is shared,
+though, and it can change through another reference to it:
 
-### When two refined types are one type
+```text
+struct Window { rows: &List<i32> }
+type NonEmpty = Window contract self.rows.len() > 0;
 
-`String contract Length { max: 200 }` written on two fields is one type or two.
-Every entry is checked, so the answer does not affect soundness. It decides
-what a program can name, and whether moving a value between the fields checks a
-clause that cannot fail.
+let mut xs: List<i32> = [1];
+let w = NonEmpty::from(Window { rows: &xs });   // the clause holds
+xs.clear();                                      // and now it does not
+```
 
-### A literal that fails its clause
+A resource's state lives in the host, and a function value may read state it
+captured, so a clause reading either has the same problem.
 
-`let n: UserName = "";` holds a constant that fails its clause. Nothing states
-whether that is a compile error, as `300 as u8` is, or a trap at run time.
+### What makes two clauses the same
+
+A refined type's identity is its base and its clauses. Nothing states yet
+whether two value clauses are the same when their values are equal, whether two
+conditions are the same when they read alike, or whether the order of the
+clauses matters.
 
 ### The common clause types
 
 `Length`, the ranges and a pattern match are the clauses most programs write.
-Which of them the standard library provides, and in which module, is open. A
-pattern clause needs a regular expression engine, which the standard library
-does not have. `Length` must also say what it counts: `String::len()` counts
-bytes, and JSON Schema's `minLength` counts code points.
+Which of them the standard library provides, and the module that holds them,
+are open. A pattern clause needs a regular expression engine, which the standard
+library does not have. `Length` must also say what it counts: `String::len()`
+counts bytes, and JSON Schema's `minLength` counts code points.
 
 ## Related WEPs
 
