@@ -1,0 +1,59 @@
+//! The names the generated module binds before it names anything the graph
+//! brings. See WEP 2026-09-20 § "Every Name Is Minted From One Set".
+
+use { HashSet } from "core:collections";
+use { is_reserved } from "lib:wadopoet";
+
+/// The type parameter `forward` takes its backend as.
+pub global BACKEND_PARAM: String = "Bk";
+
+/// The struct `pass` returns several outputs in, as the backend holds them.
+pub global PASSED: String = "Passed";
+
+/// The struct `forward` reads the weights from.
+pub global PREPARED: String = "Prepared";
+
+/// The struct the constructors of `Prepared` take its kept literals from.
+pub global KEPT: String = "Kept";
+
+/// The map a sharded `load` takes the shards in, keyed by file name.
+pub global MAP: String = "HashMap";
+
+/// What the generated module imports from the runtime: every name its code
+/// spells, whether or not one graph's code reads it.
+pub global RUNTIME_NAMES: List<String> = [
+    "Attention", "Backend", "BinaryOp", "Columns", "Concat", "Epilogue", "Expected", "Expr", "LoadError", "Merged",
+    "Paired", "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch", "extent_mismatch",
+    "extents_mismatch", "from_end", "input_mismatch", "narrow", "read_checkpoint", "read_shards", "refuse", "to_extent",
+    "unmet",
+];
+
+/// Whether `name` already means something in the generated module.
+pub fn is_bound(module: &HashSet<String>, name: &String) -> bool {
+    return module.contains(*name) || is_reserved(name);
+}
+
+/// The names the generated module binds beyond the language's own.
+pub fn module_idents() -> HashSet<String> {
+    let mut reserved = HashSet::<String>::new();
+    for let name of RUNTIME_NAMES {
+        reserved.insert(name);
+    }
+    reserved.insert("forward");
+    reserved.insert("pass");
+    reserved.insert("Outputs");
+    reserved.insert(PASSED);
+    reserved.insert("weights");
+    reserved.insert("Weights");
+    reserved.insert(PREPARED);
+    reserved.insert(KEPT);
+    // The methods `Weights`, `Prepared` and `Kept` carry, which a field must
+    // not share.
+    reserved.insert("prepare");
+    reserved.insert("load");
+    reserved.insert("embedded");
+    reserved.insert("new");
+    reserved.insert("backend");
+    reserved.insert(BACKEND_PARAM);
+    return reserved;
+}

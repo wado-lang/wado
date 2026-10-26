@@ -1,0 +1,31 @@
+// Test: a pack loop's element composes into a tuple as one element.
+//
+// The element `v` of `for let v of *self` over `self: &[..T]` is typed by the
+// pack itself, so `[v, 7]` read as `[..T, i32]`: a spread of the whole pack.
+// `p.1` was rejected as landing on a pack, though it is the `7`.
+
+use { println, Stdout } from "core:cli";
+
+trait Paired with () {
+    fn paired(&self) -> String;
+}
+
+impl<..T: Display> Paired for [..T] {
+    fn paired(&self) -> String {
+        let mut out = "";
+        for let v of *self {
+            let p = [v, 7];
+            out.push_str(&`(${p.0},${p.1})`);
+        }
+        return out;
+    }
+}
+
+export fn run() with Stdout {
+    println([1, "a"].paired());
+}
+
+__DATA__
+{
+    "stdout": "(1,7)(a,7)\n"
+}

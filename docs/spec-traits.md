@@ -1311,7 +1311,7 @@ supply.
 <!-- {"fixture":"spec_traits_format_bounds.wado"} -->
 
 ```wado
-fn describe<T>(v: &T) -> String { return `${v:?}`; }         // any type
+fn describe<T>(v: &T) -> String { return `${*v:?}`; }         // any type
 fn label<T: Display>(v: &T) -> String { return `${v}`; }     // requires a `Display`
 
 test {

@@ -1,62 +1,13 @@
 //! MNIST-12 from the ONNX Model Zoo, compiled through Loam with the weights it
-//! carries and checked against the logits shipped beside it.
+//! carries and checked against the logits shipped beside it. Every axis takes
+//! the name the graph gives it.
 
 use { Cpu, Tensor } from "lib:loam";
 use { assert_close, tensor_of } from "./oracle.wado";
 use mnist from "../tests/models/mnist-12/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "Input3",
-                        axes: ["Batch", "Gray", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Parameter5",
-                        axes: ["Feat1", "Gray", "K1Row", "K1Col"],
-                    },
-                    {
-                        pattern: "Parameter6",
-                        axes: ["Feat1", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Convolution28_Output_0",
-                        axes: ["Batch", "Feat1", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Pooling66_Output_0",
-                        axes: ["Batch", "Feat1", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Parameter87",
-                        axes: ["Feat2", "Feat1", "K2Row", "K2Col"],
-                    },
-                    {
-                        pattern: "Parameter88",
-                        axes: ["Feat2", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Convolution110_Output_0",
-                        axes: ["Batch", "Feat2", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Pooling160_Output_0",
-                        axes: ["Batch", "Feat2", "Row3", "Col3"],
-                    },
-                    {
-                        pattern: "Parameter193",
-                        axes: ["Feat2", "Row3", "Col3", "Digit"],
-                    },
-                    {
-                        pattern: "Parameter194",
-                        axes: ["Batch", "Digit"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "MNIST-12 reproduces the logits the Model Zoo ships" {
@@ -65,7 +16,7 @@ test "MNIST-12 reproduces the logits the Model Zoo ships" {
 
     let got = mnist::forward(
         &mut Cpu {},
-        &Tensor::<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> { data: x, extents: x_extents },
+        &Tensor::<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist::Input33]> { data: x, extents: x_extents },
         &mnist::Prepared::embedded(&mut Cpu {}),
     );
 

@@ -35,7 +35,7 @@ use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
-    namespace_member_alias, range_local_name,
+    namespace_member_alias, range_local_name, repeat_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
@@ -403,7 +403,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let bad: Vec<(String, Span)> = ty
             .pack_spreads()
             .into_iter()
-            .filter(|(name, _)| !self.binds_type_pack(name))
+            .filter(|(name, _)| {
+                !self.binds_type_pack(name) && !self.binds_type_pack(&repeat_pack_name(name))
+            })
             .map(|(name, span)| (name.to_string(), span))
             .collect();
         for (name, span) in bad {
@@ -2606,7 +2608,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some((elems, has_type_pack, by_ref)) = tuple_info {
             if has_type_pack || is_zip_variadic {
                 self.record_desugar(for_of.id, DesugarKind::ForOfVariadic);
-                self.resolve_variadic_for_of(for_of, iterable_type_id, is_enumerate, by_ref, ctx);
+                self.resolve_variadic_for_of(for_of, iterable_type_id, is_enumerate, ctx);
             } else {
                 self.record_desugar(for_of.id, DesugarKind::ForOfTuple);
                 self.resolve_tuple_for_of(
@@ -2694,15 +2696,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Create a deferred `VariadicForOf` TIR node for `for let v of iterable`
     /// where `iterable` has a tuple type containing `TypePack` elements.
     ///
-    /// The body is resolved once with the loop variable having the `TypePack` type.
-    /// The monomorphizer will expand this after type substitution resolves the
-    /// `TypePack` to a concrete tuple.
+    /// The body is resolved once with the loop variable typed as an element of
+    /// the pack. The monomorphizer will expand this after type substitution
+    /// resolves the `TypePack` to a concrete tuple.
     fn resolve_variadic_for_of(
         &mut self,
         for_of: &ForOfStmt,
         iterable: TypeId,
         is_enumerate: bool,
-        by_ref: bool,
         ctx: &mut FunctionContext,
     ) {
         if self.reject_expanded_control_flow(&for_of.body, "variadic") {
@@ -2711,38 +2712,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let unique_id = ctx.fresh_serial();
 
-        // Extract the element type for the loop binding.
-        // For direct TypePack: iterable is Tuple([TypePack{T}]), binding type is TypePack.
-        // For TupleZip: iterable is Tuple([Tuple([TypePack, TypePack])]), binding type is the inner tuple.
         let binding_type = {
-            let inner = {
-                let type_table = self.tysys.type_table.borrow();
-                let (elems, _) = type_table
-                    .as_tuple_through_ref(iterable)
-                    .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
-                // Prefer a direct TypePack element
-                if let Some(tp) = elems.iter().find(|e| type_table.is_type_pack(**e)) {
-                    // A mapped pack `..F::method()` binds the loop variable to
-                    // the (pack-independent) return type, not the pack itself.
-                    match type_table.get(*tp) {
-                        ResolvedType::TypePack {
-                            mapped_elem: Some(elem),
-                            ..
-                        } => *elem,
-                        _ => *tp,
-                    }
-                } else {
-                    // For TupleZip: use the first element type (all elements have the same shape)
-                    elems[0]
-                }
-            };
-            // By reference (`for v of &[..T]`), the loop variable is `&T_k`,
-            // resolved here as `&TypePack`; expansion wraps each element in `&`.
-            let bound = if by_ref {
-                self.tysys.type_table.borrow_mut().make_ref(inner)
-            } else {
-                inner
-            };
+            let (bound, _) = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .pack_walk_binding(iterable, ctx.pack_walks)
+                .expect("variadic for-of requires tuple iterable");
             // Expansion supplies the index literal per unrolled element.
             self.for_of_binding_type(is_enumerate, bound)
         };
@@ -2770,6 +2746,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
+        let ctx = &mut ctx.enter_pack_walk();
         self.resolve_block(&for_of.body, ctx, None);
     }
 

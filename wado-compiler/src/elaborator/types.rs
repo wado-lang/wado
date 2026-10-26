@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::analyze::symbol_not_visible_message;
-use crate::ast::{self, AstId, Expr, Visibility};
+use crate::ast::{self, AstId, Expr, Visibility, repeat_outside_signature};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::defs::DefId;
 use crate::elaborator::assert::AssertCaptureContext;
@@ -21,7 +21,7 @@ use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::missing_trait_message;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
+use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member, written_param_name};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{ResolvedType, StructDef, TirLocal, TypeId};
 use crate::token::Span;
@@ -454,6 +454,13 @@ pub enum TypeError {
     /// Unknown type name
     UnknownType {
         name: String,
+        span: Span,
+    },
+
+    /// A `[..X]` repeating the non-pack `X` outside a signature, where no call
+    /// settles its length.
+    RepeatOutsideSignature {
+        element: String,
         span: Span,
     },
 
@@ -1559,12 +1566,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A tagged template hole whose type mentions a type pack.
-    TemplateHolePackElement {
-        type_name: String,
-        span: Span,
-    },
-
     /// `#[compiler_item("...")]` attribute that failed validation —
     /// unknown name, kind mismatch (e.g. `#[compiler_item("option")]`
     /// on a struct), or used outside a `core::*` module. The
@@ -1676,7 +1677,7 @@ impl TypeError {
     pub(super) fn cannot_infer_message(names: &[String], owner: &str, turbofish: &str) -> String {
         let named = names
             .iter()
-            .map(|n| format!("`{n}`"))
+            .map(|n| format!("`{}`", written_param_name(n)))
             .collect::<Vec<_>>()
             .join(", ");
         format!(
@@ -1706,6 +1707,11 @@ impl TypeError {
             TypeError::UnknownType { name, span } => (
                 Code::UnknownType,
                 format!("unknown type '{}'", unalias_namespace_member(name)),
+                *span,
+            ),
+            TypeError::RepeatOutsideSignature { element, span } => (
+                Code::UnknownType,
+                repeat_outside_signature(element),
                 *span,
             ),
             TypeError::UnknownEffect { name, span } => (
@@ -1968,14 +1974,6 @@ impl TypeError {
             TypeError::TemplateTagNotCallable { span } => (
                 Code::InvalidSyntax,
                 "a template tag must name a function or a static method".to_string(),
-                *span,
-            ),
-            TypeError::TemplateHolePackElement { type_name, span } => (
-                Code::UnsupportedFeature,
-                format!(
-                    "a tagged template hole of type `{type_name}` mentions a type pack; \
-                     a template shape over a pack's element is not implemented yet"
-                ),
                 *span,
             ),
             TypeError::CannotInferType { message, span } => {
@@ -3508,8 +3506,12 @@ pub(super) struct FunctionContext {
     ///
     /// Keyed by slot, not by name: a shadowing `let i = …` inside the body is a
     /// different slot and an ordinary run-time value, which the unroller could
-    /// not fold. Empty outside a variadic enumerate body.
-    pub(super) variadic_enumerate_indices: Vec<u32>,
+    /// not fold. Each with the walk it indexes. Empty outside a variadic
+    /// enumerate body.
+    pub(super) variadic_enumerate_indices: Vec<(u32, u32)>,
+    /// How many pack walks enclose the code being walked, a closure's
+    /// included: the `walk` of the element the next one binds.
+    pub(super) pack_walks: u32,
 }
 
 /// A stretch of the walk with one `FunctionContext` field replaced. Derefs to
@@ -3689,9 +3691,24 @@ impl FunctionContext {
         )
     }
 
-    /// A variadic loop's body, where `index` is a constant subscript.
-    pub(super) fn enter_enumerate_body(&mut self, index: Option<u32>) -> FieldFrame<'_, Vec<u32>> {
-        self.extending(|ctx| &mut ctx.variadic_enumerate_indices, index)
+    /// A variadic loop's body, where `index` is a constant subscript selecting
+    /// the element of the walk the loop is.
+    pub(super) fn enter_enumerate_body(
+        &mut self,
+        index: Option<u32>,
+    ) -> FieldFrame<'_, Vec<(u32, u32)>> {
+        let walk = self.pack_walks;
+        self.extending(
+            |ctx| &mut ctx.variadic_enumerate_indices,
+            index.map(|local| (local, walk)),
+        )
+    }
+
+    /// The body of a pack walk, which binds the element of walk
+    /// `self.pack_walks` as it stood before the frame.
+    pub(super) fn enter_pack_walk(&mut self) -> FieldFrame<'_, u32> {
+        let inner = self.pack_walks + 1;
+        self.replacing(|ctx| &mut ctx.pack_walks, inner)
     }
 
     /// Enter a labeled block in either position, so a `break LABEL` inside
@@ -3743,6 +3760,7 @@ impl FunctionContext {
             compound_hoist_types: IndexMap::default(),
             mut_place_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
+            pack_walks: 0,
         }
     }
 
@@ -3829,6 +3847,9 @@ impl FunctionContext {
             compound_hoist_types: IndexMap::default(),
             mut_place_subscripts: IndexSet::default(),
             variadic_enumerate_indices: Vec::new(),
+            // A walk inside the closure unrolls with the enclosing body, so
+            // it nests in the walks around the closure.
+            pack_walks: outer_ctx.pack_walks,
         }
     }
 
@@ -3951,12 +3972,16 @@ impl FunctionContext {
         None
     }
 
-    /// Whether `expr` names the index of an enclosing variadic `.enumerate()`,
-    /// the one non-literal subscript a pack-typed tuple admits.
-    pub(super) fn is_variadic_enumerate_index(&self, expr: &ast::Expr) -> bool {
-        matches!(expr, ast::Expr::Ident(ident)
-            if self.lookup(&ident.name)
-                .is_some_and(|local| self.variadic_enumerate_indices.contains(&local.index)))
+    /// The walk whose `.enumerate()` index `expr` names, the one non-literal
+    /// subscript a pack-typed tuple admits: it selects that walk's element.
+    pub(super) fn variadic_enumerate_walk(&self, expr: &ast::Expr) -> Option<u32> {
+        let ast::Expr::Ident(ident) = expr else {
+            return None;
+        };
+        let local = self.lookup(&ident.name)?;
+        self.variadic_enumerate_indices
+            .iter()
+            .find_map(|&(index, walk)| (index == local.index).then_some(walk))
     }
 
     /// The binding `name` names here: one this frame owns, or one it reaches

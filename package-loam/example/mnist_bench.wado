@@ -13,60 +13,13 @@ use mnist from "../tests/models/mnist-12/model.onnx"
         type: "onnx",
         generator: {
             module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "Input3",
-                        axes: ["Batch", "Gray", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Parameter5",
-                        axes: ["Feat1", "Gray", "K1Row", "K1Col"],
-                    },
-                    {
-                        pattern: "Parameter6",
-                        axes: ["Feat1", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Convolution28_Output_0",
-                        axes: ["Batch", "Feat1", "Row", "Col"],
-                    },
-                    {
-                        pattern: "Pooling66_Output_0",
-                        axes: ["Batch", "Feat1", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Parameter87",
-                        axes: ["Feat2", "Feat1", "K2Row", "K2Col"],
-                    },
-                    {
-                        pattern: "Parameter88",
-                        axes: ["Feat2", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Convolution110_Output_0",
-                        axes: ["Batch", "Feat2", "Row2", "Col2"],
-                    },
-                    {
-                        pattern: "Pooling160_Output_0",
-                        axes: ["Batch", "Feat2", "Row3", "Col3"],
-                    },
-                    {
-                        pattern: "Parameter193",
-                        axes: ["Feat2", "Row3", "Col3", "Digit"],
-                    },
-                    {
-                        pattern: "Parameter194",
-                        axes: ["Batch", "Digit"],
-                    },
-                ],
-            },
+            options: { fuse: true },
         },
     };
 
 /// A digit-sized image of a fixed gradient: what the pass computes is not what
 /// it times.
-fn image() -> Tensor<f32, [mnist::Batch, mnist::Gray, mnist::Row, mnist::Col]> {
+fn image() -> Tensor<f32, [mnist::Input30, mnist::Input31, mnist::Input32, mnist::Input33]> {
     let mut data: List<f32> = [];
     for let i of 0..<784 {
         data.push((i % 7) as f32 / 7.0);

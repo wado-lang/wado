@@ -1,0 +1,31 @@
+// `[..T]` over a scalar `T` is a tuple of any length whose every element is
+// `T`: a walk over it binds `T` itself, so the body may treat each element as
+// one. Each length is its own instantiation.
+
+fn collect<T>(items: [..T]) -> List<T> {
+    let mut out: List<T> = [];
+    for let item of items {
+        out.push(item);
+    }
+    return out;
+}
+
+fn sum(values: [..i32]) -> i32 {
+    let mut total = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+test {
+    assert collect([1, 2, 3]) == [1, 2, 3];
+    assert collect(["a", "b"]) == ["a", "b"];
+    assert sum([1, 2, 3, 4]) == 10;
+    assert sum([]) == 0;
+}
+
+test "List::from_tuple" {
+    assert List::<bool>::from_tuple([]).is_empty();
+    assert List::from_tuple([1, 2]) == [1, 2];
+}

@@ -54,17 +54,19 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_consecutive_mut_calls_no_inter_sync.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
-type "functype//hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+type "functype//hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(28)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -79,7 +81,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b) {
     b.v = b.v + 1;
@@ -103,52 +105,38 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
     let a_ret: i32;
     let b_ret: i32;
     let c_ret: i32;
-    let $local_6: ref "core:prelude/string.wado//String";
-    let x_20: i64;
-    let $sroa_$f_buf_73: ref "core:prelude/string.wado//String";
-    let $hfs_v_76: i32;
+    let message_6: ref "core:prelude/string.wado//String";
+    let $cm_pair_7: i64;
+    let $hfs_v_21: i32;
     b = struct.new "hfs_consecutive_mut_calls_no_inter_sync.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    $hfs_v_76 = 0;
+    $hfs_v_21 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            b.v = $hfs_v_76;
+            b.v = $hfs_v_21;
             a_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add1"(b);
             b_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add10"(b);
             c_ret = "hfs_consecutive_mut_calls_no_inter_sync.wado/add100"(b);
             sum = ((sum + a_ret) + b_ret) + c_ret;
-            $hfs_v_76 = local.tee $hfs_v_76(b.v);
+            $hfs_v_21 = local.tee $hfs_v_21(b.v);
             i = i + 1;
-            b.v = $hfs_v_76;
+            b.v = $hfs_v_21;
             continue l1;
         };
     };
-    $sroa_$f_buf_73 = local.tee $local_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    $hfs_v_76 = sum < 0;
-    sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_20(x_20 = builtin::i64_extend_i32_s(sum); select i64(x_20 < 0_i64, 0_i64 - x_20, x_20)));
-    $hfs_v_76 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_73, $hfs_v_76, sum);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_73.repr, $hfs_v_76, x_20, sum);
-    if @unlikely(local.tee sum($local_6.used + 1) > builtin::array_len($local_6.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, sum);
-    }
-    $hfs_v_76 = $local_6.used;
-    $local_6.used = sum;
-    builtin::array_copy<u8>($local_6.repr, $hfs_v_76, global:hfs_consecutive_mut_calls_no_inter_sync.wado::$const_obj_0, 0, 1);
-    $sroa_$f_buf_73 = $local_6;
-    sum = local.tee $hfs_v_76(b.v) < 0;
-    $hfs_v_76 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_20(x_20 = builtin::i64_extend_i32_s($hfs_v_76); select i64(x_20 < 0_i64, 0_i64 - x_20, x_20)));
-    sum = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_73, sum, $hfs_v_76);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_73.repr, sum, x_20, $hfs_v_76);
-    $hfs_v_76 = builtin::i32_wrap_i64(local.tee x_20("wasi/stream-new"()));
-    sum = builtin::i32_wrap_i64(x_20 >> 32_i64);
-    i = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $hfs_v_76; $hfs_v_76 = 0; i);
-    $hfs_v_76 = sum;
+    message_6 = block -> ref "core:prelude/string.wado//String" {
+        $hfs_v_21 = b.v;
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_consecutive_mut_calls_no_inter_sync.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(sum, $hfs_v_21);
+    };
+    $hfs_v_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    i = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $hfs_v_21; $hfs_v_21 = 0; i);
+    $hfs_v_21 = sum;
     sum = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_76, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_76 = i; i = 0; $hfs_v_76);
+    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_21, message_6.repr, message_6.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_21 = i; i = 0; $hfs_v_21);
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -336,24 +324,56 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_27: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_27 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_27, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_27 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_27;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_consecutive_mut_calls_no_inter_sync.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
+    let $load_0: ref Array<u8>;
+    let out_3: ref "core:prelude/string.wado//String";
+    let is_negative_70: bool;
+    let x_74: i64;
+    let repr_93: ref Array<u8>;
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_22;
+    };
+    is_negative_70 = $mv$t$h0 < 0;
+    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
+    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_70, x_74, $mv$t$h0);
+    repr_93 = global:core:prelude/string.wado::$const_obj_0;
+    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
+    }
+    is_negative_70 = out_3.used;
+    out_3.used = $mv$t$h0;
+    builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_93, 0, 1);
+    is_negative_70 = $mv$t$h1 < 0;
+    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
+    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h1);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative_70, x_74, $mv$t$h1);
+    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_70;
+    };
+    return out_3;
 }
 
 export fn "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_export__run" as "run"

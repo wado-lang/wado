@@ -414,7 +414,7 @@ let q = sql`SELECT * FROM users WHERE id = ${id} AND name = ${user.name}`;
 
 // A hole handle also answers raw(&t) / has_spec() / index(), and
 // fmt(&t, f) renders through the trait the specifier selects.
-format`x=${x:04}`          // what `x=${x:04}` is sugar for
+String::format`x=${x:04}`  // what `x=${x:04}` is sugar for
 String::raw`a\n${x}`       // escapes kept as written: "a\\n" + x
 ```
 
@@ -914,9 +914,9 @@ assert x > 0, "x must be positive";
 
 A `contract` clause states what a caller owes. An unmarked call checks it in
 every build; a call marked `unchecked` vouches for it, and only a build that
-checks contracts checks it: `wado test`, `-O0` and `-O1` (the default of
-`wado run` and `wado serve`), or `-f contract-checks`. A clause runs at the
-call, so a `return` or `?` inside it is an error. See
+checks contracts checks it: `wado test` at any level, `-O0` and `-O1` (the
+default of `wado run`, `wado serve` and `wado test`), or `-f contract-checks`. A
+clause runs at the call, so a `return` or `?` inside it is an error. See
 [the spec](./spec-assertions.md#contract-checks).
 
 ```wado
@@ -1119,6 +1119,11 @@ concat::<[i32], [bool, String]>([1], [true, "x"]);
 fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
 middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
 // middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `K`, `Post`
+
+// A spread over a non-pack type: a tuple of any length, every element that type
+fn sum(values: [..i32]) -> i32 { ... }
+sum([1, 2, 3]);                           // 6
+fn collect<T>(items: [..T]) -> List<T> { ... }   // a walk binds `T` itself
 
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];

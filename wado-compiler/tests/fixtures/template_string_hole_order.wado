@@ -1,0 +1,19 @@
+// An untagged template is `String::format` over its holes, so it evaluates
+// every hole before it renders any: a reference renders what a later hole
+// wrote through it, as under the spelled tag (WEP 2026-01-10).
+use { println, Stdout } from "core:cli";
+
+fn bump(a: &mut i32) -> i32 {
+    *a += 1;
+    return *a;
+}
+
+export fn run() with Stdout {
+    let mut a = 1;
+    let r = &a;
+    println(`${r} ${bump(&mut a)}`);
+    println(String::format`${r} ${bump(&mut a)}`);
+}
+
+__DATA__
+{"stdout": "2 2\n3 3\n"}

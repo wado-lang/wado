@@ -1,0 +1,55 @@
+// A binding shares its source past a write that cannot change its value. Each
+// function below writes somewhere the binding's own storage is not: a temporary
+// the binding only produced, storage of a type that holds none of the binding's,
+// and nothing at all where a literal holding a reference to it goes to a callee
+// that keeps none.
+
+struct Log {
+    lines: List<String>,
+}
+
+fn view_of(s: &StrSlice) -> StrSlice {
+    return *s;
+}
+
+fn into_temporary(content: StrSlice) -> i32 {
+    let view = view_of(&content);
+    let n = view.chars().count();
+    return n + view.len();
+}
+
+fn through_reference(log: &mut Log, content: StrSlice) -> i32 {
+    let view = view_of(&content);
+    log.lines.push("seen");
+    return view.len();
+}
+
+struct Pair {
+    a: &List<i32>,
+    b: i32,
+}
+
+fn first(p: Pair) -> i32 {
+    return p.a[0] + p.b;
+}
+
+fn in_literal(xs: List<i32>) -> i32 {
+    let shared = xs;
+    let n = first(Pair { a: &shared, b: 1 });
+    return n + shared.len();
+}
+
+export fn run() {
+    let s = "hello".as_str_slice();
+    assert into_temporary(s) == 10;
+    let mut log = Log { lines: [] };
+    assert through_reference(&mut log, s) == 5;
+    assert log.lines.len() == 1;
+    assert in_literal([4, 5]) == 7;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

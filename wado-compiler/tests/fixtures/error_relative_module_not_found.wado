@@ -1,0 +1,10 @@
+// A relative import naming no file is reported at the path that names it.
+
+use { foo } from "./sub/no_such_module.wado";
+
+export fn run() {
+    foo();
+}
+
+__DATA__
+{"compile_error": ":3:18: analysis error: module not found: ./sub/no_such_module.wado", "compile_error_codes": ["MODULE_NOT_FOUND"]}

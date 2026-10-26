@@ -107,6 +107,18 @@ impl Reached {
                 );
                 continue;
             }
+            // A `&mut` in a struct literal's field is the frame's place field,
+            // and reaches its place the way the reference alone would.
+            if let Some(e) = value.as_expr()
+                && let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind
+            {
+                for field in fields {
+                    if let Some((true, inner)) = referenced_place_operand(body, field.value) {
+                        self.record(body, inner, Reach::Write);
+                    }
+                }
+                continue;
+            }
             let Some((is_mut, inner)) = referenced_place_operand(body, *value) else {
                 continue;
             };
@@ -455,14 +467,19 @@ fn reassigned_locals(body: &Body) -> LocalSet {
 }
 
 /// Locals that name settled storage: every binding of one is a `&` reference
-/// rooted at a literal or at a global the program holds one value for, and
-/// nothing rebinds it. Nothing can write what such a local names, so a value
-/// read off it stands as long as the body does.
+/// rooted at a literal, at a global the program holds one value for, or at a
+/// local nothing writes after its one binding, and nothing rebinds it. Nothing
+/// can write what such a local names, so a value read off it stands as long as
+/// the body does.
+///
+/// The local root is the shape inlining leaves: `let r = &s.repr` over the
+/// `let s = String { repr: packed"…", used: 8 }` a constant argument bound.
 pub(super) fn const_view_locals(
     body: &Body,
     facts: ProgramFacts<'_>,
     reassigned: &LocalSet,
 ) -> LocalSet {
+    let storage = unwritten_locals(body, reassigned);
     let settled = |op: Operand| {
         body.shared_ref_root(op)
             .is_some_and(|root| match &body.exprs[root].kind {
@@ -472,6 +489,9 @@ pub(super) fn const_view_locals(
                     name,
                 } => facts.global_is_const(&(module_source.clone(), name.clone())),
                 _ => false,
+            })
+            || referenced_place_operand(body, op).is_some_and(|(is_mut, inner)| {
+                !is_mut && place_of(body, inner).is_some_and(|(root, _)| storage.contains(root))
             })
     };
     let mut set = LocalSet::default();
@@ -499,6 +519,63 @@ pub(super) fn const_view_locals(
     let mut out = LocalSet::default();
     for index in set.iter() {
         if !rebound.contains(index) && !reassigned.contains(index) {
+            out.insert(index);
+        }
+    }
+    out
+}
+
+/// Locals bound once, immutably, and reached by no write: no `Assign` into
+/// them, no `&mut` over them, no call argument that reaches their storage.
+fn unwritten_locals(body: &Body, reassigned: &LocalSet) -> LocalSet {
+    let mut set = LocalSet::default();
+    let mut unsettled = LocalSet::default();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let {
+                local_index,
+                is_mut,
+                ..
+            } = &body.stmts[s].kind
+            {
+                if !is_mut && set.insert(*local_index) {
+                    return;
+                }
+                unsettled.insert(*local_index);
+            }
+        }
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                unsettled.insert(*local_index);
+            }
+        }
+        NodeRef::Expr(e) => {
+            let mut written = |op: Operand| {
+                if let Some(index) = write_root_local(body, op) {
+                    unsettled.insert(index);
+                }
+            };
+            match &body.exprs[e].kind {
+                ExprKind::Assign { target, .. } => written((*target).into()),
+                ExprKind::Unary {
+                    op: NirUnaryOp::MutRef,
+                    expr,
+                } => written(*expr),
+                ExprKind::Call { args, .. } => {
+                    for (arg, reaches_storage) in args.with_storage_reach(true) {
+                        if reaches_storage {
+                            written(arg.expr);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        NodeRef::Block(_) => {}
+    });
+    let mut out = LocalSet::default();
+    for index in set.iter() {
+        if !unsettled.contains(index) && !reassigned.contains(index) {
             out.insert(index);
         }
     }

@@ -435,6 +435,11 @@ impl Span {
         self.space == inner.space && self.start <= inner.start && inner.end <= self.end
     }
 
+    /// Whether this span was synthesized, so its position indexes no text.
+    pub fn is_synthetic(&self) -> bool {
+        self.space == AstIdSpace::FRESH
+    }
+
     /// Create a span assuming single-line ASCII content.
     /// `end_column` defaults to `column + (end - start)`, which is correct for
     /// single-line tokens whose byte length equals their column width.

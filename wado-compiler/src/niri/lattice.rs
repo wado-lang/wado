@@ -71,10 +71,20 @@ impl Interpreter<'_> {
     }
 
     /// What a local denotes at this point. An aliased local is read through its
-    /// place, never out of `env`; only [`Self::projected_lattice`] resolves one.
+    /// place, never out of `env`; only [`Self::projected_lattice`] resolves one,
+    /// unless nothing can write the place, where the reference reads as its
+    /// referent's value just as `&place` itself does.
     fn local_lattice(&self, idx: u32) -> Lattice {
-        if self.frame.place_aliases.contains_key(&idx) {
+        if self.frame.holds_place_field(idx, &[]) {
             return Lattice::Unevaluated;
+        }
+        if let Some((root, path)) = self.frame.place_aliases.get(&idx) {
+            if !self.frame.const_views.contains(idx) {
+                return Lattice::Unevaluated;
+            }
+            return self
+                .place_value(*root, path)
+                .map_or(Lattice::Unevaluated, Lattice::Const);
         }
         self.frame
             .env
@@ -114,7 +124,8 @@ impl Interpreter<'_> {
     ///
     /// The field env wins where it has an answer — it knows fields no
     /// initializer shows, such as the length body globalization records for a
-    /// hoisted sequence — and otherwise the receiver's own value decides.
+    /// hoisted sequence — and otherwise the receiver's own value decides: the
+    /// global's, where a local only refers to one.
     pub(super) fn field_access_lattice(
         &self,
         body: &Body,
@@ -122,13 +133,18 @@ impl Interpreter<'_> {
         field_index: u32,
         field_name: &str,
     ) -> Lattice {
-        if let Some(key) = self.global_receiver_key(body, inner) {
+        let receiver = if let Some(key) = self.global_receiver_key(body, inner) {
             let known = self.global_field(&key, field_name);
             if !matches!(known, Lattice::Unevaluated) {
                 return known;
             }
-        }
-        match self.projected_lattice(body, inner) {
+            self.global_lattice(&key.0, &key.1)
+        } else if let Some(read) = self.place_field_read(body, inner, Some(field_index)) {
+            return read;
+        } else {
+            self.projected_lattice(body, inner)
+        };
+        match receiver {
             Lattice::Const(receiver) => receiver
                 .field(field_index)
                 .cloned()
@@ -146,6 +162,9 @@ impl Interpreter<'_> {
     /// has no value for — and [`Self::expr_to_lattice`] leaves that
     /// unevaluated, so a rebind or a capture never turns into a copy.
     pub(super) fn projected_lattice(&self, body: &Body, op: Operand) -> Lattice {
+        if let Some(read) = self.place_field_read(body, op, None) {
+            return read;
+        }
         if let Some(index) = named_local(body, op)
             && let Some((root, path)) = self.frame.place_aliases.get(&index)
         {
@@ -550,7 +569,7 @@ impl Interpreter<'_> {
                 let [arr] = args else {
                     unreachable!("`array_len` takes an array");
                 };
-                let Lattice::Const(v) = self.operand_to_lattice(body, arr.expr) else {
+                let Lattice::Const(v) = self.projected_lattice(body, arr.expr) else {
                     return Lattice::Unevaluated;
                 };
                 v.seq_len().map_or(Lattice::Unevaluated, |len| {
@@ -615,6 +634,19 @@ impl Interpreter<'_> {
                 prim: PrimitiveType::I32,
             }),
             &CtfeBuiltin::AmbientStdio(writes) => Lattice::Const(Value::Bool(writes)),
+            &CtfeBuiltin::BitCount(count) => match args {
+                [value] => match self.operand_lattice_folded(body, value.expr) {
+                    Lattice::Const(value) => {
+                        let (value, prim) = value.as_int().expect("a bit count takes an integer");
+                        Lattice::Const(Value::Int {
+                            value: count.of(value, prim),
+                            prim,
+                        })
+                    }
+                    _ => Lattice::Unevaluated,
+                },
+                _ => unreachable!("a bit count takes one integer"),
+            },
             CtfeBuiltin::IsMoved => match args {
                 [place] => match self.operand_lattice_folded(body, place.expr) {
                     Lattice::Const(value) => {

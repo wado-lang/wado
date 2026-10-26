@@ -6,17 +6,7 @@ use { assert_close, tensor_of } from "./oracle.wado";
 use flatten from "../tests/onnx/pytorch-operator/test_operator_flatten/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Batch", "Chan", "Row", "Col"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "Flatten reproduces the output ONNX ships" {
@@ -27,9 +17,9 @@ test "Flatten reproduces the output ONNX ships" {
         #include_bytes("../tests/onnx/pytorch-operator/test_operator_flatten/test_data_set_0/output_0.pb"),
     );
 
-    let got: Tensor<f32, [flatten::Batch, Merged<[flatten::Chan, flatten::Row, flatten::Col]>]> = flatten::forward(
+    let got: Tensor<f32, [flatten::Axis00, Merged<[flatten::Axis01, flatten::Axis02, flatten::Axis03]>]> = flatten::forward(
         &mut Cpu {},
-        &Tensor::<f32, [flatten::Batch, flatten::Chan, flatten::Row, flatten::Col]> {
+        &Tensor::<f32, [flatten::Axis00, flatten::Axis01, flatten::Axis02, flatten::Axis03]> {
             data: x,
             extents: x_extents,
         },

@@ -1,13 +1,13 @@
 use { Extent } from "./extent.wado";
 use { Condition, Poly } from "./poly.wado";
-use { Axis, Shape } from "./shape.wado";
+use { Axes, Axis, Shape } from "./shape.wado";
 
-fn stat(name: String, n: i32) -> Axis {
-    return Axis { name, extent: Extent::Static(n) };
+fn stat(axes: &mut Axes, origin: String, n: i32) -> Axis {
+    return axes.mint(origin, Extent::Static(n));
 }
 
-fn sym(name: String, symbol: String) -> Axis {
-    return Axis { name, extent: Extent::symbol(&symbol) };
+fn sym(axes: &mut Axes, origin: String, symbol: String) -> Axis {
+    return axes.mint(origin, Extent::symbol(&symbol));
 }
 
 fn shape(axes: List<Axis>) -> Shape {
@@ -15,280 +15,272 @@ fn shape(axes: List<Axis>) -> Shape {
 }
 
 test "matmul contracts the shared axis and keeps the outer two" {
+    let mut axes = Axes {};
     let x = shape([
-        stat("Batch", 2),
-        stat("In", 3),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "In", 3),
     ]);
     let w = shape([
-        stat("In", 3),
-        stat("Hidden", 4),
+        stat(&mut axes, "W[0]", 3),
+        stat(&mut axes, "Hidden", 4),
     ]);
 
-    let y = x.matmul(&w, "MatMul", &mut []).unwrap();
+    let y = x.matmul(&w, "MatMul", &mut [], &mut axes).unwrap();
     assert y.rank() == 2;
-    assert y.axes[0].name == "Batch";
-    assert y.axes[1].name == "Hidden";
+    assert axes.label(&y.axes[0]) == "Batch";
+    assert axes.label(&y.axes[1]) == "Hidden";
     assert y.axes[1].extent.agrees(&Extent::Static(4));
+    assert axes.label(&w.axes[0]) == "In";
 }
 
 test "a contracted axis of two lengths names both" {
+    let mut axes = Axes {};
     let x = shape([
-        stat("Batch", 2),
-        stat("In", 3),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "In", 3),
     ]);
     let w = shape([
-        stat("In", 5),
-        stat("Hidden", 4),
+        stat(&mut axes, "In", 5),
+        stat(&mut axes, "Hidden", 4),
     ]);
 
-    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
+    let e = x.matmul(&w, "MatMul", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "MatMul: axis In is 3 on the left and 5 on the right";
 }
 
 test "a symbolic axis contracts against the same symbol" {
     // A batch that only the run knows still flows through, because it meets
     // its own symbol rather than a number.
+    let mut axes = Axes {};
     let x = shape([
-        sym("Batch", "batch"),
-        stat("In", 3),
+        sym(&mut axes, "Batch", "batch"),
+        stat(&mut axes, "In", 3),
     ]);
     let w = shape([
-        stat("In", 3),
-        stat("Hidden", 4),
+        stat(&mut axes, "In", 3),
+        stat(&mut axes, "Hidden", 4),
     ]);
 
-    let y = x.matmul(&w, "MatMul", &mut []).unwrap();
+    let y = x.matmul(&w, "MatMul", &mut [], &mut axes).unwrap();
     assert y.axes[0].extent.agrees(&Extent::symbol(&"batch"));
 }
 
 test "a symbol meeting a number is a failure, not a deferred check" {
+    let mut axes = Axes {};
     let x = shape([
-        stat("Batch", 2),
-        sym("In", "in"),
+        stat(&mut axes, "Batch", 2),
+        sym(&mut axes, "In", "in"),
     ]);
     let w = shape([
-        stat("In", 3),
-        stat("Hidden", 4),
+        stat(&mut axes, "In", 3),
+        stat(&mut axes, "Hidden", 4),
     ]);
 
-    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
+    let e = x.matmul(&w, "MatMul", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "MatMul: axis In is in on the left and 3 on the right";
 }
 
 test "matmul batches over every axis ahead of the last two" {
+    let mut axes = Axes {};
     let a = shape([
-        sym("Batch", "b"),
-        stat("M", 2),
-        stat("K", 3),
+        sym(&mut axes, "Batch", "b"),
+        stat(&mut axes, "M", 2),
+        stat(&mut axes, "K", 3),
     ]);
     let b = shape([
-        sym("Batch", "b"),
-        stat("K", 3),
-        stat("N", 4),
+        sym(&mut axes, "Batch", "b"),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
+    let y = a.matmul(&b, "MatMul", &mut [], &mut axes).unwrap();
     assert y.rank() == 3;
     assert y.axes[0].extent.agrees(&Extent::symbol(&"b"));
-    assert y.axes[1].name == "M";
-    assert y.axes[2].name == "N";
+    assert axes.label(&y.axes[1]) == "M";
+    assert axes.label(&y.axes[2]) == "N";
 }
 
 test "a batch axis of two lengths stops the contraction" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("Batch", 2),
-        stat("M", 2),
-        stat("K", 3),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "M", 2),
+        stat(&mut axes, "K", 3),
     ]);
     let b = shape([
-        stat("Batch", 8),
-        stat("K", 3),
-        stat("N", 4),
+        stat(&mut axes, "Batch", 8),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let e = a.matmul(&b, "MatMul", &mut []).unwrap_err();
+    let e = a.matmul(&b, "MatMul", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "MatMul: axis Batch is 2 on the left and 8 on the right";
 }
 
 test "a matrix broadcasts across the batch axes of the other operand" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("M", 2),
-        stat("K", 3),
+        stat(&mut axes, "M", 2),
+        stat(&mut axes, "K", 3),
     ]);
     let b = shape([
-        sym("Batch", "b"),
-        stat("K", 3),
-        stat("N", 4),
+        sym(&mut axes, "Batch", "b"),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
+    let y = a.matmul(&b, "MatMul", &mut [], &mut axes).unwrap();
     assert y.rank() == 3;
-    assert y.axes[0].name == "Batch";
-    assert y.axes[1].name == "M";
-    assert y.axes[2].name == "N";
+    assert axes.label(&y.axes[0]) == "Batch";
+    assert axes.label(&y.axes[1]) == "M";
+    assert axes.label(&y.axes[2]) == "N";
 }
 
 test "a batch axis of extent 1 yields to the other operand's" {
+    let mut axes = Axes {};
+    let one = stat(&mut axes, "One", 1);
     let a = shape([
-        stat("One", 1),
-        stat("M", 2),
-        stat("K", 3),
+        one,
+        stat(&mut axes, "M", 2),
+        stat(&mut axes, "K", 3),
     ]);
     let b = shape([
-        stat("Batch", 8),
-        stat("K", 3),
-        stat("N", 4),
+        stat(&mut axes, "Batch", 8),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let y = a.matmul(&b, "MatMul", &mut []).unwrap();
-    assert y.axes[0].name == "Batch";
+    let y = a.matmul(&b, "MatMul", &mut [], &mut axes).unwrap();
+    assert axes.label(&y.axes[0]) == "Batch";
     assert y.axes[0].extent.agrees(&Extent::Static(8));
+    assert axes.label(&one) == "One";
 }
 
 test "a rank-1 left operand is a row whose axis is dropped" {
-    let v = shape([stat("K", 3)]);
+    let mut axes = Axes {};
+    let v = shape([stat(&mut axes, "K", 3)]);
     let w = shape([
-        stat("K", 3),
-        stat("N", 4),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let y = v.matmul(&w, "MatMul", &mut []).unwrap();
+    let y = v.matmul(&w, "MatMul", &mut [], &mut axes).unwrap();
     assert y.rank() == 1;
-    assert y.axes[0].name == "N";
+    assert axes.label(&y.axes[0]) == "N";
 }
 
 test "a rank-1 right operand is a column whose axis is dropped" {
+    let mut axes = Axes {};
     let m = shape([
-        stat("M", 2),
-        stat("K", 3),
+        stat(&mut axes, "M", 2),
+        stat(&mut axes, "K", 3),
     ]);
-    let v = shape([stat("K", 3)]);
+    let v = shape([stat(&mut axes, "K", 3)]);
 
-    let y = m.matmul(&v, "MatMul", &mut []).unwrap();
+    let y = m.matmul(&v, "MatMul", &mut [], &mut axes).unwrap();
     assert y.rank() == 1;
-    assert y.axes[0].name == "M";
+    assert axes.label(&y.axes[0]) == "M";
 }
 
 test "a rank-1 operand still contracts its one axis" {
-    let v = shape([stat("K", 5)]);
+    let mut axes = Axes {};
+    let v = shape([stat(&mut axes, "K", 5)]);
     let w = shape([
-        stat("K", 3),
-        stat("N", 4),
+        stat(&mut axes, "K", 3),
+        stat(&mut axes, "N", 4),
     ]);
 
-    let e = v.matmul(&w, "MatMul", &mut []).unwrap_err();
+    let e = v.matmul(&w, "MatMul", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "MatMul: axis K is 5 on the left and 3 on the right";
 }
 
 test "elementwise broadcasts a missing leading axis" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("Batch", 2),
-        stat("Out", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Out", 4),
     ]);
-    let bias = shape([stat("Out", 4)]);
+    let bias = shape([stat(&mut axes, "Out", 4)]);
 
-    let y = a.elementwise(&bias, "add", &mut []).unwrap();
+    let y = a.elementwise(&bias, "add", &mut [], &mut axes).unwrap();
     assert y.rank() == 2;
-    assert y.axes[0].name == "Batch";
+    assert axes.label(&y.axes[0]) == "Batch";
 }
 
-test "elementwise keeps the shape when every axis agrees" {
+test "elementwise joins the axes it meets, wherever each was first reached" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("Batch", 2),
-        stat("Out", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Seq", 4),
     ]);
     let b = shape([
-        stat("Batch", 2),
-        stat("Out", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Total", 4),
     ]);
 
-    let y = a.elementwise(&b, "add", &mut []).unwrap();
+    let y = a.elementwise(&b, "add", &mut [], &mut axes).unwrap();
     assert y.rank() == 2;
-    assert y.axes[1].name == "Out";
+    assert axes.label(&b.axes[1]) == "Seq";
+    assert axes.label(&y.axes[1]) == "Seq";
 }
 
 test "elementwise names the operation that disagreed" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("Batch", 2),
-        stat("Out", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Out", 4),
     ]);
     let b = shape([
-        stat("Batch", 2),
-        stat("Out", 7),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Out", 7),
     ]);
 
-    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    let e = a.elementwise(&b, "add", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "add: axis Out is 4 on the left and 7 on the right";
 }
 
-test "elementwise refuses two axes named apart, however their lengths agree" {
+test "elementwise stretches an axis of 1 without joining it" {
+    let mut axes = Axes {};
     let a = shape([
-        stat("Batch", 2),
-        stat("Seq", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "Seq", 4),
     ]);
     let b = shape([
-        stat("Batch", 2),
-        stat("Total", 4),
+        stat(&mut axes, "Batch", 2),
+        stat(&mut axes, "One", 1),
     ]);
 
-    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
-    assert `${e}` == "add: axis Seq on the left meets Total on the right, and only an axis of 1 takes another's name";
-}
-
-test "elementwise stretches an axis of 1 named apart" {
-    let a = shape([
-        stat("Batch", 2),
-        stat("Seq", 4),
-    ]);
-    let b = shape([
-        stat("Batch", 2),
-        stat("One", 1),
-    ]);
-
-    let y = a.elementwise(&b, "add", &mut []).unwrap();
-    assert y.axes[1].name == "Seq";
-}
-
-test "a product refuses a contracted axis named apart" {
-    let x = shape([
-        stat("Seq", 3),
-        stat("Embed", 4),
-    ]);
-    let w = shape([
-        stat("Hidden", 4),
-        stat("Vocab", 5),
-    ]);
-
-    let e = x.matmul(&w, "MatMul", &mut []).unwrap_err();
-    assert `${e}` == "MatMul: axis Embed on the left meets Hidden on the right, and only an axis of 1 takes another's name";
+    let y = a.elementwise(&b, "add", &mut [], &mut axes).unwrap();
+    assert axes.label(&y.axes[1]) == "Seq";
+    assert axes.label(&b.axes[1]) == "One";
 }
 
 /// An axis whose extent is `N` clamped to at most `bound`, as a `Slice` to `N` leaves it.
-fn clamped(name: String, bound: i64) -> Axis {
+fn clamped(axes: &mut Axes, origin: String, bound: i64) -> Axis {
     let n = Poly::symbol(&"N");
-    return Axis { name, extent: Extent::of(Poly::min_of(&n, &Poly::constant(bound), &"M = Slice")).unwrap() };
+    return axes.mint(origin, Extent::of(Poly::min_of(&n, &Poly::constant(bound), &"M = Slice")).unwrap());
 }
 
 test "a clamp meets its own operand where the inputs owe that it takes it unchanged" {
-    let mask = shape([clamped("Seq", 8)]);
-    let scores = shape([sym("Seq", "N")]);
+    let mut axes = Axes {};
+    let mask = shape([clamped(&mut axes, "Seq", 8)]);
+    let scores = shape([sym(&mut axes, "Seq", "N")]);
     let mut owed: List<Condition> = [];
-    let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
+    let y = mask.elementwise(&scores, "add", &mut owed, &mut axes).unwrap();
     assert y.axes[0].extent.agrees(&Extent::symbol(&"N"));
     assert owed.len() == 1 && owed[0].reason == "M = Slice: N must be at most 8";
 }
 
 test "a count that is 1 only where the inputs owe it stretches" {
     // What a `Slice` from -1 leaves of an axis of `N`: 1, or none where `N` is 0.
+    let mut axes = Axes {};
     let n = Poly::symbol(&"N");
     let one = Poly::constant(1);
     let start = Poly::max_of(&n.try_sub(&one).unwrap(), &Poly::constant(0), &"L = Slice");
-    let last = shape([
-        Axis { name: "Seq", extent: Extent::of(n.try_sub(&start).unwrap()).unwrap() },
-    ]);
-    let scores = shape([sym("Seq", "M")]);
+    let last = shape([axes.mint("Seq", Extent::of(n.try_sub(&start).unwrap()).unwrap())]);
+    let scores = shape([sym(&mut axes, "Seq", "M")]);
     let mut owed: List<Condition> = [];
-    let y = last.elementwise(&scores, "add", &mut owed).unwrap();
+    let y = last.elementwise(&scores, "add", &mut owed, &mut axes).unwrap();
     assert y.axes[0].extent.agrees(&Extent::symbol(&"M"));
     assert owed.len() == 1 && owed[0].reason == "L = Slice: N - 1 must be at least 0";
 }
@@ -296,14 +288,13 @@ test "a count that is 1 only where the inputs owe it stretches" {
 test "two symbols on one axis owe that they are one length" {
     // A merged decoder's mask carries a symbol of its own where the scores
     // carry the cache's length and the sequence's.
-    let mask = shape([sym("Total", "M")]);
+    let mut axes = Axes {};
+    let mask = shape([sym(&mut axes, "Total", "M")]);
     let total = Poly::symbol(&"P").try_add(&Poly::symbol(&"S")).unwrap();
-    let scores = shape([
-        Axis { name: "Total", extent: Extent::of(total).unwrap() },
-    ]);
+    let scores = shape([axes.mint("Scores[0]", Extent::of(total).unwrap())]);
     let mut owed: List<Condition> = [];
-    let y = mask.elementwise(&scores, "add", &mut owed).unwrap();
-    assert y.axes[0].name == "Total";
+    let y = mask.elementwise(&scores, "add", &mut owed, &mut axes).unwrap();
+    assert axes.label(&y.axes[0]) == "Total";
     let reasons: List<String> = owed.into_iter().map(|c| c.reason).collect();
     assert reasons == [
         "add: axis Total is M on the left and P + S on the right, and the two must be one length",
@@ -312,39 +303,38 @@ test "two symbols on one axis owe that they are one length" {
 }
 
 test "two symbols one length apart on one axis are a failure" {
+    let mut axes = Axes {};
     let n = Poly::symbol(&"N");
-    let a = shape([sym("Seq", "N")]);
-    let b = shape([
-        Axis { name: "Seq", extent: Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap() },
-    ]);
-    let e = a.elementwise(&b, "add", &mut []).unwrap_err();
+    let a = shape([sym(&mut axes, "Seq", "N")]);
+    let b = shape([axes.mint("Seq", Extent::of(n.try_add(&Poly::constant(1)).unwrap()).unwrap())]);
+    let e = a.elementwise(&b, "add", &mut [], &mut axes).unwrap_err();
     assert `${e}` == "add: axis Seq is N on the left and N + 1 on the right";
 }
 
 test "a clamp meets another symbol where the inputs owe both readings" {
-    let mask = shape([clamped("Seq", 8)]);
-    let other = shape([sym("Seq", "M")]);
+    let mut axes = Axes {};
+    let mask = shape([clamped(&mut axes, "Seq", 8)]);
+    let other = shape([sym(&mut axes, "Seq", "M")]);
     let mut owed: List<Condition> = [];
-    mask.elementwise(&other, "add", &mut owed).unwrap();
+    mask.elementwise(&other, "add", &mut owed, &mut axes).unwrap();
     assert owed.len() == 3 && owed[0].reason == "M = Slice: N must be at most 8";
 }
 
 test "a 1 meeting a count that is 1 only where the inputs owe it keeps the 1" {
     // What a causal mask's rows leave for one query past a cache of `N`.
+    let mut axes = Axes {};
     let n = Poly::symbol(&"N");
     let site = "M = Slice";
     let end = Poly::min_of(&n.try_add(&Poly::constant(1)).unwrap(), &Poly::constant(512), &site);
     let start = Poly::min_of(&n, &Poly::constant(512), &site);
-    let rows = shape([
-        Axis { name: "Seq", extent: Extent::of(end.try_sub(&start).unwrap()).unwrap() },
-    ]);
-    let query = shape([stat("Seq", 1)]);
+    let rows = shape([axes.mint("Seq", Extent::of(end.try_sub(&start).unwrap()).unwrap())]);
+    let query = shape([stat(&mut axes, "Seq", 1)]);
     for let [a, b] of [
         [rows, query],
         [query, rows],
     ] {
         let mut owed: List<Condition> = [];
-        let y = a.elementwise(&b, "add", &mut owed).unwrap();
+        let y = a.elementwise(&b, "add", &mut owed, &mut axes).unwrap();
         assert y.axes[0].extent.agrees(&Extent::Static(1));
         assert !owed.is_empty();
     }

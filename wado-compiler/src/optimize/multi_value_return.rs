@@ -295,6 +295,7 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
         | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => false,

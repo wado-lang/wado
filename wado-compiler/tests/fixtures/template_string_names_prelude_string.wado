@@ -1,0 +1,12 @@
+// An untagged template is sugar for `String::format`, so it names the prelude's
+// `String` even where an import takes the name (spec-literals § Template
+// Strings).
+use { println as String, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(21);
+    String(`n=${n}`);
+}
+
+__DATA__
+{"stdout": "n=21\n"}

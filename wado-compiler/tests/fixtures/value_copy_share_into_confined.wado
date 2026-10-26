@@ -1,0 +1,26 @@
+// A binding that shares its source's storage may hand it to a parameter the
+// callee keeps nothing of: the callee holds it shared and copies before any
+// write, so the binding pays no copy for being read into it.
+
+fn view_of(s: &StrSlice) -> StrSlice {
+    return *s;
+}
+
+fn width(s: StrSlice) -> i32 {
+    return s.len();
+}
+
+fn measure(content: StrSlice) -> i32 {
+    let view = view_of(&content);
+    return width(view);
+}
+
+export fn run() {
+    assert measure("hello".as_str_slice()) == 5;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$"]
+}

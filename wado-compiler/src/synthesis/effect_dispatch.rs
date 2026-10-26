@@ -29,7 +29,7 @@ use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirCapture,
     TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirTemplatePart, TypeId,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
     positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -1357,13 +1357,6 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
                  never see it"
             );
         }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    lower_dispatch_in_expr(expr, env, ctx);
-                }
-            }
-        }
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }
         | TirExprKind::BoolLiteral(_)
@@ -2104,13 +2097,6 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             TirExprKind::VariantConstruct { payload, .. } => {
                 if let Some(p) = payload {
                     self.visit_expr(p);
-                }
-            }
-            TirExprKind::TemplateString { parts } => {
-                for part in parts {
-                    if let TirTemplatePart::Interpolation { expr, .. } = part {
-                        self.visit_expr(expr);
-                    }
                 }
             }
             TirExprKind::IntLiteral { .. }
@@ -2931,13 +2917,6 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
                 rewrite_calls_in_expr(&mut binding.handler, ctx);
             }
             rewrite_calls_in_block(body, ctx);
-        }
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    rewrite_calls_in_expr(expr, ctx);
-                }
-            }
         }
         TirExprKind::IntLiteral { .. }
         | TirExprKind::FloatLiteral { .. }

@@ -641,7 +641,8 @@ fn is_storage_builtin(builtin: CtfeBuiltin) -> bool {
         | CtfeBuiltin::Ieee754Comparison(_)
         | CtfeBuiltin::HeapBase(_)
         | CtfeBuiltin::AmbientStdio(_)
-        | CtfeBuiltin::IsMoved => false,
+        | CtfeBuiltin::IsMoved
+        | CtfeBuiltin::BitCount(_) => false,
     }
 }
 
@@ -847,6 +848,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)
         | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::Unknown

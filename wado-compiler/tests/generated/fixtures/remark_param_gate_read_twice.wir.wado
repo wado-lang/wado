@@ -31,19 +31,17 @@ type "functype//remark_param_gate_read_twice.wado/$cm_export__run" = fn();  // T
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(13)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
 type "functype//remark_param_gate_read_twice.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(18)
-
-type "functype//core:rt/write_string_to_stream$spec0$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(19)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -54,12 +52,12 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:remark_param_gate_read_twice.wado::LOG_LEVEL: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 102, 111), used: 4 };
-global global:remark_param_gate_read_twice.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(118, 101, 114, 98, 111, 115, 101), used: 7 };
+global global:remark_param_gate_read_twice.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(118, 101, 114, 98, 111, 115, 101);
 global global:remark_param_gate_read_twice.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 101, 98, 117, 103);
 global global:remark_param_gate_read_twice.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(116, 114, 97, 99, 101);
 
@@ -131,9 +129,11 @@ fn "remark_param_gate_read_twice.wado/run"() with Stdout {
         $moved_4 = "remark_param_gate_read_twice.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = i_12; i_12 = 0; $moved_4);
         i_12 = $load_1;
         $load_1 = 0;
-        v_2 = global:remark_param_gate_read_twice.wado::$const_obj_0;
-        "core:rt/write_string_to_stream$spec0$dae[add_newline]"(i_12, v_2.repr, v_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_12 = $moved_4; $moved_4 = 0; i_12);
+        builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(8)), 0, global:remark_param_gate_read_twice.wado::$const_obj_0, 0, 7);
+        builtin::array_set_u8($array_clone_dst_2, 7, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(i_12, $array_clone_dst_2);
+        "wasi/stream-drop-writable"($load_1 = i_12; i_12 = 0; $load_1);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_1 = $moved_4; $moved_4 = 0; $load_1);
     }
 }
 
@@ -151,34 +151,32 @@ fn "core:rt/unreachable"() {
     unreachable;
 }
 
-fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
+fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle, data) {
     let written: i32;
     let ptr_13: i32;
     let i: i32;
     let ptr_24: i32;
     let count_25: i32;
+    let packed_27: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
-    if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
-        return 0;
-    }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b13: block {
-        l14: loop {
-            break_if b13 i >= $mv$data$end;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 8); i = 0; b12: block {
+        l13: loop {
+            break_if b12 i >= 8;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
-            continue l14;
+            continue l13;
         };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    }; builtin::i64_extend_i32_u(ptr_13) | 34359738368_i64);
     i = 0;
     block {
-        l16: loop {
+        l15: loop {
             ptr_24 = ptr_13 + i;
-            count_25 = $mv$data$end - i;
+            count_25 = 8 - i;
             count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_7: $mv$data$start;
+                if local.tee packed_27("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_7: packed_27;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -201,23 +199,13 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 unreachable;
             });
             i = i + count_25;
-            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return ptr_24;
+            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= 8) {
+                drop("mem/realloc"(ptr_13, 8, 1, 0));
+                return;
             }
-            continue l16;
+            continue l15;
         };
     };
-}
-
-fn "core:rt/write_string_to_stream$spec0$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(8)), 0, $mv$message$repr, 0, 7);
-    builtin::array_set_u8(new_repr, 7, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, 8);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 export fn "remark_param_gate_read_twice.wado/$cm_export__run" as "run"

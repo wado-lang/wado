@@ -1,0 +1,32 @@
+// A binding taken out of `u` is lent as an earlier operand of a call whose
+// later operand writes `u` through `&mut`. The operands evaluate in order, so
+// the write runs while the loan is live and must not reach the binding.
+use { println, Stdout } from "core:cli";
+
+fn grow(s: &mut String) -> i32 {
+    s.push_str("!");
+    return 0;
+}
+
+fn first(a: &String, b: i32) -> String {
+    return `${*a}${b}`;
+}
+
+struct Pair {
+    a: &String,
+    b: i32,
+}
+
+export fn run() with Stdout {
+    let mut u = "a";
+    let held = u;
+    println(first(&held, grow(&mut u)));
+
+    let mut t = "b";
+    let kept = t;
+    let p = Pair { a: &kept, b: grow(&mut t) };
+    println(`${*p.a}${p.b}`);
+}
+
+__DATA__
+{"stdout": "a0\nb0\n"}

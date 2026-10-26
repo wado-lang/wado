@@ -18,9 +18,10 @@ struct Point {
 global ORIGIN: Point = Point { x: 3, y: 4 };
 
 export fn run() with Stdout {
-    // The field reads fold to their scalars; inspecting the whole value is what
-    // keeps the global itself alive for the promotion this fixture pins.
-    println(`${ORIGIN.x},${ORIGIN.y},${ORIGIN:?}`);
+    // A read the optimizer sees through folds the whole line to a constant, so
+    // only an opaque one keeps the global alive for the promotion pinned here.
+    let origin = builtin::black_box(ORIGIN);
+    println(`${origin.x},${origin.y},${origin:?}`);
 }
 
 __DATA__

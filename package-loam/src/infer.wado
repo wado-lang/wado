@@ -1,9 +1,11 @@
-//! Stage 0's pass over a graph: name every tensor's axes from the schema,
-//! then discharge each operator's extent conditions in order.
+//! Stage 0's pass over a graph: discharge each operator's extent conditions in
+//! order, solving which axes are one as it goes, then name each axis.
 
-use { HashMap, TreeSet } from "core:collections";
+use { HashMap, HashSet, TreeSet } from "core:collections";
+use { apply_case } from "core:serde";
 use { Extent, solved } from "./extent.wado";
-use { Axis, AxisConflict, Shape } from "./shape.wado";
+use { MAP, is_bound, module_idents } from "./idents.wado";
+use { Axes, Axis, AxisConflict, Shape } from "./shape.wado";
 use {
     SliceBounds,
     axes_of,
@@ -39,23 +41,7 @@ use {
 } from "./graph.wado";
 use { Condition, Poly, owe as owe_at, owe_equal as owe_equal_at } from "./poly.wado";
 use { from_end, spatial_extents } from "./runtime/tensor.wado";
-use { Schema } from "./schema.wado";
 use { Geometry, ints, window_over } from "./window.wado";
-
-/// A tensor the schema does not reach. Loam does not fall back to positional
-/// axes, for the same reason stage 0 has no runtime tier to defer an unproven
-/// extent to.
-pub struct UnnamedTensor {
-    pub tensor: String,
-}
-
-/// The schema named a different number of axes than the graph gave the tensor
-/// dimensions.
-pub struct AxisCountConflict {
-    pub tensor: String,
-    pub named: i32,
-    pub dims: i32,
-}
 
 /// An operator's conditions failed, at the node its first output names.
 pub struct NodeConflict {
@@ -137,9 +123,7 @@ impl Refusal {
 
 /// Why stage 0 cannot read a graph.
 pub variant InferError {
-    Unnamed(UnnamedTensor),
     Refused(Refusal),
-    AxisCount(AxisCountConflict),
     UnknownOperator(String),
     UnrankedTensor(String),
     Oversized(String),
@@ -153,20 +137,6 @@ pub variant InferError {
     Declared(DeclaredConflict),
     DeclaredElement(DeclaredElementConflict),
     Node(NodeConflict),
-}
-
-impl Display for UnnamedTensor {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.tensor}: no layout pattern names this tensor's axes`);
-    }
-}
-
-impl Display for AxisCountConflict {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(
-            `${self.tensor}: the schema names ${self.named} axes and the graph gives ${self.dims} dimensions`,
-        );
-    }
 }
 
 impl Display for Refusal {
@@ -232,9 +202,7 @@ impl Display for DeclaredElementConflict {
 impl Display for InferError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
-            Unnamed(e) => e.fmt(f),
             Refused(e) => e.fmt(f),
-            AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
             Oversized(name) => f.write_str(`${name}: its extents multiply past what a list can hold`),
@@ -250,12 +218,6 @@ impl Display for InferError {
             Node(e) => e.fmt(f),
         }
     }
-}
-
-impl Error for UnnamedTensor {
-}
-
-impl Error for AxisCountConflict {
 }
 
 impl Error for Refusal {
@@ -300,6 +262,17 @@ pub struct Checked {
     /// the branch's scope, the one around it included, and what it owes where
     /// it runs.
     pub branches: HashMap<String, [Checked, Checked]> = HashMap::new(),
+    /// Which axes the meetings made one, while stage 0 solves them.
+    pub axes: Axes = Axes {},
+    /// Each axis's name and where it took it from, once stage 0 has named them.
+    pub axis_names: List<AxisName> = [],
+}
+
+/// An axis's name, and where it took it from: a `dim_param`, or the tensor axis
+/// Loam minted it from.
+pub struct AxisName {
+    pub name: String,
+    pub source: String,
 }
 
 /// `owe_at` the node, which a graph wrong for every input stops at.
@@ -315,44 +288,199 @@ fn owe_equal(node: &Node, owed: &mut List<Condition>, a: &Poly, b: &Poly, condit
 /// Check a graph. Producing a shape for every tensor a kernel reads is what
 /// discharges the graph's extent conditions, so a successful return is the
 /// proof, save the conditions it hands `forward` to check.
-pub fn infer(graph: &Graph, schema: &Schema) -> Result<Checked, InferError> {
+pub fn infer(graph: &Graph) -> Result<Checked, InferError> {
     let mut scope = Checked {
         shapes: HashMap::new(),
         primitives: HashMap::new(),
         known: HashMap::new(),
         owed: [],
     };
-    checked_graph(graph, &mut scope, schema)?;
+    checked_graph(graph, &mut scope)?;
+    let axes = scope.axes;
+    let mut naming = Naming {
+        names: HashMap::new(),
+        taken: module_idents(),
+        words: HashMap::new(),
+    };
+    // Whether the module imports the map is emit's to decide, so no axis
+    // takes its name.
+    naming.taken.insert(MAP);
+    name_axes(graph, &mut scope, &axes, &axes.roots(), &mut naming);
     return Result::Ok(scope);
 }
 
+/// The name each class took, from whichever scope reached it first, the one
+/// each `dim_param` takes, and every name taken so far, the generated module's
+/// own among them.
+struct Naming {
+    names: HashMap<String, String>,
+    taken: HashSet<String>,
+    words: HashMap<String, String>,
+}
+
+impl Naming {
+    /// `wanted`, or the first name past it that nothing has taken.
+    fn take(&mut self, wanted: String) -> String {
+        let mut name = wanted;
+        while is_bound(&self.taken, &name) {
+            name = `${name}_`;
+        }
+        self.taken.insert(name);
+        return name;
+    }
+
+    /// The name the `dim_param` `word` gives a class.
+    fn param(&mut self, word: &String) -> String {
+        if let Some(name) = self.words.get(*word) {
+            return name;
+        }
+        let name = self.take(pascal(word));
+        self.words[*word] = name;
+        return name;
+    }
+}
+
+/// `text` in PascalCase, as `serde` spells a `name_policy`, with every run of
+/// characters but ASCII letters and digits a word boundary. A name a digit
+/// would start, or none at all, starts with `Axis`.
+fn pascal(text: &String) -> String {
+    let mut words = String::with_capacity(text.len());
+    for let c of text.chars() {
+        words.push(if c.is_ascii_alphanumeric() { c } else { '_' });
+    }
+    let out = apply_case(CaseStyle::Pascal, words);
+    if out.is_empty() || out.chars().next().unwrap().is_ascii_digit() {
+        return `Axis${out}`;
+    }
+    return out;
+}
+
+/// Name each class `scope`'s tensors reach that no scope has named yet, then
+/// rewrite each shape it holds, and its branches', in those names. `roots` is
+/// every class, in the order it was minted. The solver is spent once the names
+/// stand, so no scope keeps it. See WEP 2026-09-20 § "Axis Names Are Inferred
+/// From the Graph".
+fn name_axes(graph: &Graph, scope: &mut Checked, axes: &Axes, roots: &List<String>, naming: &mut Naming) {
+    let mut sources: List<AxisName> = [];
+    let mut tensors: List<String> = [];
+    for let declared of [&graph.inputs, &graph.outputs, &graph.initializers] {
+        for let vi of *declared {
+            tensors.push(vi.name);
+        }
+    }
+    for let node of &graph.nodes {
+        tensors.extend(&node.outputs);
+    }
+    for let tensor of tensors {
+        let Some(shape) = scope.shapes.get(tensor) else {
+            continue;
+        };
+        for let [i, axis] of shape.axes.into_iter().enumerate() {
+            name_class(&axes.read(&axis), `${tensor}[${i}]`, axes, &mut sources, naming);
+        }
+    }
+    // What else the scope holds, a constant hoisted out of a branch among
+    // them, is named from where its class was first reached.
+    let mut reached = HashSet::<String>::new();
+    for let [_, shape] of scope.shapes.entries() {
+        for let axis of shape.axes {
+            let read = axes.read(&axis);
+            let parts = if read.parts.is_empty() { [read] as List<Axis> } else { read.parts };
+            for let part of parts {
+                reached.insert(part.name);
+            }
+        }
+    }
+    for let root of *roots {
+        if reached.contains(root) {
+            name_root(&root, axes.origin(&root), axes, &mut sources, naming);
+        }
+    }
+    for let [tensor, shape] of scope.shapes.entries() {
+        let named: List<Axis> = shape.axes.into_iter().map(|a| in_names(&axes.read(&a), &naming.names)).collect();
+        scope.shapes[*tensor] = Shape { axes: named };
+    }
+    scope.axis_names = sources;
+    scope.axes = Axes {};
+    for let node of &graph.nodes {
+        let Some(pair) = scope.branches.get(node.outputs[0]) else {
+            continue;
+        };
+        let [mut then_scope, mut else_scope] = pair;
+        name_axes(&branch_graph(node, "then_branch"), &mut then_scope, axes, roots, naming);
+        name_axes(&branch_graph(node, "else_branch"), &mut else_scope, axes, roots, naming);
+        scope.branches[node.outputs[0]] = [then_scope, else_scope];
+    }
+}
+
+/// The graph an `If` holds as `attr`, which `checked_branch` has read.
+fn branch_graph(node: &Node, attr: String) -> Graph {
+    return node.attr(attr).unwrap().graph.unwrap();
+}
+
+/// Name `axis`'s class, read as `Axes::read` reads it, as `name_root` does. A
+/// merge's parts are named in its stead.
+fn name_class(axis: &Axis, origin: String, axes: &Axes, sources: &mut List<AxisName>, naming: &mut Naming) {
+    if axis.parts.is_empty() {
+        name_root(&axis.name, origin, axes, sources, naming);
+        return;
+    }
+    for let [k, part] of axis.parts.into_iter().enumerate() {
+        name_root(&part.name, `${origin}.${k}`, axes, sources, naming);
+    }
+}
+
+/// Name root `root`'s class unless a scope has: by its first `dim_param`, else
+/// minted from `origin`, the tensor axis it is reached at.
+fn name_root(root: &String, origin: String, axes: &Axes, sources: &mut List<AxisName>, naming: &mut Naming) {
+    if naming.names.contains_key(*root) {
+        return;
+    }
+    let [name, source] = match axes.word(root) {
+        Some(w) => [naming.param(&w.word), `dim_param ${w.word} at ${w.tensor}`],
+        None => [naming.take(pascal(&origin)), `minted from ${origin}`],
+    };
+    naming.names[*root] = name;
+    sources.push(AxisName { name, source });
+}
+
+/// `axis`, read as `Axes::read` reads it, under the names its classes took.
+fn in_names(axis: &Axis, names: &HashMap<String, String>) -> Axis {
+    if axis.parts.is_empty() {
+        return Axis { name: names[axis.name], extent: axis.extent };
+    }
+    return Axis::merged(axis.parts.into_iter().map(|p| in_names(&p, names)).collect(), axis.extent);
+}
+
 /// Check `graph` within `scope`, which gains its tensors and what it owes.
-fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<(), InferError> {
-    let local = schema.within(&graph.name);
+fn checked_graph(graph: &Graph, scope: &mut Checked) -> Result<(), InferError> {
     for let [name, k] of graph.constants.entries() {
         scope.known[*name] = *k;
         scope.primitives[*name] = known_primitive(k);
     }
     for let declared of [&graph.inputs, &graph.initializers] {
         for let vi of *declared {
-            scope.shapes[vi.name] = shape_of(&vi, &local)?;
+            scope.shapes[vi.name] = shape_of(&vi, &mut scope.axes)?;
             // An element no kernel reaches is left out, for emit to name.
             if let Some(element) = element_of(&vi.dtype) {
                 scope.primitives[vi.name] = element.computed;
             }
         }
     }
+    for let vi of &graph.inputs {
+        declare_dims(vi, &scope.shapes[vi.name], &mut scope.owed, &mut scope.axes)?;
+    }
     unspell_unbound(graph, &mut scope.shapes);
     for let node of &graph.nodes {
-        checked_node(node, scope, schema, &local, graph.opset)?;
+        checked_node(node, scope, graph.opset)?;
     }
     for let vi of &graph.outputs {
-        materialize(&vi.name, &scope.known, &mut scope.shapes, &local)?;
+        materialize(&vi.name, &scope.known, &mut scope.shapes, &mut scope.axes)?;
         let Some(produced) = scope.shapes.get(vi.name) else {
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
-        scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed)?)?;
+        scope.shapes[vi.name] = held(&vi.name, merge_declared(vi, &produced, &mut scope.owed, &mut scope.axes)?)?;
         if let Some(element) = element_of(&vi.dtype)
             && let Some(computed) = scope.primitives.get(vi.name)
             && element.computed != computed {
@@ -374,7 +502,7 @@ fn checked_graph(graph: &Graph, scope: &mut Checked, schema: &Schema) -> Result<
 fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
     let mut extents: List<Extent> = [];
     for let vi of &graph.inputs {
-        extents.extend(&shapes[vi.name].axes.into_iter().map(|a| a.extent).collect());
+        extents.extend(&shapes[vi.name].extents());
     }
     let bound: List<String> = solved(&extents).into_iter().map(|s| s.symbol).collect();
     for let vi of &graph.inputs {
@@ -396,15 +524,8 @@ fn unspell_unbound(graph: &Graph, shapes: &mut HashMap<String, Shape>) {
     }
 }
 
-/// Check one node: `schema` is the whole schema, which a branch narrows to its
-/// own graph, and `local` the part that reaches this graph's tensors.
-fn checked_node(
-    node: &Node,
-    scope: &mut Checked,
-    schema: &Schema,
-    local: &Schema,
-    opset: Option<i64>,
-) -> Result<(), InferError> {
+/// Check one node.
+fn checked_node(node: &Node, scope: &mut Checked, opset: Option<i64>) -> Result<(), InferError> {
     let several = node.op == "Split" || node.op == "If" || node.op == GROUP_QUERY_ATTENTION;
     if node.outputs.is_empty() || node.outputs.len() != 1 && !several {
         builtin::cold_path();
@@ -434,18 +555,18 @@ fn checked_node(
     }
     for let [index, input] of node.inputs.into_iter().enumerate() {
         if !read_at_build_time(node, index) {
-            materialize(&input, &scope.known, &mut scope.shapes, local)?;
+            materialize(&input, &scope.known, &mut scope.shapes, &mut scope.axes)?;
         }
     }
     if node.op == "If" {
-        return branched(node, scope, schema, local);
+        return branched(node, scope);
     }
     let produced = if node.op == "Split" {
-        split(node, &scope.shapes, &scope.known, local, &mut scope.owed)?;
+        split(node, &scope.shapes, &scope.known, &mut scope.owed, &mut scope.axes)?;
     } else if node.op == GROUP_QUERY_ATTENTION {
-        attention(node, &scope.shapes, &scope.known, local, &mut scope.owed)?;
+        attention(node, &scope.shapes, &scope.known, &mut scope.owed, &mut scope.axes)?;
     } else {
-        [infer_node(node, &scope.shapes, &scope.known, local, opset, &mut scope.owed)?] as List<Shape>;
+        [infer_node(node, &scope.shapes, &scope.known, opset, &mut scope.owed, &mut scope.axes)?] as List<Shape>;
     };
     let primitive = produced_primitive(node, &scope.primitives)?;
     for let [i, shape] of produced.into_iter().enumerate() {
@@ -462,13 +583,19 @@ fn checked_node(
 }
 
 /// An `If`: each branch checked in a scope of its own, and each output the
-/// axes both branches give it. An axis the two name apart takes the name the
-/// output's layout gives, and one of two lengths a length of its own, which
-/// nothing after the node can spell.
-fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -> Result<(), InferError> {
+/// axes both branches give it. An axis the two give apart is new, and one of
+/// two lengths a length of its own, which nothing after the node can spell.
+fn branched(node: &Node, scope: &mut Checked) -> Result<(), InferError> {
     branch_condition(node, scope)?;
-    let [then_graph, then_scope] = checked_branch(node, "then_branch", scope, schema)?;
-    let [else_graph, else_scope] = checked_branch(node, "else_branch", scope, schema)?;
+    let [then_graph, then_scope] = checked_branch(node, "then_branch", scope)?;
+    // The branches and the graph around them solve one set of classes, so a
+    // weight a branch reads is named as the graph holds it.
+    scope.axes = then_scope.axes;
+    let [else_graph, else_scope] = checked_branch(node, "else_branch", scope)?;
+    scope.axes = else_scope.axes;
+    for let branch of [&then_scope, &else_scope] {
+        hoist_constants(node, scope, branch)?;
+    }
     for let [i, output] of node.outputs.into_iter().enumerate() {
         let t = then_scope.shapes[then_graph.outputs[i].name];
         let e = else_scope.shapes[else_graph.outputs[i].name];
@@ -488,12 +615,15 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
         }
         let mut axes: List<Axis> = [];
         for let j of 0..<t.rank() {
-            let [a, b] = [t.axes[j], e.axes[j]];
+            let [a, b] = [
+                scope.axes.read(&t.axes[j]),
+                scope.axes.read(&e.axes[j]),
+            ];
             let extent = if a.extent.agrees(&b.extent) { a.extent } else { Extent::symbol(&`${output}[${j}]`) };
             axes.push(if a.name == b.name {
                 Axis { ..a, extent };
             } else {
-                output_layout_axis(node, &output, local, j, t.rank(), extent, "is named apart in its branches")?;
+                new_axis(&output, j, extent, &mut scope.axes);
             });
         }
         scope.shapes[output] = held(&output, Shape { axes })?;
@@ -501,21 +631,24 @@ fn branched(node: &Node, scope: &mut Checked, schema: &Schema, local: &Schema) -
             scope.primitives[output] = p;
         }
     }
-    for let branch of [&then_scope, &else_scope] {
-        hoist_constants(scope, branch, local)?;
-    }
     scope.branches[node.outputs[0]] = [then_scope, else_scope];
     return Result::Ok(());
 }
 
-/// Give `scope` a shape, under its own layout, for each of its constants
-/// `branch` read, so the constant is spelled once around the branches and each
-/// branch relabels it to the axes it read it under. One the layout around the
-/// branches does not name is left to each branch.
-fn hoist_constants(scope: &mut Checked, branch: &Checked, local: &Schema) -> Result<(), InferError> {
-    for let [name, _] of branch.shapes.entries() {
-        if scope.known.contains_key(*name) && local.axes_for(name) matches { Some(_) } {
-            materialize(name, &scope.known, &mut scope.shapes, local)?;
+/// Give `scope` the shape `branch` read each of `scope`'s constants under, so
+/// the constant is spelled once around the branches. It is one tensor, so where
+/// `scope` holds it already, the two shapes meet.
+fn hoist_constants(node: &Node, scope: &mut Checked, branch: &Checked) -> Result<(), InferError> {
+    for let [name, shape] of branch.shapes.entries() {
+        if !scope.known.contains_key(*name) {
+            continue;
+        }
+        let Some(outer) = scope.shapes.get(*name) else {
+            scope.shapes[*name] = *shape;
+            continue;
+        };
+        for let i of 0..<outer.rank() {
+            agree_at(node, &outer.axes[i], &shape.axes[i], &mut scope.owed, &mut scope.axes)?;
         }
     }
     return Result::Ok(());
@@ -541,7 +674,7 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
         let Static(n) = axis.extent else {
             return Result::Err(refusal(
                 node,
-                `operand ${cond}'s axis ${axis.name} is ${axis.extent}, and If branches on one element`,
+                `operand ${cond}'s axis ${scope.axes.label(&axis)} is ${axis.extent}, and If branches on one element`,
             ));
         };
         count *= n as i64;
@@ -554,7 +687,7 @@ fn branch_condition(node: &Node, scope: &Checked) -> Result<(), InferError> {
 
 /// The graph an `If` attribute holds, checked in a copy of `scope` that owes
 /// nothing yet.
-fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -> Result<[Graph, Checked], InferError> {
+fn checked_branch(node: &Node, attr: String, scope: &Checked) -> Result<[Graph, Checked], InferError> {
     let Some(a) = node.attr(attr) else {
         return attr_read(node, Result::Err(absent(attr)));
     };
@@ -574,7 +707,9 @@ fn checked_branch(node: &Node, attr: String, scope: &Checked, schema: &Schema) -
         ));
     }
     let mut inner = Checked { ..*scope, owed: [], branches: HashMap::new() };
-    checked_graph(&graph, &mut inner, schema)?;
+    inner.axes.depth += 1;
+    checked_graph(&graph, &mut inner)?;
+    inner.axes.depth -= 1;
     return Result::Ok([graph, inner]);
 }
 
@@ -704,12 +839,12 @@ fn known_primitive(k: &Known) -> String {
     };
 }
 
-/// Give a folded tensor a kernel reads the axes the layout names.
+/// Give a folded tensor a kernel reads axes of its own.
 fn materialize(
     tensor: &String,
     known: &HashMap<String, Known>,
     shapes: &mut HashMap<String, Shape>,
-    schema: &Schema,
+    axes: &mut Axes,
 ) -> Result<(), InferError> {
     if shapes.contains_key(*tensor) {
         return Result::Ok(());
@@ -721,14 +856,20 @@ fn materialize(
     for let e of k.extents {
         dims.push(Dim::Static(e));
     }
-    shapes[*tensor] = shape_of(&ValueInfo { name: *tensor, dtype: "", rank: Rank::Dims(dims) }, schema)?;
+    shapes[*tensor] = shape_of(&ValueInfo { name: *tensor, dtype: "", rank: Rank::Dims(dims) }, axes)?;
     return Result::Ok(());
 }
 
 /// The graph's output declaration merged into what the nodes produced, as ONNX's
 /// `mergeInDimensionInfo` does: a declared static extent settles a symbolic
-/// one, and the inputs owe that the two are equal.
-fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) -> Result<Shape, InferError> {
+/// one, and the inputs owe that the two are equal. A `dim_param` is declared as
+/// one on an input is.
+fn merge_declared(
+    vi: &ValueInfo,
+    produced: &Shape,
+    owed: &mut List<Condition>,
+    axes: &mut Axes,
+) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(*produced);
     };
@@ -740,29 +881,27 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
             produced: produced.rank(),
         }));
     }
+    declare_dims(vi, produced, owed, axes)?;
     let mut merged = *produced;
     for let mut i = 0; i < dims.len(); i += 1 {
-        // A `dim_param` names the axis in the model author's words and `?`
-        // names nothing, so neither can disagree with the schema's own name.
-        let Static(declared) = dims[i] else {
+        let axis = &merged.axes[i];
+        let Some(declared) = dims[i].as_static() else {
             continue;
         };
-        let axis = &merged.axes[i];
         let agrees = match axis.extent {
             Static(found) => declared == found,
             // The graph states a length the nodes only carried a polynomial
             // for, and a consumer of the shape table is owed the constant.
             Symbolic(p) => {
-                let condition = `axis ${axis.name} must be ${declared}, as the graph declares`;
+                let condition = `axis ${axes.label(axis)} must be ${declared}, as the graph declares`;
                 owe_equal_at(owed, &vi.name, &p, &Poly::constant(declared as i64), condition).is_ok();
             },
-            Unstated => unreachable(),
         };
         if !agrees {
             builtin::cold_path();
             return Result::Err(InferError::Declared(DeclaredConflict {
                 tensor: vi.name,
-                axis: axis.name,
+                axis: axes.label(axis),
                 declared: Extent::Static(declared),
                 produced: axis.extent,
             }));
@@ -772,40 +911,57 @@ fn merge_declared(vi: &ValueInfo, produced: &Shape, owed: &mut List<Condition>) 
     return Result::Ok(merged);
 }
 
-/// The axes a value info declares, named by the schema and given extents by
-/// the graph.
-fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
+/// Record each `dim_param` boundary tensor `vi` declares on `shape`'s axes,
+/// where it is one name rather than arithmetic. ONNX reads one `dim_param` as
+/// one length, so each axis meets the one its word was first declared on, and
+/// `owed` gains what the inputs owe for the two lengths to agree.
+fn declare_dims(vi: &ValueInfo, shape: &Shape, owed: &mut List<Condition>, axes: &mut Axes) -> Result<(), InferError> {
+    let Some(dims) = dims_of(&vi.rank) else {
+        return Result::Ok(());
+    };
+    for let [i, dim] of dims.into_iter().enumerate() {
+        let Some(word) = param_of(&dim) else {
+            continue;
+        };
+        if word.chars().any(|c| c.is_whitespace()) {
+            continue;
+        }
+        let axis = &shape.axes[i];
+        let Some(first) = axes.declare(axis, &word, &vi.name) else {
+            continue;
+        };
+        if Shape::agree(&first, axis, &vi.name, owed, axes).is_err() {
+            builtin::cold_path();
+            return Result::Err(InferError::Declared(DeclaredConflict {
+                tensor: vi.name,
+                axis: axes.label(axis),
+                declared: first.extent,
+                produced: axis.extent,
+            }));
+        }
+    }
+    return Result::Ok(());
+}
+
+/// The axes a value info declares, each a class of its own, given its extent
+/// by the graph.
+fn shape_of(vi: &ValueInfo, axes: &mut Axes) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         builtin::cold_path();
         return Result::Err(InferError::UnrankedTensor(vi.name));
     };
-    // A scalar has no axis for a pattern to name.
-    if dims.is_empty() {
-        return Result::Ok(Shape { axes: [] });
+    let mut shape: List<Axis> = [];
+    for let [i, dim] of dims.into_iter().enumerate() {
+        let origin = `${vi.name}[${i}]`;
+        let extent = extent_of(&dim, &origin);
+        shape.push(axes.mint(origin, extent));
     }
-    let Some(names) = schema.axes_for(&vi.name) else {
-        builtin::cold_path();
-        return Result::Err(InferError::Unnamed(UnnamedTensor { tensor: vi.name }));
-    };
-    if names.len() != dims.len() {
-        builtin::cold_path();
-        return Result::Err(InferError::AxisCount(AxisCountConflict {
-            tensor: vi.name,
-            named: names.len(),
-            dims: dims.len(),
-        }));
-    }
-    let mut axes: List<Axis> = [];
-    for let mut i = 0; i < dims.len(); i += 1 {
-        axes.push(Axis::named(&names[i], extent_of(&dims[i], &names[i])));
-    }
-    return held(&vi.name, Shape { axes });
+    return held(&vi.name, Shape { axes: shape });
 }
 
 /// `shape`, which a list must be able to hold.
 fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
-    let extents: List<Extent> = shape.axes.into_iter().map(|axis| axis.extent).collect();
-    if !fits(&extents) {
+    if !fits(&shape.extents()) {
         builtin::cold_path();
         return Result::Err(InferError::Oversized(*tensor));
     }
@@ -813,13 +969,23 @@ fn held(tensor: &String, shape: Shape) -> Result<Shape, InferError> {
 }
 
 /// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one, or
-/// the arithmetic over symbols it spells. A `?` has no symbol, so the axis's
-/// name stands for it, as one length.
-fn extent_of(dim: &Dim, axis: &String) -> Extent {
+/// the arithmetic over symbols it spells. A `?` has no symbol, so the tensor
+/// axis it was declared at, `origin`, stands for it.
+fn extent_of(dim: &Dim, origin: &String) -> Extent {
     return match dim {
         Static(n) => Extent::Static(*n),
+        Bound([_, n]) => Extent::Static(*n),
         Symbol(s) => Extent::param(s),
-        Unknown => Extent::symbol(axis),
+        Unknown => Extent::symbol(origin),
+    };
+}
+
+/// The `dim_param` a dimension was declared with, bound or not.
+fn param_of(dim: &Dim) -> Option<String> {
+    return match dim {
+        Symbol(s) => Option::Some(*s),
+        Bound([s, _]) => Option::Some(*s),
+        _ => null,
     };
 }
 
@@ -827,51 +993,43 @@ fn infer_node(
     node: &Node,
     shapes: &HashMap<String, Shape>,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     opset: Option<i64>,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<Shape, InferError> {
     let op = node.op;
     if op == "Unsqueeze" || op == "Squeeze" {
         let operand = operand_at(node, shapes, 0);
-        let input: List<Extent> = operand.axes.into_iter().map(|axis| axis.extent).collect();
+        let input = operand.extents();
         let carried = carried_axes(node, known, &input).map_err(|reason| refusal(node, reason))?;
         let mut axes: List<Axis> = [];
         for let [i, from] of carried.into_iter().enumerate() {
             axes.push(match from {
                 Some(a) => operand.axes[a],
-                None => output_layout_axis(
-                    node,
-                    &node.outputs[0],
-                    schema,
-                    i,
-                    carried.len(),
-                    Extent::Static(1),
-                    "is inserted",
-                )?,
+                None => new_axis(&node.outputs[0], i, Extent::Static(1), classes),
             });
         }
         return Result::Ok(Shape { axes });
     }
     if op == "Reshape" {
-        let operand = operand_at(node, shapes, 0);
-        let input = extents_of(node, &operand)?;
+        let operand = classes.read_shape(&operand_at(node, shapes, 0));
+        let input = operand.extents();
         let targets = regrouped_extents(node, known, &input, owed).map_err(|reason| refusal(node, reason))?;
-        return regrouped(node, &operand, &targets, schema);
+        return Result::Ok(regrouped(node, &operand, &targets, classes));
     }
     if op == "Flatten" {
-        return flatten(node, &operand_at(node, shapes, 0), schema);
+        return flatten(node, &operand_at(node, shapes, 0), classes);
     }
     if op == "Slice" {
-        return sliced(node, &operand_at(node, shapes, 0), known, schema, owed);
+        return sliced(node, &operand_at(node, shapes, 0), known, owed, classes);
     }
     if op == "ConstantOfShape" {
-        return filled(node, known, schema, owed);
+        return filled(node, known, owed, classes);
     }
     if op == "Range" {
         let count = range_count(node, known, owed)?;
         return Result::Ok(Shape {
-            axes: [output_layout_axis(node, &node.outputs[0], schema, 0, 1, count, "is a range")?],
+            axes: [new_axis(&node.outputs[0], 0, count, classes)],
         });
     }
     if op == "Gather" {
@@ -885,24 +1043,24 @@ fn infer_node(
     }
     if op == "MaxPool" {
         let x = operand_at(node, shapes, 0);
-        let window = window_of(node, &x, shapes, owed)?;
-        return windowed(node, [x.axes[0], x.axes[1]], &window, schema);
+        let window = window_of(node, &x, shapes, owed, classes)?;
+        return windowed(node, [x.axes[0], x.axes[1]], &window, classes);
     }
     if op == "Conv" {
         let x = operand_at(node, shapes, 0);
         let w = operand_at(node, shapes, 1);
         // `window_of` checks the weight's rank, which `conv_group` relies on.
-        let window = window_of(node, &x, shapes, owed)?;
+        let window = window_of(node, &x, shapes, owed, classes)?;
         let group = conv_group(node, &w)?;
-        agree_at(node, &x.axes[1], &grouped_inputs(node, &x.axes[1], &w.axes[1], group)?, owed)?;
+        agree_at(node, &x.axes[1], &grouped_inputs(node, &x.axes[1], &w.axes[1], group)?, owed, classes)?;
         if has_bias(node) {
             let b = operand_at(node, shapes, 2);
             if b.rank() != 1 {
                 return Result::Err(operand_rank(node, 2, b.rank(), 1));
             }
-            agree_at(node, &w.axes[0], &b.axes[0], owed)?;
+            agree_at(node, &w.axes[0], &b.axes[0], owed, classes)?;
         }
-        return windowed(node, [x.axes[0], w.axes[0]], &window, schema);
+        return windowed(node, [x.axes[0], w.axes[0]], &window, classes);
     }
     if op == "MatMul" {
         let [a, b] = binary_operands(node, shapes)?;
@@ -910,18 +1068,18 @@ fn infer_node(
             builtin::cold_path();
             return Result::Err(InferError::ScalarOperand(node.name()));
         }
-        return at_node(node, a.matmul(&b, op, owed));
+        return at_node(node, a.matmul(&b, op, owed, classes));
     }
     if is_binary_elementwise(&op) {
         let [a, b] = binary_operands(node, shapes)?;
         let trailing = trailing_axes(node, a.rank(), b.rank()).map_err(|reason| refusal(node, reason))?;
-        return at_node(node, a.elementwise(&b.followed_by_units(&a, trailing), op, owed));
+        return at_node(node, a.elementwise(&b.followed_by_units(&a, trailing), op, owed, classes));
     }
     if op == "Gemm" {
         let [_, _, trans_a, trans_b] = gemm_options(node)?;
         let a = gemm_matrix(node, shapes, 0, trans_a)?;
         let b = gemm_matrix(node, shapes, 1, trans_b)?;
-        let product = at_node(node, a.matmul(&b, op, owed))?;
+        let product = at_node(node, a.matmul(&b, op, owed, classes))?;
         if !has_bias(node) {
             return Result::Ok(product);
         }
@@ -931,7 +1089,7 @@ fn infer_node(
         if c.rank() > product.rank() {
             return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
-        return at_node(node, product.elementwise(&c, op, owed));
+        return at_node(node, product.elementwise(&c, op, owed, classes));
     }
     if op == "Transpose" {
         let shape = operand_at(node, shapes, 0);
@@ -939,14 +1097,15 @@ fn infer_node(
         return Result::Ok(shape.permute(&perm));
     }
     if op == "Concat" {
-        return joined(node, shapes, schema, owed);
+        return joined(node, shapes, owed, classes);
     }
     if is_unary_elementwise(&op) {
         return Result::Ok(operand_at(node, shapes, 0));
     }
     if op == "Where" {
-        let branches = at_node(node, operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op, owed))?;
-        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op, owed));
+        let picked = operand_at(node, shapes, 1).elementwise(&operand_at(node, shapes, 2), op, owed, classes);
+        let branches = at_node(node, picked)?;
+        return at_node(node, branches.elementwise(&operand_at(node, shapes, 0), op, owed, classes));
     }
     if op == "Softmax" {
         let x = operand_at(node, shapes, 0);
@@ -954,7 +1113,7 @@ fn infer_node(
         return Result::Ok(x);
     }
     if op == "Expand" {
-        return expanded(node, &operand_at(node, shapes, 0), known, schema, owed);
+        return expanded(node, &operand_at(node, shapes, 0), known, owed, classes);
     }
     if is_reduction(&op) {
         let x = operand_at(node, shapes, 0);
@@ -975,13 +1134,13 @@ fn infer_node(
 }
 
 /// `Split`'s outputs: the operand with the split axis cut to each part. A part
-/// narrower than the axis is a new axis, for its output's layout to name.
+/// narrower than the axis is a new axis.
 fn split(
     node: &Node,
     shapes: &HashMap<String, Shape>,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<List<Shape>, InferError> {
     let x = operand_at(node, shapes, 0);
     let parts = split_parts(node, known, &x, owed)?;
@@ -991,15 +1150,7 @@ fn split(
     for let [i, part] of parts.into_iter().enumerate() {
         let mut axes = x.axes;
         if part != whole {
-            axes[axis] = output_layout_axis(
-                node,
-                &node.outputs[i],
-                schema,
-                axis,
-                x.rank(),
-                counted(node, part)?,
-                "is a part of a split axis",
-            )?;
+            axes[axis] = new_axis(&node.outputs[i], axis, counted(node, part)?, classes);
         }
         produced.push(Shape { axes });
     }
@@ -1008,12 +1159,12 @@ fn split(
 
 /// A `Concat` the run computes, since some operand is only known then. The
 /// operands meet on every other axis, and the joined axis, as long as their
-/// parts together, is new, for the output's layout to name.
+/// parts together, is new.
 fn joined(
     node: &Node,
     shapes: &HashMap<String, Shape>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<Shape, InferError> {
     let first = operand_at(node, shapes, 0);
     let axis = concat_axis(node, first.rank())?;
@@ -1030,21 +1181,13 @@ fn joined(
             if i == axis {
                 continue;
             }
-            agree_at(node, &first.axes[i], &x.axes[i], owed)?;
+            agree_at(node, &first.axes[i], &x.axes[i], owed, classes)?;
         }
-        let part = extents_of(node, &x)?[axis].poly();
+        let part = x.axes[axis].extent.poly();
         sum = sum.try_add(&part).ok_or(refusal(node, `${sum} + ${part} leaves i64`))?;
     }
     let mut axes = first.axes;
-    axes[axis] = output_layout_axis(
-        node,
-        &node.outputs[0],
-        schema,
-        axis,
-        first.rank(),
-        counted(node, sum)?,
-        "is a concatenation",
-    )?;
+    axes[axis] = new_axis(&node.outputs[0], axis, counted(node, sum)?, classes);
     return Result::Ok(Shape { axes });
 }
 
@@ -1069,7 +1212,7 @@ pub fn split_parts(
     owed: &mut List<Condition>,
 ) -> Result<List<Poly>, InferError> {
     let axis = split_axis(node, x.rank())?;
-    let whole = extents_of(node, x)?[axis].poly();
+    let whole = x.axes[axis].extent.poly();
     let count = node.outputs.len();
     let sizes = match polys_at(node, known, 1, "split").map_err(|reason| refusal(node, reason))? {
         Some(given) => {
@@ -1108,8 +1251,9 @@ pub fn split_parts(
 
 /// `Flatten` regroups the axes ahead of `axis` into one and the rest into
 /// another, either of which may be empty and so extent 1.
-fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, InferError> {
-    let extents = extents_of(node, operand)?;
+fn flatten(node: &Node, operand: &Shape, classes: &mut Axes) -> Result<Shape, InferError> {
+    let operand = classes.read_shape(operand);
+    let extents = operand.extents();
     let axis = axis_attr(node, 1, operand.rank(), operand.rank())?;
     let mut targets: List<Extent> = [];
     for let run of [
@@ -1122,57 +1266,46 @@ fn flatten(node: &Node, operand: &Shape, schema: &Schema) -> Result<Shape, Infer
         // `held` bounded the operand's elements, so either run's are an extent.
         targets.push(Extent::of(count).unwrap());
     }
-    return regrouped(node, operand, &targets, schema);
-}
-
-/// Every extent of an operand a regrouping reads.
-fn extents_of(node: &Node, operand: &Shape) -> Result<List<Extent>, InferError> {
-    return operand.extents(&node.op).map_err(|reason| refusal(node, reason));
+    return Result::Ok(regrouped(node, &operand, &targets, classes));
 }
 
 /// Every extent of an operand the operator reads as static.
-fn static_extents_of(node: &Node, operand: &Shape) -> Result<List<i32>, InferError> {
-    return operand.static_extents(&node.op).map_err(|reason| refusal(node, reason));
+fn static_extents_of(node: &Node, operand: &Shape, classes: &Axes) -> Result<List<i32>, InferError> {
+    return operand.static_extents(&node.op, classes).map_err(|reason| refusal(node, reason));
 }
 
-/// The operand's axes regrouped onto `targets`. An axis no regrouping
-/// determines is the output layout's to name.
-fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, schema: &Schema) -> Result<Shape, InferError> {
+/// The operand's axes, as `Axes::read_shape` reads them, regrouped onto
+/// `targets`. An axis no regrouping determines is new.
+fn regrouped(node: &Node, operand: &Shape, targets: &List<Extent>, classes: &mut Axes) -> Shape {
     let mut axes: List<Axis> = [];
     for let [i, found] of operand.regroup(targets).into_iter().enumerate() {
         axes.push(match found {
             Some(axis) => axis,
-            None => layout_axis(node, schema, i, targets, "regroups none of the operand's axes")?,
+            None => new_axis(&node.outputs[0], i, targets[i], classes),
         });
     }
-    return Result::Ok(Shape { axes });
+    return Shape { axes };
 }
 
 /// A `Slice` the run computes, since a bound or the data is only known then.
-/// An axis it narrows is new, for the output layout to name. One cut to one
-/// position no layout names keeps its name, as a reduction keeping its axis
-/// does, so the `last` option's cuts need no name. Where that position exists
-/// only for some inputs, as the last one of an axis that may be empty, the
-/// inputs owe it.
+/// An axis it narrows is new. One cut to one position keeps its class, as a
+/// reduction keeping its axis does. Where that position exists only for some
+/// inputs, as the last one of an axis that may be empty, the inputs owe it.
 fn sliced(
     node: &Node,
     x: &Shape,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<Shape, InferError> {
-    let mut extents: List<Extent> = x.axes.into_iter().map(|axis| axis.extent).collect();
     let mut axes = x.axes;
-    let named = schema.axes_for(&node.outputs[0]) matches { Some(_) };
     for let cut of slice_cuts(node, known, x)? {
-        if !named && let Some(conditions) = cut.extent.oneness() {
+        if let Some(conditions) = cut.extent.oneness() {
             owed.extend(&conditions);
-            extents[cut.axis] = Extent::Static(1);
             axes[cut.axis] = Axis { ..x.axes[cut.axis], extent: Extent::Static(1) };
             continue;
         }
-        extents[cut.axis] = cut.extent;
-        axes[cut.axis] = layout_axis(node, schema, cut.axis, &extents, "is a slice of an axis")?;
+        axes[cut.axis] = new_axis(&node.outputs[0], cut.axis, cut.extent, classes);
     }
     return Result::Ok(Shape { axes });
 }
@@ -1252,37 +1385,32 @@ fn counted(node: &Node, count: Poly) -> Result<Extent, InferError> {
 }
 
 /// A `ConstantOfShape` the run fills, since a symbol stands for an extent of
-/// its shape. Each extent owes that it is not negative, and every axis is new,
-/// for the output layout to name.
+/// its shape. Each extent owes that it is not negative, and every axis is new.
 fn filled(
     node: &Node,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<Shape, InferError> {
     let written = operand_polys(node, known, 0).map_err(|reason| refusal(node, reason))?;
-    let mut extents: List<Extent> = [];
-    for let e of written {
-        owe(node, owed, e, `the shape's ${e} must not be negative`)?;
-        extents.push(counted(node, e)?);
-    }
     let mut axes: List<Axis> = [];
-    for let i of 0..<extents.len() {
-        axes.push(layout_axis(node, schema, i, &extents, "is filled")?);
+    for let [i, e] of written.into_iter().enumerate() {
+        owe(node, owed, e, `the shape's ${e} must not be negative`)?;
+        axes.push(new_axis(&node.outputs[0], i, counted(node, e)?, classes));
     }
     return Result::Ok(Shape { axes });
 }
 
 /// An `Expand`: the operand broadcast against the target shape, aligned from
 /// the end, as arithmetic broadcasts two operands. An axis the operand stretches
-/// from 1, or lacks, is new, for the output's layout to name; one it keeps owes
-/// that the target's extent is 1 or its own.
+/// from 1, or lacks, is new; one it keeps owes that the target's extent is 1 or
+/// its own.
 fn expanded(
     node: &Node,
     x: &Shape,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<Shape, InferError> {
     let target = operand_polys(node, known, 1).map_err(|reason| refusal(node, reason))?;
     let rank = i32::max(x.rank(), target.len());
@@ -1298,12 +1426,12 @@ fn expanded(
         let at_x = i - (rank - x.rank());
         let stretched = at_x < 0 || x.axes[at_x].extent matches { Static(1) } && !extent matches { Static(1) };
         if stretched {
-            axes.push(output_layout_axis(node, &node.outputs[0], schema, i, rank, extent, "is expanded")?);
+            axes.push(new_axis(&node.outputs[0], i, extent, classes));
             continue;
         }
         let kept = x.axes[at_x];
         if !extent matches { Static(1) } {
-            agree_at(node, &kept, &Axis { ..kept, extent }, owed)?;
+            agree_at(node, &kept, &Axis { ..kept, extent }, owed, classes)?;
         }
         axes.push(kept);
     }
@@ -1373,15 +1501,15 @@ pub fn attention_options(node: &Node) -> Result<AttentionOptions, InferError> {
 }
 
 
-/// The first present cache a `GroupQueryAttention` names, whose layout names
-/// the positions both caches hold.
+/// The first present cache a `GroupQueryAttention` names, whose axis holds the
+/// positions both caches hold.
 pub fn named_present(node: &Node) -> Option<String> {
     return node.outputs.into_iter().skip(1).find(|o| o != "");
 }
 
 /// A `GroupQueryAttention`'s outputs: the attended queries, of the queries'
 /// axes, then the present key and value, the past's axes with the new
-/// positions after the past ones, an axis the output layout names. The query,
+/// positions after the past ones, a new axis. The query,
 /// key and value are `[batch, sequence, heads × head]`, the past
 /// `[batch, key heads, past, head]`. The sequence lengths it is given must
 /// be the ones its shapes say, as must the rotary caches' and bias's extents.
@@ -1389,8 +1517,8 @@ fn attention(
     node: &Node,
     shapes: &HashMap<String, Shape>,
     known: &HashMap<String, Known>,
-    schema: &Schema,
     owed: &mut List<Condition>,
+    classes: &mut Axes,
 ) -> Result<List<Shape>, InferError> {
     let options = attention_options(node)?;
     for let index of [1, 2, 3, 4] {
@@ -1419,24 +1547,24 @@ fn attention(
         return Result::Err(refusal(node, "the head's extent must be a number"));
     };
     // Wide, since heads times the head may pass any extent.
-    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>| -> Result<(), InferError> {
+    let stated = |axis: &Axis, extent: i64, into: &mut List<Condition>, solving: &mut Axes| -> Result<(), InferError> {
         let Some(e) = Extent::of(Poly::constant(extent)) else {
-            return Result::Err(refusal(node, `axis ${axis.name} would be ${extent} long, which no axis is`));
+            return Result::Err(refusal(node, `axis ${solving.label(axis)} would be ${extent} long, which no axis is`));
         };
-        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into);
+        return agree_at(node, axis, &Axis { ..*axis, extent: e }, into, solving);
     };
-    stated(&q.axes[2], options.heads as i64 * dim as i64, owed)?;
-    stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed)?;
-    stated(&past_k.axes[1], options.kv_heads as i64, owed)?;
+    stated(&q.axes[2], options.heads as i64 * dim as i64, owed, classes)?;
+    stated(&k.axes[2], options.kv_heads as i64 * dim as i64, owed, classes)?;
+    stated(&past_k.axes[1], options.kv_heads as i64, owed, classes)?;
     for let i of 0..<3 {
-        agree_at(node, &k.axes[i], &v.axes[i], owed)?;
+        agree_at(node, &k.axes[i], &v.axes[i], owed, classes)?;
     }
     for let i of 0..<4 {
-        agree_at(node, &past_k.axes[i], &past_v.axes[i], owed)?;
+        agree_at(node, &past_k.axes[i], &past_v.axes[i], owed, classes)?;
     }
-    agree_at(node, &q.axes[0], &k.axes[0], owed)?;
-    agree_at(node, &q.axes[1], &k.axes[1], owed)?;
-    agree_at(node, &q.axes[0], &past_k.axes[0], owed)?;
+    agree_at(node, &q.axes[0], &k.axes[0], owed, classes)?;
+    agree_at(node, &q.axes[1], &k.axes[1], owed, classes)?;
+    agree_at(node, &q.axes[0], &past_k.axes[0], owed, classes)?;
     let sequence = q.axes[1].extent.poly();
     let Some(total) = past_k.axes[2].extent.poly().try_add(&sequence) else {
         return Result::Err(refusal(node, "the past and the sequence are more than a length holds"));
@@ -1453,50 +1581,50 @@ fn attention(
         if !node.has_operand(ROTARY_COS) || !node.has_operand(ROTARY_SIN) {
             return Result::Err(refusal(node, "do_rotary needs the cos and sin caches"));
         }
-        for let index of [ROTARY_COS, ROTARY_SIN] {
-            let cache = ranked(index, 2)?;
-            stated(&cache.axes[1], dim as i64 / 2, owed)?;
-            let Some(slack) = cache.axes[0].extent.poly().try_sub(&total) else {
-                return Result::Err(refusal(node, "the rotary cache must reach every position"));
-            };
-            owe(node, owed, slack, "the rotary cache must reach every position")?;
-        }
-    }
-    if node.has_operand(ATTENTION_BIAS) {
-        let bias = ranked(ATTENTION_BIAS, 4)?;
-        owe_equal(node, owed, &bias.axes[2].extent.poly(), &sequence, "the bias must cover the sequence")?;
-        owe_equal(node, owed, &bias.axes[3].extent.poly(), &total, "the bias must cover the past and the sequence")?;
-        for let [i, along] of [
-            [0, q.axes[0].extent.poly()],
-            [1, Poly::constant(options.heads as i64)],
-        ] as List<[i32, Poly]> {
-            let extent = bias.axes[i].extent.poly();
-            if extent.as_constant() != Option::Some(1) {
-                owe_equal(
-                    node,
-                    owed,
-                    &extent,
-                    &along,
-                    "the bias's first two extents must be 1 or the batch's and heads'",
-                )?;
-            }
+        let [cos, sin] = [
+            ranked(ROTARY_COS, 2)?,
+            ranked(ROTARY_SIN, 2)?,
+        ];
+        stated(&cos.axes[1], dim as i64 / 2, owed, classes)?;
+        let Some(slack) = cos.axes[0].extent.poly().try_sub(&total) else {
+            return Result::Err(refusal(node, "the rotary cache must reach every position"));
+        };
+        owe(node, owed, slack, "the rotary cache must reach every position")?;
+        // The two caches are read position by position together.
+        for let i of 0..<2 {
+            agree_at(node, &cos.axes[i], &sin.axes[i], owed, classes)?;
         }
     }
     let Some(total_extent) = Extent::of(total) else {
         return Result::Err(refusal(node, "the past and the sequence are more than a list holds"));
     };
     let Some(present) = named_present(node) else {
-        return Result::Err(refusal(node, "neither present output is named, so no layout names the positions"));
+        return Result::Err(refusal(
+            node,
+            "neither present output is named, and the kernel's call spells their positions",
+        ));
     };
-    let positions = output_layout_axis(
-        node,
-        &present,
-        schema,
-        2,
-        4,
-        total_extent,
-        "holds the past and the new positions",
-    )?;
+    let positions = new_axis(&present, 2, total_extent, classes);
+    if node.has_operand(ATTENTION_BIAS) {
+        let bias = ranked(ATTENTION_BIAS, 4)?;
+        agree_at(node, &bias.axes[2], &q.axes[1], owed, classes)?;
+        agree_at(node, &bias.axes[3], &positions, owed, classes)?;
+        // The batch stretches as a broadcast does, and no axis stands for the
+        // heads.
+        let [batch, heads] = [bias.axes[0], bias.axes[1]];
+        if !batch.extent.is_one() || q.axes[0].extent.is_one() {
+            agree_at(node, &batch, &q.axes[0], owed, classes)?;
+        }
+        if !heads.extent.is_one() {
+            owe_equal(
+                node,
+                owed,
+                &heads.extent.poly(),
+                &Poly::constant(options.heads as i64),
+                "the bias's second extent must be 1 or the heads'",
+            )?;
+        }
+    }
     let cache = Shape {
         axes: [past_k.axes[0], past_k.axes[1], positions, past_k.axes[3]],
     };
@@ -1550,54 +1678,20 @@ pub fn range_bounds(node: &Node, known: &HashMap<String, Known>) -> Result<[Poly
 }
 
 /// A window's output: the two leading axes it carries through, and one axis
-/// per spatial position, which the output layout names.
-fn windowed(node: &Node, lead: [Axis, Axis], window: &Geometry, schema: &Schema) -> Result<Shape, InferError> {
+/// per spatial position, each new.
+fn windowed(node: &Node, lead: [Axis, Axis], window: &Geometry, classes: &mut Axes) -> Result<Shape, InferError> {
     let [batch, channels] = lead;
-    let mut extents = [batch.extent, channels.extent] as List<Extent>;
-    for let e of window.output {
-        extents.push(counted(node, e)?);
-    }
     let mut axes = [batch, channels] as List<Axis>;
-    for let i of 2..<extents.len() {
-        axes.push(layout_axis(node, schema, i, &extents, "is a window's output")?);
+    for let [i, e] of window.output.into_iter().enumerate() {
+        axes.push(new_axis(&node.outputs[0], 2 + i, counted(node, e)?, classes));
     }
     return Result::Ok(Shape { axes });
 }
 
-/// Axis `index` of the node's first output, which the operator left
-/// undetermined, under the name the output's layout gives it. `why` says what made it new.
-fn layout_axis(
-    node: &Node,
-    schema: &Schema,
-    index: i32,
-    extents: &List<Extent>,
-    why: String,
-) -> Result<Axis, InferError> {
-    return output_layout_axis(node, &node.outputs[0], schema, index, extents.len(), extents[index], why);
-}
-
-/// `layout_axis` for any of the node's outputs, of rank `rank`.
-fn output_layout_axis(
-    node: &Node,
-    output: &String,
-    schema: &Schema,
-    index: i32,
-    rank: i32,
-    extent: Extent,
-    why: String,
-) -> Result<Axis, InferError> {
-    let Some(names) = schema.axes_for(output) else {
-        return Result::Err(refusal(node, `axis ${index} ${why}, so a layout pattern must name ${output}'s`));
-    };
-    if names.len() != rank {
-        builtin::cold_path();
-        return Result::Err(InferError::AxisCount(AxisCountConflict {
-            tensor: *output,
-            named: names.len(),
-            dims: rank,
-        }));
-    }
-    return Result::Ok(Axis::named(&names[index], extent));
+/// Axis `index` of `output`, which its operator left undetermined: a class of
+/// its own.
+fn new_axis(output: &String, index: i32, extent: Extent, classes: &mut Axes) -> Axis {
+    return classes.mint(`${*output}[${index}]`, extent);
 }
 
 /// The window a `Conv` or `MaxPool` slides over its first operand. `emit`
@@ -1607,6 +1701,7 @@ pub fn window_of(
     x: &Shape,
     shapes: &HashMap<String, Shape>,
     owed: &mut List<Condition>,
+    classes: &Axes,
 ) -> Result<Geometry, InferError> {
     if x.rank() < 3 {
         return Result::Err(refusal(
@@ -1614,13 +1709,13 @@ pub fn window_of(
             `the operand has rank ${x.rank()}, and a window slides over axes past the second`,
         ));
     }
-    let spatial: List<Poly> = extents_of(node, x)?[2..<x.rank()].to_list().into_iter().map(|e| e.poly()).collect();
+    let spatial: List<Poly> = x.extents()[2..<x.rank()].to_list().into_iter().map(|e| e.poly()).collect();
     let kernel = if node.op == "Conv" {
         let w = operand_at(node, shapes, 1);
         if w.rank() != x.rank() {
             return Result::Err(operand_rank(node, 1, w.rank(), x.rank()));
         }
-        spatial_extents(&static_extents_of(node, &w)?);
+        spatial_extents(&static_extents_of(node, &w, classes)?);
     } else {
         if node.attr("kernel_shape") matches { None } {
             return attr_read(node, Result::Err(absent("kernel_shape")));
@@ -1639,8 +1734,14 @@ fn attr_read<T>(node: &Node, read: Result<T, AttrError>) -> Result<T, InferError
     };
 }
 
-fn agree_at(node: &Node, left: &Axis, right: &Axis, owed: &mut List<Condition>) -> Result<(), InferError> {
-    return match Shape::agree(left, right, &node.op, owed) {
+fn agree_at(
+    node: &Node,
+    left: &Axis,
+    right: &Axis,
+    owed: &mut List<Condition>,
+    classes: &mut Axes,
+) -> Result<(), InferError> {
+    return match Shape::agree(left, right, &node.op, owed, classes) {
         Ok(_) => Result::Ok(()),
         Err(e) => Result::Err(InferError::Node(NodeConflict { node: node.name(), error: e })),
     };

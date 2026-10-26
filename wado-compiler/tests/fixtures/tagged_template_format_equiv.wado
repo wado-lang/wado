@@ -1,4 +1,4 @@
-// An untagged template is sugar for the prelude's `format` tag, but the
+// An untagged template is sugar for the `String::format` tag, but the
 // compiler still lowers it on a path of its own, so the two forms are held to
 // the same output over the specifier matrix (WEP 2026-01-10).
 use { println, Stdout } from "core:cli";
@@ -23,12 +23,12 @@ export fn run() with Stdout {
     let p = Pt { x: 1, y: 2 };
     let m: Meters = 2.5;
     let r = &s;
-    let tagged = format`${pi:.2}|${n:08}|${255:#x}|${255:X}|${5:b}|${8:o}|${1200:e}|${s:>6}|${s:.1}|${p}|${p:?}|${p:#?}|${m}|${r}|${r:?}|${true}|${'c'}|${n:+}`;
+    let tagged = String::format`${pi:.2}|${n:08}|${255:#x}|${255:X}|${5:b}|${8:o}|${1200:e}|${s:>6}|${s:.1}|${p}|${p:?}|${p:#?}|${m}|${r}|${r:?}|${true}|${'c'}|${n:+}`;
     let plain = `${pi:.2}|${n:08}|${255:#x}|${255:X}|${5:b}|${8:o}|${1200:e}|${s:>6}|${s:.1}|${p}|${p:?}|${p:#?}|${m}|${r}|${r:?}|${true}|${'c'}|${n:+}`;
     println(tagged);
     assert tagged == plain;
-    assert format`` == "";
-    assert format`plain text` == "plain text";
+    assert String::format`` == "";
+    assert String::format`plain text` == "plain text";
 }
 
 __DATA__

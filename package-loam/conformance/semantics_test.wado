@@ -9,7 +9,6 @@
 use { HashMap } from "core:collections";
 use { Graph } from "lib:loam/src/graph.wado";
 use { read } from "lib:loam/src/onnx_proto.wado";
-use { LayoutRule, Schema } from "lib:loam/src/schema.wado";
 use { generated, program_over, ran } from "./oracle.wado";
 
 /// The lengths of `X` the oracle ran each case at.
@@ -28,50 +27,12 @@ global INPUTS: HashMap<String, String> = {
 /// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
 /// lines, and past them why it computes nothing more: the build's refusal, or
 /// how the run stopped.
-fn loam(model: ByteList, output_axes: List<String>) -> String {
+fn loam(model: ByteList) -> String {
     let graph = read(model).unwrap();
-    return match built(&graph, output_axes) {
+    return match generated(&graph) {
         Ok(source) => run(source, &graph),
         Err(reason) => `refused: ${reason}`,
     };
-}
-
-/// The module the generator writes for `graph`, whose one output's axes are
-/// `output_axes`.
-fn built(graph: &Graph, output_axes: List<String>) -> Result<String, String> {
-    assert graph.outputs.len() == 1;
-    let output = graph.outputs[0].name;
-    let schema = Schema {
-        layout: [
-            LayoutRule {
-                pattern: "X",
-                axes: ["Seq"],
-            },
-            LayoutRule {
-                pattern: "M",
-                axes: ["Pos"],
-            },
-            LayoutRule {
-                pattern: "P",
-                axes: ["Seq", "Wide"],
-            },
-            LayoutRule {
-                pattern: "I",
-                axes: ["Batch", "Chan", "Seq"],
-            },
-            LayoutRule {
-                pattern: "W",
-                axes: ["Out", "Chan", "Tap"],
-            },
-            // The part of a `Split` a case does not return.
-            LayoutRule {
-                pattern: "Head",
-                axes: ["First"],
-            },
-            LayoutRule { pattern: output, axes: output_axes },
-        ],
-    };
-    return generated(graph, &schema);
 }
 
 /// `source` with a `run` that calls its `forward` at each of `LENGTHS` and
@@ -108,8 +69,8 @@ export fn run() with Stdout {
 }
 
 /// Loam computes from `model` what onnxruntime does, which `onnx` states.
-fn assert_agrees(model: ByteList, onnx: String, output_axes: List<String> = ["Part"]) {
-    assert loam(model, output_axes) == onnx;
+fn assert_agrees(model: ByteList, onnx: String) {
+    assert loam(model) == onnx;
 }
 
 test "Slice to N takes the first N, clamping to the axis's end" {
@@ -190,13 +151,10 @@ test "Range back by -N counts the steps of N that fit" {
     );
 }
 
-global POOLED: List<String> = ["Batch", "Chan", "Part"];
-
 test "MaxPool over N counts the windows that fit" {
     assert_agrees(
         #include_bytes("./semantics/MaxPoolOverLength.onnx"),
         #include_str("./semantics/MaxPoolOverLength.txt"),
-        POOLED,
     );
 }
 
@@ -204,7 +162,6 @@ test "MaxPool with ceil_mode over N keeps a partial last window" {
     assert_agrees(
         #include_bytes("./semantics/MaxPoolCeilOverLength.onnx"),
         #include_str("./semantics/MaxPoolCeilOverLength.txt"),
-        POOLED,
     );
 }
 
@@ -212,16 +169,11 @@ test "MaxPool with SAME_UPPER over N pads to cover every position" {
     assert_agrees(
         #include_bytes("./semantics/MaxPoolSameOverLength.onnx"),
         #include_str("./semantics/MaxPoolSameOverLength.txt"),
-        POOLED,
     );
 }
 
 test "Conv over N with padding and a stride" {
-    assert_agrees(
-        #include_bytes("./semantics/ConvOverLength.onnx"),
-        #include_str("./semantics/ConvOverLength.txt"),
-        ["Batch", "Out", "Part"],
-    );
+    assert_agrees(#include_bytes("./semantics/ConvOverLength.onnx"), #include_str("./semantics/ConvOverLength.txt"));
 }
 
 test "Split of N by sizes the graph computes from N" {
@@ -235,7 +187,6 @@ test "ConstantOfShape of a shape holding N fills N rows" {
     assert_agrees(
         #include_bytes("./semantics/ConstantOfShapeOfLength.onnx"),
         #include_str("./semantics/ConstantOfShapeOfLength.txt"),
-        ["Part", "Pair"],
     );
 }
 
@@ -262,7 +213,6 @@ test "Reshape reads 0 as the operand's extent and -1 as what remains" {
     assert_agrees(
         #include_bytes("./semantics/ReshapeKeepSplit.onnx"),
         #include_str("./semantics/ReshapeKeepSplit.txt"),
-        ["Seq", "Half", "Pair"],
     );
 }
 
@@ -270,6 +220,5 @@ test "Reshape reads a leading -1 as what the rest leaves" {
     assert_agrees(
         #include_bytes("./semantics/ReshapeRestFirst.onnx"),
         #include_str("./semantics/ReshapeRestFirst.txt"),
-        ["Rows", "Pair"],
     );
 }

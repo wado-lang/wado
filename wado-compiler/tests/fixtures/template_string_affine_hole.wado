@@ -1,0 +1,24 @@
+// A template borrows its holes: rendering an affine place leaves it owning its
+// value, so the place is still usable after the template and drops once.
+// Reading the place as a hole used to be elaborated as a move out of it.
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+export fn run() with Stdout {
+    let t = Token { id: 1 };
+    println(`${t:?}`);
+    let kept = t;
+    println(`moved ${kept.id}`);
+}
+
+__DATA__
+{"stdout": "Token { id: 1 }\nmoved 1\ndrop 1\n"}

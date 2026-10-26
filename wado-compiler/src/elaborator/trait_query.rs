@@ -1290,7 +1290,9 @@ impl TypeSystem {
                 self.walk_structural_derive_members(scope, nominal, tr, &mut |_, member| {
                     matches!(
                         self.type_table.borrow().get(member),
-                        ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. }
+                        ResolvedType::TypeParam { .. }
+                            | ResolvedType::TypePack { .. }
+                            | ResolvedType::PackElement { .. }
                     ) || self.type_implements_trait(ctx, scope, member, &trait_)
                 }) == Some(true)
             }
@@ -1363,6 +1365,7 @@ impl TypeSystem {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. } => false,
         }
@@ -2046,7 +2049,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // answers: another bound on the trait is another instantiation.
             let known = match (at_bound, trait_args.as_deref()) {
                 (true, Some(args)) => self
-                    .frame_projection_of_trait(&self_name, *declaring, Some(args), &decl.name)
+                    .frame_projection_of_trait(
+                        self_type_id,
+                        &self_name,
+                        *declaring,
+                        Some(args),
+                        &decl.name,
+                    )
                     .or_else(|| self.carried_binding(self_type_id, &decl.name)),
                 _ => self.frame_projection(self_type_id, &self_name, &decl.name),
             };
@@ -2604,18 +2613,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
             };
-            if !self
-                .tysys
-                .solver()
-                .is_rigid(&self.tysys, &self.annotate_ctx, type_arg)
-            {
-                // A hole carries its own slot's bounds to finalize; this slot's
-                // go with an answer an enclosing call is still to give.
-                if self.awaits_pending_call(type_arg) {
-                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
-                }
-                continue;
-            }
             // `..T: Foo` binds every element of the pack, not the tuple that
             // carries them: `f<..T: Foo>([1, "x"])` asks `i32: Foo` and
             // `String: Foo`, never `[i32, String]: Foo` — which would be a
@@ -2625,7 +2622,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            if !param.is_affine {
+            let rigid = self
+                .tysys
+                .solver()
+                .is_rigid(&self.tysys, &self.annotate_ctx, type_arg);
+            // An element of an enclosing pack is no one type, yet its kind is
+            // its pack's: only a hole leaves the kind open.
+            if !param.is_affine
+                && (rigid || !self.tysys.type_table.borrow().contains_infer_var(type_arg))
+            {
                 let affine_params = self.annotate_ctx.trait_ctx.affine_params();
                 if let Some(&affine) = subjects
                     .iter()
@@ -2638,6 +2643,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         span,
                     });
                 }
+            }
+            if !rigid {
+                // A hole carries its own slot's bounds to finalize; this slot's
+                // go with an answer an enclosing call is still to give.
+                if self.awaits_pending_call(type_arg) {
+                    self.defer_bounds_to_answer(param, type_arg, self_binding, impl_args, span);
+                }
+                continue;
             }
             for bound in &param.real_bounds() {
                 // `Self` where no receiver binds one was rejected where the
