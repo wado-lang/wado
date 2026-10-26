@@ -335,10 +335,14 @@ impl AnalyzeError {
             ),
             AnalyzeError::DuplicateDefinition { name, span, first } => (
                 Code::DuplicateDefinition,
-                format!(
-                    "duplicate definition '{name}' (first defined at {}:{})",
-                    first.line, first.column
-                ),
+                if first.is_synthetic() {
+                    format!("duplicate definition '{name}'")
+                } else {
+                    format!(
+                        "duplicate definition '{name}' (first defined at {}:{})",
+                        first.line, first.column
+                    )
+                },
                 *span,
             ),
             AnalyzeError::ImportShadowsDefinition {
@@ -1739,5 +1743,20 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     /// Get a copy of the implicit modules set
     pub fn get_implicit_modules(&self) -> &hashmap::IndexSet<ModuleSource> {
         &self.implicit_modules
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_synthesized_first_definition_states_no_position() {
+        let err = AnalyzeError::DuplicateDefinition {
+            name: "Trip".to_string(),
+            span: Span::new(0, 0, 1, 1),
+            first: Span::new(0, 0, 1, 1),
+        };
+        assert_eq!(err.render().1, "duplicate definition 'Trip'");
     }
 }

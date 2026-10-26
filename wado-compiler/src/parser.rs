@@ -52,7 +52,7 @@ pub struct Parser {
     /// Content of the __DATA__ section, passed from the lexer.
     data_section: Option<String>,
     /// Paths referenced by `#include_str` / `#include_bytes`, collected as they are parsed.
-    include_paths: hashmap::IndexSet<String>,
+    include_paths: hashmap::IndexMap<String, Span>,
     /// Inner attributes parsed before items. Retained even if parsing fails later,
     /// so callers can check `has_todo()` after a parse error.
     parsed_inner_attributes: Vec<InnerAttribute>,
@@ -300,7 +300,7 @@ impl Parser {
             restrict_struct_literals: false,
             shebang,
             data_section,
-            include_paths: hashmap::IndexSet::default(),
+            include_paths: hashmap::IndexMap::default(),
             parsed_inner_attributes: Vec::new(),
             ast_id_space,
             next_ast_id: 0,
@@ -5139,11 +5139,10 @@ impl Parser {
         if name == "include_str" || name == "include_bytes" {
             let is_str = name == "include_str";
             self.expect(&TokenKind::LParen)?;
-            let path = match self.peek_kind() {
+            let (path, path_span) = match self.peek_kind() {
                 TokenKind::StringLit(s) => {
                     let s = s.clone();
-                    self.advance();
-                    s
+                    (s, self.advance().span)
                 }
                 _ => {
                     return Err(ParseError {
@@ -5153,7 +5152,7 @@ impl Parser {
                 }
             };
             let close_span = self.expect(&TokenKind::RParen)?.span;
-            self.include_paths.insert(path.clone());
+            self.include_paths.entry(path.clone()).or_insert(path_span);
             let value = if is_str {
                 Literal::IncludeStr(path)
             } else {
