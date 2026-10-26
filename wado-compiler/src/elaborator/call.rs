@@ -827,7 +827,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(element) = tt.list_view_ref_element(param) else {
                 return false;
             };
-            if tt.is_compiler_item_type(arg, CompilerItem::ListView) || tt.contains_infer_var(element)
+            if tt.is_compiler_item_type(arg, CompilerItem::ListView)
+                || tt.contains_infer_var(element)
             {
                 return false;
             }
