@@ -1765,7 +1765,8 @@ fn collect_type_dependencies(
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
-        | ResolvedType::TypePack { .. } => {}
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 
         // Newtype: collect dependency on base type

@@ -1013,6 +1013,9 @@ impl<'a> WirContext<'a> {
             ResolvedType::TypePack { name, index, .. } => {
                 panic!("unsubstituted TypePack `..{name}` (index {index}) reached codegen")
             }
+            ResolvedType::PackElement { pack, .. } => {
+                panic!("an element of pack {pack:?} reached codegen, which unrolling substitutes")
+            }
             ResolvedType::InferVar(var) => {
                 panic!("unsolved inference variable `{var}` reached codegen")
             }

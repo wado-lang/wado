@@ -529,26 +529,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// case only a scope can settle.
     fn reject_pack_layout_mismatch(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
-        if !table.contains_type_pack(expected)
-            || table.contains_type_pack(actual)
-            || table.awaits_inference(actual)
-        {
+        let carries_pack = |ty: TypeId| {
+            table.contains_type_pack(ty)
+                || matches!(
+                    table.get(table.peel_refs(ty)),
+                    ResolvedType::PackElement { .. }
+                )
+        };
+        if !carries_pack(expected) || carries_pack(actual) || table.awaits_inference(actual) {
             return;
         }
         let (expected_referent, _) = unwrap_ref(expected, &table);
         let (actual_referent, _) = unwrap_ref(actual, &table);
-        if let ResolvedType::TypePack { name: pack, .. } = table.get(expected_referent) {
-            // Inside an expansion the bare pack name spells the step's element.
-            if matches!(table.get(actual_referent), ResolvedType::TypeParam { name, .. } if name == pack)
-            {
-                return;
+        match table.get(expected_referent) {
+            ResolvedType::TypePack { name: pack, .. } => {
+                // Inside an expansion the bare pack name spells the step's element.
+                if matches!(table.get(actual_referent), ResolvedType::TypeParam { name, .. } if name == pack)
+                {
+                    return;
+                }
             }
-        } else {
-            let Some(layout) = table.tuple_layout(expected) else {
-                return;
-            };
-            if table.tuple_layout(actual) == Some(layout) {
-                return;
+            ResolvedType::PackElement { .. } => {}
+            _ => {
+                let Some(layout) = table.tuple_layout(expected) else {
+                    return;
+                };
+                if table.tuple_layout(actual) == Some(layout) {
+                    return;
+                }
             }
         }
         if !table

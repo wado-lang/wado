@@ -204,29 +204,44 @@ pub fn display_function_name(name: &str) -> String {
 }
 
 /// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
-/// function an author wrote, and the span already carries the module path.
+/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`, and
+/// `Formatter::pad<String>` for one whose type arguments carry module paths too.
+/// A clone's suffix names no function an author wrote, and the span already
+/// carries the module path.
 ///
 /// An effect default spells its interface with the same separator and is left
 /// to [`display_function_name`].
 ///
 /// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker.
+/// character rather than a suffix marker; so may a type argument.
 #[must_use]
-pub fn diagnostic_function_name(name: &str) -> &str {
+pub fn diagnostic_function_name(name: &str) -> String {
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
-        return name;
+        return name.to_string();
     }
-    let unqualified = name.rsplit('/').next().unwrap_or(name);
-    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
-        INTERNAL_PREFIX.len()
-    } else {
-        0
-    };
-    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
-        Some(suffix) => &unqualified[..prefix_len + suffix],
-        None => unqualified,
+    let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
+    let mut out = String::with_capacity(name.len());
+    let mut depth = 0u32;
+    for c in name.chars() {
+        match c {
+            '/' => {
+                let path_start = out
+                    .char_indices()
+                    .rev()
+                    .find(|&(_, c)| !is_module_path(c))
+                    .map_or(0, |(i, c)| i + c.len_utf8());
+                out.truncate(path_start);
+                continue;
+            }
+            '<' | '(' | '[' => depth += 1,
+            '>' if !out.ends_with('-') => depth -= 1,
+            ')' | ']' => depth -= 1,
+            '$' if depth == 0 && !out.is_empty() => break,
+            _ => {}
+        }
+        out.push(c);
     }
+    out
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -821,27 +836,42 @@ pub fn inline_block_label(callee: &str, serial: u32) -> String {
     format!("{INTERNAL_PREFIX}inline_{callee}_{serial}")
 }
 
-/// Label the template-string synthesiser stamps on the block wrapping an
-/// expanded `` `...` `` literal.
-pub const TEMPLATE_BLOCK_LABEL: &str = "$tmpl";
-
-/// Whether `label` marks the block an expanded template string breaks out of.
-/// Shared by the producer (`synthesis::template`) and lowering, which reads it
-/// once into [`crate::nir_arena::BlockRole`]. Passes ask the node from there —
-/// a label is a name, and gets rewritten.
-#[must_use]
-pub fn is_template_block(label: &str) -> bool {
-    label == TEMPLATE_BLOCK_LABEL
+/// The `ordinal`th temporary the splice labelled `label` binds for a `&mut`
+/// argument, unique because the label is.
+pub fn inline_temp_name(label: &str, ordinal: usize) -> String {
+    let splice = label
+        .strip_prefix(INTERNAL_PREFIX)
+        .expect("an inline label is minted");
+    minted_name(&minted_what("temp", splice), ordinal)
 }
 
-/// Name of the result accumulator local in an expanded template block.
-/// Recognised by the template-hoist optimizer; single-sourced here.
-pub const TEMPLATE_RESULT_LOCAL: &str = "$r";
+/// What the block binding a template's holes before its tag's call is minted
+/// under.
+const TEMPLATE_BLOCK: &str = "template";
 
-/// Name of the `Formatter` local in an expanded template block. Producer-only
-/// today, kept beside its siblings so the template-local convention lives in
-/// one place.
-pub const TEMPLATE_FORMATTER_LOCAL: &str = "$f";
+/// The label of the block binding a template's holes before its tag's call.
+#[must_use]
+pub fn template_block_label(serial: u32) -> String {
+    minted_name(TEMPLATE_BLOCK, serial)
+}
+
+/// Whether `label` is one [`template_block_label`] minted. Read before any pass
+/// can rename a label.
+#[must_use]
+pub fn is_template_block(label: &str) -> bool {
+    label
+        .strip_prefix(INTERNAL_PREFIX)
+        .and_then(|rest| rest.strip_prefix(TEMPLATE_BLOCK))
+        .and_then(|rest| rest.strip_prefix('_'))
+        .is_some_and(|serial| serial.parse::<u32>().is_ok())
+}
+
+/// The local binding hole `k` of the template [`template_block_label`] labels
+/// with `serial`.
+#[must_use]
+pub fn template_hole_local(serial: u32, k: usize) -> String {
+    format!("{INTERNAL_PREFIX}hole_{serial}_{k}")
+}
 
 /// Per-module initializer function the lowering phase synthesises to run a
 /// module's global initializers. The optimizer's liveness / const-object
@@ -2535,6 +2565,41 @@ pub fn type_pack_name(name: &str) -> String {
     format!("..{name}")
 }
 
+/// What an element of pack `pack` names itself, bound by a walk inside `walk`
+/// others: the pack's name, marked past the outermost walk so a nested walk's
+/// element reads apart from the one enclosing it.
+pub fn pack_element_name(pack: &str, walk: u32) -> String {
+    if walk == 0 {
+        pack.to_string()
+    } else {
+        format!("{pack}@{walk}")
+    }
+}
+
+const REPEAT_PACK_MARKER: &str = "repeat";
+
+/// The pack a signature mints for a `[..X]` repeating the non-pack `X`: its
+/// length, which the argument settles.
+pub fn repeat_pack_name(element: &str) -> String {
+    format!("{INTERNAL_PREFIX}{REPEAT_PACK_MARKER}{INTERNAL_PREFIX}{element}")
+}
+
+/// The `X` a [`repeat_pack_name`] repeats, or `None` for any other name.
+pub fn repeated_element(pack: &str) -> Option<&str> {
+    pack.strip_prefix(INTERNAL_PREFIX)?
+        .strip_prefix(REPEAT_PACK_MARKER)?
+        .strip_prefix(INTERNAL_PREFIX)
+}
+
+/// A type parameter as a diagnostic names it: a minted repeat pack as the
+/// `..X` that minted it.
+pub fn written_param_name(param: &str) -> String {
+    match repeated_element(param) {
+        Some(element) => type_pack_name(element),
+        None => param.to_string(),
+    }
+}
+
 /// The `<A, B>` a diagnostic writes after a head; empty for no arguments.
 fn display_type_args(args: &[String]) -> String {
     if args.is_empty() {
@@ -2812,6 +2877,28 @@ mod tests {
         assert_eq!(
             diagnostic_function_name("$value_copy$Point$shallow"),
             "$value_copy"
+        );
+        // A type argument carries a module path of its own.
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
+            ),
+            "Formatter::pad<String>"
+        );
+        assert_eq!(
+            diagnostic_function_name(
+                "core:prelude/traits.wado/TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
+            ),
+            "TemplateHole<$tmpl$59e1,String>::lit"
+        );
+        assert_eq!(diagnostic_function_name("f1.wado/id<&f1.wado/P>"), "id<&P>");
+        assert_eq!(
+            diagnostic_function_name("f1.wado/id<[f1.wado/P,i32]>"),
+            "id<[P,i32]>"
+        );
+        assert_eq!(
+            diagnostic_function_name("f1.wado/id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
+            "id<fn(P)->i32with($e263)>"
         );
     }
 

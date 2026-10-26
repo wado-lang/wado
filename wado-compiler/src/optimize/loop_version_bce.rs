@@ -38,7 +38,7 @@ use super::condition_implication::{
     parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block, resolve,
     resolve_panic_ids, stmt_modifies,
 };
-use super::const_branch_prune::{BranchPruneRule, PruneMode};
+use super::const_branch_prune::BranchPruneRule;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
@@ -219,7 +219,7 @@ pub(super) fn version_loops(
             proofs: &proofs,
         };
         let elide_rule = ElideRule::new(&stores_aliased, calls);
-        let prune_rule = BranchPruneRule::new(PruneMode::Fixpoint);
+        let prune_rule = BranchPruneRule;
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         engine.run(&rules);
 

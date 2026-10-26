@@ -11,8 +11,7 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -492,13 +491,6 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         }
         TirExprKind::GlobalVarSet { value, .. } => remap_locals_in_expr(value, remap),
         TirExprKind::LabeledBlock { block, .. } => remap_locals_in_block(block, remap),
-        TirExprKind::TemplateString { parts } => {
-            for part in parts {
-                if let TirTemplatePart::Interpolation { expr, .. } = part {
-                    remap_locals_in_expr(expr, remap);
-                }
-            }
-        }
         TirExprKind::WithHandler { bindings, body, .. } => {
             for b in bindings {
                 remap_locals_in_expr(&mut b.handler, remap);

@@ -319,11 +319,11 @@ pub trait ReflectTemplate: Reflect with () {
     /// The literal text after the last hole of `t` — the whole template when
     /// it has none — with escapes processed.
     #[compiler_item("reflect_template_tail")]
-    fn tail(t: &Self) -> String;
+    fn tail(t: &Self) -> StrSlice;
 
     /// `tail(t)` with escapes preserved.
     #[compiler_item("reflect_template_raw_tail")]
-    fn raw_tail(t: &Self) -> String;
+    fn raw_tail(t: &Self) -> StrSlice;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -461,12 +461,12 @@ impl<T> Member for FlagsBit<T> {
 /// and specifier presence are constants of the shape, and `lit` / `raw` /
 /// `get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 #[compiler_item("template_hole")]
-pub struct TemplateHole<T, V> {
+pub struct TemplateHole<T, affine V> {
     index: i32,
     has_spec: bool,
 }
 
-impl<T, V> TemplateHole<T, V> {
+impl<T, affine V> TemplateHole<T, V> {
     /// The hole's position in the template.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -474,23 +474,18 @@ impl<T, V> TemplateHole<T, V> {
 
     /// The literal text in `t` between the previous hole (or the start) and
     /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index);
+    pub fn lit(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index).internal_view();
     }
 
     /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index + 1);
+    pub fn raw(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index + 1).internal_view();
     }
 
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool {
         return self.has_spec;
-    }
-
-    /// The hole's value in `t`.
-    pub fn get(&self, t: &T) -> V {
-        return builtin::hole_get(t, self.index);
     }
 
     /// Renders the value through the trait method the specifier's type
@@ -501,26 +496,11 @@ impl<T, V> TemplateHole<T, V> {
     }
 }
 
-global HOLE_CAPACITY_GUESS: i32 = 16;
-
-/// The tag an untagged template is sugar for: every hole rendered through its
-/// specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
-/// See WEP 2026-01-10.
-pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    // Where the template is a literal, the segments are constants, so this
-    // folds to one: the buffer is sized once, and only a hole rendering past
-    // its guess grows it.
-    let mut capacity = ReflectTemplate::<T>::tail(&t).len();
-    for let h of ReflectTemplate::<T>::members() {
-        capacity += h.lit(&t).len() + HOLE_CAPACITY_GUESS;
+impl<T, V> TemplateHole<T, V> {
+    /// The hole's value in `t`.
+    pub fn get(&self, t: &T) -> V {
+        return builtin::hole_get(t, self.index);
     }
-    let mut out = String::with_capacity(capacity);
-    for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit(&t));
-        h.fmt(&t, &mut Formatter::new(&mut out));
-    }
-    out.push_str(&ReflectTemplate::<T>::tail(&t));
-    return out;
 }
 
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is

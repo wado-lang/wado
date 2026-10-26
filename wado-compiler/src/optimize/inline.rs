@@ -20,12 +20,12 @@
 use std::cell::{Cell, RefCell};
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::inline_block_label;
+use crate::name::{inline_block_label, inline_temp_name};
 use crate::nir::{FunctionRef, InlineHint, NirFunction, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId,
-    StmtKind, StmtNode, Tracked,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId, PatKind, PatNode, StmtId, StmtKind,
+    StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
@@ -1210,7 +1210,7 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 /// Whether an argument reaches the callee as a compile-time constant — the
 /// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
-fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
+pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
         // `promote_pure_values_early` freezes it.
@@ -2942,6 +2942,69 @@ pub(super) struct InlineRevalInfo {
     pub call_expr: ExprId,
 }
 
+/// For an argument `&mut <temporary>`, the `let mut` binding the temporary
+/// to local `index` under `name`, which the argument then references instead. A reference
+/// to a local is one `ref_elim` folds away and a compile-time frame can write
+/// through; one to an rvalue is neither, so a `Formatter` built for one call
+/// would stay an object whose fields no pass can read.
+fn bind_mut_ref_temporary(
+    caller: &mut Body,
+    value: Operand,
+    index: u32,
+    name: String,
+    span: Span,
+) -> Option<(StmtId, NirLocal)> {
+    let reference = value.as_expr()?;
+    let ExprKind::Unary {
+        op: NirUnaryOp::MutRef,
+        expr: Operand::Expr(temporary),
+    } = caller.exprs[reference].kind
+    else {
+        return None;
+    };
+    if !matches!(
+        caller.exprs[temporary].kind,
+        ExprKind::Call { .. }
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::VariantConstruct { .. }
+    ) {
+        return None;
+    }
+    let type_id = caller.exprs[temporary].type_id;
+    let read = caller.exprs.push(ExprNode {
+        kind: ExprKind::Local {
+            index,
+            name: name.clone(),
+        },
+        type_id,
+        span,
+    });
+    caller.exprs[reference].kind = ExprKind::Unary {
+        op: NirUnaryOp::MutRef,
+        expr: Operand::Expr(read),
+    };
+    let let_id = caller.stmts.push(StmtNode {
+        kind: StmtKind::Let {
+            name: name.clone(),
+            local_index: index,
+            is_mut: true,
+            type_id,
+            value: Operand::Expr(temporary),
+            skip_value_copy: false,
+        },
+        span,
+    });
+    Some((
+        let_id,
+        NirLocal {
+            name,
+            type_id,
+            is_mut: true,
+        },
+    ))
+}
+
 /// Core inlining routine: builds a labeled block (in the caller arena) that
 /// binds each prepared parameter value and executes the spliced callee body
 /// with locals remapped into the caller's frame and `return`s converted to
@@ -2967,9 +3030,19 @@ fn build_inlined_labeled_block(
 
     let mut block_stmts: Vec<StmtId> = Vec::with_capacity(bindings.len());
     let mut param_to_local: IndexMap<u32, u32> = IndexMap::default();
+    let temp_base = local_offset + callee_param_count.max(callee_local_count);
+    let mut temps: Vec<NirLocal> = Vec::new();
 
     for (i, binding) in bindings.into_iter().enumerate() {
         let new_local_index = local_offset + i as u32;
+        let temp_index = temp_base + temps.len() as u32;
+        let temp_name = inline_temp_name(&label, temps.len());
+        if let Some((let_id, temp)) =
+            bind_mut_ref_temporary(caller, binding.value, temp_index, temp_name, call_span)
+        {
+            block_stmts.push(let_id);
+            temps.push(temp);
+        }
         param_to_local.insert(binding.callee_local_index, new_local_index);
         frame.locals.push(NirLocal {
             name: binding.name.clone(),
@@ -2992,12 +3065,20 @@ fn build_inlined_labeled_block(
     }
 
     let param_offset = local_offset + callee_param_count;
-    for i in callee_param_count..callee_local_count {
-        if let Some(callee_local) = candidate.locals.get(i as usize) {
-            frame.locals.push(callee_local.clone());
-        }
-    }
+    frame.locals.extend(
+        candidate
+            .locals
+            .iter()
+            .skip(callee_param_count as usize)
+            .cloned(),
+    );
     frame.local_count += new_locals_needed;
+    assert_eq!(frame.local_count, temp_base);
+    for temp in temps {
+        frame.address_taken.insert(frame.local_count);
+        frame.locals.push(temp);
+        frame.local_count += 1;
+    }
 
     // An annotation names a local and the splice renumbers locals. Dropping one
     // lets a read of a boxed local forward past a write through the alias.
@@ -3040,7 +3121,6 @@ fn build_inlined_labeled_block(
             label,
             block: bid,
             result_type,
-            role: BlockRole::Plain,
         },
         type_id: result_type,
         span: call_span,
@@ -3202,9 +3282,8 @@ fn splice_block_into(
             StmtKind::LabeledBlock {
                 label: inner_label,
                 block: inner,
-                role,
             } => {
-                let (inner_label, role) = (inner_label.clone(), *role);
+                let inner_label = inner_label.clone();
                 let inner = *inner;
                 if arena_query::has_break_to(callee, NodeRef::Block(inner), &inner_label) {
                     // The label is broken to, so the block must survive (with its
@@ -3215,7 +3294,6 @@ fn splice_block_into(
                         kind: StmtKind::LabeledBlock {
                             label: ctx.lbl(&inner_label),
                             block: nb,
-                            role,
                         },
                         span,
                     }));
@@ -3294,12 +3372,11 @@ pub(super) fn splice_stmt(
                 body: splice_block(caller, callee, b, ctx),
             }
         }
-        StmtKind::LabeledBlock { label, block, role } => {
-            let (l, b, role) = (label.clone(), *block, *role);
+        StmtKind::LabeledBlock { label, block } => {
+            let (l, b) = (label.clone(), *block);
             StmtKind::LabeledBlock {
                 label: ctx.lbl(&l),
                 block: splice_block(caller, callee, b, ctx),
-                role,
             }
         }
         StmtKind::Break { label, value } => {
@@ -3714,14 +3791,12 @@ fn splice_expr(caller: &mut Body, callee: &Body, id: ExprId, ctx: &InlineCtx) ->
             label,
             block,
             result_type,
-            role,
         } => {
-            let (l, b, rt, role) = (label.clone(), *block, *result_type, *role);
+            let (l, b, rt) = (label.clone(), *block, *result_type);
             ExprKind::LabeledBlock {
                 label: ctx.lbl(&l),
                 block: splice_block(caller, callee, b, ctx),
                 result_type: rt,
-                role,
             }
         }
         ExprKind::VariantTag { expr } => ExprKind::VariantTag {

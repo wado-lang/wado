@@ -1,0 +1,31 @@
+// The bit counting builtins fold at compile time, at both widths, and so does
+// `${255:x}`, whose digit count reads `i64_clz`.
+use { println, Stdout } from "core:cli";
+
+fn counts(n: i64, m: i32) -> i64 {
+    let wide = (64 - i64::clz(n)) * 10000 + i64::ctz(n) * 100 + i64::popcnt(n);
+    let narrow = i32::clz(m) * 10000 + i32::ctz(m) * 100 + i32::popcnt(m);
+    return wide * 1000000 + narrow as i64 + i32::clz(0) as i64 * 0 + i64::ctz(0) - 64;
+}
+
+// A negative i32 is held sign-extended, and counts over its own 32 bits.
+fn negatives() -> i32 {
+    return i32::clz(-1) * 10000 + i32::ctz(-8) * 1000 + i32::popcnt(-1) * 10 + i32::ctz(0) - 32;
+}
+
+export fn run() with Stdout {
+    println(`${255:x}`);
+    println(`${counts(0xF0, 8)}`);
+    println(`${negatives()}`);
+}
+
+__DATA__
+{
+    "stdout": "ff\n80404280301\n3320\n",
+    "wir_expect:O2": [
+        "array.new_fixed<u8>(102, 102)",
+        "array.new_fixed<u8>(51, 51, 50, 48)",
+        "array.new_fixed<u8>(56, 48, 52, 48, 52, 50, 56, 48, 51, 48, 49)"
+    ],
+    "wir_not_expect:O2": ["builtin::i64_clz", "builtin::i64_ctz", "builtin::i64_popcnt", "builtin::i32_clz"]
+}

@@ -8,7 +8,8 @@ use crate::const_eval::Value;
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, StmtId, StmtKind, StmtNode,
+    BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId, StmtKind,
+    StmtNode,
 };
 use crate::nir_visitor::NirRefVisitor;
 use crate::type_table::TypeTable;
@@ -31,6 +32,32 @@ impl FrameState {
     fn alias_involves(&self, index: u32) -> bool {
         self.place_aliases.contains_key(&index)
             || self.place_aliases.values().any(|(root, _)| *root == index)
+            || self
+                .place_fields
+                .iter()
+                .any(|((holder, _), (root, _))| *holder == index || *root == index)
+    }
+
+    /// Whether the value at `(root, path)` is a place field's placeholder or
+    /// encloses one, which no read may hand out.
+    pub(super) fn holds_place_field(&self, root: u32, path: &[u32]) -> bool {
+        self.place_fields
+            .keys()
+            .any(|(holder, field)| *holder == root && field.starts_with(path))
+    }
+
+    /// `(root, path)` re-rooted through each place field it reaches into.
+    fn resolve_place_fields(&self, mut root: u32, mut path: Vec<u32>) -> (u32, Vec<u32>) {
+        while let Some(((_, field), (target, target_path))) = self
+            .place_fields
+            .iter()
+            .find(|((holder, field), _)| *holder == root && path.starts_with(field))
+        {
+            let mut full = target_path.clone();
+            full.extend_from_slice(&path[field.len()..]);
+            (root, path) = (*target, full);
+        }
+        (root, path)
     }
 
     /// Whether a value snapshot of `index` can outlive every write to it:
@@ -104,10 +131,15 @@ fn value_of_block_flow(flow: Flow, label: Option<&str>) -> Result<Lattice, Flow>
 /// value it took *this* time round — `acc + 1` becomes the literal `1` on the
 /// first pass — so without restoring, later iterations read the first one's
 /// results.
+///
+/// The locals the body binds are kept for the same reason: a statement reduces
+/// the subtree it heads before running it, so a read below a `let` the
+/// iteration has yet to reach would fold to the binding the previous one left.
 struct LoopSnapshot {
     exprs: Vec<(ExprId, ExprNode)>,
     stmts: Vec<(StmtId, StmtNode)>,
     blocks: Vec<(BlockId, Vec<StmtId>)>,
+    bound: Vec<u32>,
 }
 
 impl LoopSnapshot {
@@ -117,14 +149,24 @@ impl LoopSnapshot {
             exprs: Vec<ExprId>,
             stmts: Vec<StmtId>,
             blocks: Vec<BlockId>,
+            bound: Vec<u32>,
         }
         impl NirRefVisitor for Collect {
             fn visit_node(&mut self, body: &Body, node: NodeRef) {
                 match node {
                     NodeRef::Expr(e) => self.exprs.push(e),
-                    NodeRef::Stmt(s) => self.stmts.push(s),
+                    NodeRef::Stmt(s) => {
+                        if let StmtKind::Let { local_index, .. } = &body.stmts[s].kind {
+                            self.bound.push(*local_index);
+                        }
+                        self.stmts.push(s);
+                    }
                     NodeRef::Block(b) => self.blocks.push(b),
-                    NodeRef::Pat(_) => {}
+                    NodeRef::Pat(p) => {
+                        if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                            self.bound.push(*local_index);
+                        }
+                    }
                 }
                 self.walk_node(body, node);
             }
@@ -147,12 +189,13 @@ impl LoopSnapshot {
                 .into_iter()
                 .map(|b| (b, body.blocks[b].stmts.clone()))
                 .collect(),
+            bound: collect.bound,
         }
     }
 
-    /// Put the captured nodes back. Nodes an iteration allocated are left
-    /// behind unreferenced.
-    fn restore(&self, body: &mut Body) {
+    /// Put the captured nodes back and unbind the body's locals. Nodes an
+    /// iteration allocated are left behind unreferenced.
+    fn restore(&self, body: &mut Body, frame: &mut FrameState) {
         for (e, node) in &self.exprs {
             body.exprs[*e] = node.clone();
         }
@@ -162,6 +205,16 @@ impl LoopSnapshot {
         for (b, stmts) in &self.blocks {
             body.blocks[*b].stmts.clone_from(stmts);
         }
+        for index in &self.bound {
+            frame.env.swap_remove(index);
+            frame.place_aliases.swap_remove(index);
+            frame.ref_roots.swap_remove(index);
+        }
+        frame
+            .place_fields
+            .retain(|(holder, _), _| !self.bound.contains(holder));
+        frame.scratch_folds.clear();
+        frame.region_misses.clear();
     }
 }
 
@@ -267,6 +320,7 @@ impl Interpreter<'_> {
                     .frame
                     .place_aliases
                     .values()
+                    .chain(self.frame.place_fields.values())
                     .any(|(root, _)| *root == index)
                 {
                     return Flow::Bail;
@@ -274,13 +328,16 @@ impl Interpreter<'_> {
                 // What makes an immutable binding of a reference an alias is that
                 // nothing displaces it, which is equally true of a mutable
                 // local nothing reassigns.
-                if (!is_mut || !self.frame.reassigned.contains(index))
-                    && let Some(named) = self.aliased_operand(body, value)
-                {
-                    return match self.record_place_alias(body, index, named) {
-                        Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
-                        None => Flow::Bail,
-                    };
+                if !is_mut || !self.frame.reassigned.contains(index) {
+                    if let Some(named) = self.aliased_operand(body, value) {
+                        return match self.record_place_alias(body, index, named) {
+                            Some(()) => Flow::Fallthrough(Lattice::Unevaluated),
+                            None => Flow::Bail,
+                        };
+                    }
+                    if let Some(flow) = self.bind_place_fields(body, index, value) {
+                        return flow;
+                    }
                 }
                 let lattice = match value.as_expr().and_then(|e| self.exec_call_stmt(body, e)) {
                     Some(Flow::Fallthrough(lattice)) => lattice,
@@ -392,9 +449,7 @@ impl Interpreter<'_> {
                 }
                 other => return other,
             }
-            snapshot.restore(body);
-            self.frame.scratch_folds.clear();
-            self.frame.region_misses.clear();
+            snapshot.restore(body, &mut self.frame);
         }
     }
 
@@ -426,6 +481,10 @@ impl Interpreter<'_> {
         {
             let (key, value) = ((module_source.clone(), name.clone()), *value);
             return self.exec_global_materialize(body, key, value);
+        }
+        // A `match` or `if` this frame settles reduces to the block it selects.
+        if let Some(e) = op.as_expr() {
+            self.select_branch_in_place(body, e);
         }
         // A block at statement position is run for what it performs. Inlining
         // leaves one where a call stood, and a unit-typed one — every `push`
@@ -530,6 +589,14 @@ impl Interpreter<'_> {
     /// root. A target naming no place, or a projection into a root the frame
     /// holds no constant for, bails.
     fn exec_store(&mut self, body: &mut Body, target: ExprId, value: Operand) -> Flow {
+        // A store over a place field, or over what encloses one, would repoint
+        // the reference rather than write through it.
+        if self
+            .aliased_place_of(body, target.into())
+            .is_some_and(|(root, path)| self.frame.holds_place_field(root, &path))
+        {
+            return Flow::Bail;
+        }
         let Some((root, path)) = self.frame_place_of(body, target.into()) else {
             return Flow::Bail;
         };
@@ -560,6 +627,9 @@ impl Interpreter<'_> {
         path: &[u32],
         update: impl FnOnce(&mut Value) -> Option<()>,
     ) -> Option<()> {
+        if self.frame.holds_place_field(root, path) {
+            return None;
+        }
         let Lattice::Const(container) = self.frame.env.get_mut(&root)? else {
             return None;
         };
@@ -591,7 +661,8 @@ impl Interpreter<'_> {
             | CtfeBuiltin::Ieee754Comparison(_)
             | CtfeBuiltin::HeapBase(_)
             | CtfeBuiltin::AmbientStdio(_)
-            | CtfeBuiltin::IsMoved => None,
+            | CtfeBuiltin::IsMoved
+            | CtfeBuiltin::BitCount(_) => None,
         }
     }
 
@@ -628,7 +699,7 @@ impl Interpreter<'_> {
         };
         let (Lattice::Const(at), Lattice::Const(source), Lattice::Const(from), Lattice::Const(len)) = (
             self.eval_operand(body, at),
-            self.eval_operand(body, source),
+            self.eval_referent(body, source),
             self.eval_operand(body, from),
             self.eval_operand(body, len),
         ) else {
@@ -659,6 +730,16 @@ impl Interpreter<'_> {
         }
         self.reduce_in_place(body, e);
         self.reduce_to_lattice(body, e)
+    }
+
+    /// [`Self::eval_operand`] for an operand only read through: an alias local
+    /// reads as the place it names, which a value position must refuse.
+    fn eval_referent(&mut self, body: &mut Body, op: Operand) -> Lattice {
+        if named_local(body, op).is_some_and(|index| self.frame.place_aliases.contains_key(&index))
+        {
+            return self.projected_lattice(body, op);
+        }
+        self.eval_operand(body, op)
     }
 
     /// Evaluate a block in expression position by executing its statements —
@@ -730,13 +811,69 @@ impl Interpreter<'_> {
             return None;
         }
         self.frame.env.swap_remove(&index);
+        self.frame
+            .place_fields
+            .retain(|(holder, _), _| *holder != index);
         self.frame.place_aliases.insert(index, (root, path));
         Some(())
     }
 
+    /// A `let` of a struct literal holding a `&mut` over a local place: each
+    /// such field records the place, as a `let` of the reference alone does, and
+    /// the rest of the literal binds as its value. `None` for any other `let`.
+    fn bind_place_fields(&mut self, body: &mut Body, index: u32, value: Operand) -> Option<Flow> {
+        let e = value.as_expr()?;
+        let ExprKind::StructLiteral { fields, .. } = &body.exprs[e].kind else {
+            return None;
+        };
+        let fields: Vec<(u32, Operand)> = fields.iter().map(|f| (f.field_index, f.value)).collect();
+        let referenced: Vec<(u32, Operand)> = fields
+            .iter()
+            .filter_map(|(field, op)| match referenced_place_operand(body, *op) {
+                Some((true, inner)) => Some((*field, inner)),
+                _ => None,
+            })
+            .collect();
+        if referenced.is_empty() {
+            return None;
+        }
+        let mut places = Vec::with_capacity(referenced.len());
+        for (field, inner) in referenced {
+            let Some(place) = self.frame_place_of(body, inner) else {
+                return Some(Flow::Bail);
+            };
+            if place.0 == index {
+                return Some(Flow::Bail);
+            }
+            places.push((field, place));
+        }
+        let mut values = Vec::with_capacity(fields.len());
+        for (field, op) in fields {
+            if places.iter().any(|(placed, _)| *placed == field) {
+                values.push((field, Value::Unit));
+                continue;
+            }
+            let Lattice::Const(v) = self.eval_operand(body, op) else {
+                return Some(Flow::Bail);
+            };
+            values.push((field, v));
+        }
+        let type_id = body.exprs[e].type_id;
+        self.bind_ctfe_local(index, Lattice::Const(Value::aggregate(type_id, values)));
+        if !matches!(self.frame.env.get(&index), Some(Lattice::Const(_))) {
+            return Some(Flow::Bail);
+        }
+        for (field, place) in places {
+            self.frame.place_fields.insert((index, vec![field]), place);
+        }
+        Some(Flow::Fallthrough(Lattice::Unevaluated))
+    }
+
     /// [`place_of`] with the frame's reference aliases applied: a chain rooted at
-    /// an alias re-roots at the place the alias was taken over.
-    pub(super) fn frame_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
+    /// an alias re-roots at the place the alias was taken over. A place field
+    /// along the path is not followed, which is what tells reading the field
+    /// itself from reading through it.
+    fn aliased_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
         let (root, mut path) = place_of(body, op)?;
         match self.frame.place_aliases.get(&root) {
             Some((alias_root, alias_path)) => {
@@ -746,6 +883,42 @@ impl Interpreter<'_> {
             }
             None => Some((root, path)),
         }
+    }
+
+    /// The storage `op` names: [`Self::aliased_place_of`], re-rooted through the
+    /// place fields it reaches into. A place field itself names its place, as an
+    /// alias local does.
+    pub(super) fn frame_place_of(&self, body: &Body, op: Operand) -> Option<(u32, Vec<u32>)> {
+        let (root, path) = self.aliased_place_of(body, op)?;
+        Some(self.frame.resolve_place_fields(root, path))
+    }
+
+    /// What reading `op` (extended by `field`) yields when it roots at a local
+    /// holding a place field. `None` for any other operand, which the ordinary
+    /// projection answers.
+    pub(super) fn place_field_read(
+        &self,
+        body: &Body,
+        op: Operand,
+        field: Option<u32>,
+    ) -> Option<Lattice> {
+        if self.frame.place_fields.is_empty() {
+            return None;
+        }
+        let (root, mut path) = self.aliased_place_of(body, op)?;
+        if !self
+            .frame
+            .place_fields
+            .keys()
+            .any(|(holder, _)| *holder == root)
+        {
+            return None;
+        }
+        path.extend(field);
+        Some(
+            self.place_value(root, &path)
+                .map_or(Lattice::Unevaluated, Lattice::Const),
+        )
     }
 
     /// Fold a call to the value it computes. One writing through a `&mut`
@@ -816,10 +989,7 @@ impl Interpreter<'_> {
                 .callees
                 .and_then(|m| m.get(key))
                 .map(|c| c.func.borrow())
-                .map_or_else(
-                    || format!("{key:?}"),
-                    |f| diagnostic_function_name(&f.name).to_string(),
-                )
+                .map_or_else(|| format!("{key:?}"), |f| diagnostic_function_name(&f.name))
         );
     }
 
@@ -1061,8 +1231,22 @@ impl Interpreter<'_> {
         Some(())
     }
 
-    /// The frame's value for a place, or `None` when it holds none.
+    /// The frame's value for a place, or `None` when it holds none. A place
+    /// field is read through, and one standing for its value is refused.
     pub(super) fn place_value(&self, root: u32, path: &[u32]) -> Option<Value> {
+        let resolved;
+        let (root, path) = if self.frame.place_fields.is_empty() {
+            (root, path)
+        } else {
+            if self.frame.holds_place_field(root, path) {
+                return None;
+            }
+            resolved = self.frame.resolve_place_fields(root, path.to_vec());
+            if self.frame.holds_place_field(resolved.0, &resolved.1) {
+                return None;
+            }
+            (resolved.0, resolved.1.as_slice())
+        };
         let Lattice::Const(value) = self.frame.env.get(&root)? else {
             return None;
         };

@@ -260,9 +260,6 @@ impl StringCollector {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
-            TirExprKind::TemplateString { .. } => {
-                unreachable!("TemplateString should be expanded before this phase")
-            }
             TirExprKind::WithHandler { .. } => {
                 unreachable!(
                     "WithHandler should be desugared by effect-dispatch synthesis before this phase"

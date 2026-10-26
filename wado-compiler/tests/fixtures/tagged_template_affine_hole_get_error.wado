@@ -1,0 +1,17 @@
+// `TemplateHole::get` copies the hole's value out, so it takes no hole of an
+// `affine` pack: a template only borrows its holes.
+fn take<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> i32 {
+    let mut n = 0;
+    for let h of ReflectTemplate::<T>::members() {
+        let v = h.get(&t);
+        n += 1;
+    }
+    return n;
+}
+
+export fn run() {
+    let _ = take`x${1}`;
+}
+
+__DATA__
+{"compile_error": ":6:17: analysis error: affine type 'V' given for 'V', which may be copied; `affine V` would admit it"}

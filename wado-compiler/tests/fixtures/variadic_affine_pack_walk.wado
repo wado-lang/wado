@@ -1,0 +1,33 @@
+// A walk over an `affine` pack moves each element out of the tuple into its
+// binding, which drops as its own iteration ends, once.
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+fn keep<affine V>(v: V) -> i32 {
+    return 1;
+}
+
+fn count<affine ..V>(t: [..V]) -> i32 {
+    let mut n = 0;
+    for let v of t {
+        log_stdout("step");
+        n += keep(v);
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    println(`${count([Token { id: 1 }, 5, Token { id: 2 }])}`);
+}
+
+__DATA__
+{"stdout": "step\ndrop 1\nstep\nstep\ndrop 2\n3\n"}

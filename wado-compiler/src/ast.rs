@@ -12,7 +12,7 @@ use crate::defs::DefId;
 use crate::escape::escape_string;
 use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
-use crate::name::UNIT_TYPE_NAME;
+use crate::name::{UNIT_TYPE_NAME, repeated_element};
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -4267,6 +4267,14 @@ pub enum Type {
     Error(Span),
 }
 
+/// What a `[..element]` outside a signature is told, by the parser in a body
+/// and by type resolution elsewhere.
+pub fn repeat_outside_signature(element: &str) -> String {
+    format!(
+        "`[..{element}]` has a length only a call settles, so it may appear only in a function's parameter or return type"
+    )
+}
+
 impl Type {
     /// Every identifier this type mentions, at any depth. A caller matching
     /// them against a declaration's parameter names learns which of those the
@@ -4649,6 +4657,10 @@ impl TraitBound {
     }
 }
 
+/// The most type parameters one list declares, a signature's repeat packs
+/// included.
+pub const MAX_GENERIC_PARAMS: usize = 256;
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
@@ -4717,9 +4729,10 @@ impl GenericParam {
     }
 
     /// Whether the source spells this param. The effect parameter `with _`
-    /// mints reads as `_` at its use sites and appears in no list.
+    /// mints reads as `_` at its use sites and appears in no list, and so does
+    /// the pack a `[..X]` repeating a non-pack `X` mints.
     pub fn is_written(&self) -> bool {
-        !(self.is_effect && self.name == EFFECT_HOLE)
+        !(self.is_effect && self.name == EFFECT_HOLE) && repeated_element(&self.name).is_none()
     }
 
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).

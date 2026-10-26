@@ -1,6 +1,7 @@
 // A temporary in a template string's hole drops when the statement holding
 // the template ends, as one anywhere else does (WEP: Affine Types), not before
-// the statement uses the string.
+// the statement uses the string. A place hole beside one is borrowed, as the
+// sugar and an explicit `String::format` both borrow it.
 
 use { println, log_stdout, Stdout } from "core:cli";
 
@@ -20,8 +21,12 @@ fn make(n: i32) -> Tok {
 
 export fn run() with Stdout {
     println(`made ${make(1).n} and ${make(2).n}`);
+    let t = make(3);
+    println(`whole ${make(4):?}`);
+    println(`place ${t:?} then ${make(5):?}`);
+    println(String::format`tagged ${t:?} ${make(6):?}`);
     println("end");
 }
 
 __DATA__
-{"stdout": "made 1 and 2\ndrop 2\ndrop 1\nend\n"}
+{"stdout": "made 1 and 2\ndrop 2\ndrop 1\nwhole Tok { n: 4 }\ndrop 4\nplace Tok { n: 3 } then Tok { n: 5 }\ndrop 5\ntagged Tok { n: 3 } Tok { n: 6 }\ndrop 6\nend\ndrop 3\n"}

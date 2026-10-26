@@ -412,14 +412,20 @@ fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D
 /// Whether `wir` contains `pattern`, where `{}` stands for a run of digits and
 /// `{name}` for one run that every `{name}` in the pattern repeats. A generated
 /// local's number is an allocation counter, not what a golden means; that two
-/// sites name the same local is.
+/// sites name the same local is. A hole after `_` also matches no suffix at
+/// all, since a local takes one only while another shares its name.
 fn wir_contains(wir: &str, pattern: &str) -> bool {
     let mut texts = Vec::new();
     let mut holes = Vec::new();
     let mut rest = pattern;
     while let Some((start, name, end)) = next_hole(rest) {
-        texts.push(&rest[..start]);
-        holes.push(name);
+        let text = &rest[..start];
+        let suffix = text.strip_suffix('_');
+        texts.push(suffix.unwrap_or(text));
+        holes.push(Hole {
+            name,
+            suffix: suffix.is_some(),
+        });
         rest = &rest[end..];
     }
     texts.push(rest);
@@ -449,24 +455,39 @@ fn next_hole(pattern: &str) -> Option<(usize, &str, usize)> {
     })
 }
 
-/// Whether `wir` opens with each hole's digits followed by its text, a named
-/// hole repeating the digits it took first.
-fn holes_match(mut wir: &str, holes: &[&str], texts: &[&str]) -> bool {
+/// A `{}` or `{name}` in a WIR pattern. `suffix` is one written after `_`,
+/// which matches `_` and digits, or nothing.
+struct Hole<'p> {
+    name: &'p str,
+    suffix: bool,
+}
+
+/// Whether `wir` opens with each hole's serial followed by its text, a named
+/// hole repeating the serial it took first.
+fn holes_match(mut wir: &str, holes: &[Hole<'_>], texts: &[&str]) -> bool {
     let mut taken: Vec<(&str, &str)> = Vec::new();
-    for (&name, text) in holes.iter().zip(texts) {
-        let digits = wir.len() - wir.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-        let serial = &wir[..digits];
-        if digits == 0 {
+    for (hole, text) in holes.iter().zip(texts) {
+        let run = |s: &str| s.len() - s.trim_start_matches(|c: char| c.is_ascii_digit()).len();
+        let len = match wir.strip_prefix('_') {
+            Some(after) if hole.suffix && run(after) > 0 => 1 + run(after),
+            _ if hole.suffix => 0,
+            _ => run(wir),
+        };
+        if len == 0 && !hole.suffix {
             return false;
         }
-        if !name.is_empty() {
-            match taken.iter().find(|(taken_name, _)| *taken_name == name) {
+        let serial = &wir[..len];
+        if !hole.name.is_empty() {
+            match taken
+                .iter()
+                .find(|(taken_name, _)| *taken_name == hole.name)
+            {
                 Some((_, first)) if *first != serial => return false,
                 Some(_) => {}
-                None => taken.push((name, serial)),
+                None => taken.push((hole.name, serial)),
             }
         }
-        let Some(after) = wir[digits..].strip_prefix(text) else {
+        let Some(after) = wir[len..].strip_prefix(text) else {
             return false;
         };
         wir = after;
@@ -483,6 +504,10 @@ fn wir_patterns_match_serials_by_hole() {
     assert!(!wir_contains(wir, "$b_{p} = $a_{p};"));
     assert!(!wir_contains("$a_16 = $a_17 + 1", "$a_{p} = $a_{p} + 1"));
     assert!(wir_contains("{ x }", "{ x }"));
+    assert!(wir_contains("select(c, x, 0)", "select(c, x_{}, 0)"));
+    assert!(wir_contains("f(i, n - i)", "f(i_{i}, n - i_{i})"));
+    assert!(!wir_contains("f(i, n - i_2)", "f(i_{i}, n - i_{i})"));
+    assert!(!wir_contains("x_ = 1", "x_{} = 1"));
 }
 
 /// The body of the first function in `wir` whose name contains `scope`, from

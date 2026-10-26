@@ -891,10 +891,12 @@ pub(super) fn integer_digits(repr: &str) -> Option<&str> {
 
 /// The name a type carries its trait bounds under, where it carries any.
 /// A pack answers with its own name: a pack's bound holds of each member
-/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way.
-pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
-    match resolved {
+/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way; so does
+/// an element of the pack.
+pub(super) fn bound_param_name(table: &TypeTable, id: TypeId) -> Option<&String> {
+    match table.get(id) {
         ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
+        ResolvedType::PackElement { pack, .. } => bound_param_name(table, *pack),
         _ => None,
     }
 }

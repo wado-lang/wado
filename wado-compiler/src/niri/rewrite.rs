@@ -647,6 +647,25 @@ impl Interpreter<'_> {
         self.reduce_in_place_node(body, NodeRef::Expr(e))
     }
 
+    /// Splice in the branch the `match` or `if` at `e` selects, reducing only
+    /// what selects it. The branch is left unreduced for the frame to run: it
+    /// may read a local it writes first, and reducing it ahead of the write
+    /// reads the stale value.
+    pub fn select_branch_in_place(&mut self, body: &mut Body, e: ExprId) {
+        if let ExprKind::Match {
+            expr: scrutinee, ..
+        } = &body.exprs[e].kind
+        {
+            let scrutinee = *scrutinee;
+            self.reduce_in_place_operand(body, scrutinee);
+            self.rewrite_match_expr_via(&mut BodySink { body }, e);
+        } else if let ExprKind::If { condition, .. } = &body.exprs[e].kind {
+            let condition = *condition;
+            self.reduce_in_place_operand(body, condition);
+            self.rewrite_if_expr_via(&mut BodySink { body }, e);
+        }
+    }
+
     fn reduce_in_place_node(&mut self, body: &mut Body, node: NodeRef) -> bool {
         let mut changed = match node {
             NodeRef::Expr(e) => self.reduce_children(body, e),
