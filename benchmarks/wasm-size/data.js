@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1792984351435,
+  "lastUpdate": 1792990267790,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71137,6 +71137,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295128,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5a2ad1349cbf484cb23ebca26b91157924076553",
+          "message": "Merge pull request #2463 from wado-lang/claude/gracious-faraday-rjp97k\n\nfeat(template): every template string compiles through `String::format`",
+          "timestamp": "2026-10-26T13:37:42+09:00",
+          "tree_id": "cc2d4278e6de74bcfc00051f2e21925eaa4eb3d0",
+          "url": "https://github.com/wado-lang/wado/commit/5a2ad1349cbf484cb23ebca26b91157924076553"
+        },
+        "date": 1792990267256,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21813,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295362,
             "unit": "bytes"
           }
         ]
