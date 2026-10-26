@@ -454,7 +454,8 @@ pub async fn cache_matches<H: CompilerHost>(
     }
     if !matches_file(
         host,
-        (&invocation.from, invocation.integrity),
+        &invocation.from,
+        invocation.integrity,
         &metadata.primary.hash,
         metadata.primary.extent,
     )
@@ -484,7 +485,8 @@ pub async fn cache_matches<H: CompilerHost>(
         }
         if !matches_file(
             host,
-            (&declared.path, declared.integrity),
+            &declared.path,
+            declared.integrity,
             &recorded.hash,
             recorded.extent,
         )
@@ -570,7 +572,8 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
 /// below still differs and the build misses.
 async fn matches_file<H: CompilerHost>(
     host: &H,
-    (path, pin): (&InvocationPath, Option<Integrity>),
+    path: &InvocationPath,
+    pin: Option<Integrity>,
     expected_hex: &str,
     extent: Option<u64>,
 ) -> bool {

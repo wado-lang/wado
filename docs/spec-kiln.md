@@ -47,11 +47,13 @@ relative to the package root, and so is the default output directory.
 
 A file's `type` says how the generator reads it, since no generator looks at
 an extension. The primary input's is the `type` beside `generator`; a
-supplementary input's is the `type` in its `{ path, type }`. The `with` clause
-may also hold `integrity`, which pins a remote primary input
-([Remote Inputs](#remote-inputs)), and nothing else. Each is a string the generator receives as the file's
-`InputFile.type`, and decides the meaning of. A `type` makes the invocation a
-different one, so the same file under two types is generated twice.
+supplementary input's is the `type` in its `{ path, type }`. Each is a string
+the generator receives as the file's `InputFile.type`, and decides the meaning
+of. A `type` makes the invocation a different one, so the same file under two
+types is generated twice.
+
+Beside `generator`, the `with` clause holds only `type` and `integrity`. The
+`integrity` pins a remote primary input ([Remote Inputs](#remote-inputs)).
 
 A `[build-dependencies]` coordinate names a published generator. Here Gale, a
 generator that builds a parser from an ANTLR4 grammar

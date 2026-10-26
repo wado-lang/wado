@@ -7,8 +7,8 @@ use wado_lsp::host::discovery::{
     absolutize, governing_workspace, normalize_path, resolve_member_manifest,
 };
 use wado_manifest::{
-    DependencySource, MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME,
-    WorkspaceManifest,
+    DependencySource, LOCK_FILENAME, MANIFEST_FILENAME, Manifest, ManifestError,
+    WORKSPACE_FILENAME, WorkspaceManifest,
 };
 
 use crate::args::CliExit;
@@ -96,7 +96,7 @@ pub(crate) fn resolution_inputs(root: &Path) -> Vec<PathBuf> {
         }
         let manifest_path = root.join(MANIFEST_FILENAME);
         files.push(manifest_path.clone());
-        files.push(root.join("wado.lock"));
+        files.push(root.join(LOCK_FILENAME));
         if let Some(workspace) = governing_workspace_root_dir(&root) {
             files.push(workspace.join(WORKSPACE_FILENAME));
         }

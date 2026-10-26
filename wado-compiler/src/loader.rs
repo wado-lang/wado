@@ -707,7 +707,8 @@ fn written_pin(
         Some(text) => match Integrity::parse(text) {
             Some(pin) => return Ok(Some((pin, at))),
             None => format!(
-                "import attribute `integrity` is `sha256:` and 64 lowercase hex digits, got `{text}`"
+                "import attribute `integrity` is {}, got `{text}`",
+                Integrity::FORM
             ),
         },
         None => format!(

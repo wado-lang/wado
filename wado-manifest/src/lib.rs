@@ -10,7 +10,7 @@ mod version;
 pub mod workspace;
 
 pub use dependency::RegistryComponentNeed;
-pub use lockfile::{LockFile, LockFileError, LockedPackage, LockedRemote};
+pub use lockfile::{LOCK_FILENAME, LockFile, LockFileError, LockedPackage, LockedRemote};
 pub use manifest::{
     Dependency, DependencySource, FormatSettings, GitPin, Manifest, ManifestError, ManifestWarning,
     Package, TestSettings, Workspace, WorkspaceManifest, WorkspacePackage, WorldEntry,

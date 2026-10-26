@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
-use wado_compiler::remote::{Integrity, held_to_use, is_remote};
+use wado_compiler::remote::is_remote;
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
@@ -78,14 +78,17 @@ impl StubHost {
         self.filesystem.diagnostics()
     }
 
-    /// The file stubbed for `url`.
-    fn remote_file(&self, url: &str) -> Result<&str, SourceError> {
+    /// The file `path` names: itself, or the one stubbed for a URL.
+    fn local<'p>(&'p self, path: &'p str) -> Result<&'p str, SourceError> {
+        if !is_remote(path) {
+            return Ok(path);
+        }
         self.stubs
             .remote
-            .get(url)
+            .get(path)
             .map(String::as_str)
             .ok_or_else(|| SourceError::NotFound {
-                path: url.to_string(),
+                path: path.to_string(),
             })
     }
 }
@@ -100,10 +103,7 @@ impl CompilerHost for StubHost {
     }
 
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-        if is_remote(path) {
-            return self.filesystem.open_source(self.remote_file(path)?).await;
-        }
-        self.filesystem.open_source(path).await
+        self.filesystem.open_source(self.local(path)?).await
     }
 
     async fn load_source_prefix(
@@ -111,23 +111,9 @@ impl CompilerHost for StubHost {
         path: &str,
         extent: Option<u64>,
     ) -> Result<Vec<u8>, SourceError> {
-        self.filesystem.load_source_prefix(path, extent).await
-    }
-
-    /// The file stubbed for `url`, held to the pin as a host with no lock
-    /// file holds it.
-    async fn load_remote(
-        &self,
-        url: &str,
-        extent: Option<u64>,
-        integrity: Option<Integrity>,
-    ) -> Result<Vec<u8>, SourceError> {
-        let file = self.remote_file(url)?;
-        held_to_use(
-            url,
-            self.filesystem.load_source_prefix(file, extent).await?,
-            integrity,
-        )
+        self.filesystem
+            .load_source_prefix(self.local(path)?, extent)
+            .await
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {

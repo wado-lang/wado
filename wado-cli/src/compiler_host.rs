@@ -13,6 +13,7 @@ use wado_compiler::{
     Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, ProbeRequest, Severity, SourceError, SourceReader,
 };
+use wado_manifest::LOCK_FILENAME;
 
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::dep_component::Acquisition;
@@ -337,7 +338,7 @@ impl CompilerHost for FilesystemCompilerHost {
         match (&loaded, &lock_root) {
             (Err(_), _) => self.run.observe_untracked(),
             (Ok(_), Some(root)) if integrity.is_none() => {
-                self.run.depend_on_file(&remote::lock_path(root));
+                self.run.depend_on_file(&root.join(LOCK_FILENAME));
             }
             (Ok(_), _) => {}
         }

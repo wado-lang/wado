@@ -16,7 +16,9 @@ use std::path::Path;
 use indexmap::IndexMap;
 
 use wado_manifest::dependency::registry_lock_id;
-use wado_manifest::{DependencySource, LockFile, LockedPackage, Manifest, registry_url};
+use wado_manifest::{
+    DependencySource, LOCK_FILENAME, LockFile, LockedPackage, Manifest, registry_url,
+};
 
 use crate::cache::generator_path;
 use crate::oci;
@@ -164,7 +166,7 @@ pub async fn fetch_build_dependencies(resolved: &[ResolvedBuildDep]) -> Result<u
 #[must_use]
 pub fn locked_generator_versions(manifest_root: &Path) -> IndexMap<String, String> {
     let mut out = IndexMap::new();
-    let Ok(text) = std::fs::read_to_string(manifest_root.join("wado.lock")) else {
+    let Ok(text) = std::fs::read_to_string(manifest_root.join(LOCK_FILENAME)) else {
         return out;
     };
     let Ok(lock) = text.parse::<LockFile>() else {

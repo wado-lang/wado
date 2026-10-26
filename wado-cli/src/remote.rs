@@ -21,12 +21,10 @@ use wado_compiler::{SourceError, SourceReader};
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::{joined, lock};
 use wado_host::tls_trust::extra_ca_certs;
-use wado_manifest::{LockFile, LockFileError, LockedRemote};
+use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
 
 use crate::cache;
 use crate::manifest::discover;
-
-const LOCK_FILENAME: &str = "wado.lock";
 
 /// How much a [`RemoteReader`] fetches at once: a probe reads a header a few
 /// bytes at a time, and each read of its own would be a round trip.
@@ -177,23 +175,39 @@ pub async fn load(
     Ok(bytes)
 }
 
-/// The `wado.lock` a remote read in the package at `root` records in.
-#[must_use]
-pub fn lock_path(root: &Path) -> PathBuf {
-    root.join(LOCK_FILENAME)
+fn lock_error(root: &Path, message: String) -> SourceError {
+    SourceError::IoError {
+        path: root.join(LOCK_FILENAME).display().to_string(),
+        message,
+    }
 }
 
 fn read_lock(root: &Path) -> Result<Option<LockFile>, SourceError> {
-    let path = lock_path(root);
-    let Ok(text) = std::fs::read_to_string(&path) else {
+    let Ok(text) = std::fs::read_to_string(root.join(LOCK_FILENAME)) else {
         return Ok(None);
     };
     text.parse()
         .map(Some)
-        .map_err(|e: LockFileError| SourceError::IoError {
-            path: path.display().to_string(),
-            message: e.to_string(),
-        })
+        .map_err(|e: LockFileError| lock_error(root, e.to_string()))
+}
+
+/// What `lock`, the lock of the package at `root`, pins `url`'s first
+/// `extent` bytes to.
+fn pin_in(
+    lock: &LockFile,
+    root: &Path,
+    url: &str,
+    extent: Option<u64>,
+) -> Result<Option<Integrity>, SourceError> {
+    let Some(text) = lock.remote_pin(url, extent) else {
+        return Ok(None);
+    };
+    Integrity::parse(text).map(Some).ok_or_else(|| {
+        lock_error(
+            root,
+            format!("the pin of '{url}' is not {}", Integrity::FORM),
+        )
+    })
 }
 
 fn locked_pin(
@@ -201,18 +215,10 @@ fn locked_pin(
     url: &str,
     extent: Option<u64>,
 ) -> Result<Option<Integrity>, SourceError> {
-    let Some(lock) = read_lock(root)? else {
-        return Ok(None);
-    };
-    let Some(text) = lock.remote_pin(url, extent) else {
-        return Ok(None);
-    };
-    Integrity::parse(text)
-        .map(Some)
-        .ok_or_else(|| SourceError::IoError {
-            path: lock_path(root).display().to_string(),
-            message: format!("the pin of '{url}' is not `sha256:` and 64 lowercase hex digits"),
-        })
+    match read_lock(root)? {
+        Some(lock) => pin_in(&lock, root, url, extent),
+        None => Ok(None),
+    }
 }
 
 /// Record `actual` as the pin of `url`'s first `extent` bytes, unless another
@@ -224,20 +230,17 @@ fn record_pin(
     actual: Integrity,
 ) -> Result<(), SourceError> {
     let _held = lock(&LOCK_WRITE);
-    if let Some(pin) = locked_pin(root, url, extent)? {
-        return check_digest(url, actual, pin, PinnedBy::Lock);
-    }
-    let path = lock_path(root);
-    let io_error = |message: String| SourceError::IoError {
-        path: path.display().to_string(),
-        message,
-    };
     let mut lock_file = match read_lock(root)? {
-        Some(lock_file) => lock_file,
+        Some(lock_file) => {
+            if let Some(pin) = pin_in(&lock_file, root, url, extent)? {
+                return check_digest(url, actual, pin, PinnedBy::Lock);
+            }
+            lock_file
+        }
         None => LockFile {
             version: 1,
             deps_hash: discover(root)
-                .map_err(|e| io_error(e.to_string()))?
+                .map_err(|e| lock_error(root, e.to_string()))?
                 .expect("a lock root holds a `wado.toml`")
                 .manifest
                 .deps_hash(),
@@ -251,7 +254,8 @@ fn record_pin(
         extent,
         integrity: actual.to_string(),
     });
-    write_atomic(&path, lock_file.to_toml().as_bytes()).map_err(|e| io_error(e.to_string()))
+    write_atomic(&root.join(LOCK_FILENAME), lock_file.to_toml().as_bytes())
+        .map_err(|e| lock_error(root, e.to_string()))
 }
 
 fn blob_path(integrity: Integrity) -> Option<PathBuf> {

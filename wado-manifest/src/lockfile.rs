@@ -4,10 +4,13 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 use serde::Deserialize;
 
+/// The lock file's name, in the package root beside `wado.toml`.
+pub const LOCK_FILENAME: &str = "wado.lock";
+
 /// A parsed `wado.lock` file.
 ///
-/// As of WEP M9, `wado.lock` is dependency-pin-only: it contains
-/// `[[package]]` and `[[build-dependency]]` entries but no Kiln
+/// As of WEP M9, `wado.lock` is pin-only: it contains `[[package]]`,
+/// `[[build-dependency]]` and `[[remote]]` entries but no Kiln
 /// generator-cache state. Per-invocation cache state lives next to the
 /// generated outputs as `<output_dir>/<primary>.kiln.json`. Older
 /// lockfiles that contain `[[generator-cache]]` sections still parse

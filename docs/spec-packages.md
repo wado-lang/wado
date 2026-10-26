@@ -637,11 +637,11 @@ extent = 4096
 integrity = "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
 ```
 
-| Field       | Present for            | Meaning                                                 |
-| ----------- | ---------------------- | ------------------------------------------------------- |
-| `url`       | every entry            | The file's URL, as the source writes it                 |
-| `extent`    | a part of a Kiln input | How many leading bytes the digest covers                |
-| `integrity` | every entry            | The digest of those bytes, or of the whole file without |
+| Field       | Present for            | Meaning                                                        |
+| ----------- | ---------------------- | -------------------------------------------------------------- |
+| `url`       | every entry            | The file's URL, as the source writes it                        |
+| `extent`    | a part of a Kiln input | How many leading bytes the digest covers                       |
+| `integrity` | every entry            | The digest of those bytes; with no `extent`, of the whole file |
 
 One URL may have several entries, one per extent read. Entries are sorted by
 `url`, then by `extent`. `wado update` keeps them. To accept new content at a

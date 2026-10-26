@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::fs;
 
-use wado_manifest::LockFile;
+use wado_manifest::{LOCK_FILENAME, LockFile};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::resolve_build_dependencies;
@@ -66,7 +66,7 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
         build_dependencies.push(dep.locked_package(integrity));
     }
 
-    let lock_path = project.root.join("wado.lock");
+    let lock_path = project.root.join(LOCK_FILENAME);
     // A remote pin records what a build first read, which no resolution
     // re-derives, so it carries over.
     let remotes = fs::read_to_string(&lock_path)

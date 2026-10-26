@@ -36,13 +36,16 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
 pub struct Integrity([u8; 32]);
 
 impl Integrity {
+    /// How a pin is written, as an error about a malformed one says.
+    pub const FORM: &str = "`sha256:` and 64 lowercase hex digits";
+
     /// The digest of `bytes`.
     #[must_use]
     pub fn of(bytes: &[u8]) -> Self {
         Self(Sha256::digest(bytes).into())
     }
 
-    /// `sha256:` and 64 lowercase hex digits, or `None`.
+    /// The pin `text` writes in [`Self::FORM`], or `None`.
     #[must_use]
     pub fn parse(text: &str) -> Option<Self> {
         let hex = text.strip_prefix(ALGORITHM)?;

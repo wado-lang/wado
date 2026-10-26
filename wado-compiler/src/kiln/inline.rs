@@ -429,7 +429,8 @@ fn lower_inline(
     let digest = clause_digest(
         &module,
         use_type.as_deref(),
-        (from.as_str(), integrity),
+        from.as_str(),
+        integrity,
         &inputs,
         None,
         &written_options,
@@ -582,7 +583,8 @@ fn lower_pin(
     let pin = Integrity::parse(text);
     if pin.is_none() {
         error(format!(
-            "kiln: `{field}` is `sha256:` and 64 lowercase hex digits, got `{text}`"
+            "kiln: `{field}` is {}, got `{text}`",
+            Integrity::FORM
         ));
     }
     pin
@@ -774,7 +776,8 @@ fn identity_key(inv: &Invocation) -> String {
     clause_digest(
         module,
         use_type,
-        (from, integrity),
+        from,
+        integrity,
         inputs,
         Some(output_dir),
         &options,
@@ -786,7 +789,8 @@ fn identity_key(inv: &Invocation) -> String {
 fn clause_digest(
     module: &GeneratorModule,
     use_type: Option<&str>,
-    (from, integrity): (&str, Option<Integrity>),
+    from: &str,
+    integrity: Option<Integrity>,
     inputs: &[InvocationInput],
     output_dir: Option<&str>,
     options: &[u8],
