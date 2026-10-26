@@ -178,9 +178,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-global global:core:prelude/format.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
-global global:core:prelude/format.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
-global global:core:prelude/primitive.wado::$const_obj_4: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
+global global:core:prelude/format.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
+global global:core:prelude/format.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(92, 117, 123), used: 3 };
+global global:core:prelude/primitive.wado::$const_obj_3: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
 
 fn "assert_escape_in_condition.wado/$template_segment$assert_escape_in_condition.wado/$tmpl$d48748ffcad618c0"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
     return (if index == 0 -> ref "core:prelude/string.wado//String" {
@@ -198,6 +198,7 @@ fn "assert_escape_in_condition.wado/$template_segment$assert_escape_in_condition
 
 fn "assert_escape_in_condition.wado/$cm_export__run"() {
     let s: ref "core:prelude/string.wado//String";
+    cold_path;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("actual"), used: 6 };
     cold_path;
     "core:rt/panic"(local.tee s("core:prelude/string.wado/core:prelude/string.wado/String::format<assert_escape_in_condition.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "assert_escape_in_condition.wado//$tmpl$d48748ffcad618c0" { h0: s, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at assert_escape_in_condition.wado:10
@@ -372,6 +373,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;
@@ -484,7 +486,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     builtin::array_set_u8(local.tee $load_8($load_1.repr), $fuse_at_63, 92);
                     builtin::array_set_u8($load_8, $fuse_at_63 + 1, 116);
                 } else if ($mv$$match_8$1 < 32) | ($mv$$match_8$1 == 127) {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/format.wado::$const_obj_3);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/format.wado::$const_obj_2);
                     text = "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/format.wado/$tmpl$47518b5dd822a983,[i32]>"(struct.new "core:prelude/format.wado//$tmpl$47518b5dd822a983" { h0: $mv$$match_8$1, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
                     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, text);
                     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 125);
@@ -500,7 +502,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"($load_1, 34);
     if truncated {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/format.wado::$const_obj_2);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/format.wado::$const_obj_1);
     }
 }
 
@@ -756,7 +758,7 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, u
 }
 
 fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
-    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_4);
+    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_3);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {

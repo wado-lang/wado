@@ -151,29 +151,31 @@ type "functype//core:rt/unreachable" = fn();  // TypeId(40)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(41)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(42)
+type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(42)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(43)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(43)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<cm_used_error_code_identity.wado/$tmpl$82976a53828ad9fe,[bool]>$spec0$spec0$sroa[t.h0]" = fn(bool) -> ref "core:prelude/string.wado//String";  // TypeId(44)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(44)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<cm_used_error_code_identity.wado/$tmpl$82976a53828ad9fe,[bool]>$spec0$spec0$sroa[t.h0]" = fn(bool) -> ref "core:prelude/string.wado//String";  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(46)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(46)
 
-type "functype//wasi/resource-drop:core/process/types.wado#Child" = fn(i32);  // TypeId(47)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(47)
 
-type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(48)
+type "functype//wasi/resource-drop:core/process/types.wado#Child" = fn(i32);  // TypeId(48)
 
-type "functype//wasi/future-drop-readable:val-result<core/process/types.wado#ExitStatus,core/process/types.wado#ErrorCode>" = fn(i32);  // TypeId(49)
+type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(49)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
+type "functype//wasi/future-drop-readable:val-result<core/process/types.wado#ExitStatus,core/process/types.wado#ErrorCode>" = fn(i32);  // TypeId(50)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(51)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(51)
 
-type "functype//cm_used_error_code_identity.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(52)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(52)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(53)
+type "functype//cm_used_error_code_identity.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(53)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(54)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -489,8 +491,8 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
-    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
+    "core:rt/panic$cold0"($mv$message$repr, $mv$message$used);
     unreachable;
 }
 
@@ -556,6 +558,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l44;
         };
     };
+}
+
+fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
+    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
+    unreachable;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, new_capacity) {

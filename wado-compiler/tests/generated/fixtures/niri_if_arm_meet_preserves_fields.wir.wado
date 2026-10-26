@@ -135,6 +135,7 @@ fn "niri_if_arm_meet_preserves_fields.wado/check_arm_writes_diverge"(flag) {
     arr = struct.new "core:prelude//List<u16>" { repr: builtin::array_new<u16>(16), used: 16 };
     if @unlikely(flag) {
         cold_path;
+        cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<u16>::grow"(arr);
         builtin::array_set<u16>(arr.repr, 16, 99);
         arr.used = 17;

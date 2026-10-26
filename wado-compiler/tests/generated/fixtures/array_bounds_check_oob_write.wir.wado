@@ -145,6 +145,7 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 
 fn "array_bounds_check_oob_write.wado/$cm_export__run"() {
     let $sroa_arr_repr_13: ref Array<i32>;
+    cold_path;
     $sroa_arr_repr_13 = array.new_fixed<i32>(10, 20, 30);
     cold_path;
     "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,index,value,$v1]"();
@@ -326,6 +327,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;
