@@ -29,7 +29,6 @@ fn send<B: AsByteSlice>(
     for let [name, value] of headers {
         fields.append(name as FieldName, value.bytes().collect() as FieldValue);
     }
-    fields.append("user-agent" as FieldName, #file.bytes().collect() as FieldValue);
 
     let [req, _req_future] = Request::new(
         fields,

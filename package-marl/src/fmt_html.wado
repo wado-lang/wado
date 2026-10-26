@@ -411,7 +411,7 @@ fn render_link<S: AsStrSlice, S1: AsStrSlice>(
     refs: &RefTable,
     out: &mut String,
 ) with RenderHook {
-    let href = escape_attr_ref(&sanitize_url(url));
+    let href = escape_attr_ref(&sanitize_url(unescape_backslashes(url)));
     out.push_str(`<a href="${href}"${title_attr(title)}>${render_inline_seq(children, refs)}</a>`);
 }
 
@@ -430,7 +430,7 @@ fn render_autolink<S: AsStrSlice>(url: S, out: &mut String) {
 }
 
 fn render_image<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(alt: S, url: S1, title: S2, out: &mut String) {
-    let src = escape_attr_ref(&sanitize_url(url));
+    let src = escape_attr_ref(&sanitize_url(unescape_backslashes(url)));
     out.push_str(`<img src="${src}" alt="${escape_attr_ref(alt)}"${title_attr(title)} />`);
 }
 
@@ -445,5 +445,5 @@ fn title_attr<S: AsStrSlice>(title: S) -> String {
     if title.len() == 0 {
         return "";
     }
-    return ` title="${escape_attr_ref(title)}"`;
+    return ` title="${escape_attr_ref(&unescape_backslashes(title))}"`;
 }

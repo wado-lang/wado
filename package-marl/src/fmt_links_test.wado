@@ -69,4 +69,7 @@ test "parse_dest_and_title rejects what is not a destination and an optional tit
     assert parse_dest_and_title("https://example.com \"unclosed") matches { None };
     assert parse_dest_and_title("https://example.com \"title\" trailing") matches { None };
     assert parse_dest_and_title("<https://example.com") matches { None };
+    assert parse_dest_and_title("/url \"abc\\\"") matches { None };
+    assert parse_dest_and_title("<bar>(baz)") matches { None };
+    assert parse_dest_and_title("/url (a (b)") matches { None };
 }

@@ -52,6 +52,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
         ["x-api-key", api_key],
         ["anthropic-version", "2023-06-01"],
         ["content-type", "application/json"],
+        ["user-agent", #file],
     ], to_bytes(&request).unwrap());
 
     if status != 200 {

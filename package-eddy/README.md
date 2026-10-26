@@ -52,10 +52,8 @@ notes; the rest is direction, not decision.
   repository and carry its evidence.
 - Reproduce what is severe. A reproducer written apart from the finding, run
   where the code runs, turns a claim into evidence; the post says which.
-- Give `AGENTS.md` only where it is used as written: to the agent that builds
-  and runs the project, or as the rules that govern the touched files, naming
-  which were applied.
-
+- Give `AGENTS.md` only to the reproduction agent, which builds and runs the
+  project as it says; a reviewer would follow the rest of it literally.
 - Estimate severity before reproduction, to choose what to reproduce, and
   decide it after, from what was demonstrated and what it reaches, read from
   structured fields. A calibrated classifier such as Jev fits the decision,

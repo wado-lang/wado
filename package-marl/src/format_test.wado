@@ -21,6 +21,19 @@ test "format keeps an inline link whose title is malformed as text" {
     assert format(source) == source;
 }
 
+test "format reprints a title holding a double quote so that it parses back" {
+    assert format("[a]: /url 'say \"hi\"'\n\n[a]\n") == "[a]: /url \"say \\\"hi\\\"\"\n\n[a]\n";
+    assert format("![i](/p 'q \"r\"')\n") == "![i](/p \"q \\\"r\\\"\")\n";
+}
+
+test "format keeps a destination with a space in angle brackets" {
+    assert format("[a]: <x y> 't'\n\n[a]\n") == "[a]: <x y> \"t\"\n\n[a]\n";
+}
+
+test "format joins a title on the next line to its link" {
+    assert format("[x](https://e.com\n\"t\")\n") == "[x](https://e.com \"t\")\n";
+}
+
 test "format leaves a bare url as plain text" {
     assert format("see https://example.com/x here\n") == "see https://example.com/x here\n";
 }

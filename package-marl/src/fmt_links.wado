@@ -4,6 +4,7 @@
 
 use { TreeMap } from "core:collections";
 use { LinkReferenceDef } from "./fmt_ast.wado";
+use { StrCursor } from "./str_cursor.wado";
 
 internal struct RefTable {
     internal defs: TreeMap<String, LinkReferenceDef>,
@@ -37,74 +38,119 @@ pub fn normalize_label<S: AsStrSlice>(raw: S) -> String {
     return words.join(" ");
 }
 
-/// Splits a link/image destination field (the text between `(` and `)`,
-/// after any inline text, or the text after a reference definition's `:`)
-/// into `[url, title]` (`title` is `""` when absent). The destination is a
-/// bare run up to the first space, or an angle-bracketed `<...>` run that may
-/// contain spaces; the title is an optional `"..."`, `'...'`, or `(...)`
-/// string after it. Anything else makes the field not a destination, so the
-/// result is `null` and the caller keeps the text as written, as CommonMark
-/// rules for link reference definitions and inline links.
-pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> Option<[String, String]> {
-    let trimmed = raw.trim();
-    let chars = trimmed.to_chars();
-    let len = chars.len();
-    let mut dest = String::new();
-    let mut p = 0;
-    if p < len && chars[p] == '<' {
-        p += 1;
-        while p < len && chars[p] != '>' {
-            dest.push(chars[p]);
-            p += 1;
-        }
-        if p == len {
-            return null;
-        }
-        p += 1;
-    } else {
-        while p < len && !chars[p] matches { ' ' | '\t' } {
-            dest.push(chars[p]);
-            p += 1;
-        }
-    }
-    while p < len && chars[p] matches { ' ' | '\t' } {
-        p += 1;
-    }
-    if p == len {
-        return Option::Some([dest, ""]);
-    }
-    let Some(title) = read_title(&chars, p) else {
-        return null;
-    };
-    return Option::Some([dest, title]);
+/// A destination and title as written (backslash escapes kept, so the
+/// formatter round-trips them), and the index just past them and the blanks
+/// after them.
+pub struct DestAndTitle {
+    pub url: String,
+    pub title: String,
+    pub end: i32,
 }
 
-/// Reads a title that starts at `start` and closes on the last char.
-fn read_title(chars: &List<char>, start: i32) -> Option<String> {
-    let closing = match chars[start] {
-        '"' => '"',
-        '\'' => '\'',
-        '(' => ')',
-        _ => {
-            return null;
-        },
+/// Splits a whole field, the text after a reference definition's `:`, into a
+/// destination and a title (`""` when absent). Anything left over makes it no
+/// definition, so the result is `null` and the caller keeps the text as
+/// written.
+pub fn parse_dest_and_title<S: AsStrSlice>(raw: S) -> Option<[String, String]> {
+    let chars = raw.to_chars();
+    let Some(field) = scan_dest_and_title(&StrCursor::over(&chars), 0) else {
+        return null;
     };
-    let last = chars.len() - 1;
-    if last == start || chars[last] != closing {
+    if field.end != chars.len() {
         return null;
     }
-    let mut title = String::new();
-    let mut p = start + 1;
-    while p < last {
-        if chars[p] == closing {
+    return Option::Some([field.url, field.title]);
+}
+
+/// Reads a link destination and an optional title starting at `start`, per
+/// CommonMark: blanks may hold one line ending, the destination is `<...>` or a
+/// bare run with balanced parentheses, and a title (`"..."`, `'...'` or
+/// `(...)`) must follow a blank. Stops where they end, so an inline link finds
+/// its `)` after the title rather than inside it.
+pub fn scan_dest_and_title(cur: &StrCursor, start: i32) -> Option<DestAndTitle> {
+    let mut p = skip_blanks(cur, start);
+    let Some([url, after_dest]) = scan_dest(cur, p) else {
+        return null;
+    };
+    p = skip_blanks(cur, after_dest);
+    let mut title = "";
+    if p > after_dest && cur.at(p) matches { Some('"' | '\'' | '(') } {
+        let Some([t, after_title]) = scan_title(cur, p) else {
             return null;
+        };
+        title = t;
+        p = skip_blanks(cur, after_title);
+    }
+    return Option::Some(DestAndTitle { url, title, end: p });
+}
+
+fn skip_blanks(cur: &StrCursor, start: i32) -> i32 {
+    let mut p = start;
+    let mut line_ends = 0;
+    while let Some(c) = cur.at(p) && c matches { ' ' | '\t' | '\n' } {
+        if c == '\n' {
+            line_ends += 1;
+            if line_ends > 1 {
+                break;
+            }
         }
-        if chars[p] == '\\' && p + 1 < last {
-            title.push(chars[p]);
-            p += 1;
-        }
-        title.push(chars[p]);
         p += 1;
     }
-    return Option::Some(title);
+    return p;
+}
+
+fn scan_dest(cur: &StrCursor, start: i32) -> Option<[String, i32]> {
+    let mut p = start;
+    if cur.is_at(p, '<') {
+        p += 1;
+        while let Some(c) = cur.at(p) {
+            if c == '>' {
+                return Option::Some([cur.slice(start + 1, p), p + 1]);
+            }
+            if c matches { '<' | '\n' } {
+                return null;
+            }
+            p += if c == '\\' && cur.at(p + 1) matches { Some(_) } { 2 } else { 1 };
+        }
+        return null;
+    }
+    let mut depth = 0;
+    // A bare destination holds no space and no ASCII control character.
+    while let Some(c) = cur.at(p) && c as u32 > 0x20 && c as u32 != 0x7F {
+        if c == '\\' && cur.at(p + 1) matches { Some(_) } {
+            p += 2;
+            continue;
+        }
+        if c == '(' {
+            depth += 1;
+        } else if c == ')' {
+            if depth == 0 {
+                break;
+            }
+            depth -= 1;
+        }
+        p += 1;
+    }
+    if depth != 0 {
+        return null;
+    }
+    return Option::Some([cur.slice(start, p), p]);
+}
+
+fn scan_title(cur: &StrCursor, start: i32) -> Option<[String, i32]> {
+    let Some(open) = cur.at(start) else {
+        return null;
+    };
+    let close = if open == '(' { ')' } else { open };
+    let mut p = start + 1;
+    while let Some(c) = cur.at(p) {
+        if c == close {
+            return Option::Some([cur.slice(start + 1, p), p + 1]);
+        }
+        if open == '(' && c == '(' {
+            return null;
+        }
+        p += if c == '\\' && cur.at(p + 1) matches { Some(_) } { 2 } else { 1 };
+    }
+    return null;
 }

@@ -48,6 +48,7 @@ export fn run() with (Stdout, Stderr, Environment, Client) {
     let [status, body] = post("openrouter.ai", "/api/v1/chat/completions", [
         ["authorization", `Bearer ${api_key}`],
         ["content-type", "application/json"],
+        ["user-agent", #file],
     ], to_bytes(&request).unwrap());
 
     if status != 200 {
