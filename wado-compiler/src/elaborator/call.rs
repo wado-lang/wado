@@ -810,26 +810,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let literal_list = matches!(arg, Expr::TupleLiteral(_))
             .then(|| self.tysys.type_table.borrow_mut().make_list(element));
         let resolved = self.resolve_expr(arg, ctx, literal_list);
-        let (is_view, list_arg) = {
-            let tt = self.tysys.type_table.borrow();
-            (
-                tt.is_compiler_item_type(resolved, CompilerItem::ListView),
-                tt.compiler_trait_fq(CompilerItem::ListArg)
-                    .with_args(vec![tt.fq_type_name(element)]),
-            )
-        };
-        if is_view
-            || !self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                resolved,
-                &list_arg,
-            )
-        {
+        if !self.converts_to_list_view(view, resolved) {
             return resolved;
         }
         self.sem.types.list_view_conversions.insert(arg.id(), view);
         view
+    }
+
+    /// Whether an `arg` argument converts to the parameter `param` through
+    /// `ListArg<T>`, `param` being a `&ListView<T>` and `arg` not already one.
+    pub(super) fn converts_to_list_view(&self, param: TypeId, arg: TypeId) -> bool {
+        let list_arg = {
+            let tt = self.tysys.type_table.borrow();
+            let Some(element) = tt.list_view_ref_element(param) else {
+                return false;
+            };
+            if tt.is_compiler_item_type(arg, CompilerItem::ListView) {
+                return false;
+            }
+            tt.compiler_trait_fq(CompilerItem::ListArg)
+                .with_args(vec![tt.fq_type_name(element)])
+        };
+        self.tysys
+            .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), arg, &list_arg)
     }
 }
 

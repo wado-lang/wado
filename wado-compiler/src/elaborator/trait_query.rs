@@ -2183,7 +2183,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Whether every class names exactly what the candidate takes there, with
-    /// no slot standing in. Argument passing’s one coercion still applies.
+    /// no slot standing in. The reference conversion still applies; a
+    /// conversion to a `&ListView<T>` is not exact.
     fn exactly_admits(
         &mut self,
         candidate: &BoundCandidate,

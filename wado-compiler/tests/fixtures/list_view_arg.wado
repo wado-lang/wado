@@ -45,6 +45,21 @@ test "a view passes on unconverted" {
     assert pass_on([1, 1]) == 2;
 }
 
+struct Summer {}
+
+impl Summer {
+    fn sum(&self, data: &ListView<u8>) -> i32 {
+        return sum(data);
+    }
+}
+
+test "a method's argument converts" {
+    let summer = Summer {};
+    let bytes: ByteList = b"\x03\x04";
+    assert summer.sum(bytes) == 7;
+    assert summer.sum(&LinearArray::<u8>::filled(2, 1)) == 2;
+}
+
 struct Keeper {
     view: Option<&ListView<u8>>,
 }
