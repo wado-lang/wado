@@ -2,19 +2,22 @@
 
 This survey covers how code review bots are built, what raises their quality,
 how they are evaluated and secured, how they trade cost against quality, and
-how they learn over time. It reads only work published from
-2026-08-01 to 2026-10-26: the models changed enough in August 2026 that older
-results say little about current ones.
+how they learn over time. It searched work published from 2026-08-01 to
+2026-10-26: the models changed enough in August 2026 that older results say
+little about current ones. Where the window held nothing on a question, an
+earlier source is cited and marked as before the window.
 
 ## Method
 
 - arXiv: the API query `abs:"code review"` with `submittedDate` in the window,
-  newest first. The papers below were read from their abstracts, not their full
-  text, so a figure here is the abstract's.
-- Industry: web searches for posts in the window from GitHub, Anthropic,
-  CodeRabbit, OpenAI and TypeSafe, and for community projects built on
-  TypeSafe's Jev. These are vendor or author reports, and their figures are
-  their own.
+  newest first, then web searches for each question the survey asks. The
+  papers below were read from their abstracts, not their full text, so a
+  figure here is the abstract's.
+- Industry: web searches for posts in the window, from vendors (GitHub,
+  Anthropic, CodeRabbit, OpenAI, Cursor, Microsoft, Sourcegraph, TypeSafe),
+  from community projects built on TypeSafe's Jev, and from press and blogs
+  that report on them. These are vendor or author reports, and their figures
+  are their own.
 
 ## Architecture
 

@@ -58,10 +58,14 @@ fn send<B: AsByteSlice>(
 
 fn read_body(resp: Response) -> ByteList {
     let [res_rx, res_tx] = Future::<Result<(), ErrorCode>>::new();
-    let [body_stream_rx, _trailers] = Response::consume_body(resp, res_rx);
+    let [body_stream_rx, received] = Response::consume_body(resp, res_rx);
 
     let buf = body_stream_rx.read_to_end_bytes();
     body_stream_rx.drop();
     res_tx.write(Result::Ok(()));
+    let outcome = received.read();
+    if !outcome matches { Some(Ok(_)) } {
+        panic(`HTTP response body failed: ${outcome:?}`);
+    }
     return buf;
 }

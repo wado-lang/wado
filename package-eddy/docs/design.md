@@ -20,9 +20,10 @@ them is in [the research](./research-code-review-bots.md).
   learning is data with provenance (the outcome that produced it, the model
   that wrote it) and a scope (the paths it applies to). Three mechanisms act
   on it:
-  - Ablation is the gate. Every time the evaluation set grows, it is rerun
-    with each learning removed, and a learning whose removal does not lower
-    the score is deleted.
+  - Ablation is the gate. A new learning takes effect only once the
+    evaluation set scores higher with it than without it. Every time the set
+    grows, it is rerun with each learning removed, and a learning whose
+    removal does not lower the score is deleted.
   - Expiry is the backstop. A learning lapses after a fixed time unless
     outcomes earned it again.
   - Quarantine by model. A learning written from one model's run reaches the
@@ -47,7 +48,7 @@ them is in [the research](./research-code-review-bots.md).
 - [x] Eddy points at problems and proposes no fixes.
 - [x] Every model call uses prompt caching.
 - [x] The thresholds (the outcome window, the expiry, the weights) start as
-  guesses and are tuned in operation.
+  guesses and are tuned in operation, on outcomes outside the held-out set.
 
 ## Leanings
 
@@ -66,7 +67,7 @@ them is in [the research](./research-code-review-bots.md).
 - How models of different providers exchange findings is worked out by trial
   during implementation.
 - How learnings are stored is decided later.
-- What the code search tool answers is decided later.
+- Which queries the code search tool takes is decided later.
 
 ## Outcome Signals
 
