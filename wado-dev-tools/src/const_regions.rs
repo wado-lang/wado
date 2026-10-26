@@ -20,7 +20,8 @@ const CORPUS_DIRS: &[&str] = &["benchmark", "wasm-size"];
 /// The remark `remarks.rs` emits for a region left to run time.
 const REGION_REMARK: &str = "computes a constant at run time: ";
 
-/// The remarks a compile emits, or the first error line when it did not build.
+/// The cause of each region a compile reports, or its first error when it did
+/// not build.
 type Outcome = Result<Vec<String>, String>;
 
 pub fn run(mut parser: lexopt::Parser) {
@@ -32,23 +33,22 @@ pub fn run(mut parser: lexopt::Parser) {
     assert!(!files.is_empty(), "the corpus must hold a file");
     let outcomes = compile_all(&wado, &files);
 
-    let mut by_cause: IndexMap<String, usize> = IndexMap::default();
+    let mut by_cause: IndexMap<&str, usize> = IndexMap::default();
     let mut by_file: Vec<(&str, usize)> = Vec::new();
     let mut skipped: Vec<(&str, &str)> = Vec::new();
     for (file, outcome) in files.iter().zip(&outcomes) {
-        let remarks = match outcome {
-            Ok(remarks) => remarks,
+        let causes = match outcome {
+            Ok(causes) => causes,
             Err(error) => {
                 skipped.push((file, error));
                 continue;
             }
         };
-        let causes: Vec<&str> = remarks.iter().filter_map(|r| region_cause(r)).collect();
         if !causes.is_empty() {
             by_file.push((file, causes.len()));
         }
-        for name in causes.into_iter().flat_map(blamed) {
-            *by_cause.entry(name.to_string()).or_default() += 1;
+        for name in causes.iter().flat_map(|cause| blamed(cause)) {
+            *by_cause.entry(name).or_default() += 1;
         }
     }
 
@@ -59,7 +59,7 @@ pub fn run(mut parser: lexopt::Parser) {
         by_file.len(),
         files.len() - skipped.len()
     );
-    let mut by_cause: Vec<(String, usize)> = by_cause.into_iter().collect();
+    let mut by_cause: Vec<(&str, usize)> = by_cause.into_iter().collect();
     print_table("Cause", &mut by_cause);
     println!();
     print_table("File", &mut by_file);
@@ -108,7 +108,10 @@ fn corpus_files() -> Vec<String> {
     let mut files: Vec<String> = dirs
         .iter()
         .flat_map(|dir| entries(dir))
-        .filter(|path| path.ends_with(".wado") && Path::new(path).is_file())
+        .filter(|path| {
+            let path = Path::new(path);
+            path.extension().is_some_and(|e| e == "wado") && path.is_file()
+        })
         .collect();
     files.sort();
     files
@@ -159,7 +162,7 @@ fn compile(wado: &str, file: &str) -> Outcome {
     if output.status.success() {
         return Ok(stderr
             .lines()
-            .filter(|l| l.contains("remark:"))
+            .filter_map(region_cause)
             .map(str::to_string)
             .collect());
     }
@@ -167,8 +170,8 @@ fn compile(wado: &str, file: &str) -> Outcome {
     // here, and only the first is expected: the line tells them apart.
     Err(stderr
         .lines()
-        .find(|l| l.contains("error:"))
-        .map_or_else(|| output.status.to_string(), |l| l.trim().to_string()))
+        .find_map(|l| l.find("error:").map(|at| l[at..].trim_end().to_string()))
+        .unwrap_or_else(|| output.status.to_string()))
 }
 
 fn region_cause(remark: &str) -> Option<&str> {
@@ -187,13 +190,13 @@ fn blamed(cause: &str) -> Vec<&str> {
 }
 
 /// A `## By <noun>` table, its rows sorted by count, descending.
-fn print_table<K: AsRef<str>>(noun: &str, rows: &mut [(K, usize)]) {
+fn print_table(noun: &str, rows: &mut [(&str, usize)]) {
     rows.sort_by_key(|row| Reverse(row.1));
     println!("## By {}\n", noun.to_lowercase());
     println!("| {noun} | Regions |");
     println!("| {} | ------- |", "-".repeat(noun.len()));
     for (key, n) in rows.iter() {
-        println!("| `{}` | {n} |", key.as_ref());
+        println!("| `{key}` | {n} |");
     }
 }
 
