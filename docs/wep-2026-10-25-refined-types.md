@@ -92,12 +92,12 @@ value enters the type, and the type records that the check passed. That is a
 manifest contract, the design Scala's and Haskell's `refined` libraries also
 ship under this name.
 
-The share decided at compile time grows as the compiler learns to evaluate more
-clauses, as in hybrid type checking. A conversion the compiler proves needs no
-check at run time, and an `R::from` it refutes, which can only trap, is
-reported (see
+The compiler decides more clauses at compile time as it learns to evaluate
+them, as hybrid type checking does. Where it proves a conversion, the
+conversion needs no check at run time. Where it refutes an `R::from`, which
+could only trap, it reports the call (see
 [the explicit conversions](#a-value-enters-a-refined-type-only-by-an-explicit-conversion)).
-Either way the conversion stays written: proving more removes checks and
+The conversion stays written either way. Proving more removes checks and
 reports more failures, but never lets a narrowing go unwritten.
 
 A refined type is not a newtype. `type UserName = String contract …` declares a
@@ -384,8 +384,8 @@ clauses matters.
 
 `Length`, the ranges and a pattern match are the clauses most programs write.
 Which of them the standard library provides, and which module outside the
-prelude holds them, are open. A pattern clause needs a regular expression engine, which the standard
-library does not have. `Length` must also say what it counts: `String::len()`
+prelude holds them, are open. A pattern clause needs a regular expression
+engine, which the standard library does not have. `Length` must also say what it counts: `String::len()`
 counts bytes, and JSON Schema's `minLength` counts code points.
 
 ## Related WEPs

@@ -238,8 +238,8 @@ Identity sits on the root rather than on each kind. A kind bound gates a name
 behind [Visibility](#visibility), so a type whose fields are private
 (`TreeMap<String,i32>`) could not be named by the library that must key it; and
 it would force a derivation to widen its bound to a kind just to name its
-subject, which a schema library's blanket over one kind cannot do: its key
-must name the type whatever kind answers for it.
+subject. A schema generator keying `$defs` by a `T: JsonSchema` cannot do that,
+since it does not know which kind `T` is.
 
 `type_name()` sits beside `type_info()` on the root: the allocation-free
 shorthand serde's `begin_struct` calls, answering the declaration name
