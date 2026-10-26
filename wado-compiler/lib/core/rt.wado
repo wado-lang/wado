@@ -37,29 +37,35 @@ use {
 } from "core:prelude/types.wado";
 
 /// Copies bytes from linear memory to a new GC array.
-///
-/// Wasm has no copy from linear memory into a GC array, so each byte is its
-/// own `array.set`. Loading eight at a time halves the cost per byte against a
-/// load per byte, which every stream read of bytes pays.
 internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);
+    memory_into_gc_array(&mut arr, 0, ptr, len);
+    return arr;
+}
+
+/// Copies `len` bytes from linear memory at `ptr` into `arr[at..<at + len]`.
+///
+/// Wasm has no copy from linear memory into a GC array, so each byte is its
+/// own `array.set`. One load feeding eight of them halves the guest's cost per
+/// byte, which every lift of bytes or a string pays.
+internal fn memory_into_gc_array(arr: &mut Array<u8>, at: i32, ptr: i32, len: i32) {
     let mut i = 0;
     while i <= len - 8 {
         let w = builtin::i64_load(ptr + i);
-        builtin::array_set_u8(&mut arr, i, w as u8);
-        builtin::array_set_u8(&mut arr, i + 1, (w >> 8) as u8);
-        builtin::array_set_u8(&mut arr, i + 2, (w >> 16) as u8);
-        builtin::array_set_u8(&mut arr, i + 3, (w >> 24) as u8);
-        builtin::array_set_u8(&mut arr, i + 4, (w >> 32) as u8);
-        builtin::array_set_u8(&mut arr, i + 5, (w >> 40) as u8);
-        builtin::array_set_u8(&mut arr, i + 6, (w >> 48) as u8);
-        builtin::array_set_u8(&mut arr, i + 7, (w >> 56) as u8);
+        let to = at + i;
+        builtin::array_set_u8(arr, to, w as u8);
+        builtin::array_set_u8(arr, to + 1, (w >> 8) as u8);
+        builtin::array_set_u8(arr, to + 2, (w >> 16) as u8);
+        builtin::array_set_u8(arr, to + 3, (w >> 24) as u8);
+        builtin::array_set_u8(arr, to + 4, (w >> 32) as u8);
+        builtin::array_set_u8(arr, to + 5, (w >> 40) as u8);
+        builtin::array_set_u8(arr, to + 6, (w >> 48) as u8);
+        builtin::array_set_u8(arr, to + 7, (w >> 56) as u8);
         i += 8;
     }
     for ; i < len; i += 1 {
-        builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
+        builtin::array_set_u8(arr, at + i, builtin::i32_load8_u(ptr + i));
     }
-    return arr;
 }
 
 /// Copies bytes from linear memory to a new GC String.
@@ -71,20 +77,23 @@ internal fn memory_to_gc_string(ptr: i32, len: i32) -> String {
 
 /// Copies `arr[src_start..<src_start + len]` from a GC array to linear memory.
 ///
-/// Eight `array.get`s in one block share their bounds checks, and one store
-/// writes what they read, which every stream write of bytes pays.
+/// `array.get`s in one block share part of their bounds checks, and one store
+/// writes the eight bytes they read, which every lower of bytes or a string
+/// pays. Four per store measures the same.
 internal fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
     let mut i = 0;
     while i <= len - 8 {
         let at = src_start + i;
-        let w = builtin::array_get_value_u8(arr, at) as i64
-            | builtin::array_get_value_u8(arr, at + 1) as i64 << 8
-            | builtin::array_get_value_u8(arr, at + 2) as i64 << 16
-            | builtin::array_get_value_u8(arr, at + 3) as i64 << 24
-            | builtin::array_get_value_u8(arr, at + 4) as i64 << 32
-            | builtin::array_get_value_u8(arr, at + 5) as i64 << 40
-            | builtin::array_get_value_u8(arr, at + 6) as i64 << 48
-            | builtin::array_get_value_u8(arr, at + 7) as i64 << 56;
+        let w = builtin::array_get_value_u8(arr, at) as i64 | builtin::array_get_value_u8(arr, at + 1) as i64 << 8 | builtin::array_get_value_u8(
+            arr,
+            at + 2,
+        ) as i64 << 16 | builtin::array_get_value_u8(arr, at + 3) as i64 << 24 | builtin::array_get_value_u8(
+            arr,
+            at + 4,
+        ) as i64 << 32 | builtin::array_get_value_u8(arr, at + 5) as i64 << 40 | builtin::array_get_value_u8(
+            arr,
+            at + 6,
+        ) as i64 << 48 | builtin::array_get_value_u8(arr, at + 7) as i64 << 56;
         builtin::i64_store(ptr + i, w);
         i += 8;
     }
