@@ -1333,7 +1333,10 @@ pub(super) fn generate_hole_bridge_helpers(
         .collect();
     let ref_struct_type = type_table.borrow_mut().make_ref(struct_type);
     let mut helpers: Vec<TirFunction> = [
-        (hole_get_helper_name as fn(&str, &str) -> String, Read::Value),
+        (
+            hole_get_helper_name as fn(&str, &str) -> String,
+            Read::Value,
+        ),
         (hole_ref_helper_name, Read::Ref),
     ]
     .into_iter()

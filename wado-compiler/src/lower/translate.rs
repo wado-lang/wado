@@ -34,8 +34,7 @@ use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
 use crate::name::{
     FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
     field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    hole_ref_helper_name,
-    template_segment_helper_name, variant_tag_helper_name,
+    hole_ref_helper_name, template_segment_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -2569,8 +2568,7 @@ impl FunctionTranslator<'_, '_> {
         }
 
         // A field read names the struct and the field type, a hole read the
-        // shape and the hole type; `hole_fmt<T>` and `template_segment<T>` name
-        // the shape only.
+        // shape and the hole type.
         for (builtin, helper_name) in [
             (
                 "struct_field_get",
@@ -2593,6 +2591,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
+        // `hole_fmt<T>` and `template_segment<T>` name the shape only.
         for (builtin, helper_name) in [
             ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
             ("template_segment", template_segment_helper_name),
