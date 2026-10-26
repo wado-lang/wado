@@ -1,11 +1,12 @@
 // A Wasm asset's export table is no Wado source, so an export spelled like a
 // keyword is not refused there. It reads with a trailing `_`, as a Component
-// Model function does.
-use { add, resume_ as seven } from "./sub/wasm_import_keyword_export.wat" with { type: "wat" };
+// Model function does, unless the keyword is one a name may be (`type`).
+use { add, resume_ as seven, type as nine } from "./sub/wasm_import_keyword_export.wat" with { type: "wat" };
 
-test "an asset exporting `resume` imports" {
+test "an asset exporting `resume` and `type` imports" {
     assert add(1, 2) == 3;
     assert seven() == 7;
+    assert nine() == 9;
 }
 
 __DATA__
