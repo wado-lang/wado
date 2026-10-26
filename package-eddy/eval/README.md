@@ -16,6 +16,12 @@ reverts, so the defects come from fix pull requests rather than reverts.
   corrects a defect, whether the blamed pull request introduced it, and whether
   a reviewer reading only that pull request's diff could have pointed at it.
 
+A pair whose fix or culprit diff runs past 60,000 bytes, generated and
+vendored files left out, gets an error instead of a verdict: the part cut off
+may be the part that shows the defect. That is about a third of the pairs.
+`-D diff_limit=…` raises the limit, and a rerun judges only the pairs left
+unsettled.
+
 An entry is usable when all three verdicts hold. Its review input is the
 culprit's diff, and its expected finding is the defect the fix names.
 
@@ -41,7 +47,8 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   relocated a function.
 - `git blame -M -C`, which follows moved and copied lines, does not take the
   movers out. It changes the top culprit of 26 fix pull requests but only 3 of
-  the 54 pairs the judge found moved rather than introduced, and it shrinks the
+  the 54 pairs a run over all 97, long diffs clipped, found moved rather than
+  introduced, and it shrinks the
   pairs above a 50% share from 97 to 84. The census blames with `-w` alone.
 - The usable yield is about the same at a 50% share as at 80%, so the share
   threshold does little; the model check is what filters.

@@ -56,7 +56,29 @@ pub fn git(args: List<String>) -> String with Process {
 }
 
 fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
-    return Command::new("git").args(args).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
+    // Unquoted, a non-ASCII path reads back as the name `git` takes.
+    let mut full = ["-c", "core.quotePath=false"] as List<String>;
+    full.extend(&args);
+    return Command::new("git").args(full).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
+}
+
+/// The paths `.gitattributes` marked generated or vendored at `rev`.
+pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Process {
+    let mut marked: List<String> = [];
+    if paths.is_empty() {
+        return marked;
+    }
+    let mut check = ["check-attr", "--source", *rev, "linguist-generated", "linguist-vendored", "--"] as List<String>;
+    check.extend(paths);
+    for let line of git(check).lines() {
+        if !(line.ends_with(": set") || line.ends_with(": true")) {
+            continue;
+        }
+        if let Some(at) = line.find(": linguist-") {
+            marked.push(line.slice(0, at).to_string());
+        }
+    }
+    return marked;
 }
 
 /// The pull requests merged into `origin/main`, oldest first. A merge's
