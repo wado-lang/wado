@@ -534,9 +534,6 @@ pub fn locals_from_params(params: &[TirParam]) -> Vec<TirLocal> {
         .collect()
 }
 
-/// Build a single `TirLocal` for a synthesised parameter slot. Convenience
-/// wrapper around the literal struct construction so synthesis sites can
-/// seed their `locals` table with `vec![param_local(...), ...]`.
 /// An immutable parameter of a synthesized function.
 pub fn synth_param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
     TirParam {
@@ -549,6 +546,8 @@ pub fn synth_param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
     }
 }
 
+/// The `TirLocal` a synthesized parameter's slot holds, for a function seeding
+/// its `locals` with `vec![param_local(...), ...]`.
 pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
     TirLocal {
         name: name.to_string(),
