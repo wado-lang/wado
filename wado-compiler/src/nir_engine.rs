@@ -870,16 +870,19 @@ impl<'a> Engine<'a> {
     /// or not, so it fails safe. `extract`'s `multi_version_locals` is this same
     /// predicate, so the value query and the freeze agree by construction.
     pub fn local_has_one_version(&mut self, local: u32) -> bool {
-        match self.local_bindings(local) {
+        let bound_once = match self.local_bindings(local) {
             // No `Let`: a parameter, or a `LetDestructure` binding the use index
             // does not record — which then fails the membership test.
             0 => {
-                return self.params.contains(&local)
-                    && self.locals().get(local as usize).is_some_and(|l| !l.is_mut);
+                self.params.contains(&local)
+                    && self.locals().get(local as usize).is_some_and(|l| !l.is_mut)
             }
-            1 => {}
+            1 => true,
             // `labeled_block_fusion` clones a block, `local_index` and all.
-            _ => return false,
+            _ => false,
+        };
+        if !bound_once {
+            return false;
         }
         // A write through a reference leaves no assign target to see, so a local
         // whose address was taken is out regardless of how it reads.
