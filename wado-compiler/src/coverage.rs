@@ -1322,7 +1322,11 @@ pub fn to_lcov(coverage: &Coverage) -> String {
             let _ = writeln!(out, "DA:{line},{count}");
         }
         let _ = writeln!(out, "LF:{}", lines.len());
-        let _ = writeln!(out, "LH:{}", lines.values().filter(|count| **count > 0).count());
+        let _ = writeln!(
+            out,
+            "LH:{}",
+            lines.values().filter(|count| **count > 0).count()
+        );
         let _ = writeln!(out, "end_of_record");
     }
     out
@@ -1453,7 +1457,13 @@ mod tests {
             None,
         );
         let lcov = to_lcov(&coverage);
-        for line in ["FNDA:4,f", "BRDA:2,0,0,4", "BRDA:2,0,1,0", "DA:2,4", "DA:3,4"] {
+        for line in [
+            "FNDA:4,f",
+            "BRDA:2,0,0,4",
+            "BRDA:2,0,1,0",
+            "DA:2,4",
+            "DA:3,4",
+        ] {
             assert!(lcov.lines().any(|l| l == line), "{line} in\n{lcov}");
         }
     }

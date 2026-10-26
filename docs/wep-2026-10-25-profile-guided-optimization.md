@@ -245,7 +245,7 @@ level.
 
 ## Roadmap
 
-1. [ ] Counting probes. The probe counts, the runner reads the counts when a
+1. [x] Counting probes. The probe counts, the runner reads the counts when a
    test returns, and LCOV carries them. `mise run test-stdlib-coverage`, before
    and after, in a table with the command beside it, shows what counting costs.
 2. [ ] `#[workload]`. The attribute runs as a test, is an error beside

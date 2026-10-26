@@ -373,8 +373,14 @@ fn totals(file: &FileCoverage) -> Totals {
     let branches = file.branches();
     let functions = file.functions();
     Totals {
-        lines: (lines.values().filter(|count| **count > 0).count(), lines.len()),
-        branches: (branches.iter().filter(|b| b.taken()).count(), branches.len()),
+        lines: (
+            lines.values().filter(|count| **count > 0).count(),
+            lines.len(),
+        ),
+        branches: (
+            branches.iter().filter(|b| b.taken()).count(),
+            branches.len(),
+        ),
         functions: (
             functions.iter().filter(|(_, count)| *count > 0).count(),
             functions.len(),

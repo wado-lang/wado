@@ -1268,13 +1268,8 @@ fn generate_test_world_bindings(project: &mut Package) {
         .into_iter()
         .map(|(test_name, user_func_rc)| {
             let binding_name = cm_export_func_name(&test_name);
-            let adapter = synthesize_export_binding(
-                &test_name,
-                &user_func_rc,
-                &entry_source,
-                &env,
-                strategy,
-            );
+            let adapter =
+                synthesize_export_binding(&test_name, &user_func_rc, &entry_source, &env, strategy);
             (test_name, binding_name, adapter)
         })
         .collect();
