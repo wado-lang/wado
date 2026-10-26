@@ -130,7 +130,7 @@ impl<T: AnyBits> IndexValue<i32> for LinearArray<T> {
     fn index_value(&self, index: i32) -> Self::Output
         contract 0 <= index < self.len()
     {
-        return unchecked self.at(index);
+        return self.at(index);
     }
 }
 
@@ -140,6 +140,6 @@ impl<T: AnyBits> IndexAssign<i32> for LinearArray<T> {
     fn index_assign(&mut self, index: i32, value: Self::Output)
         contract 0 <= index < self.len()
     {
-        unchecked self.set(index, value);
+        self.set(index, value);
     }
 }

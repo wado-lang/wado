@@ -579,7 +579,7 @@ impl FunctionTranslator<'_, '_> {
                 i32::try_from(width).expect("a primitive is a few bytes wide"),
             ));
         }
-        let moved = match builtin_name {
+        let access = match builtin_name {
             "i32_load" | "i32_store" => Some(PrimitiveType::I32),
             "i32_load8_u" | "i32_store8" => Some(PrimitiveType::U8),
             "i32_load8_s" => Some(PrimitiveType::I8),
@@ -592,7 +592,7 @@ impl FunctionTranslator<'_, '_> {
             "load" | "store" => Some(self.any_bits_primitive(type_args)),
             _ => None,
         };
-        if let Some(prim) = moved {
+        if let Some(prim) = access {
             let addr = Box::new(self.translate_operand(args[0].expr));
             return Some(if let Some(value) = args.get(1) {
                 let value = Box::new(self.translate_operand(value.expr));
