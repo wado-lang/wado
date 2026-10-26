@@ -171,11 +171,10 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             &first_param_types,
             &call_immutability,
         );
-        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
         let mut engine = Engine::new(body, buffers, locals, params);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(type_table);
-        engine.set_param_locals(param_locals);
+        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

@@ -71,7 +71,6 @@ fn forward_one(
     // it everywhere forwards into the hot paths too, which trades shared locals
     // for duplicated constants and measures slower.
     let is_cm_export = func.is_cm_export;
-    let param_locals: Vec<u32> = func.params.iter().map(|p| p.local_index).collect();
     // `Local`-read forwarding excludes address-taken / `stores`-aliased
     // locals: the canonical sets plus the engine's body scan — the
     // canonical sets are static elaboration records and go stale after
@@ -104,7 +103,7 @@ fn forward_one(
     if is_cm_export {
         // `ensure_value_graph` never rebuilds, so what is seeded here is what
         // licm and `promote_fields` inherit.
-        engine.set_param_locals(param_locals);
+        engine.seed_params();
     }
     // Before the first query: `scoped_const_reads` only *grows* a graph that
     // already exists, and this session is the one that set the real alias sets,

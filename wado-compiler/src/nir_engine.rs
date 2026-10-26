@@ -333,7 +333,7 @@ pub struct Engine<'a> {
     /// Parameter local indices, seeded as stable `Opaque`s. Only up-front
     /// seeding makes parameters visible in the loop-entry snapshots, so
     /// passes consuming [`Engine::loop_entry_value`] must call
-    /// [`Engine::set_param_locals`] first.
+    /// [`Engine::seed_params`] first.
     param_locals: Vec<u32>,
     /// Calls that mutate no caller local; the build skips their per-call
     /// `mut_escaped` bump. Empty is conservative.
@@ -717,11 +717,11 @@ impl<'a> Engine<'a> {
         &self.alias.aliased
     }
 
-    /// Record the owning function's parameter local indices so the value graph
-    /// seeds them up front (see the field doc on `param_locals`). Used by the
-    /// one build-once construction; the graph is never rebuilt on a later change.
-    pub fn set_param_locals(&mut self, locals: Vec<u32>) {
-        self.param_locals = locals;
+    /// Have the value graph seed the parameters up front (see the field doc on
+    /// `param_locals`). Used by the one build-once construction; the graph is
+    /// never rebuilt on a later change.
+    pub fn seed_params(&mut self) {
+        self.param_locals = self.params.iter().copied().collect();
     }
 
     /// Record the per-call verdicts the build reads. Supply before the first
