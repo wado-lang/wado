@@ -76,6 +76,23 @@ test "a view kept past its statement traps on a read" {
     let _ = keeper.view.unwrap()[0];
 }
 
+type Meters = f32;
+
+fn total(data: &ListView<Meters>) -> f32 {
+    let mut sum: f32 = 0.0;
+    for let i of 0..<data.len() {
+        sum += data[i] as f32;
+    }
+    return sum;
+}
+
+test "a list of any plain element converts" {
+    let distances: List<Meters> = [1.5, 2.5];
+    let halves: List<f16> = [0.5, 1.0, 2.0];
+    assert total(distances) == 4.0;
+    assert count::<f16>(halves) == 3;
+}
+
 fn count<T: AnyBits>(data: &ListView<T>) -> i32 {
     return data.len();
 }
