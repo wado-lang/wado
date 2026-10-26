@@ -198,6 +198,13 @@ other type, so the second type's clauses are checked.
 Two newtypes over one refined type are still two types, as two newtypes over
 one base are.
 
+### What can be refined
+
+A base that is a resource, or holds one at any depth, cannot be refined, and
+`B contract C` over one is a compile error. A resource's state lives in the
+host: `contract self.is_open()` can turn false when the host closes the file,
+with nothing on the Wado side entering the type again.
+
 ### Serialization enforces the clauses
 
 `Serialize` writes a refined value as its base. `Deserialize` reads the base and
@@ -271,8 +278,9 @@ let w = NonEmpty::from(Window { rows: &xs });   // the clause holds
 xs.clear();                                      // and now it does not
 ```
 
-A resource's state lives in the host, and a function value may read state it
-captured, so a clause reading either has the same problem.
+A function value may read state it captured, so a clause calling one has the
+same problem. A resource does too, since its state lives in the host, and so a
+resource is never refined (see [What can be refined](#what-can-be-refined)).
 
 ### What makes two clauses the same
 
