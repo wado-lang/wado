@@ -1485,6 +1485,10 @@ pub(super) enum ExportReturnStrategy {
     /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
     /// discriminant of the `result<>` it lifts through, so it shares that canon.
     VoidTaskReturn,
+    /// A test under `wado test --coverage`: [`Self::VoidTaskReturn`], with the
+    /// runs of every coverage region handed to the runner between the call
+    /// and the `task-return`. A test that traps hands over none.
+    CoveredTestTaskReturn,
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value
     /// result (string, list, tuple, record, option, result) via an i32
@@ -1568,9 +1572,9 @@ pub(super) fn synthesize_export_binding(
     let mut next_local = param_count;
 
     let call_return_type = match strategy {
-        ExportReturnStrategy::VoidTaskReturn | ExportReturnStrategy::AsyncTaskReturn => {
-            TypeTable::UNIT
-        }
+        ExportReturnStrategy::VoidTaskReturn
+        | ExportReturnStrategy::CoveredTestTaskReturn
+        | ExportReturnStrategy::AsyncTaskReturn => TypeTable::UNIT,
         ExportReturnStrategy::SyncReturn | ExportReturnStrategy::ResultTaskReturn => {
             user_return_type
         }
@@ -1578,8 +1582,15 @@ pub(super) fn synthesize_export_binding(
     let call_user = build_call_user(user_func, callee_module, call_args, call_return_type);
 
     let adapter_return = match strategy {
-        ExportReturnStrategy::VoidTaskReturn => {
+        ExportReturnStrategy::VoidTaskReturn | ExportReturnStrategy::CoveredTestTaskReturn => {
             body_stmts.push(expr_stmt(call_user));
+            if matches!(strategy, ExportReturnStrategy::CoveredTestTaskReturn) {
+                body_stmts.push(expr_stmt(internal_call(
+                    CompilerItem::CoverageReport.attr_name(),
+                    Vec::new(),
+                    TypeTable::UNIT,
+                )));
+            }
             body_stmts.push(expr_stmt(cm_canonical_call(
                 CanonicalIntrinsic::TaskReturn(String::new()),
                 vec![i32_const(0)],

@@ -304,11 +304,9 @@ counts as run once any test runs its start.
 
 Each region also counts how often it ran, and LCOV carries the counts: a
 function's is its body region's, a branch's the region it starts, and a line's
-its innermost region's. A test hands its counts over when it returns, so a test
-that traps loses them and adds one run for each region it reached.
-
-> Not yet implemented: a region reports only whether it ran, and LCOV gives
-> every region that ran a count of one.
+the largest among the innermost regions of the statements starting on it. A
+test hands its counts over when it returns, so a test that traps loses them and
+adds one run for each region it reached.
 
 A region that leads to nothing but a call to `unreachable()` is not one: the
 call, returned or not, is all it holds, or it holds nothing and only the call

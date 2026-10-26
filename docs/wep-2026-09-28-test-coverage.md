@@ -367,6 +367,9 @@ A counter per region, bumped on every run and read when the test ends, gives
 execution counts as well. Reading at the end loses every trapping test, and a
 host call on every run is too slow for loops.
 
+[WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md#coverage-counts-too)
+later added the counter beside the first-hit call, which answers both.
+
 ## Roadmap
 
 1. [x] The region plan: the AST walk, `#[coverage(off)]`, and

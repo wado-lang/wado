@@ -28,13 +28,29 @@ wasmtime::component::bindgen!({
 
 use self::core::coverage::coverage_host;
 
-/// The regions one test store reported, by global id.
+/// What one test store reported, by global id: each region as it first ran,
+/// and, once the test returned, the runs of each that ran more than once.
 #[derive(Debug, Default)]
-pub struct CoverageHits(pub BTreeSet<u32>);
+pub struct CoverageHits {
+    hits: BTreeSet<u32>,
+    repeated: BTreeMap<u32, i64>,
+}
+
+impl CoverageHits {
+    /// The runs of each region the test counted. See [`coverage::test_counts`].
+    #[must_use]
+    pub fn counts(&self) -> BTreeMap<u32, i64> {
+        coverage::test_counts(&self.hits, &self.repeated)
+    }
+}
 
 impl coverage_host::Host for CoverageHits {
     fn hit(&mut self, id: u32) {
-        self.0.insert(id);
+        self.hits.insert(id);
+    }
+
+    fn count(&mut self, id: u32, runs: i64) {
+        self.repeated.insert(id, runs);
     }
 }
 
@@ -167,10 +183,10 @@ impl CoverageRun {
             })
     }
 
-    /// Record what `test` hit in the plans `registered` names.
-    pub fn record(&self, registered: &[Registered], hits: &BTreeSet<u32>, test: &str) {
+    /// Record what `test` ran in the plans `registered` names.
+    pub fn record(&self, registered: &[Registered], hits: &CoverageHits, test: &str) {
         if let Ok(coverage) = lock(&self.coverage).as_mut() {
-            coverage.record(registered, hits, Some(test));
+            coverage.record(registered, &hits.counts(), Some(test));
         }
     }
 
@@ -277,12 +293,9 @@ fn uncovered_regions(coverage: &Coverage) -> Uncovered {
                 "a function's body is its first region"
             );
             let ran = regions.iter().enumerate().map(|(n, (id, region))| {
-                (
-                    format!("{} {n}", region.kind.label()),
-                    file.hit.contains(id),
-                )
+                (format!("{} {n}", region.kind.label()), file.count(*id) > 0)
             });
-            let missed: Vec<String> = if file.hit.contains(&body) {
+            let missed: Vec<String> = if file.count(body) > 0 {
                 ran.filter(|(_, hit)| !hit)
                     .map(|(label, _)| label)
                     .collect()
@@ -360,10 +373,10 @@ fn totals(file: &FileCoverage) -> Totals {
     let branches = file.branches();
     let functions = file.functions();
     Totals {
-        lines: (lines.values().filter(|ran| **ran).count(), lines.len()),
-        branches: (branches.iter().filter(|b| b.taken).count(), branches.len()),
+        lines: (lines.values().filter(|count| **count > 0).count(), lines.len()),
+        branches: (branches.iter().filter(|b| b.taken()).count(), branches.len()),
         functions: (
-            functions.iter().filter(|(_, ran)| *ran).count(),
+            functions.iter().filter(|(_, count)| *count > 0).count(),
             functions.len(),
         ),
     }
@@ -439,7 +452,8 @@ fn to_json(coverage: &Coverage) -> String {
                         "function": file.plan.functions[region.function as usize].name,
                         "start": [region.start.line, region.start.column],
                         "end": [region.end.line, region.end.column],
-                        "covered": file.hit.contains(&index),
+                        "covered": file.count(index) > 0,
+                        "count": file.count(index),
                         "tests": tests,
                     })
                 })

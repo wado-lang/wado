@@ -1211,6 +1211,11 @@ fn generate_test_world_bindings(project: &mut Package) {
     let entry_source = project.entry_module_source.clone();
     let test_name_filters = project.test_name_filters.clone();
     let entry_type_table = entry_type_table(project);
+    let strategy = if project.coverage_section.is_some() {
+        ExportReturnStrategy::CoveredTestTaskReturn
+    } else {
+        ExportReturnStrategy::VoidTaskReturn
+    };
 
     // Test functions have is_export=false (they're not world exports),
     // but they need adapters for task-return when called via `wado test`.
@@ -1268,7 +1273,7 @@ fn generate_test_world_bindings(project: &mut Package) {
                 &user_func_rc,
                 &entry_source,
                 &env,
-                ExportReturnStrategy::VoidTaskReturn,
+                strategy,
             );
             (test_name, binding_name, adapter)
         })

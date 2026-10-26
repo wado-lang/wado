@@ -91,6 +91,12 @@ its hits. A test that returns hands its counts to the runner when it ends. A
 test that traps contributes only its hits, which count as one run each. LCOV's
 `DA` and `BRDA` lines carry the counts.
 
+The hand-over runs no measured code. It walks the counters with builtins and
+reports only the regions that ran more than once, since a hit already counts
+one. Passing the counters as a `list` would lower it through `List`'s prelude
+methods, which `--coverage-include=stdlib` measures, so the hand-over would
+count runs of its own after reading theirs.
+
 A count is an `i64`. One probe and one counter serve both `--coverage` and
 `--pgo`.
 

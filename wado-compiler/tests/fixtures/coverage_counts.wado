@@ -1,0 +1,42 @@
+// `wado test --coverage` counts every run of a region. A test that returns
+// hands over its counts; one that traps counts each region it hit once, so
+// `step`, run twice before the trap, counts one. A body its branches account
+// for runs as often as they do together.
+fn parity(x: i32) -> i32 {
+    if x % 2 == 0 {
+        return 0;
+    }
+    return 1;
+}
+
+fn step(x: i32) -> i32 {
+    let y = x + 1;
+    return y;
+}
+
+test "a loop" {
+    let mut odd = 0;
+    for let i of 0..<5 {
+        odd += parity(i);
+    }
+    assert odd == 2;
+}
+
+#[expect_trap]
+test "a trap" {
+    assert step(step(1)) == 0;
+}
+
+__DATA__
+{
+  "test": {},
+  "coverage": {
+    "line_counts": {
+      "6": 5,
+      "7": 3,
+      "9": 2,
+      "13": 1,
+      "14": 1
+    }
+  }
+}

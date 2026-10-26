@@ -1792,9 +1792,8 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
     };
 
     if let Some((run, registered)) = &module.coverage {
-        let hits = std::mem::take(&mut store.data_mut().coverage_hits().0);
         let test = format!("{}::{}", module.path, job.display_name);
-        run.record(registered, &hits, &test);
+        run.record(registered, store.data_mut().coverage_hits(), &test);
     }
 
     TestResult {

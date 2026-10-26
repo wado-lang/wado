@@ -169,12 +169,13 @@ internal fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64, i64] {
 
 use { CoverageHost } from "core:coverage/coverage_host.wado";
 
-/// Whether this instance has reported each coverage region, one byte per id.
-global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
+/// How often each coverage region has run in this instance, by id.
+global mut COVERAGE_COUNTS: Array<i64> = builtin::array_new::<i64>(0);
 
-/// The probe `wado test --coverage` puts at the start of every region: tells
-/// the host the first time region `id` runs in this instance. The host hears a
-/// hit as it happens, since a test that traps cannot be entered again.
+/// The probe `wado test --coverage` puts at the start of every region: counts
+/// a run of region `id`, and tells the host the first time it runs in this
+/// instance. The host hears a hit as it happens, since a test that traps
+/// cannot be entered again.
 // Kept a call: inlined into every region, its fast path doubles what the
 // optimizer walks under `--coverage-include=stdlib`, to speed a test run that
 // spends a fraction of the compile.
@@ -183,18 +184,40 @@ global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
 #[benign(CoverageHost)]
 #[inline(never)]
 internal fn coverage_probe(id: i32) {
-    let len = builtin::array_len(&COVERAGE_SEEN);
-    if id < len && builtin::array_get_value_u8(&COVERAGE_SEEN, id) != 0 {
-        return;
+    let len = builtin::array_len(&COVERAGE_COUNTS);
+    if id < len {
+        let count = builtin::array_get_value(&COVERAGE_COUNTS, id);
+        if count != 0 {
+            builtin::array_set(&mut COVERAGE_COUNTS, id, count + 1);
+            return;
+        }
     }
     builtin::cold_path();
     if id >= len {
-        let mut grown = builtin::array_new::<u8>(if id < len * 2 { len * 2 } else { id + 1 });
-        builtin::array_copy(&mut grown, 0, &COVERAGE_SEEN, 0, len);
-        COVERAGE_SEEN = grown;
+        let mut grown = builtin::array_new::<i64>(if id < len * 2 { len * 2 } else { id + 1 });
+        builtin::array_copy(&mut grown, 0, &COVERAGE_COUNTS, 0, len);
+        COVERAGE_COUNTS = grown;
     }
-    builtin::array_set_u8(&mut COVERAGE_SEEN, id, 1);
+    builtin::array_set(&mut COVERAGE_COUNTS, id, 1);
     CoverageHost::hit(id as u32);
+}
+
+/// Tells the host how often each region that ran more than once ran; the
+/// first-hit report already counts one. A test under `wado test --coverage`
+/// calls it once its body returns.
+// Reads the array with builtins alone: a measured prelude call made here would
+// run after its region's count was read.
+#[compiler_item("coverage_report")]
+#[coverage(off)]
+#[benign(CoverageHost)]
+internal fn coverage_report() {
+    let len = builtin::array_len(&COVERAGE_COUNTS);
+    for let mut id = 0; id < len; id += 1 {
+        let runs = builtin::array_get_value(&COVERAGE_COUNTS, id);
+        if runs > 1 {
+            CoverageHost::count(id as u32, runs);
+        }
+    }
 }
 
 /// Traps unconditionally, marking code no run reaches: no input, not even one

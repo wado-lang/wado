@@ -2,12 +2,17 @@
 #![stdlib("core:coverage/coverage_host.wado")]
 
 /// Host interface behind test coverage. A probe calls it the first time its
-/// region runs in an instance. Only `wado test --coverage` supplies it. See
-/// WEP 2026-09-28 (Test Coverage).
+/// region runs in an instance, and a test that returns reports each region
+/// that ran more than once. Only `wado test --coverage` supplies it. See WEP
+/// 2026-09-28 (Test Coverage) and WEP 2026-10-25 (Profile-Guided Optimization).
 #[cm("core:coverage/coverage-host@0.1.0")]
 pub interface CoverageHost {
     /// Region `id` ran for the first time in this instance.
     #[cm("core:coverage/coverage-host@0.1.0#hit")]
     #[cm_params("id")]
     fn hit(id: u32);
+    /// Region `id` ran `runs` times in this instance, more than once.
+    #[cm("core:coverage/coverage-host@0.1.0#count")]
+    #[cm_params("id", "runs")]
+    fn count(id: u32, runs: i64);
 }
