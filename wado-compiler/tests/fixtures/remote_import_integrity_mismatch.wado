@@ -1,0 +1,13 @@
+// Content that does not hash to the pin is refused, naming the digest it has.
+
+use { exclaim } from "https://example.com/lib/util.wado"
+    with { integrity: "sha256:0000000000000000000000000000000000000000000000000000000000000000" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":3:22: analysis error: 'https://example.com/lib/util.wado' does not match its integrity: the `use` pins sha256:0000000000000000000000000000000000000000000000000000000000000000, and the content is sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513",
+  "compile_error_codes": ["REMOTE_INTEGRITY"],
+  "remote": { "https://example.com/lib/util.wado": "sub/remote_import_util.wado" }
+}

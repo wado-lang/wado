@@ -66,14 +66,22 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
         build_dependencies.push(dep.locked_package(integrity));
     }
 
+    let lock_path = project.root.join("wado.lock");
+    // A remote pin records what a build first read, which no resolution
+    // re-derives, so it carries over.
+    let remotes = fs::read_to_string(&lock_path)
+        .ok()
+        .and_then(|text| text.parse::<LockFile>().ok())
+        .map(|lock| lock.remotes)
+        .unwrap_or_default();
     let count = packages.len() + build_dependencies.len();
     let lock = LockFile {
         version: 1,
         deps_hash: project.manifest.deps_hash(),
         packages,
         build_dependencies,
+        remotes,
     };
-    let lock_path = project.root.join("wado.lock");
     fs::write(&lock_path, lock.to_toml())
         .map_err(|e| CliExit::error(format!("writing wado.lock: {e}")))?;
     eprintln!("Locked {count} package(s) → {}", lock_path.display());

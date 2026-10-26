@@ -624,6 +624,29 @@ registries is two packages. Entries are sorted by `id`, then by `version`.
 
 A path dependency has no entry.
 
+### Remote Pins
+
+Each `[[remote]]` entry pins a [remote file](./spec-modules.md#remote-modules)
+that no `use` pins itself. A build writes the entry the first time it reads the
+file, recording the digest it read. Every later read is held to that digest.
+
+```toml
+[[remote]]
+url = "https://huggingface.co/onnx-community/model/resolve/0123abc/model.onnx"
+extent = 4096
+integrity = "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+```
+
+| Field       | Present for            | Meaning                                                 |
+| ----------- | ---------------------- | ------------------------------------------------------- |
+| `url`       | every entry            | The file's URL, as the source writes it                 |
+| `extent`    | a part of a Kiln input | How many leading bytes the digest covers                |
+| `integrity` | every entry            | The digest of those bytes, or of the whole file without |
+
+One URL may have several entries, one per extent read. Entries are sorted by
+`url`, then by `extent`. `wado update` keeps them. To accept new content at a
+URL, delete its entries.
+
 ## Workspaces
 
 A workspace is a set of packages developed together. It is not a package itself:

@@ -1,0 +1,19 @@
+// With no `wado.lock` to record a pin in, a remote `from` must carry its own,
+// and the error names the digest of what the generator read.
+
+use { hello } from "https://example.com/data/header_and_payload.schema"
+    with {
+        generator: { module: "./sub/kiln/header_probe_generator.wado" },
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{
+  "compile_error": "'https://example.com/data/header_and_payload.schema' is not pinned: no `wado.lock` governs this module, so the `use` pins it with `integrity: \"sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58\"`",
+  "remote": {
+    "https://example.com/data/header_and_payload.schema": "sub/kiln/header_and_payload.schema"
+  }
+}

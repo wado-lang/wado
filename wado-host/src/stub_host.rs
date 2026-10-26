@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
+use wado_compiler::remote::{Integrity, held_to_use, is_remote};
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
@@ -29,6 +30,8 @@ pub struct HostStubs {
     /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
     /// nickname → the generator's `.wado` file, relative to the host's base.
     pub build_dependencies: IndexMap<String, String>,
+    /// What each URL serves: the URL → a file, relative to the host's base.
+    pub remote: IndexMap<String, String>,
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
@@ -74,6 +77,17 @@ impl StubHost {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.filesystem.diagnostics()
     }
+
+    /// The file stubbed for `url`.
+    fn remote_file(&self, url: &str) -> Result<&str, SourceError> {
+        self.stubs
+            .remote
+            .get(url)
+            .map(String::as_str)
+            .ok_or_else(|| SourceError::NotFound {
+                path: url.to_string(),
+            })
+    }
 }
 
 impl CompilerHost for StubHost {
@@ -86,6 +100,9 @@ impl CompilerHost for StubHost {
     }
 
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+        if is_remote(path) {
+            return self.filesystem.open_source(self.remote_file(path)?).await;
+        }
         self.filesystem.open_source(path).await
     }
 
@@ -95,6 +112,22 @@ impl CompilerHost for StubHost {
         extent: Option<u64>,
     ) -> Result<Vec<u8>, SourceError> {
         self.filesystem.load_source_prefix(path, extent).await
+    }
+
+    /// The file stubbed for `url`, held to the pin as a host with no lock
+    /// file holds it.
+    async fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> Result<Vec<u8>, SourceError> {
+        let file = self.remote_file(url)?;
+        held_to_use(
+            url,
+            self.filesystem.load_source_prefix(file, extent).await?,
+            integrity,
+        )
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {

@@ -2045,6 +2045,7 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
         ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => path.as_str(),
         ModuleSource::EntryPoint { filename, .. } => filename.as_str(),
         ModuleSource::Redirected { uri, .. } => uri.as_str(),
+        ModuleSource::Remote { url, .. } => url.as_str(),
         _ => "",
     }
 }

@@ -1,0 +1,13 @@
+// A remote module outside a package has no lock to pin it, so the `use` must,
+// and the error gives the digest to pin.
+
+use { exclaim } from "https://example.com/lib/util.wado";
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":4:22: analysis error: 'https://example.com/lib/util.wado' is not pinned: no `wado.lock` governs this module, so the `use` pins it with `integrity: \"sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513\"`",
+  "compile_error_codes": ["REMOTE_INTEGRITY"],
+  "remote": { "https://example.com/lib/util.wado": "sub/remote_import_util.wado" }
+}

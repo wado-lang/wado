@@ -28,6 +28,19 @@ use { foo as bar } from "./mod.wado";         // rename
 pub use { foo, bar } from "./internal.wado";  // re-export
 ```
 
+A URL names a remote module. It is pinned by the digest of its content: the
+`use` writes the pin, or the package's `wado.lock` records it on the first
+read. See [the spec](./spec-modules.md#remote-modules).
+
+```wado
+use { greet } from "https://example.com/lib/greet.wado"
+    with { integrity: "sha256:9ceb5c04…" };  // 64 hex digits in full
+
+// A Kiln input may be a URL too; the pin covers what the generator reads.
+use { Model } from "https://huggingface.co/<repo>/resolve/<sha>/model.onnx"
+    with { generator: { module: "lib:loam" } };
+```
+
 Namespace imports make all pub symbols from the source module directly available:
 
 ```wado

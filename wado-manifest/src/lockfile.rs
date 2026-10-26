@@ -23,6 +23,19 @@ pub struct LockFile {
     pub packages: Vec<LockedPackage>,
     /// Resolved build dependencies (Kiln generator modules).
     pub build_dependencies: Vec<LockedPackage>,
+    /// The digest each remote file was first read with, which every later
+    /// read is held to.
+    pub remotes: Vec<LockedRemote>,
+}
+
+/// A `[[remote]]` entry: the digest of the first `extent` bytes of `url`, or
+/// of the whole file where `extent` is absent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LockedRemote {
+    pub url: String,
+    pub extent: Option<u64>,
+    /// `sha256:` and 64 lowercase hex digits.
+    pub integrity: String,
 }
 
 /// A single resolved package in the lock file.
@@ -87,11 +100,23 @@ impl FromStr for LockFile {
         // but ignored — the new design (WEP M9) records that state in
         // `<output_dir>/<primary>.kiln.json`.
 
+        let remotes = raw
+            .remote
+            .unwrap_or_default()
+            .into_iter()
+            .map(|raw| LockedRemote {
+                url: raw.url,
+                extent: raw.extent,
+                integrity: raw.integrity,
+            })
+            .collect();
+
         Ok(LockFile {
             version,
             deps_hash,
             packages,
             build_dependencies,
+            remotes,
         })
     }
 }
@@ -121,7 +146,27 @@ impl LockFile {
             write_locked_package(&mut out, pkg, "[[build-dependency]]");
         }
 
+        let mut sorted_remotes: Vec<&LockedRemote> = self.remotes.iter().collect();
+        sorted_remotes.sort_by(|a, b| a.url.cmp(&b.url).then_with(|| a.extent.cmp(&b.extent)));
+        for remote in sorted_remotes {
+            out.push_str("\n[[remote]]\n");
+            let _ = writeln!(out, "url = {:?}", remote.url);
+            if let Some(extent) = remote.extent {
+                let _ = writeln!(out, "extent = {extent}");
+            }
+            let _ = writeln!(out, "integrity = {:?}", remote.integrity);
+        }
+
         out
+    }
+
+    /// The pin `wado.lock` holds for the first `extent` bytes of `url`.
+    #[must_use]
+    pub fn remote_pin(&self, url: &str, extent: Option<u64>) -> Option<&str> {
+        self.remotes
+            .iter()
+            .find(|r| r.url == url && r.extent == extent)
+            .map(|r| r.integrity.as_str())
     }
 }
 
@@ -209,6 +254,14 @@ struct RawLockFile {
     // checkouts still load cleanly.
     #[serde(rename = "generator-cache", default)]
     _generator_cache: Option<serde::de::IgnoredAny>,
+    remote: Option<Vec<RawLockedRemote>>,
+}
+
+#[derive(Deserialize)]
+struct RawLockedRemote {
+    url: String,
+    extent: Option<u64>,
+    integrity: String,
 }
 
 #[derive(Deserialize)]
@@ -385,6 +438,7 @@ deps = []
                 },
             ],
             build_dependencies: vec![],
+            remotes: vec![],
         };
         let output = lock.to_toml();
         let pos_a = output.find("a:first").unwrap();
@@ -497,10 +551,35 @@ outputs = [
                     deps: vec![],
                 },
             ],
+            remotes: vec![],
         };
         let output = lock.to_toml();
         let a_bd = output.find("tools:a-gen").unwrap();
         let z_bd = output.find("tools:z-gen").unwrap();
         assert!(a_bd < z_bd, "build-dependencies should be sorted by id");
+    }
+
+    #[test]
+    fn remote_pins_round_trip_keyed_by_url_and_extent() {
+        let text = r#"
+version = 1
+deps-hash = "sha256:x"
+
+[[remote]]
+url = "https://example.com/m.onnx"
+extent = 4096
+integrity = "sha256:aa"
+
+[[remote]]
+url = "https://example.com/m.onnx"
+integrity = "sha256:bb"
+"#;
+        let lock: LockFile = text.parse().unwrap();
+        let reparsed: LockFile = lock.to_toml().parse().unwrap();
+        assert_eq!(reparsed.remotes.len(), 2);
+        let url = "https://example.com/m.onnx";
+        assert_eq!(reparsed.remote_pin(url, Some(4096)), Some("sha256:aa"));
+        assert_eq!(reparsed.remote_pin(url, None), Some("sha256:bb"));
+        assert_eq!(reparsed.remote_pin(url, Some(1)), None);
     }
 }

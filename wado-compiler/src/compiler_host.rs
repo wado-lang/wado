@@ -14,6 +14,7 @@ use std::sync::Arc;
 use crate::ast::AstIdSpace;
 use crate::hashmap;
 use crate::kiln::options_check::CanonicalOptions;
+use crate::remote::{Integrity, PinMismatch, held_to_use, is_remote};
 use crate::token::Span;
 
 /// Log level for filtering diagnostics and log messages
@@ -165,6 +166,9 @@ pub enum Code {
     // I/O errors
     /// File read error
     FileReadError,
+    /// A remote file whose content hashes to something other than its pin, or
+    /// that nothing pins.
+    RemoteIntegrity,
 
     // Coherence errors
     /// Orphan rule violation
@@ -337,6 +341,7 @@ impl std::fmt::Display for Code {
             Code::PrivateSymbol => "PRIVATE_SYMBOL",
             Code::ImportAttrInvalid => "IMPORT_ATTR_INVALID",
             Code::FileReadError => "FILE_READ_ERROR",
+            Code::RemoteIntegrity => "REMOTE_INTEGRITY",
             Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
@@ -458,8 +463,13 @@ pub enum SourceError {
     NotFound { path: String },
     /// I/O error reading the source
     IoError { path: String, message: String },
-    /// Network error (for future HTTP support)
+    /// Fetching a remote file failed
     NetworkError { url: String, message: String },
+    /// A remote file hashes to something other than its pin; boxed, since its
+    /// two digests would triple the size of every `Result` carrying the error
+    IntegrityMismatch(Box<PinMismatch>),
+    /// A remote file nothing pins, where no lock file can record it
+    Unpinned { url: String, actual: Integrity },
 }
 
 impl std::fmt::Display for SourceError {
@@ -472,6 +482,24 @@ impl std::fmt::Display for SourceError {
             SourceError::NetworkError { url, message } => {
                 write!(f, "network error fetching '{url}': {message}")
             }
+            SourceError::IntegrityMismatch(mismatch) => {
+                let PinMismatch {
+                    url,
+                    expected,
+                    actual,
+                    pinned_by,
+                } = mismatch.as_ref();
+                write!(
+                    f,
+                    "'{url}' does not match its integrity: {pinned_by} pins {expected}, \
+                     and the content is {actual}"
+                )
+            }
+            SourceError::Unpinned { url, actual } => write!(
+                f,
+                "'{url}' is not pinned: no `wado.lock` governs this module, so the `use` \
+                 pins it with `integrity: \"{actual}\"`"
+            ),
         }
     }
 }
@@ -553,6 +581,36 @@ pub trait CompilerHost: Send + Sync {
                 bytes.truncate(usize::try_from(n).unwrap_or(usize::MAX));
             }
             Ok(bytes)
+        }
+    }
+
+    /// [`Self::load_source_prefix`] for a remote file, which must hash to
+    /// `integrity`. A host with a lock file pins what the import site leaves
+    /// unpinned; the default has none, so it refuses such a file.
+    fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move { held_to_use(url, self.load_source_prefix(url, extent).await?, integrity) }
+    }
+
+    /// The first `extent` bytes of `path`, or all of it, whichever kind of path
+    /// it is: a URL through [`Self::load_remote`], held to `integrity`, and
+    /// anything else through [`Self::load_source_prefix`].
+    fn load_file(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move {
+            if is_remote(path) {
+                self.load_remote(path, extent, integrity).await
+            } else {
+                self.load_source_prefix(path, extent).await
+            }
         }
     }
 

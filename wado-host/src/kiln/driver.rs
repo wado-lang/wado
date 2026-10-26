@@ -42,7 +42,7 @@ use wado_compiler::kiln::{
     content_hash, file_hash, generator_identity, harvest_module_graph, has_generated_marker,
     hex_digest, validate_options,
 };
-use wado_compiler::module_source::PackageHost;
+use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
 
 use super::metadata::{
@@ -193,7 +193,7 @@ pub async fn execute<H: CompilerHost>(
     let probe = ProbeRequest {
         files: files
             .iter()
-            .map(|(path, use_type)| ProbeInput {
+            .map(|(path, use_type, _)| ProbeInput {
                 path: path.as_str().to_string(),
                 use_type: use_type.cloned(),
             })
@@ -222,11 +222,11 @@ pub async fn execute<H: CompilerHost>(
     // probe's claim: a generator that reads past its own extent sees EOF rather
     // than bytes the cache key does not cover.
     let mut loaded = Vec::with_capacity(files.len());
-    for ((path, use_type), extent) in files.iter().zip(&extents) {
+    for ((path, use_type, pin), extent) in files.iter().zip(&extents) {
         loaded.push(GeneratorInputFile {
             path: path.as_str().to_string(),
             content: host
-                .load_source_prefix(path.as_str(), *extent)
+                .load_file(path.as_str(), *extent, *pin)
                 .await
                 .map_err(|source| load_error(path, source))?,
             use_type: use_type.cloned(),
@@ -255,7 +255,8 @@ pub async fn execute<H: CompilerHost>(
 
     let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
     let by = generator_identity(&invocation.module);
-    let source_paths: Vec<InvocationPath> = files.iter().map(|(path, _)| (*path).clone()).collect();
+    let source_paths: Vec<InvocationPath> =
+        files.iter().map(|(path, _, _)| (*path).clone()).collect();
     let header = GeneratedHeader::emit_with_paths(&by, &source_paths);
 
     let mut outputs = Vec::with_capacity(response.files.len());
@@ -453,7 +454,7 @@ pub async fn cache_matches<H: CompilerHost>(
     }
     if !matches_file(
         host,
-        &invocation.from,
+        (&invocation.from, invocation.integrity),
         &metadata.primary.hash,
         metadata.primary.extent,
     )
@@ -481,7 +482,14 @@ pub async fn cache_matches<H: CompilerHost>(
         if declared.path.as_str() != recorded.path || declared.use_type != recorded.use_type {
             return CacheCheck::Miss;
         }
-        if !matches_file(host, &declared.path, &recorded.hash, recorded.extent).await {
+        if !matches_file(
+            host,
+            (&declared.path, declared.integrity),
+            &recorded.hash,
+            recorded.extent,
+        )
+        .await
+        {
             return CacheCheck::Miss;
         }
     }
@@ -562,11 +570,11 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
 /// below still differs and the build misses.
 async fn matches_file<H: CompilerHost>(
     host: &H,
-    path: &InvocationPath,
+    (path, pin): (&InvocationPath, Option<Integrity>),
     expected_hex: &str,
     extent: Option<u64>,
 ) -> bool {
-    match host.load_source_prefix(path.as_str(), extent).await {
+    match host.load_file(path.as_str(), extent, pin).await {
         Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
         Err(_) => false,
     }
@@ -960,7 +968,7 @@ pub async fn harvest_invocations(
     entry_key: &str,
     settled: &mut IndexSet<String>,
     dependencies: &DependencyIndex,
-    host: &impl PackageHost,
+    host: &impl CompilerHost,
 ) -> Harvested {
     // An entry whose parse recovered from an error harvests nothing; the
     // compile that follows reports it.
@@ -980,7 +988,13 @@ pub async fn harvest_invocations(
         settled,
         dependencies,
         host,
-        async |identity| std::fs::read_to_string(entry_dir.join(identity)).ok(),
+        async |identity, pin| {
+            if is_remote(identity) {
+                let bytes = host.load_remote(identity, None, pin).await.ok()?;
+                return String::from_utf8(bytes).ok();
+            }
+            std::fs::read_to_string(entry_dir.join(identity)).ok()
+        },
     )
     .await;
     settled.extend(harvest.modules.keys().cloned());
@@ -1598,9 +1612,11 @@ mod tests {
                 invoked_as: "ns:proto@1.0.0".to_string(),
                 use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
+                integrity: None,
                 inputs: vec![InvocationInput {
                     path: InvocationPath::normalize("dep.proto"),
                     use_type: None,
+                    integrity: None,
                 }],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -1965,9 +1981,11 @@ mod tests {
                 invoked_as: "ns:proto@1.0.0".to_string(),
                 use_type: None,
                 from: InvocationPath::normalize("schema.proto"),
+                integrity: None,
                 inputs: vec![InvocationInput {
                     path: InvocationPath::normalize("dep.proto"),
                     use_type: None,
+                    integrity: None,
                 }],
                 output_dir: InvocationPath::normalize("build/kiln/proto"),
                 options: wado_compiler::kiln::CanonicalOptions::default(),

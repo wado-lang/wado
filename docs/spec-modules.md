@@ -170,8 +170,9 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 | [CM coordinate](./spec-packages.md#package-specifiers) | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | [Library alias](./spec-packages.md#package-specifiers) | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Local file                                             | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| [Remote file](#remote-modules)                         | `"https://<host>/<path>"`     | `"https://example.com/util.wado"`    |
 
-A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
+A specifier names a package, a local file, or a remote file. It never carries an interface segment: interfaces and their members
 are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
 `wasi:` are coordinates whose namespace is bundled with the compiler, not a
 separate scheme. Nested namespaces (`a:b:pkg`) follow WIT.
@@ -186,12 +187,44 @@ A module path resolves by its form:
 2. An open coordinate `<ns>:<pkg>`, in any other namespace, resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 3. A library alias `lib:<nick>` resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 4. A local path, starting `./` or `../`, resolves relative to the importing module.
-5. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
+5. A URL, starting `https://`, names a [remote module](#remote-modules).
+6. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
 bundled; `lib` is not. Every other namespace is open.
 
 Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+
+## Remote Modules
+
+A `use` may name a file by its URL. The file is fetched when the program is
+built, and from then on it is read as a local file would be.
+
+<!-- {"fixture": "remote_import.wado"} -->
+
+```wado
+use { greet } from "https://example.com/lib/greet.wado"
+    with { integrity: "sha256:9ceb5c048c24f2a36440cdcb5c7bcd48e52bd119028e88a0e38b5580b583d9c8" };
+```
+
+The URL starts `https://`. A plain `http://` URL is an error unless its host is
+`localhost`, `127.0.0.1` or `[::1]`, since anything between this machine and
+another could change the bytes.
+
+Every remote file is pinned to the SHA-256 digest of its content. The pin comes
+from one of two places:
+
+1. The `use` writes it as `integrity: "sha256:<64 lowercase hex digits>"`.
+2. The `wado.lock` of the package that builds the program records it
+   ([Remote Pins](./spec-packages.md#remote-pins)).
+
+A file in no package has no `wado.lock`, so its `use` must write the pin. The
+error for a missing pin names the digest to write. A file whose content hashes
+to anything other than its pin is an error, and so is `integrity` on an import
+of a local file. Where several `use`s pin one URL, each is held to its own pin.
+
+A remote module reaches no local file. A `./` or `../` path inside it, whether
+in a `use` or an `#include_*`, names the URL beside the module.
 
 ## Symbol Notation
 
@@ -323,7 +356,8 @@ test {
 
 The other keys have sections of their own. The dependency source keys give a
 dependency its source with no `wado.toml`
-([Inline Sources](./spec-packages.md#inline-sources)). `generator` makes the
+([Inline Sources](./spec-packages.md#inline-sources)). `integrity` pins a
+[remote module](#remote-modules). `generator` makes the
 import a [generated import](./spec-kiln.md), and `provider` satisfies a
 component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
 
