@@ -10,8 +10,10 @@ results say little about current ones.
 - arXiv: the API query `abs:"code review"` with `submittedDate` in the window,
   newest first. The papers below were read from their abstracts, not their full
   text, so a figure here is the abstract's.
-- Industry: web searches for posts in the window from GitHub and Anthropic.
-  These are vendor reports, and their figures are the vendor's own.
+- Industry: web searches for posts in the window from GitHub, Anthropic,
+  CodeRabbit, OpenAI and TypeSafe, and for community projects built on
+  TypeSafe's Jev. These are vendor or author reports, and their figures are
+  their own.
 
 ## Architecture
 
@@ -34,6 +36,71 @@ recur:
    ([claude-code-review]).
 5. Decision: turn the findings into a verdict. Estimating the risk and choosing
    the action are better kept apart (see [Cost and Quality](#cost-and-quality)).
+
+### Triage with a System One Model
+
+A System One model answers typed questions about an input instead of writing
+text. TypeSafe announced the first, Jev, on 2026-09-15 ([jev-innfactory]):
+
+- It takes up to 64,000 tokens of text and answers every question in one
+  parallel pass. A question is a choice among up to 255 options, a score on an
+  ordered scale, or a yes/no probability.
+- It is trained to give calibrated probabilities (TypeSafe calls the method
+  RLCD), and it cannot answer outside the schema. It cannot explain itself, and
+  it can still pick the wrong option.
+- It costs $0.042 per million input tokens, output free, and answers in
+  70–500 ms from the US West Coast. Access is by waitlist, through its own
+  endpoint, not a chat API.
+
+The cases that bear on review triage:
+
+- review-router decides whether a commit gets a full AI review or a quick one
+  from what the diff adds. A path rule that sent auth, CI and migration files
+  to full review sent 13 CVE fixes to the quick path, since they sat in files
+  like `validators.py`. review-router sent all 13 to full review and skipped
+  full review on 42% of 561 commits from FastAPI, Express and Django
+  ([jev-engineering]). The sample is small, and its README also says 8 of 8.
+- jev-gate (a GitHub Action) asks the same questions of every diff: sensitive
+  security area, deleted tests, secret material, breaking change, comment
+  drift. A finding at or above a per-rule threshold requests review, and only
+  a repository's explicit policy makes it block. Its author says no one has
+  calibrated the scores on these rules yet ([jev-gate]).
+- Jev scored 62.6% on "is this phishing?" asked once, against 81.3% for Claude
+  Haiku 4.5. Split into five narrow questions and combined by a logistic
+  regression fitted on 1,000 labelled emails, it reached 95.0%; the split did
+  not help Haiku. Calibration varied by question type, and on a question whose
+  answer was not in the text Jev was right 44.7% of the time at a stated 0.74
+  ([jev-beri]).
+- On TypeSafe's own four-workflow benchmark, Jev matched GPT-5.6 Terra's
+  accuracy (67.8% vs 67.9%) at about 1/76 the cost per case, 5–6 points below
+  GPT-5.6 Sol and Claude Opus 5 ([jev-datacamp]).
+
+What carries over: a System One model replaces a path rule well when the
+signal is in the diff's content, if the question is split into narrow ones, the
+thresholds are fitted on labelled history, and the version is pinned so the
+calibration does not silently change ([jev-beri]). Nobody has published a
+labelled evaluation of it as a review dispatcher.
+
+### Vendor Pipelines
+
+- CodeRabbit gathers context from many sources and runs verification agents on
+  each suggestion before posting it ([coderabbit-context]). In the window it
+  added a Reproducer Guide per Deep Scan finding, which its Runtime Analysis
+  (closed beta, 2026-10-23) runs in a coding environment, keeping the evidence.
+  Deep Scan can now verify a finding against linked repositories such as a
+  shared auth library (2026-10-02), and a security check with a severity
+  threshold can be made a required merge check (2026-10-05)
+  ([coderabbit-changelog]).
+- OpenAI's Codex Security Cloud (research preview, 2026-09-29) writes a threat
+  model of the repository first, then scans commits against it. It tries to
+  reproduce each likely issue in a clean container, attaching the logs, and
+  marks the ones that reproduce as validated. Automatic PR reviews post only
+  High and Critical findings by default ([codex-security-cloud]).
+- Anthropic's Code Review went generally available on 2026-10-15
+  ([claude-code-review]). Parallel agents hunt for bugs, a separate group votes
+  on each finding, and style and cleanup findings are dropped.
+- GitHub's lite tier runs an ensemble of models, tuned offline on ReviewBench
+  ([reviewbench]).
 
 ### Multi-Agent Interaction
 
@@ -71,6 +138,29 @@ recur:
   comment by 8.7% ([2609.22610]). Grouping changes by call graph helped
   reviewers orient ([2609.32057]). Whether either holds for a model is untested.
 
+### Context Files
+
+No study in the window measures what an `AGENTS.md` does to a reviewer. The
+studies of coding agents, and what the vendors do:
+
+- Context files did not raise task success and raised inference cost by over
+  20%. Developer-written files gained about 4% and generated ones lost about
+  3%. Agents follow the files' instructions closely, even where that hurts, and
+  repository overviews did not help; the files help where they state
+  non-standard practice ([2602.11988], revised 2026-09-29; first published
+  before the window).
+- The vendors read guideline files as review criteria, scoped to the files
+  they govern, and say which ones they applied. CodeRabbit lists each guideline
+  file used in its review summary (2026-09-30), and reads `.claude/rules/`,
+  applying a rule with `paths` only to matching files (2026-10-15)
+  ([coderabbit-changelog]). Anthropic's Code Review reads `CLAUDE.md` and a
+  `REVIEW.md` that sets what to prioritize and ignore ([claude-code-review]).
+
+What carries over: an `AGENTS.md` serves a reviewer as a list of the project's
+non-standard rules, not as an overview. A reviewer that follows it literally
+inherits its stale rules, and one written for authors (how to run the tests,
+when to commit) is noise to a reviewer.
+
 ## Quality
 
 The weak point is precision, not recall: a bot that is noisy gets ignored.
@@ -98,6 +188,26 @@ The weak point is precision, not recall: a bot that is noisy gets ignored.
 - Verification is the largest lever Anthropic reports: its team runs tests,
   the build and the linter, and a second agent reviews the diff in a fresh
   context, before the PR exists ([claude-code-review]).
+
+### Reproducing Findings
+
+The products that reproduce do it for their severe findings only, and label
+the outcome rather than drop what does not reproduce:
+
+- Codex Security Cloud runs each likely issue in a clean container. A finding
+  that reproduces is marked validated; one that does not stays unvalidated,
+  and the attempt is logged ([codex-security-cloud]).
+- CodeRabbit writes a Reproducer Guide per finding and runs it in a coding
+  environment, on demand or for each new finding ([coderabbit-changelog]).
+- A test written in the same trajectory as the claim it checks can share the
+  claim's error and lend it false confidence. ExecCritic has a separate agent
+  write the tests, a fail-closed harness qualify and freeze them, and only then
+  lets the fix use them. Tests from an untrained test agent lowered SWE-bench
+  Verified from 61.2% to 57.3%; trained, the pair reached 72.6% ([2609.09133]).
+
+What carries over: a reproduction proves a finding only when the reproducer is
+written apart from the finding and must fail before the fix. Without the
+environment to run it, a finding stays a claim.
 
 ### Measuring It
 
@@ -133,26 +243,38 @@ direction (see the table below).
   ([2608.18167]), and debate pays only with coverage and a verifying readout
   ([2610.04686]).
 
-| Source        | Measurement                                 | Result                    |
-| ------------- | ------------------------------------------- | ------------------------- |
-| [2608.09290]  | SEM-F1 on AACR-Bench (200 PRs, 10 langs)    | 25.10% vs 11.57% baseline |
-| [2608.09290]  | Tokens vs Claude Code and Codex             | 5–15× fewer               |
-| [reviewbench] | Ensemble, online A/B: addressed rate        | +8.0%                     |
-| [reviewbench] | Ensemble, online A/B: recall                | +13.6%                    |
-| [reviewbench] | Ensemble, online A/B: comment volume        | +61%                      |
-| [reviewbench] | Ensemble, online A/B: cost per review       | −8.0%                     |
-| [2610.21914]  | Token cost per CodeHealth point             | −3.5% to −6.1%            |
-| [2608.02677]  | Probability shift under a 10:1 cost prompt  | 13.6–16.9 points          |
-| [2609.37216]  | Comment trustworthiness accuracy (Sentinel) | 76.60%                    |
-| [2610.21925]  | Design trade-off F1 (DesignLore)            | 0.259 vs 0.213            |
-| [2608.02693]  | Malicious-PR detection, 24-PR window        | 16–22% (50–60% per PR)    |
+| Source            | Measurement                                         | Result                    |
+| ----------------- | --------------------------------------------------- | ------------------------- |
+| [2608.09290]      | SEM-F1 on AACR-Bench (200 PRs, 10 langs)            | 25.10% vs 11.57% baseline |
+| [2608.09290]      | Tokens vs Claude Code and Codex                     | 5–15× fewer               |
+| [reviewbench]     | Ensemble, online A/B: addressed rate                | +8.0%                     |
+| [reviewbench]     | Ensemble, online A/B: recall                        | +13.6%                    |
+| [reviewbench]     | Ensemble, online A/B: comment volume                | +61%                      |
+| [reviewbench]     | Ensemble, online A/B: cost per review               | −8.0%                     |
+| [2610.21914]      | Token cost per CodeHealth point                     | −3.5% to −6.1%            |
+| [2608.02677]      | Probability shift under a 10:1 cost prompt          | 13.6–16.9 points          |
+| [2609.37216]      | Comment trustworthiness accuracy (Sentinel)         | 76.60%                    |
+| [2610.21925]      | Design trade-off F1 (DesignLore)                    | 0.259 vs 0.213            |
+| [2608.02693]      | Malicious-PR detection, 24-PR window                | 16–22% (50–60% per PR)    |
+| [jev-engineering] | CVE fixes sent to full review vs a path rule        | 13 of 13 vs 0 of 13       |
+| [jev-engineering] | Commits that skip full review                       | 42% of 561                |
+| [jev-beri]        | Phishing, asked once vs five narrow questions       | 62.6% vs 95.0%            |
+| [jev-datacamp]    | Accuracy, Jev vs GPT-5.6 Terra                      | 67.8% vs 67.9%            |
+| [2609.09133]      | SWE-bench Verified, no tests vs both agents trained | 61.2% vs 72.6%            |
+| [2602.11988]      | Inference cost added by context files               | over 20%                  |
 
 ## What This Suggests for Eddy
 
 These are directions the findings point to, not decisions.
 
-- Spend the model where judgment is needed: rules for dispatch, bounded tools
-  for review, a verifier with a narrower view than the reviewer.
+- Spend the model where judgment is needed: a fast dispatcher, bounded tools
+  for review, a verifier with a narrower view than the reviewer. A System One
+  model may beat rules at dispatch, but only shadow-evaluated against labelled
+  history first.
+- Reproduce what is severe. A reproducer written apart from the finding, run
+  where the code runs, turns a claim into evidence; the label says which.
+- Read `AGENTS.md` as criteria, not as a briefing: pick the rules that govern
+  the touched files, and report which were applied.
 - Make disagreement explicit and grounded. Choose models for what they find
   that the others do not, and aggregate by evidence rather than by vote count.
 - Post less. Every comment should survive a refutation step against the
@@ -180,6 +302,10 @@ These are directions the findings point to, not decisions.
   Requests (2026-08-26)
 - [2608.27442] From Static to Dynamic: Benchmarking Real-World Code Review with
   MCR-Bench (2026-08-27)
+- [2602.11988] Evaluating AGENTS.md: Are Repository-Level Context Files
+  Helpful for Coding Agents? (2026-02, revised 2026-09-29)
+- [2609.09133] ExecCritic: Learn to Test, Test to Improve for Coding Agents
+  (2026-09-08)
 - [2609.15877] Using Agentic AI for contextualized and multifaceted code
   review at Ericsson (2026-09-14)
 - [2609.22610] Does Order Matter? An Empirical Investigation into the Impact
@@ -207,6 +333,17 @@ These are directions the findings point to, not decisions.
 - [claude-code-review] Anthropic's Claude Code team on how it does code review
   (2026-10-15), as reported by OrcaRouter
 - [claude-code-releases] Claude Code release notes, October 2026
+- [coderabbit-changelog] CodeRabbit changelog, August to October 2026
+- [coderabbit-context] CodeRabbit, The art and science of context engineering
+- [codex-security-cloud] eesel, Codex Security Cloud: how it works
+  (2026-10-01)
+- [jev-innfactory] innFactory, Jev: a System One model is a classifier, not an
+  LLM (2026-09-21)
+- [jev-datacamp] DataCamp, System One models: Jev
+- [jev-beri] BERI, TypeSafe's Jev scores 62.6% asked once and 95% split five
+  ways
+- [jev-engineering] eugeniughelbur/jev-engineering: review-router and jev-gate
+- [jev-gate] totally-tim/jev-gate: calibrated PR review gates on Jev
 
 [2608.02677]: https://arxiv.org/abs/2608.02677
 [2608.02693]: https://arxiv.org/abs/2608.02693
@@ -228,3 +365,13 @@ These are directions the findings point to, not decisions.
 [reviewbench]: https://github.blog/ai-and-ml/github-copilot/reviewbench-an-open-benchmark-for-ai-code-review/
 [claude-code-review]: https://www.orcarouter.ai/blog/how-the-claude-code-team-does-code-review
 [claude-code-releases]: https://releasebot.io/updates/anthropic/claude-code
+[2602.11988]: https://arxiv.org/abs/2602.11988
+[2609.09133]: https://arxiv.org/abs/2609.09133
+[coderabbit-changelog]: https://docs.coderabbit.ai/changelog
+[coderabbit-context]: https://www.coderabbit.ai/blog/the-art-and-science-of-context-engineering
+[codex-security-cloud]: https://www.eesel.ai/blog/codex-security-cloud
+[jev-innfactory]: https://innfactory.ai/en/blog/jev-system-one-model-classifier-not-llm/
+[jev-datacamp]: https://www.datacamp.com/de/blog/system-one-models-jev
+[jev-beri]: https://www.beri.net/article/typesafe-jev-typed-decision-model-calibration-decomposition-shadow-eval
+[jev-engineering]: https://github.com/eugeniughelbur/jev-engineering
+[jev-gate]: https://github.com/totally-tim/jev-gate
