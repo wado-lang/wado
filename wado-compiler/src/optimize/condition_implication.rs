@@ -377,12 +377,16 @@ impl BindWalk<'_, '_> {
             .iter()
             .any(|d| self.last_write.get(d).is_some_and(|&at| written_since(at)))
             || (p.aliased
-                && self.aliased_writes.iter().any(|&(at, stored)| {
-                    written_since(at)
-                        && p.reads
+                && self
+                    .aliased_writes
+                    .iter()
+                    .rev()
+                    .take_while(|&&(at, _)| written_since(at))
+                    .any(|&(_, stored)| {
+                        p.reads
                             .as_ref()
                             .is_none_or(|kinds| stored.may_change(self.engine, kinds))
-                }))
+                    }))
             || (p.escaped && written_since(self.last_call));
         if stale {
             self.stale.insert(t);
