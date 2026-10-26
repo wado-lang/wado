@@ -11,11 +11,24 @@ use { Poly } from "./poly.wado";
 use { BinaryOp, UnaryOp, checked_element_count } from "./runtime/tensor.wado";
 
 /// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
-/// the exporter left open and no symbol stands for.
+/// the exporter left open and no symbol stands for. `Bound` is a `dim_param`
+/// the `dims` option fixed, which still says which axes are one.
 pub variant Dim {
     Static(i32),
     Symbol(String),
+    Bound([String, i32]),
     Unknown,
+}
+
+impl Dim {
+    /// The extent the dimension states, where it states one.
+    pub fn as_static(&self) -> Option<i32> {
+        return match self {
+            Static(e) => Option::Some(*e),
+            Bound([_, e]) => Option::Some(*e),
+            _ => null,
+        };
+    }
 }
 
 /// A tensor type's rank. ONNX separates a scalar from a tensor whose rank it
@@ -51,10 +64,7 @@ pub fn static_extents(rank: &Rank) -> Option<List<i32>> {
     };
     let mut extents: List<i32> = [];
     for let d of dims {
-        let Static(e) = d else {
-            return null;
-        };
-        extents.push(e);
+        extents.push(d.as_static()?);
     }
     return Option::Some(extents);
 }
@@ -786,6 +796,7 @@ impl Display for Dim {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             Static(n) => f.write_str(`${n}`),
+            Bound([_, n]) => f.write_str(`${n}`),
             Symbol(s) => f.write_str(s),
             Unknown => f.write_str("?"),
         }

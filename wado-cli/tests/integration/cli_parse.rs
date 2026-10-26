@@ -660,10 +660,10 @@ fn test_with_exclude_drops_matching_explicit_file() {
 }
 
 #[test]
-fn test_defaults_to_o0() {
+fn test_defaults_to_o1() {
     let parser = Parser::from_args(&["a.wado"]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.knobs.opt_level, OptLevel::O0);
+    assert_eq!(opts.knobs.opt_level, OptLevel::O1);
 }
 
 #[test]

@@ -6,67 +6,17 @@ use { assert_close, tensor_of } from "./oracle.wado";
 use pool2d from "../tests/onnx/pytorch-converted/test_MaxPool2d/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Batch", "Chan", "Row", "Col"],
-                    },
-                    {
-                        pattern: "1",
-                        axes: ["Batch", "Chan", "PRow", "PCol"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 use pool1d from "../tests/onnx/pytorch-operator/test_operator_maxpool/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Batch", "Chan", "Len"],
-                    },
-                    {
-                        pattern: "1",
-                        axes: ["Batch", "Chan", "PLen"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 use conv2d from "../tests/onnx/pytorch-converted/test_Conv2d/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-            options: {
-                layout: [
-                    {
-                        pattern: "0",
-                        axes: ["Batch", "Chan", "Row", "Col"],
-                    },
-                    {
-                        pattern: "1",
-                        axes: ["Out", "Chan", "KRow", "KCol"],
-                    },
-                    {
-                        pattern: "2",
-                        axes: ["Out"],
-                    },
-                    {
-                        pattern: "3",
-                        axes: ["Batch", "Out", "CRow", "CCol"],
-                    },
-                ],
-            },
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "MaxPool over two padded axes reproduces the output ONNX ships" {
@@ -79,7 +29,7 @@ test "MaxPool over two padded axes reproduces the output ONNX ships" {
 
     let got = pool2d::forward(
         &mut Cpu {},
-        &Tensor::<f32, [pool2d::Batch, pool2d::Chan, pool2d::Row, pool2d::Col]> { data: x, extents: x_extents },
+        &Tensor::<f32, [pool2d::Axis00, pool2d::Axis01, pool2d::Axis02, pool2d::Axis03]> { data: x, extents: x_extents },
         &pool2d::Weights {}.prepare(&mut Cpu {}),
     );
 
@@ -97,7 +47,7 @@ test "MaxPool over one axis reproduces the output ONNX ships" {
 
     let got = pool1d::forward(
         &mut Cpu {},
-        &Tensor::<f32, [pool1d::Batch, pool1d::Chan, pool1d::Len]> { data: x, extents: x_extents },
+        &Tensor::<f32, [pool1d::Axis00, pool1d::Axis01, pool1d::Axis02]> { data: x, extents: x_extents },
         &pool1d::Weights {}.prepare(&mut Cpu {}),
     );
 
@@ -115,7 +65,7 @@ test "Conv with a bias reproduces the output ONNX ships" {
 
     let got = conv2d::forward(
         &mut Cpu {},
-        &Tensor::<f32, [conv2d::Batch, conv2d::Chan, conv2d::Row, conv2d::Col]> { data: x, extents: x_extents },
+        &Tensor::<f32, [conv2d::Axis00, conv2d::Axis01, conv2d::Axis02, conv2d::Axis03]> { data: x, extents: x_extents },
         &conv2d::Prepared::embedded(&mut Cpu {}),
     );
 

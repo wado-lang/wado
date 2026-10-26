@@ -62,9 +62,9 @@ fn bind(vi: &mut ValueInfo, dims: &TreeMap<String, i32>, bound: &mut HashSet<Str
         };
         if let Some(extent) = dims.get(name) {
             bound.insert(name);
-            fixed.push(Dim::Static(extent));
+            fixed.push(Dim::Bound([name, extent]));
         } else if let Some(extent) = spelled_extent(&name, dims, bound)? {
-            fixed.push(Dim::Static(extent));
+            fixed.push(Dim::Bound([name, extent]));
         } else {
             fixed.push(d);
         }

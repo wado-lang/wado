@@ -5,7 +5,7 @@
 use { Cpu, Tensor } from "lib:loam";
 use { HashMap } from "core:collections";
 use { assert_close, ints_of, tensor_of } from "./oracle.wado";
-use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
+use { BatchSize, Prepared, SequenceLength, forward } from "../tests/models/tiny-gpt2/model.onnxtext"
     with {
         type: "onnxtext",
         generator: {
@@ -19,116 +19,6 @@ use { Batch, Prepared, Seq, forward } from "../tests/models/tiny-gpt2/model.onnx
             options: {
                 dims: { batch_size: 1 },
                 outputs: ["logits"],
-                layout: [
-                    {
-                        pattern: "input_ids",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "attention_mask",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "transformer.wte.weight",
-                        axes: ["Vocab", "Embed"],
-                    },
-                    {
-                        pattern: "transformer.wpe.weight",
-                        axes: ["Pos", "Embed"],
-                    },
-                    {
-                        pattern: "*ln_1.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*ln_2.*",
-                        axes: ["Embed"],
-                    },
-                    {
-                        pattern: "*c_attn.weight",
-                        axes: ["Embed", "Qkv"],
-                    },
-                    {
-                        pattern: "*c_attn.bias",
-                        axes: ["Qkv"],
-                    },
-                    {
-                        pattern: "*attn.c_proj.weight",
-                        axes: ["(Head Dim)", "Embed"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.weight",
-                        axes: ["Embed", "Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_fc.bias",
-                        axes: ["Inner"],
-                    },
-                    {
-                        pattern: "*mlp.c_proj.weight",
-                        axes: ["Inner", "Embed"],
-                    },
-                    {
-                        pattern: "onnx::MatMul_1588",
-                        axes: ["Embed", "Vocab"],
-                    },
-                    {
-                        pattern: "/transformer/Range_output_0",
-                        axes: ["Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_2_output_0",
-                        axes: ["Batch", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_4_output_0",
-                        axes: ["Batch", "Head", "Seq"],
-                    },
-                    {
-                        pattern: "/transformer/Unsqueeze_5_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                    {
-                        pattern: "*/c_attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Qkv"],
-                    },
-                    {
-                        pattern: "*/c_proj/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/c_fc/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Inner"],
-                    },
-                    {
-                        pattern: "*/attn/Split_output_*",
-                        axes: ["Batch", "Seq", "Embed"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_1_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*/attn/Reshape_2_output_0",
-                        axes: ["Batch", "Seq", "Head", "Dim"],
-                    },
-                    {
-                        pattern: "*attn.bias",
-                        axes: ["Batch", "Head", "Pos", "Pos"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_3_output_0",
-                        axes: ["Batch", "Head", "Seq", "Pos"],
-                    },
-                    {
-                        pattern: "*/attn/Slice_4_output_0",
-                        axes: ["Batch", "Head", "Seq", "Seq"],
-                    },
-                ],
             },
         },
     };
@@ -150,8 +40,8 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let weights = Prepared::load(&mut Cpu {}, &every_shard()).unwrap();
     let got = forward(
         &mut Cpu {},
-        &Tensor::<i64, [Batch, Seq]> { data: ids, extents: ids_extents },
-        &Tensor::<i64, [Batch, Seq]> { data: mask, extents: mask_extents },
+        &Tensor::<i64, [BatchSize, SequenceLength]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [BatchSize, SequenceLength]> { data: mask, extents: mask_extents },
         &weights,
     );
 

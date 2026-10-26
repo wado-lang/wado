@@ -4,7 +4,6 @@ use { Graph } from "./graph.wado";
 use { Checked, infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { read_checkpoint } from "./runtime/checkpoint.wado";
-use { LayoutRule, Schema } from "./schema.wado";
 use {
     CheckpointFile,
     StoredTensor,
@@ -30,21 +29,7 @@ g (float[N, 2] X) => (float[N, 3] Y)
 
 fn checked_graph() -> [Graph, Checked] {
     let graph = read(&GRAPH).unwrap();
-    let layout: List<LayoutRule> = [
-        LayoutRule {
-            pattern: "X",
-            axes: ["Batch", "In"],
-        },
-        LayoutRule {
-            pattern: "W",
-            axes: ["In", "Out"],
-        },
-        LayoutRule {
-            pattern: "B",
-            axes: ["Out"],
-        },
-    ];
-    let checked = infer(&graph, &Schema { layout }).unwrap();
+    let checked = infer(&graph).unwrap();
     return [graph, checked];
 }
 
@@ -83,7 +68,7 @@ test "a weight the graph carries is not looked for in the checkpoint" {
 }
 
 test "an extent that disagrees with the graph names the axis" {
-    assert check([weight([2, 4])]).unwrap_err() == "W: axis Out is 4 in the checkpoint and 3 in the graph";
+    assert check([weight([2, 4])]).unwrap_err() == "W: axis Y1 is 4 in the checkpoint and 3 in the graph";
 }
 
 test "a weight the checkpoint lacks names itself" {
