@@ -172,6 +172,34 @@ Everything else follows from these two:
 Refined types also make immutability something a program can ask for: a refined
 `List` exposes every reading method and no mutating one.
 
+### Generic code sees the refined type, and reads it only
+
+A type parameter is solved to the refined type, the most specific one, as it is
+for a resource. Solving it to the base would not avoid the question below:
+`List<Age>` fixes its element type, so `ages.sort()` needs `Age: Ord` either
+way.
+
+A refined type meets a bound through its base's impl only where the trait reads
+a `Self` and nothing more: every `Self` in its methods' signatures is a `self`,
+`&self`, `Self` or `&Self` parameter. A trait that produces a `Self`, such as
+`Default`, `FromStr`, `From` or `FromIterator`, would mint a refined value
+unchecked. A trait with a `&mut self` method would write one in place, which
+the `&mut` rule above forbids. Either is met only by an impl for the refined
+type itself, which is how the compiler's `Deserialize`, `from` and `try_from`
+reach it.
+
+The base's impl is used as written, with nothing substituted. `Age: Add` has
+`i32` as its `Output`, so `fn twice<T: Add<Output = T>>(a: T) -> T` rejects an
+`Age` without a rule of its own.
+
+| Call on `Age`s                   | Result                                      |
+| -------------------------------- | ------------------------------------------- |
+| `max(a, b)`, `ages.sort()`       | `Age`; `Ord` only reads                     |
+| `${age}`, a map key, `Serialize` | admitted; each trait only reads             |
+| `T::default()` with `T = Age`    | error; `Default` produces a `Self`          |
+| `twice(age)`                     | error; `Add`'s `Output` is `i32`, not `Age` |
+| a sum of `ages`                  | written over the base: `ages.map(...)`      |
+
 ### A value enters a refined type only by an explicit conversion
 
 Three explicit forms produce a refined value from an unrefined one, and nothing
@@ -274,15 +302,6 @@ because the body's `{` follows it. A type's clause is not followed by a body, so
 a value clause such as `Length { max: 3 }` needs no parentheses.
 
 ## Known gaps
-
-### What a type parameter is solved to, and which bounds a refined type meets
-
-`max(a, b)` with two `Age`s solves `T` to `Age` or to `i32`. Resources solve to
-the most specific type, which needs `Age: Ord`. A trait whose methods only read,
-such as `Eq`, `Ord`, `Display` or `Serialize`, admits a refined value safely. A
-trait that produces `Self`, such as `Default`, `FromStr` or
-`Add<Output = Self>`, would mint one unchecked. Solving to the base loses the
-refinement through every generic call.
 
 ### A base that reaches shared state
 
