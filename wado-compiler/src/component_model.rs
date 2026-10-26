@@ -2362,7 +2362,7 @@ impl CmInterfaceRegistry {
                 }
                 for method in &resource.methods {
                     if let Some(wasi) = cm_import_of(&method.attrs) {
-                        let (params, list_args) = self.cm_params_of(
+                        let (params, _) = self.cm_params_of(
                             method,
                             |param| scope.param_fallback(param, &resource.name, &method.name),
                             |ty| {
@@ -2388,7 +2388,6 @@ impl CmInterfaceRegistry {
                             wasi,
                             method.is_async,
                             params,
-                            list_args,
                             return_type,
                         )?;
                     }
@@ -2520,7 +2519,7 @@ impl CmInterfaceRegistry {
                 let Some(wasi) = cm_import_of(&method.attrs) else {
                     continue;
                 };
-                let (params, list_args) = self.cm_params_of(
+                let (params, _) = self.cm_params_of(
                     method,
                     |param| scope.param_fallback(param, &effect.name, &method.name),
                     Type::clone,
@@ -2535,7 +2534,6 @@ impl CmInterfaceRegistry {
                     wasi,
                     method.is_async,
                     params,
-                    list_args,
                     return_type,
                 )?;
             }
@@ -2682,7 +2680,6 @@ impl CmInterfaceRegistry {
                     &cm_import,
                     method.is_async,
                     params,
-                    Vec::new(),
                     return_type,
                 )?;
             }
@@ -3515,8 +3512,10 @@ impl CmInterfaceRegistry {
     /// * `wasi` - The parsed WASI import metadata
     /// * `is_async` - Whether this is an async function
     /// * `params` - Parameter names and types
-    /// * `list_args` - See [`CmFunctionInfo::list_args`]
     /// * `return_type` - Return type (if any)
+    ///
+    /// An operation takes no [`CmFunctionInfo::list_args`]: it declares no
+    /// type parameters.
     ///
     /// `Err` when the CM function is already bound with another signature.
     pub fn register(
@@ -3526,7 +3525,6 @@ impl CmInterfaceRegistry {
         wasi: &CmImport,
         is_async: bool,
         params: Vec<(String, String, Type)>,
-        list_args: Vec<usize>,
         return_type: Option<Type>,
     ) -> Result<(), String> {
         let interface_path = wasi.interface_path();
@@ -3539,7 +3537,7 @@ impl CmInterfaceRegistry {
             package: wasi.package.clone(),
             is_async,
             params,
-            list_args,
+            list_args: Vec::new(),
             callbacks,
             return_type,
             world: None,
@@ -5339,7 +5337,6 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
-                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5378,7 +5375,6 @@ mod tests {
                     &CmImport::parse(cm).unwrap(),
                     false,
                     vec![],
-                    vec![],
                     None,
                 )
                 .unwrap();
@@ -5407,7 +5403,6 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
-                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5426,7 +5421,6 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
-                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
@@ -5464,7 +5458,6 @@ mod tests {
                     "data".to_string(),
                     make_stream_u8_type(),
                 )],
-                vec![],
                 Some(make_result_type()),
             )
             .unwrap();
