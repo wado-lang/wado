@@ -10,7 +10,7 @@ use crate::ast::{
     InterfaceDecl, Item, Module, UseDecl, UseItem, UseNameSpelling, Visibility, WorldExport,
     cm_import_of, cm_interface_name_of, for_each_function, walk_generic_params, walk_item,
 };
-use crate::attribute::{AttributeFault, TODO, WORKLOAD, check, for_each_attribute};
+use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::component_model::cm_definition;
 use crate::hashmap;
@@ -1036,7 +1036,10 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
     }
 
     fn check_attributes(&self, module: &Module, module_source: &ModuleSource) {
-        let report = |name: &str, span: &Span, fault: AttributeFault| {
+        for_each_attribute(module, |written| {
+            let Some(fault) = check(&written, module_source.is_program()) else {
+                return;
+            };
             let code = match fault {
                 AttributeFault::Unknown => Code::UnknownAttr,
                 AttributeFault::Misplaced { .. }
@@ -1053,30 +1056,11 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 Diagnostic {
                     severity: Severity::Error,
                     code,
-                    message: fault.message(name),
-                    span: Some(DiagnosticSpan::from_span(span, None)),
+                    message: fault.message(written.name),
+                    span: Some(DiagnosticSpan::from_span(&written.span, None)),
                 },
             );
-        };
-        for_each_attribute(module, |written| {
-            if let Some(fault) = check(&written, module_source.is_program()) {
-                report(written.name, &written.span, fault);
-            }
         });
-        // `#![TODO]` marks every test, which no test's own attributes show.
-        if module.has_todo() {
-            let workloads = module.items.iter().filter_map(|item| match item {
-                Item::Test(test) => test.attributes.iter().find(|a| a.name == WORKLOAD),
-                _ => None,
-            });
-            for workload in workloads {
-                report(
-                    WORKLOAD,
-                    &workload.span,
-                    AttributeFault::TrapsByDesign { other: TODO },
-                );
-            }
-        }
     }
 
     /// Report each `with` key nothing reads, and each value of the wrong kind,

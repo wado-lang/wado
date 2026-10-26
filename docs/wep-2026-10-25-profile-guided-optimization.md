@@ -248,7 +248,7 @@ level.
 1. [x] Counting probes. The probe counts, the runner reads the counts when a
    test returns, and LCOV carries them. `mise run test-stdlib-coverage`, before
    and after, in a table with the command beside it, shows what counting costs.
-2. [ ] `#[workload]`. The attribute runs as a test, is an error beside
+2. [x] `#[workload]`. The attribute runs as a test, is an error beside
    `#[expect_trap]` or `#[TODO]`, and e2e fixtures state both.
 3. [ ] `wado test --pgo`. It records the workloads into `pgo/`, with the
    per-function hash.
@@ -273,6 +273,9 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
+- [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
+  a module is pending, so the workload fails the recording if it traps, and is
+  reported as unexpectedly passing if it returns.
 - [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
   an arm `match_to_switch` turns into a `br_table` target reaches no hint the
   engine reads.
