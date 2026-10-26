@@ -1164,18 +1164,37 @@ impl Coverage {
     }
 }
 
-/// The runs of each region one test counted: each region it hit ran once,
-/// unless the test returned and reported more in `repeated`. A test that traps
-/// reports none.
-#[must_use]
-pub fn test_counts(hits: &BTreeSet<u32>, repeated: &BTreeMap<u32, i64>) -> BTreeMap<u32, i64> {
-    assert!(
-        repeated.keys().all(|id| hits.contains(id)),
-        "a region reported repeated runs must have reported its first"
-    );
-    hits.iter()
-        .map(|&id| (id, repeated.get(&id).copied().unwrap_or(1)))
-        .collect()
+/// What one test reported through `core:coverage`, by global id: each region as
+/// it first ran, and, once the test returned, the runs of each that ran more
+/// than once.
+#[derive(Debug, Default)]
+pub struct TestReport {
+    hits: BTreeSet<u32>,
+    repeated: BTreeMap<u32, i64>,
+}
+
+impl TestReport {
+    pub fn hit(&mut self, id: u32) {
+        self.hits.insert(id);
+    }
+
+    pub fn count(&mut self, id: u32, runs: i64) {
+        self.repeated.insert(id, runs);
+    }
+
+    /// The runs of each region the test counted: each region it hit ran once,
+    /// unless it reported more. A test that traps reports none.
+    #[must_use]
+    pub fn counts(&self) -> BTreeMap<u32, i64> {
+        assert!(
+            self.repeated.keys().all(|id| self.hits.contains(id)),
+            "a region reported repeated runs must have reported its first"
+        );
+        self.hits
+            .iter()
+            .map(|&id| (id, self.repeated.get(&id).copied().unwrap_or(1)))
+            .collect()
+    }
 }
 
 impl ModulePlan {
@@ -1456,11 +1475,9 @@ mod tests {
             .register(&vec![(plan, 0)], str::to_string)
             .expect("one plan");
         coverage.record(&registered, &BTreeMap::from([(1, 3)]), None);
-        coverage.record(
-            &registered,
-            &test_counts(&BTreeSet::from([1]), &BTreeMap::new()),
-            None,
-        );
+        let mut trapped = TestReport::default();
+        trapped.hit(1);
+        coverage.record(&registered, &trapped.counts(), None);
         let lcov = to_lcov(&coverage);
         for line in [
             "FNDA:4,f",

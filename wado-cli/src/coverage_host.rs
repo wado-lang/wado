@@ -1,5 +1,5 @@
-//! `wado test --coverage`: the `core:coverage` host each test store records its
-//! hits through, and the run-wide report those hits and the components' plans
+//! `wado test --coverage`: the `core:coverage` host each test store reports its
+//! runs through, and the run-wide report those runs and the components' plans
 //! make. See WEP 2026-09-28 (Test Coverage).
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -9,6 +9,7 @@ use std::sync::Mutex;
 
 use wado_compiler::coverage::{
     self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region, Registered,
+    TestReport,
 };
 #[cfg(debug_assertions)]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
@@ -28,43 +29,27 @@ wasmtime::component::bindgen!({
 
 use self::core::coverage::coverage_host;
 
-/// What one test store reported, by global id: each region as it first ran,
-/// and, once the test returned, the runs of each that ran more than once.
-#[derive(Debug, Default)]
-pub struct CoverageHits {
-    hits: BTreeSet<u32>,
-    repeated: BTreeMap<u32, i64>,
-}
-
-impl CoverageHits {
-    /// The runs of each region the test counted. See [`coverage::test_counts`].
-    #[must_use]
-    pub fn counts(&self) -> BTreeMap<u32, i64> {
-        coverage::test_counts(&self.hits, &self.repeated)
-    }
-}
-
-impl coverage_host::Host for CoverageHits {
+impl coverage_host::Host for TestReport {
     fn hit(&mut self, id: u32) {
-        self.hits.insert(id);
+        TestReport::hit(self, id);
     }
 
     fn count(&mut self, id: u32, runs: i64) {
-        self.repeated.insert(id, runs);
+        TestReport::count(self, id, runs);
     }
 }
 
-/// Link `core:coverage` into a test linker, reaching each store's hits through
-/// `hits`.
+/// Link `core:coverage` into a test linker, reaching each store's report
+/// through `report`.
 ///
 /// # Errors
 ///
 /// Returns an error if the linker already defines the interface.
 pub fn add_to_linker<T: Send + 'static>(
     linker: &mut Linker<T>,
-    hits: fn(&mut T) -> &mut CoverageHits,
+    report: fn(&mut T) -> &mut TestReport,
 ) -> wasmtime::Result<()> {
-    coverage_host::add_to_linker::<T, HasSelf<CoverageHits>>(linker, hits)
+    coverage_host::add_to_linker::<T, HasSelf<TestReport>>(linker, report)
 }
 
 /// The reports `--coverage` writes to `build/coverage/`.
@@ -184,9 +169,9 @@ impl CoverageRun {
     }
 
     /// Record what `test` ran in the plans `registered` names.
-    pub fn record(&self, registered: &[Registered], hits: &CoverageHits, test: &str) {
+    pub fn record(&self, registered: &[Registered], report: &TestReport, test: &str) {
         if let Ok(coverage) = lock(&self.coverage).as_mut() {
-            coverage.record(registered, &hits.counts(), Some(test));
+            coverage.record(registered, &report.counts(), Some(test));
         }
     }
 

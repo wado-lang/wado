@@ -676,7 +676,7 @@ async fn run_http_request_async(
             mocks: outgoing_mocks,
         },
         tls_ctx: common::build_tls_ctx(tls_mocks),
-        coverage: common::CoverageReports::default(),
+        coverage: common::TestReport::default(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)

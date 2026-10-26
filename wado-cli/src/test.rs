@@ -1793,7 +1793,7 @@ async fn run_single_test(job: &TestJob, cpu_permit: OwnedSemaphorePermit) -> Tes
 
     if let Some((run, registered)) = &module.coverage {
         let test = format!("{}::{}", module.path, job.display_name);
-        run.record(registered, store.data_mut().coverage_hits(), &test);
+        run.record(registered, store.data_mut().coverage_report(), &test);
     }
 
     TestResult {

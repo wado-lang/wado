@@ -13,7 +13,7 @@ use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi_http::WasiHttpCtx;
 
 use crate::common::{
-    self, CoverageReports, DEFAULT_TIMEOUT_MS, TestHttpCtx, WasiState, build_tls_ctx,
+    self, DEFAULT_TIMEOUT_MS, TestHttpCtx, TestReport, WasiState, build_tls_ctx,
     compile_against_web, engine, limit_store, runtime,
 };
 
@@ -322,7 +322,7 @@ fn run_against_stub(program: &str) -> DomObjects {
                     mocks: indexmap::IndexMap::default(),
                 },
                 tls_ctx: build_tls_ctx(indexmap::IndexMap::default()),
-                coverage: CoverageReports::default(),
+                coverage: TestReport::default(),
             };
             let mut store = Store::new(engine, state);
             limit_store(&mut store, DEFAULT_TIMEOUT_MS);

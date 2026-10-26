@@ -7,7 +7,7 @@
 //! - Test fixture parsing (__DATA__ sections)
 //! - Tokio runtime management
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -26,7 +26,7 @@ use wasmtime_wasi_tls::{
 };
 
 use wado_compiler::ast::TodoMark;
-use wado_compiler::coverage::test_counts;
+pub use wado_compiler::coverage::TestReport;
 use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
@@ -718,24 +718,7 @@ pub struct WasiState {
     pub http_hooks: TestHttpCtx,
     pub tls_ctx: WasiTlsCtx,
     /// What the guest reported under `CompilerOptions::coverage`.
-    pub coverage: CoverageReports,
-}
-
-/// What one store's guest reported through `core:coverage`, by global id.
-#[derive(Default)]
-pub struct CoverageReports {
-    /// Each region as it first ran.
-    hits: BTreeSet<u32>,
-    /// The runs of each region that ran more than once, reported when a test
-    /// returned.
-    repeated: BTreeMap<u32, i64>,
-}
-
-impl CoverageReports {
-    /// The runs of each region the test counted.
-    pub fn counts(&self) -> BTreeMap<u32, i64> {
-        test_counts(&self.hits, &self.repeated)
-    }
+    pub coverage: TestReport,
 }
 
 impl WasiView for WasiState {
@@ -779,7 +762,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage: CoverageReports::default(),
+            coverage: TestReport::default(),
         }
     }
 
@@ -792,7 +775,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage: CoverageReports::default(),
+            coverage: TestReport::default(),
         }
     }
 }
@@ -817,12 +800,12 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     let mut coverage = root.instance("core:coverage/coverage-host@0.1.0")?;
     coverage.func_wrap("hit", |mut store, (id,): (u32,)| {
         let state: &mut WasiState = store.data_mut();
-        state.coverage.hits.insert(id);
+        state.coverage.hit(id);
         Ok(())
     })?;
     coverage.func_wrap("count", |mut store, (id, runs): (u32, i64)| {
         let state: &mut WasiState = store.data_mut();
-        state.coverage.repeated.insert(id, runs);
+        state.coverage.count(id, runs);
         Ok(())
     })?;
     Ok(linker)
@@ -1354,7 +1337,7 @@ pub fn run_wasm_with_full_options(
                 mocks: outgoing_mocks,
             },
             tls_ctx: build_tls_ctx(tls_mocks),
-            coverage: CoverageReports::default(),
+            coverage: TestReport::default(),
         };
         let mut store = Store::new(engine, state);
         limit_store(&mut store, DEFAULT_TIMEOUT_MS);
