@@ -3903,16 +3903,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     .borrow()
                                     .contains_type_pack(args[target_idx]),
                             };
-                            trait_
-                                .filter(|_| !is_pack)
-                                .map(|trait_| {
-                                    self.forwarded_projection(
-                                        owner_ty,
-                                        trait_,
-                                        trait_args.clone(),
-                                        &assoc.name,
-                                    )
-                                })
+                            trait_.filter(|_| !is_pack).map(|trait_| {
+                                self.forwarded_projection(
+                                    owner_ty,
+                                    trait_,
+                                    trait_args.clone(),
+                                    &assoc.name,
+                                )
+                            })
                         } else {
                             self.settled_projection(
                                 owner_ty,
@@ -4458,7 +4456,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A slot the arguments reach only through a bound's associated type
         // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
         // off the owner the arguments did settle.
-        let names: Vec<String> = sig.decl.type_params.iter().map(|(n, _)| n.clone()).collect();
+        let names: Vec<String> = sig
+            .decl
+            .type_params
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
         self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),

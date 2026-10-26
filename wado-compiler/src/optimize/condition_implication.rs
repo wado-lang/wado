@@ -1107,7 +1107,10 @@ enum Write {
 enum Stored {
     /// A field or element of a `container`, and, where `value` is of an
     /// in-place type, the leaves of the object the slot held.
-    Slot { container: TypeId, value: TypeId },
+    Slot {
+        container: TypeId,
+        value: TypeId,
+    },
     /// Anything a value of this type reaches: a whole-value store, or a callee
     /// handed it.
     Reaching(TypeId),
@@ -1115,11 +1118,12 @@ enum Stored {
 }
 
 impl Stored {
-    /// Whether this store may change a read through objects of `kinds`.
+    /// Whether this store may change a read through objects of `kinds`, which
+    /// [`read_kinds`] named.
     fn may_change(self, engine: &Engine, kinds: &[TypeKey]) -> bool {
-        let Some(types) = engine.value_graph_type_table() else {
-            return true;
-        };
+        let types = engine
+            .value_graph_type_table()
+            .expect("kinds are read off the type table");
         let reaches = |ty: TypeId| kinds.iter().any(|&k| types.reaches_object(ty, k));
         match self {
             Stored::Slot { container, value } => {
@@ -1133,7 +1137,9 @@ impl Stored {
     /// What a store into `place` writes.
     fn into_place(body: &nir_arena::Body, place: ExprId) -> Stored {
         match &body.exprs[place].kind {
-            ExprKind::FieldAccess { expr: container, .. }
+            ExprKind::FieldAccess {
+                expr: container, ..
+            }
             | ExprKind::Index {
                 expr: container, ..
             } => Stored::Slot {
@@ -1211,9 +1217,7 @@ fn collect_read_kinds(
             ExprKind::Index {
                 expr: container,
                 index,
-            } => {
-                read_of(*container, kinds) && collect_read_kinds(engine, types, *index, kinds)
-            }
+            } => read_of(*container, kinds) && collect_read_kinds(engine, types, *index, kinds),
             ExprKind::Binary { left, right, .. } => {
                 collect_read_kinds(engine, types, *left, kinds)
                     && collect_read_kinds(engine, types, *right, kinds)
