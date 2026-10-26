@@ -325,7 +325,10 @@ fn parse_loop_guard(
 fn guard_bound_local(engine: &Engine, binds: &Binds, cond: Operand) -> Option<BoundKey> {
     let cmp = negated_operand(engine, binds, cond).unwrap_or(cond);
     let (_, _, right) = binary_parts(engine.body, resolve(engine, binds, cmp))?;
-    operand_local(engine.body, peel_capture_block(engine, binds, right)).map(BoundKey::Local)
+    match parse_check_bound(engine, binds, right)? {
+        (bound @ BoundKey::Local(_), 0) => Some(bound),
+        _ => None,
+    }
 }
 
 /// A versionable in-body check over the guard variable.
@@ -1009,8 +1012,9 @@ fn conjoin(engine: &mut Engine, terms: Vec<Operand>, last: Operand, span: Span) 
     })
 }
 
-/// Conjoin the floor terms onto `residual`: `var >= demanded`, and the
-/// `step >= 0` / `H <= MAX - step` pair that says `var` rises without wrapping.
+/// Conjoin the floor terms onto `residual`: `var >= demanded`, `var <= MAX - g`
+/// under an offset guard, and the `step >= 0` / `H <= MAX - step` pair that
+/// says `var` rises without wrapping.
 fn and_floor_terms(
     engine: &mut Engine,
     plan: &Plan,
@@ -1029,7 +1033,8 @@ fn and_floor_terms(
     // guard admitted, plus a step the terms below keep clear of it.
     if plan.guard_offset != 0 {
         let var_read = local_read(engine, plan.var, span);
-        let bits = floor.type_max - plan.guard_offset.unsigned_abs();
+        let offset = u64::try_from(plan.guard_offset).expect("`parse_loop_guard` admits g > 0");
+        let bits = floor.type_max - offset;
         let most = engine.const_operand(ValueKind::Int(bits, ty), ty);
         let room = pred(engine, var_read, NirBinaryOp::LtEq, most);
         out = pred(engine, out, NirBinaryOp::And, room);
