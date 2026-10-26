@@ -203,96 +203,41 @@ pub fn display_function_name(name: &str) -> String {
     }
 }
 
-<<<<<<< HEAD
 /// The name a diagnostic shows for a function: a method as source spells it
 /// (`String::grow`), from its structure; any other function by the name it was
-/// declared under, the span already carrying its module. An instantiation's
-/// type arguments and a clone's suffix name no function an author wrote.
+/// declared under (`id<&P>`), the span already carrying its module. A clone's
+/// suffix names no function an author wrote.
 ///
-/// A module path may hold any character, so nothing here searches the name
-/// for one: `module` is stripped as the exact prefix it is.
-||||||| fe39caccd
-/// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`. A clone's suffix names no
-/// function an author wrote, and the span already carries the module path.
-=======
-/// The name a diagnostic shows for a function: `String::grow` for
-/// `core:prelude/string.wado/String::grow$sroa[&mut(self.repr)]`, and
-/// `Formatter::pad<String>` for one whose type arguments carry module paths too.
-/// A clone's suffix names no function an author wrote, and the span already
-/// carries the module path.
->>>>>>> origin/main
+/// The function's own module is stripped as the exact prefix it is, since a
+/// module path may hold any character. Only the paths inside type arguments
+/// are found by search.
 ///
 /// An effect default spells its interface with the same separator and is left
-<<<<<<< HEAD
-/// to [`display_function_name`]. A synthesized name opens with
-/// [`INTERNAL_PREFIX`], which is its own first character rather than a suffix
-/// marker.
-||||||| fe39caccd
 /// to [`display_function_name`].
-///
-/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker.
-=======
-/// to [`display_function_name`].
-///
-/// A synthesized name opens with [`INTERNAL_PREFIX`], which is its own first
-/// character rather than a suffix marker; so may a type argument.
->>>>>>> origin/main
 #[must_use]
-<<<<<<< HEAD
 pub fn diagnostic_function_name(
     name: &str,
     module: &ModuleSource,
     method: Option<&LocalMethodName>,
 ) -> String {
-||||||| fe39caccd
-pub fn diagnostic_function_name(name: &str) -> &str {
-=======
-pub fn diagnostic_function_name(name: &str) -> String {
->>>>>>> origin/main
     if name.starts_with(EFFECT_DEFAULT_PREFIX) {
         return name.to_string();
     }
-<<<<<<< HEAD
     if let Some(method) = method {
         let mut declared = method.clone();
-        declared.method_name = as_declared(&method.method_name).to_string();
+        declared.method_name = as_declared(&method.method_name);
         return declared.to_display_name();
     }
     let local = name
         .strip_prefix(&format!("{}/", module.to_path_string()))
         .unwrap_or(name);
-    as_declared(local).to_string()
+    as_declared(local)
 }
 
-/// `name` without the type arguments or clone suffix that follow the name it
-/// was declared under.
-fn as_declared(name: &str) -> &str {
-    let prefix_len = if name.starts_with(INTERNAL_PREFIX) {
-        INTERNAL_PREFIX.len()
-    } else {
-        0
-    };
-    let rest = &name[prefix_len..];
-    let end = [rest.find('<'), rest.find(INTERNAL_PREFIX)]
-        .into_iter()
-        .flatten()
-        .min()
-        .unwrap_or(rest.len());
-    &name[..prefix_len + end]
-||||||| fe39caccd
-    let unqualified = name.rsplit('/').next().unwrap_or(name);
-    let prefix_len = if unqualified.starts_with(INTERNAL_PREFIX) {
-        INTERNAL_PREFIX.len()
-    } else {
-        0
-    };
-    match unqualified[prefix_len..].find(INTERNAL_PREFIX) {
-        Some(suffix) => &unqualified[..prefix_len + suffix],
-        None => unqualified,
-    }
-=======
+/// `name` with the module paths in its type arguments dropped and its clone
+/// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
+/// own first character rather than a suffix marker; so may a type argument.
+fn as_declared(name: &str) -> String {
     let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
@@ -316,7 +261,6 @@ fn as_declared(name: &str) -> &str {
         out.push(c);
     }
     out
->>>>>>> origin/main
 }
 
 /// The name of a `param_spec` clone: the original's name plus the clone's
@@ -2959,7 +2903,7 @@ mod tests {
                 &interner.local("./src (old)/my lib.wado"),
                 "follow<core:prelude/string.wado/String>$spec0"
             ),
-            "follow"
+            "follow<String>"
         );
         // A minted name opens with the prefix; cutting there would leave nothing.
         assert_eq!(
@@ -2975,25 +2919,19 @@ mod tests {
             "$value_copy"
         );
         // A type argument carries a module path of its own.
+        let traits = interner.core("prelude/traits.wado");
         assert_eq!(
-            diagnostic_function_name(
-                "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"
-            ),
-            "Formatter::pad<String>"
-        );
-        assert_eq!(
-            diagnostic_function_name(
-                "core:prelude/traits.wado/TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
+            named(
+                &traits,
+                "TemplateHole<a.wado/$tmpl$59e1,core:prelude/string.wado/String>::lit$sroa[self.index]"
             ),
             "TemplateHole<$tmpl$59e1,String>::lit"
         );
-        assert_eq!(diagnostic_function_name("f1.wado/id<&f1.wado/P>"), "id<&P>");
+        let f1 = interner.entry_point("f1.wado");
+        assert_eq!(named(&f1, "id<&f1.wado/P>"), "id<&P>");
+        assert_eq!(named(&f1, "id<[f1.wado/P,i32]>"), "id<[P,i32]>");
         assert_eq!(
-            diagnostic_function_name("f1.wado/id<[f1.wado/P,i32]>"),
-            "id<[P,i32]>"
-        );
-        assert_eq!(
-            diagnostic_function_name("f1.wado/id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
+            named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
             "id<fn(P)->i32with($e263)>"
         );
     }

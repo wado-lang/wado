@@ -988,16 +988,7 @@ impl Interpreter<'_> {
                 .callees
                 .and_then(|m| m.get(key))
                 .map(|c| c.func.borrow())
-<<<<<<< HEAD
                 .map_or_else(|| format!("{key:?}"), |f| f.diagnostic_name())
-||||||| fe39caccd
-                .map_or_else(
-                    || format!("{key:?}"),
-                    |f| diagnostic_function_name(&f.name).to_string(),
-                )
-=======
-                .map_or_else(|| format!("{key:?}"), |f| diagnostic_function_name(&f.name))
->>>>>>> origin/main
         );
     }
 

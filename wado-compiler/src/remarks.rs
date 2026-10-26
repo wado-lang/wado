@@ -14,18 +14,8 @@ use crate::call_args::CallArgs;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-<<<<<<< HEAD
-use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-||||||| fe39caccd
-use crate::name::diagnostic_function_name;
-use crate::nir::{FunctionRef, NirUnaryOp};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-=======
-use crate::name::diagnostic_function_name;
 use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
->>>>>>> origin/main
 use crate::nir_package::NirPackage;
 use crate::niri::{
     CtfeBuiltin, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable,
@@ -592,13 +582,7 @@ fn ctfe_runnable_names(package: &NirPackage) -> Vec<Option<String>> {
         .iter()
         .map(|f| {
             let f = f.borrow();
-<<<<<<< HEAD
             is_ctfe_runnable(&f).then(|| f.diagnostic_name())
-||||||| fe39caccd
-            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name).to_string())
-=======
-            is_ctfe_runnable(&f).then(|| diagnostic_function_name(&f.name))
->>>>>>> origin/main
         })
         .collect()
 }
