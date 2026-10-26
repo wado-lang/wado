@@ -650,13 +650,13 @@ impl Interpreter<'_> {
     /// Splice in the arm the match `e` selects, reducing only its scrutinee.
     /// The arm is left unreduced for the frame to run: it may read a local it
     /// writes first, and reducing it ahead of the write reads the stale value.
-    pub fn select_match_arm_in_place(&mut self, body: &mut Body, e: ExprId) -> bool {
+    pub fn select_match_arm_in_place(&mut self, body: &mut Body, e: ExprId) {
         let ExprKind::Match { expr: scrutinee, .. } = &body.exprs[e].kind else {
-            return false;
+            return;
         };
         let scrutinee = *scrutinee;
         self.reduce_in_place_operand(body, scrutinee);
-        self.rewrite_match_expr_via(&mut BodySink { body }, e)
+        self.rewrite_match_expr_via(&mut BodySink { body }, e);
     }
 
     fn reduce_in_place_node(&mut self, body: &mut Body, node: NodeRef) -> bool {
