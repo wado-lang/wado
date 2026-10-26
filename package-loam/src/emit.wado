@@ -4,7 +4,7 @@
 use { HashMap, HashSet } from "core:collections";
 use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado } from "lib:wadopoet";
 use { Extent, Solved, solved } from "./extent.wado";
-use { BACKEND_PARAM, KEPT, MAP, PASSED, PREPARED, RUNTIME_NAMES, is_bound, module_idents } from "./idents.wado";
+use { BACKEND_PARAM, CHECKPOINT_PARAM, KEPT, MAP, PASSED, PREPARED, RUNTIME_NAMES, is_bound, module_idents } from "./idents.wado";
 use { Poly } from "./poly.wado";
 use { Axes, Axis, Shape } from "./shape.wado";
 use {
@@ -686,14 +686,18 @@ fn emit_constructor(
     block.emit_begin(w);
     if loads {
         let [doc, param, ty, read] = match *placement {
-            File => ["a safetensors checkpoint", "checkpoint", "&ByteList", "read_checkpoint"],
+            File => ["a safetensors checkpoint", "checkpoint", `&${CHECKPOINT_PARAM}`, "read_checkpoint"],
             Shards(_) => [
                 "the shards of a safetensors checkpoint, by the file name its index gives each", "shards",
                 `&${MAP}<String, ByteList>`, "read_shards",
             ],
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
-        FnSpec::new("load", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
+        let mut load = FnSpec::new("load", Vis::Pub);
+        if *placement matches { File } {
+            load.add_generic(`affine ${CHECKPOINT_PARAM}: CheckpointBytes`);
+        }
+        load.add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
             `Result<${PREPARED_TYPE}, LoadError>`,
         ).add_effect("_").emit_begin(w);
         w.line(`let header = ${read}(${param})?;`);
@@ -713,10 +717,10 @@ fn emit_constructor(
         let shape = checked.shapes.get(vi.name).unwrap();
         let e = expected(vi, &shape);
         let data = match vi.data {
-            Some(bytes) => byte_string_literal(&bytes),
-            None => checkpoint_payload(&e, placement),
+            Some(bytes) => `List::<${primitive}>::from_le_bytes(${byte_string_literal(&bytes)})`,
+            None => checkpoint_payload(&e, &primitive, placement),
         };
-        hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: List::<${primitive}>::from_le_bytes(${data}), extents: ${e.extents} }`;
+        hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
     emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts);
     emit_kept_fields(w, names, kept);
@@ -725,15 +729,15 @@ fn emit_constructor(
     w.end();
 }
 
-/// The call reading a tensor's bytes out of the checkpoint `load` was given,
-/// checked against what the build compiled it as.
-fn checkpoint_payload(e: &Expected, placement: &Placement) -> String {
+/// The call reading a tensor's `primitive` elements out of the checkpoint
+/// `load` was given, checked against what the build compiled it as.
+fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -> String {
     let axes: List<String> = e.axes.into_iter().map(|axis| wado`"${axis}"`).collect();
-    let within = match *placement {
-        File => "checkpoint",
-        Shards(placed) => wado`shards, "${placed[e.tensor]}"`,
+    let [types, within] = match *placement {
+        File => [`${*primitive}, ${CHECKPOINT_PARAM}`, "checkpoint"],
+        Shards(placed) => [*primitive, wado`shards, "${placed[e.tensor]}"`],
     };
-    return wado`header.payload(${within}, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
+    return wado`header.payload::<${types}>(${within}, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
         ", ",
     )}], extents: ${e.extents}, elements: ${e.elements}, width: ${e.width} })?`;
 }
