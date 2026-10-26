@@ -212,6 +212,7 @@
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
 - [Fuel Benchmarks](./wep-2026-10-25-fuel-benchmarks.md)
 - [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
+- [Linear Arrays — Plain Data in Linear Memory](./wep-2026-10-26-linear-arrays.md)
 
 ## Standard Library
 
