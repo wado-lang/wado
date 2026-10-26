@@ -97,7 +97,10 @@ ${culprit_diff}
 
 /// The one JSON object in `text`, from its first `{` to its last `}`.
 fn verdict_of(text: &String) -> Result<Verdict, String> {
-    let [Some(start), Some(end)] = [text.find("{"), text.rfind("}")] else {
+    let [Some(start), Some(end)] = [
+        text.find("{"),
+        text.rfind("}"),
+    ] else {
         return Err(`unparsed: ${text}`);
     };
     return match from_string::<Verdict, String>(text.substr_bytes(start, end + 1)) {
@@ -133,7 +136,10 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
             adds_test: r.adds_test,
             title: r.title,
         };
-        match [merges.get(r.pr), merges.get(r.blamed[0].pr)] {
+        match [
+            merges.get(r.pr),
+            merges.get(r.blamed[0].pr),
+        ] {
             [Some(fix), Some(culprit)] => {
                 let user = prompt(r, &fix.sha, &culprit.sha, &culprit.title);
                 match ask(api_key, CLAUDE_MODEL, SYSTEM, user, 2000) {
@@ -154,7 +160,9 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
 }
 
 test "the verdict is the object in the reply" {
-    let v = verdict_of(&"Sure.\n{\"is_defect_fix\": true, \"introduced_by_culprit\": false, \"visible_in_diff\": false, \"defect\": \"d\", \"reason\": \"r\"}\n").unwrap();
+    let v = verdict_of(
+        &"Sure.\n{\"is_defect_fix\": true, \"introduced_by_culprit\": false, \"visible_in_diff\": false, \"defect\": \"d\", \"reason\": \"r\"}\n",
+    ).unwrap();
     assert v.is_defect_fix && !v.introduced_by_culprit;
     assert verdict_of(&"no json").is_err();
 }

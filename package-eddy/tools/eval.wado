@@ -1,7 +1,7 @@
 //! What the evaluation-set tools share: running `git`, the pull requests merged
 //! into `main`, and the census they exchange as JSON.
 
-use { Command, Process } from "core:process";
+use { Command, Process, ProcessError } from "core:process";
 use { TreeMap } from "core:collections";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
@@ -37,17 +37,21 @@ pub struct Census {
 
 /// `git`'s stdout, or `null` when it exits other than 0.
 pub fn try_git(args: List<String>) -> Option<String> with Process {
-    return match Command::new("git").args(args).capture_limit(i32::MAX).read() {
-        Ok(out) => Some(String::from_utf8_lossy(out)),
+    return match run_git(args) {
+        Ok(out) => Some(out),
         Err(_) => null,
     };
 }
 
 pub fn git(args: List<String>) -> String with Process {
-    return match Command::new("git").args(args).capture_limit(i32::MAX).read() {
-        Ok(out) => String::from_utf8_lossy(out),
+    return match run_git(args) {
+        Ok(out) => out,
         Err(e) => panic(`${e}`),
     };
+}
+
+fn run_git(args: List<String>) -> Result<String, ProcessError> with Process {
+    return Command::new("git").args(args).capture_limit(i32::MAX).read().map(|out| String::from_utf8_lossy(out));
 }
 
 /// The pull requests merged into `origin/main`, oldest first. A merge's
@@ -55,8 +59,8 @@ pub fn git(args: List<String>) -> String with Process {
 /// line of its body is the pull request's title.
 pub fn merged_prs() -> List<Merge> with Process {
     let log = git([
-        "log", "--first-parent", "--merges", "--reverse", "--date=short",
-        "--format=%H%x00%ad%x00%s%x00%b%x1e", "origin/main",
+        "log", "--first-parent", "--merges", "--reverse", "--date=short", "--format=%H%x00%ad%x00%s%x00%b%x1e",
+        "origin/main",
     ]);
     let mut merges: List<Merge> = [];
     for let record of log.split("\u{1E}") {

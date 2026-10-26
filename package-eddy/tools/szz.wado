@@ -48,7 +48,7 @@ fn is_test(path: &String) -> bool {
         || path.ends_with("_test.wado")
         || path.contains("/test/")
         || path.contains("/tests/")
-        || (name.starts_with("test_") && name.ends_with(".rs"));
+        || name.starts_with("test_") && name.ends_with(".rs");
 }
 
 /// Commit to the pull request whose merge brought it in. A commit two merges
@@ -107,7 +107,10 @@ fn old_ranges(diff: &String) -> List<[i32, i32]> {
             continue;
         };
         let [start, count] = match old.split_once(",") {
-            Some([s, c]) => [i32::from_str(s).unwrap(), i32::from_str(c).unwrap()],
+            Some([s, c]) => [
+                i32::from_str(s).unwrap(),
+                i32::from_str(c).unwrap(),
+            ],
             None => [i32::from_str(old).unwrap(), 1],
         };
         if count > 0 {
@@ -126,11 +129,11 @@ fn header_commit(line: StrSlice) -> Option<String> {
         return null;
     }
     for let c of sha.chars() {
-        if !(c.is_ascii_digit() || ('a' <= c && c <= 'f')) {
+        if !(c.is_ascii_digit() || 'a' <= c && c <= 'f') {
             return null;
         }
     }
-    if !(rest.chars().next() matches { Some(c) && c.is_ascii_digit() }) {
+    if !rest.chars().next() matches { Some(c) && c.is_ascii_digit() } {
         return null;
     }
     return Some(sha.to_string());
@@ -241,5 +244,8 @@ test "a porcelain header, not a content line" {
 
 test "the old side of each hunk" {
     let diff = "@@ -3 +3 @@\n-a\n+b\n@@ -10,2 +9,0 @@\n@@ -20,0 +18,4 @@\n";
-    assert old_ranges(&diff) == [[3, 3], [10, 11]] as List<[i32, i32]>;
+    assert old_ranges(&diff) == [
+        [3, 3],
+        [10, 11],
+    ] as List<[i32, i32]>;
 }

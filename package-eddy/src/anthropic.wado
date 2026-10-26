@@ -27,8 +27,21 @@ struct MessagesResponse {
 
 /// The text of `model`'s reply to `user` under `system`, or the error the API
 /// returned.
-pub fn ask(api_key: String, model: String, system: String, user: String, max_tokens: i32) -> Result<String, String> with Client {
-    let request = MessagesRequest { model, max_tokens, system, messages: [Message { role: "user", content: user }] };
+pub fn ask(
+    api_key: String,
+    model: String,
+    system: String,
+    user: String,
+    max_tokens: i32,
+) -> Result<String, String> with Client {
+    let request = MessagesRequest {
+        model,
+        max_tokens,
+        system,
+        messages: [
+            Message { role: "user", content: user },
+        ],
+    };
     let resp = send("api.anthropic.com", "/v1/messages", [
         ["x-api-key", api_key],
         ["anthropic-version", "2023-06-01"],
@@ -54,7 +67,12 @@ pub fn ask(api_key: String, model: String, system: String, user: String, max_tok
     return Ok(text);
 }
 
-fn send<B: AsByteSlice>(authority: String, path: String, headers: List<[String, String]>, body: B) -> Response with Client {
+fn send<B: AsByteSlice>(
+    authority: String,
+    path: String,
+    headers: List<[String, String]>,
+    body: B,
+) -> Response with Client {
     let [body_rx, body_tx] = Stream::<u8>::new();
     let [trailers_rx, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let fields = Headers::new();
