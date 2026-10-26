@@ -6,9 +6,10 @@
 //! declaring local. Every iterator adaptor parks one in a struct field
 //! instead, and the read of that field only exists after `inline`.
 
+use crate::call_args::CallArgs;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::nir::FuncId;
+use crate::nir::{CallParamSource, FuncId};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
@@ -22,11 +23,27 @@ use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_
 /// long chain costs a fixed amount. Well past what the adaptor shapes need.
 const MAX_DEPTH: u32 = 12;
 
-/// One functor's `$call`: the callee to name, and whether each parameter
-/// (`self` first) writes the caller's storage.
+/// One functor's `$call`: the callee to name, and per parameter `dae` left it,
+/// where its value comes from and whether it writes the caller's storage.
 struct CallTarget {
     func_id: FuncId,
-    params_is_mut: Vec<bool>,
+    params: Vec<(CallParamSource, bool)>,
+    user_arity: usize,
+}
+
+impl CallTarget {
+    fn takes_env(&self) -> bool {
+        self.params
+            .first()
+            .is_some_and(|&(source, _)| source == CallParamSource::Env)
+    }
+
+    /// Whether the call's argument at canonical position `at` reaches `$call`.
+    fn passes(&self, at: usize) -> bool {
+        self.params
+            .iter()
+            .any(|&(source, _)| source == CallParamSource::User(at))
+    }
 }
 
 pub(super) struct ClosureDevirtRule {
@@ -39,14 +56,19 @@ pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
     let mut targets: IndexMap<(ModuleSource, u32), CallTarget> = IndexMap::default();
     for functor in &project.closure_functors {
         let func = functor.call_method.borrow();
-        if func.is_dead || func.body.is_none() || func.params.is_empty() {
+        if func.is_dead || func.body.is_none() {
             continue;
         }
+        let sources = functor.call_param_sources();
         targets.insert(
             (functor.module_source.clone(), functor.id),
             CallTarget {
                 func_id: func.id.expect("a functor's `$call` is stamped with an id"),
-                params_is_mut: func.params.iter().map(|p| p.is_mut_ref).collect(),
+                params: sources
+                    .into_iter()
+                    .zip(func.params.iter().map(|p| p.is_mut_ref))
+                    .collect(),
+                user_arity: functor.canonical_user_params.len(),
             },
         );
     }
@@ -234,9 +256,9 @@ fn unparked_wrappers(engine: &Engine, stmts: &[StmtId]) -> Vec<(usize, ExprId, E
 }
 
 impl ClosureDevirtRule {
-    /// The `$call` this canonical wrapper dispatches to, for a call of
-    /// `arg_count` arguments.
-    fn target(&self, engine: &Engine, canonical: ExprId, arg_count: usize) -> Option<&CallTarget> {
+    /// The `$call` this canonical wrapper dispatches `args` to, when every
+    /// argument `dae` dropped from it can go unevaluated.
+    fn target(&self, engine: &Engine, canonical: ExprId, args: &[Operand]) -> Option<&CallTarget> {
         let ExprKind::ClosureToCanonical {
             functor_id,
             closure_module,
@@ -246,16 +268,29 @@ impl ClosureDevirtRule {
             return None;
         };
         let target = self.targets.get(&(closure_module.clone(), *functor_id))?;
-        (target.params_is_mut.len() == arg_count + 1).then_some(target)
+        assert_eq!(
+            args.len(),
+            target.user_arity,
+            "a call through a closure's canonical signature passes one argument per user param"
+        );
+        let types = engine.value_graph_type_table();
+        let droppable = args.iter().enumerate().all(|(at, &arg)| {
+            target.passes(at) || is_pure_nontrapping_operand_typed(engine.body, arg, types)
+        });
+        droppable.then_some(target)
     }
 
-    /// The wrapper `call` dispatches through, when this rule can make the
-    /// dispatch direct.
-    fn dispatched_wrapper(&self, engine: &mut Engine, call: ExprId) -> Option<ExprId> {
+    /// The wrapper `call` dispatches through and the `$call` behind it, when
+    /// this rule can make the dispatch direct.
+    fn dispatched_wrapper(
+        &self,
+        engine: &mut Engine,
+        call: ExprId,
+    ) -> Option<(ExprId, &CallTarget)> {
         let ExprKind::IndirectCall { callee, args } = &engine.body.exprs[call].kind else {
             return None;
         };
-        let (callee, arity) = (*callee, args.len());
+        let (callee, args) = (*callee, args.clone());
         // Naming the functor's local drops the callee operand, and with it
         // whatever the trace saw through — an inlined helper's writes, say.
         if !is_pure_nontrapping_operand_typed(engine.body, callee, engine.value_graph_type_table())
@@ -263,13 +298,15 @@ impl ClosureDevirtRule {
             return None;
         }
         let canonical = resolve_canonical(engine, callee, MAX_DEPTH)?;
-        let devirtualizable =
-            runs_before(engine, canonical, call) && self.target(engine, canonical, arity).is_some();
-        devirtualizable.then_some(canonical)
+        let target = self.target(engine, canonical, &args)?;
+        // A `$call` that takes no env names no functor, so nothing ties the
+        // call to where the wrapper sits.
+        (!target.takes_env() || runs_before(engine, canonical, call)).then_some((canonical, target))
     }
 
-    /// Every wrapper declared in `block` some `IndirectCall` dispatches through.
-    /// Parking a functor nothing devirtualizes would only add a binding.
+    /// Every wrapper declared in `block` some `IndirectCall` dispatches
+    /// through to a `$call` taking the env. Parking a functor nothing reads
+    /// would only add a binding.
     ///
     /// Walks that block alone: `runs_before` only admits a call sharing the
     /// wrapper's block, so no call outside the region can reach one inside it.
@@ -277,36 +314,57 @@ impl ClosureDevirtRule {
         exprs_under(engine.body, NodeRef::Block(block))
             .into_iter()
             .filter_map(|call| self.dispatched_wrapper(engine, call))
+            .filter_map(|(canonical, target)| target.takes_env().then_some(canonical))
             .collect()
     }
 }
 
 impl Rule for ClosureDevirtRule {
-    /// `f(args)` where `f`'s value came from one functor → `$call(f, args)`.
+    /// `f(args)` where `f`'s value came from one functor → `$call(f, args)`,
+    /// less what `dae` dropped from `$call`.
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(canonical) = self.dispatched_wrapper(engine, id) else {
-            return false;
-        };
-        let Some((local, name)) = functor_local(engine, canonical) else {
+        let Some((canonical, target)) = self.dispatched_wrapper(engine, id) else {
             return false;
         };
         let ExprKind::IndirectCall { args, .. } = &engine.body.exprs[id].kind else {
             unreachable!("`dispatched_wrapper` matched an IndirectCall");
         };
         let args = args.clone();
-        let target = self
-            .target(engine, canonical, args.len())
-            .expect("`dispatched_wrapper` found this target");
-        let (func_id, params_is_mut) = (target.func_id, target.params_is_mut.clone());
-        let type_id = engine.locals()[local as usize].type_id;
         let span = engine.body.exprs[id].span;
-        let receiver = engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span);
-        let args = args
-            .into_iter()
-            .zip(params_is_mut.iter().skip(1))
-            .map(|(expr, &is_mut)| ArenaCallArg { expr, is_mut })
-            .collect();
-        let call = ExprKind::method_call(func_id, Operand::Expr(receiver), params_is_mut[0], args);
+        let receiver = if target.takes_env() {
+            let Some((local, name)) = functor_local(engine, canonical) else {
+                return false;
+            };
+            let type_id = engine.locals()[local as usize].type_id;
+            Some(engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span))
+        } else {
+            None
+        };
+        let passed = target
+            .params
+            .iter()
+            .filter_map(|&(source, is_mut)| match source {
+                CallParamSource::Env => None,
+                CallParamSource::User(at) => Some(ArenaCallArg {
+                    expr: args[at],
+                    is_mut,
+                }),
+            });
+        let args = match receiver {
+            Some(receiver) => CallArgs::method(
+                ArenaCallArg {
+                    expr: Operand::Expr(receiver),
+                    is_mut: target.params[0].1,
+                },
+                passed,
+            ),
+            None => CallArgs::free(passed.collect()),
+        };
+        let call = ExprKind::Call {
+            func_id: target.func_id,
+            type_args: Vec::new(),
+            args,
+        };
         engine.replace_expr_kind(id, call);
         true
     }
