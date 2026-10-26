@@ -227,6 +227,9 @@ error for a missing pin names the digest to write. A file whose content hashes
 to anything other than its pin is an error, and so is `integrity` on an import
 of a local file. Where several `use`s pin one URL, each is held to its own pin.
 
+A URL names a [Wasm asset](#wasm-module-and-component-imports) the same way,
+pinned by the same rules.
+
 A remote module reaches no local file. A `./` or `../` path inside it, whether
 in a `use` or an `#include_*`, names the URL beside the module.
 

@@ -38,8 +38,8 @@ pub struct Harvest {
 /// Each import resolves as the loader resolves it, so the identity is the one
 /// the loader gives the module.
 ///
-/// `load` receives the loader identity, and the pin a remote module was first
-/// imported with, and `host` answers about packages as
+/// `load` receives the loader identity, and the first pin an import of a remote
+/// module wrote, and `host` answers about packages as
 /// the loader's host does, so a relatively reached file is placed in the
 /// package the loader places it in. The caller supplies the entry's tree
 /// because the loader does not read the entry through a host either.
@@ -73,9 +73,9 @@ where
     let entry = interner.entry_point(entry_identity);
     identities.insert(entry_key.to_string(), entry_identity.to_string());
 
-    // The first pin each remote module was imported with, which the loader
-    // holds every read of it to as well.
-    let mut pins = IndexMap::<String, Option<Integrity>>::default();
+    // The first pin any import of a remote module wrote, the one the loader
+    // asks the host for it with.
+    let mut pins = IndexMap::<String, Integrity>::default();
     let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
         VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
     while let Some((key, source, ast)) = queue.pop_front() {
@@ -86,7 +86,7 @@ where
             ast
         } else {
             let identity = decl_file_of(&source);
-            let pin = pins.get(identity).copied().flatten();
+            let pin = pins.get(identity).copied();
             let Some(text) = load(identity, pin).await else {
                 continue;
             };
@@ -104,8 +104,9 @@ where
                 // clause path relative to it is spelled.
                 ModuleSource::Remote { ref url, .. } => {
                     let url = url.to_string();
-                    pins.entry(url.clone())
-                        .or_insert_with(|| written_pin(use_decl));
+                    if let Some(pin) = written_pin(use_decl) {
+                        pins.entry(url.clone()).or_insert(pin);
+                    }
                     (child, url)
                 }
                 ModuleSource::Local { path, .. } if is_cwd_relative(import) => {

@@ -20,8 +20,16 @@ struct Served {
     range: Option<String>,
 }
 
-/// An HTTP/1.1 server on `127.0.0.1` answering each path from `files`,
-/// honoring `Range: bytes=a-b`, and recording every request.
+/// Whether a [`Server`] answers `Range: bytes=a-b` with that range.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Ranges {
+    Honored,
+    /// The whole file, as some servers send it.
+    Ignored,
+}
+
+/// An HTTP/1.1 server on `127.0.0.1` answering each path from `files`, and
+/// recording every request.
 struct Server {
     port: u16,
     files: Arc<Mutex<IndexMap<String, Vec<u8>>>>,
@@ -30,6 +38,10 @@ struct Server {
 
 impl Server {
     fn start() -> Self {
+        Self::start_with(Ranges::Honored)
+    }
+
+    fn start_with(ranges: Ranges) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let files = Arc::new(Mutex::new(IndexMap::new()));
@@ -37,7 +49,7 @@ impl Server {
         let (served, logged) = (Arc::clone(&files), Arc::clone(&log));
         std::thread::spawn(move || {
             for stream in listener.incoming().flatten() {
-                answer(stream, &served, &logged);
+                answer(stream, ranges, &served, &logged);
             }
         });
         Self { port, files, log }
@@ -63,7 +75,12 @@ impl Server {
     }
 }
 
-fn answer(stream: TcpStream, files: &Mutex<IndexMap<String, Vec<u8>>>, log: &Mutex<Vec<Served>>) {
+fn answer(
+    stream: TcpStream,
+    ranges: Ranges,
+    files: &Mutex<IndexMap<String, Vec<u8>>>,
+    log: &Mutex<Vec<Served>>,
+) {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request_line = String::new();
     reader.read_line(&mut request_line).unwrap();
@@ -100,6 +117,7 @@ fn answer(stream: TcpStream, files: &Mutex<IndexMap<String, Vec<u8>>>, log: &Mut
     let total = body.len();
     let (status, part, content_range) = match range
         .as_deref()
+        .filter(|_| ranges == Ranges::Honored)
         .and_then(|r| r.strip_prefix("bytes="))
         .and_then(|r| r.split_once('-'))
     {
@@ -299,21 +317,9 @@ export fn generate(req: Request) -> Result<Response, Error> {
 #[test]
 fn a_remote_kiln_input_is_fetched_by_range_and_pinned_to_its_extent() {
     let server = Server::start();
-    let mut model = b"7\n".to_vec();
-    model.resize(4 << 20, b'x');
-    server.serve("model.bin", &model);
-    let project = tempfile::tempdir().unwrap();
+    server.serve("model.bin", &model(b"7\n"));
+    let project = model_package(&server);
     let wado_root = tempfile::tempdir().unwrap();
-    write_package(
-        project.path(),
-        &format!(
-            "use {{ println, Stdout }} from \"core:cli\";\n\
-             use {{ hello }} from \"{}\"\n    with {{ generator: {{ module: \"./gen.wado\" }} }};\n\n\
-             export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n",
-            server.url("model.bin")
-        ),
-    );
-    std::fs::write(project.path().join("src/gen.wado"), HEADER_GENERATOR).unwrap();
 
     wado(project.path(), wado_root.path())
         .args(["run", "src/main.wado"])
@@ -333,4 +339,93 @@ fn a_remote_kiln_input_is_fetched_by_range_and_pinned_to_its_extent() {
         lock.contains(&format!("integrity = \"{}\"", Integrity::of(b"7\n"))),
         "{lock}"
     );
+}
+
+/// A 4 MiB model whose header, up to its first newline, is `header`.
+fn model(header: &[u8]) -> Vec<u8> {
+    let mut model = header.to_vec();
+    model.resize(4 << 20, b'x');
+    model
+}
+
+/// A package whose `run` prints what the header of the model `server` serves
+/// generates.
+fn model_package(server: &Server) -> tempfile::TempDir {
+    let project = tempfile::tempdir().unwrap();
+    write_package(
+        project.path(),
+        &format!(
+            "use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"{}\"\n    with {{ generator: {{ module: \"./gen.wado\" }} }};\n\n\
+             export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n",
+            server.url("model.bin")
+        ),
+    );
+    std::fs::write(project.path().join("src/gen.wado"), HEADER_GENERATOR).unwrap();
+    project
+}
+
+/// A probe's extent is decided by the bytes inside it, so a model whose header
+/// moved changed, and is held to the extent the lock pins rather than pinned
+/// afresh.
+#[test]
+fn a_moved_extent_is_held_to_the_pin_of_the_old_one() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let project = model_package(&server);
+    wado(project.path(), tempfile::tempdir().unwrap().path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+
+    server.serve("model.bin", &model(b"10\n"));
+    wado(project.path(), tempfile::tempdir().unwrap().path())
+        .args(["run", "--no-cache", "src/main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "does not match its integrity: `wado.lock` pins",
+        ));
+    let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
+    assert!(!lock.contains("extent = 3"), "{lock}");
+}
+
+/// A lock that cannot be read is reported, never replaced by one holding only
+/// the new pin.
+#[test]
+fn an_unreadable_lock_is_an_error_and_kept() {
+    let server = Server::start();
+    server.serve("util.wado", UTIL.as_bytes());
+    let project = tempfile::tempdir().unwrap();
+    write_package(project.path(), &main_using(&server.url("util.wado"), ""));
+    let unreadable = b"version = 1\n\xff\n";
+    std::fs::write(project.path().join("wado.lock"), unreadable).unwrap();
+
+    wado(project.path(), tempfile::tempdir().unwrap().path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .failure();
+    assert_eq!(
+        std::fs::read(project.path().join("wado.lock")).unwrap(),
+        unreadable
+    );
+}
+
+/// A server that sends the whole file for a range is asked once for the probe,
+/// however many blocks the header spans.
+#[test]
+fn a_server_ignoring_range_is_read_whole_once_for_the_probe() {
+    let server = Server::start_with(Ranges::Ignored);
+    let mut header = vec![b' '; 70_000];
+    header.extend_from_slice(b"7\n");
+    server.serve("model.bin", &model(&header));
+    let project = model_package(&server);
+
+    wado(project.path(), tempfile::tempdir().unwrap().path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    // One read for the probe and one for the extent it declared.
+    assert_eq!(server.requests().len(), 2, "{:?}", server.requests().len());
 }

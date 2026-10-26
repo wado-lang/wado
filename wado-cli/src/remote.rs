@@ -60,10 +60,25 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
 static LOCK_WRITE: Mutex<()> = Mutex::new(());
 
 /// What one GET answered: the bytes, and the file's whole length where the
-/// server said.
+/// server said. `whole` where the bytes are the whole file, as a server that
+/// ignores `Range` sends it, so a caller keeps them rather than asking again.
 struct Fetched {
     bytes: Vec<u8>,
     total: Option<u64>,
+    whole: bool,
+}
+
+impl Fetched {
+    /// The `range` of the file these bytes hold.
+    fn into_range(mut self, range: Range<u64>) -> Vec<u8> {
+        if self.whole {
+            let total = self.bytes.len();
+            let clamp = |at: u64| usize::try_from(at).map_or(total, |at| at.min(total));
+            self.bytes.truncate(clamp(range.end));
+            self.bytes.drain(..clamp(range.start));
+        }
+        self.bytes
+    }
 }
 
 /// GET `url`, or the `range` of it.
@@ -77,28 +92,26 @@ async fn get(url: String, range: Option<Range<u64>>) -> Result<Fetched, SourceEr
         let range = range.clone();
         RUNTIME.spawn(async move { fetch(&url, range).await })
     };
+    let range = range.as_ref();
     let (status, bytes, total) = joined(task.await).map_err(network)?;
     match status {
         StatusCode::NOT_FOUND | StatusCode::GONE => Err(SourceError::NotFound { path: url }),
         // A server that ignores `Range` sends the whole file.
-        StatusCode::OK | StatusCode::PARTIAL_CONTENT => {
-            let mut bytes = bytes;
-            if let Some(range) = range.filter(|_| status == StatusCode::OK) {
-                let total = bytes.len();
-                let clamp = |at: u64| usize::try_from(at).map_or(total, |at| at.min(total));
-                bytes.truncate(clamp(range.end));
-                bytes.drain(..clamp(range.start));
-                return Ok(Fetched {
-                    bytes,
-                    total: Some(total as u64),
-                });
-            }
-            Ok(Fetched { bytes, total })
-        }
+        StatusCode::OK => Ok(Fetched {
+            total: Some(bytes.len() as u64),
+            bytes,
+            whole: true,
+        }),
+        StatusCode::PARTIAL_CONTENT => Ok(Fetched {
+            bytes,
+            total,
+            whole: false,
+        }),
         // Past the end: a range the file does not reach holds nothing.
         StatusCode::RANGE_NOT_SATISFIABLE if range.is_some() => Ok(Fetched {
             bytes: Vec::new(),
             total,
+            whole: false,
         }),
         status => Err(network(format!("the server answered {status}"))),
     }
@@ -155,15 +168,14 @@ pub async fn load(
     {
         return Ok(bytes);
     }
-    let bytes = match extent {
-        Some(0) => Vec::new(),
-        Some(extent) => get(url.to_string(), Some(0..extent)).await?.bytes,
-        None => get(url.to_string(), None).await?.bytes,
-    };
+    let bytes = fetch_prefix(url, extent).await?;
     let actual = Integrity::of(&bytes);
     match (pin, lock_root) {
         (Some((pin, pinned_by)), _) => check_digest(url, actual, pin, pinned_by)?,
-        (None, Some(root)) => record_pin(root, url, extent, actual)?,
+        (None, Some(root)) => {
+            hold_to_other_extents(root, url, extent, &bytes).await?;
+            record_pin(root, url, extent, actual)?;
+        }
         (None, None) => {
             return Err(SourceError::Unpinned {
                 url: url.to_string(),
@@ -175,6 +187,49 @@ pub async fn load(
     Ok(bytes)
 }
 
+/// The first `extent` bytes of `url`, or all of it.
+async fn fetch_prefix(url: &str, extent: Option<u64>) -> Result<Vec<u8>, SourceError> {
+    Ok(match extent {
+        Some(0) => Vec::new(),
+        Some(extent) => get(url.to_string(), Some(0..extent))
+            .await?
+            .into_range(0..extent),
+        None => get(url.to_string(), None).await?.bytes,
+    })
+}
+
+/// Hold `bytes`, the first `extent` bytes of `url`, to every pin the lock
+/// records for another extent of it. A probe's extent is decided by the bytes
+/// inside it, so content that moved the extent changed, and an entry of its
+/// own would accept it unasked.
+async fn hold_to_other_extents(
+    root: &Path,
+    url: &str,
+    extent: Option<u64>,
+    bytes: &[u8],
+) -> Result<(), SourceError> {
+    let Some(lock_file) = read_lock(root)? else {
+        return Ok(());
+    };
+    for (other, pin) in pins_of(&lock_file, root, url)? {
+        let covered = match (other, extent) {
+            (Some(other), Some(extent)) => other <= extent,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+        let part = if covered {
+            let end = other.map_or(bytes.len(), |other| {
+                usize::try_from(other).map_or(bytes.len(), |other| other.min(bytes.len()))
+            });
+            Integrity::of(&bytes[..end])
+        } else {
+            Integrity::of(&fetch_prefix(url, other).await?)
+        };
+        check_digest(url, part, pin, PinnedBy::Lock)?;
+    }
+    Ok(())
+}
+
 fn lock_error(root: &Path, message: String) -> SourceError {
     SourceError::IoError {
         path: root.join(LOCK_FILENAME).display().to_string(),
@@ -182,13 +237,39 @@ fn lock_error(root: &Path, message: String) -> SourceError {
     }
 }
 
+/// The lock of the package at `root`, `None` only where there is none: a lock
+/// that cannot be read is an error, never one to write afresh.
 fn read_lock(root: &Path) -> Result<Option<LockFile>, SourceError> {
-    let Ok(text) = std::fs::read_to_string(root.join(LOCK_FILENAME)) else {
-        return Ok(None);
+    let text = match std::fs::read_to_string(root.join(LOCK_FILENAME)) {
+        Ok(text) => text,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(lock_error(root, e.to_string())),
     };
     text.parse()
         .map(Some)
         .map_err(|e: LockFileError| lock_error(root, e.to_string()))
+}
+
+/// Every extent of `url` that `lock`, the lock of the package at `root`, pins,
+/// with its pin.
+fn pins_of(
+    lock: &LockFile,
+    root: &Path,
+    url: &str,
+) -> Result<Vec<(Option<u64>, Integrity)>, SourceError> {
+    lock.remotes
+        .iter()
+        .filter(|entry| entry.url == url)
+        .map(|entry| {
+            let pin = Integrity::parse(&entry.integrity).ok_or_else(|| {
+                lock_error(
+                    root,
+                    format!("the pin of '{url}' is not {}", Integrity::FORM),
+                )
+            })?;
+            Ok((entry.extent, pin))
+        })
+        .collect()
 }
 
 /// What `lock`, the lock of the package at `root`, pins `url`'s first
@@ -199,15 +280,9 @@ fn pin_in(
     url: &str,
     extent: Option<u64>,
 ) -> Result<Option<Integrity>, SourceError> {
-    let Some(text) = lock.remote_pin(url, extent) else {
-        return Ok(None);
-    };
-    Integrity::parse(text).map(Some).ok_or_else(|| {
-        lock_error(
-            root,
-            format!("the pin of '{url}' is not {}", Integrity::FORM),
-        )
-    })
+    Ok(pins_of(lock, root, url)?
+        .into_iter()
+        .find_map(|(other, pin)| (other == extent).then_some(pin)))
 }
 
 fn locked_pin(
@@ -302,7 +377,7 @@ impl RemoteReader {
             len,
             blocks: Mutex::default(),
         };
-        lock(&reader.blocks).insert(0, Arc::new(first.bytes));
+        reader.keep(0, first);
         Ok(reader)
     }
 
@@ -313,9 +388,23 @@ impl RemoteReader {
         let start = index * BLOCK;
         let fetched =
             futures::executor::block_on(get(self.url.clone(), Some(start..start + BLOCK)))?;
-        let block = Arc::new(fetched.bytes);
-        lock(&self.blocks).insert(index, Arc::clone(&block));
-        Ok(block)
+        self.keep(index, fetched);
+        Ok(Arc::clone(&lock(&self.blocks)[&index]))
+    }
+
+    /// Keep what a GET of block `index` answered: every block of the file
+    /// where the server sent all of it.
+    fn keep(&self, index: u64, fetched: Fetched) {
+        let mut blocks = lock(&self.blocks);
+        if !fetched.whole {
+            blocks.insert(index, Arc::new(fetched.bytes));
+            return;
+        }
+        let chunks = fetched.bytes.chunks(BLOCK as usize);
+        for (at, chunk) in (0..).zip(chunks) {
+            blocks.insert(at, Arc::new(chunk.to_vec()));
+        }
+        blocks.entry(index).or_default();
     }
 }
 

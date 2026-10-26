@@ -30,7 +30,7 @@ use crate::name::{
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
-use crate::remote::{Integrity, PinnedBy, check_pin, is_remote, url_fault};
+use crate::remote::{Integrity, PinnedBy, check_digest, is_remote, url_fault};
 use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
 use crate::{bind, hashmap, parser, stdlib};
 
@@ -66,6 +66,8 @@ pub enum LoadError {
     IoError { path: String, message: String },
     /// A file an `#include_str` or `#include_bytes` names is not there.
     IncludeNotFound { path: String },
+    /// An `#include_*` path that is not `./` or `../` relative.
+    InvalidIncludePath { path: String },
     /// A namespaced import (`ns:pkg`, `lib:nick`) that no dependency declares.
     /// Every namespace but the bundled `core` and `wasi` is one a dependency
     /// supplies. `manifest` is the `wado.toml` it would be declared in.
@@ -174,6 +176,12 @@ impl std::fmt::Display for LoadError {
                 write!(f, "error reading '{path}': {message}")
             }
             LoadError::IncludeNotFound { path } => write!(f, "file not found: '{path}'"),
+            LoadError::InvalidIncludePath { path } => {
+                write!(
+                    f,
+                    "invalid include path '{path}'; it starts with './' or '../'"
+                )
+            }
             LoadError::UndeclaredDependency {
                 name,
                 manifest: Some(manifest),
@@ -265,12 +273,7 @@ fn stdlib_identity_message(path: Option<&str>) -> String {
 impl std::error::Error for LoadError {}
 
 impl LoadError {
-    /// This error, reported at `at` unless it already names a place nearer to
-    /// its cause.
     pub(crate) fn at_path(self, at: DiagnosticSpan) -> Self {
-        if matches!(self, LoadError::AtPath { .. }) {
-            return self;
-        }
         LoadError::AtPath {
             at,
             error: Box::new(self),
@@ -316,6 +319,7 @@ impl LoadError {
             LoadError::ModuleNotFound { .. }
             | LoadError::UndeclaredDependency { .. }
             | LoadError::InvalidModulePath { .. }
+            | LoadError::InvalidIncludePath { .. }
             | LoadError::InvalidRemoteUrl { .. }
             | LoadError::DependencyUnresolved { .. }
             | LoadError::UnexportedFile { .. } => Code::ModuleNotFound,
@@ -634,6 +638,9 @@ pub fn resolve_wasm_asset_path(
     import_source: &str,
     entry_dir: &str,
 ) -> Result<String, LoadError> {
+    if is_remote(import_source) {
+        return Ok(import_source.to_string());
+    }
     if !is_cwd_relative(import_source) {
         return Err(LoadError::InvalidModulePath {
             path: import_source.to_string(),
@@ -1452,9 +1459,13 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     skipped_bodies: IndexSet<ModuleSource>,
     imports: IndexMap<ModuleSource, Vec<ModuleSource>>,
     asset_origins: IndexMap<String, PathSite>,
-    /// Each remote module's pins, in the order its importers were read, each
+    /// Each remote file's pins, in the order its importers were read, each
     /// where its `integrity` was written.
     remote_pins: IndexMap<String, Vec<(Integrity, DiagnosticSpan)>>,
+    /// The digest of what each remote file held when it was read, which every
+    /// pin is held to once the graph is loaded: an importer read later may pin
+    /// a file read earlier.
+    remote_reads: IndexMap<String, Integrity>,
 }
 
 impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
@@ -1486,6 +1497,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             imports: IndexMap::default(),
             asset_origins: IndexMap::default(),
             remote_pins: IndexMap::default(),
+            remote_reads: IndexMap::default(),
         }
     }
 
@@ -1710,6 +1722,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
         }
 
+        self.check_remote_pins()?;
         self.check_stdlib_identities()?;
         for import_path in self.loaded.keys().filter_map(stdlib_cache_key) {
             self.host.stdlib_module_read(&import_path);
@@ -1889,10 +1902,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             ModuleSource::Wasm { path, .. } => path.clone(),
             _ => unreachable!(),
         };
-        let raw_bytes = {
-            let _span = self.logger.span(&format!("load_wasm_asset {namespace}"));
-            self.fetch_wasm_asset_bytes(&source, &path, written).await?
-        };
+        let span_name = format!("load_wasm_asset {namespace}");
+        self.logger.span_start(&span_name);
+        let fetched = self.fetch_wasm_asset_bytes(&source, &path, written).await;
+        self.logger.span_end(&span_name);
+        let raw_bytes = fetched?;
 
         let core_wasm_bytes = match kind {
             WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
@@ -2030,7 +2044,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// (`core:libm.wat`, etc.) hit `stdlib::get_stdlib_wasm_asset`; user
     /// paths (`./foo.wat`) hit `host.load_source`.
     async fn fetch_wasm_asset_bytes(
-        &self,
+        &mut self,
         source: &ModuleSource,
         path: &str,
         written: &str,
@@ -2229,7 +2243,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
     /// Get source code for a module
     async fn get_source(
-        &self,
+        &mut self,
         module_source: &ModuleSource,
         written: &str,
     ) -> Result<String, LoadError> {
@@ -2301,21 +2315,38 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         utf8_text(bytes, name)
     }
 
-    /// The remote file `url`, held to every pin a `use` of it wrote.
-    async fn load_pinned(&self, url: &str) -> Result<Vec<u8>, LoadError> {
-        let pins = self.remote_pins.get(url).map_or(&[][..], Vec::as_slice);
+    /// The remote file `url`, held by the host to the first pin a `use` of it
+    /// wrote, or to the lock's; [`Self::check_remote_pins`] holds it to the
+    /// rest.
+    async fn load_pinned(&mut self, url: &str) -> Result<Vec<u8>, LoadError> {
+        let pin = self
+            .remote_pins
+            .get(url)
+            .and_then(|pins| pins.first())
+            .map(|(pin, _)| *pin);
         let bytes = self
             .host
-            .load_remote(url, None, pins.first().map(|(pin, _)| *pin))
+            .load_remote(url, None, pin)
             .await
             .map_err(|e| LoadError::reading(e, url))?;
-        // The first pin was the host's to check; each importer that pins the
-        // file again is held to the same content.
-        for (pin, at) in pins.iter().skip(1) {
-            check_pin(url, &bytes, *pin, PinnedBy::Use)
-                .map_err(|e| LoadError::reading(e, url).at_path(at.clone()))?;
-        }
+        self.remote_reads
+            .insert(url.to_string(), Integrity::of(&bytes));
         Ok(bytes)
+    }
+
+    /// Hold every remote file read to every pin a `use` of it wrote, each
+    /// reported where it was written.
+    fn check_remote_pins(&self) -> Result<(), LoadError> {
+        for (url, pins) in &self.remote_pins {
+            let Some(read) = self.remote_reads.get(url) else {
+                continue;
+            };
+            for (pin, at) in pins {
+                check_digest(url, *read, *pin, PinnedBy::Use)
+                    .map_err(|e| LoadError::reading(e, url).at_path(at.clone()))?;
+            }
+        }
+        Ok(())
     }
 
     /// Parse source code into a module AST
@@ -2411,6 +2442,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         let mut included = IndexMap::default();
         for (pair, at) in pairs {
             let [ref ms_str, ref raw_path] = pair;
+            // Only a relative path names the file beside the module, which is
+            // also what keeps a remote module off this machine.
+            if !is_cwd_relative(raw_path) {
+                return Err(LoadError::InvalidIncludePath {
+                    path: raw_path.clone(),
+                }
+                .at_path(at));
+            }
             // Resolve path relative to the module source's real directory.
             let module_path = resolve_path
                 .get(ms_str)
@@ -2439,10 +2478,7 @@ fn resolve_include_path_impl(
     module_source_str: &str,
     raw_path: &str,
 ) -> String {
-    if !is_cwd_relative(raw_path) {
-        return raw_path.to_string();
-    }
-    // A remote module's file is beside it on its host, never on this machine.
+    assert!(is_cwd_relative(raw_path), "an include path is relative");
     if is_remote(module_source_str) {
         return resolve_module_path(module_source_str, raw_path);
     }
@@ -2554,14 +2590,5 @@ mod resolve_include_path_tests {
         let dep_module = "../dep/src/highlight/facade.wado";
         let resolved = resolve(Some(entry), dep_module, "./themes/gale-light.css");
         assert_eq!(resolved, "../dep/src/highlight/themes/gale-light.css");
-    }
-
-    #[test]
-    fn non_relative_arg_passes_through() {
-        let entry = "./main.wado";
-        // `core:foo` etc. (no leading `./` / `../`) are not relative and the
-        // elaborator must not touch them.
-        let resolved = resolve(Some(entry), entry, "/abs/data.txt");
-        assert_eq!(resolved, "/abs/data.txt");
     }
 }
