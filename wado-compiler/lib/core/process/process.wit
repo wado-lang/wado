@@ -70,6 +70,9 @@ interface types {
     /// A running child. Dropping it ends the child and every process it
     /// started, and the host ends every child when the guest exits.
     resource child {
+        /// Ask the child and every process it started to end. A child may
+        /// ignore it, and a host with no way to ask does nothing.
+        terminate: func();
         /// End the child and every process it started, now.
         kill: func();
     }

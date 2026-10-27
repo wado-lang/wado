@@ -101,6 +101,23 @@ test "a member ready without the host comes back in insertion order" {
     assert ws.is_empty();
 }
 
+test "a drained set hands back every member, the ready ones first" {
+    let mut ws = WaitableSet::<Raced>::new();
+    ws.insert(Raced::Timer(MonotonicClock::wait_for(60_000_000_000)));
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(1).result == FutureWriteResult::Pending;
+    ws.insert(Raced::Value(rx.start_read()));
+    let mut drained = ws.drain();
+    assert ws.is_empty();
+    let Some(Timer(_)) = drained.pop() else {
+        unreachable();
+    };
+    let Some(Value(read)) = drained.pop() else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(1);
+}
+
 /// A call the host resolves after it starts, handed back by the set that
 /// delivered its resolution.
 fn delivered_call() -> AsyncCall<()> with MonotonicClock {

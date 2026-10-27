@@ -976,6 +976,23 @@ impl<affine W: Waitable> WaitableSet<W> {
         return Option::Some(self.take_reported(event));
     }
 
+    /// Moves every member out, the ready ones first, leaving the set empty. A
+    /// race keeps its losers this way, where dropping the set would drop them.
+    pub fn drain(&mut self) -> List<W> {
+        let mut drained: List<W> = [];
+        for let ready of builtin::replace(&mut self.ready, []) {
+            drained.push(ready.member);
+        }
+        for let member of builtin::replace(&mut self.members, []) {
+            let Host(id) = member.wait_on() else {
+                unreachable();
+            };
+            builtin::waitable_join(id.handle, 0);
+            drained.push(member);
+        }
+        return drained;
+    }
+
     pub fn len(&self) -> i32 {
         return self.members.len() + self.ready.len();
     }

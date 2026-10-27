@@ -18,7 +18,10 @@
 //!   holds, so each declares that stream's effect.
 //! - [`Child`] is `affine`. Dropping it, or [`Child::kill`], ends the child and
 //!   every process it started, and the host ends every child when the guest
-//!   exits, so none outlives the guest.
+//!   exits, so none outlives the guest. [`Child::terminate`] asks instead, and
+//!   the child may ignore it.
+//! - A timeout is the guest's: [`Child::wait_timeout`] waits a bounded time,
+//!   and [`Child::stop`] asks, waits a grace period, then kills.
 //! - A child's output is bytes, so it comes back as a `ByteList`, never decoded.
 //!
 //! ## Errors
@@ -47,7 +50,8 @@
 //!   entries.
 //! - Every child gets `PATH`, a private `HOME` and `TMPDIR` removed once it
 //!   exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream.
-//! - Killing a child ends its process group.
+//! - `terminate` sends the child's process group `SIGTERM`, and `kill`
+//!   `SIGKILL`.
 //! - A child that fails after the sandbox refused it something is reported on
 //!   `wado`'s stderr, with the grant that would allow it. `--process-trace`
 //!   also names each file refused, on Linux.
@@ -55,6 +59,7 @@
 use types from "core:process/types.wado";
 use { Child as ChildResource, Input, Spawned } from "core:process/types.wado";
 use { Stdin, Stdout, Stderr } from "wasi:cli";
+use { Duration, MonotonicClock } from "wasi:clocks";
 
 pub use { Process } from "core:process/process.wado";
 pub use { Availability, ErrorCode, ExitStatus } from "core:process/types.wado";
@@ -253,7 +258,8 @@ impl Command {
             stdout,
             stderr,
             program: self.program,
-            exit: Option::Some(exit),
+            exit: Option::Some(exit.start_read()),
+            ended: null,
             resource: child,
         });
     }
@@ -290,9 +296,19 @@ pub affine struct Child {
     /// Where `Command::stderr_piped` asked for it.
     pub stderr: Option<Stream<u8>>,
     program: String,
-    exit: Option<Future<Result<ExitStatus, ErrorCode>>>,
+    /// The read of how the child ended, until `wait_timeout` sees it end.
+    exit: Option<FutureReadCopy<Result<ExitStatus, ErrorCode>>>,
+    /// How the child ended, once `wait_timeout` has seen it.
+    ended: Option<Result<ExitStatus, ErrorCode>>,
     resource: ChildResource,
 }
+
+affine variant Race {
+    Exit(FutureReadCopy<Result<ExitStatus, ErrorCode>>),
+    Timer(AsyncCall<()>),
+}
+
+impl Waitable for Race;
 
 impl Child {
     /// Wait for the child to end. Nothing can reach a stream still left in the
@@ -303,18 +319,62 @@ impl Child {
         builtin::drop(child.stdin.take());
         builtin::drop(child.stdout.take());
         builtin::drop(child.stderr.take());
-        let Some(ended) = child.exit.take().unwrap().read() else {
-            unreachable();
-        };
-        return match ended {
-            Ok(status) => Result::Ok(status),
-            Err(code) => Result::Err(child_error(&child.program, ProcessErrorKind::Spawn(code))),
-        };
+        if child.ended matches { None } {
+            child.ended = child.exit.take().unwrap().finish();
+        }
+        return child.status();
+    }
+
+    /// Wait at most `how_long` for the child to end: `None` where it has not.
+    /// The streams stay open, so a child blocked on a pipe nobody reads waits
+    /// out the time.
+    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError>
+        with MonotonicClock
+    {
+        if self.ended matches { None } {
+            let mut set = WaitableSet::<Race>::new();
+            set.insert(Race::Exit(self.exit.take().unwrap()));
+            set.insert(Race::Timer(MonotonicClock::wait_for(how_long)));
+            if let Exit(read) = set.wait().member {
+                self.ended = read.finish();
+            } else {
+                let Exit(read) = set.drain().pop().unwrap() else {
+                    unreachable();
+                };
+                self.exit = Option::Some(read);
+                return Result::Ok(null);
+            }
+        }
+        return Result::Ok(Option::Some(self.status()?));
+    }
+
+    /// Ask the child and every process it started to end. A child may ignore
+    /// it, so [`Child::stop`] follows it with a kill.
+    pub fn terminate(&self) {
+        self.resource.terminate();
     }
 
     /// End the child and every process it started, now.
     pub fn kill(&self) {
         self.resource.kill();
+    }
+
+    /// Ask the child to end, and end it if it has not after `grace`.
+    pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with MonotonicClock {
+        let mut child = self;
+        child.terminate();
+        if let Some(status) = child.wait_timeout(grace)? {
+            return Result::Ok(status);
+        }
+        child.kill();
+        return child.wait();
+    }
+
+    fn status(&self) -> Result<ExitStatus, ProcessError> {
+        return match self.ended.unwrap() {
+            Ok(status) => Result::Ok(status),
+            Err(code) => Result::Err(child_error(&self.program, ProcessErrorKind::Spawn(code))),
+        };
     }
 }
 

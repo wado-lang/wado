@@ -129,6 +129,31 @@ test "arg appends one argument" {
     assert c.args == ["a b", "c"];
 }
 
+test "wait_timeout reports a child still running, and its end once it comes" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let mut child = cmd`sleep 10`.spawn().unwrap();
+    assert child.wait_timeout(10_000_000).unwrap() matches { None };
+    child.kill();
+    assert child.wait_timeout(10_000_000_000).unwrap() == Option::Some(ExitStatus::Signaled(9));
+    assert child.wait().unwrap() == ExitStatus::Signaled(9);
+}
+
+test "stop asks first, and kills a child that does not listen" {
+    if availability() != Availability::Available {
+        return;
+    }
+    assert cmd`sleep 10`.spawn().unwrap().stop(10_000_000_000).unwrap() == ExitStatus::Signaled(15);
+    // An ignored signal stays ignored across exec, so `sleep` ignores it too.
+    // The child says when it ignores it, or the request could land first.
+    let script = "trap '' TERM; echo ready; sleep 10";
+    let mut deaf = cmd`sh -c ${script}`.stdout_piped().spawn().unwrap();
+    let [_, said] = deaf.stdout.take().unwrap().start_read(6).finish();
+    assert said.items == b"ready\n";
+    assert deaf.stop(100_000_000).unwrap() == ExitStatus::Signaled(9);
+}
+
 test "a piped stderr reaches the guest" {
     if availability() != Availability::Available {
         return;

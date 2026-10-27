@@ -115,6 +115,11 @@ pub affine struct Spawned {
 /// started, and the host ends every child when the guest exits.
 #[cm("core:process/types@0.1.0#child")]
 pub resource Child {
+    /// Ask the child and every process it started to end. A child may
+    /// ignore it, and a host with no way to ask does nothing.
+    #[cm("core:process/types@0.1.0#[method]child.terminate")]
+    #[cm_params("self")]
+    fn terminate(&self);
     /// End the child and every process it started, now.
     #[cm("core:process/types@0.1.0#[method]child.kill")]
     #[cm_params("self")]

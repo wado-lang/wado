@@ -41,9 +41,17 @@ const PIPE_BUFFER: usize = 8192;
 pub struct ChildHandle(Arc<Child>);
 
 impl ChildHandle {
+    pub(super) fn terminate(&self) {
+        self.signal(libc::SIGTERM);
+    }
+
     pub(super) fn kill(&self) {
+        self.signal(libc::SIGKILL);
+    }
+
+    fn signal(&self, signal: libc::c_int) {
         self.0
-            .signal_group(libc::SIGKILL)
+            .signal_group(signal)
             .expect("a confined child cannot leave the group its host signals");
     }
 }
