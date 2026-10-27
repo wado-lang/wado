@@ -183,7 +183,24 @@ pub struct CoverageSpec {
 
     /// How often each countable line ran, over every test, as LCOV's `DA`
     /// lines carry it.
+    #[serde(default, deserialize_with = "line_counts")]
     pub line_counts: Option<BTreeMap<u32, i64>>,
+}
+
+/// A map keyed by line number. JSON keys are strings, and under
+/// `#[serde(flatten)]` serde hands them over as strings rather than parsing
+/// them into the key type, so they are parsed here.
+fn line_counts<'de, D: Deserializer<'de>>(de: D) -> Result<Option<BTreeMap<u32, i64>>, D::Error> {
+    BTreeMap::<String, i64>::deserialize(de)?
+        .into_iter()
+        .map(|(line, count)| {
+            let line = line
+                .parse()
+                .map_err(|_| D::Error::custom(format!("`{line}` is not a line number")))?;
+            Ok((line, count))
+        })
+        .collect::<Result<_, _>>()
+        .map(Some)
 }
 
 /// A `__DATA__` value that is one string or a list of them.
