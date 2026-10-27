@@ -854,7 +854,7 @@ fn synthesize_future_read_func(
         let func_name = future_read_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
-        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload.clone());
+        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
         (func_name, read_name, drop_name, payload_ast, size, align)

@@ -42,7 +42,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
 
-type "functype//hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces$spec0" = fn(ref "hfs_inline_break_no_writeback.wado//Scanner");  // TypeId(17)
+type "functype//hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces" = fn(ref "hfs_inline_break_no_writeback.wado//Scanner");  // TypeId(17)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_inline_break_no_writeback.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(18)
 
@@ -71,7 +71,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:hfs_inline_break_no_writeback.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32, 32, 97, 32, 32, 98, 32, 32, 99, 32, 32);
+global global:hfs_inline_break_no_writeback.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32, 97, 32, 32, 98, 32, 32, 99, 32, 32), used: 11 };
 
 fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     let $load_0: ref "core:prelude/string.wado//String";
@@ -80,13 +80,13 @@ fn "hfs_inline_break_no_writeback.wado/run"() with Stdout {
     let count: i32;
     let $cm_pair_7: i64;
     let $hfs_pos_28: i32;
-    s = struct.new "hfs_inline_break_no_writeback.wado//Scanner" { data: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("  a  b  c  "), used: 11 }, pos: 0 };
+    s = struct.new "hfs_inline_break_no_writeback.wado//Scanner" { data: ref.as_non_null(black_box(global:hfs_inline_break_no_writeback.wado::$const_obj_0)), pos: 0 };
     count = 0;
     $hfs_pos_28 = 0;
     b0: block {
         l1: loop {
             break_if b0 $hfs_pos_28 >= local.tee $load_1(local.tee $load_0(s.data).used);
-            "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces$spec0"(s);
+            "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(s);
             if $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: block -> i32 {
                 if local.tee $hfs_pos_28(s.pos) >= $load_1 {
                     break $inline_hfs_inline_break_no_writeback_wado_Scanner__peek_2: -1;
@@ -248,19 +248,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces$spec0"(self) {
-    let $hfs_pos_16: i32;
-    $hfs_pos_16 = self.pos;
+fn "hfs_inline_break_no_writeback.wado/hfs_inline_break_no_writeback.wado/Scanner::skip_spaces"(self) {
+    let $licm_data_11: ref "core:prelude/string.wado//String";
+    let $licm_used_12: i32;
+    let $licm_repr_13: ref Array<u8>;
+    let $hfs_pos_14: i32;
+    $licm_used_12 = local.tee $licm_data_11(self.data).used;
+    $licm_repr_13 = $licm_data_11.repr;
+    $hfs_pos_14 = self.pos;
     b22: block {
         l23: loop {
-            if $hfs_pos_16 >= 11 {
-                self.pos = $hfs_pos_16;
+            if $hfs_pos_14 >= $licm_used_12 {
+                self.pos = $hfs_pos_14;
                 break b22;
             }
-            if builtin::array_get_value<u8>(global:hfs_inline_break_no_writeback.wado::$const_obj_0, $hfs_pos_16) == 32 {
-                $hfs_pos_16 = $hfs_pos_16 + 1;
+            if builtin::array_get_value<u8>($licm_repr_13, $hfs_pos_14) == 32 {
+                $hfs_pos_14 = $hfs_pos_14 + 1;
             } else {
-                self.pos = $hfs_pos_16;
+                self.pos = $hfs_pos_14;
                 return;
             }
             continue l23;

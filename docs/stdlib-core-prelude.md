@@ -4465,6 +4465,11 @@ Where a host copy started by `Stream::begin_read` lands: memory the copy
 allocates for itself, or memory `core:*` lends it, which the host writes
 into directly. Only `core:*` lends, so no raw address is ever handed out.
 
+A handler holds the value it is handed, and may forward it to another
+read. So lent memory says how much of it there is, and whether the lender
+still lends it: a read asking for more is held to the room, and one after
+the lend ended traps rather than writing what someone else now owns.
+
 _Fields are private._
 
 #### `pub fn fresh() -> ReadInto`
