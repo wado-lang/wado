@@ -156,7 +156,7 @@ impl Inputs {
 }
 
 impl Stream<u8> for Inputs {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, _into: ReadInto) -> StartedRead<u8> {
         let _ = max;
         resume StartedRead::settled(StreamChunk {
             items: self.contents[ResourceId::of(this)] as List<u8>,

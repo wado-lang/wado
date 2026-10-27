@@ -98,29 +98,29 @@ fn ends_operand(kind: i32) -> bool {
 }
 
 impl TypeScriptLexerBase for TsBase {
-    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+    fn emit(&mut self, _view: LexerView, ty: i32, channel: i32) -> i32 {
         if channel == 0 {
             self.last_token = ty;
         }
         resume ty;
     }
 
-    fn is_regex_possible(&self, view: LexerView) -> bool {
+    fn is_regex_possible(&self, _view: LexerView) -> bool {
         resume !ends_operand(self.last_token);
     }
 
-    fn is_in_template_string(&self, view: LexerView) -> bool {
+    fn is_in_template_string(&self, _view: LexerView) -> bool {
         if self.template_marks.is_empty() {
             resume false;
         }
         resume self.interp_braces.last() matches { Some(n) && n == 0 };
     }
 
-    fn is_strict_mode(&self, view: LexerView) -> bool {
+    fn is_strict_mode(&self, _view: LexerView) -> bool {
         resume self.strict;
     }
 
-    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_open_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 {
             self.interp_braces[n - 1] += 1;
@@ -128,7 +128,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_close_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         let n = self.interp_braces.len();
         if n > 0 && self.interp_braces[n - 1] > 0 {
             self.interp_braces[n - 1] -= 1;
@@ -136,7 +136,7 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_string_literal(&mut self, view: LexerView, _lx: &mut Lexer) {
         let text = view.text();
         if text == "'use strict'" || text == "\"use strict\"" {
             self.strict = true;
@@ -144,19 +144,19 @@ impl TypeScriptLexerBase for TsBase {
         resume ();
     }
 
-    fn increase_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn increase_template_depth(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.template_marks.push(self.interp_braces.len());
         resume ();
     }
 
-    fn decrease_template_depth(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn decrease_template_depth(&mut self, _view: LexerView, _lx: &mut Lexer) {
         if let Some(mark) = self.template_marks.pop() {
             self.interp_braces.truncate(mark);
         }
         resume ();
     }
 
-    fn start_template_string(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn start_template_string(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.interp_braces.push(0);
         resume ();
     }

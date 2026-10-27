@@ -17,7 +17,7 @@ struct JsBaseImpl {
 }
 
 impl JsBase for JsBaseImpl {
-    fn process_open(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_open(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.depth += 1;
         if self.depth > self.max_depth {
             self.max_depth = self.depth;
@@ -25,12 +25,12 @@ impl JsBase for JsBaseImpl {
         resume ();
     }
 
-    fn process_close(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_close(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.depth -= 1;
         resume ();
     }
 
-    fn names_enabled(&self, view: LexerView) -> bool {
+    fn names_enabled(&self, _view: LexerView) -> bool {
         resume self.names;
     }
 }
