@@ -5,9 +5,12 @@ use { Descriptor } from "wasi:filesystem/types.wado";
 use { Availability, Command, ErrorCode, Spawned } from "core:process/types.wado";
 
 
-/// Spawning a child confined to the guest's grants plus a fixed system
-/// baseline: spawning never extends the guest's authority.
+
+
+
+/// Running a host program as a child of the guest.
 /// 
+/// A host may offer it or not, and confines a child as its own policy says.
 /// Every function but `get-availability` requires it to answer `available`,
 /// and traps otherwise.
 #[cm("core:process/process@0.1.0")]

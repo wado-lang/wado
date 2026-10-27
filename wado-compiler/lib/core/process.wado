@@ -1,15 +1,56 @@
 #![stdlib("core:process")]
-//! Run a host program, confined to the guest's own grants.
+//! Run a host program as a child of the guest.
 //!
-//! A child reads and writes only beneath the directories the guest was
-//! granted, plus a fixed system baseline (the loader, shared libraries,
-//! installed programs), and reaches the network only where the guest does.
-//! Spawning never extends the guest's authority. The host offers it only where
-//! its OS can enforce that, and [`availability`] says whether this one does.
-//! Every other function requires it to answer `Available`, and traps
-//! otherwise. See WEP 2026-10-21 (`core:process`).
+//! A host offers spawning or not, and [`availability`] says which, with an
+//! answer fixed for the guest's lifetime. Every other function requires it to
+//! answer `Available`, and traps otherwise.
 //!
-//! A child's output is bytes, so it comes back as a `ByteList`, never decoded.
+//! ## Children
+//!
+//! - `program` holding a `/` is a path, relative to where the child starts.
+//!   Any other is a name the host looks up.
+//! - A child starts in the guest's first preopened directory, the one `core:fs`
+//!   resolves paths against.
+//! - A child's environment is what the host gives every child, with
+//!   [`Command::env`] laid over it. The guest's own is never passed on.
+//! - A child gets no stream of the guest's unless asked: stdin reads nothing,
+//!   and stdout and stderr go nowhere. `inherit_*` passes on a stream the guest
+//!   holds, so each declares that stream's effect.
+//! - [`Child`] is `affine`. Dropping it, or [`Child::kill`], ends the child and
+//!   every process it started, and the host ends every child when the guest
+//!   exits, so none outlives the guest.
+//! - A child's output is bytes, so it comes back as a `ByteList`, never decoded.
+//!
+//! ## Errors
+//!
+//! [`ProcessError`] names the program, as `FsError` names its path. The host
+//! reports why a child did not run as an [`ErrorCode`]. Only `read` fails on
+//! how the child ended, since it returns stdout alone and has nowhere else to
+//! report it: `output` and `status` return the [`ExitStatus`] as a value.
+//!
+//! ## The `wado` Host
+//!
+//! `wado run`, `wado serve` and `wado test` offer spawning, and confine each
+//! child so that spawning never extends the guest's authority.
+//!
+//! - A child reads and writes only beneath the directories the guest was
+//!   granted, plus a fixed system baseline: the loader, shared libraries,
+//!   installed programs and the system configuration. It reaches the network
+//!   only where the guest does.
+//! - `--process-read <path>` lets a child read and execute `path` as well, and
+//!   so does `read` under `[process]` in the user config. The guest itself
+//!   gains nothing.
+//! - `--deny-process` turns spawning off (`Denied`). A host whose OS cannot
+//!   confine a child answers `Unsupported`: Linux needs Landlock ABI 6 (Linux
+//!   6.12), and macOS confines through `sandbox-exec`.
+//! - A name is looked up on the host's `PATH`, skipping empty and relative
+//!   entries.
+//! - Every child gets `PATH`, a private `HOME` and `TMPDIR` removed once it
+//!   exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream.
+//! - Killing a child ends its process group.
+//! - A child that fails after the sandbox refused it something is reported on
+//!   `wado`'s stderr, with the grant that would allow it. `--process-trace`
+//!   also names each file refused, on Linux.
 
 use types from "core:process/types.wado";
 use { Child as ChildResource, Input, Spawned } from "core:process/types.wado";
@@ -17,7 +58,6 @@ use { Stdin, Stdout, Stderr } from "wasi:cli";
 
 pub use { Process } from "core:process/process.wado";
 pub use { Availability, ErrorCode, ExitStatus } from "core:process/types.wado";
-pub use { Duration } from "wasi:clocks";
 
 #[synopsis]
 test {
@@ -44,11 +84,8 @@ enum Stdio {
     Piped,
 }
 
-/// A program to run and how: its arguments, environment, streams and timeout.
-///
-/// A child gets no stream of the guest's unless asked: stdin reads nothing,
-/// and its stdout and stderr go nowhere. `output` and `read` pipe what they
-/// read themselves.
+/// A program to run and how: its arguments, environment and streams.
+/// `output` and `read` pipe what they read themselves.
 pub struct Command {
     internal program: String,
     internal args: List<String>,
@@ -56,13 +93,10 @@ pub struct Command {
     stdin: Stdio,
     stdout: Stdio,
     stderr: Stdio,
-    timeout: Option<Duration>,
     capture_limit: i32,
 }
 
 impl Command {
-    /// `program` holding a `/` is a path, relative to where the child starts.
-    /// Any other is looked up on the host's `PATH`.
     pub fn new(program: String) -> Command {
         return Command {
             program,
@@ -71,7 +105,6 @@ impl Command {
             stdin: Stdio::Null,
             stdout: Stdio::Null,
             stderr: Stdio::Null,
-            timeout: null,
             capture_limit: DEFAULT_CAPTURE_LIMIT,
         };
     }
@@ -88,9 +121,7 @@ impl Command {
         return command;
     }
 
-    /// Set `key` in the child's environment, over the baseline the host
-    /// gives it (`PATH`, a private `HOME` and `TMPDIR`, the locale). The
-    /// guest's own environment is never passed on.
+    /// Set `key` in the child's environment, over what the host gives it.
     pub fn env(&self, key: String, value: String) -> Command {
         let mut command = *self;
         command.env.push([key, value]);
@@ -145,18 +176,10 @@ impl Command {
         return self.inherit_stdin().inherit_stdout().inherit_stderr();
     }
 
-    /// End the child at `timeout`: the host sends its process group
-    /// `SIGTERM`, then `SIGKILL` after a grace period, and it exits
-    /// `ExitStatus::TimedOut`. There is no default.
-    pub fn timeout(&self, timeout: Duration) -> Command {
-        let mut command = *self;
-        command.timeout = Option::Some(timeout);
-        return command;
-    }
-
     /// The bytes `output` and `read` keep of each stream. Past it, stderr
-    /// keeps its tail, and stdout is an `OutputTooLarge` error: the host
-    /// kills the child the moment stdout passes it.
+    /// keeps its tail, and stdout is an `OutputTooLarge` error, since output
+    /// with its middle cut out is wrong rather than short: the child is
+    /// killed the moment stdout passes it.
     pub fn capture_limit(&self, bytes: i32) -> Command
         contract bytes >= 0
     {
@@ -170,9 +193,8 @@ impl Command {
         return self.start(self.stdin, self.stdout, self.stderr);
     }
 
-    /// Run the child to its end, reading stdout and stderr together. A
-    /// timeout is not an error: the status says `TimedOut`, beside what was
-    /// read.
+    /// Run the child to its end, reading stdout and stderr together, so a
+    /// child filling one pipe never blocks against a guest reading the other.
     pub fn output(&self) -> Result<Output, ProcessError> with Process {
         let limit = self.capture_limit;
         let mut child = self.start(unhanded(self.stdin), Stdio::Piped, Stdio::Piped)?;
@@ -219,12 +241,11 @@ impl Command {
             stdin: input,
             stdout: output_mode(out),
             stderr: output_mode(err),
-            timeout: self.timeout.map(|timeout| timeout as u64),
         };
         let Spawned { child, stdout, stderr, exit } = match Process::spawn(spec, null) {
             Ok(spawned) => spawned,
             Err(code) => {
-                return Result::Err(child_error(&self.program, error_kind(code)));
+                return Result::Err(child_error(&self.program, ProcessErrorKind::Spawn(code)));
             },
         };
         return Result::Ok(Child {
@@ -255,20 +276,11 @@ fn output_mode(stdio: Stdio) -> types::Output {
     };
 }
 
-fn error_kind(code: ErrorCode) -> ProcessErrorKind {
-    return match code {
-        NotFound => ProcessErrorKind::NotFound,
-        NotPermitted => ProcessErrorKind::NotPermitted,
-        ResourceExhausted | Io => ProcessErrorKind::Io(code),
-    };
-}
-
 fn child_error(program: &String, kind: ProcessErrorKind) -> ProcessError {
     return ProcessError { program: *program, kind };
 }
 
-/// A running child. Dropping it kills its process group, and the host kills
-/// every child when the guest exits, so a child never outlives its guest.
+/// A running child.
 pub affine struct Child {
     /// Where `Command::stdin_piped` asked for it. Dropping it closes the
     /// child's stdin.
@@ -296,11 +308,11 @@ impl Child {
         };
         return match ended {
             Ok(status) => Result::Ok(status),
-            Err(code) => Result::Err(child_error(&child.program, ProcessErrorKind::Io(code))),
+            Err(code) => Result::Err(child_error(&child.program, ProcessErrorKind::Spawn(code))),
         };
     }
 
-    /// Kill the child's process group now.
+    /// End the child and every process it started, now.
     pub fn kill(&self) {
         self.resource.kill();
     }
@@ -379,12 +391,8 @@ pub struct ProcessError {
 }
 
 pub variant ProcessErrorKind {
-    /// No such program, on `PATH` or at the path given.
-    NotFound,
-    /// The sandbox refused to execute the program: it lies outside the
-    /// grants and the baseline.
-    NotPermitted,
-    Io(ErrorCode),
+    /// The host did not run the child, or lost it, for this reason.
+    Spawn(ErrorCode),
     /// `read` only: the child ended other than `Exited(0)`, with what it
     /// wrote to stderr.
     Failed([ExitStatus, ByteList]),
@@ -395,9 +403,7 @@ pub variant ProcessErrorKind {
 impl Display for ProcessError {
     fn fmt(&self, f: &mut Formatter) {
         let reason: String = match self.kind {
-            NotFound => "no such program",
-            NotPermitted => "the sandbox refused to execute it",
-            Io(code) => `${code:?}`,
+            Spawn(code) => spawn_reason(code),
             Failed([status, stderr]) => `${status:?}: ${String::from_utf8_lossy(stderr)}`,
             OutputTooLarge => "its stdout passed the capture limit",
         };
@@ -406,6 +412,20 @@ impl Display for ProcessError {
 }
 
 impl Error for ProcessError {
+}
+
+fn spawn_reason(code: ErrorCode) -> String {
+    return match code {
+        NotFound => "no such program",
+        NotPermitted => "the host does not let a child run it",
+        NotExecutable => "not a program the host can run",
+        InvalidArgument => "an argument or environment variable the host cannot pass",
+        ArgumentListTooLong => "the arguments and environment are too long",
+        NotDirectory => "the directory to start in is not one",
+        ResourceExhausted => "the host is out of the resources a child takes",
+        Other(Some(message)) => message,
+        Other(None) => "the host failed to run it",
+    };
 }
 
 /// One hole of a [`cmd`] template: one argument, or one per element.

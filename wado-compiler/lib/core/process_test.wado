@@ -62,9 +62,38 @@ test "a missing program is NotFound" {
         return;
     }
     let err = Command::new("wado-no-such-program").status().unwrap_err();
-    assert err.kind matches { NotFound };
+    assert err.kind matches { Spawn(NotFound) };
     assert `${err}` == "wado-no-such-program: no such program";
-    assert Command::new("wado-no-such-program").output().unwrap_err().kind matches { NotFound };
+    assert Command::new("wado-no-such-program").output().unwrap_err().kind matches { Spawn(NotFound) };
+}
+
+test "a file that is no program is NotExecutable" {
+    if availability() != Availability::Available {
+        return;
+    }
+    assert Command::new("/etc/hosts").status().unwrap_err().kind matches { Spawn(NotExecutable) };
+}
+
+test "what the host cannot pass is InvalidArgument" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let invalid = |command: Command| command.status().unwrap_err().kind matches { Spawn(InvalidArgument) };
+    assert invalid(Command::new("true").arg("a\u{0}b"));
+    assert invalid(Command::new("true").env("A=B", "c"));
+    assert invalid(Command::new("true").env("", "c"));
+}
+
+test "arguments past what the host can pass are ArgumentListTooLong" {
+    if availability() != Availability::Available {
+        return;
+    }
+    let mut long = String::with_capacity(4 << 20);
+    for let _ of 0..<(4 << 20) {
+        long.push_str("x");
+    }
+    let err = Command::new("true").arg(long).status().unwrap_err();
+    assert err.kind matches { Spawn(ArgumentListTooLong) };
 }
 
 test "a failure names the program, the status and stderr" {
@@ -78,8 +107,15 @@ test "a failure names the program, the status and stderr" {
 
 test "every error kind reads as a reason" {
     let reason = |kind: ProcessErrorKind| `${ProcessError { program: "p", kind }}`;
-    assert reason(ProcessErrorKind::NotPermitted) == "p: the sandbox refused to execute it";
-    assert reason(ProcessErrorKind::Io(ErrorCode::Io)) == "p: ErrorCode::Io";
+    let spawn = |code: ErrorCode| reason(ProcessErrorKind::Spawn(code));
+    assert spawn(ErrorCode::NotPermitted) == "p: the host does not let a child run it";
+    assert spawn(ErrorCode::NotExecutable) == "p: not a program the host can run";
+    assert spawn(ErrorCode::InvalidArgument) == "p: an argument or environment variable the host cannot pass";
+    assert spawn(ErrorCode::ArgumentListTooLong) == "p: the arguments and environment are too long";
+    assert spawn(ErrorCode::NotDirectory) == "p: the directory to start in is not one";
+    assert spawn(ErrorCode::ResourceExhausted) == "p: the host is out of the resources a child takes";
+    assert spawn(ErrorCode::Other(Option::Some("lost"))) == "p: lost";
+    assert spawn(ErrorCode::Other(null)) == "p: the host failed to run it";
     assert reason(ProcessErrorKind::OutputTooLarge) == "p: its stdout passed the capture limit";
 }
 
@@ -108,14 +144,6 @@ test "an inherited stream is the guest's own" {
         return;
     }
     assert Command::new("true").inherit_stdio().status().unwrap() == ExitStatus::Exited(0);
-}
-
-test "a timeout ends the child" {
-    if availability() != Availability::Available {
-        return;
-    }
-    let status = cmd`sleep 30`.timeout(100_000_000).status().unwrap();
-    assert status == ExitStatus::TimedOut;
 }
 
 test "stdout past the capture limit is OutputTooLarge" {

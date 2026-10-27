@@ -1,15 +1,13 @@
 package core:process@0.1.0;
 
-/// Types for running a host program. See WEP 2026-10-21 (`core:process`).
+/// Types for running a host program.
 interface types {
     /// How a child ended.
     variant exit-status {
-        /// It exited with this status.
-        exited(u8),
-        /// A signal ended it.
-        signaled(u8),
-        /// The host ended it at its timeout.
-        timed-out,
+        /// It exited with this status, as the host's OS reports it.
+        exited(s32),
+        /// The host's OS ended it with this signal.
+        signaled(s32),
     }
 
     /// Whether this host spawns. Fixed when the host starts.
@@ -17,17 +15,30 @@ interface types {
         available,
         /// The host turned spawning off.
         denied,
-        /// The OS cannot confine a child.
+        /// The host cannot run a child as its policy requires.
         unsupported,
     }
 
-    enum error-code {
-        /// No such program.
+    variant error-code {
+        /// No program by that name, or nothing at the path given.
         not-found,
-        /// The sandbox refused to execute this program.
+        /// The host's policy does not let a child run this program.
         not-permitted,
+        /// What the name or path leads to is not a program the host can run.
+        not-executable,
+        /// `program`, an argument, or an environment variable is not one the
+        /// host can pass: it holds a NUL, or a variable's name is empty or
+        /// holds `=`.
+        invalid-argument,
+        /// The arguments and the environment together are more than the host
+        /// can pass.
+        argument-list-too-long,
+        /// `cwd` is not a directory.
+        not-directory,
+        /// The host lacks a resource that running a child takes.
         resource-exhausted,
-        io,
+        /// Anything else, with a message for a person where the host has one.
+        other(option<string>),
     }
 
     variant input {
@@ -45,27 +56,21 @@ interface types {
     }
 
     record command {
-        /// A path when it holds a `/`; otherwise a name looked up on the
-        /// host's `PATH`, skipping empty and relative entries.
+        /// A path when it holds a `/`; otherwise a name the host looks up.
         program: string,
         args: list<string>,
-        /// Laid over the baseline variables: `PATH`, a private `HOME` and
-        /// `TMPDIR`, `LANG` and `LC_*`, and `TERM` where a stream is
-        /// inherited. The guest's own environment is not passed on.
+        /// Laid over the variables the host gives every child. The guest's own
+        /// environment is not passed on.
         env: list<tuple<string, string>>,
         stdin: input,
         stdout: output,
         stderr: output,
-        /// Nanoseconds, as `wasi:clocks` counts a duration. At the timeout the
-        /// host sends SIGTERM to the child's process group, then SIGKILL after
-        /// a grace period the host sets.
-        timeout: option<u64>,
     }
 
-    /// A running child. Dropping it kills its process group, and the host
-    /// kills every child when the guest exits.
+    /// A running child. Dropping it ends the child and every process it
+    /// started, and the host ends every child when the guest exits.
     resource child {
-        /// Kill the child's process group now.
+        /// End the child and every process it started, now.
         kill: func();
     }
 
@@ -79,9 +84,9 @@ interface types {
     }
 }
 
-/// Spawning a child confined to the guest's grants plus a fixed system
-/// baseline: spawning never extends the guest's authority.
+/// Running a host program as a child of the guest.
 ///
+/// A host may offer it or not, and confines a child as its own policy says.
 /// Every function but `get-availability` requires it to answer `available`,
 /// and traps otherwise.
 interface process {
