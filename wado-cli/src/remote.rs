@@ -352,16 +352,15 @@ pub async fn open(
         let Some(file) = blob_path(pin).and_then(|path| FileReader::open(path).ok()) else {
             continue;
         };
-        match kept_len(url, pin) {
-            None => lengthless.push(pin),
-            Some(len)
-                if longest
-                    .as_ref()
-                    .is_none_or(|(kept, _)| kept.byte_len() < file.byte_len()) =>
-            {
-                longest = Some((file, len));
-            }
-            Some(_) => {}
+        let Some(len) = kept_len(url, pin) else {
+            lengthless.push(pin);
+            continue;
+        };
+        if longest
+            .as_ref()
+            .is_none_or(|(kept, _)| kept.byte_len() < file.byte_len())
+        {
+            longest = Some((file, len));
         }
     }
     let Some((kept, len)) = longest else {
@@ -451,8 +450,8 @@ fn pin_at(pins: &[(Option<u64>, Integrity)], extent: Option<u64>) -> Option<Inte
         .find_map(|&(other, pin)| (other == extent).then_some(pin))
 }
 
-/// Hold `bytes`, the first `extent` bytes of `url`, to every pin `pins`, the
-/// lock's for `url`, holds. A probe's extent is decided by the bytes inside it,
+/// Hold `bytes`, the first `extent` bytes of `url`, to each of `pins`, the
+/// lock's for `url`. A probe's extent is decided by the bytes inside it,
 /// so content that moved the extent changed, and an entry of its own would
 /// accept it unasked.
 async fn hold_to_locked_extents(
