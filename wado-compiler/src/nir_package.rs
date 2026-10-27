@@ -559,9 +559,10 @@ impl NirPackage {
             .iter()
             .flat_map(|dependency| &dependency.asset.imported_functions)
             .filter(|path| {
-                !answered.contains(path.split_once('#').expect("a CM function path").0)
+                self.cm_interface_registry
+                    .get_function(path)
+                    .is_some_and(|func| !answered.contains(func.interface_path.as_str()))
             })
-            .filter(|path| self.cm_interface_registry.get_function(path).is_some())
             .cloned()
             .collect();
         self.used_wasi_functions.extend(forwarded);

@@ -530,7 +530,7 @@ fn synthesize_dispatch_wrappers(
         .collect();
     // A dependency's guest effect no provider satisfies: the dependency's import
     // is wired to this wrapper, so the handler answers calls from inside it.
-    let guest_keys: Vec<Option<String>> = plan
+    let guest_callbacks: Vec<Option<GuestCallback>> = plan
         .operations
         .iter()
         .map(|op| {
@@ -538,27 +538,26 @@ fn synthesize_dispatch_wrappers(
             let interface = &registry.get_function(&key)?.interface_path;
             (registry.is_dependency_guest_import(interface)
                 && !project.provided_import_fqs.contains(interface))
-            .then_some(key)
+            .then(|| GuestCallback {
+                interface_fq: interface.clone(),
+                function_key: key,
+                wrapper: plan.wrapper_names[&op.name].clone(),
+            })
         })
         .collect();
     project
         .guest_callbacks
-        .extend(plan.operations.iter().zip(&guest_keys).filter_map(|(op, key)| {
-            Some(GuestCallback {
-                function_key: key.clone()?,
-                wrapper: plan.wrapper_names[&op.name].clone(),
-            })
-        }));
+        .extend(guest_callbacks.iter().flatten().cloned());
     let entry_module = project
         .tir_modules
         .get_mut(entry_source)
         .expect("entry module must exist");
     let type_table = entry_module.type_table.clone();
-    for ((op, &is_open_import), guest_key) in plan
+    for ((op, &is_open_import), guest_callback) in plan
         .operations
         .iter()
         .zip(&open_and_registered)
-        .zip(&guest_keys)
+        .zip(&guest_callbacks)
     {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
@@ -568,7 +567,7 @@ fn synthesize_dispatch_wrappers(
             plan,
             is_resource,
             is_open_import,
-            guest_key.is_some(),
+            guest_callback.is_some(),
             &type_table,
         );
         entry_module.add_function(wrapper);

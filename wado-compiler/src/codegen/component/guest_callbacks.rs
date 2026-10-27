@@ -15,8 +15,8 @@ use wasm_encoder::{
 };
 
 use super::{alias_interface_func, collect_component_asset, emits_function};
-use crate::codegen::component_context::ComponentModelContext;
 use crate::ast::CmImport;
+use crate::codegen::component_context::ComponentModelContext;
 use crate::component_model::{
     CmDefined, CmInterfaceInfo, CmTypeGen, CmTypeSink, cm_instance_key, emit_cm_defined,
 };
@@ -72,7 +72,12 @@ pub(super) fn nest_dependencies(
         Vec::<(&str, ModuleArg)>::new(),
     );
     let shim = ctx.core_instance_idx("guest-callback-shim");
-    let table = builder.core_alias_export(Some("guest-callback-table"), shim, "table", ExportKind::Table);
+    let table = builder.core_alias_export(
+        Some("guest-callback-table"),
+        shim,
+        "table",
+        ExportKind::Table,
+    );
     for (slot, (name, _)) in slots.iter().enumerate() {
         let alias = slot_alias(name);
         ctx.register_core_func(&alias);
@@ -202,11 +207,8 @@ pub(super) fn fill_callback_table(
     callback_table: &CallbackTable,
 ) {
     let main = ctx.core_instance_idx("main");
-    let mut args: Vec<(String, ExportKind, u32)> = vec![(
-        "table".to_string(),
-        ExportKind::Table,
-        callback_table.table,
-    )];
+    let mut args: Vec<(String, ExportKind, u32)> =
+        vec![("table".to_string(), ExportKind::Table, callback_table.table)];
     for (slot, (name, _)) in callback_table.slots.iter().enumerate() {
         let alias = format!("{name}-core");
         let idx = ctx.register_core_func(&alias);
@@ -216,7 +218,8 @@ pub(super) fn fill_callback_table(
     ctx.register_core_instance("guest-callback-fill-args");
     let fill_args = builder.core_instantiate_exports(
         Some("guest-callback-fill-args"),
-        args.iter().map(|(name, kind, idx)| (name.as_str(), *kind, *idx)),
+        args.iter()
+            .map(|(name, kind, idx)| (name.as_str(), *kind, *idx)),
     );
     ctx.register_core_module("guest-callback-fill");
     builder.core_module_raw(
@@ -307,10 +310,7 @@ fn fill_module(slots: &[(String, CoreFuncType)]) -> Vec<u8> {
         Elements::Functions(Cow::Owned(functions)),
     );
     let mut module = Module::new();
-    module
-        .section(&types)
-        .section(&imports)
-        .section(&elements);
+    module.section(&types).section(&imports).section(&elements);
     module.finish()
 }
 

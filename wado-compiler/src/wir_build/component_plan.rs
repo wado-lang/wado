@@ -256,11 +256,7 @@ pub fn build_component_plan(
             let key = &callback.function_key;
             GuestCallbackPlan {
                 function_key: key.clone(),
-                interface_fq: cm_interface_registry
-                    .get_function(key)
-                    .expect("a guest callback names a registered operation")
-                    .interface_path
-                    .clone(),
+                interface_fq: callback.interface_fq.clone(),
                 core_func_name: export_binding_names[key].clone(),
                 post_return_core_name: post_return_binding_names.get(key).cloned(),
             }

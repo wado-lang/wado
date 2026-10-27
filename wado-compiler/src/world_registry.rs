@@ -44,13 +44,16 @@ pub struct CallbackExport {
 }
 
 /// An operation of a guest effect a dependency component imports, which the
-/// program answers through its handler: composition wires the dependency's
-/// import to a lift of the binding that calls `wrapper`.
+/// program answers through its handler: the program's component nests the
+/// dependency and wires its import to a lift of the binding that calls
+/// `wrapper`.
 #[derive(Debug, Clone)]
 pub struct GuestCallback {
     /// The operation's registry key, its CM function path
     /// (`test:hlc/highlight@0.1.0#highlight`), which also names its binding.
     pub function_key: String,
+    /// The interface the operation belongs to.
+    pub interface_fq: String,
     /// The dispatch wrapper the binding calls.
     pub wrapper: String,
 }
