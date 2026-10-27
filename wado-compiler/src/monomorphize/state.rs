@@ -4,13 +4,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::synthesis::template::{written_impl_link, written_newtype_link};
+use crate::synthesis::template::written_impl_at;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
@@ -100,8 +99,7 @@ impl FuncInstState {
             if self
                 .trait_env
                 .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(instance), trait_)
-                && written_impl_link(&self.trait_env, trait_, instance, type_table)
-                    .is_none_or(|(_, depth)| depth != 0)
+                && !written_impl_at(&self.trait_env, trait_, instance, type_table)
             {
                 return None;
             }
@@ -486,7 +484,9 @@ impl Monomorphizer {
                     .functions
                     .trait_env
                     .trait_def_of_fq(trait_name)
-                    .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_)),
+                    .is_some_and(|trait_| {
+                        written_impl_at(&self.functions.trait_env, trait_, tid, type_table)
+                    }),
                 None => self.functions.trait_env.has_inherent_method_by_receiver(
                     &type_table.impl_receiver_key(tid),
                     method_name,
@@ -495,29 +495,6 @@ impl Monomorphizer {
             // The head an `impl` header writes: the declaration, with any
             // arguments left beside it rather than fused in.
             .map(|tid| type_table.fq_base_type_name(tid))
-    }
-
-    /// Whether the order answers `tid: trait_` with an impl written for `tid`
-    /// itself, or the `Eq` a `cmp` it writes alone gives it.
-    pub(super) fn has_own_trait_impl(
-        &self,
-        type_table: &TypeTable,
-        tid: TypeId,
-        trait_: DefId,
-    ) -> bool {
-        written_impl_link(&self.functions.trait_env, trait_, tid, type_table)
-            .is_some_and(|(_, depth)| depth == 0)
-    }
-
-    /// The newtype link at or below `type_id` whose written impl of `trait_`
-    /// the order selects.
-    pub(super) fn newtype_link_with_trait_impl(
-        &self,
-        type_id: TypeId,
-        type_table: &TypeTable,
-        trait_: DefId,
-    ) -> Option<TypeId> {
-        written_newtype_link(&self.functions.trait_env, trait_, type_id, type_table)
     }
 
     pub fn receiver_keeps_newtype_own_impl(

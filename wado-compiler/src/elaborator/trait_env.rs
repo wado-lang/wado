@@ -1503,12 +1503,7 @@ impl TraitEnv {
     }
 
     /// Whether the impl `block` of `trait_` answers a use wanting `wanted`.
-    fn block_answers(
-        &self,
-        block: DefId,
-        trait_: DefId,
-        wanted: &[name::FqTypeName],
-    ) -> bool {
+    fn block_answers(&self, block: DefId, trait_: DefId, wanted: &[name::FqTypeName]) -> bool {
         let header = &self.impl_headers[&block];
         trait_args_answer(header.trait_arg_ids(), wanted, &|i| {
             self.default_arg_at(trait_, i, &header.target_id)

@@ -12,10 +12,10 @@ use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketParamSource, BlanketReceiver, ImplReceiver, TraitEnv,
 };
+use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -699,7 +699,9 @@ fn instance_template(
 /// reference, whichever level of its pointee's chain answers.
 fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
     let (steps, mut level) = match tt.get_unerased(receiver) {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth.is_multiple_of(2) => return receiver,
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth.is_multiple_of(2) => {
+            return receiver;
+        }
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (depth / 2, *inner),
         _ => (depth, receiver),
     };
@@ -803,7 +805,9 @@ pub(crate) fn written_impl_reaches(
 }
 
 /// Whether an impl written for this reference's own referent (`&R`) reaches
-/// `receiver`, which the universal `&T` blanket does not count as.
+/// `receiver`, which the universal `&T` blanket does not count as. Format
+/// desugaring asks it during elaboration, before the solver joins the
+/// environment, so it cannot ask the order.
 fn ref_impl_written(trait_env: &TraitEnv, trait_: DefId, receiver: TypeId, tt: &TypeTable) -> bool {
     written_impl_reaches_where(trait_env, trait_, receiver, tt, |block| {
         trait_env.blanket_of_block(block).is_none()
@@ -892,11 +896,17 @@ pub(crate) fn ranked_ref_blanket<'a>(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<&'a BlanketImpl> {
-    ranked_blanket(trait_env, trait_name.called_decl(), trait_name.args(), receiver, tt)
-        .filter(|(blanket, link)| {
-            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
-        })
-        .map(|(blanket, _)| blanket)
+    ranked_blanket(
+        trait_env,
+        trait_name.called_decl(),
+        trait_name.args(),
+        receiver,
+        tt,
+    )
+    .filter(|(blanket, link)| {
+        matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
+    })
+    .map(|(blanket, _)| blanket)
 }
 
 /// The blanket the order selects for `receiver`, with the link of its chain
@@ -929,9 +939,10 @@ pub(crate) fn written_impl_link(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<(TypeId, u32)> {
-    let InstanceOrder::One(InstanceImpl { body, depth }) = trait_env
-        .solver()
-        .instance_order(tt, receiver, trait_, &[])?
+    let InstanceOrder::One(InstanceImpl { body, depth }) =
+        trait_env
+            .solver()
+            .instance_order(tt, receiver, trait_, &[])?
     else {
         return None;
     };
@@ -941,6 +952,17 @@ pub(crate) fn written_impl_link(
         InstanceBody::Supplied => false,
     };
     written.then(|| (chain_link(receiver, depth, tt), depth))
+}
+
+/// Whether the order answers `receiver: trait_` with an impl written for
+/// `receiver` itself, or the `Eq` a `cmp` it writes alone gives it.
+pub(crate) fn written_impl_at(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    written_impl_link(trait_env, trait_, receiver, tt).is_some_and(|(_, depth)| depth == 0)
 }
 
 /// The newtype link at or below `receiver` whose written impl of `trait_` the

@@ -35,9 +35,8 @@ use crate::ast::{HandleClasses, NamePolicy, Visibility};
 use crate::defs::DefId;
 use crate::name::{
     FqTraitName, case_construct_helper_name, case_extract_helper_name, case_ref_helper_name,
-    eq_payload_local,
-    field_get_helper_name, field_ref_helper_name, hole_get_helper_name, hole_ref_helper_name,
-    template_segment_helper_name,
+    eq_payload_local, field_get_helper_name, field_ref_helper_name, hole_get_helper_name,
+    hole_ref_helper_name, template_segment_helper_name,
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{
@@ -2266,7 +2265,10 @@ pub(super) fn generate_case_bridge_helpers(
     let mut helpers = Vec::new();
     for (mangled_payload, (payload_type, cases)) in &by_payload {
         for (helper_name, read) in [
-            (case_extract_helper_name as fn(&str, &str) -> String, Read::Value),
+            (
+                case_extract_helper_name as fn(&str, &str) -> String,
+                Read::Value,
+            ),
             (case_ref_helper_name, Read::Ref),
         ] {
             helpers.push(generate_case_extract_helper(
@@ -3719,13 +3721,8 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
         if !gives_eq || !ctx.is_requested_anywhere(&cmp.receiver, &eq_key) {
             continue;
         }
-        let mut func = generate_eq_from_cmp_fn(
-            &cmp,
-            ctx.trait_env,
-            &eq_trait_name,
-            &mut tt,
-            ctx.names,
-        );
+        let mut func =
+            generate_eq_from_cmp_fn(&cmp, ctx.trait_env, &eq_trait_name, &mut tt, ctx.names);
         func.def_id = Some(eq_decl);
         func.impl_origin = Some(cmp.block);
         generated.push(Rc::new(RefCell::new(func)));

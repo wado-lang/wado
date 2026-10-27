@@ -842,6 +842,35 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
+    answers_args_by(program, def, ty, subject, written, args, SolverType::eq)
+}
+
+/// Whether the impl answers a call that names `args` at an instance, as
+/// [`answers_args`] answers a bound. A parameter in `args` is a binder the
+/// call's own frame leaves unsettled, and fits any type.
+pub(super) fn answers_named_args(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    subject: &SolverType,
+    written: &[SolverType],
+    args: &[SolverType],
+) -> bool {
+    answers_args_by(program, def, ty, Some(subject), written, args, fits)
+}
+
+/// At every parameter, whether an argument `args` says `fits` one `written`
+/// says: each side its written argument, or the trait's default at `ty` where
+/// it wrote none.
+fn answers_args_by(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    subject: Option<&SolverType>,
+    written: &[SolverType],
+    args: &[SolverType],
+    fits: impl Fn(&SolverType, &SolverType) -> bool,
+) -> bool {
     let written = program.per_param(def.trait_, written);
     let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
@@ -858,40 +887,9 @@ pub(super) fn answers_args(
     };
     (0..written.len().max(args.len())).all(|i| {
         let asks = said(i, args.get(i).and_then(Option::as_ref));
+        let offered = said(i, written.get(i).and_then(Option::as_ref));
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
-        asks.is_empty()
-            || asks
-                .iter()
-                .any(|ask| said(i, written.get(i).and_then(Option::as_ref)).contains(ask))
-    })
-}
-
-/// Whether the impl answers a call that names `args` at an instance, as
-/// [`answers_args`] answers a bound. A parameter in `args` is a binder the
-/// call's own frame leaves unsettled, and fits any type.
-pub(super) fn answers_named_args(
-    program: &Program,
-    def: &ImplDef,
-    ty: &SolverType,
-    subject: &SolverType,
-    written: &[SolverType],
-    args: &[SolverType],
-) -> bool {
-    let written = program.per_param(def.trait_, written);
-    let args = program.per_param(def.trait_, args);
-    let selves = vec![ty.clone(), subject.clone()];
-    let said = |i: usize, given: Option<&SolverType>| match given {
-        Some(given) => vec![given.clone()],
-        None => match program.default_arg(def, i) {
-            Some(default) if default == def.target => selves.clone(),
-            Some(default) => vec![default],
-            None => Vec::new(),
-        },
-    };
-    (0..written.len().max(args.len())).all(|i| {
-        let asks = said(i, args.get(i).and_then(Option::as_ref));
-        let offered = said(i, written.get(i).and_then(Option::as_ref));
         asks.is_empty()
             || asks
                 .iter()

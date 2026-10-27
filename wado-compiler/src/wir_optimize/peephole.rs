@@ -352,9 +352,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, types: &
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_short_fill(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
-        changed |= rewrite_everywhere(instrs, &mut |instr| {
-            try_fold_get_of_new(instr, null, types)
-        });
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_get_of_new(instr, null, types));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
         });
@@ -487,10 +485,9 @@ fn try_fold_get_of_new(instr: &mut WirInstr, null: &Nullability, types: &[WirTyp
         .iter()
         .position(|field| field.name == *field_name)
         .expect("`struct.get` names a field of its type");
-    let dropped_unobservable = fields
-        .iter()
-        .enumerate()
-        .all(|(i, operand)| i == index || (is_side_effect_free(operand) && !may_trap_in(operand, null)));
+    let dropped_unobservable = fields.iter().enumerate().all(|(i, operand)| {
+        i == index || (is_side_effect_free(operand) && !may_trap_in(operand, null))
+    });
     if !dropped_unobservable {
         return false;
     }

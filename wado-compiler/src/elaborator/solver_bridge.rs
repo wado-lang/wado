@@ -14,8 +14,8 @@ use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq,
-    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates, mark_duplicates, owed,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq, comparison_row,
+    derive, derive_alongside, holds_with_args, instance_candidates, mark_duplicates, owed,
     pair_comparisons, rank, written_comparison,
 };
 use crate::type_table::{AnonStructId, TypeTable};

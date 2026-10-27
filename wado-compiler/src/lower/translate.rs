@@ -33,9 +33,9 @@ use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
     COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
-    case_extract_helper_name, case_ref_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
-    hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name, template_segment_helper_name,
-    variant_tag_helper_name,
+    case_extract_helper_name, case_ref_helper_name, closure_capture_field, field_get_helper_name,
+    field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name,
+    template_segment_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,

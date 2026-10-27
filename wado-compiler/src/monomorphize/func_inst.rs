@@ -26,6 +26,7 @@ use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
     ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance, trait_call_template,
+    written_impl_at, written_newtype_link,
 };
 use crate::tir;
 use crate::token::Span;
@@ -891,10 +892,12 @@ impl Monomorphizer {
             };
         }
         if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
-            if self.has_own_trait_impl(type_table, tid, decl) {
+            if written_impl_at(&self.functions.trait_env, decl, tid, type_table) {
                 return tid;
             }
-            if let Some(link) = self.newtype_link_with_trait_impl(tid, type_table, decl) {
+            if let Some(link) =
+                written_newtype_link(&self.functions.trait_env, decl, tid, type_table)
+            {
                 return link;
             }
         }
@@ -920,7 +923,9 @@ impl Monomorphizer {
             .trait_name
             .as_ref()
             .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-            .and_then(|trait_| self.newtype_link_with_trait_impl(tid, type_table, trait_));
+            .and_then(|trait_| {
+                written_newtype_link(&self.functions.trait_env, trait_, tid, type_table)
+            });
         match link {
             Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
             None => module_source_for_trait_impl(type_table, tid),
@@ -948,10 +953,8 @@ impl Monomorphizer {
         // `enum` and `flags` erase to a scalar without being a newtype link,
         // and an impl a link below the receiver wrote is still inherited.
         // Relowering over either takes the primitive's instruction instead.
-        !self.has_own_trait_impl(type_table, id, trait_)
-            && self
-                .newtype_link_with_trait_impl(id, type_table, trait_)
-                .is_none()
+        !written_impl_at(&self.functions.trait_env, trait_, id, type_table)
+            && written_newtype_link(&self.functions.trait_env, trait_, id, type_table).is_none()
     }
 
     /// `a.cmp(&b) == Ordering::Less` and its five siblings, on a receiver whose
@@ -2800,7 +2803,9 @@ impl Monomorphizer {
                 .trait_name
                 .as_ref()
                 .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-                .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
+                .and_then(|trait_| {
+                    written_newtype_link(&self.functions.trait_env, trait_, inner, type_table)
+                })
             {
                 self.named_by_impl(
                     info.with_substituted_struct_name(&type_table.fq_type_name(link)),
@@ -2927,8 +2932,7 @@ impl Monomorphizer {
         let blanket = if generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             trait_name_for_blanket.and_then(|tn| {
-                ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table)
-                .cloned()
+                ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table).cloned()
             })
         } else {
             None

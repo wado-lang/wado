@@ -69,21 +69,23 @@ pub fn bound_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, env, ty, Asker::Module(scope), &[trait_], |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            let level = &levels[c.depth as usize];
-            answers_args(
-                program,
-                &program.impls()[&c.impl_],
-                level,
-                Some(ty),
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
+    collect(program, env, ty, Asker::Module(scope), &[trait_], |t, _| {
+        t == trait_
+    })
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        let level = &levels[c.depth as usize];
+        answers_args(
+            program,
+            &program.impls()[&c.impl_],
+            level,
+            Some(ty),
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
 }
 
 /// The impls of `trait_` that could answer on `ty` for an instance of a generic
@@ -99,9 +101,14 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, &Env::default(), ty, Asker::Instance, &[trait_], |t, _| {
-        t == trait_
-    })
+    collect(
+        program,
+        &Env::default(),
+        ty,
+        Asker::Instance,
+        &[trait_],
+        |t, _| t == trait_,
+    )
     .in_scope
     .into_iter()
     .filter(|c| {
