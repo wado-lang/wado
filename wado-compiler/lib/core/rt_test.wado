@@ -82,10 +82,7 @@ test "poll reports a host member once the host resolved it" {
     set.insert(Raced::Value(rx.start_read()));
     assert set.poll() matches { None };
     assert tx.write(4).result == FutureWriteResult::Completed;
-    let Some(ready) = set.poll() else {
-        unreachable();
-    };
-    let Value(read) = ready.member else {
+    let Value(read) = set.poll().unwrap().member else {
         unreachable();
     };
     assert read.finish() == Option::Some(4);
