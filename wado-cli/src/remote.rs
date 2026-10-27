@@ -11,6 +11,7 @@
 //! the URL every time: no pin applies before the probe settles what it reads.
 
 use std::error::Error;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -18,7 +19,7 @@ use std::time::Duration;
 
 use reqwest::header::{CONTENT_RANGE, RANGE};
 use reqwest::redirect::Policy;
-use reqwest::{Certificate, Client, Response, StatusCode};
+use reqwest::{Certificate, Client, Response, StatusCode, Url};
 use wado_compiler::hashmap::IndexMap;
 use wado_compiler::remote::{Integrity, PinnedBy, check_digest, url_fault};
 use wado_compiler::{SourceError, SourceReader};
@@ -56,7 +57,10 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
     Client::builder()
         .tls_certs_merge(certs)
         .redirect(Policy::custom(|attempt| {
-            if let Some(fault) = url_fault(attempt.url().as_str()) {
+            let from = attempt.previous().last().expect("a redirect follows a request");
+            let fault = url_fault(attempt.url().as_str())
+                .or_else(|| redirect_fault(from, attempt.url(), reach_of));
+            if let Some(fault) = fault {
                 let target = attempt.url().to_string();
                 attempt.error(format!("a redirect to '{target}': {fault}"))
             } else if attempt.previous().len() >= MAX_REDIRECTS {
@@ -72,6 +76,60 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
 });
 
 const MAX_REDIRECTS: usize = 10;
+
+/// Which side of the boundary between this network and the internet a host
+/// is on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    Internet,
+    /// This machine or a network not routed on the internet.
+    Intranet,
+}
+
+/// Why following a redirect from `from` to `to` is refused, or `None`. A
+/// server cannot send the build somewhere its own URL could not have named:
+/// off `https://`, or across the boundary `reach` draws, either way.
+fn redirect_fault(from: &Url, to: &Url, reach: impl Fn(&Url) -> Reach) -> Option<&'static str> {
+    if from.scheme() == "https" && to.scheme() != "https" {
+        return Some("a redirect never leaves `https://`");
+    }
+    match (reach(from), reach(to)) {
+        (Reach::Internet, Reach::Intranet) => Some("a redirect from the internet never reaches this network"),
+        (Reach::Intranet, Reach::Internet) => Some("a redirect from this network never reaches the internet"),
+        _ => None,
+    }
+}
+
+/// Where `url`'s host is. A name this machine cannot resolve is left to a
+/// proxy, which reaches the internet.
+fn reach_of(url: &Url) -> Reach {
+    let host = url.host_str().unwrap_or_default();
+    let addresses: Vec<IpAddr> = match host.trim_matches(['[', ']']).parse() {
+        Ok(ip) => vec![ip],
+        // The policy is asked synchronously, from a worker of `RUNTIME`.
+        Err(_) => tokio::task::block_in_place(|| (host, 0).to_socket_addrs())
+            .map(|found| found.map(|address| address.ip()).collect())
+            .unwrap_or_default(),
+    };
+    if addresses.into_iter().any(is_intranet) {
+        Reach::Intranet
+    } else {
+        Reach::Internet
+    }
+}
+
+fn is_intranet(ip: IpAddr) -> bool {
+    match ip.to_canonical() {
+        IpAddr::V4(ip) => {
+            let [a, b, ..] = ip.octets();
+            let shared = a == 100 && b & 0xc0 == 64;
+            ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified() || shared
+        }
+        IpAddr::V6(ip) => {
+            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local() || ip.is_unspecified()
+        }
+    }
+}
 /// A host that stops answering fails the build rather than hanging it.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
@@ -522,5 +580,50 @@ impl SourceReader for RemoteReader {
             read += n;
         }
         Ok(read)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(text: &str) -> Url {
+        text.parse().unwrap()
+    }
+
+    #[test]
+    fn a_redirect_stays_on_https_and_on_its_side_of_the_boundary() {
+        let reach = |url: &Url| match url.host_str() {
+            Some("intranet.test" | "127.0.0.1") => Reach::Intranet,
+            _ => Reach::Internet,
+        };
+        let fault = |from: &str, to: &str| redirect_fault(&url(from), &url(to), reach);
+        assert_eq!(fault("https://a.test/m", "https://cdn.test/m"), None);
+        assert_eq!(fault("http://127.0.0.1/m", "http://intranet.test/m"), None);
+        assert!(fault("https://a.test/m", "http://a.test/m").is_some());
+        assert!(fault("https://a.test/m", "https://intranet.test/m").is_some());
+        assert!(fault("https://intranet.test/m", "https://a.test/m").is_some());
+    }
+
+    #[test]
+    fn an_address_the_internet_does_not_route_is_intranet() {
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "192.168.0.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:10.0.0.1",
+        ] {
+            assert!(is_intranet(ip.parse().unwrap()), "{ip}");
+        }
+        for ip in ["8.8.8.8", "100.128.0.1", "2001:4860:4860::8888"] {
+            assert!(!is_intranet(ip.parse().unwrap()), "{ip}");
+        }
+        assert_eq!(reach_of(&url("http://[::1]:8080/m")), Reach::Intranet);
     }
 }

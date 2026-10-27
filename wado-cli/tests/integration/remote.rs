@@ -366,6 +366,29 @@ fn a_redirect_off_this_machine_over_http_is_refused() {
         .stderr(predicate::str::contains("`http://` names only `localhost`"));
 }
 
+/// A redirect stays on the side of the boundary between this network and the
+/// internet that its first URL is on.
+#[test]
+fn a_redirect_stays_on_its_side_of_the_internet() {
+    let server = Server::start();
+    server.serve("util.wado", UTIL.as_bytes());
+    let local = server.url("util.wado").replace("127.0.0.1", "localhost");
+    server.redirect("near.wado", &local);
+    server.redirect("far.wado", "https://example.com/util.wado");
+    let run = |name: &str| {
+        let project = tempfile::tempdir().unwrap();
+        write_package(project.path(), &main_using(&server.url(name), ""));
+        wado(project.path(), tempfile::tempdir().unwrap().path())
+            .args(["run", "src/main.wado"])
+            .assert()
+    };
+
+    run("near.wado").success().stdout("remote!\n");
+    run("far.wado").failure().stderr(predicate::str::contains(
+        "a redirect from this network never reaches the internet",
+    ));
+}
+
 /// A pinned read is kept by content, so it needs no server once fetched.
 #[test]
 fn a_pinned_module_is_read_from_the_cache_once_fetched() {
