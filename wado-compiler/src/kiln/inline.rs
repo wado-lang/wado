@@ -13,7 +13,7 @@ use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
 use crate::name::{is_package_namespace, resolve_module_path};
 use crate::path::is_cwd_relative;
-use crate::remote::{Integrity, is_remote, url_fault};
+use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 
 use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{
@@ -563,30 +563,16 @@ fn lower_pin(
     field: &str,
     error: &mut impl FnMut(String),
 ) -> Option<Integrity> {
-    let text = match value? {
-        AttrValue::String(text) => &text.value,
-        other => {
-            error(format!(
-                "kiln: `{field}` must be a string, got {}",
-                other.kind()
-            ));
-            return None;
-        }
-    };
+    let pin = pin_of(value?)
+        .map_err(|reason| error(format!("kiln: `{field}` {reason}")))
+        .ok()?;
     if !is_remote(path.as_str()) {
         error(format!(
             "kiln: `{field}` pins a remote file, and `{path}` is not one"
         ));
         return None;
     }
-    let pin = Integrity::parse(text);
-    if pin.is_none() {
-        error(format!(
-            "kiln: `{field}` is {}, got `{text}`",
-            Integrity::FORM
-        ));
-    }
-    pin
+    Some(pin)
 }
 
 /// Resolve a `./` or `../` path written in a `use` clause relative to the

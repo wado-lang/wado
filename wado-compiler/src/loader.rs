@@ -31,7 +31,7 @@ use crate::name::{
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
 use crate::remote::{
-    Integrity, PinnedBy, check_digest, is_remote, next_in_pin_order, url_fault,
+    Integrity, PinnedBy, check_digest, is_remote, next_in_pin_order, pin_of, url_fault,
 };
 use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
 use crate::{bind, hashmap, parser, stdlib};
@@ -712,20 +712,13 @@ fn written_pin(
         return Ok(None);
     };
     let at = DiagnosticSpan::from_span(&entry.value_span, Some(&from.source_path()));
-    let message = match entry.value.as_str() {
-        Some(text) => match Integrity::parse(text) {
-            Some(pin) => return Ok(Some((pin, at))),
-            None => format!(
-                "import attribute `integrity` is {}, got `{text}`",
-                Integrity::FORM
-            ),
-        },
-        None => format!(
-            "import attribute `integrity` must be a string, got {}",
-            entry.value.kind()
-        ),
-    };
-    Err(LoadError::InvalidIntegrity { message }.at_path(at))
+    match pin_of(&entry.value) {
+        Ok(pin) => Ok(Some((pin, at))),
+        Err(reason) => Err(LoadError::InvalidIntegrity {
+            message: format!("import attribute `integrity` {reason}"),
+        }
+        .at_path(at)),
+    }
 }
 
 fn use_site(from: &ModuleSource, use_decl: &UseDecl) -> PathSite {

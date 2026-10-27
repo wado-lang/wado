@@ -13,7 +13,7 @@ use crate::name::{
 };
 use crate::parse;
 use crate::path::is_cwd_relative;
-use crate::remote::{Integrity, next_in_pin_order};
+use crate::remote::{Integrity, next_in_pin_order, pin_of};
 
 /// Every module the walk reached, keyed by the path it was reached through.
 pub struct Harvest {
@@ -176,8 +176,7 @@ fn wado_source_imports(module: &Module) -> impl Iterator<Item = &UseDecl> {
 /// The pin `use_decl` writes, where it writes a well-formed one; the loader
 /// reports any other.
 fn written_pin(use_decl: &UseDecl) -> Option<Integrity> {
-    let entry = use_decl.attributes.as_ref()?.integrity()?;
-    Integrity::parse(entry.value.as_str()?)
+    pin_of(&use_decl.attributes.as_ref()?.integrity()?.value).ok()
 }
 
 /// Rewrite `index`'s `decl_file` keys from harvest keys to loader identities,

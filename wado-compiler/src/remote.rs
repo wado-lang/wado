@@ -6,6 +6,7 @@ use std::fmt::{self, Write};
 
 use sha2::{Digest, Sha256};
 
+use crate::ast::AttrValue;
 use crate::compiler_host::SourceError;
 
 const ALGORITHM: &str = "sha256:";
@@ -29,6 +30,19 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
     };
     (!matches!(host, "localhost" | "127.0.0.1" | "[::1]"))
         .then_some("`http://` names only `localhost`, `127.0.0.1` or `[::1]`; use `https://`")
+}
+
+/// The pin an `integrity` key's `value` writes, or why it writes none, worded
+/// to follow the key's name.
+///
+/// # Errors
+///
+/// A value that is not a string, or not a pin in [`Integrity::FORM`].
+pub fn pin_of(value: &AttrValue) -> Result<Integrity, String> {
+    let text = value
+        .as_str()
+        .ok_or_else(|| format!("must be a string, got {}", value.kind()))?;
+    Integrity::parse(text).ok_or_else(|| format!("is {}, got `{text}`", Integrity::FORM))
 }
 
 /// The next of `pending` to read. Each one `unpinned` says no pin holds yet
