@@ -1886,7 +1886,7 @@ fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
         program.display(),
         program.display(),
         real.display(),
-        tool_dir.display()
+        real.display()
     );
     let refused = wado_in(work.path())
         .args(["run", "main.wado"])
@@ -1900,7 +1900,7 @@ fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
     assert_eq!(refused.matches(&warning).count(), 1, "{refused}");
     wado_in(work.path())
         .args(["run", "--process-read"])
-        .arg(&tool_dir)
+        .arg(&real)
         .arg("main.wado")
         .arg(&program)
         .assert()
