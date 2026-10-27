@@ -739,13 +739,17 @@ options.
 - A generator that imports a `wasi:*` interface its world does not import,
   directly or through a `core:*` module, is a compile error
   (`KILN_GENERATOR_FORBIDDEN_IMPORT`).
+- A generator's source may import a
+  [remote module](./spec-modules.md#remote-modules). Its pin fixes what the
+  build compiles in, and the generator itself still reaches no network.
 
 ### Running Again
 
 A generator runs again only when something it depends on changes:
 
 - the generator's identity and source, including the generated modules its own
-  source imports;
+  source imports, and the `wado.lock` entry of each remote module it reads that
+  no `use` pins;
 - the content of each input, up to its extent;
 - the options;
 - the name the use site invoked it under;

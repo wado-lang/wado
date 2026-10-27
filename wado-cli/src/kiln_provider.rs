@@ -49,7 +49,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
-use wado_compiler::remote::Integrity;
+use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
 use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
@@ -60,7 +60,9 @@ use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::fingerprint::compiler_digest;
 use crate::kiln_wit::options_descriptor_from_component;
+use crate::manifest::package_root;
 use crate::oci;
+use crate::remote::locked_pin;
 use crate::run_cache::RunCache;
 use wado_host::atomic_write::write_atomic;
 use wado_host::kiln::driver::{
@@ -271,10 +273,14 @@ impl CliGeneratorProvider {
         }
         let mut validated: Vec<(String, [u8; 32])> = Vec::with_capacity(recorded.sources.len());
         for entry in &recorded.sources {
-            let abs = base.join(&entry.path);
-            let bytes = std::fs::read(&abs).ok()?;
-            self.observe(&abs, &bytes);
-            let actual = sha256_of(&bytes);
+            let actual = if is_remote(&entry.path) {
+                locked_digest(base, &entry.path)?
+            } else {
+                let abs = base.join(&entry.path);
+                let bytes = std::fs::read(&abs).ok()?;
+                self.observe(&abs, &bytes);
+                sha256_of(&bytes)
+            };
             if actual != hex32_to_array(&entry.hash)? {
                 return None;
             }
@@ -561,11 +567,15 @@ impl Drop for ActiveGenerator {
 /// Each has to resolve back to the file it names, since it is re-hashed on
 /// every read, and it feeds the identity hash, so it must carry nothing
 /// machine-specific. One that cannot be expressed relative to `base` is kept
-/// verbatim: its hash still pins content, so it simply misses elsewhere.
+/// verbatim: its hash still pins content, so it simply misses elsewhere. A URL
+/// is kept as written.
 fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(String, [u8; 32])> {
     let base = normalize_path(base);
     raw.into_iter()
         .map(|(path, hash)| {
+            if is_remote(&path) {
+                return (path, hash);
+            }
             // `join` replaces on an absolute path, so this lands both kinds
             // on the same footing. Normalized first: diffing components that
             // still carry `.`/`..` yields nonsense like `.././foo.wado`, which
@@ -574,6 +584,14 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
             (relative_to(&base, &target).unwrap_or(path), hash)
         })
         .collect()
+}
+
+/// The digest the `wado.lock` governing `base` pins all of `url` to. A remote
+/// read the lock pinned is recorded by its URL, so only that entry, not the
+/// whole lock, decides whether a generator built on it is current.
+fn locked_digest(base: &Path, url: &str) -> Option<[u8; 32]> {
+    let pin = locked_pin(&package_root(base)?, url, None).ok()??;
+    hex32_to_array(&pin.hex())
 }
 
 /// `target` expressed relative to `base`, with `..` for each level `target`
@@ -631,7 +649,8 @@ const KILN_GENERATOR_ABI_TAG: &[u8] = b"kiln-generator-v4\n";
 /// 2. Record every `load_source` call into `loaded` (path + content
 ///    hash) so the transitive *load closure* — `.wado` modules **and**
 ///    raw assets pulled via `#include_bytes` — is persisted into the
-///    index, letting an edit to either kind invalidate the cache. The
+///    index, letting an edit to either kind invalidate the cache. A remote
+///    module the lock pins is recorded too, by its URL. The
 ///    recording is best-effort: duplicate paths from the compiler are
 ///    collapsed by the dedup step in `compile_local`.
 struct SilentHost {
@@ -693,7 +712,17 @@ impl CompilerHost for SilentHost {
         extent: Option<u64>,
         integrity: Option<Integrity>,
     ) -> impl std::future::Future<Output = Result<Vec<u8>, wado_compiler::SourceError>> + Send {
-        self.inner.load_remote(url, extent, integrity)
+        let url_owned = url.to_string();
+        let loaded = self.loaded.clone();
+        let inner_fut = self.inner.load_remote(url, extent, integrity);
+        async move {
+            let bytes = inner_fut.await?;
+            // A pin the `use` writes is in a recorded source already.
+            if integrity.is_none() {
+                lock(&loaded).push((url_owned, sha256_of(&bytes)));
+            }
+            Ok(bytes)
+        }
     }
 
     fn env_var(&self, name: &str) -> Option<String> {
@@ -761,7 +790,8 @@ struct IndexedGenerator {
     /// Every file the compile loaded — `.wado` modules and assets routed
     /// through `CompilerHost::load_source`; stdlib bypasses the host and never
     /// appears. Re-hashed on read, so an edit to a transitive import
-    /// invalidates the entry.
+    /// invalidates the entry. A remote module the lock pins is listed by its
+    /// URL and held to the lock's entry for it.
     sources: Vec<SourceEntry>,
     /// The `compiler_id` of the `wado` that built the component. Another
     /// compiler builds other bytes from the same sources, and a fix to a

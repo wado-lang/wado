@@ -584,12 +584,9 @@ export fn generate(req: Request) -> Result<Response, Error> {
         .stdout("hi from afar\n");
 }
 
-/// A generator imports no remote module, and the rule says so rather than the
-/// module going unfound.
-#[test]
-fn a_generator_importing_a_remote_module_is_told_the_rule() {
-    let server = Server::start();
-    server.serve("util.wado", UTIL.as_bytes());
+/// A package whose `run` prints what its generator, importing `exclaim` from
+/// `url` with the import attributes `with`, generates.
+fn generator_package(url: &str, with: &str) -> tempfile::TempDir {
     let project = tempfile::tempdir().unwrap();
     write_package(
         project.path(),
@@ -602,7 +599,7 @@ fn a_generator_importing_a_remote_module_is_told_the_rule() {
         project.path().join("src/gen.wado"),
         format!(
             r#"use {{ Request, Response, OutputFile, Error }} from "core:kiln";
-use {{ exclaim }} from "{}" with {{ integrity: "{}" }};
+use {{ exclaim }} from "{url}"{with};
 
 export fn generate(req: Request) -> Result<Response, Error> {{
     return Result::Ok(Response {{
@@ -613,18 +610,88 @@ export fn generate(req: Request) -> Result<Response, Error> {{
         }}],
     }});
 }}
-"#,
-            server.url("util.wado"),
-            Integrity::of(UTIL.as_bytes())
+"#
         ),
     )
     .unwrap();
+    project
+}
+
+/// A pinned remote module is as deterministic as a local one, so a generator
+/// imports it as any module does.
+#[test]
+fn a_generator_imports_a_pinned_remote_module() {
+    let server = Server::start();
+    server.serve("util.wado", UTIL.as_bytes());
+    let project = generator_package(
+        &server.url("util.wado"),
+        &format!(
+            " with {{ integrity: \"{}\" }}",
+            Integrity::of(UTIL.as_bytes())
+        ),
+    );
 
     wado(project.path(), tempfile::tempdir().unwrap().path())
         .args(["run", "src/main.wado"])
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("network imports are not allowed"));
+        .success()
+        .stdout("generated!\n");
+}
+
+/// A generator built on what the lock pins is rebuilt once `wado update` drops
+/// the pin, though none of its own sources changed, and only then: another
+/// entry of the lock moving leaves it be.
+#[test]
+fn a_generator_on_a_lock_pin_is_rebuilt_when_the_pin_moves() {
+    let server = Server::start();
+    server.serve("util.wado", UTIL.as_bytes());
+    let project = generator_package(&server.url("util.wado"), "");
+    let wado_root = tempfile::tempdir().unwrap();
+
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("generated!\n");
+
+    let index = project.path().join("build/kiln/generators.json");
+    let built = std::fs::metadata(&index).unwrap().modified().unwrap();
+    let lock = project.path().join("wado.lock");
+    let other = format!(
+        "{}\n[[remote]]\nurl = \"{}\"\nintegrity = \"{}\"\n",
+        std::fs::read_to_string(&lock).unwrap(),
+        server.url("other.wado"),
+        Integrity::of(b"")
+    );
+    std::fs::write(&lock, other).unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("generated!\n");
+    assert_eq!(
+        std::fs::metadata(&index).unwrap().modified().unwrap(),
+        built,
+        "the generator was rebuilt"
+    );
+
+    server.serve(
+        "util.wado",
+        b"pub fn exclaim(s: String) -> String { return `${s}?`; }\n",
+    );
+    wado(project.path(), wado_root.path())
+        .arg("update")
+        .assert()
+        .success();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("generated?\n");
+    assert_ne!(
+        std::fs::metadata(&index).unwrap().modified().unwrap(),
+        built
+    );
 }
 
 /// A server that sends the whole file for a range is asked once for the probe,

@@ -337,7 +337,13 @@ fn pin_in(
         .find_map(|(other, pin)| (other == extent).then_some(pin)))
 }
 
-fn locked_pin(
+/// What the `wado.lock` of the package at `root` pins `url`'s first `extent`
+/// bytes to.
+///
+/// # Errors
+///
+/// A lock that cannot be read, or that writes a malformed pin for `url`.
+pub fn locked_pin(
     root: &Path,
     url: &str,
     extent: Option<u64>,
