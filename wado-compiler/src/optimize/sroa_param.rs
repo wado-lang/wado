@@ -218,21 +218,13 @@ fn collect_and_validate(
             if info.form == FieldForm::Shared {
                 continue;
             }
-            let aliasing_write = may_write_aliasing_location(
-                &reachable_writes[key.index()],
-                &info.struct_key,
-                &write_targets,
-                types,
-                &struct_fields,
-            );
-            if param_snapshot_unsound(
-                &func,
-                pi,
-                &info.struct_key,
-                types,
-                &struct_fields,
-                aliasing_write,
-            ) {
+            let reach = WriteReach {
+                writes: &reachable_writes[key.index()],
+                targets: &write_targets,
+                type_table: types,
+                struct_fields: &struct_fields,
+            };
+            if param_snapshot_unsound(&func, pi, std::slice::from_ref(&info.struct_key), &reach) {
                 continue;
             }
             found.push(((key, pi), info));
@@ -330,10 +322,30 @@ fn collect_and_validate(
             // to itself and so resolves to nothing — dropping it after the
             // fixpoint left `get` scalarized around a position that no longer
             // existed.
+            // A field held by value is a snapshot, which a write into what it
+            // shares stales: `f(&mut h.data, &h)` truncating the list `h.data`
+            // names leaves a by-value `data` whose `used` the optimizer trusts.
             let before = candidates.len();
-            candidates.retain(|_, info| {
+            candidates.retain(|&(key, pi), info| {
                 info.field_index != u32::MAX
                     && is_sroa_eligible_inner_type(info.inner_type_id, &type_table)
+                    && (info.form != FieldForm::Value || {
+                        let mut shared = IndexSet::default();
+                        by_value_structs(info.inner_type_id, types, &struct_fields, &mut shared);
+                        let shared: Vec<_> = shared.into_iter().collect();
+                        let reach = WriteReach {
+                            writes: &reachable_writes[key.index()],
+                            targets: &write_targets,
+                            type_table: types,
+                            struct_fields: &struct_fields,
+                        };
+                        !param_snapshot_unsound(
+                            &functions[key.index()].borrow(),
+                            pi,
+                            &shared,
+                            &reach,
+                        )
+                    })
             });
             if candidates.len() == before {
                 break;
@@ -415,43 +427,109 @@ fn struct_key_behind_ref(
     struct_key_of(type_id, type_table).or_else(|| reference_param_struct_key(type_id, type_table))
 }
 
+/// What [`param_snapshot_unsound`] weighs a candidate against: everything the
+/// callee may write other than through the candidate itself.
+struct WriteReach<'a> {
+    writes: &'a ReachableWrites,
+    targets: &'a WriteTargets,
+    type_table: &'a TypeTable,
+    struct_fields: &'a StructFieldsIndex,
+}
+
 /// Reject a reference candidate whose call-time snapshot the callee could
-/// invalidate through another access path: an `aliasing_write` the walk cannot
-/// rule out, or a sibling param a write can *reach* the wrapper through —
+/// invalidate through another access path: a write landing on a `stale` struct
+/// that an aliasing global write or a sibling param can *reach* —
 /// `f(&s.m, &mut s)`, or a `&mut` hidden in a by-value field. A boxed reference
 /// counts, `&x` of an address-taken local lowering to a read of the one box.
 fn param_snapshot_unsound(
     func: &NirFunction,
     pi: usize,
-    struct_key: &(String, ModuleSource),
-    type_table: &TypeTable,
-    struct_fields: &StructFieldsIndex,
-    aliasing_write: bool,
+    stale: &[(String, ModuleSource)],
+    reach: &WriteReach<'_>,
 ) -> bool {
+    let type_table = reach.type_table;
     let param_type = func.params[pi].type_id;
-    let candidate_is_ref =
-        reference_param_struct_key(param_type, type_table).as_ref() == Some(struct_key);
+    let candidate_is_ref = reference_param_struct_key(param_type, type_table).is_some();
     let candidate_is_boxed_ref = type_table.box_payload_of(param_type).is_some();
     if !candidate_is_ref && !candidate_is_boxed_ref {
         return false;
     }
-    if aliasing_write {
-        return true;
-    }
-    func.params.iter().enumerate().any(|(pj, other)| {
-        if pj == pi {
-            return false;
-        }
-        let mut visited = IndexSet::default();
-        mut_reachable_contains(
-            other.type_id,
-            param_root_writable(other.type_id, type_table),
+    stale.iter().any(|struct_key| {
+        may_write_aliasing_location(
+            reach.writes,
             struct_key,
+            reach.targets,
             type_table,
-            struct_fields,
-            &mut visited,
-        )
+            reach.struct_fields,
+        ) || func.params.iter().enumerate().any(|(pj, other)| {
+            pj != pi && {
+                let mut visited = IndexSet::default();
+                mut_reachable_contains(
+                    other.type_id,
+                    param_root_writable(other.type_id, type_table),
+                    struct_key,
+                    type_table,
+                    reach.struct_fields,
+                    &mut visited,
+                )
+            }
+        })
     })
+}
+
+/// The structs a by-value `ty` holds without a reference between: what a
+/// snapshot of it shares with the place it was read from. The optimizer takes a
+/// by-value parameter's fields as no one else's to write, so a write landing on
+/// any of these stales the snapshot as surely as one replacing it.
+fn by_value_structs(
+    ty: TypeId,
+    type_table: &TypeTable,
+    struct_fields: &StructFieldsIndex,
+    out: &mut IndexSet<(String, ModuleSource)>,
+) {
+    match type_table.get(ty) {
+        ResolvedType::Struct { def, type_args } => {
+            let key = (
+                type_table.struct_rendered_name(*def, type_args),
+                type_table.struct_head_module(*def).clone(),
+            );
+            if let Some(fields) = struct_fields.get(&key).cloned()
+                && out.insert(key)
+            {
+                for field in fields {
+                    by_value_structs(field, type_table, struct_fields, out);
+                }
+            }
+        }
+        // `List<T>` among them: a builtin aggregate the package lists no fields
+        // for, whose arguments may still sit in it by value.
+        ResolvedType::GenericInstance { type_args, .. } => {
+            let key = generic_instance_key(ty, type_table);
+            if out.insert(key) {
+                for &arg in type_args {
+                    by_value_structs(arg, type_table, struct_fields, out);
+                }
+            }
+        }
+        ResolvedType::Newtype { base_type, .. } => {
+            by_value_structs(*base_type, type_table, struct_fields, out);
+        }
+        _ => {}
+    }
+}
+
+/// The key a `GenericInstance` is written under in a write target, as
+/// [`struct_key_of`] keys a `Struct`.
+fn generic_instance_key(ty: TypeId, type_table: &TypeTable) -> (String, ModuleSource) {
+    let ResolvedType::GenericInstance { def, .. } = type_table.get(ty) else {
+        unreachable!("only a generic instance is keyed here");
+    };
+    (
+        type_table
+            .struct_list_name(ty)
+            .expect("a generic instance renders a list name"),
+        type_table.def_module(*def).clone(),
+    )
 }
 
 /// Whether a parameter's *own* storage can be written through: the pointee of a
@@ -533,8 +611,15 @@ fn mut_reachable_contains(
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
-        ResolvedType::GenericInstance { type_args, .. }
-        | ResolvedType::GenericResource { type_args, .. } => {
+        ResolvedType::GenericInstance { type_args, .. } => {
+            if writable && generic_instance_key(ty, type_table) == *target {
+                return true;
+            }
+            return type_args.iter().any(|&t| {
+                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
+            });
+        }
+        ResolvedType::GenericResource { type_args, .. } => {
             let args = type_args.clone();
             return args.iter().any(|&t| {
                 mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
