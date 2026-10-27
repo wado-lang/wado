@@ -1,0 +1,41 @@
+// An async import's caller lowers each argument into its own memory, and the
+// callee has read every one by the time the call resolves, so the caller frees
+// them all then. Each call here lowers a 64 KiB path; once the first calls have
+// grown memory to hold that, the rest reuse it, through flat arguments
+// (`stat_at`) and the parameter buffer (`symlink_at`, past four flat slots)
+// alike. The debug allocator never reuses a block, so the fixture runs under the
+// free list.
+use { println, Stdout } from "core:cli";
+use { Preopens, PathFlags } from "wasi:filesystem";
+
+global SIZE: i32 = 65_536;
+
+export fn run() with (Stdout, Preopens) {
+    let dir = Preopens::get_directories().remove(0).0;
+    let mut path = String::with_capacity(SIZE);
+    for let _ of 0..<SIZE {
+        path.push('a');
+    }
+    let mut failed = 0;
+    for let _ of 0..<2 {
+        if dir.stat_at(PathFlags::none(), path).wait() matches { Err(_) } {
+            failed += 1;
+        }
+        if dir.symlink_at(path, path).wait() matches { Err(_) } {
+            failed += 1;
+        }
+    }
+    let warm = builtin::memory_size();
+    for let _ of 0..<8 {
+        if dir.stat_at(PathFlags::none(), path).wait() matches { Err(_) } {
+            failed += 1;
+        }
+        if dir.symlink_at(path, path).wait() matches { Err(_) } {
+            failed += 1;
+        }
+    }
+    println(`${failed} ${builtin::memory_size() - warm}`);
+}
+
+__DATA__
+{"stdout": "20 0\n", "allocator": "freelist", "preopened_dirs": [["testdata", "testdata"]]}

@@ -1,0 +1,27 @@
+// A static method's bound `S: AsSlice<Elem = T>` settles the impl's `T` from
+// the argument, as it settles a function's own `T`.
+use { println, Stdout } from "core:cli";
+
+struct Wrap<T> {
+    first: T,
+}
+
+impl<T> Wrap<T> {
+    fn of<S: AsSlice<Elem = T>>(source: &S) -> Wrap<T> {
+        return Wrap::<T> { first: source.at(0) };
+    }
+}
+
+fn first_of<T, S: AsSlice<Elem = T>>(source: &S) -> T {
+    return source.at(0);
+}
+
+export fn run() with Stdout {
+    let source: List<i32> = [7, 8];
+    println(`${first_of(&source)}`);
+    let w = Wrap::of(&source);
+    println(`${w.first}`);
+}
+
+__DATA__
+{"stdout": "7\n7\n"}

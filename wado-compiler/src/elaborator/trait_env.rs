@@ -1477,17 +1477,32 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<&[name::FqTypeName]> {
-        self.entries_by_receiver(receiver).find_map(|entry| {
-            let header = &self.impl_headers[&entry];
-            let args = header.trait_arg_ids();
-            (header.trait_def() == Some(trait_) && self.block_answers(entry, trait_, wanted))
-                // The count the impl's own name spells, not every argument
-                // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-                .then(|| {
-                    &args[..non_default_named_arg_count(args, &|i| {
-                        self.default_arg_at(trait_, i, &header.target_id)
-                    })]
-                })
+        let block = self.answering_impl(receiver, trait_, wanted)?;
+        Some(self.spelled_trait_args(block, trait_))
+    }
+
+    /// The trait arguments `block`, an impl of `trait_`, names itself by: the
+    /// count its own name spells, not every argument written, so
+    /// `impl Add<Cm> for Cm` mangles as a bare `Add`.
+    pub(crate) fn spelled_trait_args(&self, block: DefId, trait_: DefId) -> &[name::FqTypeName] {
+        let header = &self.impl_headers[&block];
+        let args = header.trait_arg_ids();
+        &args[..non_default_named_arg_count(args, &|i| {
+            self.default_arg_at(trait_, i, &header.target_id)
+        })]
+    }
+
+    /// The impl on `receiver` answering `trait_` at the caller's `wanted`
+    /// arguments.
+    pub(crate) fn answering_impl(
+        &self,
+        receiver: &name::Receiver,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+    ) -> Option<DefId> {
+        self.entries_by_receiver(receiver).find(|&entry| {
+            self.impl_headers[&entry].trait_def() == Some(trait_)
+                && self.block_answers(entry, trait_, wanted)
         })
     }
 

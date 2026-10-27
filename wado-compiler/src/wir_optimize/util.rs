@@ -107,7 +107,7 @@ impl Footprint {
         self.call || self.fields.contains(name)
     }
 
-    fn touches_heap(&self) -> bool {
+    pub(super) fn touches_heap(&self) -> bool {
         self.heap || self.call || !self.fields.is_empty()
     }
 
@@ -132,6 +132,7 @@ impl Footprint {
             | WirInstr::I32Load16S { .. }
             | WirInstr::I64Load { .. }
             | WirInstr::V128Load { .. }
+            | WirInstr::MemoryCopy { .. }
             | WirInstr::TableGet { .. }
             | WirInstr::MemorySize => self.heap = true,
             WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
@@ -190,7 +191,8 @@ impl Footprint {
             | WirInstr::I64Store { .. }
             | WirInstr::V128Store { .. }
             | WirInstr::MemoryGrow(_)
-            | WirInstr::MemoryFill { .. } => self.heap = true,
+            | WirInstr::MemoryFill { .. }
+            | WirInstr::MemoryCopy { .. } => self.heap = true,
             WirInstr::Call { .. } | WirInstr::CallIndirect { .. } | WirInstr::CallRef { .. } => {
                 self.call = true;
             }
@@ -375,6 +377,7 @@ pub(super) fn is_root_observable(instr: &WirInstr) -> bool {
         | WirInstr::V128Store { .. }
         | WirInstr::MemoryGrow(_)
         | WirInstr::MemoryFill { .. }
+        | WirInstr::MemoryCopy { .. }
         // Trap.
         | WirInstr::Unreachable
         // Control-flow exits — execution of a sub-expression that contains
@@ -463,6 +466,7 @@ pub(super) fn own_traps(instr: &WirInstr) -> OwnTraps {
         | WirInstr::I64Store { .. }
         | WirInstr::V128Store { .. }
         | WirInstr::MemoryFill { .. }
+        | WirInstr::MemoryCopy { .. }
         | WirInstr::TableGet { .. }
         | WirInstr::TableSet { .. }
         | WirInstr::Unreachable => OwnTraps::new(&[], true),

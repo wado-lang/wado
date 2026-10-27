@@ -10,7 +10,7 @@ use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FuncParts, NirUnaryOp};
+use crate::nir::{FuncId, FuncParts, NirLocal, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtId, StmtKind,
 };
@@ -103,6 +103,13 @@ struct LocalUsage {
     is_assigned: bool,
     has_field_mutation: bool,
     address_taken: bool,
+    mut_ref_taken: bool,
+}
+
+impl LocalUsage {
+    fn never_written(&self) -> bool {
+        !self.is_assigned && !self.has_field_mutation && !self.mut_ref_taken
+    }
 }
 
 /// If `expr` is `builtin::copy_value::<T>(inner)`, return `inner`; else `expr`.
@@ -570,7 +577,9 @@ fn analyze_expr(body: &Body, id: ExprId, result: &mut AnalysisResult, ctx: &Anal
                 && let Some(ie) = inner.as_expr()
                 && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
             {
-                result.usage.entry(*index).or_default().address_taken = true;
+                let usage = result.usage.entry(*index).or_default();
+                usage.address_taken = true;
+                usage.mut_ref_taken |= op == NirUnaryOp::MutRef;
             }
             if let Some(ie) = inner.as_expr() {
                 analyze_expr(body, ie, result, ctx);
@@ -602,11 +611,38 @@ fn needs_value_copy(type_id: TypeId, type_table: &TypeTable) -> bool {
     )
 }
 
+/// Whether `let target = source` binds two locals nothing ever writes, which
+/// then name one permanent value. Even a reference to the target may name the
+/// source instead, since no write can tell the two places apart and `ref_eq`
+/// leaves open whether two places are one. An inlined `fn f(xs: Array<T>)`
+/// reading `&xs` leaves that shape (`core:simd`'s `lane(&lanes, k)`).
+///
+/// Both must be declared immutable as well. A `&mut xs[i]` on a list of
+/// variants lowers to a shared read whose payload the caller then writes
+/// (`mut_ref_variant_element`), so a `mut` binding is written where no write
+/// to it shows.
+fn names_one_value(
+    binding: &CopyBinding,
+    target_usage: &LocalUsage,
+    usage: &IndexMap<u32, LocalUsage>,
+    locals: &[NirLocal],
+) -> bool {
+    let CopySource::Local { index, .. } = &binding.source else {
+        return false;
+    };
+    let declared_immutable = |local: u32| !locals[local as usize].is_mut;
+    declared_immutable(binding.target_local)
+        && declared_immutable(*index)
+        && target_usage.never_written()
+        && usage.get(index).is_none_or(LocalUsage::never_written)
+}
+
 fn can_propagate_copy(
     binding: &CopyBinding,
     usage: &IndexMap<u32, LocalUsage>,
     type_table: &TypeTable,
     promoted_reads: &IndexSet<u32>,
+    locals: &[NirLocal],
 ) -> bool {
     if promoted_reads.contains(&binding.target_local) && !binding.promoted_reads_substitutable {
         return false;
@@ -625,7 +661,7 @@ fn can_propagate_copy(
     if target_usage.has_field_mutation && needs_value_copy(binding.type_id, type_table) {
         return false;
     }
-    if target_usage.address_taken {
+    if target_usage.address_taken && !names_one_value(binding, target_usage, usage, locals) {
         return false;
     }
 
@@ -647,7 +683,8 @@ fn can_propagate_copy(
             }
             let is_value_type = needs_value_copy(binding.type_id, type_table);
             // Neither binding is ever written — the target is already known
-            // unassigned and not address-taken, and the source is neither
+            // unassigned and, if address-taken, one value with the source
+            // (`names_one_value`), and the source is neither
             // assigned, field-mutated, nor address-taken — so the copy only
             // names a second, permanently identical object. Nothing can observe
             // the sharing, whatever the read counts, so the coarse value-type
@@ -917,7 +954,15 @@ fn propagate_at_root(
         let eliminable: Vec<CopyBinding> = analysis
             .bindings
             .into_iter()
-            .filter(|b| can_propagate_copy(b, &analysis.usage, type_table, &promoted_reads))
+            .filter(|b| {
+                can_propagate_copy(
+                    b,
+                    &analysis.usage,
+                    type_table,
+                    &promoted_reads,
+                    engine.locals(),
+                )
+            })
             .collect();
         if eliminable.is_empty() {
             break;
@@ -1020,10 +1065,14 @@ pub fn propagate_copies(
             applied: Cell::new(false),
         };
         let FuncParts {
-            body, locals, name, ..
+            body,
+            locals,
+            name,
+            params,
+            ..
         } = func.parts();
         let body = body.expect("checked above");
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         let changed = engine.run(&[&rule]);
         if changed {
             compiler_trace!("opt_loop", "copy_prop changed {name}");

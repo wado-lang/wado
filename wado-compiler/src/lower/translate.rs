@@ -2010,8 +2010,8 @@ impl FunctionTranslator<'_, '_> {
             captures,
             ..
         } = &expr.kind
-            && let Some(functor) = self.base.closure.functor_infos.get(*closure_id as usize)
         {
+            let functor = &self.base.closure.functor_infos[*closure_id as usize];
             let nir_struct = self.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,
@@ -2373,6 +2373,9 @@ impl FunctionTranslator<'_, '_> {
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
+            }
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),

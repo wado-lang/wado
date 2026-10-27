@@ -10,7 +10,7 @@
 use { Display, Inspect } from "core:prelude/traits.wado";
 use { String, StrCharIter, StrSlice, AsStrSlice, is_char_start } from "core:prelude/string.wado";
 use { Option } from "core:prelude/types.wado";
-use { unreachable } from "core:rt";
+use { unreachable, memory_to_gc_string } from "core:rt";
 
 /// Bytes the leading sign occupies in the `len` bytes at `at` — where zero
 /// padding starts, so `-42` pads to `-0042` and not `00-42`.
@@ -288,12 +288,7 @@ impl Formatter {
             return;
         }
         // Padding needed — create temporary string for alignment
-        let mut arr: Array<u8> = builtin::array_new(len);
-        for let mut i = 0; i < len; i += 1 {
-            builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i));
-        }
-        let s = String::internal_from_utf8_raw(arr, len);
-        self.pad(s);
+        self.pad(memory_to_gc_string(ptr, len));
     }
 
     /// Write the sign character, if this value carries one.

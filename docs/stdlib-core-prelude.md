@@ -316,6 +316,13 @@ See WEP 2026-01-20.
 Marker every affine resource holds, and nothing else. Sealed and
 compiler-stated; user impls are rejected. See WEP: Affine Types.
 
+### `pub trait AnyBits with ()`
+
+Marker of a type every bit pattern of its width is a value of: the
+fixed-width integers, the floats, `v128`, and a newtype or `flags` type over
+one. `builtin::load` reads one from any bytes. Sealed and compiler-stated;
+user impls are rejected. See WEP: Linear Arrays.
+
 ### `pub affine trait IndexRef<IndexType> with ()`
 
 Immutable reference indexing: `&container[i]` reads through this.
@@ -355,11 +362,12 @@ affine element too. Like that assignment it checks `b` before `a`, and
 
 #### `fn index_swap(&mut self, a: IndexType, b: IndexType)`
 
-### `pub trait IndexValue<IndexType> with ()`
+### `pub affine trait IndexValue<IndexType> with ()`
 
 Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
-aliased by reference (scalars, resources).
+aliased by reference (scalars, resources). An affine container hands out
+copyable elements by value too (`LinearArray`).
 
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 
@@ -1051,7 +1059,7 @@ Readable end of an async sequence (WASI Component Model stream).
 
 `#[cm("stream-new")]`
 
-#### `fn begin_read(&self, max: i32) -> StartedRead<T>`
+#### `fn begin_read(&self, max: i32, into: ReadInto) -> StartedRead<T>`
 
 `#[cm("stream-read")]`
 
@@ -1060,7 +1068,8 @@ waited for. It is the operation a handler answers, with
 `StartedRead::settled`. A program calls `start_read`, which holds the
 end for the copy: a second copy on an end that is copying traps, and
 a `StartedRead` dropped in flight waits for its copy where a
-`ReadCopy` cancels it.
+`ReadCopy` cancels it. A handler may ignore `into`: it says where a
+host copy lands, and `settled` answers with the elements themselves.
 
 #### `fn cancel_read(&self) -> u32`
 
@@ -4454,6 +4463,23 @@ value comes back in `rest` where the reader dropped first.
 #### `rest: Option<T>`
 
 #### `result: FutureWriteResult`
+
+### `pub struct ReadInto`
+
+Where a host copy started by `Stream::begin_read` lands: memory the copy
+allocates for itself, or memory `core:*` lends it, which the host writes
+into directly. Only `core:*` lends, so no raw address is ever handed out.
+
+A handler holds the value it is handed, and may forward it to another
+read. So lent memory says how much of it there is, and whether the lender
+still lends it: a read asking for more is held to the room, and one after
+the lend ended traps rather than writing what someone else now owns.
+
+_Fields are private._
+
+#### `pub fn fresh() -> ReadInto`
+
+Memory the copy allocates for itself, and frees once it has settled.
 
 ### `pub affine struct StartedRead<affine T>`
 

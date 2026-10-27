@@ -1,0 +1,45 @@
+// A callee handed a `Holder` reaches the `Buf` it references, so it may change
+// what `a.len` reads. `n` keeps the length from before the call, so `i < n`
+// no longer bounds `a.at(i)`, whose check traps.
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    data: List<i32>,
+    len: i32,
+}
+
+struct Holder {
+    buf: &mut Buf,
+}
+
+impl Buf {
+    fn at(&self, index: i32) -> i32
+        contract 0 <= index < self.len
+    {
+        return self.data[index];
+    }
+}
+
+#[inline(never)]
+fn clear(h: &mut Holder) {
+    h.buf.len = 0;
+}
+
+#[inline(never)]
+fn read_after_clear(a: &Buf, h: &mut Holder, i: i32) -> i32 {
+    let n = a.len;
+    clear(h);
+    if 0 <= i && i < n {
+        return a.at(i);
+    }
+    return -1;
+}
+
+export fn run() with Stdout {
+    let mut x = Buf { data: [1, 2, 3], len: builtin::black_box(3) };
+    let mut h = Holder { buf: &mut x };
+    println(`${read_after_clear(&x, &mut h, builtin::black_box(1))}`);
+}
+
+__DATA__
+{"stderr_contains": ["index < self.len"], "trapped": true}

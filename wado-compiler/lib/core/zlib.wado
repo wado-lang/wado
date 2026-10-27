@@ -31,6 +31,7 @@
 //! before it is written, so untrusted input cannot expand without bound.
 //!
 
+use { gc_array_to_memory } from "core:rt";
 
 #[synopsis]
 test {
@@ -2298,12 +2299,8 @@ pub fn deflate_raw(input: &ByteList, level: i32 = Z_DEFAULT_COMPRESSION, strateg
         // the 16-byte pad keeps the trailing v128.load in bounds.
         let scratch_size = input_len + 16;
         let scratch = builtin::realloc(0, 0, 16, scratch_size);
-        for let mut i = 0; i < input_len; i += 1 {
-            builtin::i32_store8(scratch + i, input[i]);
-        }
-        for let mut i = 0; i < 16; i += 1 {
-            builtin::i32_store8(scratch + input_len + i, 0 as u8);
-        }
+        gc_array_to_memory(input.internal_raw_data_ref(), 0, scratch, input_len);
+        builtin::memory_fill(scratch + input_len, 0 as u8, 16);
 
         if config.use_lazy {
             // Lazy matching (levels 4-9)

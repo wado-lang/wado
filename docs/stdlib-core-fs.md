@@ -82,6 +82,12 @@ The whole content of `path`. A path that names anything but a regular file
 — a directory, a device, a pipe — fails rather than reading, and the kind
 is read off the open descriptor rather than by resolving the path twice.
 
+### `pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> with Preopens`
+
+The whole content of `path` in linear memory: what [`read`] returns, with
+no byte lifted into the GC heap. A file of `f32`s becomes a
+`LinearArray<f32>` by `cast`, with no element copied.
+
 ### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
 The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.

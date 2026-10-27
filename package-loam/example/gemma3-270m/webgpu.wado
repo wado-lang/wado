@@ -42,7 +42,7 @@ struct Oracle {
 }
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let checkpoint = match fs::read("build/gemma3.safetensors") {
+    let checkpoint = match fs::read_linear("build/gemma3.safetensors") {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
@@ -58,6 +58,8 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
         return;
     };
     let mut model = Model::load(gpu, &checkpoint).unwrap();
+    // The device holds the weights.
+    builtin::drop(checkpoint);
     for let g of from_string::<Oracle>(&text).unwrap().generate {
         let mut all = g.ids;
         let started = MonotonicClock::now();

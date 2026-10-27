@@ -1,0 +1,13 @@
+// A `LinearArray` names a block of this instance's memory, so it never crosses
+// a component boundary: what it holds is private to `core:linear`, and an
+// export publishes every type it reaches.
+use { LinearArray } from "core:linear";
+
+export fn weights() -> LinearArray<f32> {
+    return LinearArray::<f32>::filled(4, 0.0);
+}
+
+__DATA__
+{
+  "compile_error": ":6:8: analysis error: `Block` in return type of `weights` is not published"
+}

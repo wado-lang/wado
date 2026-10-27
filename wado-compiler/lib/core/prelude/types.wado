@@ -303,9 +303,10 @@ pub resource Stream<T> {
     /// `StartedRead::settled`. A program calls `start_read`, which holds the
     /// end for the copy: a second copy on an end that is copying traps, and
     /// a `StartedRead` dropped in flight waits for its copy where a
-    /// `ReadCopy` cancels it.
+    /// `ReadCopy` cancels it. A handler may ignore `into`: it says where a
+    /// host copy lands, and `settled` answers with the elements themselves.
     #[cm("stream-read")]
-    fn begin_read(&self, max: i32) -> StartedRead<T>;
+    fn begin_read(&self, max: i32, into: ReadInto) -> StartedRead<T>;
 
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed word the Component Model answers: the count the copy moved
@@ -329,7 +330,7 @@ impl<affine T> Stream<T> {
     /// Start one copy of up to `max` elements without waiting for it. The end
     /// moves into the copy, and `ReadCopy::finish` hands it back.
     pub fn start_read(self, max: i32) -> ReadCopy<T> {
-        let started = self.begin_read(max);
+        let started = self.begin_read(max, ReadInto::fresh());
         return ReadCopy { copy: Option::Some([self, started]) };
     }
 }
@@ -348,7 +349,7 @@ impl<T> Stream<T> {
     pub fn read_to_end_sized(&self, expected: i32) -> List<T> {
         let mut all = List::<T>::with_capacity(expected);
         loop {
-            let chunk = self.begin_read(STREAM_CHUNK_ELEMENTS).settle(self);
+            let chunk = self.begin_read(STREAM_CHUNK_ELEMENTS, ReadInto::fresh()).settle(self);
             all.extend(&chunk.items);
             if chunk.result != CopyResult::Completed {
                 return all;
@@ -367,6 +368,48 @@ impl Stream<u8> {
 /// Elements per copy in the read loop the stdlib runs. A copy blocks
 /// until the peer moves, so this bounds the buffer, not the throughput.
 internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
+
+/// Where a host copy started by `Stream::begin_read` lands: memory the copy
+/// allocates for itself, or memory `core:*` lends it, which the host writes
+/// into directly. Only `core:*` lends, so no raw address is ever handed out.
+///
+/// A handler holds the value it is handed, and may forward it to another
+/// read. So lent memory says how much of it there is, and whether the lender
+/// still lends it: a read asking for more is held to the room, and one after
+/// the lend ended traps rather than writing what someone else now owns.
+#[compiler_item("read_into")]
+pub struct ReadInto {
+    ptr: i32,
+    room: i32,
+    /// Whether the lender still lends `ptr`; `None` for memory the copy
+    /// allocates for itself.
+    lending: Option<&mut bool>,
+}
+
+impl ReadInto {
+    /// Memory the copy allocates for itself, and frees once it has settled.
+    pub fn fresh() -> ReadInto {
+        return ReadInto { ptr: 0, room: 0, lending: null };
+    }
+
+    /// The `room` bytes at `ptr`, lent while `*lending` holds. Only a byte
+    /// stream's read takes it.
+    internal fn lent(ptr: i32, room: i32, lending: &mut bool) -> ReadInto
+        contract ptr != 0
+    {
+        return ReadInto { ptr, room, lending: Option::Some(lending) };
+    }
+
+    /// Where the host copies `room` bytes to, how many of them it may, and
+    /// the bytes the copy owns there: none of lent memory.
+    internal fn landing(&self, room: i32) -> [i32, i32, i32] {
+        if let Some(lending) = self.lending {
+            assert *lending, "a lent destination is written only while it is lent";
+            return [self.ptr, i32::min(room, self.room), 0];
+        }
+        return [builtin::realloc(0, 0, 1, room), room, room];
+    }
+}
 
 /// A read copy as `Stream::begin_read` started it: one the host may still be
 /// copying into `buffer`, or one a handler settled with its `items`.
@@ -632,6 +675,7 @@ fn settled_copy_at(handle: i32) -> Option<i32> {
 /// `handle` it belongs to: `packed` is what the canonical answered, BLOCKED
 /// until the copy settles. The host may write the memory until then, so a
 /// buffer dropped with its copy in flight waits for the copy before it frees.
+/// It frees the `size` bytes it owns at `ptr`, none where the memory is lent.
 #[compiler_item("copy_buffer")]
 internal affine struct CopyBuffer {
     internal handle: i32,
@@ -649,7 +693,7 @@ impl CopyBuffer {
     }
 
     /// The packed result the copy settled on, waiting for it where it has not.
-    fn settle(&mut self) -> i32 {
+    internal fn settle(&mut self) -> i32 {
         self.packed = settled_copy(self.handle, self.packed);
         return self.packed;
     }
@@ -683,7 +727,9 @@ impl CopyBuffer {
 impl Drop for CopyBuffer {
     fn drop(self) {
         let _ = settled_copy(self.handle, self.packed);
-        let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+        if self.size > 0 {
+            let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+        }
     }
 }
 
@@ -1016,6 +1062,10 @@ pub affine struct AsyncCall<affine T> {
     buffer: Option<ResultBuffer>,
     /// Reads the CM-ABI bytes at the buffer and materializes them as `T`.
     lift: fn(i32) -> T,
+    /// What the arguments were lowered into, or None for arguments owning no
+    /// memory. A field, so it drops after the subtask resolves: only then has
+    /// the callee read every argument.
+    args: Option<ArgBuffer>,
 }
 
 impl<affine T> AsyncCall<T> {
@@ -1094,6 +1144,20 @@ internal affine struct ResultBuffer {
 impl Drop for ResultBuffer {
     fn drop(self) {
         let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+    }
+}
+
+/// The linear memory an async call's arguments were lowered into, recorded
+/// at `ptr`, and the function freeing it from that record when it drops.
+#[compiler_item("arg_buffer")]
+internal affine struct ArgBuffer {
+    internal ptr: i32,
+    internal release: fn(i32),
+}
+
+impl Drop for ArgBuffer {
+    fn drop(self) {
+        (self.release)(self.ptr);
     }
 }
 

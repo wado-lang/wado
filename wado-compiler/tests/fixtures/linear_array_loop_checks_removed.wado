@@ -1,0 +1,34 @@
+// A product indexing two `LinearArray`s states each index's range as a
+// contract, and `loop_version_bce` runs a version of the loop with neither
+// check where the bounds already hold. That version is a load and a
+// multiply-add per element, with no `unreachable` left in it.
+use { println, Stdout } from "core:cli";
+use { LinearArray } from "core:linear";
+use { f32x4 } from "core:simd";
+
+fn dot(x: &LinearArray<f32x4>, w: &LinearArray<f32x4>, at: i32, n: i32) -> f32x4 {
+    let mut sum = f32x4::splat(0.0);
+    for let mut v = 0; v < n; v += 1 {
+        sum = sum + x[v] * w[at + v];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(8);
+    let mut x = LinearArray::<f32x4>::filled(n, f32x4::splat(0.5));
+    let w = LinearArray::<f32x4>::filled(n * 2, f32x4::splat(2.0));
+    x[3] = f32x4::splat(4.0);
+    let s = dot(&x, &w, builtin::black_box(n), n);
+    println(`${s.extract_lane(0)}`);
+}
+
+__DATA__
+{
+  "stdout": "15\n",
+  "wir_scope": "linear_array_loop_checks_removed.wado/dot",
+  "wir_expect:O2": [
+    "(at >= 0) & (n <= (",
+    "v >= n;\n                $sroa_self_value_"
+  ]
+}

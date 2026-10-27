@@ -241,7 +241,7 @@ mod tests {
         };
         let rule = ElideRule::new(&stores_aliased, calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(body, &mut buffers, locals);
+        let mut engine = Engine::new(body, &mut buffers, locals, &[]);
         engine.run(&[&rule]);
     }
 
@@ -292,7 +292,7 @@ mod tests {
         };
         let rule = ElideRule::new(&stores_aliased, calls);
         let mut buffers = EngineBuffers::default();
-        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+        let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
         engine.set_value_graph_type_table(&types);
         engine.run(&[&rule]);
         body.blocks[body.root()]

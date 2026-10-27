@@ -10,9 +10,13 @@ use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 
 use super::arena_query::{block_contains_loop, strip_refs};
+use super::assign_to_let::promote_lone_assignments;
 use super::gate::{FunctionGate, GatedPass};
 
-/// Flatten every block a statement evaluates first, across the package.
+/// Flatten every block a statement evaluates first, across the package, then
+/// turn the lone assignment of each local no `let` binds into its `let`
+/// ([`promote_lone_assignments`]): an argument's in-place binding is one, and
+/// flattening is what lays it out as a statement.
 ///
 /// Its own pass between the post-inline peephole and `sroa`, never a peephole
 /// rule: the session's pristine-map rules (`ref_elim`, `elide_box_local`,
@@ -27,12 +31,17 @@ pub(super) fn flatten_let_blocks(project: &mut NirPackage, gate: &mut FunctionGa
         functions.len(),
         |buffers, fid| {
             let mut func = functions[fid.index()].borrow_mut();
-            let FuncParts { body, locals, .. } = func.parts();
+            let FuncParts {
+                body,
+                locals,
+                params,
+                ..
+            } = func.parts();
             let Some(body) = body else {
                 return false;
             };
-            let mut engine = Engine::new(body, buffers, locals);
-            engine.run(&[&rule])
+            let flattened = Engine::new(body, buffers, locals, params).run(&[&rule]);
+            promote_lone_assignments(body, locals, params) || flattened
         },
     )
 }
@@ -344,7 +353,7 @@ mod tests {
         let mut buffers = EngineBuffers::default();
         let rule = LetBlockFlattenRule;
         {
-            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals);
+            let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
             engine.run(&[&rule]);
         }
 
