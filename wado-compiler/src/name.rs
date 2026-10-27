@@ -614,6 +614,18 @@ pub fn cm_future_read_func_name(payload: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_future_read_{payload}")
 }
 
+/// The helper starting a read of a future of the payload type mangled as
+/// `payload`.
+pub fn cm_future_begin_read_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_begin_read_{payload}")
+}
+
+/// The function lifting what a read copied from a future of the payload type
+/// mangled as `payload`.
+pub fn cm_future_lift_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_lift_{payload}")
+}
+
 /// The helper writing a stream of the element type mangled as `element`.
 pub fn cm_stream_write_func_name(element: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_stream_write_{element}")

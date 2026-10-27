@@ -1909,10 +1909,12 @@ use { cmd, Command, Process } from "core:process";
 let head = cmd`git rev-parse HEAD`.read()?;          // ByteList; Err on a nonzero exit
 let out = cmd`git commit -m ${msg} -- ${files}`.output()?;  // status, stdout, stderr
 let status = Command::new("make").arg("test").inherit_stdio().status()?;
-let status = cmd`sleep 30`.timeout(100_000_000).status()?;  // ns; ExitStatus::TimedOut
 
 let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
 child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe
+
+let server = cmd`./serve`.spawn()?;
+server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks Duration)
 ```
 
 ### core:collections

@@ -220,6 +220,15 @@ impl HasData for ProcessHost {
 impl types::Host for ProcessView<'_> {}
 
 impl types::HostChild for ProcessView<'_> {
+    fn terminate(&mut self, child: Resource<ChildHandle>) -> wasmtime::Result<()> {
+        let handle = self.table.get(&child)?;
+        #[cfg(unix)]
+        handle.terminate();
+        #[cfg(not(unix))]
+        match *handle {}
+        Ok(())
+    }
+
     fn kill(&mut self, child: Resource<ChildHandle>) -> wasmtime::Result<()> {
         let handle = self.table.get(&child)?;
         #[cfg(unix)]
