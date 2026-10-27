@@ -1220,6 +1220,11 @@ fn assert_wir_expectations(
         );
         return;
     };
+    // The golden retains WIR at a level the patterns may not name, and
+    // `wir_scope` may name a function that level inlines away.
+    if !spec.has_wir_expectations(opt_level) {
+        return;
+    }
     let (expect, not_expect) = spec.wir_expectations(opt_level);
     let opt_name = common::opt_level_name(opt_level);
     let wir_text = match spec.wir_scope.as_deref() {
