@@ -1,0 +1,93 @@
+{
+  "reviewer": "claude-opus-5-5",
+  "grader": "claude-opus-5-5",
+  "entries": [
+    {
+      "fix": 686,
+      "culprit": 684,
+      "defect": "The struct name index was keyed only by name, so same-named structs from different modules collided and lookups could return another module's struct.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/monomorphize.rs",
+              "summary": "The plain-struct fallback now looks a struct up by name only, so a same-named struct from another module can be returned.",
+              "detail": "The old fallback loop required both `struct_name == &name` and `struct_source == &module_source`. The new `find_struct_by_name(&name)` ignores the module source. When two modules each define a struct called `Node`, `Item`, etc., a reference to one can be rewritten to the other's TypeId. That gives wrong field layouts and wrong type identity in codegen."
+            },
+            {
+              "file": "wado-compiler/src/tir.rs",
+              "summary": "`struct_name_index` keeps the last-interned struct for each name, but the replaced linear scans returned the first matching struct in insertion order.",
+              "detail": "`intern` does `struct_name_index.insert(name.clone(), id)` for every new Struct, and `retain` rebuilds the index the same way. Distinct ResolvedType::Struct values with the same name overwrite each other, so the index points to the most recent one. Such duplicates include identical names in different modules, or a generic template and a later variant with different fields. Every lookup that used to return the first-registered TypeId can now silently return a different, later type."
+            },
+            {
+              "file": "wado-compiler/src/resolver/orchestration.rs",
+              "summary": "`known_type_names_cache` is now built only from global maps and drops each module's local type-name maps.",
+              "detail": "The removed `rebuild_known_type_names_cache` also added the current resolver's `struct_fields`, `variant_cases`, `enum_cases`, `flags_cases`, `newtypes` and `generic_newtype_defs`. These per-module maps can contain names that are not keys in the `all_*` maps, such as import aliases or locally registered entries. Such names are no longer recognised as type names, so valid code can be misresolved. The global set also adds generic newtypes from every module, which may wrongly treat identifiers from unrelated modules as types."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 says the struct lookup now uses only the name and ignores the module source, so a same-named struct from another module can be returned, which is the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/monomorphize.rs",
+              "summary": "The plain-struct fallback no longer checks `module_source`, so it can resolve to a same-named struct from another module.",
+              "detail": "The old fallback matched on both `struct_name == &name` and `struct_source == &module_source`. The new code calls `find_struct_by_name(&name)`, which ignores the module. When two modules each define a struct with the same name (e.g. a user `Error` and a stdlib `Error`), the type resolves to whichever struct the index holds. That yields wrong field layouts, a wrong result or codegen errors."
+            },
+            {
+              "file": "wado-compiler/src/tir.rs",
+              "summary": "`struct_name_index` keeps only the last interned struct for each name, while the replaced lookups returned the first match in table order.",
+              "detail": "`intern` overwrites the entry whenever another `ResolvedType::Struct` with the same name but different fields or module is interned. `retain` rebuilds the index the same last-wins way. The removed loops over `iter_type_ids()` returned the first matching TypeId. Duplicate names are possible because `Struct` identity includes `module_source` and fields, so the mangled-name lookups can now return a different TypeId than before. This can produce mismatched types after monomorphization."
+            },
+            {
+              "file": "wado-compiler/src/resolver/orchestration.rs",
+              "summary": "The global `known_type_names_cache` no longer includes the current module's flat local maps, so names that exist only there, such as aliased imports, are no longer recognized as types.",
+              "detail": "`rebuild_known_type_names_cache` used to add keys from the per-module `struct_fields`, `variant_cases`, `enum_cases`, `flags_cases`, `newtypes` and `generic_newtype_defs`. These flat maps can contain names under which types are visible in that module, e.g. renamed imports, that are not keys in the `all_*` maps. The precomputed global set only walks the `all_*` maps. Such names are therefore missing from the known type names, and the resolver may misclassify identifiers or miss types."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 says find_struct_by_name ignores module_source, so a lookup can return another module's same-named struct, which is the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/monomorphize.rs",
+              "summary": "The plain-struct fallback now matches on name only, so it no longer checks that the struct's `module_source` matches.",
+              "detail": "The old fallback required both `struct_name == &name` and `struct_source == &module_source`. `find_struct_by_name(&name)` returns whatever struct with that name was interned last, from any module. When two modules define a struct with the same name, a type can be rewritten to the other module's struct. That gives wrong field layouts and types in codegen."
+            },
+            {
+              "file": "wado-compiler/src/tir.rs",
+              "summary": "`struct_name_index` keeps the last interned struct per name, while the old linear scans returned the first one.",
+              "detail": "`intern` overwrites the index entry whenever another `ResolvedType::Struct` with the same name is interned. That happens for different modules, or for a re-interned struct whose fields or content differ. `retain` also rebuilds the index with last-wins semantics. The replaced loops over `iter_type_ids()` returned the earliest matching TypeId. Mangled-name lookups in monomorphization can therefore resolve to a different, possibly stale or duplicate, TypeId than before."
+            },
+            {
+              "file": "wado-compiler/src/resolver/orchestration.rs",
+              "summary": "`known_type_names_cache` no longer includes each module's own local type maps, so names that exist only in a module's local maps are no longer known.",
+              "detail": "`rebuild_known_type_names_cache` also inserted keys from the per-module maps: `struct_fields`, `variant_cases`, `enum_cases`, `flags_cases`, `newtypes` and `generic_newtype_defs`. These maps can hold names that are not keys in the global `all_*` maps, for example imported or aliased names registered under a local name. The new global set leaves them out. Code that checks whether a name is a known type can then misclassify such names, causing spurious resolution errors or wrong path handling."
+            },
+            {
+              "file": "wado-compiler/src/loader.rs",
+              "summary": "WASI modules are cached under an interface key derived with `strip_prefix(\"wasi:\").unwrap()`, which can panic or produce keys that do not match the loader's `ModuleSource::Wasi` values.",
+              "detail": "Every compilation now eagerly parses, binds and desugars every core and WASI module on first use. If any entry in `ALL_WASI_MODULES` lacks the `wasi:` prefix, the process panics. If the stripped path is formatted differently from the `interface` the loader builds from import paths, the cached entries are never hit. Any lex, parse or bind problem in an unused stdlib module also now panics compilations that never import it."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 says find_struct_by_name matches on name only and ignores module_source, so it can return a same-named struct from another module, which is the defect the fix addresses."
+          },
+          "error": null
+        }
+      ]
+    }
+  ]
+}
