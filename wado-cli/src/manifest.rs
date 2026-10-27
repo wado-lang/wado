@@ -572,19 +572,16 @@ command = "src/main.wado"
         assert_eq!(result.root, tmp.path());
     }
 
+    /// A directory above the temporary one may hold a `wado.toml`, so only
+    /// what lies inside it is asserted.
     #[test]
-    fn discover_returns_none_when_missing() {
+    fn discover_finds_no_manifest_where_there_is_none() {
         let tmp = tempfile::tempdir().unwrap();
         let subdir = tmp.path().join("no-manifest");
         fs::create_dir_all(&subdir).unwrap();
 
-        // Discovery will walk up, but tempdir root won't have wado.toml either,
-        // so eventually it should return None (at filesystem root).
-        // We test that it doesn't panic and doesn't find a spurious manifest.
-        let result = discover(&subdir).unwrap();
-        // Can't guarantee None since parent dirs might have wado.toml,
-        // but in practice tempdir is deep enough. Just check no panic.
-        let _ = result;
+        let found = discover(&subdir).unwrap();
+        assert!(found.is_none_or(|manifest| !manifest.root.starts_with(tmp.path())));
     }
 
     #[test]

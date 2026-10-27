@@ -566,10 +566,9 @@ pub trait CompilerHost: Send + Sync {
     fn open_source(
         &self,
         path: &str,
-        integrity: Option<Integrity>,
+        _integrity: Option<Integrity>,
     ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
         async move {
-            let _ = integrity;
             let bytes = self.load_source(path).await?;
             Ok(Arc::new(bytes) as Arc<dyn SourceReader>)
         }
@@ -633,8 +632,7 @@ pub trait CompilerHost: Send + Sync {
     /// the host's choosing carrying `file_stem`, and answer where they landed.
     /// The default keeps none: a host with no filesystem has nowhere to put
     /// them.
-    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
-        let _ = (file_stem, bytes);
+    fn save_internal_artifact(&self, _file_stem: &str, _bytes: &[u8]) -> Option<String> {
         None
     }
 
