@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793109913637,
+  "lastUpdate": 1793110785034,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71557,6 +71557,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bf2d7dfd015d53c9451a177093599ec6cae067ba"
         },
         "date": 1793109912583,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295291,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0fe5443fa6ae65aa342e6eb08b7d38bc57434b28",
+          "message": "Merge pull request #2474 from wado-lang/ccr-8641bdb7-o0k3k6\n\nfeat: import modules and Kiln inputs by URL, pinned by digest",
+          "timestamp": "2026-10-27T22:52:58+09:00",
+          "tree_id": "51f3c0ba243b847cee56f3983d74a4e04d245f92",
+          "url": "https://github.com/wado-lang/wado/commit/0fe5443fa6ae65aa342e6eb08b7d38bc57434b28"
+        },
+        "date": 1793110784345,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
