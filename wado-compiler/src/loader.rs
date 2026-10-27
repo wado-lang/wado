@@ -30,7 +30,9 @@ use crate::name::{
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
-use crate::remote::{Integrity, PinnedBy, check_digest, is_remote, url_fault};
+use crate::remote::{
+    Integrity, PinnedBy, check_digest, is_remote, next_in_pin_order, url_fault,
+};
 use crate::wit_consume::{ComponentBindings, ExportedInterface, build_bindings};
 use crate::{bind, hashmap, parser, stdlib};
 
@@ -1438,7 +1440,7 @@ pub struct ModuleLoader<'a, H: CompilerHost> {
     loaded_wasm_namespaces: IndexSet<String>,
     /// Wasm asset imports queued by `load_implicit_modules` (sync method);
     /// drained by `load_all` after that runs so the async fetch can happen.
-    pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, UseDecl)>,
+    pending_implicit_wasm_imports: Vec<(ModuleSource, WasmAssetKind, PathSite)>,
     /// Registry-component imports discovered during `collect_imports`: a
     /// coordinate `use { X } from "ns:pkg"` resolved to an already-materialized
     /// [`ModuleSource::Wasm`] via the dependency index. Drained like
@@ -1591,7 +1593,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         // Collect imports from entry module (before bind)
         let mut pending: VecDeque<(ModuleSource, PathSite)> = VecDeque::new();
-        let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, UseDecl)> = Vec::new();
+        let mut wasm_imports: Vec<(ModuleSource, WasmAssetKind, PathSite)> = Vec::new();
         self.collect_imports(
             &entry_ast,
             &entry_module_source,
@@ -1609,16 +1611,14 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
         self.logger.span_end(&format!("load {entry_name}"));
 
-        // A remote module no `use` read so far pins waits until nothing else is
-        // pending, as any module may write the pin that holds its read.
         let mut unpinned = VecDeque::new();
         loop {
-            let (module_source, site, deferrable) = match pending.pop_front() {
-                Some((module_source, site)) => (module_source, site, true),
-                None => match unpinned.pop_front() {
-                    Some((module_source, site)) => (module_source, site, false),
-                    None => break,
-                },
+            let Some((module_source, site)) =
+                next_in_pin_order(&mut pending, &mut unpinned, |(s, _)| {
+                    matches!(s, ModuleSource::Remote { url, .. } if !self.remote_pins.contains_key(url.as_str()))
+                })
+            else {
+                break;
             };
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
@@ -1627,14 +1627,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
 
             // Skip if currently loading (cycle)
             if self.loading.contains(&module_source) {
-                continue;
-            }
-
-            if deferrable
-                && let ModuleSource::Remote { url, .. } = &module_source
-                && !self.remote_pins.contains_key(url.as_str())
-            {
-                unpinned.push_back((module_source, site));
                 continue;
             }
 
@@ -1707,8 +1699,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Load wasm asset bytes (`use _ from "<path>" with { type: "wat"|"wasm" }`).
         // Done after the main module loop so `wasm_imports` includes
         // assets discovered transitively through stdlib modules.
-        for (from_ms, kind, use_decl) in wasm_imports {
-            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        for (source, kind, site) in wasm_imports {
+            self.handle_wasm_source(source, kind, site).await?;
         }
 
         // Load implicit modules (for compiler-generated code)
@@ -1720,8 +1712,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // Drain any wasm asset imports surfaced by implicit modules (e.g.
         // `core:builtin` declaring `use _ from "./libm.wat" with { type: "wat" };`).
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
-        for (from_ms, kind, use_decl) in queued {
-            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        for (source, kind, site) in queued {
+            self.handle_wasm_source(source, kind, site).await?;
         }
 
         // Load registry-component dependencies resolved from a coordinate `use`
@@ -1735,8 +1727,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // has been seen, load the stdlib modules they need.
         self.load_pending_component_stdlib_deps();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
-        for (from_ms, kind, use_decl) in queued {
-            self.handle_wasm_import(&from_ms, kind, &use_decl).await?;
+        for (source, kind, site) in queued {
+            self.handle_wasm_source(source, kind, site).await?;
         }
 
         self.check_remote_pins()?;
@@ -1781,21 +1773,29 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// `pending` is populated with regular Wado imports for the main
     /// load loop. Wasm-asset imports (`with { type: "wat"|"wasm" }`) are
     /// accumulated into a side-channel `wasm_imports_out` so the caller
-    /// can run their async loading after this synchronous walk.
+    /// can run their async loading after this synchronous walk, by when every
+    /// pin a `use` writes is noted.
     fn collect_imports(
         &mut self,
         module: &Module,
         from_module_source: &ModuleSource,
         pending: &mut VecDeque<(ModuleSource, PathSite)>,
-        wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, UseDecl)>,
+        wasm_imports_out: &mut Vec<(ModuleSource, WasmAssetKind, PathSite)>,
     ) -> Result<(), LoadError> {
         for item in &module.items {
             if let Item::Use(use_decl) = item {
+                let site = use_site(from_module_source, use_decl);
                 if let Some(kind) = wasm_asset_kind_from_attrs(use_decl.attributes.as_ref()) {
-                    wasm_imports_out.push((from_module_source.clone(), kind, use_decl.clone()));
+                    let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
+                    let path =
+                        resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)
+                            .map_err(|error| error.at_path(site.at.clone()))?;
+                    if is_remote(&path) {
+                        self.note_remote(&path, use_decl, from_module_source, &site)?;
+                    }
+                    wasm_imports_out.push((self.interner.wasm(&path, kind), kind, site));
                     continue;
                 }
-                let site = use_site(from_module_source, use_decl);
                 let resolved = self
                     .resolve_import(from_module_source, &use_decl.source)
                     .map_err(|error| error.at_path(site.at.clone()))?;
@@ -1865,29 +1865,10 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         Ok(())
     }
 
-    /// Loads the asset a `use … from "<path>" with { type: "wat"|"wasm" }` names.
-    async fn handle_wasm_import(
-        &mut self,
-        from_module_source: &ModuleSource,
-        kind: WasmAssetKind,
-        use_decl: &UseDecl,
-    ) -> Result<(), LoadError> {
-        let entry_dir = entry_dir_of(self.entry_module_source.as_ref());
-        let site = use_site(from_module_source, use_decl);
-        let path = resolve_wasm_asset_path(from_module_source, &use_decl.source, &entry_dir)
-            .map_err(|error| error.at_path(site.at.clone()))?;
-        if is_remote(&path) {
-            self.note_remote(&path, use_decl, from_module_source, &site)?;
-        }
-        let source = self.interner.wasm(&path, kind);
-        self.handle_wasm_source(source, kind, site).await
-    }
-
-    /// Load a wasm asset from an already-resolved [`ModuleSource::Wasm`] — the
-    /// shared body of [`Self::handle_wasm_import`], reused for a registry
-    /// component dependency whose `.wasm` path is resolved from the dependency
-    /// index rather than a `with { type: "wasm" }` clause. A diagnostic in its
-    /// bindings is reported at the first `site` importing it.
+    /// Load a wasm asset from a resolved [`ModuleSource::Wasm`]: one a
+    /// `with { type: "wat"|"wasm" }` clause names, or a registry component
+    /// dependency whose `.wasm` path is resolved from the dependency index. A
+    /// diagnostic in its bindings is reported at the first `site` importing it.
     async fn handle_wasm_source(
         &mut self,
         source: ModuleSource,

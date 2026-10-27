@@ -1,6 +1,7 @@
 //! Remote files: a `use` or a Kiln input naming an `http://` or `https://` URL,
 //! and the digest that pins what the URL serves.
 
+use std::collections::VecDeque;
 use std::fmt::{self, Write};
 
 use sha2::{Digest, Sha256};
@@ -28,6 +29,23 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
     };
     (!matches!(host, "localhost" | "127.0.0.1" | "[::1]"))
         .then_some("`http://` names only `localhost`, `127.0.0.1` or `[::1]`; use `https://`")
+}
+
+/// The next of `pending` to read. Each one `unpinned` says no pin holds yet
+/// waits in `held` until `pending` drains, as any module read meanwhile may
+/// write the pin its read is held to.
+pub fn next_in_pin_order<T>(
+    pending: &mut VecDeque<T>,
+    held: &mut VecDeque<T>,
+    unpinned: impl Fn(&T) -> bool,
+) -> Option<T> {
+    while let Some(next) = pending.pop_front() {
+        if !unpinned(&next) {
+            return Some(next);
+        }
+        held.push_back(next);
+    }
+    held.pop_front()
 }
 
 /// The SHA-256 digest a `with { integrity: "sha256:<hex>" }` pins a remote file

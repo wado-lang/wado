@@ -13,7 +13,7 @@ use crate::name::{
 };
 use crate::parse;
 use crate::path::is_cwd_relative;
-use crate::remote::Integrity;
+use crate::remote::{Integrity, next_in_pin_order};
 
 /// Every module the walk reached, keyed by the path it was reached through.
 pub struct Harvest {
@@ -78,7 +78,13 @@ where
     let mut pins = IndexMap::<String, Integrity>::default();
     let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
         VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
-    while let Some((key, source, ast)) = queue.pop_front() {
+    let mut unpinned = VecDeque::new();
+    loop {
+        let Some((key, source, ast)) = next_in_pin_order(&mut queue, &mut unpinned, |(_, s, _)| {
+            matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str()))
+        }) else {
+            break;
+        };
         if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
@@ -492,6 +498,34 @@ mod tests {
             Some(manifest)
         );
         assert!(!harvest.packages.contains_key("main.wado"));
+    }
+
+    #[test]
+    fn a_remote_module_is_read_under_the_pin_a_later_module_writes() {
+        let url = "https://example.com/r.wado";
+        let pin = Integrity::of(b"pub fn r() {}\n");
+        let sources = [
+            ("./a.wado".to_string(), format!("use {{ r }} from \"{url}\";\n")),
+            ("./b.wado".to_string(), "use { c } from \"./c.wado\";\n".to_string()),
+            (
+                "./c.wado".to_string(),
+                format!("use {{ r }} from \"{url}\" with {{ integrity: \"{pin}\" }};\n"),
+            ),
+            (url.to_string(), "pub fn r() {}\n".to_string()),
+        ];
+        let asked = std::cell::RefCell::new(Vec::new());
+        block_on(walk(
+            "main.wado",
+            "main.wado",
+            ast_of("use { a } from \"./a.wado\";\nuse { b } from \"./b.wado\";\n"),
+            &IndexSet::default(),
+            async |path: &str, pin| {
+                asked.borrow_mut().push((path.to_string(), pin));
+                sources.iter().find(|(p, _)| p == path).map(|(_, s)| s.clone())
+            },
+        ));
+
+        assert!(asked.borrow().contains(&(url.to_string(), Some(pin))));
     }
 
     #[test]

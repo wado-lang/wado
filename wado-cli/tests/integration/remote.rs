@@ -301,12 +301,15 @@ fn a_file_in_no_package_must_pin_a_remote_module() {
 }
 
 /// A pin written anywhere holds every `use` of the URL, whichever the loader
-/// reaches first.
+/// reaches first, a Wasm asset's as a module's.
 #[test]
 fn a_pin_written_by_a_later_module_pins_an_earlier_use() {
+    const SEVEN: &str = "(module (func (export \"seven\") (result i32) i32.const 7))";
     let server = Server::start();
     server.serve("util.wado", UTIL.as_bytes());
+    server.serve("seven.wat", SEVEN.as_bytes());
     let url = server.url("util.wado");
+    let wat = server.url("seven.wat");
     let dir = tempfile::tempdir().unwrap();
     let write = |name: &str, text: String| std::fs::write(dir.path().join(name), text).unwrap();
     write(
@@ -321,7 +324,8 @@ fn a_pin_written_by_a_later_module_pins_an_earlier_use() {
         "a.wado",
         format!(
             "use {{ exclaim }} from \"{url}\";\n\
-             pub fn a() -> String {{ return exclaim(\"a\"); }}\n"
+             use {{ seven }} from \"{wat}\" with {{ type: \"wat\" }};\n\
+             pub fn a() -> String {{ return exclaim(`a${{seven()}}`); }}\n"
         ),
     );
     write(
@@ -332,8 +336,10 @@ fn a_pin_written_by_a_later_module_pins_an_earlier_use() {
         "c.wado",
         format!(
             "use {{ exclaim }} from \"{url}\" with {{ integrity: \"{}\" }};\n\
-             pub fn c() -> String {{ return exclaim(\"c\"); }}\n",
-            Integrity::of(UTIL.as_bytes())
+             use {{ seven }} from \"{wat}\" with {{ type: \"wat\", integrity: \"{}\" }};\n\
+             pub fn c() -> String {{ return exclaim(`c${{seven()}}`); }}\n",
+            Integrity::of(UTIL.as_bytes()),
+            Integrity::of(SEVEN.as_bytes())
         ),
     );
 
@@ -341,7 +347,7 @@ fn a_pin_written_by_a_later_module_pins_an_earlier_use() {
         .args(["run", "main.wado"])
         .assert()
         .success()
-        .stdout("a!c!\n");
+        .stdout("a7!c7!\n");
 }
 
 /// A redirect is held to the rule a `use` is: `http://` reaches only this
