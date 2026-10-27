@@ -773,8 +773,8 @@ What a `WaitableSet` waits on: a value the host reports events for by its
 handle. It is sealed, so a set holds only what it can account for: the
 standard library implements it on the calls, and a variant whose cases each
 hold one derives it with `impl Waitable for V;`. A bare stream or future end
-is none, since no copy on it is in flight: a copy started on a stream end,
-`ReadCopy` or `WriteCopy`, is one.
+is none, since no copy on it is in flight: a copy started on one,
+`ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
 
 #### `fn wait_on(&self) -> WaitOn`
 
@@ -1005,17 +1005,25 @@ Read the value from the future: Some(value) when fulfilled, None if the
 writer dropped without writing. A readable end is read once, so the read
 consumes it.
 
-#### `fn cancel_read(&self)`
+#### `fn cancel_read(&self) -> u32`
 
 `#[cm("future-cancel-read")]`
 
-Cancel an in-progress read. Blocks until cancellation completes.
+Cancel the read in flight, blocking until it settles, and return the
+`CopyResult` it ended on, numbered as the Component Model numbers it. A
+`FutureReadCopy` dropped in flight calls it. It traps on an end with no
+read in flight.
 
 #### `fn drop(self)`
 
 `#[cm("future-drop-readable")]`
 
 Drop the readable end of the future.
+
+#### `pub fn start_read(self) -> FutureReadCopy<T>`
+
+Start the read without waiting for it, so a `WaitableSet` can wait on
+it beside other work. The end moves into the read.
 
 ### `pub resource FutureWritable<T>`
 
@@ -4423,6 +4431,27 @@ _Fields are private._
 The identity of `r`. A static function rather than a method, so it
 takes no name from any resource.
 
+### `pub affine struct FutureReadCopy<affine T>`
+
+A read started on a future end, holding the end until it is finished.
+Dropping one in flight cancels it, and drops a value it had read.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> Option<T>`
+
+The value, or None where the writer dropped without writing. Waits for a
+read that has not settled, so a read never inserted into a set finishes
+as well. The end drops, as a read consumes it.
+
+#### `impl Drop for FutureReadCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for FutureReadCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ### `pub struct StreamChunk<affine T>`
 
 What one read copy moved, and how that copy ended. A copy carries elements
@@ -4554,6 +4583,11 @@ without the host comes first. Traps on an empty set.
 
 The member that has an event, moved out, or None where none has one
 yet.
+
+#### `pub fn drain(&mut self) -> List<W>`
+
+Moves every member out, the ready ones first, leaving the set empty. A
+race keeps its losers this way, where dropping the set would drop them.
 
 #### `pub fn len(&self) -> i32`
 
@@ -5879,7 +5913,7 @@ own, so it is ready without one.
 
 #### `Copied(CopyResult)`
 
-A started stream copy settled, ending as this says.
+A started stream or future copy settled, ending as this says.
 
 ## Enums
 

@@ -1898,6 +1898,9 @@ let status = Command::new("make").arg("test").inherit_stdio().status()?;
 
 let mut child = Command::new("cat").stdin_piped().stdout_piped().spawn()?;
 child.stdin.take().unwrap().write_all(b"ping");      // drop it to close the pipe
+
+let server = cmd`./serve`.spawn()?;
+server.stop(5_000_000_000)?;   // terminate, then kill after 5 s (a wasi:clocks Duration)
 ```
 
 ### core:collections

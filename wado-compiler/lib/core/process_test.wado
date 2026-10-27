@@ -89,7 +89,7 @@ test "arguments past what the host can pass are ArgumentListTooLong" {
         return;
     }
     let mut long = String::with_capacity(4 << 20);
-    for let _ of 0..<(4 << 20) {
+    for let _ of 0..<4 << 20 {
         long.push_str("x");
     }
     let err = Command::new("true").arg(long).status().unwrap_err();

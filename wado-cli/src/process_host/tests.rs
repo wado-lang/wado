@@ -55,9 +55,9 @@ fn dot_names_the_childs_directory_only_as_the_first_grant() {
 fn a_signaled_child_reports_what_the_sandbox_refused_it() {
     let refusals = BTreeSet::from([Refusal::LeaveGroup]);
     let warning = refusals_warning("job", &ExitStatus::Signaled(9), &refusals, Trace::Off);
-    assert!(warning.is_some_and(
-        |warning| warning.contains("`job` was killed by signal 9 after the sandbox refused")
-    ));
+    assert!(warning.is_some_and(|warning| {
+        warning.contains("`job` was killed by signal 9 after the sandbox refused")
+    }));
 }
 
 /// A write is granted on the directory the sandbox judged, which an

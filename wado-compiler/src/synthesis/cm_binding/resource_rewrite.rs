@@ -1157,7 +1157,10 @@ fn synthesize_future_started_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<T
     )
 }
 
-fn synthesize_future_started_read_funcs(payload_type_id: TypeId, ctx: &SynthCtx) -> Vec<TirFunction> {
+fn synthesize_future_started_read_funcs(
+    payload_type_id: TypeId,
+    ctx: &SynthCtx,
+) -> Vec<TirFunction> {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
     let (mangled, read_name, cm_package, payload_ast, size, align) = {

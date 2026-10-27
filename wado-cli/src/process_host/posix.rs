@@ -5,9 +5,9 @@ use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::os::fd::OwnedFd;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
-use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::thread::{self, JoinHandle};
@@ -269,9 +269,14 @@ fn start(
 fn invalid_argument(program: &str, args: &[String], env: &[(String, String)]) -> Option<ErrorCode> {
     let strings = std::iter::once(program)
         .chain(args.iter().map(String::as_str))
-        .chain(env.iter().flat_map(|(key, value)| [key.as_str(), value.as_str()]));
+        .chain(
+            env.iter()
+                .flat_map(|(key, value)| [key.as_str(), value.as_str()]),
+        );
     let invalid = strings.into_iter().any(|string| string.contains('\0'))
-        || env.iter().any(|(key, _)| key.is_empty() || key.contains('='));
+        || env
+            .iter()
+            .any(|(key, _)| key.is_empty() || key.contains('='));
     invalid.then_some(ErrorCode::InvalidArgument)
 }
 

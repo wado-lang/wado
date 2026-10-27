@@ -328,9 +328,7 @@ impl Child {
     /// Wait at most `how_long` for the child to end: `None` where it has not.
     /// The streams stay open, so a child blocked on a pipe nobody reads waits
     /// out the time.
-    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError>
-        with MonotonicClock
-    {
+    pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with MonotonicClock {
         if self.ended matches { None } {
             let mut set = WaitableSet::<Race>::new();
             set.insert(Race::Exit(self.exit.take().unwrap()));
