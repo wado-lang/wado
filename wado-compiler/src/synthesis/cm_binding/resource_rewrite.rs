@@ -261,7 +261,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> V
         .expect("a stream-read record element is a registered binding record");
     assert!(
         registry
-            .get_struct_fields_by_source(&source, &elem_name)
+            .get_struct_fields_by_source(&source, &named.name)
             .is_some(),
         "a stream-read element is a record"
     );
@@ -363,8 +363,6 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 /// own, so its base's, at every level.
 fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegistry) -> ast::Type {
     let id = peel_newtypes(tt, payload);
-    // Peeled off the TypeId, not the produced AST: a lib-local alias's
-    // synthesized `NamedType` carries no source interface to look it up by.
     if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
         let name = tt.def_name(*def).to_string();
         let args: Vec<ast::Type> = type_args
@@ -1869,7 +1867,7 @@ fn resource_decl(
         .expect("a resource is declared");
     assert!(
         cm_interface_registry
-            .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+            .resource_cm_name_of(tt.defs().ast_id(def))
             .is_some(),
         "a dropped resource has a Component Model name"
     );

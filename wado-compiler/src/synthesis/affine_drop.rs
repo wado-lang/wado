@@ -272,7 +272,7 @@ impl<'a> AffineTypes<'a> {
             }
             let named = self
                 .reg
-                .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+                .resource_cm_name_of(tt.defs().ast_id(def))
                 .is_some();
             return if named {
                 Layout::Resource
