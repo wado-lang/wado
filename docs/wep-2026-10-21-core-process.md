@@ -302,7 +302,13 @@ more, and says it on its own stderr, with the fix where one exists:
   waits to `exec` until the host holds its listener, so a host out of
   descriptors fails the spawn rather than leave a call unanswered. The kernel
   allows one listener per chain of filters, so under an enclosing sandbox that
-  holds one, the filter answers `EPERM` itself and nothing is reported.
+  holds one, the filter answers `EPERM` itself and nothing is reported. The
+  host takes the listener on every spawn, `--process-trace` or not, so a child
+  that installs its own (a container runtime's seccomp notify) fails with
+  `EBUSY`. That was chosen over taking it only under the trace: a refusal
+  leaves the child no clue that the sandbox caused its failure, so the report
+  must come without a flag that only someone who already suspects the sandbox
+  would pass.
 - `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
   refused a child, with the grant that would allow it: `--process-read` for a
   read, `--dir` for a write, which the guest gains too. It reports whatever the
