@@ -641,7 +641,10 @@ fn pgo_profiles(runs: &[PackageRun]) -> Result<BTreeSet<PathBuf>, CliExit> {
                 return Err(CliExit::error(format!(
                     "--pgo records all of a package's workloads into one profile, but this \
                      run leaves out {} of the package at {}",
-                    discover::display_path(file.strip_prefix(&root).unwrap_or(&file)),
+                    discover::display_path(
+                        file.strip_prefix(&root)
+                            .expect("a package's files lie under its root")
+                    ),
                     root.display()
                 )));
             }

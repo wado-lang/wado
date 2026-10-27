@@ -1487,7 +1487,7 @@ pub(super) enum ExportReturnStrategy {
     VoidTaskReturn {
         /// A test under `wado test --coverage` or `--pgo`: calls
         /// `core:rt::coverage_report` between the call and the `task-return`,
-        /// so a test that traps reports no counts.
+        /// so a test that traps reports only its hits.
         report_coverage: bool,
     },
     /// Sync `--lib` export: the synchronous canon lift returns the lowered

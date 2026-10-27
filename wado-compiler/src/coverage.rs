@@ -1246,7 +1246,7 @@ impl TestReport {
     }
 
     /// The runs of each region the test counted: each region it hit ran once,
-    /// unless it reported more. A test that traps reports none. Test code can
+    /// unless it reported more. A test that traps reports no more. Test code can
     /// call `core:coverage` itself, so a region counted but never hit counts
     /// too, and a count runs at least once.
     #[must_use]
