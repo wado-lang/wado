@@ -3254,6 +3254,15 @@ impl CmInterfaceRegistry {
             .or_else(|| self.find_component_type_source(name).map(str::to_string))
     }
 
+    /// The interfaces declaring an `ErrorCode`, in either shape.
+    pub fn error_code_declarers(&self) -> impl Iterator<Item = &str> {
+        self.enums
+            .keys()
+            .chain(self.variants.keys())
+            .filter(|(_, name)| name == ERROR_CODE_WADO_NAME)
+            .map(|(source, _)| source.as_str())
+    }
+
     /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
     /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
@@ -3999,7 +4008,8 @@ impl CmInterfaceRegistry {
 
 use crate::compiler_item::CompilerItem;
 use wasm_encoder::{
-    ComponentTypeRef, ComponentValType, InstanceType, PrimitiveValType, TypeBounds,
+    Alias, ComponentOuterAliasKind, ComponentTypeRef, ComponentValType, InstanceType,
+    PrimitiveValType, TypeBounds,
 };
 
 /// One Component Model defined-type shape, with its inner value types already
@@ -4044,6 +4054,9 @@ pub trait CmTypeSink {
     /// reference it by afterwards (an instance alias index, or `idx` itself for
     /// the top-level sink).
     fn name(&mut self, cm_name: &str, idx: u32) -> u32;
+    /// Bring `outer_idx`, a type of the enclosing component, into this sink's
+    /// type space; return the index to reference it by.
+    fn alias_outer(&mut self, outer_idx: u32) -> u32;
 }
 
 /// [`CmTypeSink`] that records the names a type walk would export, emitting
@@ -4076,6 +4089,10 @@ impl CmTypeSink for CmNameSink {
         self.names.push(cm_name.to_string());
         self.alloc()
     }
+
+    fn alias_outer(&mut self, _outer_idx: u32) -> u32 {
+        self.alloc()
+    }
 }
 
 /// [`CmTypeSink`] that emits into an interface [`InstanceType`], sharing the
@@ -4103,6 +4120,15 @@ impl CmTypeSink for InstanceSink<'_> {
     fn name(&mut self, cm_name: &str, idx: u32) -> u32 {
         self.it
             .export(cm_name, ComponentTypeRef::Type(TypeBounds::Eq(idx)));
+        self.alloc()
+    }
+
+    fn alias_outer(&mut self, outer_idx: u32) -> u32 {
+        self.it.alias(Alias::Outer {
+            kind: ComponentOuterAliasKind::Type,
+            count: 1,
+            index: outer_idx,
+        });
         self.alloc()
     }
 }
@@ -4174,6 +4200,9 @@ pub struct CmTypeGen {
     /// The CM names this engine has exported into its sink, so a caller can ask
     /// what the walk put into the interface's namespace instead of predicting it.
     named_exports: IndexSet<String>,
+    /// Named types the enclosing component already holds, by cache key, for
+    /// the walk to alias on first reach rather than spell again.
+    outer: IndexMap<String, u32>,
 }
 
 impl Default for CmTypeGen {
@@ -4202,16 +4231,52 @@ impl CmTypeGen {
             cache: IndexMap::default(),
             interface_hint: None,
             named_exports: IndexSet::default(),
+            outer: IndexMap::default(),
         }
     }
 
     /// Create a new generator with an interface hint for type disambiguation.
     pub fn with_interface_hint(interface_hint: &str) -> Self {
         Self {
-            cache: IndexMap::default(),
             interface_hint: Some(interface_hint.to_string()),
-            named_exports: IndexSet::default(),
+            ..Self::new()
         }
+    }
+
+    /// Let the walk reach the enum or variant `name` that `owner` declares
+    /// through `outer_idx`, a type of the enclosing component. Aliasing keeps
+    /// the one type its declaring interface exports, where a structural copy
+    /// would be a type of its own.
+    pub fn register_outer(
+        &mut self,
+        registry: &CmInterfaceRegistry,
+        owner: &str,
+        name: &str,
+        outer_idx: u32,
+    ) {
+        let key = match registry.get_variant_cm_name_by_source(owner, name) {
+            Some(cm_name) => Self::named_key(CmTypeKind::Variant, owner, cm_name),
+            None => {
+                assert!(
+                    registry.declares_kind(CmTypeKind::Enum, owner, name),
+                    "`{owner}` declares `{name}` as an enum or a variant"
+                );
+                Self::named_key(CmTypeKind::Enum, owner, name)
+            }
+        };
+        self.outer.insert(key, outer_idx);
+    }
+
+    /// The type the walk already has under `key`, aliased in from the
+    /// enclosing component on first reach when [`Self::register_outer`] put it
+    /// there.
+    fn existing(&mut self, sink: &mut dyn CmTypeSink, key: &str) -> Option<u32> {
+        if let Some(&idx) = self.cache.get(key) {
+            return Some(idx);
+        }
+        let idx = sink.alias_outer(*self.outer.get(key)?);
+        self.cache.insert(key.to_string(), idx);
+        Some(idx)
     }
 
     pub fn interface_hint(&self) -> Option<&str> {
@@ -4229,11 +4294,6 @@ impl CmTypeGen {
     fn export_named(&mut self, sink: &mut dyn CmTypeSink, cm_name: &str, idx: u32) -> u32 {
         self.named_exports.insert(cm_name.to_string());
         sink.name(cm_name, idx)
-    }
-
-    /// Register the type `owner` declares as `name`, already defined at `idx`.
-    pub fn register_named(&mut self, kind: CmTypeKind, owner: &str, name: &str, idx: u32) {
-        self.cache.insert(Self::named_key(kind, owner, name), idx);
     }
 
     /// A type name is unique only within the interface declaring it:
@@ -4271,7 +4331,7 @@ impl CmTypeGen {
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
         let cache_key = Self::named_key(CmTypeKind::Variant, owner, cm_name);
-        if let Some(&idx) = self.cache.get(&cache_key) {
+        if let Some(idx) = self.existing(sink, &cache_key) {
             return idx;
         }
 
@@ -4623,7 +4683,7 @@ impl CmTypeGen {
                     .map(<[String]>::to_vec)
                 {
                     let cache_key = Self::named_key(CmTypeKind::Enum, source, name);
-                    if let Some(&idx) = self.cache.get(&cache_key) {
+                    if let Some(idx) = self.existing(sink, &cache_key) {
                         return ComponentValType::Type(idx);
                     }
                     let variant_refs: Vec<&str> = variants.iter().map(String::as_str).collect();

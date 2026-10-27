@@ -435,4 +435,8 @@ impl CmTypeSink for InstanceExportSink<'_> {
             .push((cm_name.to_string(), ComponentExportKind::Type, idx));
         idx
     }
+
+    fn alias_outer(&mut self, outer_idx: u32) -> u32 {
+        outer_idx
+    }
 }
