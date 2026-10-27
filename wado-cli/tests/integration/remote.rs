@@ -514,6 +514,16 @@ fn model(header: &[u8]) -> Vec<u8> {
     model
 }
 
+/// A `main.wado` printing what `./gen.wado` generates from `url`, pinned by its
+/// `use` to `pin`.
+fn main_generating(url: &str, pin: &str) -> String {
+    format!(
+        "use {{ println, Stdout }} from \"core:cli\";\n\
+         use {{ hello }} from \"{url}\"\n    with {{ generator: {{ module: \"./gen.wado\" }}, integrity: \"{pin}\" }};\n\n\
+         export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n"
+    )
+}
+
 /// A package whose `run` prints what the header of the model `server` serves
 /// generates.
 fn model_package(server: &Server) -> tempfile::TempDir {
@@ -658,6 +668,7 @@ fn a_probe_reads_past_the_kept_bytes_from_the_server() {
         .unwrap()
         .replace("chunk.items[0] == b'\\n'", "n == 3");
     std::fs::write(&generator, three_bytes).unwrap();
+    let before = server.requests().len();
     wado(project.path(), wado_root.path())
         .args(["run", "src/main.wado"])
         .assert()
@@ -665,6 +676,80 @@ fn a_probe_reads_past_the_kept_bytes_from_the_server() {
         .stdout("7\n");
     let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
     assert!(lock.contains("extent = 3"), "{lock}");
+    let requests = server.requests();
+    assert!(
+        requests[before..]
+            .iter()
+            .all(|r| r.range.as_deref() != Some("bytes=0-65535")),
+        "the kept bytes are not fetched again: {requests:?}"
+    );
+}
+
+/// The bytes kept for a `use`'s pin hold only the extent they are: a probe
+/// reading further is held to the pin, not handed them.
+#[test]
+fn a_use_pin_kept_for_a_shorter_extent_holds_a_longer_one() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let dir = tempfile::tempdir().unwrap();
+    let wado_root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("main.wado"),
+        main_generating(&server.url("model.bin"), &Integrity::of(b"7\n").to_string()),
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("gen.wado"), HEADER_GENERATOR).unwrap();
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    std::fs::write(
+        dir.path().join("gen.wado"),
+        HEADER_GENERATOR.replace("chunk.items[0] == b'\\n'", "n == 3"),
+    )
+    .unwrap();
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "does not match its integrity: the `use` pins",
+        ));
+}
+
+/// A kept part fetched before its file's length was kept gains the length the
+/// next time a probe reaches the server, and needs no server after.
+#[test]
+fn a_kept_part_without_its_length_gains_it_from_the_next_probe() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    let generator = project.path().join("src/gen.wado");
+    let change = |mark: &str| {
+        let changed = std::fs::read_to_string(&generator).unwrap() + mark;
+        std::fs::write(&generator, changed).unwrap();
+    };
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    std::fs::remove_dir_all(wado_root.path().join("remote/len")).unwrap();
+
+    change("// online\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    server.withdraw("model.bin");
+    change("// offline\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
 }
 
 /// The pin a `use` writes serves the probe from the cache as the lock's does,
@@ -677,13 +762,7 @@ fn a_kiln_input_pinned_by_its_use_is_probed_from_the_cache() {
     let wado_root = tempfile::tempdir().unwrap();
     std::fs::write(
         dir.path().join("main.wado"),
-        format!(
-            "use {{ println, Stdout }} from \"core:cli\";\n\
-             use {{ hello }} from \"{}\"\n    with {{ generator: {{ module: \"./gen.wado\" }}, integrity: \"{}\" }};\n\n\
-             export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n",
-            server.url("model.bin"),
-            Integrity::of(b"7\n"),
-        ),
+        main_generating(&server.url("model.bin"), &Integrity::of(b"7\n").to_string()),
     )
     .unwrap();
     std::fs::write(dir.path().join("gen.wado"), HEADER_GENERATOR).unwrap();

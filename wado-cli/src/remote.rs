@@ -26,6 +26,7 @@ use wado_compiler::{SourceError, SourceReader};
 use wado_host::atomic_write::write_atomic;
 use wado_host::sync::{joined, lock};
 use wado_host::tls_trust::extra_ca_certs;
+use wado_lsp::host::FileReader;
 use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
 
 use crate::cache;
@@ -284,10 +285,10 @@ pub async fn load(
     use_pin: Option<Integrity>,
     lock_root: Option<&Path>,
 ) -> Result<Vec<u8>, SourceError> {
-    let pins = Pins::of(url, use_pin, lock_root)?;
-    let pin = pins.at(extent);
+    let pin = Pins::of(url, use_pin, lock_root)?.at(extent);
     if let Some((pin, _)) = pin
         && let Some(bytes) = cached(pin)
+        && is_extent(&bytes, extent, kept_len(url, pin))
     {
         return Ok(bytes);
     }
@@ -296,8 +297,18 @@ pub async fn load(
     match (pin, lock_root) {
         (Some((pin, pinned_by)), _) => check_digest(url, actual, pin, pinned_by)?,
         (None, Some(root)) => {
-            hold_to_other_extents(url, extent, &bytes, &pins).await?;
-            record_pin(root, url, extent, actual)?;
+            // Held from the check to the write, so a pin another compile
+            // records meanwhile is held against too.
+            let _held = hold_lock_file(root).map_err(|message| lock_error(root, message))?;
+            let lock_file = read_lock(root)?;
+            let pins = match &lock_file {
+                Some(lock) => pins_of(lock, root, url)?,
+                None => Vec::new(),
+            };
+            hold_to_locked_extents(url, extent, &bytes, &pins).await?;
+            if pin_at(&pins, extent).is_none() {
+                record_pin(root, lock_file, url, extent, actual)?;
+            }
         }
         (None, None) => {
             return Err(SourceError::Unpinned {
@@ -310,9 +321,22 @@ pub async fn load(
     Ok(bytes)
 }
 
+/// Whether `bytes`, kept from a file `len` long where that is known, are its
+/// first `extent` bytes. A `use`'s pin holds whatever extent is read, so the
+/// bytes kept for it may be any one.
+fn is_extent(bytes: &[u8], extent: Option<u64>, len: Option<u64>) -> bool {
+    let held = bytes.len() as u64;
+    match extent {
+        Some(extent) => held == extent,
+        None => len.is_none_or(|len| held == len),
+    }
+}
+
 /// `url` opened to be read a range at a time: from the bytes kept for the
 /// longest part of it `use_pin` or the lock at `lock_root` pins, and past them
 /// from the server, which a probe reading only what a pin covers never asks.
+/// The kept bytes are read as they are on disk: what a probe reads is no
+/// dependency, and [`load`] holds what the build depends on to its pin.
 ///
 /// # Errors
 ///
@@ -322,20 +346,41 @@ pub async fn open(
     use_pin: Option<Integrity>,
     lock_root: Option<&Path>,
 ) -> Result<Arc<dyn SourceReader>, SourceError> {
-    let kept = Pins::of(url, use_pin, lock_root)?
-        .all()
-        .into_iter()
-        .filter_map(|pin| Some((cached(pin)?, kept_len(url, pin)?)))
-        .max_by_key(|(bytes, _)| bytes.len());
-    Ok(match kept {
-        Some((bytes, len)) if bytes.len() as u64 == len => Arc::new(bytes),
-        Some((kept, len)) => Arc::new(KeptPrefix {
+    let mut longest: Option<(FileReader, u64)> = None;
+    let mut lengthless = Vec::new();
+    for pin in Pins::of(url, use_pin, lock_root)?.all() {
+        let Some(file) = blob_path(pin).and_then(|path| FileReader::open(path).ok()) else {
+            continue;
+        };
+        match kept_len(url, pin) {
+            None => lengthless.push(pin),
+            Some(len)
+                if longest
+                    .as_ref()
+                    .is_none_or(|(kept, _)| kept.byte_len() < file.byte_len()) =>
+            {
+                longest = Some((file, len));
+            }
+            Some(_) => {}
+        }
+    }
+    let Some((kept, len)) = longest else {
+        let reader = RemoteReader::open_at(url, 0).await?;
+        // A part kept before its file's length was gains it now.
+        for pin in lengthless {
+            store_len(url, pin, reader.len);
+        }
+        return Ok(Arc::new(reader));
+    };
+    Ok(if kept.byte_len() == len {
+        Arc::new(kept)
+    } else {
+        Arc::new(KeptPrefix {
             url: url.to_string(),
             kept,
             len,
             rest: Mutex::new(None),
-        }),
-        None => Arc::new(RemoteReader::open(url).await?),
+        })
     })
 }
 
@@ -368,9 +413,7 @@ impl Pins {
     fn at(&self, extent: Option<u64>) -> Option<(Integrity, PinnedBy)> {
         match self {
             Self::Use(pin) => Some((*pin, PinnedBy::Use)),
-            Self::Lock(pins) => pins
-                .iter()
-                .find_map(|&(other, pin)| (other == extent).then_some((pin, PinnedBy::Lock))),
+            Self::Lock(pins) => pin_at(pins, extent).map(|pin| (pin, PinnedBy::Lock)),
         }
     }
 
@@ -402,19 +445,22 @@ async fn fetch_prefix(
     })
 }
 
-/// Hold `bytes`, the first `extent` bytes of `url`, to every pin `pins` holds
-/// for another extent of it. A probe's extent is decided by the bytes inside
-/// it, so content that moved the extent changed, and an entry of its own would
+/// The pin `pins`, a lock's for one URL, holds for its first `extent` bytes.
+fn pin_at(pins: &[(Option<u64>, Integrity)], extent: Option<u64>) -> Option<Integrity> {
+    pins.iter()
+        .find_map(|&(other, pin)| (other == extent).then_some(pin))
+}
+
+/// Hold `bytes`, the first `extent` bytes of `url`, to every pin `pins`, the
+/// lock's for `url`, holds. A probe's extent is decided by the bytes inside it,
+/// so content that moved the extent changed, and an entry of its own would
 /// accept it unasked.
-async fn hold_to_other_extents(
+async fn hold_to_locked_extents(
     url: &str,
     extent: Option<u64>,
     bytes: &[u8],
-    pins: &Pins,
+    pins: &[(Option<u64>, Integrity)],
 ) -> Result<(), SourceError> {
-    let Pins::Lock(pins) = pins else {
-        unreachable!("a `use` pins every extent it reads");
-    };
     for &(other, pin) in pins {
         let digest = match other {
             Some(other) if extent.is_none_or(|extent| other <= extent) => {
@@ -486,22 +532,18 @@ pub fn locked_pin(
         .map(|(pin, _)| pin))
 }
 
-/// Record `actual` as the pin of `url`'s first `extent` bytes, unless another
-/// read recorded one first, which `actual` is then held to.
+/// Record `actual` as the pin of `url`'s first `extent` bytes in `lock_file`,
+/// the lock of the package at `root` as it is now, or a new one where there is
+/// none. The caller holds the lock.
 fn record_pin(
     root: &Path,
+    lock_file: Option<LockFile>,
     url: &str,
     extent: Option<u64>,
     actual: Integrity,
 ) -> Result<(), SourceError> {
-    let _held = hold_lock_file(root).map_err(|message| lock_error(root, message))?;
-    let mut lock_file = match read_lock(root)? {
-        Some(lock_file) => {
-            if let Some((pin, pinned_by)) = Pins::Lock(pins_of(&lock_file, root, url)?).at(extent) {
-                return check_digest(url, actual, pin, pinned_by);
-            }
-            lock_file
-        }
+    let mut lock_file = match lock_file {
+        Some(lock_file) => lock_file,
         None => LockFile {
             version: 1,
             deps_hash: discover(root)
@@ -564,16 +606,25 @@ fn store(url: &str, integrity: Integrity, bytes: &[u8], len: Option<u64>) {
     if let Some(path) = blob_path(integrity) {
         let _ = write_atomic(&path, bytes);
     }
-    if let (Some(path), Some(len)) = (len_path(url, integrity), len) {
+    if let Some(len) = len {
+        store_len(url, integrity, len);
+    }
+}
+
+/// Keep `len` as the length of the file at `url` that served the bytes
+/// `integrity` pins.
+fn store_len(url: &str, integrity: Integrity, len: u64) {
+    if let Some(path) = len_path(url, integrity) {
         let _ = write_atomic(&path, len.to_string().as_bytes());
     }
 }
 
-/// A remote file whose leading bytes `kept` are served from the cache. A read
-/// past them opens the file on the server.
+/// A remote file whose leading bytes are read from `kept`, the file the cache
+/// keeps them in. A read past them opens the file on the server, from the
+/// block holding the first byte not kept.
 struct KeptPrefix {
     url: String,
-    kept: Vec<u8>,
+    kept: FileReader,
     len: u64,
     rest: Mutex<Option<Arc<RemoteReader>>>,
 }
@@ -584,7 +635,10 @@ impl KeptPrefix {
         if let Some(reader) = &*rest {
             return Ok(Arc::clone(reader));
         }
-        let reader = Arc::new(futures::executor::block_on(RemoteReader::open(&self.url))?);
+        let first = self.kept.byte_len() / BLOCK;
+        let reader = Arc::new(futures::executor::block_on(RemoteReader::open_at(
+            &self.url, first,
+        ))?);
         *rest = Some(Arc::clone(&reader));
         Ok(reader)
     }
@@ -596,18 +650,17 @@ impl SourceReader for KeptPrefix {
     }
 
     fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
-        let kept = part(&self.kept, start..start + buf.len() as u64);
-        buf[..kept.len()].copy_from_slice(kept);
-        if kept.len() == buf.len() {
-            return Ok(kept.len());
+        let kept = self.kept.read_at(start, buf)?;
+        if kept == buf.len() {
+            return Ok(kept);
         }
-        let past = start.max(self.kept.len() as u64);
-        Ok(kept.len() + self.rest()?.read_at(past, &mut buf[kept.len()..])?)
+        let past = start.max(self.kept.byte_len());
+        Ok(kept + self.rest()?.read_at(past, &mut buf[kept..])?)
     }
 }
 
 /// A remote file read a range at a time, as a Kiln probe reads one.
-pub struct RemoteReader {
+struct RemoteReader {
     url: String,
     len: u64,
     blocks: Mutex<Blocks>,
@@ -625,24 +678,21 @@ enum Blocks {
 }
 
 impl RemoteReader {
-    /// Open `url`, learning its length from the first block.
-    ///
-    /// # Errors
-    ///
-    /// The fetch's failure, or a server that does not say how long the file is.
-    pub async fn open(url: &str) -> Result<Self, SourceError> {
-        let first = get(url.to_string(), Some(0..BLOCK)).await?;
-        let len = first.total.ok_or_else(|| SourceError::NetworkError {
+    /// Open `url`, learning its length from the block numbered `first`.
+    async fn open_at(url: &str, first: u64) -> Result<Self, SourceError> {
+        let range = first * BLOCK..(first + 1) * BLOCK;
+        let fetched = get(url.to_string(), Some(range)).await?;
+        let len = fetched.total.ok_or_else(|| SourceError::NetworkError {
             url: url.to_string(),
             message: "the server does not say how long the file is".to_string(),
         })?;
-        let blocks = if first.whole {
+        let blocks = if fetched.whole {
             Blocks::Whole {
-                bytes: first.bytes,
-                rest: first.rest,
+                bytes: fetched.bytes,
+                rest: fetched.rest,
             }
         } else {
-            Blocks::Ranged(IndexMap::from_iter([(0, Arc::new(first.bytes))]))
+            Blocks::Ranged(IndexMap::from_iter([(first, Arc::new(fetched.bytes))]))
         };
         Ok(Self {
             url: url.to_string(),

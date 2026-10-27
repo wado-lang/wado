@@ -133,14 +133,19 @@ impl FilesystemCompilerHost {
 }
 
 /// A file on disk, read a range at a time.
-struct FileReader {
+pub struct FileReader {
     file: Mutex<File>,
     len: u64,
     path: PathBuf,
 }
 
 impl FileReader {
-    fn open(path: PathBuf) -> Result<Self, SourceError> {
+    /// Open `path`, learning its length.
+    ///
+    /// # Errors
+    ///
+    /// The file cannot be opened or its length read.
+    pub fn open(path: PathBuf) -> Result<Self, SourceError> {
         let file = File::open(&path).map_err(|e| io_error(&path, &e))?;
         let len = file.metadata().map_err(|e| io_error(&path, &e))?.len();
         Ok(Self {
