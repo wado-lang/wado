@@ -2859,7 +2859,10 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let remote = interner.remote("https://example.com/lib//a.wado");
         let name = "Hole<https://example.com/b.wado/$t>";
-        assert_eq!(unqualified_name(&wir_type_key(&remote, name), Some(&remote)), name);
+        assert_eq!(
+            unqualified_name(&wir_type_key(&remote, name), Some(&remote)),
+            name
+        );
         let tuple = wir_tuple_type_key(&["core:prelude//String".to_string()]);
         assert_eq!(unqualified_name(&tuple, None), "[core:prelude//String]");
         assert_eq!(unqualified_name("Array<i32>", None), "Array<i32>");
