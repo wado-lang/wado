@@ -1,0 +1,14 @@
+// `Node::describe` reaches the imported trait only through its value blanket,
+// and that call is what puts the trait in scope, so the import is used.
+use { Describe } from "./sub/unused_import_blanket_static_call_lib.wado";
+
+struct Node {
+    value: i32,
+}
+
+export fn run() {
+    assert Node::describe() == "struct";
+}
+
+__DATA__
+{"warnings_not_contains": ["is never used"]}

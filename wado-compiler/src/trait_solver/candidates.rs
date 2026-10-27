@@ -3,9 +3,12 @@
 //! between them is [`rank`](super::rank).
 
 use super::holds::{
-    answers_args, impl_applies, newtype_base, peels_to_never, withheld_at, written_only_at,
+    answers_args, answers_named_args, comparison_row, impl_applies, newtype_base, peels_to_never,
+    withheld_at, written_only_at,
 };
-use super::program::{Env, ImplId, MethodId, ModuleId, Program, SolverType, TraitDeclId};
+use super::program::{
+    Asker, Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
+};
 use super::rank::{Candidate, Generality};
 
 /// The candidates at one call site, and what the diagnostic needs where there
@@ -36,7 +39,8 @@ pub fn candidates(
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let answered = collect(program, env, receiver, scope, in_scope, |trait_, own| {
+    let asker = Asker::Module(scope);
+    let answered = collect(program, env, receiver, asker, in_scope, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -44,7 +48,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, scope, in_scope, |trait_, _| {
+    let reserved = collect(program, env, receiver, asker, in_scope, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -65,39 +69,73 @@ pub fn bound_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, env, ty, scope, &[trait_], |t, _| t == trait_)
-        .in_scope
-        .into_iter()
-        .filter(|c| {
-            let level = &levels[c.depth as usize];
-            answers_args(
-                program,
-                &program.impls()[&c.impl_],
-                level,
-                Some(ty),
-                &c.trait_args,
-                args,
-            )
-        })
-        .collect()
+    collect(program, env, ty, Asker::Module(scope), &[trait_], |t, _| {
+        t == trait_
+    })
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        let level = &levels[c.depth as usize];
+        answers_args(
+            program,
+            &program.impls()[&c.impl_],
+            level,
+            Some(ty),
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
 }
 
-/// Whether impl `id` applies to `ty`, its bounds included: what an instance of
-/// a generic body selects by once its parameters are settled. It reaches `ty`
-/// at any level of the newtype chain a call on `ty` walks, so a `&W` of a
-/// newtype over `List<u8>` reaches `impl<T> IntoIterator for &List<T>`.
+/// The impls of `trait_` that could answer on `ty` for an instance of a generic
+/// body, a call there naming `args`, for [`rank`](super::rank) to order. A
+/// parameter in `args` is a binder the call's own frame leaves open. The
+/// instance asks, so every member is visible to it, and an instance needs no
+/// import.
 #[must_use]
-pub fn applies(program: &Program, env: &Env, scope: ModuleId, id: ImplId, ty: &SolverType) -> bool {
-    let def = &program.impls()[&id];
+pub fn instance_candidates(
+    program: &Program,
+    ty: &SolverType,
+    trait_: TraitDeclId,
+    args: &[SolverType],
+) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    let reached = if program.not_inherited.contains(&id) {
-        &levels[..(own_levels(ty) as usize).min(levels.len())]
-    } else {
-        &levels[..]
-    };
-    reached
-        .iter()
-        .any(|level| impl_applies(program, env, scope, id, def, level).is_some())
+    collect(
+        program,
+        &Env::default(),
+        ty,
+        Asker::Instance,
+        &[trait_],
+        |t, _| t == trait_,
+    )
+    .in_scope
+    .into_iter()
+    .filter(|c| {
+        answers_named_args(
+            program,
+            &program.impls()[&c.impl_],
+            &levels[c.depth as usize],
+            ty,
+            &c.trait_args,
+            args,
+        )
+    })
+    .collect()
+}
+
+/// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`
+/// calls: a paired impl's, or an `Eq` marker's at a written `Ord`'s target.
+#[must_use]
+pub fn cmp_giving_eq(program: &Program, receiver: &SolverType, c: &Candidate) -> Option<ImplId> {
+    let (eq, ord) = program.comparisons?;
+    if c.trait_ != eq || program.impls()[&c.impl_].origin == ImplOrigin::Written {
+        return None;
+    }
+    match comparison_row(program, &chain(program, receiver)[c.depth as usize])? {
+        (row, written) if row == ord => Some(written),
+        _ => None,
+    }
 }
 
 /// The impls whose trait or own body `declares` the method.
@@ -105,7 +143,7 @@ fn collect(
     program: &Program,
     env: &Env,
     receiver: &SolverType,
-    scope: ModuleId,
+    asker: Asker,
     in_scope: &[TraitDeclId],
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
@@ -138,7 +176,7 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, scope, impl_, def, ty) else {
+            let Some(trait_args) = impl_applies(program, env, asker, impl_, def, ty) else {
                 continue;
             };
             let candidate = Candidate {
@@ -157,10 +195,24 @@ fn collect(
         }
         withheld.extend(written_only_at(program, ty));
     }
+    // A marker asks for a body, which any other impl answering at its level
+    // already gives: beside one it is a no-op.
+    let answered_besides = |c: &Candidate, all: &[Candidate]| {
+        all.iter()
+            .any(|o| o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o))
+    };
+    for list in [&mut found.in_scope, &mut found.out_of_scope] {
+        let all = list.clone();
+        list.retain(|c| !is_marker(program, c) || !answered_besides(c, &all));
+    }
     if !found.in_scope.is_empty() {
         found.out_of_scope.clear();
     }
     found
+}
+
+fn is_marker(program: &Program, c: &Candidate) -> bool {
+    program.impls()[&c.impl_].origin == ImplOrigin::Marker
 }
 
 /// How many of [`chain`]'s levels are the receiver's own, before any newtype

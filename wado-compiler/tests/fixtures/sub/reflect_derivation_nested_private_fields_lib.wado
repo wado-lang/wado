@@ -1,0 +1,38 @@
+pub trait Describe with () {
+    fn describe(depth: i32) -> String;
+}
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Describe> Describe for T {
+    fn describe(depth: i32) -> String {
+        let mut s = "";
+        for let f of ReflectStruct::<T>::members() {
+            s.push_str(field(&f, depth));
+        }
+        return s;
+    }
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Describe> Describe for V {
+    fn describe(depth: i32) -> String {
+        return "variant";
+    }
+}
+
+fn field<T, F: Describe>(f: &StructField<T, F>, depth: i32) -> String {
+    return F::describe(depth);
+}
+
+impl Describe for i32 {
+    fn describe(depth: i32) -> String {
+        return "i32";
+    }
+}
+
+impl<T: Describe> Describe for Option<T> {
+    fn describe(depth: i32) -> String {
+        if depth > 2 {
+            return "...";
+        }
+        return `Option<${T::describe(depth + 1)}>`;
+    }
+}

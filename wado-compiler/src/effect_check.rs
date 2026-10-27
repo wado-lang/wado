@@ -1178,10 +1178,12 @@ fn operation_requirements(
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
-        // operations demand the dependency's own host-leaf capabilities.
+        // operations demand the dependency's own host-leaf capabilities. A
+        // types-only leaf has no operation to perform.
         return registry
             .host_leaf_imports_for(fq)
             .iter()
+            .filter(|leaf| registry.declares_functions(leaf))
             .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
             .collect();

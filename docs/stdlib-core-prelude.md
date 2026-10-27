@@ -3449,6 +3449,11 @@ Builds this case around `payload`.
 
 Builds this case with no payload. Traps unless `is_unit()`.
 
+#### `pub fn extract_ref(&self, v: &T) -> &P`
+
+The payload of this case in `v`, by reference, so an affine payload is
+not copied. Traps unless `holds(v)`.
+
 #### `pub fn extract(&self, v: &T) -> P`
 
 The payload of this case in `v`. Traps unless `holds(v)`.
