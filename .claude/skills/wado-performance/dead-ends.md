@@ -18,6 +18,27 @@ wado dump -O2 benchmark/json_catalog/json_catalog.wado    # before/after: diff t
 for i in 1 2 3; do mise run json-catalog; done           # before and after
 ```
 
+## `array.new_fixed` of zeros in place of a short `array.new_default` (2026-10-28)
+
+wasmtime zero-fills every `array.new_default` through the `memory_fill`
+libcall, whatever the length. fts allocates a 16-byte `String` per conversion,
+and `wasmtime_builtin_memory_fill` plus `memset` took 3.6% of a perf profile.
+Emitting a constant-length packed `array.new_default` as `array.new_fixed` of
+that many zeros skips the libcall.
+
+It measured slower, three alternating pairs:
+
+| `array.new_default` 16 bytes  | fts ms/iter         |
+| ----------------------------- | ------------------- |
+| as is (libcall)               | 41.55, 41.56, 41.57 |
+| `array.new_fixed` of 16 zeros | 42.95, 42.87, 42.96 |
+
+wasmtime initializes `array.new_fixed` one element at a time, each through its
+own element address. Sixteen byte stores cost more than one libcall.
+
+Generalizes: the fill libcall is cheaper than it reads in a profile. Price the
+replacement in instructions per element before trading it for stores.
+
 ## Keeping pool memory resident for `wado serve` (wasmtime 50, 2026-10-22)
 
 `create_serve_engine` sets no `PoolingAllocationConfig::linear_memory_keep_resident`,

@@ -12,6 +12,39 @@ An entry names the price that changed (a constant, a predicate), the A/B for
 every row whose wasm changed, the reason the losing row lost, and who decided
 to keep the change.
 
+## `param_spec`'s clone cap raised from 128 to 4096 (2026-10-28)
+
+`MAX_TOTAL_SPECIALIZATIONS` bounds the clones `param_spec` mints over a whole
+module. Clones are minted first come, first served, and a dead one still
+counts. At 128, nine of the fifteen benchmarks reached the cap, so visit order
+decided which calls specialized. On json_catalog, a splice that minted a few
+more clones elsewhere cost the `Formatter` fold in `prepare_int_write`, and
+every integer allocated a `Formatter`. gale_gen needs between 1024 and 4096.
+
+Every Wado row ran through `mise run all-wado`, three rounds per arm, in
+alternating order. Both arms carry the sole-site splice of the same day.
+
+| Row                          | Change    | `-O2` wasm |
+| ---------------------------- | --------- | ---------- |
+| json_catalog / ser           | +15.7%    | +2.8%      |
+| gale_gen                     | +2.2%     | +17.9%     |
+| gale_gen (1 GiB heap)        | +3.0%     | +17.9%     |
+| json_twitter / ser           | +1.6%     | +3.5%      |
+| json_catalog / de            | +0.8%     | +2.8%      |
+| cbor_canada / de             | +0.7%     | +0.2%      |
+| cbor_catalog / ser           | +0.6%     | 0%         |
+| cbor_canada / ser            | **−0.9%** | +0.2%      |
+| cbor_twitter / ser           | **−2.5%** | 0%         |
+| sqlite_parse                 | noise     | +5.3%      |
+| syntax_highlight             | noise     | +5.2%      |
+| sieve, fts, zlib (no change) | noise     | 0%         |
+
+The losing CBOR rows changed no more than 0.2% in size, so a few more clones
+moved code rather than adding much. gale_gen at `-O2` compiles 22% faster and
+peaks 36% higher in RSS. Two narrower rules were set aside: counting only live
+clones, and spending the cap on calls in loops first. The user chose the
+higher cap.
+
 ## `br_table` for a long cascade at any density (2026-10-20)
 
 `match_to_switch` turned a `match` into a `br_table` only at a density of 0.75
