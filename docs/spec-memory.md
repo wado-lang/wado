@@ -1,8 +1,9 @@
 # Memory Model
 
 This chapter covers how values are copied and shared: value semantics,
-references, and how parameters and receivers hold their arguments. Memory is
-garbage-collected, so a program writes no lifetimes and frees nothing.
+references, and how parameters and receivers hold their arguments. Values are
+garbage-collected, so a program writes no lifetimes and frees nothing. The last
+section covers the linear memory beside them.
 
 ## Value Semantics
 
@@ -343,4 +344,64 @@ Without `mut`, any assignment to a parameter is a compile error:
 fn bad(n: i32) {
     n = 10;
 }
+```
+
+## Linear Memory
+
+Beside the GC heap, a program has one linear memory: bytes it reaches by
+address. The `builtin` functions below read and write it, and are as raw as the
+Wasm instructions they lower to. An address outside the memory traps. Nothing
+else is checked, so which bytes an address names is the caller's to keep right.
+
+### `AnyBits`
+
+`AnyBits` is a sealed marker trait in the prelude. It holds for a type of which
+every bit pattern of its width is a value, so a load from any bytes reads one.
+The compiler states it, and a user `impl AnyBits` is a compile error.
+
+- It holds for `i8` to `i64`, `u8` to `u64`, `f16`, `bf16`, `f32`, `f64` and
+  `v128`.
+- It holds for a newtype over a type it holds for, the `core:simd` lane types
+  among them.
+- It holds for a `flags` type, whose bits are a `u32` that `as` converts either
+  way.
+- It holds for nothing else. `bool`, `char` and an `enum` leave patterns out. A
+  struct, a variant, a tuple or a reference may hold a GC reference. `i128` and
+  `u128` are GC objects, and `()` has no width.
+
+### Loads and Stores
+
+| Built-in                                             | Does                                       |
+| ---------------------------------------------------- | ------------------------------------------ |
+| `builtin::load<T: AnyBits>(addr: i32) -> T`          | reads a `T` at `addr`                      |
+| `builtin::store<T: AnyBits>(addr: i32, value: T)`    | writes `value` at `addr`                   |
+| `builtin::size_of<T: AnyBits>() -> i32`              | the bytes a `T` takes, as a constant       |
+| `builtin::memory_copy(dst: i32, src: i32, len: i32)` | copies `len` bytes; the ranges may overlap |
+
+A load or a store moves exactly `size_of::<T>()` bytes, little-endian, at an
+address of any alignment. A load of a signed integer narrower than 32 bits
+sign-extends it, and of an unsigned one zero-extends it. A newtype moves as its
+base does:
+
+<!-- {"fixture":"spec_memory_any_bits.wado"} -->
+
+```wado
+let p = builtin::realloc(0, 0, 16, 32);
+builtin::store(p, -1 as i16);
+assert builtin::load::<u16>(p) == 0xFFFF;
+assert builtin::load::<u8>(p + 1) == 0xFF;
+
+builtin::store(p + 4, 21.5 as Celsius);
+builtin::memory_copy(p + 8, p + 4, builtin::size_of::<Celsius>());
+assert builtin::load::<Celsius>(p + 8) == 21.5 as Celsius;
+assert builtin::load::<u32>(p + 8) == 0x41AC0000;
+```
+
+A type argument that is not `AnyBits` is a compile error:
+
+<!-- {"fixture":"builtin_any_bits_refused.wado"} -->
+
+```wado
+let b = builtin::load::<bool>(p);
+let c = builtin::load::<char>(p);
 ```

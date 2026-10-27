@@ -1,0 +1,71 @@
+// `builtin::load` and `builtin::store` move an `AnyBits` value at its own
+// width, and `builtin::size_of` answers that width. Each store lands on bytes
+// filled with 0xAA, so a store wider than its type would show in the byte
+// after it, and a load reading the wrong width or sign in the value.
+use { println, Stdout } from "core:cli";
+use { f32x4 } from "core:simd";
+
+type Meters = f64;
+
+flags Perms {
+    Read,
+    Write,
+    Execute,
+}
+
+fn put<T: AnyBits>(at: i32, value: T) -> u8 {
+    builtin::memory_fill(at, 0xAA as u8, 32);
+    builtin::store(at, value);
+    return builtin::i32_load8_u(at + builtin::size_of::<T>());
+}
+
+export fn run() with Stdout {
+    let p = builtin::realloc(0, 0, 16, 64);
+
+    let mut after = put(p, -1 as i8);
+    println(`i8 ${builtin::load::<i8>(p)} u8 ${builtin::load::<u8>(p)} after ${after:x}`);
+
+    after = put(p, -2 as i16);
+    println(`i16 ${builtin::load::<i16>(p)} u16 ${builtin::load::<u16>(p)} after ${after:x}`);
+
+    after = put(p, 1.0 as f16);
+    println(`f16 ${builtin::load::<f16>(p)} bits ${builtin::load::<u16>(p):x} after ${after:x}`);
+
+    after = put(p, 1.0 as bf16);
+    println(`bf16 ${builtin::load::<bf16>(p)} bits ${builtin::load::<u16>(p):x} after ${after:x}`);
+
+    after = put(p, -3);
+    println(`i32 ${builtin::load::<i32>(p)} u32 ${builtin::load::<u32>(p)} after ${after:x}`);
+
+    after = put(p, 1.5 as f32);
+    println(`f32 ${builtin::load::<f32>(p)} bits ${builtin::load::<u32>(p):x} after ${after:x}`);
+
+    after = put(p, -4 as i64);
+    println(`i64 ${builtin::load::<i64>(p)} u64 ${builtin::load::<u64>(p)} after ${after:x}`);
+
+    after = put(p, 2.5);
+    println(`f64 ${builtin::load::<f64>(p)} bits ${builtin::load::<u64>(p):x} after ${after:x}`);
+
+    after = put(p, 7.25 as Meters);
+    println(`Meters ${builtin::load::<Meters>(p) as f64} after ${after:x}`);
+
+    after = put(p, Perms::Read | Perms::Execute);
+    println(`Perms ${builtin::load::<Perms>(p) as u32} after ${after:x}`);
+
+    after = put(p, f32x4::splat(0.5) * f32x4::splat(16.0));
+    let back = builtin::load::<f32x4>(p);
+    println(`f32x4 ${back.extract_lane(0)} ${back.extract_lane(3)} after ${after:x}`);
+
+    builtin::store(p, 0x0807060504030201 as i64);
+    builtin::memory_copy(p + 20, p, 8);
+    println(`copied ${builtin::load::<i64>(p + 20):x} after ${builtin::i32_load8_u(p + 28):x}`);
+
+    println(
+        `sizes ${builtin::size_of::<i8>()} ${builtin::size_of::<u16>()} ${builtin::size_of::<f16>()} ${builtin::size_of::<bf16>()} ${builtin::size_of::<i32>()} ${builtin::size_of::<f32>()} ${builtin::size_of::<u64>()} ${builtin::size_of::<f64>()} ${builtin::size_of::<Meters>()} ${builtin::size_of::<Perms>()} ${builtin::size_of::<v128>()} ${builtin::size_of::<f32x4>()}`,
+    );
+}
+
+__DATA__
+{
+  "stdout": "i8 -1 u8 255 after aa\ni16 -2 u16 65534 after aa\nf16 1 bits 3c00 after aa\nbf16 1 bits 3f80 after aa\ni32 -3 u32 4294967293 after aa\nf32 1.5 bits 3fc00000 after aa\ni64 -4 u64 18446744073709551612 after aa\nf64 2.5 bits 4004000000000000 after aa\nMeters 7.25 after aa\nPerms 5 after aa\nf32x4 8 8 after aa\ncopied 807060504030201 after aa\nsizes 1 2 2 2 4 4 8 8 8 4 16 16\n"
+}

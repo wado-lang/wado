@@ -112,7 +112,7 @@ pub struct Semantics {
     /// The name each type the entry's `export use` adopts is published under.
     published_names: IndexMap<DefId, String>,
     /// The coverage plan reify instrumented this compile with, under
-    /// `wado test --coverage`.
+    /// `wado test --coverage` or `--pgo`.
     pub(crate) coverage: Option<CoverageMap>,
 }
 

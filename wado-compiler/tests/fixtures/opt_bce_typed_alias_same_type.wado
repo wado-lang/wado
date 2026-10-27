@@ -1,0 +1,35 @@
+// `b` and `a` name one `Buf`, and a store into a `Buf`'s field may change
+// what `a.len` reads. The range's end is `a.len` read once, so after the
+// store the guard no longer bounds the check, which traps on the next pass.
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    data: List<i32>,
+    len: i32,
+}
+
+impl Buf {
+    fn at(&self, index: i32) -> i32
+        contract 0 <= index < self.len
+    {
+        return self.data[index];
+    }
+}
+
+#[inline(never)]
+fn sum_shrinking(a: &Buf, b: &mut Buf) -> i32 {
+    let mut s = 0;
+    for let i of 0..<a.len {
+        s += a.at(i);
+        b.len = 0;
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let mut x = Buf { data: [1, 2, 3], len: builtin::black_box(3) };
+    println(`${sum_shrinking(&x, &mut x)}`);
+}
+
+__DATA__
+{"stderr_contains": ["index < self.len"], "trapped": true}

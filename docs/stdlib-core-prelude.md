@@ -316,6 +316,13 @@ See WEP 2026-01-20.
 Marker every affine resource holds, and nothing else. Sealed and
 compiler-stated; user impls are rejected. See WEP: Affine Types.
 
+### `pub trait AnyBits with ()`
+
+Marker of a type every bit pattern of its width is a value of: the
+fixed-width integers, the floats, `v128`, and a newtype or `flags` type over
+one. `builtin::load` reads one from any bytes. Sealed and compiler-stated;
+user impls are rejected. See WEP: Linear Arrays.
+
 ### `pub affine trait IndexRef<IndexType> with ()`
 
 Immutable reference indexing: `&container[i]` reads through this.
@@ -355,11 +362,12 @@ affine element too. Like that assignment it checks `b` before `a`, and
 
 #### `fn index_swap(&mut self, a: IndexType, b: IndexType)`
 
-### `pub trait IndexValue<IndexType> with ()`
+### `pub affine trait IndexValue<IndexType> with ()`
 
 Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
-aliased by reference (scalars, resources).
+aliased by reference (scalars, resources). An affine container hands out
+copyable elements by value too (`LinearArray`).
 
 #### `fn index_value(&self, index: IndexType) -> Self::Output`
 
@@ -773,8 +781,8 @@ What a `WaitableSet` waits on: a value the host reports events for by its
 handle. It is sealed, so a set holds only what it can account for: the
 standard library implements it on the calls, and a variant whose cases each
 hold one derives it with `impl Waitable for V;`. A bare stream or future end
-is none, since no copy on it is in flight: a copy started on a stream end,
-`ReadCopy` or `WriteCopy`, is one.
+is none, since no copy on it is in flight: a copy started on one,
+`ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
 
 #### `fn wait_on(&self) -> WaitOn`
 
@@ -1005,17 +1013,25 @@ Read the value from the future: Some(value) when fulfilled, None if the
 writer dropped without writing. A readable end is read once, so the read
 consumes it.
 
-#### `fn cancel_read(&self)`
+#### `fn cancel_read(&self) -> u32`
 
 `#[cm("future-cancel-read")]`
 
-Cancel an in-progress read. Blocks until cancellation completes.
+Cancel the read in flight, blocking until it settles, and return the
+`CopyResult` it ended on, numbered as the Component Model numbers it. A
+`FutureReadCopy` dropped in flight calls it. It traps on an end with no
+read in flight.
 
 #### `fn drop(self)`
 
 `#[cm("future-drop-readable")]`
 
 Drop the readable end of the future.
+
+#### `pub fn start_read(self) -> FutureReadCopy<T>`
+
+Start the read without waiting for it, so a `WaitableSet` can wait on
+it beside other work. The end moves into the read.
 
 ### `pub resource FutureWritable<T>`
 
@@ -1051,7 +1067,7 @@ Readable end of an async sequence (WASI Component Model stream).
 
 `#[cm("stream-new")]`
 
-#### `fn begin_read(&self, max: i32) -> StartedRead<T>`
+#### `fn begin_read(&self, max: i32, into: ReadInto) -> StartedRead<T>`
 
 `#[cm("stream-read")]`
 
@@ -1060,7 +1076,8 @@ waited for. It is the operation a handler answers, with
 `StartedRead::settled`. A program calls `start_read`, which holds the
 end for the copy: a second copy on an end that is copying traps, and
 a `StartedRead` dropped in flight waits for its copy where a
-`ReadCopy` cancels it.
+`ReadCopy` cancels it. A handler may ignore `into`: it says where a
+host copy lands, and `settled` answers with the elements themselves.
 
 #### `fn cancel_read(&self) -> u32`
 
@@ -4428,6 +4445,27 @@ _Fields are private._
 The identity of `r`. A static function rather than a method, so it
 takes no name from any resource.
 
+### `pub affine struct FutureReadCopy<affine T>`
+
+A read started on a future end, holding the end until it is finished.
+Dropping one in flight cancels it, and drops a value it had read.
+
+_Fields are private._
+
+#### `pub fn finish(self) -> Option<T>`
+
+The value, or None where the writer dropped without writing. Waits for a
+read that has not settled, so a read never inserted into a set finishes
+as well. The end drops, as a read consumes it.
+
+#### `impl Drop for FutureReadCopy<T>`
+
+##### `fn drop(self)`
+
+#### `impl Waitable for FutureReadCopy<T>`
+
+##### `fn wait_on(&self) -> WaitOn`
+
 ### `pub struct StreamChunk<affine T>`
 
 What one read copy moved, and how that copy ended. A copy carries elements
@@ -4454,6 +4492,23 @@ value comes back in `rest` where the reader dropped first.
 #### `rest: Option<T>`
 
 #### `result: FutureWriteResult`
+
+### `pub struct ReadInto`
+
+Where a host copy started by `Stream::begin_read` lands: memory the copy
+allocates for itself, or memory `core:*` lends it, which the host writes
+into directly. Only `core:*` lends, so no raw address is ever handed out.
+
+A handler holds the value it is handed, and may forward it to another
+read. So lent memory says how much of it there is, and whether the lender
+still lends it: a read asking for more is held to the room, and one after
+the lend ended traps rather than writing what someone else now owns.
+
+_Fields are private._
+
+#### `pub fn fresh() -> ReadInto`
+
+Memory the copy allocates for itself, and frees once it has settled.
 
 ### `pub affine struct StartedRead<affine T>`
 
@@ -4550,15 +4605,21 @@ whether the host has an event left for it is settled here.
 
 `#[benign(RawWaitableSet)]`
 
-Blocks until a member has an event, and moves it out. A member ready
-without the host comes first. Traps on an empty set.
+Blocks until a member is ready, and moves it out: a copy once it
+settled, a call once it resolved. A member ready without the host comes
+first. Traps on an empty set.
 
 #### `pub fn poll(&mut self) -> Option<Ready<W>>`
 
 `#[benign(RawWaitableSet)]`
 
-The member that has an event, moved out, or None where none has one
-yet.
+The member that is ready, as `wait` means it, moved out, or None where
+none is yet.
+
+#### `pub fn drain(&mut self) -> List<W>`
+
+Moves every member out, the ready ones first, leaving the set empty. A
+race keeps its losers this way, where dropping the set would drop them.
 
 #### `pub fn len(&self) -> i32`
 
@@ -4575,7 +4636,7 @@ host traps on dropping a set that still has one.
 
 ### `pub struct Ready<affine W>`
 
-A member of a `WaitableSet` that has an event, moved out of the set with
+A member of a `WaitableSet` that is ready, moved out of the set with
 the event.
 
 #### `member: W`
@@ -5884,7 +5945,7 @@ own, so it is ready without one.
 
 #### `Copied(CopyResult)`
 
-A started stream copy settled, ending as this says.
+A started stream or future copy settled, ending as this says.
 
 ## Enums
 

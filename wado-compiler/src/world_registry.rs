@@ -175,24 +175,6 @@ pub struct WorldInfo {
 }
 
 impl WorldInfo {
-    /// The CM package segment of this world's fully-qualified name:
-    /// `wasi:http/service` → `"http"`. Empty when `fq_name` has no
-    /// scheme/package structure, as the synthetic `test` world does not. For a
-    /// `starts_with`-friendly form that pins the scheme, use
-    /// [`Self::namespace_prefix`].
-    pub fn package(&self) -> &str {
-        fq_name_package(&self.fq_name)
-    }
-
-    /// Namespace prefix usable with `ModuleSource::starts_with` / type
-    /// registry lookups that scope by `(name, namespace)`.
-    ///
-    /// `wasi:http/service` → `"wasi:http/"`, `core:kiln/generator` →
-    /// `"core:kiln/"`. Returns an empty slice for bare-name worlds.
-    pub fn namespace_prefix(&self) -> &str {
-        fq_name_namespace_prefix(&self.fq_name)
-    }
-
     /// True when this world has an `import {interface_name} { ... }` block.
     ///
     /// The check is by locally-bound interface name (the identifier written in
@@ -216,28 +198,14 @@ impl WorldInfo {
     }
 }
 
-/// Extract the package segment of a CM-style fully-qualified name
-/// (`"wasi:http/service"` → `"http"`; `"core:kiln/generator"` →
-/// `"kiln"`). Returns `""` when the name has no `scheme:package/...` shape.
-///
-/// Works for both world `fq_name`s (`wasi:http/service`) and interface FQs
-/// (`wasi:http/types`) — the parsing only cares about the `scheme:pkg/...`
-/// prefix and ignores whatever follows the `/`.
+/// The package segment of a CM-style fully-qualified name
+/// (`"wasi:http/types"` → `"http"`), or `""` without a `scheme:package/...`
+/// shape.
 pub fn fq_name_package(fq_name: &str) -> &str {
     let Some((_, rest)) = fq_name.split_once(':') else {
         return "";
     };
     rest.split_once('/').map_or("", |(pkg, _)| pkg)
-}
-
-/// Extract the namespace prefix (`scheme:package/`) of a world
-/// `fq_name`. Returns `""` when the name has no structure.
-fn fq_name_namespace_prefix(fq_name: &str) -> &str {
-    let after_slash = fq_name.find('/').map(|i| i + 1).unwrap_or(0);
-    if after_slash == 0 || !fq_name[..after_slash].contains(':') {
-        return "";
-    }
-    &fq_name[..after_slash]
 }
 
 /// Registry of world definitions for code generation
@@ -566,14 +534,6 @@ mod tests {
         );
     }
 
-    fn world_info(fq: &str) -> WorldInfo {
-        WorldInfo {
-            fq_name: fq.to_string(),
-            exports: Vec::new(),
-            imports: Vec::new(),
-        }
-    }
-
     /// Build a `Result<Ok, Err>` return type from two named-type names.
     fn result_return(ok: &str, err: &str) -> Type {
         Type::Generic(GenericType {
@@ -588,44 +548,11 @@ mod tests {
     }
 
     #[test]
-    fn test_fq_name_accessors_wasi() {
-        let w = world_info("wasi:http/service");
-        assert_eq!(w.package(), "http");
-        assert_eq!(w.namespace_prefix(), "wasi:http/");
-    }
-
-    #[test]
-    fn test_fq_name_accessors_kiln() {
-        let w = world_info("core:kiln/generator");
-        assert_eq!(w.package(), "kiln");
-        assert_eq!(w.namespace_prefix(), "core:kiln/");
-    }
-
-    #[test]
-    fn test_fq_name_accessors_cli() {
-        let w = world_info("wasi:cli/command");
-        assert_eq!(w.package(), "cli");
-        assert_eq!(w.namespace_prefix(), "wasi:cli/");
-    }
-
-    #[test]
-    fn test_fq_name_accessors_bare_name() {
-        // Synthesized worlds without a `scheme:pkg/iface` shape (e.g. the
-        // fallback when no `#[cm(...)]` is present) surface empty slices,
-        // not partial parses.
-        let w = world_info("test");
-        assert_eq!(w.package(), "");
-        assert_eq!(w.namespace_prefix(), "");
-    }
-
-    #[test]
-    fn test_fq_name_accessors_no_scheme() {
-        // `name/with-slash-but-no-scheme` has no scheme prefix, so
-        // `namespace_prefix` returns `""` rather than a misleading
-        // `"name/"`.
-        let w = world_info("orphan/x");
-        assert_eq!(w.package(), "");
-        assert_eq!(w.namespace_prefix(), "");
+    fn a_fq_name_package_is_the_segment_between_scheme_and_slash() {
+        assert_eq!(fq_name_package("wasi:http/types@0.3.0"), "http");
+        assert_eq!(fq_name_package("core:kiln/generator"), "kiln");
+        assert_eq!(fq_name_package("test"), "");
+        assert_eq!(fq_name_package("orphan/x"), "");
     }
 
     #[test]

@@ -159,6 +159,7 @@ wado test file.wado                 # run tests in one file
 wado test --filter '**/json*.wado'  # run tests in files matching a wildcard
 wado test --profile guest file.wado # guest profile over that file's tests
 wado test --coverage=lcov,json      # also report what ran, into build/coverage/
+wado test --pgo                     # record the #[workload] tests into pgo/default.pgo
 wado test --no-cache                # also rerun the files that passed before
 ```
 

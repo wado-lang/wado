@@ -17,6 +17,7 @@ pub mod builtin_registry;
 pub mod call_args;
 pub mod canonical;
 pub mod cm_abi;
+pub mod cm_type_decls;
 pub mod codegen;
 pub mod codegen_flags;
 pub mod comment;
@@ -63,6 +64,7 @@ pub mod parallel;
 pub mod param_resolution;
 pub mod parser;
 pub mod path;
+pub mod pgo;
 mod prelower_reach;
 pub mod primitive;
 pub mod remarks;
@@ -158,6 +160,7 @@ pub use monomorphize::monomorphize;
 use monomorphize::{Monomorphization, lower_instance_patterns};
 pub use optimize::{OptLevel, optimize};
 pub use package::Package;
+pub use package::TestSelection;
 pub use parser::{ParseError, Parser};
 use self_comparison::self_comparison_diagnostics;
 use synthesis::SynthesisError;
@@ -470,12 +473,10 @@ pub struct CompilerOptions {
     /// that have run the Kiln pipeline (wado-cli, wado-lsp) populate this;
     /// everyone else leaves it empty.
     pub invocations: kiln::InvocationIndex,
-    /// `--test-name` substring filters for the test world. When non-empty,
-    /// only `test "name"` blocks whose name contains one of these strings are
-    /// exported; the rest become dead code and are removed by early DCE, so
-    /// filtered-out tests are never compiled into the output. Empty means
-    /// "run every test". Ignored outside the test world.
-    pub test_name_filters: Vec<String>,
+    /// The tests the test world exports; the rest become dead code and are
+    /// removed by early DCE, so they are never compiled into the output.
+    /// Ignored outside the test world.
+    pub test_selection: TestSelection,
     /// Raw codegen feature flags forwarded from the CLI's generic `-f <flag>`
     /// option (e.g. `["no-branch-hinting"]`). Parsed into [`CodegenFlags`] during
     /// compilation; an unrecognized flag is a hard error. Empty by default.
@@ -531,7 +532,7 @@ impl Default for CompilerOptions {
             log_level: None,
             allocator: None,
             invocations: kiln::InvocationIndex::default(),
-            test_name_filters: Vec::new(),
+            test_selection: TestSelection::default(),
             codegen_flags: Vec::new(),
             lints: Lints::default(),
             unused_diagnostics: true,
@@ -1251,7 +1252,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
         Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            if let Some(source) = registry.resolve_cm_source_for(named)
+            if let Some(source) = registry.source_interface(named)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
             {
                 return Some(cm);
@@ -1971,7 +1972,7 @@ fn compile_after_load<H: CompilerHost>(
         registry.register_lib_local_items(
             lib_surface.published_type_decls(),
             fq,
-            tysys.resolutions.defs(),
+            &tysys.resolutions,
         );
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
@@ -2044,7 +2045,7 @@ fn compile_after_load<H: CompilerHost>(
     }
     package.skip_validation = options.skip_validation;
     package.coverage_section = coverage.map(|map| map.encode());
-    package.test_name_filters = options.test_name_filters;
+    package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
     package.provided_import_fqs = options

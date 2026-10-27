@@ -1,0 +1,29 @@
+// A closure a function takes as a parameter, called through another closure
+// capturing it, is called directly: no `let` binds a parameter, and the
+// parameter is still one value for the whole body.
+use { println, Stdout } from "core:cli";
+
+fn table(rows: i32, cols: i32, at: fn(i32, i32) -> i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let r of 0..<rows {
+        for let c of 0..<cols {
+            let near = |dc: i32| if c + dc < cols { at(r, c + dc) } else { 0 };
+            out.push(near(0) + near(1) * 2 + near(2) * 3 + near(3) * 4);
+        }
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let scale = builtin::black_box(3);
+    let t = table(builtin::black_box(3), builtin::black_box(5), |r, c| r * scale + c);
+    println(`${t}`);
+}
+
+__DATA__
+{
+    "stdout": "[20, 30, 20, 11, 4, 50, 60, 38, 20, 7, 80, 90, 56, 29, 10]\n",
+    "wir_not_expect:O2": [
+        "call_ref"
+    ]
+}

@@ -31,17 +31,37 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__wasi:demo/events@0.1.0#tag"(
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_10: ref Array<u8>;
     let i: i32;
+    let to: i32;
+    let $licm_arith_7: i32;
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:demo/events@0.1.0#tag"(builtin::f64_reinterpret_i64(self), $outptr);
     $str_ptr = builtin::load_i32($outptr);
     arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
     i = 0;
+    $licm_arith_7 = $str_len - 8;
     b0: block {
         l1: loop {
-            break_if b0 i >= $str_len;
+            break_if b0 i > $licm_arith_7;
+            self = builtin::load_i64($str_ptr + i);
+            to = i;
+            builtin::array_set_u8(arr_10, to, builtin::i32_wrap_i64(self) & 255);
+            builtin::array_set_u8(arr_10, to + 1, builtin::i32_wrap_i64(self >> 8_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 2, builtin::i32_wrap_i64(self >> 16_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 3, builtin::i32_wrap_i64(self >> 24_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 4, builtin::i32_wrap_i64(self >> 32_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 5, builtin::i32_wrap_i64(self >> 40_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 6, builtin::i32_wrap_i64(self >> 48_i64) & 255);
+            builtin::array_set_u8(arr_10, to + 7, builtin::i32_wrap_i64(self >> 56_i64) & 255);
+            i = i + 8;
+            continue l1;
+        };
+    };
+    b2: block {
+        l3: loop {
+            break_if b2 i >= $str_len;
             builtin::array_set_u8(arr_10, i, builtin::load_u8($str_ptr + i));
             i = i + 1;
-            continue l1;
+            continue l3;
         };
     };
     $lifted_string = struct.new "core:prelude/string.wado//String" { repr: arr_10, used: $str_len };

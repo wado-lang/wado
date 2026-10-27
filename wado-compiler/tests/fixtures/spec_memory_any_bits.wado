@@ -1,0 +1,18 @@
+// What the specification's linear-memory section quotes.
+
+type Celsius = f32;
+
+test {
+    let p = builtin::realloc(0, 0, 16, 32);
+    builtin::store(p, -1 as i16);
+    assert builtin::load::<u16>(p) == 0xFFFF;
+    assert builtin::load::<u8>(p + 1) == 0xFF;
+
+    builtin::store(p + 4, 21.5 as Celsius);
+    builtin::memory_copy(p + 8, p + 4, builtin::size_of::<Celsius>());
+    assert builtin::load::<Celsius>(p + 8) == 21.5 as Celsius;
+    assert builtin::load::<u32>(p + 8) == 0x41AC0000;
+}
+
+__DATA__
+{"test": {}}

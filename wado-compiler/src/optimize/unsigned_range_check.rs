@@ -26,9 +26,14 @@ pub fn fuse_unsigned_range_checks(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals, params);
             engine.set_value_graph_type_table(&type_table);
             // A snapshot, as condition implication's: a fused check writes no
             // local, so no bind it holds goes stale.

@@ -17,7 +17,7 @@ use crate::ir::{
 };
 use crate::naming;
 use crate::naming::{to_snake_case, to_upper_camel_case, to_wado_identifier};
-use wado_compiler::wit_consume::wit_holds_affine;
+use wado_compiler::wit_consume::{lent_list_elem, wit_holds_affine};
 
 pub struct Transformer<'a> {
     resolve: &'a Resolve,
@@ -178,7 +178,7 @@ impl<'a> Transformer<'a> {
                         WorldKey::Interface(_) => continue,
                     };
 
-                    let params = self.transform_params(&func.params)?;
+                    let params = self.transform_params(&func.params, None)?;
                     let return_type = self.transform_result(func.result.as_ref())?;
 
                     exports.push(WadoWorldExport::Function(WadoWorldExportFn {
@@ -247,7 +247,7 @@ impl<'a> Transformer<'a> {
     ) -> Result<WadoFunction> {
         let cm_attr = format!("{cm_interface}#{name}");
 
-        let params = self.transform_params(&func.params)?;
+        let params = self.transform_params(&func.params, Some(func))?;
         let return_type = self.transform_result(func.result.as_ref())?;
 
         // Check if this is an async function
@@ -264,7 +264,13 @@ impl<'a> Transformer<'a> {
         })
     }
 
-    fn transform_params(&self, params: &[Param]) -> Result<Vec<WadoParam>> {
+    /// `params`, of the import `importing` binds where it is one: only an
+    /// import's list may take a view.
+    fn transform_params(
+        &self,
+        params: &[Param],
+        importing: Option<&Function>,
+    ) -> Result<Vec<WadoParam>> {
         params
             .iter()
             .map(|param| {
@@ -273,6 +279,8 @@ impl<'a> Transformer<'a> {
                     ty: self.transform_type(param.ty)?,
                     wit_name: param.name.clone(),
                     default: None,
+                    lends_view: importing
+                        .is_some_and(|func| lent_list_elem(self.resolve, func, param.ty).is_some()),
                 })
             })
             .collect()
@@ -637,7 +645,7 @@ impl<'a> Transformer<'a> {
                         name: method_name,
                         doc_comment: func.docs.contents.clone(),
                         cm_attr: method_attr,
-                        params: self.transform_params(&func.params)?,
+                        params: self.transform_params(&func.params, Some(func))?,
                         return_type: self.transform_result(func.result.as_ref())?,
                         is_async,
                         never_returns: false,

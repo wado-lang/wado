@@ -1313,6 +1313,9 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
             lower_dispatch_in_expr(left, env, ctx);
             lower_dispatch_in_expr(right, env, ctx);
         }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before dispatch")
+        }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
@@ -2062,6 +2065,9 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
             TirExprKind::Binary { left, right, .. } => {
                 self.visit_expr(left);
                 self.visit_expr(right);
+            }
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion before dispatch")
             }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
@@ -2886,6 +2892,9 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
         TirExprKind::Binary { left, right, .. } => {
             rewrite_calls_in_expr(left, ctx);
             rewrite_calls_in_expr(right, ctx);
+        }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before dispatch")
         }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }

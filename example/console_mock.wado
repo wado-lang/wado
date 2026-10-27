@@ -66,7 +66,7 @@ impl Stdin for MockStdio {
 
 // Reads replay `input`; the stream itself is a real one.
 impl Stream<u8> for MockStdio {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let end = i32::min(self.input_pos + max, self.input.len());
         let mut chunk: List<u8> = [];
         chunk.extend_from_slice(self.input.slice(self.input_pos, end));

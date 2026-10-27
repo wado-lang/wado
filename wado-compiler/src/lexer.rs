@@ -8,6 +8,7 @@
 // functions [`lex`] and [`lex_in`].
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::ast::AstIdSpace;
 use crate::comment::{Comment, CommentKind};
@@ -164,6 +165,9 @@ pub fn rebase_span(span: Span, origin: Position) -> Span {
 /// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].
 #[derive(Debug)]
 pub struct LexResult {
+    /// The text lexed, which every span's byte offsets index unless
+    /// [`lex_interpolation`] rebased them onto the enclosing file.
+    pub source: Arc<str>,
     pub tokens: Vec<Token>,
     pub errors: Vec<LexError>,
     pub comments: Vec<Comment>,
@@ -493,6 +497,7 @@ impl<'a> Lexer<'a> {
         }
 
         LexResult {
+            source: Arc::from(self.input),
             tokens,
             errors: self.errors,
             comments: self.comments,

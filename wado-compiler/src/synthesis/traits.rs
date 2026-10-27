@@ -5060,7 +5060,7 @@ fn scalar_order_stmts(
 ///
 /// Handles type decomposition, method name mangling, impl module resolution,
 /// and Ref/MutRef monomorphization. The value is automatically wrapped in a reference.
-fn trait_call_on_type(
+pub(super) fn trait_call_on_type(
     value: TirExpr,
     value_type: TypeId,
     trait_name: &FqTraitName,

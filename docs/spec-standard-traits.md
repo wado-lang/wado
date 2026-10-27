@@ -1014,7 +1014,7 @@ The prelude defines traits for index-based access:
 <!-- {"source": "wado-compiler/lib/core/prelude/traits.wado"} -->
 
 ```wado
-pub trait IndexValue<IndexType> with () {
+pub affine trait IndexValue<IndexType> with () {
     type Output;
 
     /// Returns a copy of the element at the given index.

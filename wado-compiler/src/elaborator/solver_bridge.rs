@@ -1068,6 +1068,7 @@ impl SolverBridge {
         let mut bridge = Self { program, lowering };
         // Before the declarations, whose derived `Copyable` reads them.
         bridge.state_copyable_facts();
+        bridge.state_any_bits_facts(tysys);
         let shapes = bridge.shapes(modules);
         bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
         let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
@@ -1096,6 +1097,25 @@ impl SolverBridge {
             };
             if copies {
                 self.program.facts.insert((head, copyable), Fact::default());
+            }
+        }
+    }
+
+    /// The primitives whose every bit pattern is a value. A newtype or `flags`
+    /// type inherits the fact from its base.
+    fn state_any_bits_facts(&mut self, tysys: &TypeSystem) {
+        let Some(any_bits) = tysys
+            .compiler_trait_def(CompilerItem::AnyBits)
+            .map(|def| self.lowering.trait_decl(def))
+        else {
+            return;
+        };
+        for index in 0..self.lowering.decls.len() {
+            let head = TypeDeclId(u32::try_from(index).expect("fewer than 2^32 declarations"));
+            if let DeclKey::Builtin(name) = self.lowering.decl_key(head)
+                && PrimitiveType::from_name(name).is_some_and(|p| p.any_bits_width().is_some())
+            {
+                self.program.facts.insert((head, any_bits), Fact::default());
             }
         }
     }

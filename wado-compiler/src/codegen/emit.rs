@@ -1900,6 +1900,15 @@ impl<'a> WirEmitter<'a> {
                 self.emit_instr(f, len);
                 f.instruction(&Instruction::MemoryFill(0));
             }
+            WirInstr::MemoryCopy { dst, src, len } => {
+                self.emit_instr(f, dst);
+                self.emit_instr(f, src);
+                self.emit_instr(f, len);
+                f.instruction(&Instruction::MemoryCopy {
+                    src_mem: 0,
+                    dst_mem: 0,
+                });
+            }
 
             // GC: Array (packed access)
             WirInstr::ArrayGetS {

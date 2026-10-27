@@ -260,6 +260,9 @@ impl StringCollector {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
+            }
             TirExprKind::WithHandler { .. } => {
                 unreachable!(
                     "WithHandler should be desugared by effect-dispatch synthesis before this phase"

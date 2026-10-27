@@ -153,8 +153,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
-global global:core:prelude/traits.wado::$const_obj_24: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
-global mut global:core:prelude/traits.wado::$const_obj_26: ref null "tuple//[core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>, core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>]" = ref.null none;
+global global:core:prelude/traits.wado::$const_obj_31: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
+global mut global:core:prelude/traits.wado::$const_obj_33: ref null "tuple//[core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>, core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>]" = ref.null none;
 
 fn "comparison_chain_dispatch.wado/$cm_export__$test_0_an_impl_written_for_a_reference"() {
     "wasi/task-return"(0);
@@ -217,13 +217,55 @@ fn "core:prelude/types.wado/cm_await_copy"(handle) {
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
+    let at: i32;
+    let w: i64;
+    let $licm_arith_7: i32;
     i = 0;
+    $licm_arith_7 = len - 8;
     b4: block {
         l5: loop {
-            break_if b4 i >= len;
+            break_if b4 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l5;
+        };
+    };
+    b6: block {
+        l7: loop {
+            break_if b6 i > $licm_arith_7;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l7;
+        };
+    };
+    b8: block {
+        l9: loop {
+            break_if b8 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l5;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l9;
+        };
+    };
+    b10: block {
+        l11: loop {
+            break_if b10 i >= len;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l11;
         };
     };
 }
@@ -293,7 +335,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l10: loop {
+        l16: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             result_7 = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -301,7 +343,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return result_7;
             }
-            continue l10;
+            continue l16;
         };
     };
 }
@@ -410,25 +452,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<comparison_
 
 fn "core:prelude/traits.wado/comparison_chain_dispatch.wado/Color^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let s_10: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_26) {
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_33) {
         let $mv_0_1: ref "core:prelude/traits.wado//EnumCase<comparison_chain_dispatch.wado/Color>";
         let $mv_1_2: ref "core:prelude/traits.wado//EnumCase<comparison_chain_dispatch.wado/Color>";
         multivalue_bind [$mv_0_1, $mv_1_2] = "comparison_chain_dispatch.wado/comparison_chain_dispatch.wado/Color^core:prelude/traits.wado/ReflectEnum::members"();
-        global:core:prelude/traits.wado::$const_obj_26 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>, core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>]" { 0: $mv_0_1, 1: $mv_1_2 };
+        global:core:prelude/traits.wado::$const_obj_33 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>, core:prelude/traits.wado/EnumCase<comparison_chain_dispatch.wado/Color>]" { 0: $mv_0_1, 1: $mv_1_2 };
     }
-    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_26.0;
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_33.0;
     if self == 0 {
         s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, s_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_31);
         s_10 = $mv_1_2.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_10);
     }
-    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_26.1;
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_33.1;
     if self == 1 {
         s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Color"), used: 5 };
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, s_10);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_24);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_31);
         s_10 = $mv_1_2.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_10);
     }

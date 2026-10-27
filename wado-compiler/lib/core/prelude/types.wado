@@ -217,13 +217,78 @@ pub resource Future<T> {
     #[cm("future-read")]
     fn read(self) -> Option<T>;
 
-    /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Cancel the read in flight, blocking until it settles, and return the
+    /// `CopyResult` it ended on, numbered as the Component Model numbers it. A
+    /// `FutureReadCopy` dropped in flight calls it. It traps on an end with no
+    /// read in flight.
     #[cm("future-cancel-read")]
-    fn cancel_read(&self);
+    fn cancel_read(&self) -> u32;
 
     /// Drop the readable end of the future.
     #[cm("future-drop-readable")]
     fn drop(self);
+}
+
+impl<affine T> Future<T> {
+    /// The Component Model read, started into a buffer the payload fits and
+    /// not waited for.
+    #[cm("future-begin-read")]
+    internal fn begin_read(&self) -> CopyBuffer;
+
+    /// The value a completed read on this end copied to `ptr`, lifted.
+    #[cm("future-lift")]
+    internal fn lift_read(&self, ptr: i32) -> T;
+
+    /// Start the read without waiting for it, so a `WaitableSet` can wait on
+    /// it beside other work. The end moves into the read.
+    pub fn start_read(self) -> FutureReadCopy<T> {
+        let buffer = self.begin_read();
+        return FutureReadCopy { read: Option::Some([self, buffer]) };
+    }
+}
+
+/// A read started on a future end, holding the end until it is finished.
+/// Dropping one in flight cancels it, and drops a value it had read.
+pub affine struct FutureReadCopy<affine T> {
+    read: Option<[Future<T>, CopyBuffer]>,
+}
+
+impl<affine T> FutureReadCopy<T> {
+    /// The value, or None where the writer dropped without writing. Waits for a
+    /// read that has not settled, so a read never inserted into a set finishes
+    /// as well. The end drops, as a read consumes it.
+    pub fn finish(self) -> Option<T> {
+        let mut copy = self;
+        let [end, mut buffer] = copy.read.take().unwrap();
+        if copy_result(buffer.settle()) != CopyResult::Completed {
+            return null;
+        }
+        return Option::Some(end.lift_read(buffer.ptr));
+    }
+}
+
+impl<affine T> Drop for FutureReadCopy<T> {
+    fn drop(self) {
+        let Some([end, mut buffer]) = self.read else {
+            return;
+        };
+        if buffer.ready_cancel() {
+            buffer.packed = end.cancel_read() as i32;
+        }
+        // A read that completed before the cancel owns what it lifts to.
+        if copy_result(buffer.settle()) == CopyResult::Completed {
+            let _ = end.lift_read(buffer.ptr);
+        }
+    }
+}
+
+impl<affine T> Waitable for FutureReadCopy<T> {
+    fn wait_on(&self) -> WaitOn {
+        let Some([_, buffer]) = &self.read else {
+            unreachable();
+        };
+        return buffer.wait_on();
+    }
 }
 
 /// Writable end of an async value (WASI Component Model future).
@@ -303,9 +368,10 @@ pub resource Stream<T> {
     /// `StartedRead::settled`. A program calls `start_read`, which holds the
     /// end for the copy: a second copy on an end that is copying traps, and
     /// a `StartedRead` dropped in flight waits for its copy where a
-    /// `ReadCopy` cancels it.
+    /// `ReadCopy` cancels it. A handler may ignore `into`: it says where a
+    /// host copy lands, and `settled` answers with the elements themselves.
     #[cm("stream-read")]
-    fn begin_read(&self, max: i32) -> StartedRead<T>;
+    fn begin_read(&self, max: i32, into: ReadInto) -> StartedRead<T>;
 
     /// Cancel the copy in flight, blocking until it settles, and return the
     /// packed word the Component Model answers: the count the copy moved
@@ -329,7 +395,7 @@ impl<affine T> Stream<T> {
     /// Start one copy of up to `max` elements without waiting for it. The end
     /// moves into the copy, and `ReadCopy::finish` hands it back.
     pub fn start_read(self, max: i32) -> ReadCopy<T> {
-        let started = self.begin_read(max);
+        let started = self.begin_read(max, ReadInto::fresh());
         return ReadCopy { copy: Option::Some([self, started]) };
     }
 }
@@ -348,7 +414,7 @@ impl<T> Stream<T> {
     pub fn read_to_end_sized(&self, expected: i32) -> List<T> {
         let mut all = List::<T>::with_capacity(expected);
         loop {
-            let chunk = self.begin_read(STREAM_CHUNK_ELEMENTS).settle(self);
+            let chunk = self.begin_read(STREAM_CHUNK_ELEMENTS, ReadInto::fresh()).settle(self);
             all.extend(&chunk.items);
             if chunk.result != CopyResult::Completed {
                 return all;
@@ -367,6 +433,48 @@ impl Stream<u8> {
 /// Elements per copy in the read loop the stdlib runs. A copy blocks
 /// until the peer moves, so this bounds the buffer, not the throughput.
 internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
+
+/// Where a host copy started by `Stream::begin_read` lands: memory the copy
+/// allocates for itself, or memory `core:*` lends it, which the host writes
+/// into directly. Only `core:*` lends, so no raw address is ever handed out.
+///
+/// A handler holds the value it is handed, and may forward it to another
+/// read. So lent memory says how much of it there is, and whether the lender
+/// still lends it: a read asking for more is held to the room, and one after
+/// the lend ended traps rather than writing what someone else now owns.
+#[compiler_item("read_into")]
+pub struct ReadInto {
+    ptr: i32,
+    room: i32,
+    /// Whether the lender still lends `ptr`; `None` for memory the copy
+    /// allocates for itself.
+    lending: Option<&mut bool>,
+}
+
+impl ReadInto {
+    /// Memory the copy allocates for itself, and frees once it has settled.
+    pub fn fresh() -> ReadInto {
+        return ReadInto { ptr: 0, room: 0, lending: null };
+    }
+
+    /// The `room` bytes at `ptr`, lent while `*lending` holds. Only a byte
+    /// stream's read takes it.
+    internal fn lent(ptr: i32, room: i32, lending: &mut bool) -> ReadInto
+        contract ptr != 0
+    {
+        return ReadInto { ptr, room, lending: Option::Some(lending) };
+    }
+
+    /// Where the host copies `room` bytes to, how many of them it may, and
+    /// the bytes the copy owns there: none of lent memory.
+    internal fn landing(&self, room: i32) -> [i32, i32, i32] {
+        if let Some(lending) = self.lending {
+            assert *lending, "a lent destination is written only while it is lent";
+            return [self.ptr, i32::min(room, self.room), 0];
+        }
+        return [builtin::realloc(0, 0, 1, room), room, room];
+    }
+}
 
 /// A read copy as `Stream::begin_read` started it: one the host may still be
 /// copying into `buffer`, or one a handler settled with its `items`.
@@ -632,6 +740,7 @@ fn settled_copy_at(handle: i32) -> Option<i32> {
 /// `handle` it belongs to: `packed` is what the canonical answered, BLOCKED
 /// until the copy settles. The host may write the memory until then, so a
 /// buffer dropped with its copy in flight waits for the copy before it frees.
+/// It frees the `size` bytes it owns at `ptr`, none where the memory is lent.
 #[compiler_item("copy_buffer")]
 internal affine struct CopyBuffer {
     internal handle: i32,
@@ -649,7 +758,7 @@ impl CopyBuffer {
     }
 
     /// The packed result the copy settled on, waiting for it where it has not.
-    fn settle(&mut self) -> i32 {
+    internal fn settle(&mut self) -> i32 {
         self.packed = settled_copy(self.handle, self.packed);
         return self.packed;
     }
@@ -683,7 +792,9 @@ impl CopyBuffer {
 impl Drop for CopyBuffer {
     fn drop(self) {
         let _ = settled_copy(self.handle, self.packed);
-        let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+        if self.size > 0 {
+            let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+        }
     }
 }
 
@@ -720,8 +831,8 @@ internal fn cm_await_copy(handle: i32) -> i32 {
 /// handle. It is sealed, so a set holds only what it can account for: the
 /// standard library implements it on the calls, and a variant whose cases each
 /// hold one derives it with `impl Waitable for V;`. A bare stream or future end
-/// is none, since no copy on it is in flight: a copy started on a stream end,
-/// `ReadCopy` or `WriteCopy`, is one.
+/// is none, since no copy on it is in flight: a copy started on one,
+/// `ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
 #[compiler_item("waitable")]
 pub affine trait Waitable with () {
     fn wait_on(&self) -> WaitOn;
@@ -770,7 +881,7 @@ pub variant ReadyEvent {
     /// own, so it is ready without one.
     Unreported,
     Call(CallState),
-    /// A started stream copy settled, ending as this says.
+    /// A started stream or future copy settled, ending as this says.
     Copied(CopyResult),
 }
 
@@ -861,7 +972,7 @@ pub affine struct WaitableSet<affine W: Waitable> {
     ready: List<Ready<W>>,
 }
 
-/// A member of a `WaitableSet` that has an event, moved out of the set with
+/// A member of a `WaitableSet` that is ready, moved out of the set with
 /// the event.
 pub struct Ready<affine W> {
     pub member: W,
@@ -886,29 +997,52 @@ impl<affine W: Waitable> WaitableSet<W> {
         }
     }
 
-    /// Blocks until a member has an event, and moves it out. A member ready
-    /// without the host comes first. Traps on an empty set.
+    /// Blocks until a member is ready, and moves it out: a copy once it
+    /// settled, a call once it resolved. A member ready without the host comes
+    /// first. Traps on an empty set.
     #[benign(RawWaitableSet)]
     pub fn wait(&mut self) -> Ready<W> {
         assert !self.is_empty(), "a set waits on a member";
         if !self.ready.is_empty() {
             return self.ready.remove(0);
         }
-        let event = self.raw.wait();
-        return self.take_reported(event);
+        loop {
+            if let Some(ready) = self.take_reported(self.raw.wait()) {
+                return ready;
+            }
+        }
     }
 
-    /// The member that has an event, moved out, or None where none has one
-    /// yet.
+    /// The member that is ready, as `wait` means it, moved out, or None where
+    /// none is yet.
     #[benign(RawWaitableSet)]
     pub fn poll(&mut self) -> Option<Ready<W>> {
         if !self.ready.is_empty() {
             return Option::Some(self.ready.remove(0));
         }
-        let Some(event) = self.raw.poll() else {
-            return null;
-        };
-        return Option::Some(self.take_reported(event));
+        while let Some(event) = self.raw.poll() {
+            if let Some(ready) = self.take_reported(event) {
+                return Option::Some(ready);
+            }
+        }
+        return null;
+    }
+
+    /// Moves every member out, the ready ones first, leaving the set empty. A
+    /// race keeps its losers this way, where dropping the set would drop them.
+    pub fn drain(&mut self) -> List<W> {
+        let mut drained: List<W> = [];
+        while let Some(ready) = self.poll() {
+            drained.push(ready.member);
+        }
+        for let member of builtin::replace(&mut self.members, []) {
+            let Host(id) = member.wait_on() else {
+                unreachable();
+            };
+            builtin::waitable_join(id.handle, 0);
+            drained.push(member);
+        }
+        return drained;
     }
 
     pub fn len(&self) -> i32 {
@@ -919,20 +1053,24 @@ impl<affine W: Waitable> WaitableSet<W> {
         return self.len() == 0;
     }
 
-    fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
-        builtin::waitable_join(reported.handle, 0);
+    /// The member `reported` settles, moved out, or None where it reports a
+    /// call that moved on without resolving, which stays joined: a member is
+    /// ready only once it has nothing left to wait for.
+    fn take_reported(&mut self, reported: WaitEvent) -> Option<Ready<W>> {
         // Found before the event is recorded, which settles the member.
         let at = self.member_at(reported.handle);
         match reported.event {
             Call(state) => {
-                if state.is_resolved() {
-                    DELIVERED.push(Resolution { handle: reported.handle, state });
+                if !state.is_resolved() {
+                    return null;
                 }
+                DELIVERED.push(Resolution { handle: reported.handle, state });
             },
             Copied(_) => SETTLED_COPIES.push(CopySettlement { handle: reported.handle, packed: reported.payload }),
             Unreported => unreachable(),
         }
-        return Ready { member: self.members.remove(at), event: reported.event };
+        builtin::waitable_join(reported.handle, 0);
+        return Option::Some(Ready { member: self.members.remove(at), event: reported.event });
     }
 
     fn member_at(&self, handle: i32) -> i32 {
@@ -1016,6 +1154,10 @@ pub affine struct AsyncCall<affine T> {
     buffer: Option<ResultBuffer>,
     /// Reads the CM-ABI bytes at the buffer and materializes them as `T`.
     lift: fn(i32) -> T,
+    /// What the arguments were lowered into, or None for arguments owning no
+    /// memory. A field, so it drops after the subtask resolves: only then has
+    /// the callee read every argument.
+    args: Option<ArgBuffer>,
 }
 
 impl<affine T> AsyncCall<T> {
@@ -1025,14 +1167,7 @@ impl<affine T> AsyncCall<T> {
         if let Some(subtask) = call.subtask.take() {
             let mut set = WaitableSet::<Subtask>::new();
             set.insert(subtask);
-            loop {
-                let ready = set.wait();
-                if ready.event matches { Call(state) && state.is_resolved() } {
-                    drop_resolved(ready.member);
-                    break;
-                }
-                set.insert(ready.member);
-            }
+            drop_resolved(set.wait().member);
         }
         // The buffer drops, freed, once the lift has read it.
         return match call.buffer.take() {
@@ -1094,6 +1229,20 @@ internal affine struct ResultBuffer {
 impl Drop for ResultBuffer {
     fn drop(self) {
         let _ = builtin::realloc(self.ptr, self.size, self.align, 0);
+    }
+}
+
+/// The linear memory an async call's arguments were lowered into, recorded
+/// at `ptr`, and the function freeing it from that record when it drops.
+#[compiler_item("arg_buffer")]
+internal affine struct ArgBuffer {
+    internal ptr: i32,
+    internal release: fn(i32),
+}
+
+impl Drop for ArgBuffer {
+    fn drop(self) {
+        (self.release)(self.ptr);
     }
 }
 

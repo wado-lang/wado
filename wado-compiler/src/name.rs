@@ -592,6 +592,12 @@ pub fn cm_lift_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
 }
 
+/// The function freeing what an async CM import's arguments were lowered into,
+/// which `ArgBuffer` points to.
+pub fn cm_release_args_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_release_args__{cm_identifier}")
+}
+
 /// The function packaging a handler's result of an async CM import as the
 /// `AsyncCall<T>` its call site reads.
 pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
@@ -606,6 +612,18 @@ pub fn cm_future_write_func_name(payload: &str) -> String {
 /// The helper reading a future of the payload type mangled as `payload`.
 pub fn cm_future_read_func_name(payload: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_future_read_{payload}")
+}
+
+/// The helper starting a read of a future of the payload type mangled as
+/// `payload`.
+pub fn cm_future_begin_read_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_begin_read_{payload}")
+}
+
+/// The function lifting what a read copied from a future of the payload type
+/// mangled as `payload`.
+pub fn cm_future_lift_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_lift_{payload}")
 }
 
 /// The helper writing a stream of the element type mangled as `element`.

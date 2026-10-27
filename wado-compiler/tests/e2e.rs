@@ -17,7 +17,7 @@ use bytes::Bytes;
 use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -617,7 +617,7 @@ async fn run_http_request_async(
             mocks: outgoing_mocks,
         },
         tls_ctx: common::build_tls_ctx(tls_mocks),
-        coverage_hits: BTreeSet::new(),
+        coverage: common::TestReport::default(),
     };
     let mut store = Store::new(engine, state);
     // Set epoch deadline for timeout enforcement (HTTP tests use 5s default)
@@ -1129,7 +1129,7 @@ fn run_with_allocator(
             assert_coverage(
                 &wasm,
                 fixture_path,
-                &result.coverage_hits,
+                &result.coverage_counts,
                 coverage,
                 test_id,
             );
@@ -1157,7 +1157,7 @@ fn run_with_allocator(
 fn assert_coverage(
     wasm: &[u8],
     fixture_path: &Path,
-    hits: &BTreeSet<u32>,
+    per_test: &[BTreeMap<u32, i64>],
     expected: &CoverageSpec,
     test_id: &str,
 ) {
@@ -1167,7 +1167,9 @@ fn assert_coverage(
     let registered = coverage
         .register(&plans, str::to_string)
         .unwrap_or_else(|mismatch| panic!("[{test_id}] plans disagree on {}", mismatch.path));
-    coverage.record(&registered, hits, None);
+    for counts in per_test {
+        coverage.record(&registered, counts, None);
+    }
     let name = fixture_path.file_name().unwrap().to_string_lossy();
     let file = coverage
         .files
@@ -1178,13 +1180,13 @@ fn assert_coverage(
     let branches: Vec<String> = file
         .branches()
         .iter()
-        .filter(|b| !b.taken)
+        .filter(|b| !b.taken())
         .map(Branch::describe)
         .collect();
     let functions: Vec<String> = file
         .functions()
         .into_iter()
-        .filter(|(_, ran)| !ran)
+        .filter(|(_, count)| *count == 0)
         .map(|(f, _)| f.name.clone())
         .collect();
     let plan = || render_plan(&file.plan);
@@ -1206,6 +1208,14 @@ fn assert_coverage(
         "[{test_id}] uncovered functions\n{}",
         plan()
     );
+    if let Some(line_counts) = &expected.line_counts {
+        assert_eq!(
+            &file.lines(),
+            line_counts,
+            "[{test_id}] line counts\n{}",
+            plan()
+        );
+    }
 }
 
 /// Check the fixture's `wir_expect:Ox` / `wir_not_expect:Ox` patterns against the
