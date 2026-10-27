@@ -443,12 +443,10 @@ fn peel_transparent_newtype(
     if !matches!(tt.get(type_id), ResolvedType::Newtype { .. }) {
         return type_id;
     }
-    let owner = tt.newtype_link_owning(type_id, |tid| {
-        ctx.trait_env
-            .trait_def_of_fq(trait_name)
-            .is_some_and(|trait_| written_impl_reaches(ctx.trait_env, trait_, tid, &tt))
-    });
-    owner.unwrap_or_else(|| tt.reflect_structure_head(type_id))
+    ctx.trait_env
+        .trait_def_of_fq(trait_name)
+        .and_then(|trait_| written_newtype_link(ctx.trait_env, trait_, type_id, &tt))
+        .unwrap_or_else(|| tt.reflect_structure_head(type_id))
 }
 
 /// Unified format trait dispatch: emit the `value.fmt(&mut f)` call,
@@ -883,19 +881,79 @@ fn value_blanket_link<'a>(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<(&'a BlanketImpl, TypeId)> {
+    ranked_blanket(trait_env, trait_, &[], receiver, tt)
+        .filter(|(blanket, _)| blanket.receiver == BlanketReceiver::Value)
+}
+
+/// The `&T` blanket the order selects for the reference `receiver` itself.
+pub(crate) fn ranked_ref_blanket<'a>(
+    trait_env: &'a TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<&'a BlanketImpl> {
+    ranked_blanket(trait_env, trait_name.called_decl(), trait_name.args(), receiver, tt)
+        .filter(|(blanket, link)| {
+            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
+        })
+        .map(|(blanket, _)| blanket)
+}
+
+/// The blanket the order selects for `receiver`, with the link of its chain
+/// the blanket answers.
+fn ranked_blanket<'a>(
+    trait_env: &'a TraitEnv,
+    trait_: DefId,
+    args: &[FqTypeName],
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(&'a BlanketImpl, TypeId)> {
     let InstanceOrder::One(InstanceImpl {
         body: InstanceBody::Block(block),
         depth,
     }) = trait_env
         .solver()
+        .instance_order(tt, receiver, trait_, args)?
+    else {
+        return None;
+    };
+    let blanket = trait_env.blanket_of_block(block)?;
+    Some((blanket, chain_link(receiver, depth, tt)))
+}
+
+/// The link of `receiver`'s chain whose written impl of `trait_` the order
+/// selects, with its depth: the receiver itself at depth 0.
+pub(crate) fn written_impl_link(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(TypeId, u32)> {
+    let InstanceOrder::One(InstanceImpl { body, depth }) = trait_env
+        .solver()
         .instance_order(tt, receiver, trait_, &[])?
     else {
         return None;
     };
-    let blanket = trait_env
-        .blanket_of_block(block)
-        .filter(|blanket| blanket.receiver == BlanketReceiver::Value)?;
-    Some((blanket, chain_link(receiver, depth, tt)))
+    let written = match body {
+        InstanceBody::Block(block) => trait_env.blanket_of_block(block).is_none(),
+        InstanceBody::EqFromCmp(_) => true,
+        InstanceBody::Supplied => false,
+    };
+    written.then(|| (chain_link(receiver, depth, tt), depth))
+}
+
+/// The newtype link at or below `receiver` whose written impl of `trait_` the
+/// order selects.
+pub(crate) fn written_newtype_link(
+    trait_env: &TraitEnv,
+    trait_: DefId,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<TypeId> {
+    written_impl_link(trait_env, trait_, tt.peel_refs(receiver), tt)
+        .map(|(link, _)| link)
+        .filter(|&link| matches!(tt.get_unerased(link), ResolvedType::Newtype { .. }))
 }
 
 /// The reflection trait `bound` names, or `None` for any other bound.

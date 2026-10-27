@@ -25,7 +25,7 @@ use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_value_blanket, ref_blanket_instance, trait_call_template,
+    ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance, trait_call_template,
 };
 use crate::tir;
 use crate::token::Span;
@@ -2431,9 +2431,9 @@ impl Monomorphizer {
     /// ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
     /// The general path peels every ref off the auto-`&self`'d receiver, which
     /// would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and drop the
-    /// leading `&`. Resolve the param's own value (ref intact) and, if it is a
-    /// reference to a universal-ref-blanket trait, route to that blanket in its
-    /// own module and report `true`. Otherwise leave `method_func` untouched.
+    /// leading `&`. Resolve the param's own value (ref intact) and, if the order
+    /// selects a `&T` blanket for it, route to that blanket in its own module
+    /// and report `true`. Otherwise leave `method_func` untouched.
     fn try_ref_blanket_shortcut(
         &self,
         method_func: &mut FunctionRef,
@@ -2455,13 +2455,8 @@ impl Monomorphizer {
         let Some(trait_fq) = info.trait_name.as_ref() else {
             return false;
         };
-        let Some(trait_) = trait_fq.canonical() else {
-            return false;
-        };
         let Some(blanket) =
-            self.functions
-                .trait_env
-                .universal_ref_blanket(trait_, ref_kind, trait_fq.args())
+            ranked_ref_blanket(&self.functions.trait_env, trait_fq, self_tid, type_table)
         else {
             return false;
         };

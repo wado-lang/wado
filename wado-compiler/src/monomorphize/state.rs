@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
+use crate::synthesis::template::{written_impl_link, written_newtype_link};
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
@@ -86,7 +86,8 @@ impl FuncInstState {
     }
 
     /// Module of a non-blanket impl, generic ones included, defining `info` on
-    /// `instance`; `None` where the head's written impls all miss `instance`.
+    /// `instance`; `None` where the head writes impls of the trait but the order
+    /// selects none of them for `instance` itself.
     pub fn generic_or_concrete_impl_module(
         &self,
         info: &LocalMethodName,
@@ -99,7 +100,8 @@ impl FuncInstState {
             if self
                 .trait_env
                 .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(instance), trait_)
-                && !written_impl_reaches(&self.trait_env, trait_, instance, type_table)
+                && written_impl_link(&self.trait_env, trait_, instance, type_table)
+                    .is_none_or(|(_, depth)| depth != 0)
             {
                 return None;
             }
@@ -495,30 +497,27 @@ impl Monomorphizer {
             .map(|tid| type_table.fq_base_type_name(tid))
     }
 
-    /// Whether the declaration `tid` names carries its own `impl <trait> for`
-    /// block reaching `tid`, or the `Eq` a `cmp` it writes alone gives it.
+    /// Whether the order answers `tid: trait_` with an impl written for `tid`
+    /// itself, or the `Eq` a `cmp` it writes alone gives it.
     pub(super) fn has_own_trait_impl(
         &self,
         type_table: &TypeTable,
         tid: TypeId,
         trait_: DefId,
     ) -> bool {
-        let trait_env = &self.functions.trait_env;
-        written_impl_reaches(trait_env, trait_, tid, type_table)
-            || eq_from_written_cmp(trait_env, trait_env.solver(), trait_, tid, type_table).is_some()
+        written_impl_link(&self.functions.trait_env, trait_, tid, type_table)
+            .is_some_and(|(_, depth)| depth == 0)
     }
 
-    /// The first newtype link at or below `type_id` writing its own impl of
-    /// `trait_`.
+    /// The newtype link at or below `type_id` whose written impl of `trait_`
+    /// the order selects.
     pub(super) fn newtype_link_with_trait_impl(
         &self,
         type_id: TypeId,
         type_table: &TypeTable,
         trait_: DefId,
     ) -> Option<TypeId> {
-        type_table.newtype_link_owning(type_id, |tid| {
-            self.has_own_trait_impl(type_table, tid, trait_)
-        })
+        written_newtype_link(&self.functions.trait_env, trait_, type_id, type_table)
     }
 
     pub fn receiver_keeps_newtype_own_impl(

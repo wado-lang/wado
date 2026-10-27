@@ -1503,7 +1503,7 @@ impl TraitEnv {
     }
 
     /// Whether the impl `block` of `trait_` answers a use wanting `wanted`.
-    pub(crate) fn block_answers(
+    fn block_answers(
         &self,
         block: DefId,
         trait_: DefId,
@@ -1719,29 +1719,6 @@ impl TraitEnv {
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
-    }
-
-    /// The universal ref blanket (`impl<T> Trait for &T`) answering
-    /// `trait_<wanted>`, the one writing the fewest open arguments first. `Eq`
-    /// has two: `Eq for &T` and `Eq<String> for &T`.
-    pub(crate) fn universal_ref_blanket(
-        &self,
-        trait_: DefId,
-        ref_kind: name::RefKind,
-        wanted: &[name::FqTypeName],
-    ) -> Option<&BlanketImpl> {
-        let is_mut = ref_kind == name::RefKind::Mut;
-        self.blanket_impls
-            .get(&trait_)?
-            .iter()
-            .filter(|b| {
-                b.receiver == BlanketReceiver::Ref { is_mut }
-                    && self.block_answers(b.def, trait_, wanted)
-            })
-            .min_by_key(|b| {
-                let written = self.impl_headers[&b.def].trait_arg_ids();
-                written.iter().filter(|arg| arg.mentions_binder()).count()
-            })
     }
 
     /// The blanket impl block `def` declares, if it is one.
