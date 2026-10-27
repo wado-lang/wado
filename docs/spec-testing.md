@@ -376,6 +376,13 @@ the function's source text and its regions' kinds and positions relative to
 it. The lines after it give how often each of the function's regions ran, the
 regions numbered from zero within the function. A region not listed never ran.
 
+A count of zero and no profile are different things. Every function of a
+module the profile lists has a `fn` line, one the workloads never ran
+included, and each of its regions has a count, zero where no line gives one.
+A function with no `fn` line has no profile at all, and neither does one whose
+hash differs from its current source's: nothing measured it as it stands, so
+no count applies to it.
+
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 ## Example Test File
