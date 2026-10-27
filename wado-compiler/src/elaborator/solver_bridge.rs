@@ -2491,13 +2491,15 @@ impl SolverBridge {
 
     fn instance_impl(&self, receiver: &SolverType, chosen: &Candidate) -> InstanceImpl {
         let body = if let Some(ord) = cmp_giving_eq(&self.program, receiver, chosen) {
-            InstanceBody::EqFromCmp(self.impl_def_of(ord).expect("a written impl has a block"))
+            InstanceBody::EqFromCmp(
+                self.impl_def_of(ord)
+                    .expect("an `Ord` written for a declaration has a block"),
+            )
         } else {
             match self.program.impls()[&chosen.impl_].origin {
-                ImplOrigin::Written => InstanceBody::Block(
-                    self.impl_def_of(chosen.impl_)
-                        .expect("a written impl has a block"),
-                ),
+                ImplOrigin::Written => self
+                    .impl_def_of(chosen.impl_)
+                    .map_or(InstanceBody::Supplied, InstanceBody::Block),
                 ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
                     match self.impl_def_of(chosen.impl_) {
                         // A marker no blanket derives for keeps its own block,
@@ -2507,7 +2509,7 @@ impl SolverBridge {
                         {
                             InstanceBody::Block(source)
                         }
-                        _ => InstanceBody::Derived,
+                        _ => InstanceBody::Supplied,
                     }
                 }
             }
@@ -2540,8 +2542,9 @@ pub(crate) enum InstanceBody {
     /// The written block's own method, or the trait default it inherits. A
     /// derived body's block is the `Reflect*` blanket it comes from.
     Block(DefId),
-    /// The body the compiler derives with no blanket, a marker's included.
-    Derived,
+    /// A body the compiler supplies with no block: a primitive's, or one it
+    /// derives with no blanket, a marker's included.
+    Supplied,
     /// The `==` a `cmp` written alone gives, in that `Ord` block.
     EqFromCmp(DefId),
 }

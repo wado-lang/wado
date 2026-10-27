@@ -674,7 +674,7 @@ pub(crate) fn answering_link(
 }
 
 /// The template `method` of `trait_` instantiates from `body`; `None` where
-/// the compiler derives it.
+/// the compiler supplies it.
 fn instance_template(
     trait_env: &TraitEnv,
     body: InstanceBody,
@@ -683,7 +683,7 @@ fn instance_template(
 ) -> Option<TemplateId> {
     match body {
         InstanceBody::Block(block) => trait_env.method_template(block, method),
-        InstanceBody::Derived => None,
+        InstanceBody::Supplied => None,
         InstanceBody::EqFromCmp(block) => Some(
             PairedEq {
                 eq: trait_env
@@ -700,14 +700,15 @@ fn instance_template(
 /// `receiver` is named by. A call through a reference is named by the
 /// reference, whichever level of its pointee's chain answers.
 fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
-    let (steps, mut level) = match tt.get(receiver) {
+    let (steps, mut level) = match tt.get_unerased(receiver) {
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth % 2 == 0 => return receiver,
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (depth / 2, *inner),
         _ => (depth, receiver),
     };
     for _ in 0..steps {
-        level = match tt.get(level) {
+        level = match tt.get_unerased(level) {
             ResolvedType::Newtype { base_type, .. } => *base_type,
+            ResolvedType::Flags { .. } => TypeTable::U32,
             // Only a newtype over a reference goes on through one.
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
             _ => unreachable!("the solver's chain from `{receiver:?}` has no level {depth}"),
