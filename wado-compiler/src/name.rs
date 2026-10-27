@@ -12,6 +12,7 @@ use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
+use crate::remote::is_remote;
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
@@ -1904,10 +1905,7 @@ pub fn wado_identifier(idl_name: &str) -> String {
 /// must never be normalized: a reserved namespace (`core:`, `wasi:`) or
 /// a remote URI (`http://` / `https://`).
 fn has_special_prefix(path: &str) -> bool {
-    path.starts_with("core:")
-        || CmNamespace::split_specifier(path).is_some()
-        || path.starts_with("https://")
-        || path.starts_with("http://")
+    path.starts_with("core:") || CmNamespace::split_specifier(path).is_some() || is_remote(path)
 }
 
 /// Normalize a module path lexically via [`crate::path::normalize`] — resolve
@@ -2101,7 +2099,7 @@ pub fn resolve_import_with_entry(
     if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
         return interner.binding(namespace, interface);
     }
-    if import_source.starts_with("https://") || import_source.starts_with("http://") {
+    if is_remote(import_source) {
         return interner.remote(import_source);
     }
 
