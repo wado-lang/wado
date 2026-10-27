@@ -56,7 +56,7 @@ global mut SETTLED_COPIES: core:prelude/list.wado/List<core:prelude/types.wado/C
 
 global mut DELIVERED: core:prelude/list.wado/List<core:prelude/types.wado/Resolution> = deferred null;
 
-global mut COVERAGE_SEEN: Array<u8> = deferred null;
+global mut COVERAGE_COUNTS: Array<i64> = deferred null;
 
 global mut CM_CALLBACKS: core:prelude/list.wado/List<fn()->()> = deferred null;
 
@@ -13420,22 +13420,43 @@ fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64,i64] {
 
 #[inline(never)]
 fn coverage_probe(id: i32) {
-    let len: i32 = "core::builtin::core/builtin/array_len<u8>"(&core::rt::COVERAGE_SEEN);
-    if ((id < len) && (core::builtin::array_get_value_u8(&core::rt::COVERAGE_SEEN, id) != 0)) {
-        return;
+    let len: i32 = "core::builtin::core/builtin/array_len<i64>"(&core::rt::COVERAGE_COUNTS);
+    if (id < len) {
+        let count: i64 = "core::builtin::core/builtin/array_get_value<i64>"(&core::rt::COVERAGE_COUNTS, id);
+        if (count != 0) {
+            "core::builtin::core/builtin/array_set<i64>"(&mut core::rt::COVERAGE_COUNTS, id, (count + 1));
+            return;
+        }
     }
     core::builtin::cold_path();
     if (id >= len) {
-        let mut grown: Array<u8> = "core::builtin::core/builtin/array_new<u8>"(if (id < (len * 2)) {
+        let mut grown: Array<i64> = "core::builtin::core/builtin/array_new<i64>"(if (id < (len * 2)) {
             (len * 2);
         } else {
             (id + 1);
         });
-        "core::builtin::core/builtin/array_copy<u8>"(&mut grown, 0, &core::rt::COVERAGE_SEEN, 0, len);
-        core::rt::COVERAGE_SEEN = grown;
+        "core::builtin::core/builtin/array_copy<i64>"(&mut grown, 0, &core::rt::COVERAGE_COUNTS, 0, len);
+        core::rt::COVERAGE_COUNTS = grown;
     }
-    core::builtin::array_set_u8(&mut core::rt::COVERAGE_SEEN, id, 1);
+    "core::builtin::core/builtin/array_set<i64>"(&mut core::rt::COVERAGE_COUNTS, id, 1);
     "ops.all_dirty.wado::$cm_binding__core:coverage/coverage-host@0.1.0#hit"(id as u32 as i32);
+}
+
+fn coverage_report() {
+    let len: i32 = "core::builtin::core/builtin/array_len<i64>"(&core::rt::COVERAGE_COUNTS);
+    let mut id: i32 = 0;
+    loop {
+        if !(id < len) {
+            break;
+        }
+        $for_0_body: {
+            let runs: i64 = "core::builtin::core/builtin/array_get_value<i64>"(&core::rt::COVERAGE_COUNTS, id);
+            if (runs > 1) {
+                "ops.all_dirty.wado::$cm_binding__core:coverage/coverage-host@0.1.0#count"(id as u32 as i32, runs);
+            }
+        }
+        id = (id + 1);
+    }
 }
 
 pub fn unreachable() -> ! {
@@ -13483,7 +13504,7 @@ fn cm_callback_key(callback: fn()->()) -> u32 {
                     };
                     if !$cond {
                         core::builtin::cold_path();
-                        "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1, String { repr: packed"core:rt:250", used: 11 });
+                        "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1, String { repr: packed"core:rt:273", used: 11 });
                     }
                 }
                 i;
@@ -13508,7 +13529,7 @@ fn cm_callback(key: u32) -> fn()->() {
             };
             if !$cond {
                 core::builtin::cold_path();
-                "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key as i32, $v1, String { repr: packed"core:rt:261", used: 11 });
+                "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(key as i32, $v1, String { repr: packed"core:rt:284", used: 11 });
             }
         }
         key as i32;
@@ -13956,6 +13977,10 @@ fn "$cm_binding__core:coverage/coverage-host@0.1.0#hit"(id: i32) with CoverageHo
     cm_raw_call $core:coverage/coverage-host@0.1.0#hit(id);
 }
 
+fn "$cm_binding__core:coverage/coverage-host@0.1.0#count"(id: i32, runs: i64) with CoverageHost {
+    cm_raw_call $core:coverage/coverage-host@0.1.0#count(id, runs);
+}
+
 export fn "$cm_export__run"() {
     "ops.all_dirty.wado::$initialize_modules"();
     "ops.all_dirty.wado::run"();
@@ -14136,7 +14161,15 @@ pub fn "core:prelude/list.wado/List<u8>::len"(self: &core:prelude/list.wado/List
     return self.used;
 }
 
-pub fn "core/builtin/array_len<u8>"(arr: &Array<u8>) -> i32;
+pub fn "core/builtin/array_copy<i64>"(dst: &mut Array<i64>, dst_offset: i32, src: &Array<i64>, src_offset: i32, len: i32);
+
+pub fn "core/builtin/array_set<i64>"(arr: &mut Array<i64>, idx: i32, value: i64);
+
+pub fn "core/builtin/array_get_value<i64>"(arr: &Array<i64>, idx: i32) -> i64;
+
+pub fn "core/builtin/array_len<i64>"(arr: &Array<i64>) -> i32;
+
+pub fn "core/builtin/array_new<i64>"(len: i32) -> Array<i64>;
 
 pub fn "core/builtin/call_indirect_stderr_write_via_stream<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>"(rx: core:prelude/types.wado/Stream<u8>) -> core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>;
 
@@ -14547,7 +14580,7 @@ pub fn "core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$e
 }
 
 pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
-    return "core::builtin::core/builtin/array_len<u8>"(self);
+    return core::builtin::array_len::<u8>(self);
 }
 
 // retains: repr
@@ -15615,7 +15648,7 @@ pub fn "core:prelude/string.wado/String::format<core:prelude/$tmpl$607565a668ad1
 }
 
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/From<Array<T>>::from"(elements: Array<u8>) -> core:prelude/list.wado/List<u8> {
-    let used: i32 = "core::builtin::core/builtin/array_len<u8>"(&elements);
+    let used: i32 = core::builtin::array_len::<u8>(&elements);
     return List<u8> { repr: elements, used: used };
 }
 
@@ -23763,7 +23796,7 @@ pub fn "$initialize_module"() {
 }
 
 pub fn "$initialize_module"() {
-    core::rt::COVERAGE_SEEN = "core::builtin::core/builtin/array_new<u8>"(0);
+    core::rt::COVERAGE_COUNTS = "core::builtin::core/builtin/array_new<i64>"(0);
     core::rt::CM_CALLBACKS = "core::prelude/list.wado::core:prelude/list.wado/List<fn()->()>^core:prelude/traits.wado/From<Array<T>>::from"([]);
     core::rt::CM_COPY_MAX = 268435455;
 }
@@ -25784,6 +25817,10 @@ fn "$value_copy$[i64,i64]"(v: [i64,i64]) -> [i64,i64] {
 
 fn "$value_copy$core:prelude/list.wado/List<fn()->()>"(v: core:prelude/list.wado/List<fn()->()>) -> core:prelude/list.wado/List<fn()->()> {
     return v;
+}
+
+fn "$value_copy$Array<i64>"(v: Array<i64>) -> Array<i64> {
+    return core::builtin::array_clone::<i64>(&v);
 }
 
 fn "$value_copy$core:prelude/list.wado/List<core:prelude/types.wado/Resolution>"(v: core:prelude/list.wado/List<core:prelude/types.wado/Resolution>) -> core:prelude/list.wado/List<core:prelude/types.wado/Resolution> {
