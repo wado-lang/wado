@@ -2119,58 +2119,24 @@ fn generate_cm_imports(
             // WASI packages declare (`ErrorCode`) against this interface.
             let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             register_outer_error_codes(&mut shared_type_gen, project, ctx);
-            let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
             let resource_exports = resource_exports_for(
                 &mut shared_type_gen,
                 &resource_handles,
                 &project.cm_interface_registry,
             );
-
             for func in &cm_functions {
-                let mut signature_type = |ty: &Type| {
-                    let resolved_ty = project
-                        .cm_interface_registry
-                        .resolve_type_preserving_local_newtypes(ty);
-                    let mut sink = InstanceSink {
-                        it: &mut instance_type,
-                        next_idx: &mut local_type_idx,
-                    };
-                    shared_type_gen.ast_type_to_cm(
-                        &mut sink,
-                        &resolved_ty,
-                        &project.cm_interface_registry,
-                        &resource_exports,
-                    )
-                };
-                let params: Vec<(&str, ComponentValType)> = func
-                    .params
-                    .iter()
-                    .map(|(_, cm_name, ty)| (cm_name.as_str(), signature_type(ty)))
-                    .collect();
-                let result_type = func.return_type.as_ref().map(&mut signature_type);
-
-                let mut func_encoder = instance_type.ty().function();
-                if func.is_async {
-                    func_encoder.async_(true).params(params).result(result_type);
-                } else {
-                    func_encoder.params(params).result(result_type);
-                }
-
-                let func_type_idx = local_type_idx;
-                local_type_idx += 1;
-
-                deferred_func_exports.push((func.wasi_func_name.clone(), func_type_idx));
-            }
-
-            for (func_name, func_type_idx) in &deferred_func_exports {
-                instance_type.export(
-                    func_name,
-                    wasm_encoder::ComponentTypeRef::Func(*func_type_idx),
+                export_func_in_instance_type(
+                    &mut instance_type,
+                    &mut local_type_idx,
+                    &mut shared_type_gen,
+                    project,
+                    &resource_exports,
+                    func,
                 );
             }
 
-            // The loops above emit `ErrorCode` only where a signature reaches
-            // it, and the type walk may have emitted it on demand.
+            // `ErrorCode` lands in the instance only where a signature above
+            // reached it, so the walk says whether it is there.
             exported_error_code = project
                 .cm_interface_registry
                 .own_error_code_cm_name(&interface_info.path)
@@ -2362,34 +2328,30 @@ fn export_func_in_instance_type(
     func: &CmFunctionInfo,
 ) {
     let registry = &project.cm_interface_registry;
-    let resolved_return = func
-        .return_type
-        .as_ref()
-        .map(|ty| registry.resolve_type(ty));
-
-    let cm_params: Vec<(String, ComponentValType)> = func
-        .params
-        .iter()
-        .map(|(_, cm_name, ty)| {
-            let mut sink = InstanceSink {
-                it: instance_type,
-                next_idx: type_idx,
-            };
-            let cm_type = type_gen.ast_type_to_cm(&mut sink, ty, registry, resource_exports);
-            (cm_name.clone(), cm_type)
-        })
-        .collect();
-
-    let cm_result = resolved_return.as_ref().map(|ty| {
+    let mut lower = |ty: &Type| {
+        let resolved = registry.resolve_type_preserving_local_newtypes(ty);
         let mut sink = InstanceSink {
             it: instance_type,
             next_idx: type_idx,
         };
-        type_gen.ast_type_to_cm(&mut sink, ty, registry, resource_exports)
-    });
+        type_gen.ast_type_to_cm(&mut sink, &resolved, registry, resource_exports)
+    };
 
-    let param_refs: Vec<(&str, ComponentValType)> =
-        cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+    let param_refs: Vec<(&str, ComponentValType)> = func
+        .params
+        .iter()
+        .map(|(_, cm_name, ty)| {
+            // A method's receiver is a borrow, however the binding spells it.
+            let cm_type = if cm_name == "self" && matches!(ty, Type::Named(_)) {
+                lower(&Type::Reference(Box::new(ty.clone())))
+            } else {
+                lower(ty)
+            };
+            (cm_name.as_str(), cm_type)
+        })
+        .collect();
+    let cm_result = func.return_type.as_ref().map(&mut lower);
+
     let mut func_encoder = instance_type.ty().function();
     if func.is_async {
         func_encoder
@@ -3245,17 +3207,16 @@ fn import_resource_using_interfaces(
                         cm_name,
                         wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
                     );
-                } else if let Some(outer_idx) =
-                    aliased_type_idx(ctx, project, source, resource_name, cm_name)
-                {
+                } else {
+                    let outer_idx = aliased_type_idx(ctx, project, source, resource_name, cm_name)
+                        .unwrap_or_else(|| {
+                            unaliased(&format!("resource `{cm_name}` of `{source}`"))
+                        });
                     instance_type.alias(Alias::Outer {
                         kind: ComponentOuterAliasKind::Type,
                         count: 1,
                         index: outer_idx,
                     });
-                } else {
-                    // Resource not yet imported — skip this interface
-                    continue;
                 }
                 let resource_idx = local_type_idx;
                 local_type_idx += 1;
@@ -3276,60 +3237,14 @@ fn import_resource_using_interfaces(
                 &resource_handles,
                 &project.cm_interface_registry,
             );
-            let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
-
             for func in &cm_functions {
-                let mut signature_type = |ty: &Type| {
-                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                    let mut sink = InstanceSink {
-                        it: &mut instance_type,
-                        next_idx: &mut local_type_idx,
-                    };
-                    type_gen.ast_type_to_cm(
-                        &mut sink,
-                        &resolved_ty,
-                        &project.cm_interface_registry,
-                        &resource_exports,
-                    )
-                };
-                let param_refs: Vec<(&str, ComponentValType)> = func
-                    .params
-                    .iter()
-                    .map(|(_, cm_name, ty)| {
-                        // A `self` declared as the bare resource is still the
-                        // borrow a method takes.
-                        let val = if let Type::Named(named) = ty
-                            && let Some(handles) = resource_handles.get(&named.name)
-                            && cm_name == "self"
-                        {
-                            ComponentValType::Type(handles.borrow)
-                        } else {
-                            signature_type(ty)
-                        };
-                        (cm_name.as_str(), val)
-                    })
-                    .collect();
-                let result_type = func.return_type.as_ref().map(&mut signature_type);
-
-                let mut func_encoder = instance_type.ty().function();
-                if func.is_async {
-                    func_encoder
-                        .async_(true)
-                        .params(param_refs)
-                        .result(result_type);
-                } else {
-                    func_encoder.params(param_refs).result(result_type);
-                }
-                let func_type_idx = local_type_idx;
-                local_type_idx += 1;
-
-                deferred_func_exports.push((func.wasi_func_name.clone(), func_type_idx));
-            }
-
-            for (func_name, func_type_idx) in &deferred_func_exports {
-                instance_type.export(
-                    func_name,
-                    wasm_encoder::ComponentTypeRef::Func(*func_type_idx),
+                export_func_in_instance_type(
+                    &mut instance_type,
+                    &mut local_type_idx,
+                    &mut type_gen,
+                    project,
+                    &resource_exports,
+                    func,
                 );
             }
 
