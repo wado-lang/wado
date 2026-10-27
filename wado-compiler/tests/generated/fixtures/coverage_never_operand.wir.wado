@@ -72,12 +72,34 @@ fn "core:rt/coverage_report"() {
     id = 0;
     b0: block {
         l1: loop {
-            break_if b0 id >= len;
+            break_if b0 (((id >= len) | ((id + 1) >= len)) | (((id + 1) + 1) >= len)) | ((((id + 1) + 1) + 1) >= len);
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
             if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
                 "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
             }
             id = id + 1;
             continue l1;
+        };
+    };
+    b6: block {
+        l7: loop {
+            break_if b6 id >= len;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_never_operand.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l7;
         };
     };
 }

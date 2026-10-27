@@ -81,12 +81,34 @@ fn "core:rt/coverage_report"() {
     id = 0;
     b3: block {
         l4: loop {
-            break_if b3 id >= len;
+            break_if b3 (((id >= len) | ((id + 1) >= len)) | (((id + 1) + 1) >= len)) | ((((id + 1) + 1) + 1) >= len);
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_empty_tuple_for_of.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_empty_tuple_for_of.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_empty_tuple_for_of.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
             if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
                 "coverage_empty_tuple_for_of.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
             }
             id = id + 1;
             continue l4;
+        };
+    };
+    b9: block {
+        l10: loop {
+            break_if b9 id >= len;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_empty_tuple_for_of.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l10;
         };
     };
 }

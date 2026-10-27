@@ -288,14 +288,36 @@ fn "core:rt/coverage_report"() {
     let runs: i64;
     len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
     id = 0;
-    b10: block {
-        l11: loop {
-            break_if b10 id >= len;
+    b16: block {
+        l17: loop {
+            break_if b16 (((id >= len) | ((id + 1) >= len)) | (((id + 1) + 1) >= len)) | ((((id + 1) + 1) + 1) >= len);
             if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
                 "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
             }
             id = id + 1;
-            continue l11;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l17;
+        };
+    };
+    b22: block {
+        l23: loop {
+            break_if b22 id >= len;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l23;
         };
     };
 }
@@ -334,13 +356,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-<<<<<<< HEAD
-        l16: loop {
-||||||| 0fe5443fa
-        l13: loop {
-=======
-        l19: loop {
->>>>>>> origin/main
+        l28: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             result_7 = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -348,13 +364,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return result_7;
             }
-<<<<<<< HEAD
-            continue l16;
-||||||| 0fe5443fa
-            continue l13;
-=======
-            continue l19;
->>>>>>> origin/main
+            continue l28;
         };
     };
 }
