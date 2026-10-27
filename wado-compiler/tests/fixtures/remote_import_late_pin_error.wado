@@ -1,0 +1,14 @@
+// A pin written by an importer read after the remote file is held to the same
+// content: `c` pins the file `a` already read.
+
+use { a } from "./sub/remote_late_pin_a.wado";
+use { b } from "./sub/remote_late_pin_b.wado";
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "sub/remote_late_pin_c.wado:2:23: analysis error: 'https://example.com/lib/util.wado' does not match its integrity: the `use` pins sha256:1111111111111111111111111111111111111111111111111111111111111111, and the content is sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513; to accept the content, write `integrity: \"sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513\"`",
+  "compile_error_codes": ["REMOTE_INTEGRITY"],
+  "remote": { "https://example.com/lib/util.wado": "sub/remote_import_util.wado" }
+}

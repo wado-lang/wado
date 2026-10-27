@@ -1,55 +1,177 @@
-use { Schema, TypeSet } from "../src/lib.wado";
+use { JsonSchema, Schema, SchemaGenerator, schema_for } from "../src/lib.wado";
 use { Value } from "core:value";
-use { to_string_pretty } from "core:json";
+use { TreeMap, TreeSet } from "core:collections";
+use { to_string } from "core:json";
 
-test "gale-style options object serializes to idiomatic JSON Schema" {
-    // { highlight: bool (required), trace: bool = false }
-    let mut root = Schema::object();
-    root.as_root();
-    root.property("highlight", Schema::boolean());
-    let mut trace = Schema::boolean();
-    trace.set_default(Value::Bool(false));
-    root.property("trace", trace);
-    root.require("highlight");
+fn inline<T: JsonSchema>() -> String {
+    let mut gen = SchemaGenerator::new();
+    return to_string(&T::json_schema(&mut gen)).unwrap();
+}
 
-    let json = to_string_pretty(&root).unwrap();
-    assert json == `{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "properties": {
-    "highlight": {
-      "type": "boolean"
-    },
-    "trace": {
-      "type": "boolean",
-      "default": false
+fn standalone<T: JsonSchema>() -> String {
+    return to_string(&schema_for::<T>()).unwrap();
+}
+
+test "an absent keyword is left out" {
+    assert to_string(&Schema {}).unwrap() == "{}";
+    assert to_string(&Schema::constant(Value::Null)).unwrap() == `{"const":null}`;
+}
+
+test "bool" {
+    assert inline::<bool>() == `{"type":"boolean"}`;
+}
+
+test "an integer up to 32 bits is bounded by its type's range" {
+    assert inline::<i8>() == `{"type":"integer","minimum":-128,"maximum":127}`;
+    assert inline::<u16>() == `{"type":"integer","minimum":0,"maximum":65535}`;
+    assert inline::<i32>() == `{"type":"integer","minimum":-2147483648,"maximum":2147483647}`;
+    assert inline::<u32>() == `{"type":"integer","minimum":0,"maximum":4294967295}`;
+}
+
+test "a 64-bit integer is a safe number or a decimal string in range" {
+    let i = inline::<i64>();
+    assert i.starts_with(
+        `{"anyOf":[{"type":"integer","minimum":-9007199254740991,"maximum":9007199254740991},{"type":"string","pattern":"^(0|-?([1-9][0-9]{0,17}|`,
+    );
+    assert i.ends_with(`|9223372036854775807)|-9223372036854775808)$"}]}`);
+    let u = inline::<u64>();
+    assert u.starts_with(
+        `{"anyOf":[{"type":"integer","minimum":0,"maximum":9007199254740991},{"type":"string","pattern":"^(0|([1-9][0-9]{0,18}|`,
+    );
+    assert u.ends_with(`|18446744073709551615))$"}]}`);
+}
+
+test "a 128-bit integer is a decimal string in range" {
+    let s = inline::<u128>();
+    assert s.starts_with(`{"type":"string","pattern":"^(0|([1-9][0-9]{0,37}|`);
+    assert s.ends_with(`|340282366920938463463374607431768211455))$"}`);
+    assert inline::<i128>().ends_with(
+        `|170141183460469231731687303715884105727)|-170141183460469231731687303715884105728)$"}`,
+    );
+}
+
+test "a float is a number" {
+    assert inline::<f64>() == `{"type":"number"}`;
+    assert inline::<f32>() == `{"type":"number"}`;
+}
+
+test "char is a string of one code point" {
+    assert inline::<char>() == `{"type":"string","minLength":1,"maxLength":1}`;
+}
+
+test "String" {
+    assert inline::<String>() == `{"type":"string"}`;
+}
+
+test "a byte type is unpadded base64url" {
+    assert inline::<ByteList>() == `{"type":"string","contentEncoding":"base64url"}`;
+}
+
+test "unit is null" {
+    assert inline::<()>() == `{"type":"null"}`;
+}
+
+test "an Option is its type or null, through anyOf" {
+    assert inline::<Option<String>>() == `{"anyOf":[{"type":"string"},{"type":"null"}]}`;
+    assert inline::<Option<Option<bool>>>() == `{"anyOf":[{"anyOf":[{"type":"boolean"},{"type":"null"}]},{"type":"null"}]}`;
+}
+
+test "a Result is an object holding Ok or Err" {
+    assert inline::<Result<bool, String>>() == `{"oneOf":[{"type":"object","properties":{"Ok":{"type":"boolean"}},"required":["Ok"],"maxProperties":1},{"type":"object","properties":{"Err":{"type":"string"}},"required":["Err"],"maxProperties":1}]}`;
+}
+
+test "List, TreeSet and TreeMap" {
+    assert inline::<List<bool>>() == `{"type":"array","items":{"type":"boolean"}}`;
+    assert inline::<TreeSet<String>>() == `{"type":"array","items":{"type":"string"},"uniqueItems":true}`;
+    assert inline::<TreeMap<String, bool>>() == `{"type":"object","additionalProperties":{"type":"boolean"}}`;
+}
+
+test "a tuple is an array of exactly its arity" {
+    assert inline::<[bool, String]>() == `{"type":"array","prefixItems":[{"type":"boolean"},{"type":"string"}],"minItems":2,"maxItems":2}`;
+}
+
+struct Point {
+    x: f64,
+    y: f64 = 0.0,
+}
+
+test "a struct is a definition: a field without a default is required" {
+    assert standalone::<Point>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Point","$defs":{"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
+}
+
+test "a bare Option field is required, and one defaulting to null is not" {
+    struct Profile {
+        nickname: Option<String>,
+        bio: Option<String> = null,
     }
-  },
-  "required": [
-    "highlight"
-  ],
-  "additionalProperties": false
-}`;
+    assert standalone::<Profile>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Profile","$defs":{"Profile":{"type":"object","properties":{"nickname":{"anyOf":[{"type":"string"},{"type":"null"}]},"bio":{"anyOf":[{"type":"string"},{"type":"null"}],"default":null}},"required":["nickname"]}}}`;
 }
 
-test "absent fields are omitted" {
-    let json = to_string_pretty(&Schema::boolean()).unwrap();
-    assert json == `{
-  "type": "boolean"
-}`;
+#[wire(name_policy = "camelCase")]
+struct CreateUser {
+    user_name: String,
+    #[wire(name = "home")]
+    location: Point,
 }
 
-test "nullable string via a type union" {
-    let schema = Schema {
-        type: Option::Some(TypeSet::Many(["string", "null"])),
-        default_: Option::Some(Value::Null),
-    };
-    let json = to_string_pretty(&schema).unwrap();
-    assert json == `{
-  "type": [
-    "string",
-    "null"
-  ],
-  "default": null
-}`;
+test "properties go under their wire names, and a nested struct is referred to" {
+    assert standalone::<CreateUser>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/CreateUser","$defs":{"CreateUser":{"type":"object","properties":{"userName":{"type":"string"},"home":{"$ref":"#/$defs/Point"}},"required":["userName","home"]},"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
+}
+
+struct Node {
+    value: i8,
+    next: Option<Node>,
+}
+
+test "a recursive struct refers to its own definition" {
+    assert standalone::<Node>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Node","$defs":{"Node":{"type":"object","properties":{"value":{"type":"integer","minimum":-128,"maximum":127},"next":{"anyOf":[{"$ref":"#/$defs/Node"},{"type":"null"}]}},"required":["value","next"]}}}`;
+}
+
+enum Color {
+    Red,
+    Green,
+}
+
+test "an enum is a string of its wire names" {
+    assert standalone::<Color>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Color","$defs":{"Color":{"type":"string","enum":["Red","Green"]}}}`;
+}
+
+flags Perms {
+    Read,
+    Write,
+}
+
+test "flags are an array of distinct member names" {
+    assert standalone::<Perms>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Perms","$defs":{"Perms":{"type":"array","items":{"type":"string","enum":["Read","Write"]},"uniqueItems":true}}}`;
+}
+
+variant Shape {
+    Circle(f64),
+    Empty,
+}
+
+test "a variant is one of its cases: a name, or an object holding the payload" {
+    assert standalone::<Shape>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Shape","$defs":{"Shape":{"oneOf":[{"type":"object","properties":{"Circle":{"type":"number"}},"required":["Circle"],"maxProperties":1},{"const":"Empty"}]}}}`;
+}
+
+#[wire(tag = "kind")]
+variant Event {
+    Moved(Point),
+    Closed,
+}
+
+test "a tagged variant is one of its cases, each holding its name under the tag" {
+    assert standalone::<Event>() == `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"#/$defs/Event","$defs":{"Event":{"oneOf":[{"$ref":"#/$defs/Point","properties":{"kind":{"const":"Moved"}},"required":["kind"]},{"type":"object","properties":{"kind":{"const":"Closed"}},"required":["kind"]}]},"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}}`;
+}
+
+type UserName = String;
+
+test "a newtype takes its base's schema" {
+    assert inline::<UserName>() == `{"type":"string"}`;
+}
+
+test "an OpenAPI generator refers to its definitions under components" {
+    let mut gen = SchemaGenerator::openapi();
+    assert to_string(&Point::json_schema(&mut gen)).unwrap() == `{"$ref":"#/components/schemas/Point"}`;
+    assert to_string(&gen.definitions()).unwrap() == `{"Point":{"type":"object","properties":{"x":{"type":"number"},"y":{"type":"number","default":0}},"required":["x"]}}`;
 }

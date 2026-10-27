@@ -83,6 +83,12 @@ pub fn variant_tag<affine T>(v: &T) -> i32;
 #[side_effect(trap)]
 pub fn variant_case_extract<affine T, P>(v: &T, index: i32) -> P;
 
+/// Reads the payload of variant case `index` of `v` by reference, so an affine
+/// payload is not copied. Rewritten by lowering like `variant_case_extract`.
+#[storage(part_of_args)]
+#[side_effect(trap)]
+pub fn variant_case_ref<affine T, affine P>(v: &T, index: i32) -> &P;
+
 /// Builds variant case `index` of `T` around `payload`.
 /// Rewritten by lowering like `variant_case_extract`.
 #[storage(holds_args)]

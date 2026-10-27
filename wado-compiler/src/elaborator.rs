@@ -51,7 +51,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use tysys::TypeSystem;
 
-pub(crate) use solver_bridge::SolverBridge;
+pub(crate) use solver_bridge::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
 
 use crate::hashmap::IndexMap;
 

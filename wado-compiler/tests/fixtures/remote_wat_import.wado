@@ -1,0 +1,15 @@
+// A `use` names a Wasm asset by its URL as it names a module, pinned the same
+// way.
+
+use { add_one } from "https://example.com/lib/user.wat"
+    with { type: "wat", integrity: "sha256:c481901109f4f4038ccb1f66f9701695498883f3297e0376b9cc289dd420cf0a" };
+
+test {
+    assert add_one(41) == 42;
+}
+
+__DATA__
+{
+  "test": {},
+  "remote": { "https://example.com/lib/user.wat": "sub/wasm_import_user.wat" }
+}

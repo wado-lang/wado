@@ -161,6 +161,13 @@ This WEP does not design the browser playground integration. It requires only th
 - `wado-lsp/src/server.rs` uses synchronous `std::io::{stdin, stdout}` for framing; `Engine` queries remain `async fn` and are awaited between reads.
 - Source layout uses `wado-lsp/src/server.rs` + `wado-lsp/src/server/{transport,dispatch,rpc}.rs` (rather than `server/mod.rs`) to comply with the workspace `clippy::mod-module-files` lint.
 
+## Known Gaps
+
+- The server reads no [remote module](./spec-modules.md#remote-modules). Its
+  host has no `load_remote`, so every `use` of a URL reports the module missing.
+  The server runs in a browser too, where a fetch is a different capability than
+  on the desktop.
+
 ## See Also
 
 - [`wep-2026-01-16-source-provider-abstraction.md`](./wep-2026-01-16-source-provider-abstraction.md) — `CompilerHost` abstraction that makes the compiler I/O-free and Wasm-buildable.

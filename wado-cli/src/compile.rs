@@ -1590,6 +1590,7 @@ mod kiln_dir_module_tests {
             invoked_as: module_path.to_string(),
             use_type: None,
             from: InvocationPath::normalize("grammar.g4"),
+            integrity: None,
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
             options: wado_compiler::kiln::CanonicalOptions::default(),

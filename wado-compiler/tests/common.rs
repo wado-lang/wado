@@ -33,6 +33,7 @@ use wado_compiler::{
     OptLevel,
 };
 use wado_host::engine::default_config;
+pub use wado_host::fixture::opt_level_name;
 use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -1226,17 +1227,6 @@ pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, co
             "[{context}] Failed to parse __DATA__ section as JSON: {e}\nContent:\n{data_section}"
         );
     })
-}
-
-/// Get human-readable name for optimization level
-pub fn opt_level_name(opt: OptLevel) -> &'static str {
-    match opt {
-        OptLevel::O0 => "O0",
-        OptLevel::O1 => "O1",
-        OptLevel::O2 => "O2",
-        OptLevel::O3 => "O3",
-        OptLevel::Os => "Os",
-    }
 }
 
 /// Result of running a Wasm component with captured output

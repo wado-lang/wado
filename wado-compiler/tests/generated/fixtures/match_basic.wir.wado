@@ -539,15 +539,13 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
-global mut global:match_basic.wado::$const_obj_5: ref null Array<u8> = ref.null none;
-global mut global:match_basic.wado::$const_obj_6: ref null Array<u8> = ref.null none;
-global mut global:match_basic.wado::$const_obj_7: ref null Array<u8> = ref.null none;
-global mut global:match_basic.wado::$const_obj_8: ref null Array<u8> = ref.null none;
+global global:match_basic.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(119, 111, 114, 108, 100);
+global global:match_basic.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
 global global:match_basic.wado::$const_obj_9: ref Array<u8> = array.new_fixed<u8>(116, 119, 111);
 global global:match_basic.wado::$const_obj_10: ref Array<u8> = array.new_fixed<u8>(111, 110, 101);
 global global:match_basic.wado::$const_obj_11: ref Array<u8> = array.new_fixed<u8>(117, 110, 107, 110, 111, 119, 110);
-global mut global:match_basic.wado::$const_obj_12: ref null Array<u8> = ref.null none;
-global mut global:match_basic.wado::$const_obj_13: ref null Array<u8> = ref.null none;
+global global:match_basic.wado::$const_obj_12: ref Array<u8> = array.new_fixed<u8>(98);
+global global:match_basic.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(97);
 global global:match_basic.wado::$const_obj_14: ref "Array<core:prelude/string.wado/String>" = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 109, 97, 108, 108, 32, 108, 101, 97, 102, 40, 49, 41), used: 13 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 100, 101, 40, 49, 48, 44, 50, 48, 41), used: 11 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 109, 112, 116, 121), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 101, 97, 102, 40, 57, 57, 41), used: 8 });
 global global:match_basic.wado::$const_obj_15: ref "Array<match_basic.wado/Tree>" = array.new_fixed<ref "match_basic.wado//Tree">(struct.new "match_basic.wado//Tree::Leaf" { discriminant: 0, payload_0: 1 }, struct.new "match_basic.wado//Tree::Node" { discriminant: 1, payload_0: struct.new "tuple//[i32, i32]" { 0: 10, 1: 20 } }, struct.new "match_basic.wado//Tree" { 2 }, struct.new "match_basic.wado//Tree::Leaf" { discriminant: 0, payload_0: 99 });
 global global:match_basic.wado::$const_obj_16: ref "Array<core:prelude/types.wado/Option<i32>>" = array.new_fixed<ref "core:prelude/types.wado//Option<i32>">(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 1 }, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 3 }, struct.new "core:prelude/types.wado//Option<i32>" { 0 }, struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 5 });
@@ -575,8 +573,7 @@ fn "match_basic.wado/$test_2_match_on_string_literals"() {
     $match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 };
     if @unlikely(local.tee i_19((if $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
         a_12 = $match_scrut_0.repr;
-        global:match_basic.wado::$const_obj_8 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }.repr;
-        b_15 = global:match_basic.wado::$const_obj_8;
+        b_15 = global:match_basic.wado::$const_obj_6;
         if local.tee len_18(5 - 0) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
         }
@@ -597,8 +594,7 @@ fn "match_basic.wado/$test_2_match_on_string_literals"() {
     } else {
         select i32($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
             b_15 = $match_scrut_0.repr;
-            global:match_basic.wado::$const_obj_7 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 }.repr;
-            a_12 = global:match_basic.wado::$const_obj_7;
+            a_12 = global:match_basic.wado::$const_obj_5;
             if local.tee i_19(5 - 0) != 5 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
             }
@@ -623,7 +619,6 @@ fn "match_basic.wado/$test_2_match_on_string_literals"() {
     $match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other"), used: 5 };
     if @unlikely((local.tee i_19((if $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
         b_15 = $match_scrut_0.repr;
-        global:match_basic.wado::$const_obj_6 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 108, 111), used: 5 }.repr;
         a_12 = global:match_basic.wado::$const_obj_6;
         if local.tee i_19(5 - 0) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
@@ -645,7 +640,6 @@ fn "match_basic.wado/$test_2_match_on_string_literals"() {
     } else {
         select i32($inline_core_prelude_array_wado_seq_eq_u8__7: block -> bool {
             b_15 = $match_scrut_0.repr;
-            global:match_basic.wado::$const_obj_5 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 111, 114, 108, 100), used: 5 }.repr;
             a_12 = global:match_basic.wado::$const_obj_5;
             if local.tee i_19(5 - 0) != 5 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__7: 0;
@@ -688,7 +682,6 @@ fn "match_basic.wado/$test_4_an_arm_that_returns_from_the_enclosing_function"() 
         $match_scrut_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
         if $inline_core_prelude_array_wado_seq_eq_u8__17: block -> bool {
             a_90 = $match_scrut_0.repr;
-            global:match_basic.wado::$const_obj_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }.repr;
             b_93 = global:match_basic.wado::$const_obj_13;
             if local.tee $v0_2(1 - 0) != 1 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__17: 0;
@@ -709,7 +702,6 @@ fn "match_basic.wado/$test_4_an_arm_that_returns_from_the_enclosing_function"() 
             struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("alpha"), used: 5 };
         } else if $inline_core_prelude_array_wado_seq_eq_u8__19: block -> bool {
             b_93 = $match_scrut_0.repr;
-            global:match_basic.wado::$const_obj_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }.repr;
             a_90 = global:match_basic.wado::$const_obj_12;
             if local.tee i_97(1 - 0) != 1 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;

@@ -7273,6 +7273,10 @@ impl Parser {
         // so what it read as a keyword belongs to the enclosing module.
         self.contextual_keywords
             .append(&mut parser.contextual_keywords);
+        // So do its includes, which the loader reads only through the module.
+        for (path, span) in std::mem::take(&mut parser.include_paths) {
+            self.include_paths.entry(path).or_insert(span);
+        }
         // Its comments belong to the file too. The outer lex hides them behind
         // the template's single token, so without this they reach no trivia map
         // and the formatter drops them undetected. The second list is what a

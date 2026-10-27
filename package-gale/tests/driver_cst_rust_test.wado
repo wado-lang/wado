@@ -108,6 +108,13 @@ test "tokenize C string literals" {
     assert rlex_prs("fn f() { open(c\"/dev/null\", cr\"x\"); }").ok();
 }
 
+// A byte string continues past a `\` at the end of a line, as a string does.
+test "tokenize a byte string continued on the next line" {
+    let tokens = rlex_tok("b\"a\\\n    b\"");
+    assert rust::token_kind_name(tokens.kinds[0]) == "BYTE_STRING_LITERAL";
+    assert rlex_prs("fn f() { g(b\"a\\\n    b\"); }").ok();
+}
+
 test "parse empty crate" {
     let result = rlex_prs("");
     if !result.ok() {

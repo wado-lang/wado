@@ -1,0 +1,48 @@
+// `Inspect` holds for every type, an affine one included, and inspecting reads
+// its members in place. The variant blanket once took a payload out by value,
+// running its `Drop` mid-inspection; the newtype blanket copied the base the
+// same way, and the tuple impl rejected an affine element outright.
+
+global mut DROPS: i32 = 0;
+
+affine struct Token {
+    id: i32,
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        DROPS += 1;
+    }
+}
+
+affine variant Held {
+    One(Token),
+    Empty,
+}
+
+type Wrapped = Token;
+
+test "a variant's affine payload" {
+    let held = Held::One(Token { id: 7 });
+    assert `${held:?}` == "Held::One(Token { id: 7 })";
+    assert DROPS == 0;
+}
+
+test "an option's affine payload" {
+    let held: Option<Token> = Some(Token { id: 7 });
+    assert `${held:?}` == "Option::Some(Token { id: 7 })";
+    assert DROPS == 0;
+}
+
+test "a newtype over an affine base" {
+    let held = Token { id: 7 } as Wrapped;
+    assert `${held:?}` == "Token { id: 7 } as Wrapped";
+    assert DROPS == 0;
+}
+
+test "a tuple's affine element" {
+    let held = [Token { id: 7 }, 1];
+    assert `${held:?}` == "[Token { id: 7 }, 1]";
+    assert `${held:#?}` == "[\n  Token {\n    id: 7,\n  },\n  1,\n]";
+    assert DROPS == 0;
+}

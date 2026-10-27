@@ -13,6 +13,7 @@ use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
 use crate::name::{is_package_namespace, resolve_module_path};
 use crate::path::is_cwd_relative;
+use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 
 use super::cache::{encode_written_options, hex_digest};
 use super::invocation::{
@@ -205,13 +206,19 @@ fn lower_inline(
     let mut errors: Vec<Diagnostic> = Vec::new();
 
     for (key, entry) in &attrs.entries {
-        if key != ImportAttributes::GENERATOR && key != ImportAttributes::TYPE {
+        if ![
+            ImportAttributes::GENERATOR,
+            ImportAttributes::TYPE,
+            ImportAttributes::INTEGRITY,
+        ]
+        .contains(&key.as_str())
+        {
             errors.push(clause_error(
                 module_path,
                 &entry.key_span,
                 format!(
                     "kiln: unknown key `{key}` beside `generator`; a generated import's \
-                     `with` holds `generator`, and may hold `type`"
+                     `with` holds `generator`, and may hold `type` and `integrity`"
                 ),
             ));
         }
@@ -322,13 +329,22 @@ fn lower_inline(
     // The literal source string keys the loader redirect (frame-independent);
     // `from` is the same path resolved relative to the declaring file.
     let source = InvocationPath::normalize(&use_decl.source);
-    let from = resolve_or_reject(
+    let from = resolve_source(
         module_path,
         &use_decl.source,
         manifest_root,
         "from",
         use_decl,
         &mut errors,
+    );
+    let integrity = lower_pin(
+        attrs
+            .entries
+            .get(ImportAttributes::INTEGRITY)
+            .map(|e| &e.value),
+        &from,
+        ImportAttributes::INTEGRITY,
+        &mut |message| errors.push(use_error(module_path, use_decl, message)),
     );
     let inputs = match attr_value(cfg, "inputs") {
         None => Vec::new(),
@@ -373,6 +389,16 @@ fn lower_inline(
 
     let output_dir_override = match attr_value(cfg, "output_dir") {
         None => None,
+        Some(AttrValue::String(_)) if is_remote(module_path) => {
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                "kiln: a remote module's clause writes into the build's own tree, so it \
+                 names no `generator.output_dir`"
+                    .to_string(),
+            ));
+            None
+        }
         Some(AttrValue::String(s)) => Some(resolve_or_reject(
             module_path,
             s,
@@ -422,6 +448,7 @@ fn lower_inline(
         module,
         use_type,
         from,
+        integrity,
         inputs,
         output_dir,
         options,
@@ -430,9 +457,9 @@ fn lower_inline(
     })
 }
 
-/// One `generator.inputs` element: a path, or `{ path, type }` naming how the
-/// generator reads it. `anchor` is the declaring file, the manifest root, and
-/// the `use`.
+/// One `generator.inputs` element: a path, or `{ path, type, integrity }`
+/// naming how the generator reads it and pinning a remote one. `anchor` is the
+/// declaring file, the manifest root, and the `use`.
 fn lower_input(
     field: &str,
     value: &AttrValue,
@@ -440,13 +467,16 @@ fn lower_input(
     errors: &mut Vec<Diagnostic>,
 ) -> Option<InvocationInput> {
     let mut error = |message: String| errors.push(use_error(module_path, use_decl, message));
-    let (path, use_type) = match value {
-        AttrValue::String(path) => (path, None),
+    let (path, use_type, pin) = match value {
+        AttrValue::String(path) => (path, None, None),
         AttrValue::Object(fields) => {
             for key in fields.keys() {
-                if key != "path" && key != ImportAttributes::TYPE {
+                if !["path", ImportAttributes::TYPE, ImportAttributes::INTEGRITY]
+                    .contains(&key.as_str())
+                {
                     error(format!(
-                        "kiln: unknown `{field}` field `{key}`; the fields are `path` and `type`"
+                        "kiln: unknown `{field}` field `{key}`; the fields are `path`, `type`, \
+                         and `integrity`"
                     ));
                 }
             }
@@ -462,7 +492,11 @@ fn lower_input(
                 }
             };
             match attr_value(fields, "path") {
-                Some(AttrValue::String(path)) => (path, use_type),
+                Some(AttrValue::String(path)) => (
+                    path,
+                    use_type,
+                    attr_value(fields, ImportAttributes::INTEGRITY),
+                ),
                 Some(other) => {
                     error(format!(
                         "kiln: `{field}.path` must be a string, got {}",
@@ -484,8 +518,61 @@ fn lower_input(
             return None;
         }
     };
-    let path = resolve_or_reject(module_path, path, manifest_root, field, use_decl, errors);
-    Some(InvocationInput { path, use_type })
+    let path = resolve_source(module_path, path, manifest_root, field, use_decl, errors);
+    let integrity = lower_pin(pin, &path, &format!("{field}.integrity"), &mut |message| {
+        errors.push(use_error(module_path, use_decl, message));
+    });
+    Some(InvocationInput {
+        path,
+        use_type,
+        integrity,
+    })
+}
+
+/// A `from` or `inputs` path: a URL as written, a path relative to the remote
+/// module declaring it, or a `./` / `../` path relative to the declaring file.
+fn resolve_source(
+    module_path: &str,
+    raw: &str,
+    manifest_root: &str,
+    field: &str,
+    use_decl: &UseDecl,
+    errors: &mut Vec<Diagnostic>,
+) -> InvocationPath {
+    if is_remote(raw) {
+        if let Some(reason) = url_fault(raw) {
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!("kiln: `{field}` {reason}, got `{raw}`"),
+            ));
+        }
+        return InvocationPath::normalize(raw);
+    }
+    if is_remote(module_path) && is_cwd_relative(raw) {
+        return InvocationPath::normalize(&resolve_module_path(module_path, raw));
+    }
+    resolve_or_reject(module_path, raw, manifest_root, field, use_decl, errors)
+}
+
+/// The pin `value` writes for `path`, reporting through `error` a value that
+/// is not one, or one on a local file.
+fn lower_pin(
+    value: Option<&AttrValue>,
+    path: &InvocationPath,
+    field: &str,
+    error: &mut impl FnMut(String),
+) -> Option<Integrity> {
+    let pin = pin_of(value?)
+        .map_err(|reason| error(format!("kiln: `{field}` {reason}")))
+        .ok()?;
+    if !is_remote(path.as_str()) {
+        error(format!(
+            "kiln: `{field}` pins a remote file, and `{path}` is not one"
+        ));
+        return None;
+    }
+    Some(pin)
 }
 
 /// Resolve a `./` or `../` path written in a `use` clause relative to the
@@ -572,6 +659,17 @@ fn lower_module_specifier(
     // project — the provider resolves it as `manifest_root.join(path)`
     // when reading the file on disk and computing a stable cache key.
     if is_cwd_relative(spec) {
+        if is_remote(module_path) {
+            errors.push(use_error(
+                module_path,
+                use_decl,
+                format!(
+                    "kiln: a remote module names its generator by a `[build-dependencies]` \
+                     specifier, not a relative path, got `{spec}`"
+                ),
+            ));
+            return None;
+        }
         return Some(GeneratorModule::LocalPath(resolve_decl_relative(
             module_path,
             spec,
@@ -658,12 +756,20 @@ fn module_key(module: &GeneratorModule) -> String {
     }
 }
 
+/// Two clauses that pin one file differently are two invocations, so each
+/// stays held to its own pin.
 fn identity_key(inv: &Invocation) -> String {
-    let (module, _, use_type, from, inputs, output_dir, options) = inv.identity_tuple();
-    clause_digest(module, use_type, from, inputs, Some(output_dir), &options)
+    let (module, _, use_type, from, integrity, inputs, output_dir, options) = inv.identity_tuple();
+    let mut key = clause_digest(module, use_type, from, inputs, Some(output_dir), &options);
+    for pin in std::iter::once(integrity).chain(inputs.iter().map(|input| input.integrity)) {
+        key.push(' ');
+        key.push_str(&pin.map_or_else(|| "-".to_string(), |pin| pin.to_string()));
+    }
+    key
 }
 
-/// The hex SHA-256 of what a clause names. The synthetic id leaves out the
+/// The hex SHA-256 of what a clause names, its pins aside: a pin follows the
+/// content, as a local file's digest does. The synthetic id leaves out the
 /// output directory, since by default the directory is named for it.
 fn clause_digest(
     module: &GeneratorModule,
@@ -973,7 +1079,7 @@ mod tests {
             only_error(attrs),
             (
                 "kiln: unknown key `provider` beside `generator`; a generated import's `with` \
-                 holds `generator`, and may hold `type`"
+                 holds `generator`, and may hold `type` and `integrity`"
                     .to_string(),
                 3,
                 9,
@@ -1053,12 +1159,94 @@ mod tests {
                 InvocationInput {
                     path: InvocationPath::normalize("src/Lexer.g4"),
                     use_type: None,
+                    integrity: None,
                 },
                 InvocationInput {
                     path: InvocationPath::normalize("src/Calc.highlights.scm"),
                     use_type: Some("highlights".to_string()),
+                    integrity: None,
                 },
             ]
+        );
+    }
+
+    const PIN: &str = "sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513";
+
+    #[test]
+    fn a_remote_input_is_kept_as_written_with_its_pin() {
+        let url = "https://huggingface.co/o/m/resolve/0123/tokenizer.json";
+        let inputs = lowered_inputs(vec![input_object(&[("path", url), ("integrity", PIN)])]);
+        assert_eq!(
+            inputs,
+            [InvocationInput {
+                path: InvocationPath(url.to_string()),
+                use_type: None,
+                integrity: Integrity::parse(PIN),
+            }]
+        );
+    }
+
+    #[test]
+    fn a_remote_from_carries_the_pin_written_beside_generator() {
+        let url = "https://huggingface.co/o/m/resolve/0123/model.onnx";
+        let mut attrs =
+            attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]);
+        attrs
+            .entries
+            .insert("integrity".to_string(), entry(AttrValue::string(PIN)));
+        let module = module_with_use(url, attrs);
+        let invocation = expect_ok(collect_inline_invocations(
+            [("src/main.wado", &module)],
+            &IndexMap::default(),
+            "",
+        ))
+        .remove(0);
+        assert_eq!(invocation.from.as_str(), url);
+        assert_eq!(invocation.integrity, Integrity::parse(PIN));
+    }
+
+    #[test]
+    fn a_pin_on_a_local_input_is_an_error() {
+        let attrs = attr_with_generator(&[
+            ("module", AttrValue::string("lib:gen".to_string())),
+            (
+                "inputs",
+                AttrValue::Array(vec![AttrItem {
+                    span: span(),
+                    value: input_object(&[("path", "./Lexer.g4"), ("integrity", PIN)]),
+                }]),
+            ),
+        ]);
+        let errors = expect_errors(collect_inline_invocations(
+            [("src/main.wado", &module_with_use("./Calc.g4", attrs))],
+            &IndexMap::default(),
+            "",
+        ));
+        assert_eq!(
+            errors[0].message,
+            "kiln: `generator.inputs[0].integrity` pins a remote file, and `src/Lexer.g4` is not one"
+        );
+    }
+
+    #[test]
+    fn a_plain_http_input_off_this_machine_is_an_error() {
+        let errors = expect_errors(collect_inline_invocations(
+            [(
+                "src/main.wado",
+                &module_with_use(
+                    "http://example.com/model.onnx",
+                    attr_with_generator(&[("module", AttrValue::string("lib:gen".to_string()))]),
+                ),
+            )],
+            &IndexMap::default(),
+            "",
+        ));
+        assert!(
+            errors[0]
+                .message
+                .starts_with("kiln: `from` `http://` names only"),
+            "{}",
+            errors[0].message
         );
     }
 
@@ -1093,7 +1281,10 @@ mod tests {
         );
         assert_eq!(
             errors(input_object(&[("path", "./a.scm"), ("kind", "highlights")])),
-            ["kiln: unknown `generator.inputs[0]` field `kind`; the fields are `path` and `type`"]
+            [
+                "kiln: unknown `generator.inputs[0]` field `kind`; the fields are `path`, `type`, \
+                 and `integrity`"
+            ]
         );
     }
 
@@ -1128,6 +1319,48 @@ mod tests {
         assert_ne!(
             digest_of(input_object(&[("path", "./a.scm")])),
             digest_of(input_object(&[("path", "./a.scm"), ("type", "highlights")])),
+        );
+    }
+
+    /// A pin follows the content, as a local file's digest does, so re-pinning
+    /// leaves the output where it was.
+    #[test]
+    fn a_pin_leaves_the_output_directory_where_it_was() {
+        let url = "https://huggingface.co/o/m/resolve/0123/model.onnx";
+        let invocation = |pin: Option<&str>| {
+            let mut attrs = attr_with_generator(&[
+                ("module", AttrValue::string("lib:gen".to_string())),
+                (
+                    "inputs",
+                    AttrValue::Array(vec![AttrItem {
+                        span: span(),
+                        value: match pin {
+                            Some(pin) => input_object(&[("path", url), ("integrity", pin)]),
+                            None => input_object(&[("path", url)]),
+                        },
+                    }]),
+                ),
+            ]);
+            if let Some(pin) = pin {
+                attrs
+                    .entries
+                    .insert("integrity".to_string(), entry(AttrValue::string(pin)));
+            }
+            expect_ok(collect_inline_invocations(
+                [("src/main.wado", &module_with_use(url, attrs))],
+                &IndexMap::default(),
+                "",
+            ))
+            .remove(0)
+        };
+        let repinned = Integrity::of(b"").to_string();
+        assert_eq!(
+            invocation(None).output_dir,
+            invocation(Some(PIN)).output_dir
+        );
+        assert_eq!(
+            invocation(Some(PIN)).output_dir,
+            invocation(Some(&repinned)).output_dir
         );
     }
 

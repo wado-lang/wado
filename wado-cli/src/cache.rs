@@ -22,6 +22,7 @@ use crate::build_dep::GENERATOR_WORLD_SEGMENT;
 use crate::compile::build_dir;
 use crate::user_config::user_config;
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 use wado_lsp::host::discovery::home_dir;
 
 /// The dependency cache root: `$WADO_ROOT`, else `~/wado`. Shares the resolver
@@ -29,6 +30,28 @@ use wado_lsp::host::discovery::home_dir;
 pub fn root() -> Result<PathBuf, String> {
     wado_lsp::host::discovery::cache_root()
         .ok_or_else(|| "cannot locate the home directory; set WADO_ROOT".to_string())
+}
+
+/// Hold `name`, a file of the cache's `.locks/`, against every other holder, in
+/// this process or another, until the returned file drops.
+///
+/// # Errors
+///
+/// The cache's root cannot be found, or the file cannot be opened or held.
+pub fn hold(name: &str) -> Result<fs::File, String> {
+    let locks = root()?.join(".locks");
+    let path = locks.join(name);
+    let held = (|| {
+        fs::create_dir_all(&locks)?;
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)?;
+        file.lock()?;
+        Ok(file)
+    })();
+    held.map_err(|e: io::Error| format!("{}: {e}", path.display()))
 }
 
 /// Export the user config's `root` as `$WADO_ROOT` when that env var is unset,

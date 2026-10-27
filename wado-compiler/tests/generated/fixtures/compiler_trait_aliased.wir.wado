@@ -71,7 +71,7 @@ type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<c
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<compiler_trait_aliased.wado/NetworkError>$sroa[payload.code]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(25)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]" = fn(ref "tuple//[core:prelude/string.wado/String, i32]", ref "core:prelude/string.wado//String");  // TypeId(26)
+type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", i32, ref "core:prelude/string.wado//String");  // TypeId(26)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<compiler_trait_aliased.wado/ServiceError>$sroa[payload.value]$spec0$sroa[f.buf]" = fn(ref null "compiler_trait_aliased.wado//NetworkError", ref "core:prelude/string.wado//String");  // TypeId(27)
 
@@ -95,7 +95,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/NetworkError^core:prelude/traits.wado/Inspect::inspect$sroa[self.code]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(37)
 
-type "functype//core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "tuple//[core:prelude/string.wado/String, i32]", ref "core:prelude/string.wado//String");  // TypeId(38)
+type "functype//core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String", i32, ref "core:prelude/string.wado//String");  // TypeId(38)
 
 type "functype//core:prelude/traits.wado/compiler_trait_aliased.wado/ServiceError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]" = fn(ref null "compiler_trait_aliased.wado//NetworkError", ref "core:prelude/string.wado//String");  // TypeId(39)
 
@@ -542,7 +542,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<co
     builtin::array_copy<u8>(f.repr, start_104, global:core:prelude/traits.wado::$const_obj_193, 0, 1);
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]"(payload, f) {
+fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]"($mv$payload$0, $mv$payload$1, f) {
     let new_used_103: i32;
     let start_104: i32;
     if @unlikely(local.tee new_used_103(f.used + 1) > builtin::array_len(f.repr)) {
@@ -552,14 +552,14 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[c
     start_104 = f.used;
     f.used = new_used_103;
     builtin::array_copy<u8>(f.repr, start_104, global:core:prelude/traits.wado::$const_obj_194, 0, 1);
-    "core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(payload, f);
-    if @unlikely(local.tee start_104(f.used + 1) > builtin::array_len(f.repr)) {
+    "core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"($mv$payload$0, $mv$payload$1, f);
+    if @unlikely(local.tee $mv$payload$1(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_104);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$payload$1);
     }
-    new_used_103 = f.used;
-    f.used = start_104;
-    builtin::array_copy<u8>(f.repr, new_used_103, global:core:prelude/traits.wado::$const_obj_193, 0, 1);
+    start_104 = f.used;
+    f.used = $mv$payload$1;
+    builtin::array_copy<u8>(f.repr, start_104, global:core:prelude/traits.wado::$const_obj_193, 0, 1);
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<compiler_trait_aliased.wado/ServiceError>$sroa[payload.value]$spec0$sroa[f.buf]"(payload, f) {
@@ -809,12 +809,10 @@ fn "core:prelude/traits.wado/compiler_trait_aliased.wado/NetworkError^core:prelu
     builtin::array_copy<u8>(f.repr, start_25, global:core:prelude/traits.wado::$const_obj_185, 0, 2);
 }
 
-fn "core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"(self, f) {
-    let $load_12: ref Array<u8>;
-    let v_5: ref "core:prelude/string.wado//String";
+fn "core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/traits.wado/Inspect::inspect$spec0$sroa[f.buf]"($mv$self$0, $mv$self$1, f) {
+    let $load_10: ref Array<u8>;
     let new_used_19: i32;
     let start_20: i32;
-    let start_52: i32;
     let x: i64;
     if @unlikely(local.tee new_used_19(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
@@ -823,27 +821,25 @@ fn "core:prelude/tuple.wado/[core:prelude/string.wado/String,i32]^core:prelude/t
     start_20 = f.used;
     f.used = new_used_19;
     builtin::array_copy<u8>(f.repr, start_20, global:core:prelude/tuple.wado::$const_obj_197, 0, 1);
-    v_5 = self.0;
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(f, v_5.repr, v_5.used);
-    start_20 = self.1;
-    if @unlikely(local.tee new_used_19(f.used + 2) > builtin::array_len(f.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_19);
-    }
-    start_52 = f.used;
-    f.used = new_used_19;
-    builtin::array_copy<u8>(f.repr, start_52, global:core:prelude/tuple.wado::$const_obj_196, 0, 2);
-    start_52 = start_20 < 0;
-    start_20 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(start_20); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_52 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(f, start_52, start_20);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_12(f.repr), start_52, x, start_20);
-    if @unlikely(local.tee start_20(f.used + 1) > builtin::array_len($load_12)) {
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(f, $mv$self$0.repr, $mv$self$0.used);
+    if @unlikely(local.tee start_20(f.used + 2) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_20);
     }
-    start_52 = f.used;
+    new_used_19 = f.used;
     f.used = start_20;
-    builtin::array_copy<u8>(f.repr, start_52, global:core:prelude/tuple.wado::$const_obj_195, 0, 1);
+    builtin::array_copy<u8>(f.repr, new_used_19, global:core:prelude/tuple.wado::$const_obj_196, 0, 2);
+    new_used_19 = $mv$self$1 < 0;
+    $mv$self$1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s($mv$self$1); select i64(x < 0_i64, 0_i64 - x, x)));
+    new_used_19 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(f, new_used_19, $mv$self$1);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_10(f.repr), new_used_19, x, $mv$self$1);
+    if @unlikely(local.tee $mv$self$1(f.used + 1) > builtin::array_len($load_10)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, $mv$self$1);
+    }
+    new_used_19 = f.used;
+    f.used = $mv$self$1;
+    builtin::array_copy<u8>(f.repr, new_used_19, global:core:prelude/tuple.wado::$const_obj_195, 0, 1);
 }
 
 fn "core:prelude/traits.wado/compiler_trait_aliased.wado/ServiceError^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
@@ -979,7 +975,8 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<[core:prelude/string
         if @unlikely((ref.is_null(self) == 0) != 1) {
             unreachable;
         }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]"(ref.as_non_null(self), f);
+        let $mv_arg_1: ref "tuple//[core:prelude/string.wado/String, i32]";
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<[core:prelude/string.wado/String,i32]>$spec0$sroa[f.buf]"(local.tee $mv_arg_1(ref.as_non_null(self)).0, $mv_arg_1.1, f);
     }
 }
 
@@ -1012,10 +1009,9 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,compiler_trait_a
         start_24 = f.used;
         f.used = new_used_23;
         builtin::array_copy<u8>(f.repr, start_24, $sroa_other_repr_132, 0, 2);
-        if @unlikely(self.discriminant != 0) {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(if @unlikely(self.discriminant != 0) {
             unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(ref.cast "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Ok"(self).payload_0, f);
+        }; ref.cast "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Ok"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee start_24(f.used + 6) > builtin::array_len(f.repr)) {
@@ -1041,10 +1037,9 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<i32,compiler_trait_a
         new_used_23 = f.used;
         f.used = start_24;
         builtin::array_copy<u8>(f.repr, new_used_23, $load_4, 0, 3);
-        if @unlikely(self.discriminant != 1) {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<compiler_trait_aliased.wado/ServiceError>$sroa[payload.value]$spec0$sroa[f.buf]"(if @unlikely(self.discriminant != 1) {
             unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<compiler_trait_aliased.wado/ServiceError>$sroa[payload.value]$spec0$sroa[f.buf]"(ref.cast "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Err"(self).payload_0, f);
+        }; ref.cast "core:prelude/types.wado//Result<i32,compiler_trait_aliased.wado/ServiceError>::Err"(self).payload_0, f);
     }
 }
 
