@@ -1237,9 +1237,6 @@ fn generate_test_world_bindings(project: &mut Package) {
             .collect()
     };
 
-    // The test world is a bare-name world, so its CM package is empty
-    // (`fq_name_package`); test adapters take no params, so the package is
-    // never consulted.
     let env = ExportBindingEnv {
         tir_modules: &project.tir_modules,
         type_table: &entry_type_table,

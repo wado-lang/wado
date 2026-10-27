@@ -73,7 +73,19 @@ impl CmTypeDecls {
                 self.newtype_bases.insert(item.id(), alias.ty.clone());
             }
         }
-        for item in signing.into_iter().flat_map(|module| &module.items) {
+        self.bind_signed(
+            signing.into_iter().flat_map(|module| &module.items),
+            resolutions,
+        );
+    }
+
+    /// Record what each type `items` sign resolves to.
+    pub fn bind_signed<'m>(
+        &self,
+        items: impl IntoIterator<Item = &'m Item>,
+        resolutions: &Resolutions,
+    ) {
+        for item in items {
             for_each_signed_type(item, &mut |ty| self.bind_sites(ty, resolutions));
             if let Item::Resource(resource) = item {
                 self.bind_self(resource);

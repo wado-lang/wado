@@ -1940,7 +1940,11 @@ fn compile_after_load<H: CompilerHost>(
         let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
-        registry.register_lib_local_items(lib_surface.published_type_decls(), fq);
+        registry.register_lib_local_items(
+            lib_surface.published_type_decls(),
+            fq,
+            &tysys.resolutions,
+        );
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
         // submodule, since a library spreads its effects (like its types).

@@ -929,6 +929,14 @@ pub struct CmGetterResource {
     pub source: String,
 }
 
+/// Where a type declaration is registered: its interface, and the Wado name it
+/// is registered under there, which an `export use` alias may have given it.
+#[derive(Debug, Clone)]
+struct CmRegistration {
+    interface: String,
+    name: String,
+}
+
 /// The codegen component-instance key `"{package}-{interface}"` (e.g.
 /// `"http-types"`). Package-qualified because a bare interface name collides
 /// across packages (`wasi:cli/types` vs `wasi:http/types`). Both
@@ -966,9 +974,10 @@ pub struct CmInterfaceRegistry {
     /// The declaration each type name the registry holds resolves to.
     type_decls: CmTypeDecls,
 
-    /// The interface each registered type declaration is registered under, so
-    /// a reference bound to its declaration answers its interface.
-    declared_in: IndexMap<AstId, String>,
+    /// Where each registered type declaration is registered, so a reference
+    /// bound to its declaration answers its interface and the name the
+    /// `(interface, name)`-keyed maps hold it under.
+    registrations: IndexMap<AstId, CmRegistration>,
 
     /// Every bound CM function, by [`CmFunctionInfo::cm_identifier`].
     functions: IndexMap<String, CmFunctionInfo>,
@@ -1961,7 +1970,28 @@ impl CmInterfaceRegistry {
     /// The CM interface the type declaration `decl` is registered under.
     #[must_use]
     pub fn interface_of_decl(&self, decl: AstId) -> Option<&str> {
-        self.declared_in.get(&decl).map(String::as_str)
+        self.registrations
+            .get(&decl)
+            .map(|registration| registration.interface.as_str())
+    }
+
+    /// The Wado name the type declaration `decl` is registered under, which a
+    /// type naming it must spell for the registry's maps to answer.
+    #[must_use]
+    pub fn registered_name_of(&self, decl: AstId) -> Option<&str> {
+        self.registrations
+            .get(&decl)
+            .map(|registration| registration.name.as_str())
+    }
+
+    fn register_decl(&mut self, decl: AstId, interface: &str, name: &str) {
+        self.registrations.insert(
+            decl,
+            CmRegistration {
+                interface: interface.to_string(),
+                name: name.to_string(),
+            },
+        );
     }
 
     /// A span-insensitive key for `ty`, which names a CM type by its declaring
@@ -2093,20 +2123,18 @@ impl CmInterfaceRegistry {
         scope: &CmDeclScope,
     ) -> Result<(), String> {
         for item in &module.items {
-            if !matches!(
-                item,
+            let name = match item {
+                Item::Resource(resource) => &resource.name,
                 Item::Newtype(_)
-                    | Item::Resource(_)
-                    | Item::Struct(_)
-                    | Item::Flags(_)
-                    | Item::Enum(_)
-                    | Item::Variant(_)
-            ) {
-                continue;
-            }
+                | Item::Struct(_)
+                | Item::Flags(_)
+                | Item::Enum(_)
+                | Item::Variant(_) => item.type_decl().expect("a type item declares a type").name,
+                _ => continue,
+            };
             let source_interface = Self::cm_source_interface(item.attrs());
             if !source_interface.is_empty() {
-                self.declared_in.insert(item.id(), source_interface);
+                self.register_decl(item.id(), &source_interface, name);
             }
         }
 
@@ -2625,17 +2653,20 @@ impl CmInterfaceRegistry {
     /// entry module's own types, so lift/lower resolves them uniformly. Each
     /// is registered under the name it carries, which may be an `export use`
     /// alias, and keeps its declaration, so resolution can locate a type the
-    /// entry-FQ mapping cannot.
+    /// entry-FQ mapping cannot. A stdlib module signs nothing of its own, so the
+    /// types these items sign are bound here.
     pub fn register_lib_local_items<'a>(
         &mut self,
         items: impl IntoIterator<Item = &'a (ModuleSource, Item)>,
         iface_fq: &str,
+        resolutions: &Resolutions,
     ) {
         for (_, item) in items {
             assert!(
                 item.type_decl().is_some(),
                 "a library publishes only types beyond its entry module"
             );
+            self.type_decls.bind_signed([item], resolutions);
             self.register_lib_local_item(item, iface_fq);
         }
     }
@@ -2643,8 +2674,8 @@ impl CmInterfaceRegistry {
     /// `item`'s type references must already answer their source interface: the
     /// caller binds them by declaration.
     fn register_lib_local_item(&mut self, item: &Item, iface_fq: &str) {
-        if item.type_decl().is_some() {
-            self.declared_in.insert(item.id(), iface_fq.to_string());
+        if let Some(decl) = item.type_decl() {
+            self.register_decl(item.id(), iface_fq, decl.name);
         }
         match item {
             Item::Newtype(alias) => register_unique(
@@ -4914,24 +4945,17 @@ mod tests {
         registry
     }
 
-    /// A type site naming the one declaration `interface` registers, spelled
-    /// `name`.
-    fn sole_declaration_of(registry: &CmInterfaceRegistry, interface: &str, name: &str) -> Type {
-        let decls: Vec<AstId> = registry
-            .declared_in
+    /// A type site naming the declaration `interface` registers as `name`.
+    fn registered_type(registry: &CmInterfaceRegistry, interface: &str, name: &str) -> Type {
+        let decl = registry
+            .registrations
             .iter()
-            .filter(|(_, fq)| fq.as_str() == interface)
+            .find(|(_, r)| r.interface == interface && r.name == name)
             .map(|(decl, _)| *decl)
-            .collect();
-        let [decl] = decls.as_slice() else {
-            panic!(
-                "`{interface}` registers one declaration, not {}",
-                decls.len()
-            )
-        };
+            .unwrap_or_else(|| panic!("`{interface}` registers `{name}`"));
         registry
             .type_decls
-            .decl_type(*decl, name.to_string(), Vec::new(), make_span())
+            .decl_type(decl, name.to_string(), Vec::new(), make_span())
     }
 
     /// The registered parameter types of `interface::method`.
@@ -5029,7 +5053,7 @@ mod tests {
             }
             "#,
         );
-        let status = sole_declaration_of(&registry, "wasi:demo/types@0.1.0", "Status");
+        let status = registered_type(&registry, "wasi:demo/types@0.1.0", "Status");
         assert_eq!(cm_layout_with_registry(&status, &registry), (1, 1));
     }
 

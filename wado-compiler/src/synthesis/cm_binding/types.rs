@@ -1201,17 +1201,22 @@ pub(super) fn type_id_to_ast_type(
     }
     // The type names its declaration, so the registry answers its interface
     // from the declaration and no by-name search can offer another module's
-    // `ErrorCode` and lift a record as its enum.
+    // `ErrorCode` and lift a record as its enum. It is spelled as the registry
+    // holds it: a library publishes an adopted `FileType` as its `Kind`.
     let declared = |def: DefId, args: Vec<Type>| {
-        let (name, _) = type_table
-            .nominal_head(type_id)
-            .expect("a nominal type names a declaration");
-        cm_interface_registry.type_decls().decl_type(
-            type_table.defs().ast_id(def),
-            name,
-            args,
-            span,
-        )
+        let decl = type_table.defs().ast_id(def);
+        let name = cm_interface_registry
+            .registered_name_of(decl)
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                type_table
+                    .nominal_head(type_id)
+                    .expect("a nominal type names a declaration")
+                    .0
+            });
+        cm_interface_registry
+            .type_decls()
+            .decl_type(decl, name, args, span)
     };
     match resolved {
         ResolvedType::Primitive(p) => {
