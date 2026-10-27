@@ -1,8 +1,8 @@
 //! Per-thread snapshot of the stdlib closure's post-`semantics_with_logger`
 //! state, so each compile seeds from it instead of re-running loader → analyze →
-//! elaborate over the same stdlib AST (~112 ms apiece, ~28 s per `wado test`
-//! run on package-gale). Thread-local because [`Semantics`] is `!Send`, and
-//! built over an empty entry source so the loader yields the real closure.
+//! elaborate over the same stdlib AST. Thread-local because [`Semantics`] is
+//! `!Send`, and built over an empty entry source so the loader yields the real
+//! closure.
 
 use std::cell::{Cell, OnceCell, RefCell};
 use std::future::Future;
@@ -18,7 +18,14 @@ use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, SourceError,
 };
+<<<<<<< HEAD
 use crate::defs::{DefId, DefKind, DefTable};
+||||||| 73611c2bfc0
+use crate::defs::{DefId, DefKind};
+=======
+use crate::coverage::CoverageScope;
+use crate::defs::{DefId, DefKind};
+>>>>>>> origin/main
 use crate::elaborator::liveness::LivenessScope;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
@@ -32,6 +39,9 @@ use crate::type_table::TypeTable;
 
 thread_local! {
     static SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };
+    /// The snapshot a compile measuring the stdlib seeds from, its stdlib
+    /// reified with probes.
+    static PROBED_SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };
     /// Re-entry guard for [`get_or_init_snapshot`].  Set to `true`
     /// while [`build_snapshot`] is running.  The synthetic snapshot
     /// build calls through `semantics_with_logger` (which itself looks up
@@ -48,19 +58,26 @@ pub(crate) fn is_building() -> bool {
     BUILDING.with(Cell::get)
 }
 
-/// Return the current thread's stdlib [`Semantics`] snapshot, building it on
-/// first call by driving the loader and [`semantics_with_logger`] over an empty
-/// entry source. [`None`] under [`build_snapshot`] itself, where reading the
-/// still-being-built cache would re-enter the `OnceCell` initialiser.
+/// Return the current thread's stdlib [`Semantics`] snapshot for a compile
+/// measuring `coverage`, building it on first call by driving the loader and
+/// [`semantics_with_logger`] over an empty entry source. [`None`] under
+/// [`build_snapshot`] itself, where reading the still-being-built cache would
+/// re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
 /// If the stdlib closure fails to load or analyze — a build-time inconsistency
 /// in the shipped stdlib, which is not recoverable.
-pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
+pub(crate) fn get_or_init_snapshot(coverage: Option<CoverageScope>) -> Option<Rc<Semantics>> {
     if is_building() {
         return None;
     }
-    Some(SNAPSHOT.with(|cell| {
+    let probed = coverage.filter(|scope| scope.stdlib);
+    let slot = if probed.is_some() {
+        &PROBED_SNAPSHOT
+    } else {
+        &SNAPSHOT
+    };
+    Some(slot.with(|cell| {
         cell.get_or_init(|| {
             // Drop guard so the flag is cleared even if `build_snapshot`
             // panics — otherwise an upstream `catch_unwind` (test
@@ -75,22 +92,22 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
             }
             BUILDING.with(|c| c.set(true));
             let _guard = ResetGuard;
-            Rc::new(build_snapshot())
+            Rc::new(build_snapshot(probed))
         })
         .clone()
     }))
 }
 
-/// Build the current thread's snapshot now, ahead of the first
-/// `semantics_with_logger` call.  Intended for parallel batch drivers (e.g.
-/// `wado test`) to amortise the ~120 ms snapshot build across worker
-/// threads before any compile work is scheduled, instead of paying
-/// the cost on each worker's first compile.
+/// Build the current thread's snapshot for compiles measuring `coverage` now,
+/// ahead of the first `semantics_with_logger` call.  Intended for parallel
+/// batch drivers (e.g. `wado test`) to amortise the snapshot build across
+/// worker threads before any compile work is scheduled, instead of paying the
+/// cost on each worker's first compile.
 ///
 /// No-op if the snapshot is already built on this thread, or if
 /// called re-entrantly from inside `build_snapshot`.
-pub fn prewarm() {
-    let _ = get_or_init_snapshot();
+pub fn prewarm(coverage: Option<CoverageScope>) {
+    let _ = get_or_init_snapshot(coverage);
 }
 
 /// Every name `core:prelude` puts in scope in every module, with what it
@@ -100,7 +117,7 @@ pub fn prewarm() {
 /// If called from inside [`build_snapshot`].
 pub fn prelude_names() -> Vec<(String, DefKind)> {
     let snap =
-        get_or_init_snapshot().expect("prelude_names is not called while the snapshot builds");
+        get_or_init_snapshot(None).expect("prelude_names is not called while the snapshot builds");
     let resolutions = snap.resolutions().expect("the stdlib snapshot is complete");
     let defs = resolutions.defs();
     let mut names: Vec<(String, DefKind)> = resolutions
@@ -114,8 +131,9 @@ pub fn prelude_names() -> Vec<(String, DefKind)> {
 /// Drive the full loader + `semantics_with_logger` pipeline on an empty
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib
-/// subset every real compile loads.
-fn build_snapshot() -> Semantics {
+/// subset every real compile loads. Under `coverage`, the stdlib takes the
+/// probes a compile measuring it would.
+fn build_snapshot(coverage: Option<CoverageScope>) -> Semantics {
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
 
@@ -140,7 +158,7 @@ fn build_snapshot() -> Semantics {
         load_result,
         &logger,
         true,
-        None,
+        coverage,
         &LivenessScope::Compilation,
     );
     assert!(
@@ -392,7 +410,7 @@ mod tests {
 
     #[test]
     fn snapshot_builds_and_contains_stdlib_closure() {
-        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
 
         // The implicit-modules pass always pulls in `core:prelude` and
         // its closure.  Verify the snapshot covers them so downstream
@@ -435,7 +453,7 @@ mod tests {
     /// silently re-elaborates the stdlib.
     #[test]
     fn a_plain_compile_carries_the_snapshot_parses() {
-        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
         let host = SnapshotHost;
         let load_result = poll_to_completion(async {
             ModuleLoader::new(&host, LogLevel::Off)
@@ -477,8 +495,8 @@ mod tests {
 
     #[test]
     fn snapshot_is_cached_per_thread() {
-        let a = get_or_init_snapshot().expect("not building");
-        let b = get_or_init_snapshot().expect("not building");
+        let a = get_or_init_snapshot(None).expect("not building");
+        let b = get_or_init_snapshot(None).expect("not building");
         assert!(
             Rc::ptr_eq(&a, &b),
             "second call on same thread must return the cached Rc"

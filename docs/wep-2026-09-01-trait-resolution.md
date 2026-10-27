@@ -712,7 +712,7 @@ reflection. Reopening it takes both of:
 - [ ] Answer what a caller sees when the narrower impl binds an associated type
   differently — the question rank 3 declines.
 - [ ] Answer incomparable bound sets. Supertrait closure is a partial order:
-  `{Constrained, Reflect}` beside `{ReflectStruct, Reflect}` is neither
+  `{Display, Reflect}` beside `{ReflectStruct, Reflect}` is neither
   narrower nor wider, so a specificity rank leaves that pair at rank 3 and
   the ambiguity report has to keep naming it.
 

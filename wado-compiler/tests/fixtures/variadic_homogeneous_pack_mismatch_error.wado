@@ -1,0 +1,17 @@
+//! `[..i32]` takes a tuple of `i32` only, so an element of another type is a
+//! mismatch at the call.
+
+fn sum(values: [..i32]) -> i32 {
+    let mut total = 0;
+    for let v of values {
+        total += v;
+    }
+    return total;
+}
+
+test "an element of another type" {
+    assert sum([1, "a"]) == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[i32, i32]', found '[i32, String]'"}

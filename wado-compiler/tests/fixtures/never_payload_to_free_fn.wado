@@ -3,7 +3,7 @@
 // it. `Result<T, !>` is where an uninhabited payload reaches a walk.
 
 fn show<P: Inspect>(payload: &P) -> String {
-    return `${payload:?}`;
+    return `${*payload:?}`;
 }
 
 fn render<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {

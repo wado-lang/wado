@@ -4,14 +4,22 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
+<<<<<<< HEAD
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, cm_primitive_of, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
+||||||| 73611c2bfc0
+use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
+use crate::hashmap::IndexMap;
+=======
+use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
+use crate::hashmap::{IndexMap, IndexSet};
+>>>>>>> origin/main
 use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::test_selected;
 use crate::tir::TirTest;
 use crate::world_registry::{
-    CALLBACK_INTERFACE, CallbackExport, WorldExportInfo, WorldInfo, WorldRegistry,
+    CALLBACK_INTERFACE, CallbackExport, GuestCallback, WorldExportInfo, WorldInfo, WorldRegistry,
 };
 use wasm_encoder::PrimitiveValType;
 
@@ -31,6 +39,30 @@ pub struct ComponentPlan {
     pub test_exports: Vec<TestExportPlan>,
     /// The callbacks among [`Self::world_exports`].
     pub callback_exports: Vec<CallbackExport>,
+    /// Lifts a dependency's guest-effect import is wired to, rather than
+    /// exports of the component.
+    pub guest_callbacks: Vec<GuestCallbackPlan>,
+}
+
+/// The lift of one [`GuestCallback`]: the operation's signature comes from the
+/// registry under `function_key`.
+#[derive(Debug, Clone)]
+pub struct GuestCallbackPlan {
+    pub function_key: String,
+    /// The interface the operation belongs to.
+    pub interface_fq: String,
+    pub core_func_name: String,
+    pub post_return_core_name: Option<String>,
+}
+
+impl ComponentPlan {
+    /// The interfaces a dependency imports that the program's handlers answer.
+    pub fn answered_interfaces(&self) -> IndexSet<&str> {
+        self.guest_callbacks
+            .iter()
+            .map(|callback| callback.interface_fq.as_str())
+            .collect()
+    }
 }
 
 /// A world export to create at the component boundary.
@@ -176,6 +208,7 @@ pub fn build_component_plan(
     lib_world: Option<&WorldInfo>,
     is_lib_world: bool,
     callback_exports: &[CallbackExport],
+    guest_callbacks: &[GuestCallback],
 ) -> ComponentPlan {
     // Build world exports from registry.
     // For the test world, there are no world exports — only test exports.
@@ -225,10 +258,24 @@ pub fn build_component_plan(
         vec![]
     };
 
+    let guest_callbacks = guest_callbacks
+        .iter()
+        .map(|callback| {
+            let key = &callback.function_key;
+            GuestCallbackPlan {
+                function_key: key.clone(),
+                interface_fq: callback.interface_fq.clone(),
+                core_func_name: export_binding_names[key].clone(),
+                post_return_core_name: post_return_binding_names.get(key).cloned(),
+            }
+        })
+        .collect();
+
     ComponentPlan {
         world_exports,
         test_exports,
         callback_exports: callback_exports.to_vec(),
+        guest_callbacks,
     }
 }
 

@@ -65,33 +65,37 @@ type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array
 
 type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(23)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(24)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(25)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(25)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
+type "functype//core:rt/unreachable" = fn();  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//global_init_namespaced_operation_default.wado/global_init_namespaced_operation_default.wado/$Closure_0::$call" = fn(ref "global_init_namespaced_operation_default.wado//$Closure_0", i32) -> i32;  // TypeId(29)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(29)
 
-type "functype//global_init_namespaced_operation_default.wado/global_init_namespaced_operation_default.wado/$Closure_1::$call" = fn(ref "global_init_namespaced_operation_default.wado//$Closure_1", i32) -> i32;  // TypeId(30)
+type "functype//global_init_namespaced_operation_default.wado/global_init_namespaced_operation_default.wado/$Closure_0::$call" = fn(ref "global_init_namespaced_operation_default.wado//$Closure_0", i32) -> i32;  // TypeId(30)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
+type "functype//global_init_namespaced_operation_default.wado/global_init_namespaced_operation_default.wado/$Closure_1::$call" = fn(ref "global_init_namespaced_operation_default.wado//$Closure_1", i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<global_init_namespaced_operation_default.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(33)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
 
-type "functype//global_init_namespaced_operation_default.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
+
+type "functype//global_init_namespaced_operation_default.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -111,19 +115,17 @@ global mut global:global_init_namespaced_operation_default.wado::STEPPED: i32 = 
 global mut global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" = ref.null none;
 global mut global:global_init_namespaced_operation_default.wado::$modules_initialized: bool = 0;
 global global:global_init_namespaced_operation_default.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 83, 116, 101, 112, 112, 101, 114, 58, 58, 115, 116, 101, 112, 96), used: 40 };
-global global:global_init_namespaced_operation_default.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
+global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     let acc: ref "global_init_namespaced_operation_default.wado//Acc";
-    let $local_1_1: ref "core:prelude/string.wado//String";
+    let $hole_0_0: i32;
     let $save_./sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    let self_8: i32;
-    let is_negative_14: bool;
-    let x_18: i64;
-    let $local_1_37: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    let $local_2_38: ref "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
+    let $local_1: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
+    let $local_2: ref "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
+    let $local_3: i32;
     let $moved_4: i32;
-    let $sroa_$f_buf_75: ref "core:prelude/string.wado//String";
+    let $cm_pair_7: i64;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:global_init_namespaced_operation_default.wado::$modules_initialized);
         cold_path;
@@ -131,45 +133,33 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     };
     acc = struct.new "global_init_namespaced_operation_default.wado//Acc" { value: 100 };
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" { outer: local.tee $save_./sub/ns_stepper.wado/Stepper(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_0" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_0" } };
-    $sroa_$f_buf_75 = local.tee $local_1_1(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 });
-    is_negative_14 = local.tee self_8(global:global_init_namespaced_operation_default.wado::STEPPED) < 0;
-    self_8 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(self_8); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    is_negative_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, is_negative_14, self_8);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, is_negative_14, x_18, self_8);
-    if @unlikely(local.tee self_8($local_1_1.used + 1) > builtin::array_len($local_1_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1_1, self_8);
-    }
-    is_negative_14 = $local_1_1.used;
-    $local_1_1.used = self_8;
-    builtin::array_copy<u8>($local_1_1.repr, is_negative_14, global:global_init_namespaced_operation_default.wado::$const_obj_1, 0, 1);
-    $sroa_$f_buf_75 = $local_1_1;
-    self_8 = local.tee is_negative_14($inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_15: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_1_37(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper)) == 0) {
-            global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = local.tee $local_2_38(ref.as_non_null($local_1_37)).outer;
-            is_negative_14 = block -> i32 {
-                let $indirect_call_2: ref "canonical//CanonicalClosure_0";
-                call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_2_38.op_step)).env, 1);
-            };
-            global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $local_1_37;
-            break $inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_15: is_negative_14;
-        } else {
-            let $mv_arg_1: ref "core:prelude/string.wado//String";
-            "core:rt/panic"(local.tee $mv_arg_1(global:global_init_namespaced_operation_default.wado::$const_obj_0).repr, $mv_arg_1.used);
+    $hole_0_0 = global:global_init_namespaced_operation_default.wado::STEPPED;
+    $mv_arg_2 = block -> ref "core:prelude/string.wado//String" {
+        $local_3 = $inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_1: block -> i32 {
+            if @likely(ref.is_null(local.tee $local_1(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper)) == 0) {
+                global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = local.tee $local_2(ref.as_non_null($local_1)).outer;
+                $local_3 = block -> i32 {
+                    let $indirect_call_3: ref "canonical//CanonicalClosure_0";
+                    call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_step)).env, 1);
+                };
+                global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $local_1;
+                break $inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_1: $local_3;
+            } else {
+                let $mv_arg_2: ref "core:prelude/string.wado//String";
+                "core:rt/panic"(local.tee $mv_arg_2(global:global_init_namespaced_operation_default.wado::$const_obj_0).repr, $mv_arg_2.used);
+                unreachable;
+            }
             unreachable;
-        }
-        unreachable;
-    }) < 0;
-    is_negative_14 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_18(x_18 = builtin::i64_extend_i32_s(is_negative_14); select i64(x_18 < 0_i64, 0_i64 - x_18, x_18)));
-    self_8 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"($sroa_$f_buf_75, self_8, is_negative_14);
-    "core:prelude/primitive.wado/write_decimal_digits"($sroa_$f_buf_75.repr, self_8, x_18, is_negative_14);
-    is_negative_14 = builtin::i32_wrap_i64(local.tee x_18("wasi/stream-new"()));
-    self_8 = builtin::i32_wrap_i64(x_18 >> 32_i64);
-    $moved_4 = "global_init_namespaced_operation_default.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = is_negative_14; is_negative_14 = 0; $moved_4);
-    is_negative_14 = self_8;
-    self_8 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_14, $local_1_1.repr, $local_1_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_14 = $moved_4; $moved_4 = 0; is_negative_14);
+        };
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<global_init_namespaced_operation_default.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($hole_0_0, $local_3);
+    };
+    $local_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $hole_0_0 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $moved_4 = "global_init_namespaced_operation_default.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $local_3; $local_3 = 0; $moved_4);
+    $local_3 = $hole_0_0;
+    $hole_0_0 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_3, $mv_arg_2.repr, $mv_arg_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_3 = $moved_4; $moved_4 = 0; $local_3);
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $save_./sub/ns_stepper.wado/Stepper;
 }
 
@@ -208,6 +198,8 @@ fn "global_init_namespaced_operation_default.wado/$initialize_module"() {
     let acc: ref "global_init_namespaced_operation_default.wado//Acc";
     let $local_2: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
     let $sroa_$exit_4_1_6: i32;
+    cold_path;
+    cold_path;
     acc = struct.new "global_init_namespaced_operation_default.wado//Acc" { value: 0 };
     cold_path;
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" { outer: local.tee $local_2(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_1" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_1" } };
@@ -318,7 +310,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
-fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
@@ -328,6 +320,11 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+}
+
+fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
+    "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;
 }
@@ -460,24 +457,56 @@ fn "global_init_namespaced_operation_default.wado/global_init_namespaced_operati
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {
-    let start_26: i32;
+    let start_27: i32;
     if is_negative {
         if @unlikely(local.tee is_negative(self.used + 1) > builtin::array_len(self.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
         }
-        start_26 = self.used;
+        start_27 = self.used;
         self.used = is_negative;
-        builtin::array_set_u8(self.repr, start_26, 45);
+        builtin::array_set_u8(self.repr, start_27, 45);
     } else {
     }
     if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
     }
-    start_26 = self.used;
+    start_27 = self.used;
     self.used = digit_count;
-    return start_26;
+    return start_27;
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<global_init_namespaced_operation_default.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
+    let $load_0: ref Array<u8>;
+    let out_3: ref "core:prelude/string.wado//String";
+    let is_negative_70: bool;
+    let x_74: i64;
+    let repr_93: ref Array<u8>;
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_22;
+    };
+    is_negative_70 = $mv$t$h0 < 0;
+    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
+    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_70, x_74, $mv$t$h0);
+    repr_93 = global:core:prelude/string.wado::$const_obj_1;
+    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
+    }
+    is_negative_70 = out_3.used;
+    out_3.used = $mv$t$h0;
+    builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_93, 0, 1);
+    is_negative_70 = $mv$t$h1 < 0;
+    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
+    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h1);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative_70, x_74, $mv$t$h1);
+    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_70;
+    };
+    return out_3;
 }
 
 fn "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_0"($env, $p0) {

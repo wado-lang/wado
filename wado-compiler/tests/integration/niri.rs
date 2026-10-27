@@ -25,9 +25,8 @@ use wado_compiler::nir::{
     NirParam, NirUnaryOp, ParamAbi, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
-    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
-    ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind,
-    StmtNode, Tracked,
+    ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind,
+    ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId, StmtKind, StmtNode, Tracked,
 };
 use wado_compiler::nir_value_graph::ValueKind;
 use wado_compiler::niri::{
@@ -1427,7 +1426,8 @@ fn reduce_local_rewrites_const_false_if_no_else_to_unit() {
     let ExprKind::LabeledBlock { block: blk, .. } = body.exprs[e].kind else {
         panic!("expected an empty block, got {:?}", body.exprs[e].kind);
     };
-    assert!(body.blocks[blk].stmts.is_empty());
+    let stmts = &body.blocks[blk].stmts;
+    assert!(stmts.is_empty(), "{stmts:?}");
 }
 
 #[test]
@@ -1609,7 +1609,8 @@ fn reduce_local_block_drops_const_false_if_stmt_without_else() {
         span: Span::default(),
     });
     assert!(interp.reduce_local_block_in_body(&mut body, block));
-    assert!(body.blocks[block].stmts.is_empty());
+    let stmts = &body.blocks[block].stmts;
+    assert!(stmts.is_empty(), "{stmts:?}");
 }
 
 #[test]
@@ -5134,7 +5135,6 @@ fn labeled_block_stmt_b(label: &str, stmts: Vec<StmtBuild>) -> StmtBuild {
             StmtKind::LabeledBlock {
                 label: label.clone(),
                 block,
-                role: BlockRole::of_label(&label),
             },
         )
     })
@@ -7433,7 +7433,6 @@ fn labeled_block_expr_of(label: &'static str, stmts: Vec<StmtBuild>, type_id: Ty
                 label: label.to_string(),
                 block,
                 result_type: type_id,
-                role: BlockRole::of_label(label),
             },
             type_id,
         ))
@@ -7555,10 +7554,10 @@ fn a_region_writing_an_outer_local_is_refused() {
 fn a_labeled_region_folds_through_its_own_break() {
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "$tmpl",
+        "region",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
-            break_stmt_b(Some("$tmpl"), Some(local_expr(0, TypeTable::I32))),
+            break_stmt_b(Some("region"), Some(local_expr(0, TypeTable::I32))),
         ],
         TypeTable::I32,
     );
@@ -7578,7 +7577,7 @@ fn a_region_breaking_to_an_outer_label_is_refused() {
     // Control flow leaves the block, so its value cannot stand for it.
     let table = TypeTable::new();
     let region = labeled_block_expr_of(
-        "$tmpl",
+        "region",
         vec![
             let_stmt_b("a", 0, TypeTable::I32, int_lit(2, TypeTable::I32, "2")),
             break_stmt_b(Some("outer"), Some(local_expr(0, TypeTable::I32))),

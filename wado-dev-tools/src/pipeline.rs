@@ -19,7 +19,7 @@ const COMPILER_STACK_SIZE: usize = 16 * 1024 * 1024;
 /// and runs the full compiler plus wasmtime. On constrained sandboxes this has
 /// empirically caused SIGSEGV from resource exhaustion; set `WADO_GOLDEN_WORKERS`
 /// to cap the parallelism in that case.
-fn default_num_workers() -> usize {
+pub fn default_num_workers() -> usize {
     if let Some(n) = std::env::var("WADO_GOLDEN_WORKERS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
@@ -704,7 +704,8 @@ mod tests {
         written.insert("a".to_string());
         written.insert("b".to_string());
 
-        assert!(collect_stale(existing, &written).is_empty());
+        let stale = collect_stale(existing, &written);
+        assert!(stale.is_empty(), "{stale:?}");
     }
 
     #[test]

@@ -13,7 +13,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, LocalMethodName};
+use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
 use crate::tir;
 use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InlineHint, LetStorage, MonomorphInfo, TemplateId,
@@ -67,6 +67,37 @@ pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirE
         return_type,
         synth_span(),
     )
+}
+
+/// `builtin::$known_cold_path();`, the marker the compiler places where the
+/// program itself makes the path rare.
+pub fn known_cold_path_stmt(span: Span) -> TirStmt {
+    marker_stmt(KNOWN_COLD_PATH_INTRINSIC, span)
+}
+
+/// `builtin::cold_path();`, for a path the compiler guesses is rare as an
+/// author would.
+pub fn cold_path_stmt(span: Span) -> TirStmt {
+    marker_stmt(COLD_PATH_INTRINSIC, span)
+}
+
+fn marker_stmt(intrinsic: &str, span: Span) -> TirStmt {
+    TirStmt::new(
+        TirStmtKind::Expr(builtin_call(intrinsic, Vec::new(), TypeTable::UNIT)),
+        span,
+    )
+}
+
+/// Whether `stmt` is a cold marker, whoever placed it.
+pub fn is_cold_marker_stmt(stmt: &TirStmt) -> bool {
+    matches!(&stmt.kind, TirStmtKind::Expr(expr) if is_cold_marker_expr(expr))
+}
+
+/// Whether `expr` is a call to a cold marker, whoever placed it.
+pub fn is_cold_marker_expr(expr: &TirExpr) -> bool {
+    matches!(&expr.kind, TirExprKind::Call { func, .. }
+        if func.is_builtin_named(COLD_PATH_INTRINSIC)
+            || func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC))
 }
 
 /// Create a call to an internal function (e.g., `internal::cm_lower_string`).

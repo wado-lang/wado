@@ -415,11 +415,13 @@ test {
 
 ### Core Modules
 
-Each function export becomes a free function of the same name. A call to it
-calls that export, whatever the name: an export named like a `core:builtin`
-intrinsic or like another asset's export is still its own asset's function. An
-export spelled like a Wado keyword is imported under an alias
-(`use { resume as seven } from ...`).
+Each function export becomes a free function named by its export's
+`snake_case` reading, as a component's function is: `add-one` and `addOne` are
+both `add_one`. A reading that is a Wado keyword takes a trailing `_`
+(`use { resume_ as seven } from ...`), unless that keyword may also be a name:
+`type` stays `type`. A call to it calls that export, whatever
+the name: an export named like a `core:builtin` intrinsic or like another
+asset's export is still its own asset's function.
 
 An asset is embedded in the output and shares the component's memory. The
 memory's first pages, as many as the asset's own memory declares at minimum,
@@ -433,6 +435,8 @@ rejected at the import when it:
   64-bit, shared, has a custom page size, or has a minimum of 2 GiB or more;
 - has a `start` section;
 - exports a function that re-exports an imported one;
+- exports a function whose `snake_case` reading is no Wado identifier (`1st`),
+  or two whose readings are one name (`a-b` and `a_b`);
 - exports a function whose parameters are not `i32`, `i64`, `f32`, `f64`, or
   `v128`, or that has more than one result, or a result of any other type.
 
@@ -504,7 +508,32 @@ component requires the effects its own host imports map to
 (`wasi:clocks/monotonic-clock` requires `MonotonicClock`), and a component that
 imports nothing from the host requires no effect. A component that imports an
 interface no host provides (a guest effect) makes that interface an effect its
-caller must handle. `with { provider: "./impl.wado" }` supplies it instead: the
+caller must handle. The handler installed where the caller calls into the
+component answers each call the component makes to the interface, while the
+component is still running:
+
+<!-- {"fixture":"spec_modules_guest_effect_handler.wado"} -->
+
+```wado
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`
+    }
+}
+
+test {
+    let mut tag = Tag {};
+    with Highlight => &mut tag do {
+        assert Hlc::wrap("x", "wado").text == "[wado:x]";
+    }
+}
+```
+
+`with { provider: "./impl.wado" }` supplies the interface instead: the
 named Wado file is compiled into a component that exports the interface, bound
 by operation name, and composed in, so the caller needs no handler. A `provider`
 on a component that imports no guest effect is an error. So is one that does not

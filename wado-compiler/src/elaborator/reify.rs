@@ -84,30 +84,75 @@ use crate::elaborator::util::{
 use crate::escape::{
     unescape_byte, unescape_bytes, unescape_char, unescape_string, unescape_template_segment,
 };
-use crate::format_spec::{FormatKind, TemplateFormatSpec};
+use crate::format_spec::FormatKind;
+use crate::hashmap;
 use crate::lexer::defaults_to_float;
 use crate::name::{
     DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
-    minted_name, range_local_name, test_function_name, widened_half_local_name,
+    minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
+    widened_half_local_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
-use crate::synthesis::common::builtin_call;
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
+use crate::synthesis::common::{
+    builtin_call, cold_path_stmt, is_cold_marker_stmt, known_cold_path_stmt,
+};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
 };
 use crate::tir::{
-    FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateShape,
+    FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
-    TirTemplatePart, hold_hole,
+    hold_hole,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
 use crate::unparse::{unparse_expr_source, unparse_instance_pattern, unparse_pattern_source};
-use crate::{format_spec, hashmap};
+
+/// A template's text and holes as reify assembles it: one segment more than
+/// holes, each segment cooked and raw, and each hole with its specifier as
+/// written.
+struct TemplatePieces {
+    segments: Vec<[String; 2]>,
+    holes: Vec<(TirExpr, Option<String>)>,
+}
+
+impl Default for TemplatePieces {
+    fn default() -> Self {
+        Self {
+            segments: vec![Default::default()],
+            holes: Vec::new(),
+        }
+    }
+}
+
+/// The statements binding the holes a template literal cannot read where it
+/// stands, and the serial naming them.
+struct HoleBindings {
+    lets: Vec<TirStmt>,
+    serial: u32,
+}
+
+impl TemplatePieces {
+    fn text(&mut self, cooked: &str, raw: &str) {
+        let [c, r] = self.segments.last_mut().expect("starts with one segment");
+        c.push_str(cooked);
+        r.push_str(raw);
+    }
+
+    /// Text that no source spelled, so it has no raw form of its own.
+    fn literal(&mut self, text: &str) {
+        self.text(text, text);
+    }
+
+    fn hole(&mut self, value: TirExpr, spec: Option<String>) {
+        self.holes.push((value, spec));
+        self.segments.push(Default::default());
+    }
+}
 
 /// Generate the `ann_*` annotation accessors on [`Reify`], one per
 /// [`super::sem::types::BodyFacts`] map from the list `with_body_facts!`
@@ -452,6 +497,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     pub(crate) logger: &'a Logger<'a, H>,
     /// Source module currently being reified.
     pub(crate) current_module_source: ModuleSource,
+    /// The module whose TIR is being built, which `current_module_source`
+    /// leaves while code is reified standing in another (`with_perspective`).
+    pub(crate) emitted_module_source: ModuleSource,
     /// Items of the current module, set before per-Item dispatch.
     pub(crate) current_module_items: &'a [Item],
 
@@ -501,6 +549,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// Local newtype declarations (`Stmt::Item`) — same reasoning as
     /// `pending_local_structs`.
     pub(crate) pending_local_newtypes: IndexMap<DefId, TirNewtype>,
+    /// The template shapes reify mints (`reify_template_type`), flushed with
+    /// `pending_local_structs` and reify-owned for the same reason.
+    pub(crate) pending_template_structs: Vec<TirStruct>,
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
@@ -620,6 +671,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             loaded_modules,
             logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
+            emitted_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
 
             tuple_overlay_stack: Vec::new(),
@@ -628,6 +680,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             compound_overrides: IndexMap::default(),
             call_site_location: None,
             pending_local_structs: IndexMap::default(),
+            pending_template_structs: Vec::new(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
             probes_emitted: IndexSet::default(),
@@ -713,9 +766,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// `read` marked moved where its value is affine. `read` reads a local
     /// reify bound ahead of its use, in a position that takes the value.
     fn handed_on(&self, read: TirExpr) -> TirExpr {
-        let affine =
-            self.ask_ownership(|_, facts| self.tysys.is_affine(read.type_id, facts.affine_params));
-        if affine { read.moved() } else { read }
+        if self.is_affine_type(read.type_id) {
+            read.moved()
+        } else {
+            read
+        }
+    }
+
+    /// Whether a value of `ty` is move-only in the body being reified.
+    fn is_affine_type(&self, ty: TypeId) -> bool {
+        self.ask_ownership(|_, facts| self.tysys.is_affine(ty, facts.affine_params))
     }
 
     /// The body fact `map` records for `id` in the walk reify is replaying:
@@ -882,6 +942,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         module_source: ModuleSource,
     ) -> Result<TirModule, Bail> {
         self.current_module_source = module_source.clone();
+        self.emitted_module_source = module_source.clone();
         self.current_module_items = &module.items;
 
         let mut tir_module = TirModule::new(module_source);
@@ -1016,6 +1077,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         for local_newtype in std::mem::take(&mut self.pending_local_newtypes).into_values() {
             tir_module.add_newtype(local_newtype);
+        }
+        for template_struct in std::mem::take(&mut self.pending_template_structs) {
+            tir_module.add_struct(template_struct);
         }
 
         tir_module.wasm_module = module.wasm_module().map(String::from);
@@ -2354,7 +2418,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Open the cold tail of a block at its first statement that cannot return.
+    /// Mark a block cold ahead of its first statement that cannot return.
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
@@ -2367,21 +2431,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !stmts.iter().any(diverges) {
             return stmts;
         }
-        let is_marker = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e)
-                if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if func.is_builtin_named("cold_path")))
-        };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
-        // A marker makes the rest of its block cold, which is where `block_cut`
-        // stops pricing and where `cold_outline`'s region starts, so the first
-        // one in a block is the only one worth placing — and a synthesis site
-        // that placed its own ahead of the statements it built keeps it.
+        // A marker makes its whole basic block cold, so one per block is all
+        // there is to place, and a synthesis site that placed its own keeps it.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_marker(&s);
+            marked = marked || is_cold_marker_stmt(&s);
             if diverges(&s) && !marked {
-                out.push(self.make_cold_path_stmt(s.span));
+                out.push(known_cold_path_stmt(s.span));
                 marked = true;
             }
             out.push(s);
@@ -3289,17 +3346,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         spliced
     }
 
-    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
-    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
-    /// Mirrors [`super::Elaborator::desugar_assert`].
-    /// Build a `builtin::cold_path()` marker statement for a compiler-synthesized
-    /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
-    /// then hints the enclosing branch unlikely and the inliner skips the branch.
-    fn make_cold_path_stmt(&self, span: Span) -> TirStmt {
-        let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
-        TirStmt::new(TirStmtKind::Expr(call), span)
-    }
-
     /// A conditional slot's failure-message text, chosen in the cold branch so
     /// an unreached slot says so instead of quoting its zero value.
     fn assert_slot_text_let(
@@ -3310,19 +3356,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         seen_index: u32,
         seen_name: String,
         value_ref: TirExpr,
-        inspect_spec: Option<TemplateFormatSpec>,
+        inspect_spec: Option<String>,
         span: Span,
+        ctx: &mut FunctionContext,
     ) -> TirStmt {
-        let rendered = TirExpr::new(
-            TirExprKind::TemplateString {
-                parts: vec![TirTemplatePart::Interpolation {
-                    expr: Box::new(value_ref),
-                    format_spec: inspect_spec,
-                }],
-            },
-            string_type,
-            span,
-        );
+        let mut pieces = TemplatePieces::default();
+        pieces.hole(value_ref, inspect_spec);
+        let rendered = self.reify_string_format(pieces, span, ctx);
         let marker = TirExpr::new(
             TirExprKind::StringLiteral(NOT_EVALUATED.to_string()),
             string_type,
@@ -3367,12 +3407,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// or `<moved>` where a move emptied the place. A variant spends null on a
     /// case of its own, so only a struct or a resource is told apart.
     fn assert_slot_rendering(
-        &self,
+        &mut self,
         value: TirExpr,
         string_type: TypeId,
         span: Span,
-    ) -> (TirExpr, Option<TemplateFormatSpec>) {
-        let inspect_spec = Some(TemplateFormatSpec::of_kind(FormatKind::Inspect));
+        ctx: &mut FunctionContext,
+    ) -> (TirExpr, Option<String>) {
+        let inspect_spec = FormatKind::Inspect.as_char().map(String::from);
         let can_be_moved = self.tysys.carries_affine(value.type_id) && {
             let tt = self.tysys.type_table.borrow();
             let head = tt.representation_head(value.type_id);
@@ -3384,12 +3425,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
         let string = |kind| TirExpr::new(kind, string_type, span);
         let moved = builtin_call("is_moved", vec![value.clone()], TypeTable::BOOL);
-        let inspected = string(TirExprKind::TemplateString {
-            parts: vec![TirTemplatePart::Interpolation {
-                expr: Box::new(value),
-                format_spec: inspect_spec,
-            }],
-        });
+        let mut pieces = TemplatePieces::default();
+        pieces.hole(value, inspect_spec);
+        let inspected = self.reify_string_format(pieces, span, ctx);
         let choice = string(TirExprKind::If {
             condition: Box::new(moved),
             then_branch: TirBlock::new(
@@ -3407,6 +3445,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (choice, None)
     }
 
+    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
+    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
+    /// Mirrors [`super::Elaborator::desugar_assert`].
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -3526,75 +3567,36 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .trait_env
             .module_of_span(span, &self.current_module_source)
             .to_string();
-        let string_literal = |text: String| {
-            Box::new(TirExpr::new(
-                TirExprKind::StringLiteral(text),
-                string_type,
-                span,
-            ))
-        };
-        let mut parts: Vec<TirTemplatePart> = if assert_stmt.contract {
+        let mut pieces = TemplatePieces::default();
+        if assert_stmt.contract {
             // The call breaking the contract is to blame, so the clause reports
             // where it was called from.
-            let clause_site = format!("{file}:{line}");
-            vec![
-                TirTemplatePart::Literal("Contract of ".to_string()),
-                TirTemplatePart::Interpolation {
-                    expr: string_literal(contract_owner_name(&ctx.function_name)),
-                    format_spec: None,
-                },
-                TirTemplatePart::Literal(" failed at ".to_string()),
-                TirTemplatePart::Interpolation {
-                    expr: Box::new(builtin_call(
-                        CONTRACT_SITE_INTRINSIC,
-                        vec![*string_literal(clause_site)],
-                        string_type,
-                    )),
-                    format_spec: None,
-                },
-            ]
+            let clause_site = TirExpr::new(
+                TirExprKind::StringLiteral(format!("{file}:{line}")),
+                string_type,
+                span,
+            );
+            let owner = contract_owner_name(&ctx.function_name);
+            pieces.literal(&format!("Contract of {owner} failed at "));
+            pieces.hole(
+                builtin_call(CONTRACT_SITE_INTRINSIC, vec![clause_site], string_type),
+                None,
+            );
         } else {
-            vec![
-                TirTemplatePart::Literal("Assertion failed in ".to_string()),
-                TirTemplatePart::Interpolation {
-                    expr: string_literal(ctx.function_name.clone()),
-                    format_spec: None,
-                },
-                TirTemplatePart::Literal(" at ".to_string()),
-                TirTemplatePart::Interpolation {
-                    expr: string_literal(file),
-                    format_spec: None,
-                },
-                TirTemplatePart::Literal(":".to_string()),
-                TirTemplatePart::Interpolation {
-                    expr: Box::new(TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: line,
-                            repr: line.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    )),
-                    format_spec: None,
-                },
-            ]
-        };
+            let function = &ctx.function_name;
+            pieces.literal(&format!("Assertion failed in {function} at {file}:{line}"));
+        }
         if let Some(msg) = &assert_stmt.message {
-            parts.push(TirTemplatePart::Literal(": ".to_string()));
+            pieces.literal(": ");
             let msg_tir = self.reify_expr(msg, ctx, None);
-            parts.push(TirTemplatePart::Interpolation {
-                expr: Box::new(msg_tir),
-                format_spec: None,
-            });
+            pieces.hole(msg_tir, None);
         }
 
         let condition_source = info.as_ref().map_or_else(
             || unparse_expr_source(&assert_stmt.condition),
             |info| info.condition_source.clone(),
         );
-        parts.push(TirTemplatePart::Literal(format!(
-            "\ncondition: {condition_source}\n"
-        )));
+        pieces.literal(&format!("\ncondition: {condition_source}\n"));
 
         let mut text_lets: Vec<TirStmt> = Vec::new();
         for (slot_idx, slot) in actx.slots.iter().enumerate() {
@@ -3604,7 +3606,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let Some(type_id) = slot.type_id else {
                 continue;
             };
-            parts.push(TirTemplatePart::Literal(format!("{}: ", slot.label)));
+            pieces.literal(&format!("{}: ", slot.label));
             let local_ref = match (&slot.place_expr, slot.local_index) {
                 (Some(place), _) => place.clone(),
                 (None, Some(local_index)) => TirExpr::new(
@@ -3618,7 +3620,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 (None, None) => continue,
             };
             let (local_ref, inspect_spec) =
-                self.assert_slot_rendering(local_ref, string_type, span);
+                self.assert_slot_rendering(local_ref, string_type, span, ctx);
             match slot.seen_local_index {
                 Some(seen_index) => {
                     let render_index = render_local_of[&slot_idx];
@@ -3632,28 +3634,24 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         local_ref,
                         inspect_spec,
                         span,
+                        ctx,
                     ));
-                    parts.push(TirTemplatePart::Interpolation {
-                        expr: Box::new(TirExpr::new(
-                            TirExprKind::Local {
-                                index: render_index,
-                                name: render_name,
-                            },
-                            string_type,
-                            span,
-                        )),
-                        format_spec: None,
-                    });
+                    let rendered = TirExpr::new(
+                        TirExprKind::Local {
+                            index: render_index,
+                            name: render_name,
+                        },
+                        string_type,
+                        span,
+                    );
+                    pieces.hole(rendered, None);
                 }
-                None => parts.push(TirTemplatePart::Interpolation {
-                    expr: Box::new(local_ref),
-                    format_spec: inspect_spec,
-                }),
+                None => pieces.hole(local_ref, inspect_spec),
             }
-            parts.push(TirTemplatePart::Literal("\n".to_string()));
+            pieces.literal("\n");
         }
 
-        let template_tir = TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span);
+        let template_tir = self.reify_string_format(pieces, span, ctx);
 
         // Emit `core:rt::assert_failed`, not `panic`: a distinct callee
         // lets `-f bare-asserts` (see `lower::bare_asserts`) replace assertion
@@ -3668,7 +3666,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         let mut then_stmts = Vec::with_capacity(text_lets.len() + 2);
-        then_stmts.push(self.make_cold_path_stmt(span));
+        then_stmts.push(known_cold_path_stmt(span));
         then_stmts.extend(text_lets);
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
         let then_block = TirBlock::new(then_stmts, span);
@@ -4078,52 +4076,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.fresh_serial();
 
-        // Look through a `&`/`&mut` wrapper: `for v of &[..T]` binds `&T_k`.
-        // `by_ref` and the element type are derived from a single lookup so the
-        // two cannot drift.
-        let (inner, by_ref) = {
-            let type_table = self.tysys.type_table.borrow();
-            match type_table.as_tuple_through_ref(iterable.type_id) {
-                Some((elems, by_ref)) => {
-                    // A `.zip()` binds its one element, the pair `[..A, ..B]`,
-                    // so its pack sits a level down. Everywhere else the pack is
-                    // an element: `resolve_for_of` sends a tuple carrying none
-                    // down the concrete path instead.
-                    let inner = if let Some(&pack) =
-                        elems.iter().find(|e| type_table.is_type_pack(**e))
-                    {
-                        pack
-                    } else {
-                        let is_zip = matches!(
-                            actual_iterable,
-                            ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-                        );
-                        assert!(
-                            is_zip,
-                            "variadic for-of over a tuple carrying no pack: {}",
-                            type_table.type_name(iterable.type_id)
-                        );
-                        elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
-                    };
-                    // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
-                    // the mapped element, not the pack itself.
-                    let inner = match type_table.get(inner) {
-                        ResolvedType::TypePack {
-                            mapped_elem: Some(elem),
-                            ..
-                        } => *elem,
-                        _ => inner,
-                    };
-                    (inner, by_ref)
-                }
-                None => (TypeTable::UNKNOWN, false),
-            }
-        };
-        let bound_type = if by_ref {
-            self.tysys.type_table.borrow_mut().make_ref(inner)
-        } else {
-            inner
-        };
+        let (bound_type, by_ref) = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .pack_walk_binding(iterable.type_id, ctx.pack_walks)
+            .unwrap_or((TypeTable::UNKNOWN, false));
         // Expansion supplies the index literal per unrolled element.
         let binding_type = if is_enumerate {
             self.tysys
@@ -4152,7 +4110,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let mut body = self.reify_block(
             &for_of.body,
-            &mut ctx.enter_enumerate_body(index_binding),
+            &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
             None,
         );
         if !destruct_stmts.is_empty() {
@@ -4170,6 +4128,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 unique_id,
                 by_ref,
                 is_enumerate,
+                walk: ctx.pack_walks,
+                moves: !by_ref && self.is_affine_type(bound_type),
             },
             span,
         )]
@@ -4191,7 +4151,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let elem_type = self
             .tysys
-            .comprehension_pack_elem(iterable.type_id)
+            .comprehension_pack_elem(iterable.type_id, ctx.pack_walks)
             .unwrap_or(TypeTable::UNKNOWN);
         let binding_type = if is_enumerate {
             self.tysys
@@ -4210,7 +4170,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
         let body = self.reify_expr(
             &comp.body,
-            &mut ctx.enter_enumerate_body(index_binding),
+            &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
             None,
         );
 
@@ -4223,6 +4183,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 body: Box::new(body),
                 unique_id,
                 is_enumerate,
+                walk: ctx.pack_walks,
             },
             recorded_type,
             span,
@@ -4866,78 +4827,129 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
-    /// Reify a template string `` `…${expr}…` ``: no interpolations concatenates
-    /// to a `StringLiteral` at reify time, a lone `String` interpolation with no
-    /// format spec forwards its expression unchanged, and everything else builds
-    /// `Vec<TirTemplatePart>` with specs from [`crate::format_spec::parse`].
+    /// Reify an untagged template as the `String::format` call it is sugar for.
     fn reify_template_string(
         &mut self,
         template: &ast::TemplateStringExpr,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
+        let mut pieces = TemplatePieces::default();
+        for part in &template.parts {
+            match part {
+                // Annotate validated every segment's escapes.
+                ast::TemplatePart::String(raw) => {
+                    pieces.text(&unescape_template_segment(raw), raw);
+                }
+                ast::TemplatePart::Interpolation { expr, format, .. } => {
+                    let value = self.reify_expr(expr, ctx, None);
+                    pieces.hole(value, format.as_ref().map(|f| f.spec.clone()));
+                }
+            }
+        }
+        self.reify_string_format(pieces, template.span, ctx)
+    }
+
+    /// `` String::format`…` `` over `pieces`, resolved here rather than by
+    /// name, so it reaches the prelude's `String` wherever an import or
+    /// `#![no_prelude]` takes the name. A template with no hole is its text,
+    /// and one that is a lone `String` hole is that value.
+    fn reify_string_format(
+        &mut self,
+        pieces: TemplatePieces,
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let TemplatePieces {
+            mut segments,
+            mut holes,
+        } = pieces;
         let string_type = self
             .tysys
             .type_table
             .borrow_mut()
             .make_compiler_struct(CompilerItem::String);
-        let span = template.span;
-
-        let has_interpolation = template
-            .parts
-            .iter()
-            .any(|p| matches!(p, ast::TemplatePart::Interpolation { .. }));
-
-        if !has_interpolation {
-            let mut combined = String::new();
-            for part in &template.parts {
-                if let ast::TemplatePart::String(s) = part {
-                    combined.push_str(&unescape_template_segment(s));
-                }
-            }
-            return TirExpr::new(TirExprKind::StringLiteral(combined), string_type, span);
+        if holes.is_empty() {
+            let [cooked, _] = segments
+                .pop()
+                .expect("a template has one segment more than holes");
+            return TirExpr::new(TirExprKind::StringLiteral(cooked), string_type, span);
+        }
+        let lone_string = {
+            let tt = self.tysys.type_table.borrow();
+            matches!(holes.as_slice(), [(value, None)]
+                if tt.type_key(value.type_id) == tt.type_key(string_type))
+                && segments
+                    .iter()
+                    .all(|[cooked, raw]| cooked.is_empty() && raw.is_empty())
+        };
+        if lone_string {
+            return holes.pop().expect("matched one hole").0;
         }
 
-        let mut parts = Vec::new();
-        for part in &template.parts {
-            match part {
-                ast::TemplatePart::String(s) => {
-                    let unescaped = unescape_template_segment(s);
-                    if !unescaped.is_empty() {
-                        parts.push(TirTemplatePart::Literal(unescaped));
-                    }
-                }
-                ast::TemplatePart::Interpolation { expr, format, .. } => {
-                    let resolved = self.reify_expr(expr, ctx, None);
-                    let format_spec = format.as_ref().map(|f| {
-                        format_spec::parse(&f.spec)
-                            .expect("the parser rejects a malformed format specifier")
-                    });
-                    parts.push(TirTemplatePart::Interpolation {
-                        expr: Box::new(resolved),
-                        format_spec,
-                    });
-                }
-            }
-        }
-
-        if template.parts.len() == 1
-            && matches!(
-                parts.as_slice(),
-                [TirTemplatePart::Interpolation { expr, format_spec: None }]
-                    if expr.type_id == string_type
+        let (values, holes): (Vec<TirExpr>, Vec<TemplateHole>) = holes
+            .into_iter()
+            .map(|(value, spec)| {
+                let ty = value.type_id;
+                (value, TemplateHole { ty, spec })
+            })
+            .unzip();
+        let shape = TemplateShape { holes };
+        let template_ty = self.reify_template_type(shape, span);
+        let (literal, holes) =
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
+        let (func, type_args) = {
+            let mut tt = self.tysys.type_table.borrow_mut();
+            let mut func = method_ref(&tt, CompilerItem::StringFormat);
+            func.template = Some(
+                tt.compiler_items()
+                    .require_template(CompilerItem::StringFormat),
+            );
+            let hole_types = tt
+                .template_shape_of_type(template_ty)
+                .expect("a template type has a shape")
+                .hole_types();
+            (
+                func,
+                vec![template_ty, tt.template_holes_tuple(&hole_types)],
             )
-            && let Some(TirTemplatePart::Interpolation { expr, .. }) = parts.pop()
-        {
-            return *expr;
+        };
+        let call = TirExpr::new(
+            TirExprKind::Call {
+                type_args,
+                func: Box::new(func),
+                args: CallArgs::free(vec![CallArg::new(literal, false)]),
+            },
+            string_type,
+            span,
+        );
+        Self::bind_holes_around(call, holes, string_type, span)
+    }
+
+    /// The anonymous type `shape` denotes, minted on its first sighting in this
+    /// module. Annotate mints a tagged template's; this mints the shapes only
+    /// reify sees, whose hole types it alone settles.
+    fn reify_template_type(&mut self, shape: TemplateShape, span: Span) -> TypeId {
+        let mut tt = self.tysys.type_table.borrow_mut();
+        let id = tt.intern_template_shape(self.emitted_module_source.clone(), shape);
+        let def = StructDef::Anon(id);
+        if let Some(ty) = tt.find_struct_type(def) {
+            return ty;
         }
-        TirExpr::new(TirExprKind::TemplateString { parts }, string_type, span)
+        let name = tt.anon_struct_mangle(id);
+        let fields = tt.anon_shape_struct_fields(id);
+        let ty = tt.make_struct(def);
+        self.pending_template_structs.push(TirStruct::anonymous(
+            id,
+            name,
+            self.emitted_module_source.clone(),
+            &fields,
+            span,
+        ));
+        ty
     }
 
     /// Reify a tagged template as the call annotate resolved it: the tag on a
-    /// literal of the template's anonymous type, one field per hole. A hole
-    /// that is a place is read or referenced where it stands; any other is
-    /// evaluated once, in source order, into a local of the block the call
-    /// then sits in (WEP 2026-01-10).
+    /// literal of the template's anonymous type (WEP 2026-01-10).
     fn reify_tagged_template(
         &mut self,
         tagged: &ast::TaggedTemplateExpr,
@@ -4952,106 +4964,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // Annotate diagnosed the template or the tag.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         };
-        let (struct_name, shape, open) = {
-            let tt = self.tysys.type_table.borrow();
-            let ResolvedType::Struct {
-                def: def @ StructDef::Anon(id),
-                ..
-            } = tt.get(template_ty)
-            else {
-                panic!("annotate records an anonymous struct type for a tagged template");
-            };
-            let shape = tt
-                .template_shape_of_type(template_ty)
-                .expect("annotate records a template type for a tagged template")
-                .clone();
-            // The name the shape was registered under, not the one a message
-            // shows: both render the shape, and only the mangle is a key.
-            (tt.struct_head_name(*def), shape, tt.anon_shape_is_open(*id))
-        };
-        let hole_types = shape.hole_types();
-
-        let unique_id = ctx.fresh_serial();
-        let mut stmts: Vec<TirStmt> = Vec::new();
-        let mut fields: Vec<TirStructField> = Vec::new();
-        let holes: Vec<&ast::Expr> = tagged.template.interpolations().collect();
-        let values: Vec<TirExpr> = holes
-            .iter()
+        let values: Vec<TirExpr> = tagged
+            .template
+            .interpolations()
             .map(|expr| self.reify_expr(expr, ctx, None))
             .collect();
-        // A place is read where it stands only while nothing between there and
-        // the call can write it. The struct literal is built after every
-        // hoisted hole has run, so a place followed by a hole that is not one
-        // is read too late and must be bound at its own position instead.
-        let last_hoisted = values.iter().rposition(|v| !Self::is_place_hole(v));
-        for (k, ((expr, mut value), &hole_ty)) in
-            holes.iter().zip(values).zip(&hole_types).enumerate()
-        {
-            if last_hoisted.is_some_and(|last| k <= last) {
-                let name = format!("$hole_{unique_id}_{k}");
-                let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
-                stmts.push(TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index,
-                        is_mut: false,
-                        type_id: hole_ty,
-                        value,
-                        storage: LetStorage::Planned,
-                    },
-                    expr.span(),
-                ));
-                value = TirExpr::new(
-                    TirExprKind::Local {
-                        index: local_index,
-                        name,
-                    },
-                    hole_ty,
-                    expr.span(),
-                );
-            }
-            let mut field = TirStructField {
-                name: TemplateShape::field_name(k),
-                value,
-                field_index: k as u32,
-            };
-            if !open
-                && let Some(taken) =
-                    hold_hole(&mut field, hole_ty, &mut self.tysys.type_table.borrow_mut())
-            {
-                ctx.address_taken_locals.insert(taken);
-            }
-            fields.push(field);
-        }
         // Annotate validated every segment's escapes.
-        let string_type = self
-            .tysys
-            .type_table
-            .borrow_mut()
-            .make_compiler_struct(CompilerItem::String);
-        let segments = tagged.template.raw_segments();
-        for key in shape.segment_keys() {
-            let text = match TemplateShape::segment_of(key) {
-                (k, true) => segments[k].clone(),
-                (k, false) => unescape_template_segment(&segments[k]),
-            };
-            let (name, field_index) = shape.segment_field(key);
-            fields.push(TirStructField {
-                name,
-                value: TirExpr::new(TirExprKind::StringLiteral(text), string_type, span),
-                field_index,
-            });
-        }
+        let segments: Vec<[String; 2]> = tagged
+            .template
+            .raw_segments()
+            .into_iter()
+            .map(|raw| [unescape_template_segment(&raw), raw])
+            .collect();
+        let (literal, holes) =
+            self.reify_template_literal(template_ty, values, &segments, span, ctx);
 
-        let literal = TirExpr::new(
-            TirExprKind::StructLiteral {
-                struct_type: template_ty,
-                struct_name,
-                fields,
-            },
-            template_ty,
-            span,
-        );
         // The template is the tag's one written argument; a trailing parameter
         // with a default is filled here, as it is for a spelled call.
         let mut args = vec![CallArg::new(literal, false)];
@@ -5073,11 +5000,144 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         );
         let call = Self::hoist_block(call, prelude);
+        Self::bind_holes_around(call, holes, recorded_type, span)
+    }
+
+    /// The literal of `template_ty` over the reified holes and each segment's
+    /// cooked and raw text, and the statements binding the holes it cannot
+    /// read where it stands: a place that a later computed hole may write.
+    fn reify_template_literal(
+        &mut self,
+        template_ty: TypeId,
+        values: Vec<TirExpr>,
+        segments: &[[String; 2]],
+        span: Span,
+        ctx: &mut FunctionContext,
+    ) -> (TirExpr, HoleBindings) {
+        let (struct_name, shape, open) = {
+            let tt = self.tysys.type_table.borrow();
+            let ResolvedType::Struct {
+                def: def @ StructDef::Anon(id),
+                ..
+            } = tt.get(template_ty)
+            else {
+                panic!("annotate records an anonymous struct type for a tagged template");
+            };
+            let shape = tt
+                .template_shape_of_type(template_ty)
+                .expect("a template type has a shape")
+                .clone();
+            // The name the shape was registered under, not the one a message
+            // shows: both render the shape, and only the mangle is a key.
+            (tt.struct_head_name(*def), shape, tt.anon_shape_is_open(*id))
+        };
+        let hole_types = shape.hole_types();
+        assert_eq!(values.len(), hole_types.len());
+        assert_eq!(segments.len(), hole_types.len() + 1);
+
+        let serial = ctx.fresh_serial();
+        let mut stmts: Vec<TirStmt> = Vec::new();
+        let mut fields: Vec<TirStructField> = Vec::new();
+        // The literal evaluates its fields in order, and a hole that computes
+        // its value stays a temporary of the statement, dropped as it ends. The
+        // template shares a place's storage rather than copying it, so a place
+        // a later computed hole may write is copied at its own position. An
+        // affine place cannot be copied, and is read in place.
+        let last_computed = values.iter().rposition(|v| !Self::is_place_hole(v));
+        for (k, (mut value, &hole_ty)) in values.into_iter().zip(&hole_types).enumerate() {
+            let snapshot = last_computed.is_some_and(|last| k < last)
+                && Self::is_place_hole(&value)
+                && !self.is_affine_type(hole_ty);
+            if snapshot {
+                let name = template_hole_local(serial, k);
+                let local_index = ctx.add_local(name.clone(), hole_ty, false, None);
+                let hole_span = value.span;
+                stmts.push(TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index,
+                        is_mut: false,
+                        type_id: hole_ty,
+                        value,
+                        storage: LetStorage::Planned,
+                    },
+                    hole_span,
+                ));
+                value = TirExpr::new(
+                    TirExprKind::Local {
+                        index: local_index,
+                        name,
+                    },
+                    hole_ty,
+                    hole_span,
+                );
+            }
+            let mut field = TirStructField {
+                name: TemplateShape::field_name(k),
+                value,
+                field_index: k as u32,
+            };
+            if !open
+                && let Some(taken) =
+                    hold_hole(&mut field, hole_ty, &mut self.tysys.type_table.borrow_mut())
+            {
+                ctx.address_taken_locals.insert(taken);
+            }
+            fields.push(field);
+        }
+        let string_type = self
+            .tysys
+            .type_table
+            .borrow_mut()
+            .make_compiler_struct(CompilerItem::String);
+        for key in shape.segment_keys() {
+            let (k, raw) = TemplateShape::segment_of(key);
+            let (name, field_index) = shape.segment_field(key);
+            fields.push(TirStructField {
+                name,
+                value: TirExpr::new(
+                    TirExprKind::StringLiteral(segments[k][usize::from(raw)].clone()),
+                    string_type,
+                    span,
+                ),
+                field_index,
+            });
+        }
+
+        let literal = TirExpr::new(
+            TirExprKind::StructLiteral {
+                struct_type: template_ty,
+                struct_name,
+                fields,
+            },
+            template_ty,
+            span,
+        );
+        (
+            literal,
+            HoleBindings {
+                lets: stmts,
+                serial,
+            },
+        )
+    }
+
+    /// `call` after the statements binding its template's holes, in a block of
+    /// its own where there are any.
+    fn bind_holes_around(
+        call: TirExpr,
+        holes: HoleBindings,
+        result_type: TypeId,
+        span: Span,
+    ) -> TirExpr {
+        let HoleBindings {
+            lets: mut stmts,
+            serial,
+        } = holes;
         if stmts.is_empty() {
             return call;
         }
-
-        let label = format!("$tagged_{unique_id}");
+        let label = template_block_label(serial);
         stmts.push(TirStmt::new(
             TirStmtKind::Break {
                 label: Some(label.clone()),
@@ -5089,9 +5149,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             TirExprKind::LabeledBlock {
                 label,
                 block: TirBlock::new(stmts, span),
-                result_type: recorded_type,
+                result_type,
             },
-            recorded_type,
+            result_type,
             span,
         )
     }
@@ -5893,7 +5953,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        self.make_cold_path_stmt(span),
+                        // A failure is no trap, so its rarity is a guess.
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 // `Option<U>` and the operand's `Option<T>`
@@ -6026,7 +6087,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        self.make_cold_path_stmt(span),
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(err_variant),
@@ -6190,8 +6251,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `.enumerate()` index: kept as `Index` here and rewritten to the
         // element's `FieldAccess` when the loop unrolls (WEP 2026-03-14).
         if let Some(elems) = &tuple_elems
-            && ctx.is_variadic_enumerate_index(&index.index)
-            && let Some(elem_type) = self.tysys.pack_element_type(elems)
+            && let Some(walk) = ctx.variadic_enumerate_walk(&index.index)
+            && let Some(elem_type) = self.tysys.pack_element_type(elems, walk)
         {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             return TirExpr::new(

@@ -9,6 +9,7 @@ use crate::args::{self, CliExit, OptSpec};
 use crate::process_host::ProcessGrant;
 use crate::runtime::{parse_collector, parse_gc_heap_size};
 use wado_host::engine::{DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE};
+use wado_host::sandbox::Trace;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
@@ -142,7 +143,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),
@@ -300,6 +301,7 @@ pub enum RuntimeKnobOpt {
     ReportFuel,
     DenyProcess,
     ProcessRead,
+    ProcessTrace,
 }
 
 impl RuntimeKnobOpt {
@@ -309,6 +311,7 @@ impl RuntimeKnobOpt {
         Self::ReportFuel,
         Self::DenyProcess,
         Self::ProcessRead,
+        Self::ProcessTrace,
     ];
 
     #[must_use]
@@ -344,6 +347,12 @@ impl RuntimeKnobOpt {
                 value: Some("<path>"),
                 desc: "Let a child the guest spawns read and execute <path>, beyond\nthe guest's grants and the system baseline (a toolchain under\nHOME, say). Repeatable; the guest itself gains nothing.\n`[process] read` in ~/.config/wado/config.toml adds the same",
             },
+            Self::ProcessTrace => OptSpec {
+                long: Some("process-trace"),
+                short: None,
+                value: None,
+                desc: "Watch each file a child the guest spawns opens, creates or\nremoves, and name each path the sandbox refused it, with the\ngrant that would allow it. Every such call waits on wado, so\nchildren run slower. Linux only",
+            },
         }
     }
 }
@@ -356,8 +365,9 @@ pub struct RuntimeKnobs {
     pub gc_heap_initial_size: u64,
     /// `--report-fuel`: meter the guest in fuel and report what it spent.
     pub report_fuel: bool,
-    /// `--deny-process` / `--process-read`: whether a guest may spawn, and
-    /// what its children may read beyond its grants.
+    /// `--deny-process` / `--process-read` / `--process-trace`: whether a
+    /// guest may spawn, what its children may read beyond its grants, and
+    /// whether the host watches their file calls.
     pub process: ProcessGrant,
 }
 
@@ -367,7 +377,10 @@ impl Default for RuntimeKnobs {
             collector: DEFAULT_COLLECTOR,
             gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
             report_fuel: false,
-            process: ProcessGrant::Offered { read: Vec::new() },
+            process: ProcessGrant::Offered {
+                read: Vec::new(),
+                trace: Trace::Off,
+            },
         }
     }
 }
@@ -386,16 +399,19 @@ impl RuntimeKnobs {
             }
             RuntimeKnobOpt::ReportFuel => self.report_fuel = true,
             RuntimeKnobOpt::DenyProcess => match &self.process {
-                ProcessGrant::Offered { read } if read.is_empty() => {
+                ProcessGrant::Offered {
+                    read,
+                    trace: Trace::Off,
+                } if read.is_empty() => {
                     self.process = ProcessGrant::Denied;
                 }
-                ProcessGrant::Offered { .. } => return Err(process_read_with_deny()),
+                ProcessGrant::Offered { .. } => return Err(child_knob_with_deny()),
                 ProcessGrant::Denied => {}
             },
             RuntimeKnobOpt::ProcessRead => {
                 let path = args::require_string(parser)?;
-                let ProcessGrant::Offered { read } = &mut self.process else {
-                    return Err(process_read_with_deny());
+                let ProcessGrant::Offered { read, .. } = &mut self.process else {
+                    return Err(child_knob_with_deny());
                 };
                 // Resolved here, so a symlink the child would follow names the
                 // tree the rule opens, and a typo fails before the guest runs.
@@ -404,13 +420,21 @@ impl RuntimeKnobs {
                         .map_err(|e| CliExit::error(format!("--process-read {path}: {e}")))?,
                 );
             }
+            RuntimeKnobOpt::ProcessTrace => {
+                let ProcessGrant::Offered { trace, .. } = &mut self.process else {
+                    return Err(child_knob_with_deny());
+                };
+                *trace = Trace::Files;
+            }
         }
         Ok(())
     }
 }
 
-fn process_read_with_deny() -> CliExit {
-    CliExit::error("--process-read opens a path to a spawned child, which --deny-process forbids")
+fn child_knob_with_deny() -> CliExit {
+    CliExit::error(
+        "--process-read and --process-trace act on a spawned child, which --deny-process forbids",
+    )
 }
 
 /// Whether a custom section is embedded in the output component. `Auto` follows
@@ -516,10 +540,30 @@ impl EmbedOptions {
 #[cfg(test)]
 mod tests {
     use super::{
-        CompileKnobOpt, EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel, parse_opt_level_arg,
+        CompileKnobOpt, EmbedOpt, EmbedOptions, EmbedPolicy, OptLevel, RuntimeKnobOpt,
+        RuntimeKnobs, parse_opt_level_arg,
     };
     use lexopt::Parser;
     use wado_compiler::CodegenFlags;
+
+    fn apply_runtime(opts: &[RuntimeKnobOpt]) -> Result<RuntimeKnobs, String> {
+        let mut knobs = RuntimeKnobs::default();
+        for &opt in opts {
+            knobs
+                .apply(opt, &mut Parser::from_args::<[&str; 0]>([]))
+                .map_err(|e| e.message)?;
+        }
+        Ok(knobs)
+    }
+
+    #[test]
+    fn deny_process_refuses_a_trace_in_either_order() {
+        use RuntimeKnobOpt::{DenyProcess, ProcessTrace};
+        for opts in [[DenyProcess, ProcessTrace], [ProcessTrace, DenyProcess]] {
+            let err = apply_runtime(&opts).unwrap_err();
+            assert!(err.contains("--deny-process forbids"), "{err}");
+        }
+    }
 
     #[test]
     fn the_feature_help_lists_every_supported_flag() {

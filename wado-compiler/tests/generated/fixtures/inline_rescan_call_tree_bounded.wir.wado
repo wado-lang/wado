@@ -49,29 +49,31 @@ type "functype//inline_rescan_call_tree_bounded.wado/f12" = fn(i32) -> i32;  // 
 
 type "functype//inline_rescan_call_tree_bounded.wado/f13" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//inline_rescan_call_tree_bounded.wado/$cm_export__run" = fn();  // TypeId(22)
+type "functype//inline_rescan_call_tree_bounded.wado/run" = fn();  // TypeId(22)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(23)
+type "functype//inline_rescan_call_tree_bounded.wado/$cm_export__run" = fn();  // TypeId(23)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
+type "functype//core:rt/unreachable" = fn();  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(26)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(27)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<inline_rescan_call_tree_bounded.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
-type "functype//inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(33)
+type "functype//inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1126,81 +1128,89 @@ fn "inline_rescan_call_tree_bounded.wado/f13"(x) {
     return ((x_11 * 3) + (((a_4 * 3) + ((((x + 1) * 3) + ((x ^ 16) + 1)) % 10007)) % 10007)) % 10007;
 }
 
+fn "inline_rescan_call_tree_bounded.wado/run"() with Stdout {
+    let x_0: i32;
+    let a_43: i32;
+    let x_50: i32;
+    let a_56: i32;
+    let x_79: i32;
+    let a_117: i32;
+    let message_196: ref "core:prelude/string.wado//String";
+    let $cm_pair_7: i64;
+    let x_219: i32;
+    a_43 = (((local.tee x_0(black_box(3)) + 1) * 3) + ((x_0 ^ 16) + 1)) % 10007;
+    x_50 = x_0 ^ 15;
+    x_50 = ((a_43 * 3) + ((((x_50 + 1) * 3) + ((x_50 ^ 16) + 1)) % 10007)) % 10007;
+    a_56 = (((local.tee a_43(x_0 ^ 14) + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007;
+    a_43 = a_43 ^ 15;
+    a_43 = ((x_50 * 3) + (((a_56 * 3) + ((((a_43 + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
+    x_50 = (((local.tee a_56(x_0 ^ 13) + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007;
+    x_79 = a_56 ^ 15;
+    x_79 = ((x_50 * 3) + ((((x_79 + 1) * 3) + ((x_79 ^ 16) + 1)) % 10007)) % 10007;
+    x_50 = (((local.tee a_56(a_56 ^ 14) + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007;
+    a_56 = a_56 ^ 15;
+    a_56 = ((a_43 * 3) + (((x_79 * 3) + (((x_50 * 3) + ((((a_56 + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007)) % 10007)) % 10007)) % 10007;
+    x_79 = (((local.tee x_50(x_0 ^ 12) + 1) * 3) + ((x_50 ^ 16) + 1)) % 10007;
+    a_43 = x_50 ^ 15;
+    a_43 = ((x_79 * 3) + ((((a_43 + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007)) % 10007;
+    a_117 = (((local.tee x_79(x_50 ^ 14) + 1) * 3) + ((x_79 ^ 16) + 1)) % 10007;
+    x_79 = x_79 ^ 15;
+    x_79 = ((a_43 * 3) + (((a_117 * 3) + ((((x_79 + 1) * 3) + ((x_79 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
+    a_117 = (((local.tee x_50(x_50 ^ 13) + 1) * 3) + ((x_50 ^ 16) + 1)) % 10007;
+    a_43 = x_50 ^ 15;
+    a_43 = ((a_117 * 3) + ((((a_43 + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007)) % 10007;
+    a_117 = (((local.tee x_50(x_50 ^ 14) + 1) * 3) + ((x_50 ^ 16) + 1)) % 10007;
+    x_50 = x_50 ^ 15;
+    x_50 = ((a_56 * 3) + (((x_79 * 3) + (((a_43 * 3) + (((a_117 * 3) + ((((x_50 + 1) * 3) + ((x_50 ^ 16) + 1)) % 10007)) % 10007)) % 10007)) % 10007)) % 10007;
+    a_43 = (((local.tee a_117(x_0 ^ 11) + 1) * 3) + ((a_117 ^ 16) + 1)) % 10007;
+    x_79 = a_117 ^ 15;
+    x_79 = ((a_43 * 3) + ((((x_79 + 1) * 3) + ((x_79 ^ 16) + 1)) % 10007)) % 10007;
+    a_56 = (((local.tee a_43(a_117 ^ 14) + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007;
+    a_43 = a_43 ^ 15;
+    a_43 = ((x_79 * 3) + (((a_56 * 3) + ((((a_43 + 1) * 3) + ((a_43 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
+    x_79 = (((local.tee a_56(a_117 ^ 13) + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007;
+    x_219 = a_56 ^ 15;
+    x_219 = ((x_79 * 3) + ((((x_219 + 1) * 3) + ((x_219 ^ 16) + 1)) % 10007)) % 10007;
+    x_79 = (((local.tee a_56(a_56 ^ 14) + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007;
+    a_56 = a_56 ^ 15;
+    a_56 = ((a_43 * 3) + (((x_219 * 3) + (((x_79 * 3) + ((((a_56 + 1) * 3) + ((a_56 ^ 16) + 1)) % 10007)) % 10007)) % 10007)) % 10007;
+    a_117 = "inline_rescan_call_tree_bounded.wado/f12"(a_117 ^ 12);
+    a_117 = ((x_50 * 3) + (((a_56 * 3) + a_117) % 10007)) % 10007;
+    a_56 = "inline_rescan_call_tree_bounded.wado/f10"(x_0 ^ 10);
+    a_56 = ((a_117 * 3) + a_56) % 10007;
+    a_117 = "inline_rescan_call_tree_bounded.wado/f9"(x_0 ^ 9);
+    a_117 = ((a_56 * 3) + a_117) % 10007;
+    a_56 = "inline_rescan_call_tree_bounded.wado/f8"(x_0 ^ 8);
+    a_56 = ((a_117 * 3) + a_56) % 10007;
+    a_117 = "inline_rescan_call_tree_bounded.wado/f7"(x_0 ^ 7);
+    a_117 = ((a_56 * 3) + a_117) % 10007;
+    a_56 = "inline_rescan_call_tree_bounded.wado/f6"(x_0 ^ 6);
+    a_56 = ((a_117 * 3) + a_56) % 10007;
+    a_117 = "inline_rescan_call_tree_bounded.wado/f5"(x_0 ^ 5);
+    a_117 = ((a_56 * 3) + a_117) % 10007;
+    a_56 = "inline_rescan_call_tree_bounded.wado/f4"(x_0 ^ 4);
+    a_56 = ((a_117 * 3) + a_56) % 10007;
+    a_117 = "inline_rescan_call_tree_bounded.wado/f3"(x_0 ^ 3);
+    a_117 = ((a_56 * 3) + a_117) % 10007;
+    a_56 = "inline_rescan_call_tree_bounded.wado/f2"(x_0 ^ 2);
+    a_56 = ((a_117 * 3) + a_56) % 10007;
+    x_0 = "inline_rescan_call_tree_bounded.wado/f1"(x_0 ^ 1);
+    message_196 = "core:prelude/string.wado/core:prelude/string.wado/String::format<inline_rescan_call_tree_bounded.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(((a_56 * 3) + x_0) % 10007);
+    x_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    a_56 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    a_117 = "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_117 = x_0; x_0 = 0; a_117);
+    x_0 = a_56;
+    a_56 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(x_0, message_196.repr, message_196.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x_0 = a_117; a_117 = 0; x_0);
+}
+
 fn "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
     return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "inline_rescan_call_tree_bounded.wado/$cm_export__run"() {
-    let $local_0: ref "core:prelude/string.wado//String";
-    let x_6: i32;
-    let a_49: i32;
-    let x_56: i32;
-    let a_62: i32;
-    let x_85: i32;
-    let a_123: i32;
-    let $cm_pair_7: i64;
-    $local_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    a_49 = (((local.tee x_6(black_box(3)) + 1) * 3) + ((x_6 ^ 16) + 1)) % 10007;
-    x_56 = x_6 ^ 15;
-    x_56 = ((a_49 * 3) + ((((x_56 + 1) * 3) + ((x_56 ^ 16) + 1)) % 10007)) % 10007;
-    a_62 = (((local.tee a_49(x_6 ^ 14) + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007;
-    a_49 = a_49 ^ 15;
-    a_49 = ((x_56 * 3) + (((a_62 * 3) + ((((a_49 + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
-    x_56 = (((local.tee a_62(x_6 ^ 13) + 1) * 3) + ((a_62 ^ 16) + 1)) % 10007;
-    x_85 = a_62 ^ 15;
-    x_85 = ((x_56 * 3) + ((((x_85 + 1) * 3) + ((x_85 ^ 16) + 1)) % 10007)) % 10007;
-    x_56 = (((local.tee a_62(a_62 ^ 14) + 1) * 3) + ((a_62 ^ 16) + 1)) % 10007;
-    a_62 = a_62 ^ 15;
-    a_62 = ((a_49 * 3) + (((x_85 * 3) + (((x_56 * 3) + ((((a_62 + 1) * 3) + ((a_62 ^ 16) + 1)) % 10007)) % 10007)) % 10007)) % 10007;
-    x_85 = (((local.tee x_56(x_6 ^ 12) + 1) * 3) + ((x_56 ^ 16) + 1)) % 10007;
-    a_49 = x_56 ^ 15;
-    a_49 = ((x_85 * 3) + ((((a_49 + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007)) % 10007;
-    a_123 = (((local.tee x_85(x_56 ^ 14) + 1) * 3) + ((x_85 ^ 16) + 1)) % 10007;
-    x_85 = x_85 ^ 15;
-    x_85 = ((a_49 * 3) + (((a_123 * 3) + ((((x_85 + 1) * 3) + ((x_85 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
-    a_123 = (((local.tee x_56(x_56 ^ 13) + 1) * 3) + ((x_56 ^ 16) + 1)) % 10007;
-    a_49 = x_56 ^ 15;
-    a_49 = ((a_123 * 3) + ((((a_49 + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007)) % 10007;
-    a_123 = (((local.tee x_56(x_56 ^ 14) + 1) * 3) + ((x_56 ^ 16) + 1)) % 10007;
-    x_56 = x_56 ^ 15;
-    x_56 = ((a_62 * 3) + (((x_85 * 3) + (((a_49 * 3) + (((a_123 * 3) + ((((x_56 + 1) * 3) + ((x_56 ^ 16) + 1)) % 10007)) % 10007)) % 10007)) % 10007)) % 10007;
-    a_49 = (((local.tee a_123(x_6 ^ 11) + 1) * 3) + ((a_123 ^ 16) + 1)) % 10007;
-    x_85 = a_123 ^ 15;
-    x_85 = ((a_49 * 3) + ((((x_85 + 1) * 3) + ((x_85 ^ 16) + 1)) % 10007)) % 10007;
-    a_62 = (((local.tee a_49(a_123 ^ 14) + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007;
-    a_49 = a_49 ^ 15;
-    a_49 = ((x_85 * 3) + (((a_62 * 3) + ((((a_49 + 1) * 3) + ((a_49 ^ 16) + 1)) % 10007)) % 10007)) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f13"(a_123 ^ 13);
-    a_62 = ((a_49 * 3) + a_62) % 10007;
-    a_123 = "inline_rescan_call_tree_bounded.wado/f12"(a_123 ^ 12);
-    a_123 = ((x_56 * 3) + (((a_62 * 3) + a_123) % 10007)) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f10"(x_6 ^ 10);
-    a_62 = ((a_123 * 3) + a_62) % 10007;
-    a_123 = "inline_rescan_call_tree_bounded.wado/f9"(x_6 ^ 9);
-    a_123 = ((a_62 * 3) + a_123) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f8"(x_6 ^ 8);
-    a_62 = ((a_123 * 3) + a_62) % 10007;
-    a_123 = "inline_rescan_call_tree_bounded.wado/f7"(x_6 ^ 7);
-    a_123 = ((a_62 * 3) + a_123) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f6"(x_6 ^ 6);
-    a_62 = ((a_123 * 3) + a_62) % 10007;
-    a_123 = "inline_rescan_call_tree_bounded.wado/f5"(x_6 ^ 5);
-    a_123 = ((a_62 * 3) + a_123) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f4"(x_6 ^ 4);
-    a_62 = ((a_123 * 3) + a_62) % 10007;
-    a_123 = "inline_rescan_call_tree_bounded.wado/f3"(x_6 ^ 3);
-    a_123 = ((a_62 * 3) + a_123) % 10007;
-    a_62 = "inline_rescan_call_tree_bounded.wado/f2"(x_6 ^ 2);
-    a_62 = ((a_123 * 3) + a_62) % 10007;
-    x_6 = "inline_rescan_call_tree_bounded.wado/f1"(x_6 ^ 1);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(((a_62 * 3) + x_6) % 10007, $local_0);
-    x_6 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    a_62 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    a_123 = "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_123 = x_6; x_6 = 0; a_123);
-    x_6 = a_62;
-    a_62 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(x_6, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x_6 = a_123; a_123 = 0; x_6);
+    "inline_rescan_call_tree_bounded.wado/run"();
     "wasi/task-return"(0);
 }
 
@@ -1332,90 +1342,96 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.buf]"(self, f) {
-    let is_negative_2: bool;
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<inline_rescan_call_tree_bounded.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
+    let out_3: ref "core:prelude/string.wado//String";
+    let is_negative_65: bool;
     let x: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_45: i32;
-    is_negative_2 = self < 0;
-    x = builtin::i64_extend_i32_s(self);
+    let start_153: i32;
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
+    $inline_core_prelude_string_wado_String__internal_push_view_20: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_20;
+    };
+    is_negative_65 = t < 0;
+    x = builtin::i64_extend_i32_s(t);
     x = select i64(x < 0_i64, 0_i64 - x, x);
-    self = $inline_count_digits_u64_1: block -> i32 {
+    t = $inline_count_digits_u64_0: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
                 if x <u 10_i64 {
-                    break $inline_count_digits_u64_1: 1;
+                    break $inline_count_digits_u64_0: 1;
                 }
-                break $inline_count_digits_u64_1: 2;
+                break $inline_count_digits_u64_0: 2;
             }
             if x <u 1000_i64 {
-                break $inline_count_digits_u64_1: 3;
+                break $inline_count_digits_u64_0: 3;
             }
             if x <u 10000_i64 {
-                break $inline_count_digits_u64_1: 4;
+                break $inline_count_digits_u64_0: 4;
             }
-            break $inline_count_digits_u64_1: 5;
+            break $inline_count_digits_u64_0: 5;
         }
         if x <u 10000000000_i64 {
             if x <u 10000000_i64 {
                 if x <u 1000000_i64 {
-                    break $inline_count_digits_u64_1: 6;
+                    break $inline_count_digits_u64_0: 6;
                 }
-                break $inline_count_digits_u64_1: 7;
+                break $inline_count_digits_u64_0: 7;
             }
             if x <u 100000000_i64 {
-                break $inline_count_digits_u64_1: 8;
+                break $inline_count_digits_u64_0: 8;
             }
             if x <u 1000000000_i64 {
-                break $inline_count_digits_u64_1: 9;
+                break $inline_count_digits_u64_0: 9;
             }
-            break $inline_count_digits_u64_1: 10;
+            break $inline_count_digits_u64_0: 10;
         }
         if x <u 1000000000000000_i64 {
             if x <u 1000000000000_i64 {
                 if x <u 100000000000_i64 {
-                    break $inline_count_digits_u64_1: 11;
+                    break $inline_count_digits_u64_0: 11;
                 }
-                break $inline_count_digits_u64_1: 12;
+                break $inline_count_digits_u64_0: 12;
             }
             if x <u 10000000000000_i64 {
-                break $inline_count_digits_u64_1: 13;
+                break $inline_count_digits_u64_0: 13;
             }
             if x <u 100000000000000_i64 {
-                break $inline_count_digits_u64_1: 14;
+                break $inline_count_digits_u64_0: 14;
             }
-            break $inline_count_digits_u64_1: 15;
+            break $inline_count_digits_u64_0: 15;
         }
         if x <u 100000000000000000_i64 {
             if x <u 10000000000000000_i64 {
-                break $inline_count_digits_u64_1: 16;
+                break $inline_count_digits_u64_0: 16;
             }
-            break $inline_count_digits_u64_1: 17;
+            break $inline_count_digits_u64_0: 17;
         }
         if x <u 1000000000000000000_i64 {
-            break $inline_count_digits_u64_1: 18;
+            break $inline_count_digits_u64_0: 18;
         }
         if x <u -8446744073709551616_i64 {
-            break $inline_count_digits_u64_1: 19;
+            break $inline_count_digits_u64_0: 19;
         }
-        break $inline_count_digits_u64_1: 20;
+        break $inline_count_digits_u64_0: 20;
     };
-    if is_negative_2 {
-        if @unlikely(local.tee is_negative_2(f.used + 1) > builtin::array_len(f.repr)) {
+    if is_negative_65 {
+        if @unlikely(local.tee is_negative_65(0 + 1) > builtin::array_len(out_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, is_negative_2);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_45 = f.used;
-        f.used = is_negative_2;
-        builtin::array_set_u8(f.repr, start_45, 45);
+        start_153 = out_3.used;
+        out_3.used = is_negative_65;
+        builtin::array_set_u8(out_3.repr, start_153, 45);
     } else {
     }
-    if @unlikely(local.tee start_45(f.used + self) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee start_153(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_45);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_153);
     }
+<<<<<<< HEAD
     is_negative_2 = f.used;
     f.used = start_45;
     arr = f.repr;
@@ -1423,18 +1439,39 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]$spec0$sroa[f.b
     b40: block {
         l41: loop {
             break_if b40 (self - is_negative_2) < 2;
+||||||| 73611c2bfc0
+    is_negative_2 = f.used;
+    f.used = start_45;
+    arr = f.repr;
+    self = is_negative_2 + self;
+    b34: block {
+        l35: loop {
+            break_if b34 (self - is_negative_2) < 2;
+=======
+    is_negative_65 = out_3.used;
+    out_3.used = start_153;
+    arr = out_3.repr;
+    t = is_negative_65 + t;
+    b34: block {
+        l35: loop {
+            break_if b34 (t - is_negative_65) < 2;
+>>>>>>> origin/main
             q = x /u 100_i64;
-            tens = local.tee start_45(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, self - 1, ((48 + start_45) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
-            self = self - 2;
+            tens = local.tee start_153(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, t - 1, ((48 + start_153) - (tens * 10)) & 255);
+            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            t = t - 2;
             x = q;
             continue l41;
         };
     };
-    if self > is_negative_2 {
-        builtin::array_set_u8(arr, is_negative_2, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+    if t > is_negative_65 {
+        builtin::array_set_u8(arr, is_negative_65, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
     }
+    $inline_core_prelude_string_wado_String__internal_push_view_39: block {
+        break $inline_core_prelude_string_wado_String__internal_push_view_39;
+    };
+    return out_3;
 }
 
 export fn "inline_rescan_call_tree_bounded.wado/$cm_export__run" as "run"

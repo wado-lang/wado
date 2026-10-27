@@ -1,0 +1,11 @@
+// A Wasm asset's export is named in snake_case on the Wado side, as a Component
+// Model function is, whatever casing the asset spells it in.
+use { add_one, get_value } from "./sub/wasm_import_kebab_export.wat" with { type: "wat" };
+
+test "kebab-case and camelCase exports import in snake_case" {
+    assert add_one(2) == 3;
+    assert get_value() == 7;
+}
+
+__DATA__
+{"test": {}}

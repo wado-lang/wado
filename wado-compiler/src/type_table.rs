@@ -10,7 +10,7 @@ use sha2::Digest;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{AstId, HandleClasses, RangeKind};
+use crate::ast::{AstId, HandleClasses, MAX_GENERIC_PARAMS, RangeKind};
 use crate::compiler_item::CompilerItems;
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -20,7 +20,8 @@ use crate::name::{
     TypeHead, TypeNameInfo, UNIT_TYPE_NAME, assoc_type_projection_name,
     display_assoc_type_projection, display_generic_name, display_tuple_type, format_type_name,
     mangle_builtin_array_type, mangle_declared, mangle_generic_name, mangle_local_item_name,
-    mangle_tuple_type, ref_type_name, template_shape_name, type_pack_name,
+    mangle_tuple_type, pack_element_name, ref_type_name, repeated_element, template_shape_name,
+    type_pack_name,
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
@@ -429,6 +430,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -587,6 +589,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
             | ResolvedType::Error => None,
@@ -984,6 +987,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Newtype { .. }
@@ -1000,7 +1004,7 @@ impl TypeTable {
     /// predicate.
     #[must_use]
     pub fn is_boxed_reference_target(&self, ty: TypeId) -> bool {
-        match self.get(ty) {
+        match self.get(self.representation_head(ty)) {
             ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
@@ -1161,6 +1165,9 @@ impl TypeTable {
                 ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
                     (name.clone(), index)
                 }
+                ResolvedType::PackElement { pack, walk } => {
+                    (pack_element_name(self.pack_name(*pack), *walk), index)
+                }
                 other => unreachable!("collected a parameter that is not one: {other:?}"),
             })
             .collect()
@@ -1180,6 +1187,13 @@ impl TypeTable {
         match self.get(id) {
             ResolvedType::TypeParam { index, .. } | ResolvedType::TypePack { index, .. } => {
                 found.insert(*index, id);
+            }
+            // Its walk's unroll answers it, at the walk's slot.
+            ResolvedType::PackElement { pack, walk } => {
+                let ResolvedType::TypePack { index, .. } = self.get(*pack) else {
+                    unreachable!("a pack element names a type pack");
+                };
+                found.insert(Self::pack_walk_slot(*index, *walk), id);
             }
             _ => {
                 self.any_constituent(id, &mut |t| {
@@ -1785,6 +1799,7 @@ impl TypeTable {
                     ResolvedType::TypePack { mapped_elem, .. } => {
                         components.extend(mapped_elem.iter().copied());
                     }
+                    ResolvedType::PackElement { pack, .. } => components.push(*pack),
                     ResolvedType::AssocTypeProjection {
                         param_id,
                         args,
@@ -2820,6 +2835,7 @@ impl TypeTable {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::Unknown
@@ -3249,6 +3265,110 @@ impl TypeTable {
             index,
             mapped_elem: None,
         })
+    }
+
+    /// What `for let v of iterable` binds `v` to, `iterable` being a tuple
+    /// that carries a pack, and whether it reads through a reference
+    /// (`for v of &[..T]` binds `&T_k`). A mapped pack binds its mapped
+    /// element. A `.zip()` binds its one element, the pair `[..A, ..B]`, whose
+    /// packs sit a level down. `None` where `iterable` is no tuple.
+    pub fn pack_walk_binding(&mut self, iterable: TypeId, walk: u32) -> Option<(TypeId, bool)> {
+        let (elems, by_ref) = self.as_tuple_through_ref(iterable)?;
+        let element = match self.pack_in(&elems) {
+            Some(pack) => self.pack_step_type(pack, walk),
+            None => elems[0],
+        };
+        let bound = if by_ref {
+            self.make_ref(element)
+        } else {
+            element
+        };
+        Some((bound, by_ref))
+    }
+
+    /// The pack among a tuple's `elems`.
+    pub fn pack_in(&self, elems: &[TypeId]) -> Option<TypeId> {
+        elems.iter().copied().find(|&e| self.is_type_pack(e))
+    }
+
+    /// The type one step of walk `walk` over `pack` binds: a mapped pack's
+    /// (`[..Option<F>]`) mapped element, or an element of an identity pack.
+    pub fn pack_step_type(&mut self, pack: TypeId, walk: u32) -> TypeId {
+        match self.get(pack) {
+            ResolvedType::TypePack {
+                mapped_elem: Some(elem),
+                ..
+            } => *elem,
+            _ => self.make_pack_element(pack, walk),
+        }
+    }
+
+    /// The `Holes` tuple of a template whose holes have types `holes`. A hole
+    /// typed by a pack holds one step of a walk over it, where a pack in a
+    /// tuple would splice the whole of it. A pack names the element of the
+    /// walk unrolling substitutes it in, which is the outermost one.
+    pub fn template_holes_tuple(&mut self, holes: &[TypeId]) -> TypeId {
+        let elems: Vec<TypeId> = holes
+            .iter()
+            .map(|&hole| {
+                if self.is_type_pack(hole) {
+                    self.pack_step_type(hole, 0)
+                } else {
+                    hole
+                }
+            })
+            .collect();
+        self.make_tuple(elems)
+    }
+
+    pub fn make_pack_element(&mut self, pack: TypeId, walk: u32) -> TypeId {
+        assert!(self.is_type_pack(pack), "a pack element names a type pack");
+        self.intern(ResolvedType::PackElement { pack, walk })
+    }
+
+    /// The substitution key under which unrolling walk `walk` fills the
+    /// elements of the pack declared at `pack_index`. Above every declared
+    /// parameter's index, so it never shadows one.
+    pub fn pack_walk_slot(pack_index: u32, walk: u32) -> u32 {
+        const BASE: u32 = 1 << 30;
+        const PACKS_PER_WALK: u32 = 1 << 10;
+        // An impl's list and its method's index one sequence.
+        const _: () = assert!(2 * MAX_GENERIC_PARAMS <= PACKS_PER_WALK as usize);
+        assert!(
+            pack_index < PACKS_PER_WALK && walk < BASE / PACKS_PER_WALK - 1,
+            "a declaration's parameters and a body's walk nesting are bounded"
+        );
+        BASE + walk * PACKS_PER_WALK + pack_index
+    }
+
+    /// Where `pack` is a mapped pack whose element does not mention it, the
+    /// identity pack driving its length and the one type every element is.
+    pub fn repeated_element(&mut self, pack: TypeId) -> Option<(TypeId, TypeId)> {
+        let ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem: Some(element),
+        } = self.get(pack).clone()
+        else {
+            return None;
+        };
+        if self.mentions_param_slot(element, index) {
+            return None;
+        }
+        Some((self.make_type_pack(name, index), element))
+    }
+
+    /// Whether `id` mentions the type parameter or pack at slot `index`.
+    fn mentions_param_slot(&self, id: TypeId, index: u32) -> bool {
+        match self.get(id) {
+            ResolvedType::TypeParam { index: at, .. }
+            | ResolvedType::TypePack { index: at, .. }
+                if *at == index =>
+            {
+                true
+            }
+            _ => self.any_constituent(id, &mut |t| self.mentions_param_slot(t, index)),
+        }
     }
 
     /// Create a mapped type pack: element `i` is `elem[F := F_i]`, where the
@@ -4577,17 +4697,43 @@ impl TypeTable {
                 mapped_elem,
             } => match leaves.params.get(&index) {
                 Some(&filled) => filled,
-                None => match leaves.renames.get(&index) {
-                    Some(&moved) => match mapped_elem {
-                        Some(elem) => {
-                            let elem = self.subst_rec(elem, leaves);
-                            self.make_mapped_type_pack(name, moved, elem)
+                None => match (leaves.renames.get(&index), mapped_elem) {
+                    (Some(&moved), Some(elem)) => {
+                        let elem = self.subst_rec(elem, leaves);
+                        self.make_mapped_type_pack(name, moved, elem)
+                    }
+                    (Some(&moved), None) => self.make_type_pack(name, moved),
+                    // A mapped pack the substitution leaves keeps its length,
+                    // its element substituted.
+                    (None, Some(elem)) => {
+                        let substituted = self.subst_rec(elem, leaves);
+                        if substituted == elem {
+                            type_id
+                        } else {
+                            self.make_mapped_type_pack(name, index, substituted)
                         }
-                        None => self.make_type_pack(name, moved),
-                    },
-                    None => type_id,
+                    }
+                    (None, None) => type_id,
                 },
             },
+            // Unrolling its walk fills the element's slot; a renaming into
+            // another pack keeps it an element of that pack. Anything else the
+            // pack becomes leaves it to its own walk's unroll: an enclosing
+            // walk binds the pack to that walk's element.
+            ResolvedType::PackElement { pack, walk } => {
+                let ResolvedType::TypePack { index, .. } = self.get(pack) else {
+                    unreachable!("a pack element names a type pack");
+                };
+                if let Some(&element) = leaves.params.get(&Self::pack_walk_slot(*index, walk)) {
+                    return element;
+                }
+                let substituted = self.subst_rec(pack, leaves);
+                if substituted != pack && self.is_type_pack(substituted) {
+                    self.make_pack_element(substituted, walk)
+                } else {
+                    type_id
+                }
+            }
             ResolvedType::AssocParam {
                 owning_trait,
                 assoc_name,
@@ -4674,6 +4820,11 @@ impl TypeTable {
                                         // yields `Case<T, P_k>` at position k;
                                         // a pack-independent `..F::method()`
                                         // repeats its return type `|F|` times.
+                                        // A pack nothing answered is as unknown
+                                        // mapped as spliced: no length to repeat.
+                                        Some(_) if pack_type == Self::UNKNOWN => {
+                                            new_elems.push(Self::UNKNOWN);
+                                        }
                                         Some(elem) => {
                                             let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {
@@ -5308,6 +5459,8 @@ impl TypeTable {
     fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
         match self.get(id) {
             ResolvedType::TypePack { .. } => packs_count,
+            // One step's element is as rigid as a type parameter.
+            ResolvedType::PackElement { .. } => false,
             ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             // Its arguments are holes of their own: `S::Buf<?0>` awaits `?0`.
             ResolvedType::AssocTypeProjection {
@@ -5424,6 +5577,14 @@ impl TypeTable {
         }
     }
 
+    /// Whether `id` mentions one step's element of a pack walk.
+    pub fn mentions_pack_element(&self, id: TypeId) -> bool {
+        match self.get(id) {
+            ResolvedType::PackElement { .. } => true,
+            _ => self.any_constituent(id, &mut |t| self.mentions_pack_element(t)),
+        }
+    }
+
     /// Whether `id` is, or is a tuple spreading, a pack `pred` holds of.
     pub fn any_type_pack(&self, id: TypeId, pred: &impl Fn(TypeId) -> bool) -> bool {
         match self.get(id) {
@@ -5508,6 +5669,11 @@ impl TypeTable {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner) => f(*inner),
+            ResolvedType::PackElement { pack, .. } => f(*pack),
+            ResolvedType::TypePack {
+                mapped_elem: Some(element),
+                ..
+            } => f(*element),
             ResolvedType::Function {
                 params,
                 return_type,
@@ -5543,6 +5709,7 @@ impl TypeTable {
             self.get(id),
             ResolvedType::TypeParam { .. }
                 | ResolvedType::TypePack { .. }
+                | ResolvedType::PackElement { .. }
                 | ResolvedType::AssocTypeProjection { .. }
         )
     }
@@ -5869,8 +6036,25 @@ impl TypeTable {
                 display_generic_name(&self.head_name(*def, qualified), &args)
             }
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
+            // A repeat reads as the source spells it, its length unnamed.
+            ResolvedType::TypePack {
+                name,
+                mapped_elem: Some(element),
+                ..
+            } if repeated_element(name).is_some() => type_pack_name(&type_name(*element)),
             ResolvedType::TypePack { name, .. } => type_pack_name(name),
+            ResolvedType::PackElement { pack, walk } => {
+                pack_element_name(self.pack_name(*pack), *walk)
+            }
         }
+    }
+
+    /// The name a pack was declared under, without the `..` a spread spells.
+    fn pack_name(&self, pack: TypeId) -> &str {
+        let ResolvedType::TypePack { name, .. } = self.get(pack) else {
+            panic!("a pack element names a type pack");
+        };
+        name
     }
 
     /// Mangle a type name, resolving all newtypes/flags to their base types recursively.
@@ -6420,6 +6604,11 @@ impl TypeTable {
                 }
             }
             ResolvedType::TypePack { name, .. } => TypeNameInfo::Named(type_pack_name(name)),
+            // One parameter list cannot name a pack and a parameter alike, so
+            // the bare name is unique to the element of the outermost walk.
+            ResolvedType::PackElement { pack, walk } => {
+                TypeNameInfo::Named(pack_element_name(self.pack_name(*pack), *walk))
+            }
             ResolvedType::Never => TypeNameInfo::Named(NEVER_TYPE_NAME.to_string()),
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
@@ -6674,6 +6863,7 @@ impl TypeTable {
             | ResolvedType::AssocParam { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
             | ResolvedType::Newtype { .. }

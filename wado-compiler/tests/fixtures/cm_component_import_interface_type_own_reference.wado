@@ -1,0 +1,9 @@
+// A record of `a:x/trip` holds another type of its own interface, while
+// `b:y/trip` shares the interface's basename (issue #2421).
+use { "a:x/trip" as Trip, "b:y/trip" as YTrip } from "./sub/wasm_import_cm_trip_outer.wat" with { type: "wat" };
+
+test {
+    let outer: Trip::Outer = Trip::f();
+    assert outer.inner.reason == 5;
+    assert YTrip::g() == 2;
+}

@@ -25,7 +25,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::semantics::member_visible;
 use crate::tir;
-use crate::tir::{EffectRef, ResolvedType, TirCapture, TirTemplatePart};
+use crate::tir::{EffectRef, ResolvedType, TirCapture};
 use crate::token::Span;
 
 const MAX_LINE_WIDTH: usize = 120;
@@ -5065,29 +5065,6 @@ impl<'a> TirUnparser<'a> {
                 self.output.push_str("$variant_payload(");
                 self.unparse_expr(expr);
                 self.output.push_str(&format!(", case={case_index})"));
-            }
-            TirExprKind::TemplateString { parts } => {
-                self.output.push('`');
-                for part in parts {
-                    match part {
-                        TirTemplatePart::Literal(s) => {
-                            self.output.push_str(s);
-                        }
-                        TirTemplatePart::Interpolation {
-                            expr: inner,
-                            format_spec,
-                        } => {
-                            self.output.push_str("${");
-                            self.unparse_expr(inner);
-                            if let Some(spec) = format_spec {
-                                self.output.push(':');
-                                self.output.push_str(&spec.to_string());
-                            }
-                            self.output.push('}');
-                        }
-                    }
-                }
-                self.output.push('`');
             }
             TirExprKind::WithHandler { bindings, body, .. } => {
                 self.output.push_str("with ");

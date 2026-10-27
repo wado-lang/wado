@@ -164,7 +164,7 @@ impl<'a> WirEmitter<'a> {
         let code = self.emit_code_section();
 
         // Branch hints section (must appear before code section)
-        if !self.all_branch_hints.is_empty() {
+        if self.codegen_flags.branch_hinting && !self.all_branch_hints.is_empty() {
             let mut hints = BranchHints::new();
             for (func_idx, func_hints) in &self.all_branch_hints {
                 hints.function_hints(

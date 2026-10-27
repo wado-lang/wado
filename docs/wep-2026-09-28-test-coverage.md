@@ -170,13 +170,20 @@ derivation gets wrong: the region ran, but reports as not run.
 Over the standard library, 1,874 of 10,960 regions are derived, so a measured
 compile inserts 17% fewer probes.
 
-### A compile that measures the standard library skips its snapshot
+### A compile that measures the standard library seeds from a probed snapshot
 
 Each worker thread elaborates the standard library once and seeds every compile
-from that snapshot, reified TIR included. Probes inserted at reify would be part
-of it, so a compile that measures the standard library elaborates it afresh
-instead. The snapshot stays plain, and a program `core:eval` compiles in the
-same process, which is never measured, seeds from it as before.
+from that snapshot, reified TIR included. Probes inserted at reify are part of
+it, so a thread keeps a second snapshot, built with probes, for the compiles
+that measure the standard library. The plain one stays plain, and a program
+`core:eval` compiles in the same process, which is never measured, seeds from it
+as before.
+
+A probe's id is its region's place in the compile's numbering, so a snapshot
+module keeps the ids the snapshot gave it, and every other module the compile
+measures numbers past the last of them. The ids of a compile are then no longer
+contiguous, and the section states each module's first id, so nothing reads
+them as if they were.
 
 A compile whose entry is itself a stdlib file (`lib/core/json.wado`, which
 declares `#![stdlib("core:json")]`) plans that module as `core:json`, the same
@@ -370,8 +377,8 @@ host call on every run is too slow for loops.
 4. [x] The runner: collecting hits, merging plans, the summary, LCOV and JSON.
 5. [x] Fixtures with `uncovered_lines`, `uncovered_branches` and
    `uncovered_functions`, and the `-O0`/`-O3` check over the stdlib tests.
-6. [x] The standard library: its snapshot skipped when measured,
-   `--coverage-baseline`, and the CI job with its first baseline.
+6. [x] The standard library: its probed snapshot, `--coverage-baseline`, and
+   the CI job with its first baseline.
 7. [ ] 100% for the standard library: the baseline holds only regions no
    stdlib test can reach.
 8. [x] Derived regions: the plan marks them, reify leaves them without a probe,

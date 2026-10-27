@@ -1,0 +1,8 @@
+// An export that reads as no Wado identifier, even in snake_case, cannot be
+// bound, so the asset is rejected at the use that imports it.
+use _ from "./sub/wasm_import_unnamable_export.wat" with { type: "wat" };
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":3:12: analysis error: wasm import error in ./sub/wasm_import_unnamable_export.wat: export `1st` reads as `1st`, which is no Wado identifier"}

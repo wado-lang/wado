@@ -1,0 +1,27 @@
+//! A local item in one method body leaves the impl's packs in scope for the
+//! methods after it, so `[..T]` there is the impl's pack, not a repeat of `T`:
+//! an argument of another arity is a mismatch.
+
+trait Pair<P> with () {
+    fn one(&self) -> i32;
+    fn same(&self, other: P) -> i32;
+}
+
+impl<..T> Pair<[..T]> for [..T] {
+    fn one(&self) -> i32 {
+        struct L { x: i32 }
+        let l = L { x: 1 };
+        return l.x;
+    }
+
+    fn same(&self, other: [..T]) -> i32 {
+        return 0;
+    }
+}
+
+test {
+    assert [1, "a"].same([2, 3, 4]) == 0;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[i32, String]', found '[i32, i32, i32]'"}

@@ -167,7 +167,7 @@ impl DeserializeError {
     /// This error, reached through the element or entry `key`: a list's index,
     /// a map's key, written as `Inspect` writes it.
     pub fn within_item<K: Inspect>(&self, key: &K) -> DeserializeError {
-        return self.within(`[${key:?}]`);
+        return self.within(`[${*key:?}]`);
     }
 
     fn within(&self, step: String) -> DeserializeError {
@@ -241,7 +241,7 @@ impl DeserializeError {
     pub fn duplicate_field<K: Inspect>(key: &K) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
-            message: `duplicate field: ${key:?}`,
+            message: `duplicate field: ${*key:?}`,
             offset: -1,
         };
     }

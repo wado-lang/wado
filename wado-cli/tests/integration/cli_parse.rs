@@ -248,7 +248,7 @@ fn run_basic() {
         opts.preopened_dirs,
         vec![(".".to_string(), ".".to_string())]
     );
-    assert!(opts.program_args.is_empty());
+    assert!(opts.program_args.is_empty(), "{:?}", opts.program_args);
 }
 
 #[test]
@@ -307,7 +307,7 @@ fn run_gc_heap_initial_rejects_overflow() {
 fn run_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
-    assert!(opts.preopened_dirs.is_empty());
+    assert!(opts.preopened_dirs.is_empty(), "{:?}", opts.preopened_dirs);
 }
 
 #[test]
@@ -490,7 +490,7 @@ fn serve_dir() {
 fn serve_no_dir_default() {
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::serve::parse_args(parser).unwrap();
-    assert!(opts.preopened_dirs.is_empty());
+    assert!(opts.preopened_dirs.is_empty(), "{:?}", opts.preopened_dirs);
 }
 
 #[test]

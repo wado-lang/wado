@@ -488,6 +488,7 @@ fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &
     project.reserve_asset_memory();
 
     project.used_wasi_functions = used_wasi_functions;
+    project.use_nested_dependency_imports();
 }
 
 /// Filter string literals to those owned by surviving functions.
@@ -1765,7 +1766,8 @@ fn collect_type_dependencies(
         | ResolvedType::Resource { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::AssocParam { .. }
-        | ResolvedType::TypePack { .. } => {}
+        | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. } => {}
         ResolvedType::InferVar(var) => panic!("{var} reached DCE"),
 
         // Newtype: collect dependency on base type

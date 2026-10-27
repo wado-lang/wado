@@ -937,21 +937,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
-        for sealed_item in [
-            CompilerItem::Reflect,
-            CompilerItem::ReflectStruct,
-            CompilerItem::ReflectVariant,
-            CompilerItem::ReflectEnum,
-            CompilerItem::ReflectFlags,
-            CompilerItem::ReflectNewtype,
-            CompilerItem::ReflectTemplate,
+        for sealed_item in CompilerItem::REFLECT_KINDS.into_iter().chain([
             CompilerItem::Member,
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
             CompilerItem::AnyBits,
             CompilerItem::Waitable,
-        ] {
+        ]) {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {
                 continue;
             };
@@ -1744,6 +1737,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // waits for the bodies to resolve.
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(
+                snapshot.and_then(|s| s.coverage.as_ref()),
                 modules.iter().filter(|(source, _)| scope.measures(source)),
                 &rt_unreachable_calls(state, symbols),
             )
@@ -2870,6 +2864,21 @@ impl<'a, 'l, 'm, H: CompilerHost> TypeNameCheck<'a, 'l, 'm, H> {
             self.visit_type(ty);
         }
     }
+
+    fn check_type_name(&mut self, written: &str, span: Span) {
+        // A synthesized `ns$member` names the member, as the `ns::member`
+        // an author writes does.
+        let name = split_namespace_member(written).map_or(written, |(_, member)| member);
+        if !matches!(name, UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Self")
+            && !self.type_params.contains(&name)
+            && !self.known.contains(name)
+        {
+            self.report(TypeError::UnknownType {
+                name: written.to_string(),
+                span,
+            });
+        }
+    }
 }
 
 impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
@@ -2966,21 +2975,9 @@ impl<H: CompilerHost> AstVisitor<'_> for TypeNameCheck<'_, '_, '_, H> {
 
     fn visit_type(&mut self, ty: &Type) {
         match ty {
-            Type::Named(named) => {
-                // A synthesized `ns$member` names the member, as the `ns::member`
-                // an author writes does.
-                let name = split_namespace_member(&named.name)
-                    .map_or(named.name.as_str(), |(_, member)| member);
-                if !matches!(name, UNIT_TYPE_NAME | NEVER_TYPE_NAME | "Self")
-                    && !self.type_params.contains(&name)
-                    && !self.known.contains(name)
-                {
-                    self.report(TypeError::UnknownType {
-                        name: named.name.clone(),
-                        span: named.span,
-                    });
-                }
-            }
+            Type::Named(named) => self.check_type_name(&named.name, named.span),
+            // A spread names a pack, or the element type it repeats.
+            Type::TypePackSpread(name, span) => self.check_type_name(name, *span),
             Type::Infer(span) if !self.allow_infer => {
                 self.report(TypeError::InferPlaceholderNotAllowed { span: *span });
             }

@@ -7,6 +7,7 @@
 use crate::const_eval::Value;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
+use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncCell, FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, LocalSet, NodeRef, Operand, PatId,
@@ -15,6 +16,7 @@ use crate::nir_arena::{
 use crate::nir_package::{AmbientStream, NirPackage};
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::parallel::Executor;
+use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -103,6 +105,35 @@ pub enum CtfeBuiltin {
     AmbientStdio(bool),
     /// `is_moved`: whether the place it reads holds the `null` a move wrote.
     IsMoved,
+    /// `i32_clz` … `i64_popcnt`.
+    BitCount(BitCount),
+}
+
+/// What an `i32_*` or `i64_*` bit counting builtin counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BitCount {
+    LeadingZeros,
+    TrailingZeros,
+    Ones,
+}
+
+impl BitCount {
+    /// The count over `value`, a `Value::Int` of `prim`, as Wasm answers it.
+    fn of(self, value: u64, prim: PrimitiveType) -> u64 {
+        let width = match prim {
+            PrimitiveType::I32 => 32,
+            PrimitiveType::I64 => 64,
+            _ => unreachable!("a bit counting builtin takes an i32 or an i64"),
+        };
+        // An i32 is held sign-extended; its count is over its own 32 bits.
+        let bits = value & (u64::MAX >> (64 - width));
+        let count = match self {
+            Self::LeadingZeros => bits.leading_zeros() - (64 - width),
+            Self::TrailingZeros => bits.trailing_zeros().min(width),
+            Self::Ones => bits.count_ones(),
+        };
+        u64::from(count)
+    }
 }
 
 impl CtfeBuiltin {
@@ -124,7 +155,8 @@ impl CtfeBuiltin {
             | Self::Ieee754Comparison(_)
             | Self::HeapBase(_)
             | Self::AmbientStdio(_)
-            | Self::IsMoved => false,
+            | Self::IsMoved
+            | Self::BitCount(_) => false,
         }
     }
 }
@@ -301,12 +333,15 @@ pub(crate) fn build_ctfe_builtin_map(project: &NirPackage) -> CtfeBuiltinMap {
             Some("array_copy" | "array_move") => CtfeBuiltin::ArrayCopy,
             Some("array_clone_prefix") => CtfeBuiltin::ArrayClonePrefix,
             Some("array_release") => CtfeBuiltin::ArrayRelease,
-            Some("cold_path") => CtfeBuiltin::ColdPath,
+            Some(COLD_PATH_INTRINSIC) => CtfeBuiltin::ColdPath,
             Some("select") => CtfeBuiltin::Select,
             Some("i32_as_char") => CtfeBuiltin::I32AsChar,
             Some("f32_is_nan" | "f64_is_nan") => CtfeBuiltin::FloatIsNan,
             Some("heap_base") => CtfeBuiltin::HeapBase(project.heap_base()),
             Some("is_moved") => CtfeBuiltin::IsMoved,
+            Some("i32_clz" | "i64_clz") => CtfeBuiltin::BitCount(BitCount::LeadingZeros),
+            Some("i32_ctz" | "i64_ctz") => CtfeBuiltin::BitCount(BitCount::TrailingZeros),
+            Some("i32_popcnt" | "i64_popcnt") => CtfeBuiltin::BitCount(BitCount::Ones),
             Some(name) if let Some(stream) = AmbientStream::of_availability_builtin(name) => {
                 CtfeBuiltin::AmbientStdio(project.ambient_stdio().writes(stream))
             }
@@ -529,6 +564,12 @@ struct FrameState {
     /// referent.
     /// Populated only during frame execution; empty everywhere else.
     place_aliases: IndexMap<u32, (u32, Vec<u32>)>,
+    /// Fields a frame's `let` bound to a `&mut` over a local place, keyed by the
+    /// local and the path to the field, and resolved as [`Self::place_aliases`]
+    /// are. The aggregate holds a placeholder there, so neither the field nor
+    /// anything enclosing it reads as a value; a read or a write through the
+    /// field reaches the place.
+    place_fields: IndexMap<(u32, Vec<u32>), (u32, Vec<u32>)>,
     /// Locals this frame bound to a reference, mapped to the local the referent
     /// lives in — `&mut xs[i]` reduces to a reference to an accessor result, which
     /// still names `xs` — or `None` where it resolved to nothing nameable.
@@ -876,6 +917,9 @@ impl<'a> Interpreter<'a> {
     /// displaces any place alias the index held, and never restores it.
     pub fn bind_local(&mut self, index: u32, lattice: Lattice) {
         self.frame.place_aliases.swap_remove(&index);
+        self.frame
+            .place_fields
+            .retain(|(root, _), _| *root != index);
         let unbacked_aggregate = matches!(&lattice, Lattice::Const(v) if !v.is_scalar())
             && !self.frame.aggregate_locals.contains(index);
         let lattice = if unbacked_aggregate {

@@ -17,11 +17,16 @@ use crate::OptLevel;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CodegenFlags {
     /// Emit `metadata.code.branch_hint` entries (the default);
-    /// `-f no-branch-hinting` benchmarks without them, lowering
-    /// `builtin::cold_path()` to a no-op and skipping trap-based inference. The
-    /// markers are dropped at WIR build, not NIR, so the inliner's cold-path
-    /// cost exclusion is unchanged and the A/B isolates the hints themselves.
+    /// `-f no-branch-hinting` benchmarks without them. Only the emitter reads
+    /// it: every pass sees the same markers and hints either way, so the A/B
+    /// isolates what the hints are worth to the engine.
     pub branch_hinting: bool,
+
+    /// Keep the cold markers (the default); `-f no-cold-paths` drops every one
+    /// before any pass reads it, the compiler's included, to measure what they
+    /// are worth to the whole pipeline. The hints `infer_branch_hints` derives
+    /// from traps stay.
+    pub cold_paths: bool,
 
     /// Lower an assertion failure to a bare `unreachable` trap instead of the
     /// power-assert diagnostic. The check and trap always stay; only the
@@ -47,6 +52,7 @@ impl Default for CodegenFlags {
     fn default() -> Self {
         Self {
             branch_hinting: true,
+            cold_paths: true,
             bare_asserts: false,
             wide_arithmetic: true,
             contract_checks: false,
@@ -74,6 +80,7 @@ impl CodegenFlags {
     /// so a new flag cannot be added and left undiscoverable.
     pub const SUPPORTED: &'static [&'static str] = &[
         "branch-hinting",
+        "cold-paths",
         "bare-asserts",
         "wide-arithmetic",
         "contract-checks",
@@ -114,6 +121,7 @@ impl CodegenFlags {
             };
             match name {
                 "branch-hinting" => result.branch_hinting = enabled,
+                "cold-paths" => result.cold_paths = enabled,
                 "bare-asserts" => result.bare_asserts = enabled,
                 "wide-arithmetic" => result.wide_arithmetic = enabled,
                 "contract-checks" => result.contract_checks = enabled,

@@ -1,6 +1,6 @@
 // A hole is read where it stands, in source order: a place hole a later hole
 // mutates carries the value it had at its own position, as it does in the
-// untagged template that is sugar for `format` (WEP 2026-01-10).
+// untagged template that is sugar for `String::format` (WEP 2026-01-10).
 use { println, Stdout } from "core:cli";
 
 fn bump(m: &mut i32) -> i32 {
@@ -15,14 +15,14 @@ fn grow(s: &mut String) -> i32 {
 
 export fn run() with Stdout {
     let mut a = 1;
-    let tagged = format`${a} ${bump(&mut a)}`;
+    let tagged = String::format`${a} ${bump(&mut a)}`;
     let mut b = 1;
     let plain = `${b} ${bump(&mut b)}`;
     println(tagged);
     assert tagged == plain;
 
     let mut s = "a";
-    let tagged_s = format`${s} ${grow(&mut s)}`;
+    let tagged_s = String::format`${s} ${grow(&mut s)}`;
     let mut t = "a";
     let plain_s = `${t} ${grow(&mut t)}`;
     println(tagged_s);

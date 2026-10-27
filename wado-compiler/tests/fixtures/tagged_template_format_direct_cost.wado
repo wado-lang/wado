@@ -1,10 +1,10 @@
-// A `format` site costs what the direct lowering of the same template does:
+// A `String::format` site costs what the direct lowering of the same template does:
 // the buffer sized from the segments, the radix renderer spliced in with its
 // prefix a constant, and a plain `String` hole appended without a `Formatter`.
 use { println, Stdout } from "core:cli";
 
 fn render(i: i32, s: String) -> String {
-    return format`i=${i:#x} s=${s} end`;
+    return String::format`i=${i:#x} s=${s} end`;
 }
 
 export fn run() with Stdout {
@@ -14,7 +14,7 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "i=0xff s=a end\n",
-    "wir_scope": "/format<",
+    "wir_scope": "String::format<tagged_template_format_direct_cost",
     "wir_expect:O2": [
         "struct.new \"core:prelude/string.wado//String\" { repr: builtin::array_new<u8>(41), used: 0 }"
     ],

@@ -45,9 +45,9 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(9)
 
 type "functype//serde_bound_driven_absence.wado/$cm_export__run" = fn();  // TypeId(10)
 
-type "functype//core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(11)
+type "functype//core:json/core/json/serialize_into<i32>$sroa[value.value]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(11)
 
-type "functype//core:json/core/json/serialize_into<i32>$sroa[value.value]" = fn(ref "core:prelude/string.wado//String", i32) -> ref null "core:serde//SerializeError";  // TypeId(12)
+type "functype//core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]" = fn(i32, ref "core:prelude/types.wado//Option<char>") -> ref "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>";  // TypeId(12)
 
 type "functype//core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32);  // TypeId(13)
 
@@ -77,32 +77,13 @@ fn "serde_bound_driven_absence.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]"(value, trailing_char) {
-    let buf: ref "core:prelude/string.wado//String";
-    let $qm_e: ref "core:serde//SerializeError";
-    let $match_7: ref null "core:serde//SerializeError";
-    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(value, buf)))) {
-    } else {
-        $qm_e = ref.as_non_null($match_7);
-        cold_path;
-        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: $qm_e };
-    }
-    if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
-        value = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, value);
-    } else {
-    }
-    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; value = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(value)), 0, $array_clone_src_1, 0, value); $array_clone_dst_2, used: value } };
-}
-
 fn "core:json/core/json/serialize_into<i32>$sroa[value.value]"(buf, value) {
     let is_negative_20: bool;
     let x: i64;
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_74: i32;
+    let start_75: i32;
     return is_negative_20 = value < 0, x = builtin::i64_extend_i32_s(value), x = select i64(x < 0_i64, 0_i64 - x, x), value = $inline_count_digits_u64_0: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
@@ -167,27 +148,46 @@ fn "core:json/core/json/serialize_into<i32>$sroa[value.value]"(buf, value) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, is_negative_20);
         }
-        start_74 = buf.used;
+        start_75 = buf.used;
         buf.used = is_negative_20;
-        builtin::array_set_u8(buf.repr, start_74, 45);
+        builtin::array_set_u8(buf.repr, start_75, 45);
     } else {
-    }, if @unlikely(local.tee start_74(buf.used + value) > builtin::array_len(buf.repr)) {
+    }, if @unlikely(local.tee start_75(buf.used + value) > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_74);
-    }, is_negative_20 = buf.used, buf.used = start_74, arr = buf.repr, value = is_negative_20 + value, b24: block {
-        l25: loop {
-            break_if b24 (value - is_negative_20) < 2;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_75);
+    }, is_negative_20 = buf.used, buf.used = start_75, arr = buf.repr, value = is_negative_20 + value, b22: block {
+        l23: loop {
+            break_if b22 (value - is_negative_20) < 2;
             q = x /u 100_i64;
-            tens = local.tee start_74(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, ((48 + start_74) - (tens * 10)) & 255);
+            tens = local.tee start_75(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, value - 1, ((48 + start_75) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
             value = value - 2;
             x = q;
-            continue l25;
+            continue l23;
         };
     }, if value > is_negative_20 {
         builtin::array_set_u8(arr, is_negative_20, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
     }, ref.null none;
+}
+
+fn "core:json/core/json/to_string<serde_bound_driven_absence.wado/UsedForSerialize>$sroa[value.x]"(value, trailing_char) {
+    let buf: ref "core:prelude/string.wado//String";
+    let $qm_e: ref "core:serde//SerializeError";
+    let $match_7: ref null "core:serde//SerializeError";
+    buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
+    if @likely(ref.is_null(local.tee $match_7("core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(value, buf)))) {
+    } else {
+        $qm_e = ref.as_non_null($match_7);
+        cold_path;
+        return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Err" { discriminant: 1, payload_0: $qm_e };
+    }
+    if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
+        value = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, value);
+    } else {
+    }
+    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; value = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(value)), 0, $array_clone_src_1, 0, value); $array_clone_dst_2, used: value } };
 }
 
 fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {

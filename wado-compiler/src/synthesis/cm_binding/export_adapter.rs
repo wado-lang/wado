@@ -834,6 +834,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 | ResolvedType::AssocParam { .. }
                 | ResolvedType::InferVar(_)
                 | ResolvedType::TypePack { .. }
+                | ResolvedType::PackElement { .. }
                 | ResolvedType::AssocTypeProjection { .. }
                 | ResolvedType::BuiltinArray(_)
                 | ResolvedType::Unknown

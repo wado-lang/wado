@@ -1,0 +1,50 @@
+// A cold marker covers its whole basic block: what runs ahead of it is cold
+// too, as long as no path leaves the block before reaching it.
+//
+// `probe`'s message is built from `j`, computed ahead of the `panic` whose
+// marker reify places last, so the computation moves into the cold helper with
+// the `panic` and the helper takes `x`. `probe_guarded` can return before the
+// `panic`, so the computation ahead of that return is on a path no marker
+// covers: it stays, and the helper takes `j`.
+
+fn probe(x: i32) -> i32 {
+    let r = x + 1;
+    if x < 0 {
+        let a = x + 2;
+        let b = a + 3;
+        let c = b + 4;
+        let d = c + 5;
+        let j = d + 6;
+        panic(`cold ${j}`);
+    }
+    return r;
+}
+
+fn probe_guarded(x: i32) -> i32 {
+    let r = x + 1;
+    if x < 0 {
+        let a = x * 2;
+        let b = a * 3;
+        let c = b * 4;
+        let d = c * 5;
+        let j = d * 6;
+        if j == builtin::black_box(0) {
+            return j;
+        }
+        panic(`cold ${j}`);
+    }
+    return r;
+}
+
+export fn run() {
+    assert probe(builtin::black_box(5)) == 6;
+    assert probe(builtin::black_box(6)) == 7;
+    assert probe_guarded(builtin::black_box(7)) == 8;
+    assert probe_guarded(builtin::black_box(8)) == 9;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": ["probe$cold0\"(x) {", "probe_guarded$cold0$dae[x]\"(j) {"]
+}

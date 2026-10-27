@@ -10,7 +10,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0
 
 jobs:
   # One job replaces the old precheck/tidy-rust/tidy-wado/aggregator fan-out.
@@ -86,7 +85,7 @@ jobs:
       # After the join: the index lists the stdlib docs `doc-stdlib` writes.
       - name: Regenerate docs index
         if: steps.precheck.outputs.should-run == 'true'
-        run: node scripts/docs-index.mjs
+        run: mise run update-docs-index
 
       # Whole-tree formatters (`mise run format` locally), separate steps so each
       # is timed and fails on its own. After the join so they don't race a

@@ -18,14 +18,16 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::niri::{Callee, CalleeMap, CtfeBuiltinMap, build_callee_map, build_ctfe_builtin_map};
+use crate::niri::{
+    Callee, CalleeMap, CtfeBuiltinMap, GlobalKey, build_callee_map, build_ctfe_builtin_map,
+};
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
-use super::arena_query::{cold_exprs, cold_path_id};
+use super::arena_query::ColdRuns;
 use super::body_memo::BodyMemo;
-use super::const_branch_prune::{BranchPruneRule, PruneMode};
+use super::const_branch_prune::BranchPruneRule;
 use super::const_folding::ConstFoldRule;
 use super::dae::is_dae_sroa_eligible;
 use super::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
@@ -35,7 +37,7 @@ use super::inline::{body_callees, recursive_functions};
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
-use crate::name::param_spec_name;
+use crate::name::{COLD_PATH_INTRINSIC, param_spec_name};
 use crate::nir::NirLocal;
 use crate::parallel::Executor;
 
@@ -60,6 +62,14 @@ enum FieldConst {
     /// clone builds it once and its reads name that one object, as the
     /// caller's reads named the one it passed.
     Literal(Arc<ConstLiteral>),
+    /// `&GLOBAL` for an immutable global: every read of it names what the
+    /// caller's reference named.
+    GlobalRef {
+        module_source: ModuleSource,
+        name: String,
+        global_type: ConstType,
+        ref_type: ConstType,
+    },
 }
 
 /// The type of a constant: its key says which constants are one, and its id
@@ -111,10 +121,15 @@ enum ConstLiteral {
 
 impl FieldConst {
     /// The constant an operand holds, or `None` otherwise.
-    fn of_operand(body: &Body, types: &TypeTable, op: Operand) -> Option<Self> {
+    fn of_operand(
+        body: &Body,
+        types: &TypeTable,
+        immutable: &IndexSet<GlobalKey>,
+        op: Operand,
+    ) -> Option<Self> {
         match op {
             Operand::Value(_) => Self::of_scalar(body, types, op),
-            Operand::Expr(expr) => Self::of_literal(body, types, expr),
+            Operand::Expr(expr) => Self::of_literal(body, types, immutable, expr),
         }
     }
 
@@ -141,7 +156,12 @@ impl FieldConst {
         }
     }
 
-    fn of_literal(body: &Body, types: &TypeTable, expr: ExprId) -> Option<Self> {
+    fn of_literal(
+        body: &Body,
+        types: &TypeTable,
+        immutable: &IndexSet<GlobalKey>,
+        expr: ExprId,
+    ) -> Option<Self> {
         let node = &body.exprs[expr];
         let literal = match &node.kind {
             ExprKind::PackedArray(data) if data.len() <= MAX_SEQ_ELEMENTS => {
@@ -157,12 +177,28 @@ impl FieldConst {
                 fields: fields
                     .iter()
                     .map(|f| {
-                        let value = Self::of_operand(body, types, f.value)?;
+                        let value = Self::of_operand(body, types, immutable, f.value)?;
                         let ty = ConstType::of(types, body.operand_type(f.value));
                         Some((f.field_index, f.name.clone(), value, ty))
                     })
                     .collect::<Option<_>>()?,
             },
+            ExprKind::Unary {
+                op: NirUnaryOp::Ref,
+                expr: Operand::Expr(inner),
+            } if let ExprKind::GlobalVarGet {
+                module_source,
+                name,
+            } = &body.exprs[*inner].kind
+                && immutable.contains(&(module_source.clone(), name.clone())) =>
+            {
+                return Some(FieldConst::GlobalRef {
+                    module_source: module_source.clone(),
+                    name: name.clone(),
+                    global_type: ConstType::of(types, body.exprs[*inner].type_id),
+                    ref_type: ConstType::of(types, node.type_id),
+                });
+            }
             _ => return None,
         };
         Some(FieldConst::Literal(Arc::new(literal)))
@@ -187,6 +223,29 @@ impl FieldConst {
             FieldConst::Char(c) => ValueKind::Char(*c),
             FieldConst::Literal(literal) => {
                 return literal.build(engine, types, at, span).map(Operand::Expr);
+            }
+            FieldConst::GlobalRef {
+                module_source,
+                name,
+                global_type,
+                ref_type,
+            } => {
+                if !ref_type.admits(types, at) {
+                    return None;
+                }
+                let global = engine.alloc_expr(
+                    ExprKind::GlobalVarGet {
+                        module_source: module_source.clone(),
+                        name: name.clone(),
+                    },
+                    global_type.id,
+                    span,
+                );
+                let reference = ExprKind::Unary {
+                    op: NirUnaryOp::Ref,
+                    expr: Operand::Expr(global),
+                };
+                return Some(Operand::Expr(engine.alloc_expr(reference, at, span)));
             }
         };
         Some(Operand::Value(engine.body.values.alloc_unshared(kind, at)))
@@ -343,6 +402,8 @@ impl LocalUses {
 /// The signature facts the classifier needs about callees, by function index.
 struct Signatures {
     of: Vec<Signature>,
+    /// The globals no write reaches, whose `&G` a clone may name again.
+    immutable_globals: IndexSet<GlobalKey>,
 }
 
 struct Signature {
@@ -354,11 +415,8 @@ struct Signature {
     /// `None` for a parameter the callee may store a reference to: it outlives
     /// the call, so its fields are not ours to freeze.
     param_struct: Vec<Option<TypeKey>>,
-    /// Whether the function has a body the summary can walk.
+    /// Whether the function has a body the summary can walk and a clone can copy.
     has_body: bool,
-    /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
-    /// the unique anchor passes resolve that item by.
-    specializable: bool,
     /// Whether each parameter's own slot may be replaced by a constant. A
     /// slot the body reassigns, references or aliases holds more than the argument.
     param_fixed: Vec<bool>,
@@ -382,7 +440,6 @@ impl Signatures {
         let functions = &project.functions;
         let of = exec.map_indices(functions.len(), |index| {
             let func = functions[index].borrow();
-            let live_body = func.body.is_some() && !func.is_dead;
             Signature {
                 param_locals: func.params.iter().map(|p| p.local_index).collect(),
                 param_names: func.params.iter().map(|p| p.name.clone()).collect(),
@@ -400,8 +457,7 @@ impl Signatures {
                         }
                     })
                     .collect(),
-                has_body: live_body,
-                specializable: live_body && func.compiler_item.is_none(),
+                has_body: func.body.is_some() && !func.is_dead,
                 param_fixed: func
                     .params
                     .iter()
@@ -411,7 +467,15 @@ impl Signatures {
                     && !recursive.contains(&FuncId::new(index)),
             }
         });
-        Signatures { of }
+        Signatures {
+            of,
+            immutable_globals: project
+                .globals
+                .iter()
+                .filter(|g| !g.wado_mutable)
+                .map(|g| (g.module_source.clone(), g.name.clone()))
+                .collect(),
+        }
     }
 
     /// The parameter local index a call's argument at `position` binds to, for a
@@ -493,8 +557,10 @@ fn collect_local_uses(
                     uses.writes.push((*field_index, None));
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
-                    uses.writes
-                        .push((*field_index, FieldConst::of_operand(body, types, *value)));
+                    uses.writes.push((
+                        *field_index,
+                        FieldConst::of_operand(body, types, &signatures.immutable_globals, *value),
+                    ));
                 } else {
                     uses.reads.insert(*field_index);
                 }
@@ -763,6 +829,7 @@ fn summarize_params(
 fn struct_literal_consts(
     body: &Body,
     types: &TypeTable,
+    immutable: &IndexSet<GlobalKey>,
     value: Operand,
     expected: Option<TypeKey>,
 ) -> Option<FieldConsts> {
@@ -789,7 +856,8 @@ fn struct_literal_consts(
         fields
             .iter()
             .filter_map(|field| {
-                FieldConst::of_operand(body, types, field.value).map(|c| (field.field_index, c))
+                FieldConst::of_operand(body, types, immutable, field.value)
+                    .map(|c| (field.field_index, c))
             })
             .collect(),
     )
@@ -827,7 +895,9 @@ fn collect_roots(
         let expected = locals
             .get(local as usize)
             .and_then(|l| struct_base(l.type_id, types));
-        let Some(consts) = struct_literal_consts(body, types, value, expected) else {
+        let Some(consts) =
+            struct_literal_consts(body, types, &signatures.immutable_globals, value, expected)
+        else {
             invalid.insert(local);
             return;
         };
@@ -924,7 +994,13 @@ fn collect_roots(
             let expected = locals
                 .get(*local as usize)
                 .and_then(|l| struct_base(l.type_id, types));
-            let Some(assigned) = struct_literal_consts(body, types, *rebind, expected) else {
+            let Some(assigned) = struct_literal_consts(
+                body,
+                types,
+                &signatures.immutable_globals,
+                *rebind,
+                expected,
+            ) else {
                 consts.clear();
                 break;
             };
@@ -1073,7 +1149,7 @@ struct Site {
     call: ExprId,
     callee: FuncId,
     bindings: Vec<Binding>,
-    /// On a path a `cold_path()` marker opens. Such a call is pointed at a clone
+    /// In a cold run. Such a call is pointed at a clone
     /// other calls pay for, and never has one minted for it: a clone for a call
     /// that rarely runs buys no time for its size.
     cold: bool,
@@ -1106,7 +1182,7 @@ fn select_sites(
             _ => return,
         };
         let signature = &signatures.of[callee.index()];
-        if !signature.specializable {
+        if !signature.has_body {
             return;
         }
         let unanimous = constants.get(&callee);
@@ -1121,6 +1197,7 @@ fn select_sites(
                         locals,
                         body,
                         types,
+                        immutable: &signatures.immutable_globals,
                         facts,
                         roots,
                     },
@@ -1180,6 +1257,7 @@ struct SelectField<'a> {
     locals: &'a [NirLocal],
     body: &'a Body,
     types: &'a TypeTable,
+    immutable: &'a IndexSet<GlobalKey>,
     facts: &'a IndexMap<(FuncId, u32), ParamFacts>,
     roots: &'a IndexMap<u32, FieldConsts>,
 }
@@ -1205,7 +1283,13 @@ fn select_field_bindings(
             }
         }
         // A literal written at the call is the only name its object has.
-        None => match struct_literal_consts(caller.body, caller.types, arg, Some(pointee)) {
+        None => match struct_literal_consts(
+            caller.body,
+            caller.types,
+            caller.immutable,
+            arg,
+            Some(pointee),
+        ) {
             Some(consts) => {
                 literal = consts;
                 &literal
@@ -1254,7 +1338,7 @@ pub(super) fn specialize_const_params(
     let mut reachable =
         reachable_function_positions(project, descriptors, reachability, gate.exec(), cached);
     let mut changed = false;
-    while specialize_round(project, state, gate, descriptors, &mut reachable) {
+    while specialize_round(project, state, gate, &mut reachable) {
         changed = true;
     }
     gate.catch_up(GatedPass::ParamSpec, project.functions.len());
@@ -1267,7 +1351,6 @@ fn specialize_round(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
-    descriptors: &mut DescriptorCache,
     reachable: &mut IndexSet<usize>,
 ) -> bool {
     let constants = collect_call_constants(project, reachable, gate.exec());
@@ -1279,7 +1362,7 @@ fn specialize_round(
         Signatures::build(project, &types, &recursive, gate.exec())
     };
     let facts = summarize_params(project, &signatures, gate.exec());
-    let cold = cold_path_id(descriptors.descriptors(project));
+    let cold = project.builtin_func_id(COLD_PATH_INTRINSIC);
     let per_caller = collect_sites(
         project,
         state,
@@ -1449,7 +1532,7 @@ fn collect_sites(
         let body = func.body.as_ref().filter(|_| !func.is_dead)?;
         let seed = state.param_consts.get(&FuncId::new(index));
         let roots = collect_roots(&func, body, types, signatures, facts, seed);
-        let cold_calls = cold.map(|c| cold_exprs(body, c)).unwrap_or_default();
+        let cold_calls = ColdRuns::of(body, cold).exprs(body);
         let mut sites = select_sites(
             &func.locals,
             body,
@@ -1654,8 +1737,16 @@ impl BranchSettler {
         types: &TypeTable,
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
+<<<<<<< HEAD
         let prune = BranchPruneRule::new(PruneMode::Fixpoint);
         let mut engine = Engine::new(body, buffers, locals, params);
+||||||| 73611c2bfc0
+        let prune = BranchPruneRule::new(PruneMode::Fixpoint);
+        let mut engine = Engine::new(body, buffers, locals);
+=======
+        let prune = BranchPruneRule;
+        let mut engine = Engine::new(body, buffers, locals);
+>>>>>>> origin/main
         engine.set_value_graph_type_table(types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
         engine.run(&[&fold, &prune]);
@@ -1691,6 +1782,10 @@ fn build_clone(
     clone.id = Some(id);
     clone.visibility = Visibility::Private;
     clone.is_export = false;
+    // The marker names the one canonical function behind a compiler item, and
+    // that stays the original, which the passes resolving the item synthesize
+    // calls to.
+    clone.compiler_item = None;
 
     let mut bound: IndexMap<u32, FieldConsts> = IndexMap::default();
     let mut whole: IndexMap<u32, FieldConst> = IndexMap::default();
@@ -1906,10 +2001,13 @@ fn redirect_const_reads(
             FieldConst::Int(..)
             | FieldConst::Float(..)
             | FieldConst::Bool(_)
-            | FieldConst::Char(_) => match value.operand_at(engine, types, type_id, span) {
-                Some(operand) => operand,
-                None => continue,
-            },
+            | FieldConst::Char(_)
+            | FieldConst::GlobalRef { .. } => {
+                match value.operand_at(engine, types, type_id, span) {
+                    Some(operand) => operand,
+                    None => continue,
+                }
+            }
         };
         engine.redirect_expr(read, operand);
         rewritten = true;
@@ -1923,12 +2021,13 @@ fn redirect_const_reads(
 }
 
 /// Whether a place read may name a fresh copy of the literal instead: one that
-/// only reads through it, `&s` or `s.used`, sees what the copy holds.
+/// only reads through it, `&s`, `s.used` or `&s.repr`, sees what the copy holds.
 fn reads_fresh_literal(engine: &Engine, read: ExprId, value: &FieldConst) -> bool {
-    if !matches!(value, FieldConst::Literal(_)) {
-        return false;
-    }
-    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(read)) else {
+    matches!(value, FieldConst::Literal(_)) && only_read_through(engine, read)
+}
+
+fn only_read_through(engine: &Engine, place: ExprId) -> bool {
+    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(place)) else {
         return false;
     };
     match engine.body.exprs[parent].kind {
@@ -1936,7 +2035,9 @@ fn reads_fresh_literal(engine: &Engine, read: ExprId, value: &FieldConst) -> boo
             op: NirUnaryOp::Ref,
             ..
         } => true,
-        ExprKind::FieldAccess { .. } => !is_place_read(engine, parent),
+        ExprKind::FieldAccess { .. } => {
+            !is_place_read(engine, parent) || only_read_through(engine, parent)
+        }
         _ => false,
     }
 }

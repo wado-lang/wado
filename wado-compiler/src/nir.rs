@@ -16,7 +16,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, closure_call_method_info, closure_call_name, minted_name,
+    FunctionId, LocalMethodName, closure_call_method_info, closure_call_name,
+    diagnostic_function_name, minted_name,
 };
 use crate::nir_arena::{Body, ExprBody, Tracked};
 use crate::tir::{self, DeclarationLookup, EffectRef, StructDef, TypeId};
@@ -834,6 +835,10 @@ pub enum InlineHint {
 impl NirFunction {
     pub fn intrinsic(&self) -> Option<&str> {
         DeclarationLookup::from(self).intrinsic()
+    }
+
+    pub fn diagnostic_name(&self) -> String {
+        diagnostic_function_name(&self.name, &self.module_source, self.method_info.as_ref())
     }
 
     /// Different after any edit to the body or the locals.

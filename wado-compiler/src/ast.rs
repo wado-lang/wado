@@ -10,9 +10,9 @@ use std::ops::Deref;
 
 use crate::defs::DefId;
 use crate::escape::escape_string;
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::lexer::WILDCARD;
-use crate::name::UNIT_TYPE_NAME;
+use crate::name::{UNIT_TYPE_NAME, repeated_element};
 use crate::token::Span;
 
 /// Identity of one `AstId` allocation space — one per parse. Each top-level
@@ -166,8 +166,9 @@ pub struct Module {
     /// Content of the __DATA__ section, if present in the source file.
     /// This is available after parsing for tooling (test harnesses, IDEs).
     data_section: Option<String>,
-    /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing.
-    include_paths: IndexSet<String>,
+    /// Paths referenced by `#include_str` and `#include_bytes` literals, collected during parsing,
+    /// each with the span of its first reference.
+    include_paths: IndexMap<String, Span>,
     /// The [`AstIdSpace`] this module's ids were allocated from (the parsing
     /// `Parser`'s space). [`Self::alloc_ast_id`] continues it.
     ast_id_space: AstIdSpace,
@@ -239,7 +240,7 @@ impl Module {
             inner_attributes: Vec::new(),
             shebang: None,
             data_section: None,
-            include_paths: IndexSet::default(),
+            include_paths: IndexMap::default(),
             ast_id_space: AstIdSpace::next(),
             ast_id_count: 0,
             has_syntax_errors: false,
@@ -253,7 +254,7 @@ impl Module {
         inner_attributes: Vec<InnerAttribute>,
         shebang: Option<String>,
         data_section: Option<String>,
-        include_paths: IndexSet<String>,
+        include_paths: IndexMap<String, Span>,
         ast_id_space: AstIdSpace,
         ast_id_count: u32,
         has_syntax_errors: bool,
@@ -1353,7 +1354,7 @@ impl Module {
         self.data_section.as_deref()
     }
 
-    pub fn include_paths(&self) -> &IndexSet<String> {
+    pub fn include_paths(&self) -> &IndexMap<String, Span> {
         &self.include_paths
     }
 }
@@ -2577,9 +2578,11 @@ impl ImportAttributes {
     /// Inline provider source (`with { provider: "./ext.wado" }`): a Wado file
     /// compiled on-demand into a component that satisfies the imported
     /// dependency's guest-effect imports (research-cm-boundary-callbacks.md).
+    /// The path comes with the span it is written at.
     #[must_use]
-    pub fn provider_path(&self) -> Option<&str> {
-        self.get("provider").and_then(AttrValue::as_str)
+    pub fn provider_path(&self) -> Option<(&str, Span)> {
+        let entry = self.entries.get("provider")?;
+        Some((entry.value.as_str()?, entry.value_span))
     }
 
     /// Raw lookup for any top-level attribute.
@@ -4264,6 +4267,14 @@ pub enum Type {
     Error(Span),
 }
 
+/// What a `[..element]` outside a signature is told, by the parser in a body
+/// and by type resolution elsewhere.
+pub fn repeat_outside_signature(element: &str) -> String {
+    format!(
+        "`[..{element}]` has a length only a call settles, so it may appear only in a function's parameter or return type"
+    )
+}
+
 impl Type {
     /// Every identifier this type mentions, at any depth. A caller matching
     /// them against a declaration's parameter names learns which of those the
@@ -4646,6 +4657,10 @@ impl TraitBound {
     }
 }
 
+/// The most type parameters one list declares, a signature's repeat packs
+/// included.
+pub const MAX_GENERIC_PARAMS: usize = 256;
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]
@@ -4714,9 +4729,10 @@ impl GenericParam {
     }
 
     /// Whether the source spells this param. The effect parameter `with _`
-    /// mints reads as `_` at its use sites and appears in no list.
+    /// mints reads as `_` at its use sites and appears in no list, and so does
+    /// the pack a `[..X]` repeating a non-pack `X` mints.
     pub fn is_written(&self) -> bool {
-        !(self.is_effect && self.name == EFFECT_HOLE)
+        !(self.is_effect && self.name == EFFECT_HOLE) && repeated_element(&self.name).is_none()
     }
 
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
@@ -5319,7 +5335,7 @@ test "addition" {
             .into_iter()
             .map(|(id, _)| id)
             .collect();
-        assert!(!ids.is_empty());
+        assert!(!ids.is_empty(), "SAMPLE parses to no nodes");
 
         let mut seen: IndexSet<AstId> = IndexSet::default();
         for id in &ids {

@@ -2368,12 +2368,19 @@ impl<'a> PatternLowerer<'a> {
             | TirExprKind::GlobalVarGet { .. }
             | TirExprKind::Capture { .. }
             | TirExprKind::EnumConstruct { .. } => {}
+<<<<<<< HEAD
             TirExprKind::TemplateString { .. } => {
                 unreachable!("TemplateString should be expanded before this phase")
             }
             TirExprKind::ListViewOf { .. } => {
                 unreachable!("synthesis::list_view expands every conversion")
             }
+||||||| 73611c2bfc0
+            TirExprKind::TemplateString { .. } => {
+                unreachable!("TemplateString should be expanded before this phase")
+            }
+=======
+>>>>>>> origin/main
             TirExprKind::WithHandler { .. } => {
                 unreachable!(
                     "WithHandler should be desugared by effect-dispatch synthesis before this phase"

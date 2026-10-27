@@ -30,12 +30,6 @@ assert decoded matches { Ok(s) && s == "Wado" };
 Whether `a` and `b` point to one place, not merely to equal values. `==`
 on references compares the values.
 
-### `pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
-
-The tag an untagged template is sugar for: every hole rendered through its
-specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
-See WEP 2026-01-10.
-
 ### `pub fn eq_constant_time<A: AsByteSlice, B: AsByteSlice>(a: &A, b: &B) -> bool`
 
 Whether two byte strings are equal, in time that does not depend on where
@@ -291,14 +285,14 @@ type a template literal denotes). See WEP 2026-01-10.
 
 Returns the per-hole members.
 
-#### `fn tail(t: &Self) -> String`
+#### `fn tail(t: &Self) -> StrSlice`
 
 `#[compiler_item("reflect_template_tail")]`
 
 The literal text after the last hole of `t` — the whole template when
 it has none — with escapes processed.
 
-#### `fn raw_tail(t: &Self) -> String`
+#### `fn raw_tail(t: &Self) -> StrSlice`
 
 `#[compiler_item("reflect_template_raw_tail")]`
 
@@ -3530,11 +3524,11 @@ The flags value with only this bit set.
 
 ##### `fn inspect(&self, f: &mut Formatter)`
 
-### `pub struct TemplateHole<T, V>`
+### `pub struct TemplateHole<T, affine V>`
 
 A hole handle minted by `ReflectTemplate::members()`: the hole's position
-and specifier presence are constants of the shape, and `lit` / `raw` /
-`get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
+and specifier are constants of the shape, and `lit` / `raw` / `get` /
+`get_ref` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 
 _Fields are private._
 
@@ -3542,12 +3536,12 @@ _Fields are private._
 
 The hole's position in the template.
 
-#### `pub fn lit(&self, t: &T) -> String`
+#### `pub fn lit(&self, t: &T) -> StrSlice`
 
 The literal text in `t` between the previous hole (or the start) and
 this one, escapes processed.
 
-#### `pub fn raw(&self, t: &T) -> String`
+#### `pub fn raw(&self, t: &T) -> StrSlice`
 
 `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
 
@@ -3555,15 +3549,28 @@ this one, escapes processed.
 
 Whether the hole wrote a `:spec`.
 
-#### `pub fn get(&self, t: &T) -> V`
+#### `pub fn spec(&self) -> Option<String>`
 
-The hole's value in `t`.
+The specifier as written after the `:`, or `None` without one.
+
+#### `pub fn get_ref(&self, t: &T) -> &V`
+
+A reference to the hole's value in `t`, which copies nothing, so it
+reaches a hole of an affine type as well.
 
 #### `pub fn fmt(&self, t: &T, f: &mut Formatter)`
 
 Renders the value through the trait method the specifier's type
 selects (`Display::fmt` when it names none), on a `Formatter` carrying
 the specifier's settings over `f`'s buffer.
+
+#### `pub fn get(&self, t: &T) -> V`
+
+The hole's value in `t`.
+
+#### `impl Inspect for TemplateHole<T, V>`
+
+##### `fn inspect(&self, f: &mut Formatter)`
 
 ### `pub struct StructField<affine T, affine F>`
 
@@ -4899,15 +4906,21 @@ _Fields are private._
 
 Create a new empty string.
 
-#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String`
+#### `pub fn format<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String`
+
+`#[compiler_item("string_format")]`
+
+The tag an untagged template is sugar for: every hole rendered through
+its specifier into one buffer. `` `x=${x}` `` is
+`` String::format`x=${x}` ``. See WEP 2026-01-10.
+
+#### `pub fn raw<T: ReflectTemplate<Holes = [..V]>, affine ..V>(t: T) -> String`
 
 The tag keeping a template's escapes as written: `` String::raw`a\nb` ``
-is `"a\\nb"`, its holes rendered as `format` renders them. See
+is `"a\\nb"`, its holes rendered as `String::format` renders them. See
 WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
-
-`#[compiler_item("string_with_capacity")]`
 
 Create an empty string with space for `capacity` bytes.
 
@@ -5538,9 +5551,7 @@ _Fields are private._
 
 #### `pub fn grow(&mut self)`
 
-#### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
-
-`#[compiler_item("list_from_tuple")]`
+#### `pub fn from_tuple(elements: [..T]) -> List<T>`
 
 Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 

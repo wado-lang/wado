@@ -96,9 +96,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         sound.then_some(TemplateShape { holes })
     }
 
-    /// Whether `ty` can be a hole of a shape: decided, and free of a type pack.
-    /// One mentioning the enclosing item's type parameters makes the shape
-    /// open; a pack's element would need a shape per element.
+    /// Whether `ty` can be a hole of a shape: decided. One mentioning the
+    /// enclosing item's type parameters or packs makes the shape open.
     fn hole_type_admissible(&mut self, ty: TypeId, span: Span) -> bool {
         if ty == TypeTable::ERROR || ty == TypeTable::UNKNOWN {
             return false;
@@ -109,11 +108,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .to_string(),
                 span,
             });
-            return false;
-        }
-        if self.tysys.type_table.borrow().mentions_type_pack(ty) {
-            let type_name = self.tysys.type_table.borrow().type_name(ty);
-            let _ = self.emit(TypeError::TemplateHolePackElement { type_name, span });
             return false;
         }
         true

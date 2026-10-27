@@ -1,0 +1,40 @@
+// A compile-time loop reduces a statement's subtree before running it. A read
+// below a `let` the iteration has not reached yet must not fold to the value
+// the previous iteration bound there: each digit lands once, in order.
+use { println, Stdout } from "core:cli";
+
+fn digits() -> i32 {
+    let xs: List<i32> = [1, 2, 3];
+    let mut i = 0;
+    let mut t = 0;
+    loop {
+        let m: [i32, i32] = next: {
+            if i >= 3 {
+                break next: [0, 0];
+            }
+            let item = xs[i];
+            i += 1;
+            [1, item]
+        };
+        match m.0 {
+            1 => {
+                let x = m.1;
+                t = t * 10 + x;
+            },
+            _ => {
+                break;
+            },
+        }
+    }
+    return t;
+}
+
+export fn run() with Stdout {
+    println(`${digits()}`);
+}
+
+__DATA__
+{
+    "stdout": "123\n",
+    "wir_expect:O2": ["array.new_fixed<u8>(49, 50, 51)"]
+}

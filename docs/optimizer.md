@@ -68,7 +68,7 @@ on how many. See [WEP: Parallel Optimizer](./wep-2026-10-08-parallel-optimizer.m
 3. The fixed-point loop: `container_sroa`, `peephole`, `value_copy_demote`,
    `sroa_param`, `sroa_variant_return`, `inline`, `peephole`,
    `let_block_flatten`, `sroa`, `copy_prop`, `dae`, `drve`, `const_folding`,
-   `param_spec`, `licm` (with `condition_implication`), `tmpl_hoist`. Once it
+   `param_spec`, `licm` (with `condition_implication`). Once it
    converges, `inline` releases the callees it held back, and the loop runs
    again.
 4. After the loop, once: `field_scalarize`, `store_load_forward`,
@@ -178,7 +178,6 @@ Loops and fields:
   original, and turn a fill loop into `array.fill`.
 - `unsigned_range_check` — fuse a remaining `0 <= i && i < n` into one unsigned
   compare. It runs after the passes above, which read the two halves apart.
-- `tmpl_hoist` — reuse a template string's buffer across loop iterations.
 - `field_scalarize` — keep hot GC fields in locals across a loop.
 
 Whole program and backend:
@@ -238,8 +237,45 @@ settles the locals (step 11).
 A `#![wasm_module(...)]` core module, such as the allocator, runs the same list
 on its own, with its passes named `wir/<module>:<pass>`.
 
-wasmtime lays out the cold side of a hinted branch out of line.
-`-f no-branch-hinting` disables hints for benchmarking.
+## Branch Hints
+
+A cold marker, `builtin::cold_path()`, says that the code around it rarely runs.
+The author writes one where they expect a path to be rare. The compiler writes
+one where the program itself makes a path rare: ahead of a trap, past a global's
+once-guard, and in the default arm of a switch.
+
+### What a Marker Covers
+
+A marker makes its basic block cold. A basic block is a straight run of code
+that control enters only at its start and leaves only at its end. Wado's IR
+nests blocks rather than listing basic blocks, so the optimizer reads the same
+rule through dominance: a point is cold when every path through it passes the
+marker. The code after the marker in its block is cold, and so is the code
+before it, back to the last statement that can leave the block first.
+
+- In `if bad { let m = describe(x); panic(m); }`, every path through `describe`
+  reaches the marker reify puts ahead of `panic`, so `describe` is cold too.
+- In `if let Some(v) = fast(k) { return v; } cold_path(); return slow(k);`, the
+  guard can return before the marker, so the guard stays hot and only what
+  follows it is cold.
+- In `if c { if d { cold_path(); a } else { cold_path(); b } }`, every path
+  through the outer arm passes one of the two markers, so the outer arm is cold
+  as a whole.
+
+Every pass that reads a marker reads this one rule: the inliner's prices,
+`cold_outline`'s regions, the callees only cold code calls, the remarks, and the
+branch hints.
+
+### Hints and Flags
+
+A branch whose one side is cold gets a hint that the other side is likely.
+wasmtime lays out the cold side out of line. A branch to a trap is hinted the
+same way, marker or not.
+
+`-f no-branch-hinting` leaves the hints out of the Wasm, so a benchmark measures
+what they are worth to the engine. `-f no-cold-paths` drops every marker, the
+compiler's included, before any pass reads one, so a benchmark measures what the
+markers are worth to the whole pipeline.
 
 ## Profile-Guided Optimization
 
@@ -251,8 +287,7 @@ from its `#[workload]` tests. A compile marks each outermost region the
 workloads never ran with `cold_path()`, so every pass that reads a marker
 treats it as it treats one the author wrote. The test world reads no profile unless `-f pgo`
 asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths` ignores every
-marker the author or the profile wrote, so three builds of one program can be
-compared.
+marker, so three builds of one program can be compared.
 
 Two questions stay open while profiles spread, and each optimizer change that
 touches cold paths answers them again:

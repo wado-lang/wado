@@ -1,7 +1,7 @@
 // Regression: at -O3 (inline threshold 40) iterating an `List<[bool, i32, String]>`
 // with a 3-arg template string printed empty fields instead of the tuple
 // values. Threshold ≥ 39 inlined enough of `f64::fmt_fixed` /
-// `String::push_str` for `tmpl_hoist` to lift the template's `String`
+// `String::push_str` for the since-deleted `tmpl_hoist` to lift the template's `String`
 // buffer out of the `for-of` loop, after which HFS scalarised the
 // buffer's `.used`/`.repr` fields. The inlined `push_str` body wrote the
 // new length only to the HFS scalar; the outer

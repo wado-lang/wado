@@ -248,6 +248,47 @@ impl TypeSystem {
     /// it or at what it holds at any depth, through a newtype either way. A
     /// type parameter on either side may be bound to anything.
     fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
+<<<<<<< HEAD
+||||||| 73611c2bfc0
+        let open = |resolved: &ResolvedType| {
+            matches!(
+                resolved,
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::AssocParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::AssocTypeProjection { .. }
+            )
+        };
+        let head_key = |ty: TypeId| {
+            let tt = self.type_table.borrow();
+            tt.type_key(tt.representation_head(ty))
+        };
+        let pointee = self.type_table.borrow().representation_head(pointee);
+        if open(self.type_table.borrow().get(pointee)) {
+            return true;
+        }
+        let target = head_key(pointee);
+=======
+        let open = |resolved: &ResolvedType| {
+            matches!(
+                resolved,
+                ResolvedType::TypeParam { .. }
+                    | ResolvedType::AssocParam { .. }
+                    | ResolvedType::TypePack { .. }
+                    | ResolvedType::PackElement { .. }
+                    | ResolvedType::AssocTypeProjection { .. }
+            )
+        };
+        let head_key = |ty: TypeId| {
+            let tt = self.type_table.borrow();
+            tt.type_key(tt.representation_head(ty))
+        };
+        let pointee = self.type_table.borrow().representation_head(pointee);
+        if open(self.type_table.borrow().get(pointee)) {
+            return true;
+        }
+        let target = head_key(pointee);
+>>>>>>> origin/main
         self.reaches(place, &|ty, resolved| {
             is_open(resolved) || may_name_one_type(&self.type_table.borrow(), ty, pointee)
         })
@@ -272,6 +313,7 @@ impl TypeSystem {
             ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. } => return params,
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
@@ -346,6 +388,7 @@ impl TypeSystem {
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::Unknown
@@ -762,7 +805,7 @@ impl TypeSystem {
     /// The name the type parameter or pack in this slot carries, `None` for a
     /// slot holding anything else.
     pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
-        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
+        bound_param_name(&self.type_table.borrow(), type_id).cloned()
     }
 
     /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
@@ -976,13 +1019,25 @@ impl HeldTypes for AffineParams<'_> {
 
     fn held(&self, type_id: TypeId) -> Held {
         let table = self.types.type_table.borrow();
+        let declared_affine = |param_id: TypeId| {
+            let key = table.type_key(param_id);
+            self.affine_params
+                .iter()
+                .any(|&param| table.type_key(param) == key)
+        };
         let is_affine_param = match table.get(type_id) {
-            ResolvedType::TypeParam { .. } => {
-                let key = table.type_key(type_id);
-                self.affine_params
-                    .iter()
-                    .any(|&param| table.type_key(param) == key)
+            // A pack mapped through a constructor (`[..TemplateHole<T, V>]`)
+            // holds its element as a parameter of the pack's name and index.
+            ResolvedType::TypeParam { name, index } => {
+                declared_affine(type_id)
+                    || self.affine_params.iter().any(|&param| {
+                        matches!(table.get(param), ResolvedType::TypePack { name: n, index: i, .. }
+                            if n == name && i == index)
+                    })
             }
+            ResolvedType::TypePack { .. } => declared_affine(type_id),
+            // A walk's element is one of its pack's, as affine as the pack.
+            ResolvedType::PackElement { pack, .. } => declared_affine(*pack),
             ResolvedType::AssocTypeProjection {
                 owning_trait,
                 assoc_name,

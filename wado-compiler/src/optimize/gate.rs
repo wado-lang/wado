@@ -39,7 +39,6 @@ pub enum GatedPass {
     ConstFold,
     Sroa,
     Licm,
-    TmplHoist,
     ContainerSroa,
     Inline,
     Dae,
@@ -60,7 +59,7 @@ pub enum GatedPass {
 }
 
 impl GatedPass {
-    const COUNT: usize = 20;
+    const COUNT: usize = 19;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -328,7 +327,6 @@ mod tests {
             GatedPass::ConstFold,
             GatedPass::Sroa,
             GatedPass::Licm,
-            GatedPass::TmplHoist,
             GatedPass::ContainerSroa,
             GatedPass::Inline,
             GatedPass::Dae,
@@ -351,7 +349,6 @@ mod tests {
                 | GatedPass::ConstFold
                 | GatedPass::Sroa
                 | GatedPass::Licm
-                | GatedPass::TmplHoist
                 | GatedPass::ContainerSroa
                 | GatedPass::Inline
                 | GatedPass::Dae
@@ -469,7 +466,7 @@ mod tests {
                 .map(|(fid, _)| fid)
                 .collect()
         };
-        assert!(visited(&mut gate).is_empty());
+        assert_eq!(visited(&mut gate), Vec::<FuncId>::new());
         // Dirty function 1 (and its caller 0 via propagation), then run again.
         gate.mark_changed(FuncId::new(1));
         assert_eq!(visited(&mut gate), vec![FuncId::new(0), FuncId::new(1)]);

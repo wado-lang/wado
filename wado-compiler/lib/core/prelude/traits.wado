@@ -319,11 +319,11 @@ pub trait ReflectTemplate: Reflect with () {
     /// The literal text after the last hole of `t` — the whole template when
     /// it has none — with escapes processed.
     #[compiler_item("reflect_template_tail")]
-    fn tail(t: &Self) -> String;
+    fn tail(t: &Self) -> StrSlice;
 
     /// `tail(t)` with escapes preserved.
     #[compiler_item("reflect_template_raw_tail")]
-    fn raw_tail(t: &Self) -> String;
+    fn raw_tail(t: &Self) -> StrSlice;
 }
 
 /// A case handle minted by `ReflectVariant::members()`: the payload type `P`
@@ -458,15 +458,15 @@ impl<T> Member for FlagsBit<T> {
 }
 
 /// A hole handle minted by `ReflectTemplate::members()`: the hole's position
-/// and specifier presence are constants of the shape, and `lit` / `raw` /
-/// `get` / `fmt` reach what a template value holds. See WEP 2026-01-10.
+/// and specifier are constants of the shape, and `lit` / `raw` / `get` /
+/// `get_ref` / `fmt` reach what a template value holds. See WEP 2026-01-10.
 #[compiler_item("template_hole")]
-pub struct TemplateHole<T, V> {
+pub struct TemplateHole<T, affine V> {
     index: i32,
-    has_spec: bool,
+    spec: Option<String>,
 }
 
-impl<T, V> TemplateHole<T, V> {
+impl<T, affine V> TemplateHole<T, V> {
     /// The hole's position in the template.
     pub fn index(&self) -> i32 {
         return self.index;
@@ -474,23 +474,29 @@ impl<T, V> TemplateHole<T, V> {
 
     /// The literal text in `t` between the previous hole (or the start) and
     /// this one, escapes processed.
-    pub fn lit(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index);
+    pub fn lit(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index).internal_view();
     }
 
     /// `lit(t)` with escapes preserved: `\n` is a backslash and an `n`.
-    pub fn raw(&self, t: &T) -> String {
-        return builtin::template_segment(t, 2 * self.index + 1);
+    pub fn raw(&self, t: &T) -> StrSlice {
+        return builtin::template_segment(t, 2 * self.index + 1).internal_view();
     }
 
     /// Whether the hole wrote a `:spec`.
     pub fn has_spec(&self) -> bool {
-        return self.has_spec;
+        return self.spec matches { Some(_) };
     }
 
-    /// The hole's value in `t`.
-    pub fn get(&self, t: &T) -> V {
-        return builtin::hole_get(t, self.index);
+    /// The specifier as written after the `:`, or `None` without one.
+    pub fn spec(&self) -> Option<String> {
+        return self.spec;
+    }
+
+    /// A reference to the hole's value in `t`, which copies nothing, so it
+    /// reaches a hole of an affine type as well.
+    pub fn get_ref(&self, t: &T) -> &V {
+        return builtin::hole_ref(t, self.index);
     }
 
     /// Renders the value through the trait method the specifier's type
@@ -501,26 +507,11 @@ impl<T, V> TemplateHole<T, V> {
     }
 }
 
-global HOLE_CAPACITY_GUESS: i32 = 16;
-
-/// The tag an untagged template is sugar for: every hole rendered through its
-/// specifier into one buffer. `` `x=${x}` `` is `` format`x=${x}` ``.
-/// See WEP 2026-01-10.
-pub fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
-    // Where the template is a literal, the segments are constants, so this
-    // folds to one: the buffer is sized once, and only a hole rendering past
-    // its guess grows it.
-    let mut capacity = ReflectTemplate::<T>::tail(&t).len();
-    for let h of ReflectTemplate::<T>::members() {
-        capacity += h.lit(&t).len() + HOLE_CAPACITY_GUESS;
+impl<T, V> TemplateHole<T, V> {
+    /// The hole's value in `t`.
+    pub fn get(&self, t: &T) -> V {
+        return builtin::hole_get(t, self.index);
     }
-    let mut out = String::with_capacity(capacity);
-    for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit(&t));
-        h.fmt(&t, &mut Formatter::new(&mut out));
-    }
-    out.push_str(&ReflectTemplate::<T>::tail(&t));
-    return out;
 }
 
 /// A field handle minted by `ReflectStruct::members()`: the field type `F` is
@@ -573,14 +564,14 @@ impl<affine T, affine F> Member for StructField<T, F> {
     }
 }
 
-// The four member handles are sealed against reflection (WEP 2026-06-13), so
+// The member handles are sealed against reflection (WEP 2026-06-13), so
 // they cannot use the `ReflectStruct` derivations above and write their own
 // impls instead. The output matches what a derived struct produces.
 
 // `Option<String>`'s own `Inspect` is synthesized in `prelude/types.wado`,
 // which is not yet resolvable while this module is elaborated. Render the two
 // cases directly, matching what the variant derive emits.
-internal fn inspect_wire_override(v: &Option<String>, f: &mut Formatter) {
+internal fn inspect_option_string(v: &Option<String>, f: &mut Formatter) {
     match v {
         Option::Some(s) => {
             f.write_str("Option::Some(");
@@ -640,7 +631,7 @@ impl<affine T, affine F> Inspect for StructField<T, F> {
         self.field_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_field(f, "has_default", false);
         self.has_default.inspect(f);
@@ -662,7 +653,7 @@ impl<affine T, affine P> Inspect for VariantCase<T, P> {
         self.case_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_field(f, "is_unit", false);
         self.is_unit.inspect(f);
@@ -684,7 +675,7 @@ impl<T: Inspect> Inspect for EnumCase<T> {
         self.case_name.inspect(f);
         struct_field_end(f);
         struct_field(f, "wire_override", false);
-        inspect_wire_override(&self.wire_override, f);
+        inspect_option_string(&self.wire_override, f);
         struct_field_end(f);
         struct_close(f);
     }
@@ -701,6 +692,19 @@ impl<T: Inspect> Inspect for FlagsBit<T> {
         struct_field_end(f);
         struct_field(f, "member_name", false);
         self.member_name.inspect(f);
+        struct_field_end(f);
+        struct_close(f);
+    }
+}
+
+impl<T, affine V> Inspect for TemplateHole<T, V> {
+    fn inspect(&self, f: &mut Formatter) {
+        struct_open(f, "TemplateHole");
+        struct_field(f, "index", true);
+        self.index.inspect(f);
+        struct_field_end(f);
+        struct_field(f, "spec", false);
+        inspect_option_string(&self.spec, f);
         struct_field_end(f);
         struct_close(f);
     }
@@ -1106,6 +1110,27 @@ impl<N: ReflectNewtype<Base = B>, B: Inspect> Inspect for N {
         base.inspect(f);
         f.write_str(" as ");
         f.write_str(&Reflect::<N>::type_name());
+    }
+}
+
+/// Template debug formatting derived over `ReflectTemplate` (WEP 2026-01-10):
+/// the template as written, its text raw and each hole's value inspected with
+/// its specifier. `==` compares the text, so the form shows it.
+impl<T: ReflectTemplate<Holes = [..V]>, affine ..V: Inspect> Inspect for T {
+    fn inspect(&self, f: &mut Formatter) {
+        f.write_char('`');
+        for let h of ReflectTemplate::<T>::members() {
+            f.write_str(h.raw(self));
+            f.write_str("${");
+            h.get_ref(self).inspect(f);
+            if let Some(spec) = h.spec() {
+                f.write_char(':');
+                f.write_str(&spec);
+            }
+            f.write_char('}');
+        }
+        f.write_str(ReflectTemplate::<T>::raw_tail(self));
+        f.write_char('`');
     }
 }
 

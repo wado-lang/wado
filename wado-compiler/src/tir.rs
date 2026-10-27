@@ -11,7 +11,6 @@ use crate::builtin_facts::{BuiltinFacts, ParamShape, ReturnShape, SideEffect, St
 use crate::call_args::CallArgs;
 use crate::canonical::CmCallTarget;
 use crate::compiler_item::CompilerItem;
-use crate::format_spec::TemplateFormatSpec;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::ast::{NamePolicy, RangeKind, RestClause, Visibility};
@@ -509,14 +508,17 @@ impl TemplateShape {
 /// open shape's literal is held once substituted; holding twice is a no-op.
 pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable) -> Option<u32> {
     let field_ty = tt.hole_field_type(hole_ty);
-    if tt.type_key(field_ty) == tt.type_key(hole_ty)
-        || tt.type_key(field.value.type_id) == tt.type_key(field_ty)
-    {
+    // Monomorphization holds a substituted shape before its instances are
+    // drained, while one generic instance may still be spelled both as a
+    // `GenericInstance` and as its struct.
+    let same = |tt: &TypeTable, a: TypeId, b: TypeId| {
+        tt.type_key(a) == tt.type_key(b) || tt.instance_key(a) == tt.instance_key(b)
+    };
+    if same(tt, field_ty, hole_ty) || same(tt, field.value.type_id, field_ty) {
         return None;
     }
-    assert_eq!(
-        tt.type_key(field.value.type_id),
-        tt.type_key(hole_ty),
+    assert!(
+        same(tt, field.value.type_id, hole_ty),
         "a hole's value has the hole's type"
     );
     let taken = match &field.value.kind {
@@ -660,6 +662,22 @@ pub enum ResolvedType {
         name: String,
         index: u32,
         mapped_elem: Option<TypeId>,
+    },
+    /// One element of an identity pack: what `for let v of t` over `t: [..T]`
+    /// binds `v` to. Apart from the pack because a tuple splices a pack it
+    /// holds: `[v, 7]` is `[T_k, i32]`, where the pack would make it
+    /// `[..T, i32]`. It carries the pack's bounds, and unrolling substitutes
+    /// each element for it.
+    ///
+    /// Nested walks over one pack bind different elements, so the element is
+    /// also the walk's: `x` and `v` in `for x of t { for v of t { … } }` have
+    /// two types, and `pick::<A>(x, v)` does not unify them.
+    PackElement {
+        /// The identity [`ResolvedType::TypePack`] this is an element of.
+        pack: TypeId,
+        /// How many pack walks enclose the one binding this element: its
+        /// substitution slot is `TypeTable::pack_walk_slot`.
+        walk: u32,
     },
     /// A generic associated type's own parameter (`E` in `type Buf<E> =
     /// List<E>;`), standing in a binding for the argument a projection supplies.
@@ -1243,6 +1261,8 @@ pub enum TirExprKind {
         unique_id: u32,
         /// Whether the binding is the `[index, value]` pair of `.enumerate()`
         is_enumerate: bool,
+        /// The `walk` of the `PackElement` the binding holds
+        walk: u32,
     },
 
     /// Access to a captured variable inside a closure body
@@ -1353,6 +1373,7 @@ pub enum TirExprKind {
         payload_type: TypeId,
     },
 
+<<<<<<< HEAD
     /// Unresolved template string expression.
     ///
     /// Created by the elaborator with resolved sub-expressions but without
@@ -1370,6 +1391,19 @@ pub enum TirExprKind {
         value: Box<TirExpr>,
     },
 
+||||||| 73611c2bfc0
+    /// Unresolved template string expression.
+    ///
+    /// Created by the elaborator with resolved sub-expressions but without
+    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
+    /// expands this into the `$tmpl` labeled block with `String::with_capacity`,
+    /// `push_str`, `Formatter`, and `Display`/inspect calls.
+    TemplateString {
+        parts: Vec<TirTemplatePart>,
+    },
+
+=======
+>>>>>>> origin/main
     /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///
@@ -1409,18 +1443,6 @@ pub struct TirHandlerBinding {
     /// the handler is evaluated once and one effect's mutations are seen by the
     /// rest. `None` for an explicit `Effect => handler`. Unique per `WithHandler`.
     pub bundle_group: Option<u32>,
-}
-
-/// A part of a resolved template string.
-#[derive(Debug, Clone)]
-pub enum TirTemplatePart {
-    /// A literal string segment.
-    Literal(String),
-    /// An interpolated expression with optional format specifier.
-    Interpolation {
-        expr: Box<TirExpr>,
-        format_spec: Option<TemplateFormatSpec>,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -2028,6 +2050,12 @@ pub enum TirStmtKind {
         /// When the iterable is `tuple.enumerate()`, the binding is the pair
         /// `[i32, T_k]`; expansion pairs each element with its index literal.
         is_enumerate: bool,
+        /// The `walk` of the `PackElement` the binding holds
+        walk: u32,
+        /// Whether the element is affine, so each unrolled binding moves its
+        /// field out of the tuple. Only reify knows the body's `affine`
+        /// parameters.
+        moves: bool,
     },
 }
 

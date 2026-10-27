@@ -1856,6 +1856,144 @@ fn test_run_process_read_opens_a_path_to_the_child() {
         )));
 }
 
+/// A program the sandbox would refuse to execute is named, with the grant
+/// that lets it run, once however often the guest tries it. Run through a
+/// link, it is judged where the link leads.
+#[cfg(unix)]
+#[test]
+fn test_run_names_a_program_the_sandbox_refuses_and_its_grant() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let tool = tempfile::tempdir().unwrap();
+    let tool_dir = tool.path().canonicalize().unwrap().join("real");
+    let real = tool_dir.join("tool.sh");
+    std::fs::create_dir(&tool_dir).unwrap();
+    std::fs::write(&real, "#!/bin/sh\necho tool\n").unwrap();
+    std::fs::set_permissions(&real, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let program = tool.path().canonicalize().unwrap().join("tool");
+    std::os::unix::fs::symlink(&real, &program).unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { args, Environment } from \"core:cli\";\nuse { Command, Process } from \"core:process\";\n\nexport fn run() with (Environment, Process) {\n    for let _ of 0..<2 {\n        let _ = Command::new(args()[0]).status();\n    }\n}\n",
+    )
+    .unwrap();
+    let warning = format!(
+        "warning: core:process: `{}` is {}, a link to {}, outside the guest's grants and the system baseline\nhelp: let a child run it with `--process-read {}`",
+        program.display(),
+        program.display(),
+        real.display(),
+        real.display()
+    );
+    let refused = wado_in(work.path())
+        .args(["run", "main.wado"])
+        .arg(&program)
+        .assert()
+        .success()
+        .get_output()
+        .stderr
+        .clone();
+    let refused = String::from_utf8(refused).unwrap();
+    assert_eq!(refused.matches(&warning).count(), 1, "{refused}");
+    wado_in(work.path())
+        .args(["run", "--process-read"])
+        .arg(&real)
+        .arg("main.wado")
+        .arg(&program)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("core:process").not());
+}
+
+/// A child that fails after the filter refused it a call is reported with the
+/// call, once however often the guest runs it. `setsid --wait` from util-linux
+/// exits 1 when its `setsid` is refused.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_names_what_the_sandbox_refused_a_failing_child() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { Command, Process } from \"core:process\";\n\nexport fn run() with Process {\n    for let _ of 0..<2 {\n        let _ = Command::new(\"setsid\").arg(\"--wait\").arg(\"true\").status();\n    }\n}\n",
+    )
+    .unwrap();
+    let stderr = wado_in(work.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .get_output()
+        .stderr
+        .clone();
+    let stderr = String::from_utf8(stderr).unwrap();
+    let warning = "warning: core:process: `setsid` exited with status 1 after the sandbox refused it leaving its process group";
+    assert_eq!(stderr.matches(warning).count(), 1, "{stderr}");
+}
+
+/// `--process-trace` names a file the sandbox refused a child, and the grant
+/// that would let it through; without it, `cat`'s failure is all there is.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_run_process_trace_names_a_refused_file_and_its_grant() {
+    if sandbox::availability() != sandbox::Availability::Available {
+        return;
+    }
+    let work = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let secret = outside.path().canonicalize().unwrap().join("secret.txt");
+    std::fs::write(&secret, "secret").unwrap();
+    std::fs::write(
+        work.path().join("main.wado"),
+        "use { args, Environment } from \"core:cli\";\nuse { Command, Process } from \"core:process\";\n\nexport fn run() with (Environment, Process) {\n    let _ = Command::new(\"cat\").arg(args()[0]).status();\n}\n",
+    )
+    .unwrap();
+    let path = secret.display();
+    wado_in(work.path())
+        .args(["run", "--process-trace", "main.wado"])
+        .arg(&secret)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(format!(
+            "warning: core:process: `cat` exited with status 1 after the sandbox refused it reading {path}\nhelp: let a child read {path} with `--process-read {path}`"
+        )));
+    wado_in(work.path())
+        .args(["run", "main.wado"])
+        .arg(&secret)
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("core:process").not());
+}
+
+#[test]
+fn test_run_unavailable_spawning_names_its_fix() {
+    let tmp = tempfile::tempdir().unwrap();
+    std::fs::write(
+        tmp.path().join("main.wado"),
+        "use { cmd, Process } from \"core:process\";\n\nexport fn run() with Process {\n    let _ = cmd`true`.status();\n}\n",
+    )
+    .unwrap();
+    wado_in(tmp.path())
+        .args(["run", "--deny-process", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains(
+                "core:process is unavailable: spawning is turned off by --deny-process",
+            )
+            .and(predicate::str::contains(
+                "help: run without `--deny-process`",
+            ))
+            .and(predicate::str::contains(
+                "help: a guest that can do without spawning asks `availability()` first",
+            )),
+        );
+}
+
 #[test]
 fn test_run_process_read_takes_an_existing_path_and_a_spawning_guest() {
     let tmp = tempfile::tempdir().unwrap();

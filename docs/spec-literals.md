@@ -587,9 +587,9 @@ let s = "\uDE00";
 ## Template Strings
 
 A template string is written in backticks. It is sugar for a call of the
-prelude's `format` tag, so `` `x=${x}` `` means `` format`x=${x}` `` and has the
-type `String` (see [Tagged Template Literals](#tagged-template-literals)). It
-names the prelude's `format` even where another item named `format` is in scope,
+`String::format` tag, so `` `x=${x}` `` means `` String::format`x=${x}` `` and
+has the type `String` (see [Tagged Template Literals](#tagged-template-literals)).
+It names the prelude's `String` even where an import takes the name `String`,
 and in a module without the prelude.
 
 `${expr}` interpolates the value of `expr`, and everything else is literal text.
@@ -786,7 +786,9 @@ assert `${a:.3?}` == "[1, 2, 3, ...]";
 A container renders its elements with the same spec it was given, so precision
 and width reach every element. A tuple or struct never caps its own arity, but
 its string and sequence fields honour the precision, and `${a:6?}` pads each
-element rather than the whole list.
+element rather than the whole list. A tagged template value is such a container
+for its holes. As in Rust, the `Inspect` of a string or a `char` ignores the
+width, so `${"a":>5?}` renders `"a"`.
 
 ### The Formatter
 
@@ -962,6 +964,7 @@ The output follows Wado's literal syntax where it has one:
 | Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`              |
 | Flags, none set          | `Type::none()`                            | `Perms::none()`                            |
 | Newtype                  | base value, then `as Name`                | `1.5 as Meters`                            |
+| Tagged template value    | the template as written, holes inspected  | `` `n=${7:04}` ``                          |
 | `&T`, `&mut T`           | `&` or `&mut`, then the referent          | `&42`, `&mut Point { x: 1, y: 2 }`         |
 | Closure                  | its signature                             | `\|i32, i32\| -> i32`                      |
 | Affine resource          | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                              |
@@ -1102,12 +1105,22 @@ test "the tag sees each hole in its own type" {
 
 A hole handle (`TemplateHole<T, V>`) answers `index()` (its position, from 0),
 `lit(&t)` / `raw(&t)` (the preceding segment of `t`, escapes processed or
-preserved), `get(&t)` (the value, `V`), `has_spec()`, and
+preserved), `get(&t)` (a copy of the value, `V`), `get_ref(&t)` (a reference
+to it, `&V`), `spec()` (the specifier as written, or `None`), `has_spec()`, and
 `fmt(&t, f)` (rendering the value through the trait its specifier selects, as
-[Format Types](#format-types) states).
+[Format Types](#format-types) states). A tag declaring `affine ..V` takes an
+affine hole, and its handles offer no `get`, since a copy of an affine value
+does not exist. `String::format` and `String::raw` declare it.
 `ReflectTemplate::<T>::tail(&t)` and `raw_tail(&t)` give the segment after the
-last hole. `index()` and `has_spec()` are constants of the shape. A hole handle
-is minted only by `members()`.
+last hole. A segment is a `StrSlice` over the template's own text, so reading
+one copies nothing. `index()`, `spec()` and `has_spec()` are constants of the
+shape. A hole handle is minted only by `members()`.
+
+A template value inspects as the template it was written as: each segment raw,
+and each hole as its value inspected, followed by its specifier.
+`` `${t:?}` `` on `` id`n=${n:04}\n` `` with `n = 7` renders
+`` `n=${7:04}\n` ``. `==` compares the text as well as the holes, so the form
+shows the text.
 
 `members()` walks a pack, so `Holes` is bound either as one (`[..V]`) or as the
 empty tuple (`[]`, for a tag that reads only `tail(&t)`). A concrete tuple
@@ -1124,22 +1137,15 @@ then generic over that parameter, and each instantiation of the item
 instantiates the tag with it. A bound the tag places on its pack is met only
 through the bounds the item declares, as for any call.
 
-> Not yet implemented: a hole whose type mentions a type pack, such as the
-> binding of a `for let v of t` over `t: [..T]`, is rejected as a tag's
-> argument.
-
 Holes are evaluated once, left to right, before the tag runs. Each hole's value
 is the one it had at its own position, so a later hole that writes to its
-storage changes nothing the tag sees: `` format`${a} ${bump(&mut a)}` ``
-renders `a` as it was before `bump` ran. A tag may carry effects,
+storage changes nothing the tag sees: `` String::format`${a} ${bump(&mut a)}` ``
+renders `a` as it was before `bump` ran. A place whose type is affine is the
+exception: it cannot be copied, so the tag reads it as it is once every hole has
+run, and `` `${c:?} ${c.bump()}` `` renders `c` after the bump. A tag may carry effects,
 which the caller declares as for any call, and return any type.
 
-> Not yet implemented: an untagged template renders each hole before it
-> evaluates the next. `` `${r} ${bump(&mut a)}` `` over `r = &a` renders `r`
-> before `bump` writes `a`, and a hole whose rendering traps stops the holes
-> after it from running.
-
-The prelude's `format` tag renders each hole through its specifier into one
+The `String::format` tag renders each hole through its specifier into one
 buffer, and returns it. An untagged template is sugar for it (see
 [Template Strings](#template-strings)), and a program may call it by name.
 

@@ -467,13 +467,13 @@ impl CmdArg for u64 {
 pub fn cmd<T: ReflectTemplate<Holes = [..V]>, ..V: CmdArg>(t: T) -> Command {
     let mut words = Words { done: [], word: null, list: null };
     for let h of ReflectTemplate::<T>::members() {
-        words.literal(&h.lit(&t));
+        words.literal(h.lit(&t));
         match h.get(&t).cmd_args() {
             One(arg) => words.join(&arg),
             Each(args) => words.each(args),
         }
     }
-    words.literal(&ReflectTemplate::<T>::tail(&t));
+    words.literal(ReflectTemplate::<T>::tail(&t));
     let mut args = words.finish();
     assert !args.is_empty(), "a cmd template names a program";
     let program = args.remove(0);
@@ -490,7 +490,7 @@ struct Words {
 }
 
 impl Words {
-    fn literal(&mut self, text: &String) {
+    fn literal(&mut self, text: StrSlice) {
         for let c of text.chars() {
             if c.is_whitespace() {
                 self.end();

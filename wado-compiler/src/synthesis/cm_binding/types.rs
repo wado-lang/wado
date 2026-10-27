@@ -611,6 +611,7 @@ fn check_cm_boundary_representable_inner(
             | ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::InferVar(_)
             | ResolvedType::AssocTypeProjection { .. }
             | ResolvedType::BuiltinArray(_)
@@ -1255,6 +1256,7 @@ pub(super) fn type_id_to_ast_type(
         | ResolvedType::AssocParam { .. }
         | ResolvedType::InferVar(_)
         | ResolvedType::TypePack { .. }
+        | ResolvedType::PackElement { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::Unknown
         | ResolvedType::Error => {

@@ -30,11 +30,12 @@ use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
+use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
-    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
-    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    template_segment_helper_name, variant_tag_helper_name,
+    COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
+    case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
+    hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name, template_segment_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -42,9 +43,9 @@ use crate::nir::{
     NirTypeParam, NirVariantCase, NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
-    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
-    PatNode, StmtId, StmtKind, StmtNode, Tracked,
+    ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, Body,
+    ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind, PatNode, StmtId,
+    StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -74,6 +75,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         closure,
         value_copy,
     } = plan;
+    // After the plan, whose global once-guards place a marker of their own.
+    if !flat.codegen_flags.cold_paths {
+        cold_paths::drop_markers(&flat);
+    }
     // Before pattern lowering, which keeps a destructure of a multi-value
     // builtin whole: a software form returns its tuple like any call, and its
     // destructure is lowered like any other.
@@ -347,10 +352,10 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
 }
 
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
-/// assignment writing in place replaces whole.
-fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
+/// assignment writing in place replaces whole, or that live in a `Box`.
+fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) -> IndexSet<u32> {
     struct Scan {
-        deferred: IndexSet<u32>,
+        deferred: IndexMap<u32, tir::TypeId>,
         replaced: IndexSet<u32>,
     }
     impl TirRefVisitor for Scan {
@@ -364,7 +369,7 @@ fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
                 && *type_id != TypeTable::UNIT
                 && value.type_id == TypeTable::UNIT
             {
-                self.deferred.insert(*local_index);
+                self.deferred.insert(*local_index, *type_id);
             }
             self.walk_stmt(stmt);
         }
@@ -382,13 +387,14 @@ fn guarded_locals(func: &TirFunction) -> IndexSet<u32> {
         return IndexSet::default();
     };
     let mut scan = Scan {
-        deferred: IndexSet::default(),
+        deferred: IndexMap::default(),
         replaced: IndexSet::default(),
     };
     scan.visit_block(body);
     scan.deferred
-        .intersection(&scan.replaced)
-        .copied()
+        .into_iter()
+        .filter(|&(local, ty)| scan.replaced.contains(&local) || boxed(local, ty))
+        .map(|(local, _)| local)
         .collect()
 }
 
@@ -533,7 +539,9 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 base.value_copy,
             );
         }
-        let guarded_locals = guarded_locals(func);
+        let guarded_locals = guarded_locals(func, |local, ty| {
+            address_taken.contains(&local) && base.box_plan.box_struct_types.contains_key(&ty)
+        });
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
         let moved_roots = if needs_copy_analysis {
@@ -1582,15 +1590,50 @@ impl FunctionTranslator<'_, '_> {
             TypeTable::UNIT,
             span,
         );
+        let TirExprKind::Assign { target, value } = &assign.kind else {
+            unreachable!("a guarded assignment is an `Assign`");
+        };
+        let TirExprKind::Local { index, name } = &target.kind else {
+            unreachable!("a guarded assignment writes a local");
+        };
+        let boxed = self.box_type_of_local(*index, target.type_id);
+        // A boxed local's first assignment allocates its box; every later one
+        // writes through it, where a reference taken since may read it.
+        let first_write = match boxed {
+            Some(box_type) => {
+                let boxed_value = self.wrap_in_box(self.convert_operand(value), box_type, span);
+                let local = self.alloc_expr(
+                    ExprKind::Local {
+                        index: *index,
+                        name: name.clone(),
+                    },
+                    box_type,
+                    span,
+                );
+                self.alloc_expr(
+                    ExprKind::Assign {
+                        target: local,
+                        value: boxed_value.into(),
+                    },
+                    TypeTable::UNIT,
+                    span,
+                )
+            }
+            None => self.convert_expr_unexpanded(assign),
+        };
         let store = vec![
-            self.alloc_stmt(
-                StmtKind::Expr(self.convert_expr_unexpanded(assign).into()),
-                span,
-            ),
+            self.alloc_stmt(StmtKind::Expr(first_write.into()), span),
             self.alloc_stmt(StmtKind::Expr(raise.into()), span),
         ];
-        let Some(in_place) = self.try_expand_in_place_assign(assign) else {
-            return store;
+        let in_place = match boxed {
+            Some(_) => vec![self.alloc_stmt(
+                StmtKind::Expr(self.convert_expr_unexpanded(assign).into()),
+                span,
+            )],
+            None => match self.try_expand_in_place_assign(assign) {
+                Some(in_place) => in_place,
+                None => return store,
+            },
         };
         let then_block = self.alloc_block(in_place, span);
         let else_block = self.alloc_block(store, span);
@@ -1602,6 +1645,14 @@ impl FunctionTranslator<'_, '_> {
             },
             span,
         )]
+    }
+
+    /// The `Box` a local of type `ty` lives in, where its address is taken.
+    fn box_type_of_local(&self, local: u32, ty: tir::TypeId) -> Option<tir::TypeId> {
+        if !self.address_taken.contains(&local) {
+            return None;
+        }
+        self.base.box_plan.box_struct_types.get(&ty).copied()
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {
@@ -1620,14 +1671,12 @@ impl FunctionTranslator<'_, '_> {
                 storage,
             } => {
                 // Copy first, then box: a boxed local changes only its
-                // storage cell, not its value semantics.
-                let (effective_type, box_wrap_type) = if self.address_taken.contains(local_index)
-                    && let Some(&box_type) = self.base.box_plan.box_struct_types.get(type_id)
-                {
-                    (box_type, Some(box_type))
-                } else {
-                    (*type_id, None)
-                };
+                // storage cell, not its value semantics. A local declared
+                // without a value gets its box at its first assignment
+                // ([`Self::guarded_assign`]).
+                let box_type = self.box_type_of_local(*local_index, *type_id);
+                let effective_type = box_type.unwrap_or(*type_id);
+                let box_wrap_type = box_type.filter(|_| !self.guarded_locals.contains(local_index));
                 let needs_value_copy_wrap = !storage.skips_copy()
                     && !self.share_eligible_locals.contains(local_index)
                     && (*is_mut || !self.source_shares_immutable_storage(*local_index, value))
@@ -1679,7 +1728,6 @@ impl FunctionTranslator<'_, '_> {
             TirStmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
                 label: label.clone(),
                 block: self.convert_block(block),
-                role: BlockRole::of_label(label),
             },
             TirStmtKind::LetDestructure { pattern, value } => {
                 let value = self.convert_stored_operand(value);
@@ -2303,7 +2351,6 @@ impl FunctionTranslator<'_, '_> {
                 label: label.clone(),
                 block: self.convert_block(block),
                 result_type: *result_type,
-                role: BlockRole::of_label(label),
             },
             TirExprKind::VariantTag { expr } => ExprKind::VariantTag {
                 expr: self.convert_operand(expr),
@@ -2326,12 +2373,19 @@ impl FunctionTranslator<'_, '_> {
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
+<<<<<<< HEAD
             TirExprKind::TemplateString { .. } => unreachable!(
                 "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
             ),
             TirExprKind::ListViewOf { .. } => {
                 unreachable!("synthesis::list_view expands every conversion")
             }
+||||||| 73611c2bfc0
+            TirExprKind::TemplateString { .. } => unreachable!(
+                "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
+            ),
+=======
+>>>>>>> origin/main
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),
@@ -2531,12 +2585,16 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
+        // A field read names the struct and the field type, a hole read the
+        // shape and the hole type.
         for (builtin, helper_name) in [
             (
                 "struct_field_get",
                 field_get_helper_name as fn(&str, &str) -> String,
             ),
             ("struct_field_ref", field_ref_helper_name),
+            ("hole_get", hole_get_helper_name),
+            ("hole_ref", hole_ref_helper_name),
         ] {
             if func.is_builtin_named(builtin) {
                 let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
@@ -2551,19 +2609,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
-        // and `template_segment<T>` the shape only.
-        if func.is_builtin_named("hole_get") {
-            let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
-            let name = {
-                let tt = self.base.type_table.borrow();
-                hole_get_helper_name(
-                    &tt.mangle_type_arg_unboxed(ta[0]),
-                    &tt.mangle_type_arg_unboxed(ta[1]),
-                )
-            };
-            return Some(self.bridge_call(ta[0], name, args, "hole_get"));
-        }
+        // `hole_fmt<T>` and `template_segment<T>` name the shape only.
         for (builtin, helper_name) in [
             ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
             ("template_segment", template_segment_helper_name),
@@ -3173,9 +3219,15 @@ fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
 }
 
 pub(super) fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
+    // Who placed a cold marker matters only up to NIR, which has one.
+    let name = if func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC) {
+        COLD_PATH_INTRINSIC
+    } else {
+        &func.name
+    };
     nir::FunctionRef {
         module_source: func.module_source.clone(),
-        name: func.name.clone(),
+        name: name.to_string(),
         monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
         method_info: func.method_info.clone(),
     }

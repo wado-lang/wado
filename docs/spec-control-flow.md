@@ -357,6 +357,12 @@ assert out == "42 hello true ";
 `break` and `continue` are errors inside a tuple for-of body, since the runs are
 not iterations of one loop.
 
+In a generic body, a walk over a pack (`[..T]`) types its binding as the pack's
+element, which is rigid, as a type parameter is. Each walk binds an element of
+its own. Two nested walks over one pack bind two element types. They are distinct
+even though the walks share the pack, since over `[1, "a"]` one run pairs an
+`i32` with a `String`.
+
 `.enumerate()` binds the index beside the element:
 `for let [i, v] of t.enumerate()`. The index is a compile-time constant, so it
 is the one non-literal a tuple accepts as a subscript (`t[i]`), for reads and
@@ -636,6 +642,11 @@ assert opt matches { Some(x) && x > 0 };
 `builtin::cold_path()` marks the path that contains it as rarely run, so the
 other side of its branch is the likely one. It does not change what the program
 computes.
+
+That path is every point each run through which passes the marker. It takes
+what follows the marker in its block, and what precedes it back to the last
+statement that can leave the block first, by a `return`, a `break`, a
+`continue` or a `?`.
 
 It is a statement rather than a condition wrapper, so it works anywhere a branch
 body does. That includes an `if let` or `match` arm, where no boolean condition

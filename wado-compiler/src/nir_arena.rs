@@ -17,7 +17,7 @@ use crate::const_eval::{MAX_SEQ_ELEMENTS, Value, truncate_int};
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
-use crate::name::{is_template_block, minted_name};
+use crate::name::minted_name;
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
@@ -125,34 +125,6 @@ pub struct StmtNode {
 pub struct BlockNode {
     pub stmts: Vec<StmtId>,
     pub span: Span,
-}
-
-/// What a labeled block is for, where a pass acts on the distinction.
-///
-/// The role rides on the node rather than on the label, which is a name and
-/// gets rewritten: the inliner renames every label it copies, and a marker
-/// spelled in one would not survive. Lowering reads the label once, and every
-/// copy after that carries the role.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum BlockRole {
-    #[default]
-    Plain,
-    /// The block an expanded template string breaks out of. `tmpl_hoist`
-    /// rewrites it and the in-loop branch prune leaves it standing for that.
-    Template,
-}
-
-impl BlockRole {
-    /// The role a block's label spells at lowering. The one place a label
-    /// decides a role; the node answers every question after it.
-    #[must_use]
-    pub fn of_label(label: &str) -> Self {
-        if is_template_block(label) {
-            Self::Template
-        } else {
-            Self::Plain
-        }
-    }
 }
 
 /// A pattern node.
@@ -416,7 +388,6 @@ pub enum ExprKind {
         label: String,
         block: BlockId,
         result_type: TypeId,
-        role: BlockRole,
     },
     VariantTag {
         expr: Operand,
@@ -455,7 +426,6 @@ impl ExprKind {
             label: minted_name(what, block.index()),
             block,
             result_type,
-            role: BlockRole::Plain,
         }
     }
 
@@ -545,7 +515,6 @@ pub enum StmtKind {
     LabeledBlock {
         label: String,
         block: BlockId,
-        role: BlockRole,
     },
     LetDestructure {
         pattern: PatId,
@@ -1284,12 +1253,10 @@ impl Body {
                 label,
                 block,
                 result_type,
-                role,
             } => ExprKind::LabeledBlock {
                 label,
                 block: self.clone_block(block),
                 result_type,
-                role,
             },
             ExprKind::VariantTag { expr } => ExprKind::VariantTag {
                 expr: self.clone_operand(expr),
@@ -1368,10 +1335,9 @@ impl Body {
                 value: value.map(|o| self.clone_operand(o)),
             },
             StmtKind::Continue => StmtKind::Continue,
-            StmtKind::LabeledBlock { label, block, role } => StmtKind::LabeledBlock {
+            StmtKind::LabeledBlock { label, block } => StmtKind::LabeledBlock {
                 label,
                 block: self.clone_block(block),
-                role,
             },
             StmtKind::LetDestructure { pattern, value } => StmtKind::LetDestructure {
                 pattern: self.clone_pat(pattern),

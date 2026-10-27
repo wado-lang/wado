@@ -1,0 +1,23 @@
+// A dependency answered by a handler also imports a WASI interface the program
+// itself never calls; the program imports it on the dependency's behalf.
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Clk, Tag } from "./sub/wasm_import_cm_guest_effect_clock.wat" with { type: "wat" };
+
+struct Fixed {}
+
+impl Tag for Fixed {
+    fn tag(&mut self) -> u32 {
+        resume 41
+    }
+}
+
+export fn run() with (Stdout, MonotonicClock) {
+    let mut h = Fixed {};
+    with Tag => &mut h do {
+        println(`${Clk::stamp()}`);
+    }
+}
+
+__DATA__
+{"stdout": "42\n"}

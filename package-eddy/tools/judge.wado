@@ -1,0 +1,218 @@
+//! Asks a model whether each SZZ pair is real: the fix pull request corrects a
+//! defect that the culprit introduced, visible in the culprit's diff. Judges
+//! each pair whose culprit wrote at least `min-share` of the blamed lines.
+//!
+//! Run it from the repository root. The model is a build input:
+//! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... wado run package-eddy/tools/judge.wado -- \
+//!     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
+//! ```
+
+use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Client } from "wasi:http";
+use { to_bytes_pretty, from_string } from "core:json";
+use { TreeMap } from "core:collections";
+use { git, generated, merge_title, Census, FixResult } from "./eval.wado";
+use { ask } from "../src/anthropic.wado";
+
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
+
+/// The largest diff the model reads, in bytes. A pair with a larger one is not
+/// judged: the hunk that shows the defect may be the part left out.
+#[param(name = "diff_limit")]
+global LIMIT: i32 = 2_000_000;
+
+global SYSTEM: String = "You audit candidate entries for a code-review evaluation set built with the SZZ method.
+Each entry pairs a FIX pull request with the CULPRIT pull request that git blame says last wrote most of the lines the fix changed.
+Judge from the diffs alone. Answer with one JSON object and nothing else:
+{\"is_defect_fix\": bool, \"introduced_by_culprit\": bool, \"visible_in_diff\": bool, \"defect\": \"<one sentence: what was wrong>\", \"reason\": \"<one or two sentences>\"}
+- is_defect_fix: the fix corrects wrong behaviour (a crash, a wrong result, a missed diagnostic, a hang), not a refactor, a feature, a rename or a doc change.
+- introduced_by_culprit: the wrong behaviour the fix corrects was introduced by lines the culprit added or changed, not merely moved or reformatted there.
+- visible_in_diff: a careful reviewer reading only the culprit's diff could have pointed at the defect.";
+
+struct Verdict {
+    is_defect_fix: bool,
+    introduced_by_culprit: bool,
+    visible_in_diff: bool,
+    defect: String,
+    reason: String,
+}
+
+struct Pair {
+    fix: i32,
+    culprit: i32,
+    share: f64,
+    lines: i32,
+    #[wire(name = "addsTest")]
+    adds_test: bool,
+    title: String,
+    verdict: Option<Verdict> = null,
+    error: Option<String> = null,
+}
+
+struct Judged {
+    model: String,
+    min_share: f64,
+    pairs: List<Pair>,
+}
+
+/// What merge `sha` changed in `paths`, generated, vendored and Markdown files
+/// left out.
+fn source_diff(sha: &String, paths: &List<String>, what: String) -> Result<String, String> with Process {
+    let base = `${sha}^1`;
+    let gen = generated(&base, paths);
+    let mut diff_args = ["diff", base, *sha, "--"] as List<String>;
+    let mut any = false;
+    for let p of paths {
+        if !gen.contains_str(p) && !p.ends_with(".md") {
+            diff_args.push(*p);
+            any = true;
+        }
+    }
+    // With no path, `git diff` would show the whole merge.
+    let diff = if any { git(diff_args) } else { "" };
+    if diff.is_empty() {
+        return Err(`the ${what} diff is empty`);
+    }
+    if diff.len() > LIMIT {
+        return Err(`the ${what} diff is ${diff.len()} bytes, over ${LIMIT}`);
+    }
+    return Ok(diff);
+}
+
+/// The diffs the model reads: the fix, and the culprit restricted to the files
+/// the blamed lines were in.
+fn prompt(r: &FixResult) -> Result<String, String> with Process {
+    let culprit = &r.blamed[0];
+    let mut fix_paths: List<String> = [];
+    for let f of git(["diff", "--name-only", `${r.sha}^1`, r.sha]).lines() {
+        fix_paths.push(f.to_string());
+    }
+    let fix_diff = source_diff(&r.sha, &fix_paths, "fix")?;
+    let culprit_diff = source_diff(&culprit.sha, &culprit.paths, "culprit")?;
+    return Ok(`FIX PR #${r.pr}: ${r.title}
+
+<fix_diff>
+${fix_diff}
+</fix_diff>
+
+CULPRIT PR #${culprit.pr}: ${merge_title(&culprit.sha)}
+(diff restricted to the files the blamed lines were in)
+
+<culprit_diff>
+${culprit_diff}
+</culprit_diff>`);
+}
+
+/// The one JSON object in `text`, from its first `{` to its last `}`.
+fn verdict_of(text: &String) -> Result<Verdict, String> {
+    if let [Some(start), Some(end)] = [
+        text.find("{"),
+        text.rfind("}"),
+    ]
+        && start < end {
+        return match from_string::<Verdict, String>(text.substr_bytes(start, end + 1)) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(`unparsed: ${e:?}: ${text}`),
+        };
+    }
+    return Err(`unparsed: ${text}`);
+}
+
+export fn run() with (Stderr, Environment, Preopens, Process, Client) {
+    let arguments = args();
+    assert arguments.len() == 3, "usage: judge.wado <szz.json> <min-share> <out.json>";
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+    let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
+    let min_share = f64::from_str(&arguments[1]).unwrap();
+    let out_path = arguments[2];
+    let judged = earlier_verdicts(&out_path);
+
+    let mut out = Judged { model: CLAUDE_MODEL, min_share, pairs: [] };
+    for let r of &census.results {
+        if r.old_lines == 0 || r.blamed[0].pr == 0 {
+            continue;
+        }
+        let share = r.blamed[0].n as f64 / r.old_lines as f64;
+        if share < min_share {
+            continue;
+        }
+        let mut pair = Pair {
+            fix: r.pr,
+            culprit: r.blamed[0].pr,
+            share: f64::round(share * 100.0) / 100.0,
+            lines: r.old_lines,
+            adds_test: r.adds_test,
+            title: r.title,
+        };
+        // The prompt comes first: a verdict settles a pair only while its
+        // diffs still fit.
+        let user = match prompt(r) {
+            Ok(user) => user,
+            Err(e) => {
+                pair.error = Some(e);
+                out.pairs.push(pair);
+                continue;
+            },
+        };
+        if let Some(earlier) = judged.get(pair_key(pair.fix, pair.culprit)) {
+            pair.verdict = Some(earlier);
+            out.pairs.push(pair);
+            continue;
+        }
+        // Thinking spends from the same budget as the answer.
+        match ask(api_key, CLAUDE_MODEL, SYSTEM, user, 16_000) {
+            Ok(text) => match verdict_of(&text) {
+                Ok(v) => pair.verdict = Some(v),
+                Err(e) => pair.error = Some(e),
+            },
+            Err(e) => pair.error = Some(e),
+        }
+        out.pairs.push(pair);
+        // Written after every pair, so a run that dies keeps what it paid for.
+        fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+        eprintln(`${out.pairs.len()} #${r.pr}`);
+    }
+    fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+}
+
+/// The verdicts an earlier run of this model left at `path`, by pair. A rerun
+/// judges only the pairs it did not settle, and a fix the census now blames on
+/// another pull request is a new pair.
+fn earlier_verdicts(path: &String) -> TreeMap<String, Verdict> with Preopens {
+    let mut by_pair = TreeMap::<String, Verdict>::new();
+    let Ok(text) = fs::read_to_string(path) else {
+        return by_pair;
+    };
+    let earlier = from_string::<Judged, String>(text).unwrap();
+    if earlier.model != CLAUDE_MODEL {
+        return by_pair;
+    }
+    for let p of earlier.pairs {
+        if let Some(v) = p.verdict {
+            by_pair[pair_key(p.fix, p.culprit)] = v;
+        }
+    }
+    return by_pair;
+}
+
+fn pair_key(fix: i32, culprit: i32) -> String {
+    return `${fix}<-${culprit}`;
+}
+
+test "the verdict is the object in the reply" {
+    let v = verdict_of(
+        &"Sure.\n{\"is_defect_fix\": true, \"introduced_by_culprit\": false, \"visible_in_diff\": false, \"defect\": \"d\", \"reason\": \"r\"}\n",
+    ).unwrap();
+    assert v.is_defect_fix && !v.introduced_by_culprit;
+    assert verdict_of(&"no json").is_err();
+    assert verdict_of(&"a } before { the object").is_err();
+}

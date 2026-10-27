@@ -1470,6 +1470,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             .iter()
             .map(|(source, module)| (module.ast_id_space(), source.clone())),
     );
+    logger.register_asset_origins(std::mem::take(&mut load_result.asset_origins));
 
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
     // per-module elaborators can each `borrow_mut()` it from `&self`
@@ -1481,14 +1482,12 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // `annotate_modules` seeds its `TypeTable` / decl maps / registries
     // from this snapshot and `build_tir_from_state` copies the
     // pre-lowered stdlib `TirModule`s directly into its result, skipping
-    // the ~28 s of CPU otherwise duplicated across a typical `wado test`
-    // run.  Returns `None` when called from inside the snapshot builder
-    // itself (re-entry guard); a fresh full pipeline runs in that case.
+    // the work otherwise duplicated across a `wado test` run.  Returns
+    // `None` when called from inside the snapshot builder itself (re-entry
+    // guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        // A measured stdlib takes probes the plain snapshot lacks.
-        get_or_init_snapshot()
-            .filter(|_| !coverage.is_some_and(|scope| scope.stdlib))
+        get_or_init_snapshot(coverage)
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1761,6 +1760,8 @@ mod tests {
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
+    use crate::tir::{TirExpr, TirExprKind};
+    use crate::tir_visitor::TirRefVisitor;
 
     /// The body walk's facts stay in the [`ModuleSemantics`] that recorded
     /// them, and `Semantics` reads through to it rather than holding a copy.
@@ -1808,7 +1809,7 @@ mod tests {
     /// place rather than a copy made per compile.
     #[test]
     fn a_compile_shares_the_snapshot_facts() {
-        let snap = get_or_init_snapshot().expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
         let snap_state = snap
             .state
             .as_ref()
@@ -1826,6 +1827,155 @@ mod tests {
             &state.module_semantics[prelude],
             &snap_state.module_semantics[prelude],
         ));
+    }
+
+    /// What `wado test --coverage --coverage-include=stdlib` analyzes `source` to.
+    fn measuring_stdlib(source: &str) -> Semantics {
+        let host = InMemoryCompilerHost::new();
+        let loaded = block_on(load(
+            parse(source),
+            Some("entry.wado"),
+            &host,
+            InvocationIndex::new(),
+            LogLevel::default(),
+        ))
+        .expect("the entry loads");
+        semantics_with_logger(
+            loaded,
+            &Logger::new(&host, LogLevel::default()),
+            true,
+            Some(STDLIB),
+            &LivenessScope::Compilation,
+        )
+    }
+
+    const STDLIB: CoverageScope = CoverageScope {
+        include_deps: false,
+        stdlib: true,
+    };
+
+    /// A compile measuring the stdlib seeds from a snapshot whose stdlib took
+    /// its probes when built, and numbers its regions as the snapshot did,
+    /// whatever else it loads.
+    #[test]
+    fn a_stdlib_measuring_compile_seeds_from_the_probed_snapshot() {
+        let snap = get_or_init_snapshot(Some(STDLIB)).expect("not re-entering the builder");
+        let seed = snap
+            .coverage
+            .as_ref()
+            .expect("the snapshot measures the stdlib");
+        let sem = measuring_stdlib(
+            "use { to_string } from \"core:json\";\nfn main() { let _ = to_string(&1); }",
+        );
+        let state = sem.state.as_ref().expect("annotate state");
+        let prelude = state
+            .module_semantics
+            .keys()
+            .find(|source| source.to_string() == "core:prelude")
+            .expect("every compile loads the prelude");
+        assert!(std::rc::Rc::ptr_eq(
+            &state.module_semantics[prelude],
+            &snap.state.as_ref().expect("complete").module_semantics[prelude],
+        ));
+
+        let base_of = |map: &CoverageMap, path: &str| {
+            map.modules
+                .iter()
+                .zip(&map.bases)
+                .find_map(|(plan, &base)| (plan.path == path).then_some(base))
+        };
+        let map = sem.coverage.as_ref().expect("the compile measures");
+        assert_eq!(base_of(map, "core:prelude"), base_of(seed, "core:prelude"));
+        assert!(base_of(map, "core:json") >= Some(seed.end()));
+        assert!(base_of(map, "entry.wado") >= Some(seed.end()));
+    }
+
+    /// A stdlib trait's default body that reify replays in the entry module
+    /// takes the stdlib's probes, as the stdlib's own instances do.
+    #[test]
+    fn a_replayed_stdlib_default_body_takes_its_probes() {
+        struct Probes(Vec<u64>);
+        impl TirRefVisitor for Probes {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                if let TirExprKind::Call { func, args, .. } = &expr.kind
+                    && func.name == "coverage_probe"
+                    && let [id] = args.split().1
+                    && let TirExprKind::IntLiteral { value, .. } = id.expr.kind
+                {
+                    self.0.push(value);
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let seed_end = get_or_init_snapshot(Some(STDLIB))
+            .expect("not re-entering the builder")
+            .coverage
+            .as_ref()
+            .expect("the snapshot measures the stdlib")
+            .end();
+        let sem = measuring_stdlib(
+            "struct Countdown { n: i32 }
+             impl Iterator for Countdown {
+                 type Item = i32;
+                 fn next(&mut self) -> Option<i32> {
+                     if self.n == 0 { return null; }
+                     self.n -= 1;
+                     return Option::Some(self.n);
+                 }
+             }
+             export fn run() { let _ = Countdown { n: 3 }.count(); }",
+        );
+        let mut probes = Probes(Vec::new());
+        for func in &sem.tir_modules[&sem.entry_module_source].functions {
+            if let Some(body) = func.borrow().body.as_ref() {
+                probes.visit_block(body);
+            }
+        }
+        assert!(probes.0.iter().any(|&id| id < u64::from(seed_end)));
+    }
+
+    /// A cold marker says after reify who placed it: the author's and `?`'s
+    /// guesses are `cold_path`, and the compiler's, where the program itself
+    /// makes a path rare, are `$known_cold_path`.
+    #[test]
+    fn a_cold_marker_records_who_placed_it() {
+        struct Markers(Vec<String>);
+        impl TirRefVisitor for Markers {
+            fn visit_expr(&mut self, expr: &TirExpr) {
+                if let TirExprKind::Call { func, .. } = &expr.kind
+                    && let Some(name @ ("cold_path" | "$known_cold_path")) = func.intrinsic()
+                {
+                    self.0.push(name.to_string());
+                }
+                self.walk_expr(expr);
+            }
+        }
+        let host = InMemoryCompilerHost::new();
+        let sem = block_on(semantics(
+            "fn authored(x: i32) -> i32 { if x > 0 { builtin::cold_path(); return 1; } return 0; }
+             fn guessed(o: Option<i32>) -> Option<i32> { let v = o?; return Some(v); }
+             fn asserted(x: i32) { assert x > 0; }
+             fn panicked(x: i32) { if x > 0 { panic(\"no\"); } }
+             export fn run() { authored(1); guessed(null); asserted(1); panicked(0); }",
+            &host,
+            Some("entry.wado"),
+        ));
+        let entry = &sem.tir_modules[&sem.entry_module_source];
+        let markers = |name: &str| {
+            let func = entry
+                .functions
+                .iter()
+                .find(|f| f.borrow().name == name)
+                .expect("`run` keeps it live")
+                .borrow();
+            let mut markers = Markers(Vec::new());
+            markers.visit_block(func.body.as_ref().expect("it has a body"));
+            markers.0
+        };
+        assert_eq!(markers("authored"), ["cold_path"]);
+        assert_eq!(markers("guessed"), ["cold_path"]);
+        assert_eq!(markers("asserted"), ["$known_cold_path"]);
+        assert_eq!(markers("panicked"), ["$known_cold_path"]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

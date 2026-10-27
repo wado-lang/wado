@@ -413,6 +413,7 @@ pub fn generate_adapters(mut project: Package) -> Result<Package, SynthesisError
     let callbacks = generate_import_adapters(&mut project);
     synthesize_callback_exports(&mut project, &callbacks);
     synthesize_export_adapters(&mut project)?;
+    synthesize_guest_callback_bindings(&mut project);
     generate_test_world_bindings(&mut project);
     let validated = reject_unresolvable_record_payloads(&project)?;
     reduce_unexpanded_task_returns(&project);
@@ -668,22 +669,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisErro
         validate_lib_interface_names(&world_info, &project.cm_interface_registry)?;
     }
 
-    let entry_module = project
-        .tir_modules
-        .get_mut(&entry_source)
-        .expect("entry module should exist");
-    for (export_name, binding_name, adapter) in export_adapters {
-        project
-            .export_binding_names
-            .insert(export_name, binding_name);
-        entry_module.functions.push(adapter);
-    }
-    for (export_name, func_name, post_return) in post_returns {
-        project
-            .post_return_binding_names
-            .insert(export_name, func_name);
-        entry_module.functions.push(post_return);
-    }
+    register_export_bindings(project, export_adapters, post_returns);
     for (module_source, task_entry) in task_entries {
         project
             .tir_modules
@@ -693,6 +679,83 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisErro
             .push(task_entry);
     }
     Ok(())
+}
+
+/// Add each export's binding and `post-return` to the entry module, under the
+/// export's name.
+fn register_export_bindings(
+    project: &mut Package,
+    bindings: Vec<(String, String, Rc<RefCell<TirFunction>>)>,
+    post_returns: Vec<(String, String, Rc<RefCell<TirFunction>>)>,
+) {
+    let entry_module = project
+        .tir_modules
+        .get_mut(&project.entry_module_source)
+        .expect("entry module should exist");
+    for (export_name, binding_name, binding) in bindings {
+        project
+            .export_binding_names
+            .insert(export_name, binding_name);
+        entry_module.functions.push(binding);
+    }
+    for (export_name, func_name, post_return) in post_returns {
+        project
+            .post_return_binding_names
+            .insert(export_name, func_name);
+        entry_module.functions.push(post_return);
+    }
+}
+
+/// Synthesize the export each guest callback lifts: a synchronous binding of
+/// the dependency's operation that calls the operation's dispatch wrapper, so
+/// the handler installed when the dependency calls in answers it.
+fn synthesize_guest_callback_bindings(project: &mut Package) {
+    let entry_type_table = entry_type_table(project);
+    let entry_source = project.entry_module_source.clone();
+    let mut bindings = Vec::new();
+    let mut post_returns = Vec::new();
+    for callback in &project.guest_callbacks {
+        let info = project
+            .cm_interface_registry
+            .get_function(&callback.function_key)
+            .expect("a guest callback names a registered operation");
+        let wrapper = project.tir_modules[&entry_source]
+            .functions
+            .iter()
+            .find(|f| f.borrow().name == callback.wrapper)
+            .expect("the wrapper is synthesized with its callback")
+            .clone();
+        let params: Vec<(String, Type)> = info
+            .params
+            .iter()
+            .map(|(name, _, ty)| (name.clone(), ty.clone()))
+            .collect();
+        let env = ExportBindingEnv {
+            tir_modules: &project.tir_modules,
+            type_table: &entry_type_table,
+            world_params: &params,
+            world_return: info.return_type.as_ref(),
+            cm_interface_registry: &project.cm_interface_registry,
+            cm_package: &info.package,
+            interner: &project.interner,
+        };
+        let name = &callback.function_key;
+        bindings.push((
+            name.clone(),
+            cm_export_func_name(name),
+            synthesize_export_binding(
+                name,
+                &wrapper,
+                &entry_source,
+                &env,
+                ExportReturnStrategy::SyncReturn,
+            ),
+        ));
+        if let Some(post_return) = synthesize_post_return(name, &env) {
+            post_returns.push((name.clone(), cm_post_return_func_name(name), post_return));
+        }
+    }
+    register_export_bindings(project, bindings, post_returns);
 }
 
 /// Reject a library whose exports would claim one interface name twice.
