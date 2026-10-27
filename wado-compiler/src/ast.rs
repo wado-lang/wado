@@ -1900,6 +1900,8 @@ pub mod lint {
     pub const DEAD_CODE: &str = "dead_code";
     /// A `use` bringing in a name its module never refers to.
     pub const UNUSED_IMPORTS: &str = "unused_imports";
+    /// A variable or parameter nothing reads.
+    pub const UNUSED_VARIABLES: &str = "unused_variables";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.

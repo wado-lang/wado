@@ -1,0 +1,133 @@
+// The `unused_variables` lint: a variable or parameter nothing reads. One only
+// written to, by `=` or a compound assignment, is reported too.
+use { println, Stdout } from "core:cli";
+
+struct Pair { kept: i32, dropped_field: i32 }
+
+variant Shape { Circle(i32), Square(i32) }
+
+fn params(read_param: i32, unread_param: i32, _quiet_param: i32) -> i32 {
+    return read_param;
+}
+
+fn locals() -> i32 {
+    let unread_let = 1;
+    let _quiet_let = 2;
+    #[allow(unused_variables)]
+    let allowed_let = 3;
+    let read_let = 4;
+    return read_let;
+}
+
+#[allow(unused_variables)]
+fn allowed_fn(allowed_param: i32) {
+    let allowed_in_fn = 1;
+}
+
+fn writes() -> i32 {
+    let mut assigned_only = 0;
+    assigned_only = 5;
+    let mut compound_only = 0;
+    compound_only += 1;
+    let mut swapped_only = 0;
+    let mut swapped_read = 0;
+    [swapped_only, swapped_read] = [1, 2];
+    let mut reassigned_read = 0;
+    reassigned_read = 7;
+    return reassigned_read + swapped_read;
+}
+
+fn patterns(o: Option<i32>, s: Shape, p: Pair) -> i32 {
+    let { kept, dropped_field } = p;
+    let mut total = kept;
+    if let Some(unread_if_let) = o {
+        total += 1;
+    }
+    total += match o {
+        Some(unread_arm) => 1,
+        None => 0,
+    };
+    total += match s {
+        Circle(or_unread) | Square(or_unread) => 1,
+    };
+    total += match s {
+        Circle(or_read) | Square(or_read) => or_read,
+    };
+    for let unread_elem of [1, 2] as List<i32> {
+        total += 1;
+    }
+    return total;
+}
+
+fn reads(shorthand_read: i32, template_read: i32, captured_read: i32, derived_read: i32) -> i32 {
+    let made = Pair { kept: shorthand_read, dropped_field: 0 };
+    let kept = made.kept;
+    let text = `${template_read}`;
+    let capture = || captured_read;
+    let derived_read = derived_read + 1;
+    return Pair { kept, dropped_field: derived_read }.kept + text.len() + capture();
+}
+
+fn closures() -> i32 {
+    let f = |unread_closure_param: i32| 1;
+    return f(0);
+}
+
+struct Counter { n: i32 }
+
+impl Counter {
+    fn bump(&mut self, unread_method_param: i32) {
+        self.n += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 0 };
+    c.bump(1);
+    allowed_fn(0);
+    let total = params(1, 2, 3) + locals() + writes()
+        + patterns(Some(1), Shape::Circle(2), Pair { kept: 3, dropped_field: 4 })
+        + reads(1, 2, 3, 4) + closures() + c.n;
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "31\n",
+    "warnings_contains": [
+        "parameter `unread_param` is never used",
+        "variable `unread_let` is never used",
+        "variable `assigned_only` is assigned to, but never read",
+        "variable `compound_only` is assigned to, but never read",
+        "variable `swapped_only` is assigned to, but never read",
+        "variable `dropped_field` is never used; write `dropped_field: _`",
+        "variable `unread_if_let` is never used",
+        "variable `unread_arm` is never used",
+        "variable `or_unread` is never used",
+        "variable `unread_elem` is never used",
+        "parameter `unread_closure_param` is never used",
+        "parameter `unread_method_param` is never used"
+    ],
+    "warnings_not_contains": [
+        "`read_param`",
+        "`_quiet_param`",
+        "`_quiet_let`",
+        "`allowed_let`",
+        "`allowed_param`",
+        "`allowed_in_fn`",
+        "`read_let`",
+        "`swapped_read`",
+        "`reassigned_read`",
+        "`kept`",
+        "`total`",
+        "`or_read`",
+        "`shorthand_read`",
+        "`template_read`",
+        "`captured_read`",
+        "`derived_read`",
+        "`made`",
+        "`text`",
+        "`capture`",
+        "`self`"
+    ]
+}
