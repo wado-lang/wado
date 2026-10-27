@@ -165,7 +165,8 @@ pub fn rebase_span(span: Span, origin: Position) -> Span {
 /// Bundle of tokens + recovered diagnostics + trivia returned by [`lex`].
 #[derive(Debug)]
 pub struct LexResult {
-    /// The text lexed, which every span's byte offsets index.
+    /// The text lexed, which every span's byte offsets index unless
+    /// [`lex_interpolation`] rebased them onto the enclosing file.
     pub source: Arc<str>,
     pub tokens: Vec<Token>,
     pub errors: Vec<LexError>,

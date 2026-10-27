@@ -7259,7 +7259,7 @@ impl Parser {
         // per interpolation.
         let mut parser = Parser::build(
             self.ast_id_space,
-            lex_result.source,
+            Arc::clone(&self.source),
             lex_result.tokens,
             None,
             None,

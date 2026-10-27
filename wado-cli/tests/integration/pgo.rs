@@ -155,6 +155,21 @@ fn a_run_with_nothing_sound_to_record_keeps_the_profile() {
         ));
     assert_eq!(fs::read_to_string(&profile).unwrap(), "kept\n");
 
+    // A pending TODO does not fail the run, but its workload trapped all the same.
+    fs::write(
+        tmp.path().join("bench_test.wado"),
+        "#![TODO]\n\n#[workload]\ntest \"pending\" {\n    assert 1 == 2;\n}\n",
+    )
+    .unwrap();
+    wado_in(tmp.path())
+        .args(["test", "--pgo"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "pgo: a `#[TODO]` workload or file is pending, so no profile was written",
+        ));
+    assert_eq!(fs::read_to_string(&profile).unwrap(), "kept\n");
+
     fs::remove_file(tmp.path().join("bench_test.wado")).unwrap();
     wado_in(tmp.path())
         .args(["test", "--pgo"])

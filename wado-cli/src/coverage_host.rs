@@ -239,11 +239,14 @@ impl CoverageRun {
 
     /// Record what `test` ran in the plans `registration` names.
     pub fn record(&self, registration: &Registration, report: &TestReport, test: &str) {
+        let counts = report.counts();
+        // A profile names no test.
+        let test = matches!(self.measurement, Measurement::Coverage(_)).then_some(test);
         if let Ok(reports) = lock(&self.reports).as_mut() {
             reports
                 .get_mut(&registration.report)
                 .expect("`register` added the report")
-                .record(&registration.registered, &report.counts(), Some(test));
+                .record(&registration.registered, &counts, test);
         }
     }
 
@@ -320,6 +323,11 @@ fn write_profiles(
     if totals.failed() {
         return Err(CliExit::error(
             "pgo: the run failed, so no profile was written",
+        ));
+    }
+    if totals.todo_pending > 0 {
+        return Err(CliExit::error(
+            "pgo: a `#[TODO]` workload or file is pending, so no profile was written",
         ));
     }
     if profiles.is_empty() {

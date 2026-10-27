@@ -19,6 +19,7 @@ use crate::ast::{
 };
 use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -597,7 +598,7 @@ fn function_hash<'r>(
     regions: impl Iterator<Item = &'r Region>,
 ) -> u64 {
     let mut h = Sha256::new();
-    h.update(source[text.bytes.clone()].as_bytes());
+    h.update(normalize_line_breaks(&source[text.bytes.clone()]).as_bytes());
     for region in regions {
         h.update([region.kind.code()]);
         for pos in [region.start, region.end] {
@@ -1597,6 +1598,8 @@ mod tests {
         assert_eq!(base["g"], edited["g"]);
         let moved = hashes(&format!("{g}\n\n{f}"));
         assert_eq!(base, moved);
+        let crlf = hashes(&format!("{f}{g}").replace('\n', "\r\n"));
+        assert_eq!(base, crlf);
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

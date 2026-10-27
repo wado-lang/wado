@@ -2468,8 +2468,7 @@ fn prewarm_workers(compile_jobs: usize, total_files: usize) -> usize {
 /// whether any did. A run that read two versions of a file describes neither
 /// tree; green is the dangerous outcome, since the pinned generator would
 /// otherwise let a mid-run edit pass silently against the pre-edit build.
-fn report_changed_inputs(run_cache: &RunCache) -> bool {
-    let changed = run_cache.inputs().changed();
+fn report_changed_inputs(changed: &[PathBuf]) -> bool {
     if changed.is_empty() {
         return false;
     }
@@ -2478,7 +2477,7 @@ fn report_changed_inputs(run_cache: &RunCache) -> bool {
          describe neither the old tree nor the new one:",
         changed.len()
     );
-    for path in &changed {
+    for path in changed {
         eprintln!("    {}", path.display());
     }
     eprintln!("re-run once the edits have settled.");
@@ -2608,26 +2607,33 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
 
     reporter.on_run_done(&grand, multi_pkg, overall_start.elapsed());
 
-    let reported = write_profile(&profile, profiler_slot.as_ref())
-        .and_then(|()| {
-            coverage_run.map_or(Ok(()), |run| {
-                Arc::into_inner(run)
-                    .expect("every stage holding the coverage run has finished")
-                    .finish(reporter.as_ref(), &grand)
+    // What the run measured describes neither tree once an input changed, so
+    // none of it is written.
+    let changed = run_cache.inputs().changed();
+    let reported = if changed.is_empty() {
+        write_profile(&profile, profiler_slot.as_ref())
+            .and_then(|()| {
+                coverage_run.map_or(Ok(()), |run| {
+                    Arc::into_inner(run)
+                        .expect("every stage holding the coverage run has finished")
+                        .finish(reporter.as_ref(), &grand)
+                })
             })
-        })
-        .and_then(|()| {
-            metered.map_or(Ok(()), |results| {
-                let root = std::env::current_dir().map_err(|e| {
-                    CliExit::error(format!("cannot read the current directory: {e}"))
-                })?;
-                fuel_host::write_report(&root, &results)
+            .and_then(|()| {
+                metered.map_or(Ok(()), |results| {
+                    let root = std::env::current_dir().map_err(|e| {
+                        CliExit::error(format!("cannot read the current directory: {e}"))
+                    })?;
+                    fuel_host::write_report(&root, &results)
+                })
             })
-        });
+    } else {
+        Ok(())
+    };
     reporter.on_recap();
     reported?;
 
-    if report_changed_inputs(&run_cache) {
+    if report_changed_inputs(&changed) {
         return Err(CliExit::silent_failure(1));
     }
     if grand.failed() {

@@ -350,8 +350,9 @@ error, since it would overwrite the profile with part of the workloads. So
 `--filter`, `--test-name` and `--exclude` are errors with `--pgo`, as is a path
 argument naming part of a package. So are `--coverage` and `--no-run`.
 
-The profile is written only when the run passes and ran a workload. Otherwise
-the run fails, and an existing profile is kept.
+The profile is written only when the run passes with no pending `#[TODO]`, ran
+a workload, and saw no source file change while it ran. Otherwise the run
+fails, and an existing profile is kept.
 
 A profile is text, one record per line:
 
@@ -372,7 +373,7 @@ A `module` line names a module the same way on any machine:
 - A `core:` module is its import path.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
-the function's source text and its regions' kinds and positions relative to
+the function's source text, a CRLF read as LF, and its regions' kinds and positions relative to
 it. The lines after it give how often each of the function's regions ran, the
 regions numbered from zero within the function. A region not listed never ran.
 
