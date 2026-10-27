@@ -1739,7 +1739,7 @@ test "large data processing" {
 }
 
 // Workload: runs like any test, and `wado test --pgo` records what it ran into
-// the profile the optimizer reads. It must not trap.
+// the package's profile, `pgo/default.pgo`. It must not trap.
 #[workload]
 test "typical request" {
     assert route("/users/42").is_some();
