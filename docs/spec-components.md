@@ -213,7 +213,8 @@ copy ended on, or `Unreported` for a member that
 neither has a handle for the host to report nor an event of its own. A member
 whose event is already known enters ready with that event, whether the host
 reported it to another set or the call or copy settled as it started. A set
-that drops drops its remaining members first.
+that drops drops its remaining members first. `drain` instead moves every
+member out, the ready ones first, so a race keeps its losers.
 
 A member is any type implementing `Waitable`, whose `wait_on` answers either the
 handle the host reports the member by or the event it is ready with. The trait
@@ -326,10 +327,6 @@ a `FutureReadCopy<T>`, which a set waits on as it waits on a stream copy.
 `finish` waits where the read has not settled and returns the value, or `None`
 where the writer dropped without writing. Dropping a read that has not settled
 cancels it, and dropping one that read a value drops the value.
-
-`WaitableSet::drain` moves every member out and leaves the set empty, the ready
-members first. A race keeps its losers this way, where dropping the set would
-drop them.
 
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
