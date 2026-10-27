@@ -1216,18 +1216,14 @@ fn assert_wir_expectations(
     opt_level: OptLevel,
     test_id: &str,
 ) {
-    let Some(wir_text) = wir_text else {
-        assert!(
-            !spec.has_wir_expectations(opt_level),
-            "[{test_id}] the fixture states WIR expectations but no WIR was retained"
-        );
-        return;
-    };
-    // The golden retains WIR at a level the patterns may not name, and
+    // A golden retains WIR at a level the patterns may not name, where
     // `wir_scope` may name a function that level inlines away.
     if !spec.has_wir_expectations(opt_level) {
         return;
     }
+    let wir_text = wir_text.unwrap_or_else(|| {
+        panic!("[{test_id}] the fixture states WIR expectations but no WIR was retained")
+    });
     let (expect, not_expect) = spec.wir_expectations(opt_level);
     let opt_name = common::opt_level_name(opt_level);
     let wir_text = match spec.wir_scope.as_deref() {

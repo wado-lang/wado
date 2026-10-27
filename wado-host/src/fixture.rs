@@ -44,7 +44,10 @@ pub fn opt_level_name(level: OptLevel) -> &'static str {
 pub fn expects_compile_failure(source: &str) -> bool {
     let expects_error = data_section(source)
         .and_then(|data| serde_json::from_str::<serde_json::Value>(data.trim()).ok())
-        .is_some_and(|spec| spec.get("compile_error").is_some_and(serde_json::Value::is_string));
+        .is_some_and(|spec| {
+            spec.get("compile_error")
+                .is_some_and(serde_json::Value::is_string)
+        });
     if expects_error {
         return true;
     }
