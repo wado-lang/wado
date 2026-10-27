@@ -1427,8 +1427,9 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// How much more a callee may cost where its splice pays back than anywhere
 /// else: at a site inside a loop, whose call edge is paid on every iteration,
 /// and at the callee's only site, where the body moves rather than being
-/// copied. Only a callee reaching no safepoint qualifies, so the splice brings
-/// its body alone and none of the spills a safepoint costs the loop. At `-O2`
+/// copied. Only a callee reaching no safepoint qualifies inside a loop, so the
+/// splice brings its body alone and none of the spills a safepoint costs the
+/// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one). At `-O2`
 /// this admits up to 64, which reaches the stdlib's UTF-8 codec helpers
 /// (`decode_char_at` 50, `encode_char` 61) and the zlib match helpers that once
 /// carried an inline hint each.
@@ -1446,6 +1447,11 @@ enum Reach {
     /// [`PAYBACK_FACTOR`] with one site. A splice of its caller copies that
     /// site, and the copy is a second one.
     Sole,
+    /// [`Reach::Sole`] for a loop-free callee reaching a safepoint, and only
+    /// outside a loop: the call it replaces is a safepoint too, so the caller
+    /// spills nothing it did not already, where a loop would reload its
+    /// references on every iteration.
+    SoleOutsideLoops,
     Everywhere,
 }
 
@@ -1619,10 +1625,14 @@ fn classify_callee(
     });
     let reach = if folds {
         Reach::Everywhere
-    } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR
-        || has_safepoint(body, type_table, cold, safepoint_calls)
-    {
+    } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
         Reach::Nowhere
+    } else if has_safepoint(body, type_table, cold, safepoint_calls) {
+        if sites == 1 && !arena_query::block_contains_loop(body, body.root()) {
+            Reach::SoleOutsideLoops
+        } else {
+            Reach::Nowhere
+        }
     } else if sites == 1 {
         Reach::Sole
     } else {
@@ -3089,7 +3099,10 @@ fn try_inline_call_expr(
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
+        (Site::Plain | Site::Loop, Reach::Sole) | (Site::Plain, Reach::SoleOutsideLoops) => {
+            frame.original_site(call_id)
+        }
+        (Site::Loop, Reach::SoleOutsideLoops) => false,
         (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
         (Site::Plain | Site::Loop, Reach::Nowhere) => {

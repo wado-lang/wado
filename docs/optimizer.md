@@ -104,7 +104,9 @@ Allocation and aggregates:
   sites reach, unless the body is no bigger than the call. A callee that
   reaches no safepoint (no call,
   no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop. Only sites in a
+  back: at its only call site, or at its only site in a loop. A loop-free
+  callee that does reach one is admitted at the same price at its only call
+  site outside a loop, which was a safepoint already. Only sites in a
   function an entry reaches count. A function only
   loops reach runs once per iteration, so its body counts as a loop's. A call
   is tried before its arguments, and a spliced body, arguments included, is
