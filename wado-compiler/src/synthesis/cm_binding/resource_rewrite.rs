@@ -688,7 +688,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -696,21 +695,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         TypeTable::I32,
         false,
     );
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
-    ));
+    stmts.push(alloc_payload_buffer(ptr_idx, size, align));
 
     // Lower `value` into the buffer using the shared registry-backed lowerer.
     let lower_ctx = LowerContext {
@@ -926,6 +911,26 @@ fn future_payload_package(payload: &CmFuturePayload) -> String {
     }
 }
 
+/// `let ptr = realloc(0, 0, align, size)`: the buffer one future payload is
+/// read into.
+fn alloc_payload_buffer(ptr_idx: u32, size: i32, align: i32) -> TirStmt {
+    let_stmt(
+        "ptr",
+        ptr_idx,
+        TypeTable::I32,
+        builtin_call(
+            "realloc",
+            vec![
+                i32_const(0),
+                i32_const(0),
+                i32_const(align),
+                i32_const(size),
+            ],
+            TypeTable::I32,
+        ),
+    )
+}
+
 fn synthesize_future_read_func(
     payload_type_id: TypeId,
     option_type_id: TypeId,
@@ -966,7 +971,6 @@ fn synthesize_future_read_func(
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -974,21 +978,7 @@ fn synthesize_future_read_func(
         TypeTable::I32,
         false,
     );
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
-    ));
+    stmts.push(alloc_payload_buffer(ptr_idx, size, align));
 
     let status_idx = alloc_named_local(
         &mut next_local,
@@ -1196,21 +1186,7 @@ fn synthesize_future_started_read_funcs(
     );
     let handle = || local_ref(handle_idx, "handle", TypeTable::I32);
     let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
-    let allocate = let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
-    );
+    let allocate = alloc_payload_buffer(ptr_idx, size, align);
     let packed = cm_canonical_call(read_name, vec![handle(), ptr()], TypeTable::I32);
     let buffer = copy_buffer_literal(handle(), packed, ptr(), i32_const(size), align, type_table);
     let buffer_type = type_table.borrow_mut().make_copy_buffer();

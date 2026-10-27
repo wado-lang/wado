@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Read};
+use std::iter;
 use std::os::fd::OwnedFd;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -267,13 +268,13 @@ fn start(
 /// What the OS cannot pass to a child: a NUL in any string, or a variable
 /// whose name is empty or holds `=`, which would read as another variable.
 fn invalid_argument(program: &str, args: &[String], env: &[(String, String)]) -> Option<ErrorCode> {
-    let strings = std::iter::once(program)
+    let invalid = iter::once(program)
         .chain(args.iter().map(String::as_str))
         .chain(
             env.iter()
                 .flat_map(|(key, value)| [key.as_str(), value.as_str()]),
-        );
-    let invalid = strings.into_iter().any(|string| string.contains('\0'))
+        )
+        .any(|string| string.contains('\0'))
         || env
             .iter()
             .any(|(key, _)| key.is_empty() || key.contains('='));
