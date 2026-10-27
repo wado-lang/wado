@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793024946899,
+  "lastUpdate": 1793064071357,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71381,6 +71381,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c80386b9db5f16c449ff186d170954eb4a94c570"
         },
         "date": 1793024945748,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295381,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "99bfbab2e461754f072e0575206b5f5204a5493f",
+          "message": "Merge pull request #2472 from wado-lang/claude/upbeat-knuth-rwam10\n\nfeat(process): say what the sandbox refused a child, and the grant that would allow it",
+          "timestamp": "2026-10-27T10:08:32+09:00",
+          "tree_id": "2bc251690e775c686c90967273d357579b23a484",
+          "url": "https://github.com/wado-lang/wado/commit/99bfbab2e461754f072e0575206b5f5204a5493f"
+        },
+        "date": 1793064070532,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
