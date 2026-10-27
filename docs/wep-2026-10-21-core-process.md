@@ -379,7 +379,8 @@ comments for the interface. What follows is why it takes the shape it does.
 - `cwd` is its own parameter because a record cannot hold a `borrow`. With
   `none`, the child starts in the first preopened directory, the one `core:fs`
   resolves paths against. The directory the host started in may lie outside the
-  grants.
+  grants. A guest with no preopen gets the host's choice, and `wado` picks the
+  child's private `HOME`.
 - There is no `find-executable`: the host decides what runs, and a name it
   cannot find is `not-found`.
 - The guest's environment is not passed on. The host's baseline variables come

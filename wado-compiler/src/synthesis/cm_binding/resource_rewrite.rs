@@ -867,7 +867,13 @@ fn future_payload_package(payload: &CmFuturePayload) -> String {
 /// The `handle` a copy binding takes, then the `ptr` of its buffer, both `i32`.
 fn handle_and_ptr_locals(next_local: &mut u32, locals: &mut Vec<TirLocal>) -> (u32, u32) {
     let mut local = |name: &str| {
-        alloc_named_local(next_local, locals, Some(name.to_string()), TypeTable::I32, false)
+        alloc_named_local(
+            next_local,
+            locals,
+            Some(name.to_string()),
+            TypeTable::I32,
+            false,
+        )
     };
     (local("handle"), local("ptr"))
 }

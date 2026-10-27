@@ -15,7 +15,7 @@ answer `Available`, and traps otherwise.
 - `program` holding a `/` is a path, relative to where the child starts.
   Any other is a name the host looks up.
 - A child starts in the guest's first preopened directory, the one `core:fs`
-  resolves paths against.
+  resolves paths against. Where the guest has none, the host picks one.
 - A child's environment is what the host gives every child, with
   [`Command::env`] laid over it. The guest's own is never passed on.
 - A child gets no stream of the guest's unless asked: stdin reads nothing,
@@ -54,7 +54,8 @@ child so that spawning never extends the guest's authority.
 - A name is looked up on the host's `PATH`, skipping empty and relative
   entries.
 - Every child gets `PATH`, a private `HOME` and `TMPDIR` removed once it
-  exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream.
+  exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream. A guest
+  with no preopened directory starts its children in that `HOME`.
 - `terminate` sends the child's process group `SIGTERM`, and `kill`
   `SIGKILL`.
 - A child that fails after the sandbox refused it something is reported on

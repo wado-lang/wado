@@ -196,8 +196,8 @@ fn start(
     let inherits = stdin == Stdio::Inherit
         || matches!(stdout, Route::Inherit)
         || matches!(stderr, Route::Inherit);
-    if let Some(code) = invalid_argument(program, args, env) {
-        return Ok(Err(code));
+    if !passable(program, args, env) {
+        return Ok(Err(ErrorCode::InvalidArgument));
     }
     let launched = (|| {
         let scratch = Scratch::new().map_err(error_code)?;
@@ -266,20 +266,20 @@ fn start(
     }))
 }
 
-/// What the OS cannot pass to a child: a NUL in any string, or a variable
-/// whose name is empty or holds `=`, which would read as another variable.
-fn invalid_argument(program: &str, args: &[String], env: &[(String, String)]) -> Option<ErrorCode> {
-    let invalid = iter::once(program)
+/// Whether the OS can pass these to a child: no string holds a NUL, and no
+/// variable's name is empty or holds `=`, which would read as another variable.
+fn passable(program: &str, args: &[String], env: &[(String, String)]) -> bool {
+    let has_nul = iter::once(program)
         .chain(args.iter().map(String::as_str))
         .chain(
             env.iter()
                 .flat_map(|(key, value)| [key.as_str(), value.as_str()]),
         )
-        .any(|string| string.contains('\0'))
-        || env
+        .any(|string| string.contains('\0'));
+    !has_nul
+        && env
             .iter()
-            .any(|(key, _)| key.is_empty() || key.contains('='));
-    invalid.then_some(ErrorCode::InvalidArgument)
+            .all(|(key, _)| !key.is_empty() && !key.contains('='))
 }
 
 impl Spawning {

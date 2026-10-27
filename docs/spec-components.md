@@ -204,10 +204,12 @@ with Fetch => &Canned {} do {
 #### Waiting on Several
 
 A `WaitableSet<W>` owns what it waits on. `insert` moves a member in, and
-`wait` blocks until one has an event, then moves that member back out in a
-`Ready<W>` beside the event. `poll` asks without blocking. The event is a
-`ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
-`CopyResult` a started stream copy ended on, or `Unreported` for a member that
+`wait` blocks until one is ready, then moves that member back out in a
+`Ready<W>` beside the event. A call is ready once it resolved: an event that
+only moves it from `Starting` to `Started` keeps it waiting. `poll` asks
+without blocking. The event is a `ReadyEvent`: `Call` with the `CallState` a
+call resolved in, `Copied` with the `CopyResult` a started stream or future
+copy ended on, or `Unreported` for a member that
 neither has a handle for the host to report nor an event of its own. A member
 whose event is already known enters ready with that event, whether the host
 reported it to another set or the call or copy settled as it started. A set

@@ -4574,15 +4574,16 @@ whether the host has an event left for it is settled here.
 
 `#[benign(RawWaitableSet)]`
 
-Blocks until a member has an event, and moves it out. A member ready
-without the host comes first. Traps on an empty set.
+Blocks until a member is ready, and moves it out: a copy once it
+settled, a call once it resolved. A member ready without the host comes
+first. Traps on an empty set.
 
 #### `pub fn poll(&mut self) -> Option<Ready<W>>`
 
 `#[benign(RawWaitableSet)]`
 
-The member that has an event, moved out, or None where none has one
-yet.
+The member that is ready, as `wait` means it, moved out, or None where
+none is yet.
 
 #### `pub fn drain(&mut self) -> List<W>`
 
@@ -4604,7 +4605,7 @@ host traps on dropping a set that still has one.
 
 ### `pub struct Ready<affine W>`
 
-A member of a `WaitableSet` that has an event, moved out of the set with
+A member of a `WaitableSet` that is ready, moved out of the set with
 the event.
 
 #### `member: W`
