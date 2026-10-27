@@ -1,0 +1,17 @@
+// A remote module's include has no `use` to pin it, so only a lock can, and a
+// file outside a package has none.
+
+use { note } from "https://example.com/lib/include_note.wado"
+    with { integrity: "sha256:64f74ccf2465d92add79dce94bd25888904f4431902114e645f70fdf53dcd7c7" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "cannot pin 'https://example.com/lib/note.txt': only a `wado.lock` pins a remote module's include, and none governs this module",
+  "compile_error_codes": ["REMOTE_INTEGRITY"],
+  "remote": {
+    "https://example.com/lib/include_note.wado": "sub/remote_include_note.wado",
+    "https://example.com/lib/note.txt": "sub/remote_include_note.txt"
+  }
+}

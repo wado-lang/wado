@@ -222,11 +222,13 @@ mod tests {
             invoked_as: format!("ns:{name}@1.0.0"),
             use_type: None,
             from: InvocationPath::normalize(from),
+            integrity: None,
             inputs: inputs
                 .iter()
                 .map(|p| InvocationInput {
                     path: InvocationPath::normalize(p),
                     use_type: None,
+                    integrity: None,
                 })
                 .collect(),
             output_dir: InvocationPath::normalize(out),

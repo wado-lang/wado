@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 
-use crate::ast::{ImportAttributes, Item, Module};
+use crate::ast::{ImportAttributes, Item, Module, UseDecl};
 use crate::compiler_host::{Code, DependencyIndex, Diagnostic, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::inline::InvocationIndex;
@@ -13,6 +13,7 @@ use crate::name::{
 };
 use crate::parse;
 use crate::path::is_cwd_relative;
+use crate::remote::{Integrity, next_in_pin_order, pin_of};
 
 /// Every module the walk reached, keyed by the path it was reached through.
 pub struct Harvest {
@@ -27,8 +28,8 @@ pub struct Harvest {
 }
 
 /// Walk the module graph from `entry_key` and `entry_ast`, parsing every Wado
-/// source import reachable from them: a `./` / `../` path, and a module of a
-/// source dependency in `dependencies` at any depth.
+/// source import reachable from them: a `./` / `../` path, a remote module,
+/// and a module of a source dependency in `dependencies` at any depth.
 ///
 /// A module carries two names, seeded by `entry_key` and `entry_identity`: a
 /// clause path is spelled against the key, and the loader reads the module
@@ -37,7 +38,8 @@ pub struct Harvest {
 /// Each import resolves as the loader resolves it, so the identity is the one
 /// the loader gives the module.
 ///
-/// `load` receives the loader identity, and `host` answers about packages as
+/// `load` receives the loader identity, and the first pin an import of a remote
+/// module wrote, and `host` answers about packages as
 /// the loader's host does, so a relatively reached file is placed in the
 /// package the loader places it in. The caller supplies the entry's tree
 /// because the loader does not read the entry through a host either.
@@ -56,7 +58,7 @@ pub async fn harvest_module_graph<L>(
     load: L,
 ) -> Harvest
 where
-    L: AsyncFn(&str) -> Option<String>,
+    L: AsyncFn(&str, Option<Integrity>) -> Option<String>,
 {
     let mut modules = IndexMap::<String, Module>::default();
     let mut identities = IndexMap::<String, String>::default();
@@ -71,16 +73,26 @@ where
     let entry = interner.entry_point(entry_identity);
     identities.insert(entry_key.to_string(), entry_identity.to_string());
 
+    // The first pin any import of a remote module wrote, the one the loader
+    // asks the host for it with.
+    let mut pins = IndexMap::<String, Integrity>::default();
     let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
         VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
-    while let Some((key, source, ast)) = queue.pop_front() {
+    let mut unpinned = VecDeque::new();
+    while let Some((key, source, ast)) = next_in_pin_order(
+        &mut queue,
+        &mut unpinned,
+        |(_, s, _)| matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str())),
+    ) {
         if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
         let ast = if let Some(ast) = ast {
             ast
         } else {
-            let Some(text) = load(decl_file_of(&source)).await else {
+            let identity = decl_file_of(&source);
+            let pin = pins.get(identity).copied();
+            let Some(text) = load(identity, pin).await else {
                 continue;
             };
             let Ok(parsed) = parse(&text).into_fail_fast() else {
@@ -89,9 +101,19 @@ where
             parsed.ast
         };
 
-        for import in wado_source_imports(&ast) {
+        for use_decl in wado_source_imports(&ast) {
+            let import = use_decl.source.as_str();
             let child = resolve_import_with_entry(&mut interner, &source, import, Some(&entry));
             let (child, child_key) = match child {
+                // A remote module is keyed by its URL, which is also how a
+                // clause path relative to it is spelled.
+                ModuleSource::Remote { ref url, .. } => {
+                    let url = url.to_string();
+                    if let Some(pin) = written_pin(use_decl) {
+                        pins.entry(url.clone()).or_insert(pin);
+                    }
+                    (child, url)
+                }
                 ModuleSource::Local { path, .. } if is_cwd_relative(import) => {
                     let path = path.to_string();
                     let placed = interner.place(&path, host);
@@ -140,7 +162,7 @@ fn key_of(entry_key: &str, identity: &str) -> String {
 
 /// The imports of `module` that are Wado source: those with neither `generator`
 /// nor `type`, whatever the extension.
-fn wado_source_imports(module: &Module) -> impl Iterator<Item = &str> {
+fn wado_source_imports(module: &Module) -> impl Iterator<Item = &UseDecl> {
     module.items.iter().filter_map(|item| {
         let Item::Use(use_decl) = item else {
             return None;
@@ -149,8 +171,14 @@ fn wado_source_imports(module: &Module) -> impl Iterator<Item = &str> {
             .attributes
             .as_ref()
             .is_none_or(ImportAttributes::reads_as_source);
-        is_source.then_some(use_decl.source.as_str())
+        is_source.then_some(use_decl)
     })
+}
+
+/// The pin `use_decl` writes, where it writes a well-formed one; the loader
+/// reports any other.
+fn written_pin(use_decl: &UseDecl) -> Option<Integrity> {
+    pin_of(&use_decl.attributes.as_ref()?.integrity()?.value).ok()
 }
 
 /// Rewrite `index`'s `decl_file` keys from harvest keys to loader identities,
@@ -225,7 +253,7 @@ mod tests {
         entry_identity: &str,
         entry_ast: Module,
         settled: &IndexSet<String>,
-        load: impl AsyncFn(&str) -> Option<String>,
+        load: impl AsyncFn(&str, Option<Integrity>) -> Option<String>,
     ) -> Harvest {
         let dependencies = DependencyIndex::default();
         harvest_module_graph(
@@ -245,8 +273,8 @@ mod tests {
     /// walk that asks under keys the loader never uses.
     fn exact(
         sources: &'static [(&'static str, &'static str)],
-    ) -> impl AsyncFn(&str) -> Option<String> {
-        move |path: &str| {
+    ) -> impl AsyncFn(&str, Option<Integrity>) -> Option<String> {
+        move |path: &str, _| {
             let hit = sources
                 .iter()
                 .find(|(p, _)| *p == path)
@@ -402,7 +430,7 @@ mod tests {
             "main.wado",
             ast_of("use { a } from \"./missing.wado\";\n"),
             &IndexSet::default(),
-            async |_| None,
+            async |_, _| None,
         ));
 
         assert_eq!(harvest.modules.keys().collect::<Vec<_>>(), ["main.wado"]);
@@ -468,6 +496,43 @@ mod tests {
             Some(manifest)
         );
         assert!(!harvest.packages.contains_key("main.wado"));
+    }
+
+    #[test]
+    fn a_remote_module_is_read_under_the_pin_a_later_module_writes() {
+        let url = "https://example.com/r.wado";
+        let pin = Integrity::of(b"pub fn r() {}\n");
+        let sources = [
+            (
+                "./a.wado".to_string(),
+                format!("use {{ r }} from \"{url}\";\n"),
+            ),
+            (
+                "./b.wado".to_string(),
+                "use { c } from \"./c.wado\";\n".to_string(),
+            ),
+            (
+                "./c.wado".to_string(),
+                format!("use {{ r }} from \"{url}\" with {{ integrity: \"{pin}\" }};\n"),
+            ),
+            (url.to_string(), "pub fn r() {}\n".to_string()),
+        ];
+        let asked = std::cell::RefCell::new(Vec::new());
+        block_on(walk(
+            "main.wado",
+            "main.wado",
+            ast_of("use { a } from \"./a.wado\";\nuse { b } from \"./b.wado\";\n"),
+            &IndexSet::default(),
+            async |path: &str, pin| {
+                asked.borrow_mut().push((path.to_string(), pin));
+                sources
+                    .iter()
+                    .find(|(p, _)| p == path)
+                    .map(|(_, s)| s.clone())
+            },
+        ));
+
+        assert!(asked.borrow().contains(&(url.to_string(), Some(pin))));
     }
 
     #[test]

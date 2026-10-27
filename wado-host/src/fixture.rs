@@ -137,6 +137,10 @@ pub struct CompileInputs {
     /// file, relative to the fixture directory.
     #[serde(default)]
     pub build_dependencies: IndexMap<String, String>,
+    /// Stubbed remote files: URL → the file it serves, relative to the fixture
+    /// directory.
+    #[serde(default)]
+    pub remote: IndexMap<String, String>,
     /// Override the `--param-unknown` policy level (`error` / `warn` / `ignore`).
     #[serde(default, deserialize_with = "policy_level")]
     pub param_unknown: Option<ParamPolicyLevel>,
@@ -211,6 +215,7 @@ impl CompileInputs {
             dependencies: self.dependencies.clone(),
             package_roots: self.package_roots.clone(),
             build_dependencies: self.build_dependencies.clone(),
+            remote: self.remote.clone(),
         }
     }
 

@@ -142,8 +142,8 @@ Bare names (`from "router"`) are rejected everywhere.
 
 ## Known gaps
 
-- A remote `http://` / `https://` specifier is not implemented. It passes
-  validation, and the import fails as a missing file.
+- The language server reads no remote module, not even one `wado` has fetched
+  already. An import of one reports the file as missing in the editor.
 - An inline source takes no `path`. `with` rejects the key as unknown, so a
   single-file script cannot name a path dependency.
 - A `lib:` key cannot carry `package` beside a `git` source. The manifest

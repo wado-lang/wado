@@ -1,0 +1,13 @@
+// Plain `http://` reaches only this machine: anything on the way could rewrite
+// what another host serves.
+
+use { exclaim } from "http://example.com/lib/util.wado"
+    with { integrity: "sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":4:22: analysis error: invalid module path 'http://example.com/lib/util.wado': `http://` names only `localhost`, `127.0.0.1` or `[::1]`; use `https://`",
+  "compile_error_codes": ["MODULE_NOT_FOUND"]
+}

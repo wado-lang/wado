@@ -1,0 +1,20 @@
+// A generated import inside a remote module runs like one in a local module:
+// its `from` names the URL beside the module, its generator is a
+// `[build-dependencies]` specifier, and its output lands in this build's tree.
+
+use { value } from "https://example.com/lib/user.wado"
+    with { integrity: "sha256:5d3e2fb39ae467978b1c3083253346ae44ba123a851813041b54696b130a6a0e" };
+
+test {
+    assert value() == 7;
+}
+
+__DATA__
+{
+  "test": {},
+  "build_dependencies": { "lib:header": "./sub/kiln/header_probe_generator.wado" },
+  "remote": {
+    "https://example.com/lib/user.wado": "sub/remote_kiln_user.wado",
+    "https://example.com/lib/header_and_payload.schema": "sub/kiln/header_and_payload.schema"
+  }
+}

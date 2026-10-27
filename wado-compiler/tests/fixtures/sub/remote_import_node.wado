@@ -1,0 +1,18 @@
+// Served at https://example.com/lib//node.wado: a type that names itself, so
+// its field resolves only once every type is known.
+
+pub struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+pub fn sum(node: &Node) -> i32 {
+    return match &node.next {
+        Some(next) => node.value + sum(next),
+        None => node.value,
+    };
+}
+
+pub fn pair(a: i32, b: i32) -> Node {
+    return Node { value: a, next: Some(Node { value: b, next: null }) };
+}
