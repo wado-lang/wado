@@ -388,6 +388,12 @@ pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) ->
     format!("$case_extract${mangled_variant}${mangled_payload}")
 }
 
+/// [`case_extract_helper_name`]'s twin answering a reference to the payload,
+/// which lowering rewrites `builtin::variant_case_ref::<V, P>` calls to.
+pub fn case_ref_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
+    format!("$case_ref${mangled_variant}${mangled_payload}")
+}
+
 /// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
 pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
     format!("$case_construct${mangled_variant}${mangled_payload}")

@@ -14,9 +14,9 @@ use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, applies, bound_candidates, candidates, comparison_row,
-    derive, derive_alongside, holds_with_args, mark_duplicates, owed, pair_comparisons, rank,
-    written_comparison,
+    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq, comparison_row,
+    derive, derive_alongside, holds_with_args, instance_candidates, mark_duplicates, owed,
+    pair_comparisons, rank, written_comparison,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -2453,34 +2453,71 @@ impl SolverBridge {
         }
     }
 
-    /// Whether a written block applies at `instance`, its bounds included: what
-    /// a generic body's instance selects by, every parameter settled. Where the
-    /// lowering states nothing about the block or the instance (a closure
-    /// environment, or a template's own `Self` whose parameters no bound in
-    /// scope here answers), the target match alone decides.
-    pub(crate) fn blocks_applying_at<'a>(
-        &'a self,
-        table: &'a TypeTable,
-        instance: TypeId,
-    ) -> impl Fn(DefId) -> bool + 'a {
-        let ty = self.lowering.type_id(table, instance, &|_| None).ok();
-        move |block| {
-            table.impl_reaches_instance(block, instance)
-                && self
-                    .block_applies(table, block, ty.as_ref())
-                    .is_none_or(|applies| applies)
-        }
-    }
-
-    fn block_applies(
+    /// What the order selects for `trait_<args>` on `instance`, every parameter
+    /// settled: the question a generic body's instance asks of a call through a
+    /// bound. An argument naming a binder of the call's own frame is open.
+    /// `None` where the lowering cannot say the instance or the trait.
+    pub(crate) fn instance_order(
         &self,
         table: &TypeTable,
-        block: DefId,
-        ty: Option<&SolverType>,
-    ) -> Option<bool> {
-        let impl_ = *self.lowering.written_impls.get(&block)?;
-        let scope = self.lowering.known_module(table.def_module(block))?;
-        Some(applies(&self.program, &Env::default(), scope, impl_, ty?))
+        instance: TypeId,
+        trait_: DefId,
+        args: &[FqTypeName],
+    ) -> Option<InstanceOrder> {
+        let trait_ = self.lowering.known_trait(trait_)?;
+        let ty = self.lowering.type_id(table, instance, &|_| None).ok()?;
+        let args = args
+            .iter()
+            .map(|arg| {
+                self.lowering
+                    .named_arg(arg, &|_| Some(ParamKind::Type(0)))
+                    .ok()
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let found = instance_candidates(&self.program, &ty, trait_, &args);
+        Some(match rank(&found) {
+            Selection::One(index) => InstanceOrder::One(self.instance_impl(&ty, &found[index])),
+            Selection::None => InstanceOrder::Nothing,
+            Selection::AmbiguousTraits(live)
+            | Selection::AmbiguousBlankets(live)
+            | Selection::Overloaded(live)
+            | Selection::Duplicated(live) => InstanceOrder::Tied(
+                live.iter()
+                    .map(|&i| self.impl_def_of(found[i].impl_))
+                    .collect(),
+            ),
+        })
+    }
+
+    fn instance_impl(&self, receiver: &SolverType, chosen: &Candidate) -> InstanceImpl {
+        let body = if let Some(ord) = cmp_giving_eq(&self.program, receiver, chosen) {
+            InstanceBody::EqFromCmp(
+                self.impl_def_of(ord)
+                    .expect("an `Ord` written for a declaration has a block"),
+            )
+        } else {
+            match self.program.impls()[&chosen.impl_].origin {
+                ImplOrigin::Written => self
+                    .impl_def_of(chosen.impl_)
+                    .map_or(InstanceBody::Supplied, InstanceBody::Block),
+                ImplOrigin::Derived | ImplOrigin::Marker | ImplOrigin::Paired => {
+                    match self.impl_def_of(chosen.impl_) {
+                        // A marker no blanket derives for keeps its own block,
+                        // which declares no method.
+                        Some(source)
+                            if self.lowering.written_impls.get(&source) != Some(&chosen.impl_) =>
+                        {
+                            InstanceBody::Block(source)
+                        }
+                        _ => InstanceBody::Supplied,
+                    }
+                }
+            }
+        };
+        InstanceImpl {
+            body,
+            depth: chosen.depth,
+        }
     }
 
     /// The impl block a candidate names: the one it was lowered from, or for a
@@ -2490,6 +2527,35 @@ impl SolverBridge {
     fn impl_def_of(&self, impl_: ImplId) -> Option<DefId> {
         self.lowering.impl_defs.get(&impl_).copied()
     }
+}
+
+/// The impl the order selects for an instance: where its body comes from, and
+/// the level of the receiver's chain it answers at.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct InstanceImpl {
+    pub(crate) body: InstanceBody,
+    pub(crate) depth: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum InstanceBody {
+    /// The written block's own method, or the trait default it inherits. A
+    /// derived body's block is the `Reflect*` blanket it comes from.
+    Block(DefId),
+    /// A body the compiler supplies with no block: a primitive's, or one it
+    /// derives with no blanket, a marker's included.
+    Supplied,
+    /// The `==` a `cmp` written alone gives, in that `Ord` block.
+    EqFromCmp(DefId),
+}
+
+/// What the order answers an instance.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) enum InstanceOrder {
+    One(InstanceImpl),
+    Nothing,
+    /// Impls the order cannot tell apart, by their blocks.
+    Tied(Vec<Option<DefId>>),
 }
 
 /// What the order answers, naming each candidate by the impl block it came

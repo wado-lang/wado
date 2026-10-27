@@ -1716,53 +1716,6 @@ impl TraitEnv {
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
     }
 
-    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
-    /// accepts. A trait may carry several disjoint value blankets — the four
-    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
-    /// so a receiver-blind first-wins selection would hand every receiver the
-    /// first-registered kind and then reject it on the bound check.
-    pub(crate) fn value_blanket_for_receiver(
-        &self,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-        satisfies: &dyn Fn(&[BlanketBound]) -> bool,
-    ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(&trait_)?;
-        let mut values = impls
-            .iter()
-            .filter(|b| b.receiver == BlanketReceiver::Value)
-            .filter(|b| satisfies(&b.bounds));
-        if let Some(hint) = type_module
-            && let Some(b) = values.clone().find(|b| &b.module == hint)
-        {
-            return Some(b);
-        }
-        values.next()
-    }
-
-    /// The universal ref blanket (`impl<T> Trait for &T`) answering
-    /// `trait_<wanted>`, the one writing the fewest open arguments first. `Eq`
-    /// has two: `Eq for &T` and `Eq<String> for &T`.
-    pub(crate) fn universal_ref_blanket(
-        &self,
-        trait_: DefId,
-        ref_kind: name::RefKind,
-        wanted: &[name::FqTypeName],
-    ) -> Option<&BlanketImpl> {
-        let is_mut = ref_kind == name::RefKind::Mut;
-        self.blanket_impls
-            .get(&trait_)?
-            .iter()
-            .filter(|b| {
-                b.receiver == BlanketReceiver::Ref { is_mut }
-                    && self.block_answers(b.def, trait_, wanted)
-            })
-            .min_by_key(|b| {
-                let written = self.impl_headers[&b.def].trait_arg_ids();
-                written.iter().filter(|arg| arg.mentions_binder()).count()
-            })
-    }
-
     /// The blanket impl block `def` declares, if it is one.
     pub(crate) fn blanket_of_block(&self, def: DefId) -> Option<&BlanketImpl> {
         self.blanket_impls.values().flatten().find(|b| b.def == def)
