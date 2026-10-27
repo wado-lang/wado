@@ -5,7 +5,6 @@
 //! - Component Model ABI: type conversion and support checking for CM codegen
 
 use std::collections::BTreeMap;
-use std::convert::Infallible;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -14,8 +13,8 @@ use wasm_encoder::ValType;
 use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
-    cm_import_of, declares_unrestricted, world_import_of,
+    NamedType, NamespacedGenericType, Type, UseItem, cm_function_path, cm_import_of,
+    declares_unrestricted, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
@@ -406,9 +405,9 @@ pub fn cm_payload_type_from_ast(
             CompilerItem::Option => Some(CmPayloadType::Option(Box::new(
                 cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
             ))),
-            CompilerItem::List => Some(CmPayloadType::List(Box::new(
-                cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
-            ))),
+            CompilerItem::List => Some(CmPayloadType::List(Box::new(cm_payload_type_from_ast(
+                type_table, &g.args[0], registry,
+            )?))),
             CompilerItem::Result => {
                 let arm = |t: &Type| -> Option<Option<Box<CmPayloadType>>> {
                     if t.is_unit() {
@@ -871,14 +870,18 @@ impl CmFunctionInfo {
                 .is_some_and(|payload| Self::cm_type_requires_memory(payload, registry, seen))
         })
     }
-
 }
 
 /// Whether `ty` is a string, a list or a stream, not looking inside it.
 fn type_itself_requires_memory(ty: &Type, decls: &CmTypeDecls) -> bool {
     matches!(
         decls.item_of(ty),
-        Some(CompilerItem::String | CompilerItem::List | CompilerItem::TreeMap | CompilerItem::Stream)
+        Some(
+            CompilerItem::String
+                | CompilerItem::List
+                | CompilerItem::TreeMap
+                | CompilerItem::Stream
+        )
     )
 }
 
@@ -1793,6 +1796,41 @@ pub fn try_for_each_signed_type<E>(
     }
 }
 
+/// Visit each type `item` declares or signs, as [`try_for_each_signed_type`]
+/// does, without the copy of `item` a reader would otherwise take.
+pub fn for_each_signed_type(item: &Item, visit: &mut impl FnMut(&Type)) {
+    fn function(f: &ast::Function, visit: &mut impl FnMut(&Type)) {
+        f.params
+            .iter()
+            .map(|p| &p.ty)
+            .chain(&f.return_type)
+            .for_each(visit);
+    }
+    match item {
+        Item::Struct(s) => s.fields.iter().for_each(|f| visit(&f.ty)),
+        Item::Variant(v) => v
+            .cases
+            .iter()
+            .filter_map(|c| c.payload.as_ref())
+            .for_each(visit),
+        Item::Newtype(a) => visit(&a.ty),
+        Item::Function(f) => function(f, visit),
+        Item::Interface(decl) => decl.methods.iter().for_each(|m| function(m, visit)),
+        Item::Resource(r) => r.methods.iter().for_each(|m| function(m, visit)),
+        Item::Use(_)
+        | Item::Flags(_)
+        | Item::Enum(_)
+        | Item::TupleTypeDecl(_)
+        | Item::BuiltinTypeDecl(_)
+        | Item::Impl(_)
+        | Item::Trait(_)
+        | Item::World(_)
+        | Item::Test(_)
+        | Item::Global(_)
+        | Item::Error(_) => {}
+    }
+}
+
 /// Visit each parameter and result type of `decl`'s operations.
 pub fn try_for_each_operation_type<E>(
     decl: &mut InterfaceDecl,
@@ -1877,12 +1915,12 @@ pub fn bind_type_names<E>(
 /// The source interface of every named type `module` signs whose name is in
 /// `local_names`, the rest being primitives, type parameters or foreign names.
 fn collect_named_type_sources(
-    module: &mut ast::Module,
+    module: &ast::Module,
     local_names: &IndexMap<String, String>,
 ) -> SourceInterfaceBatch {
     let mut sources = SourceInterfaceBatch::default();
-    for item in &mut module.items {
-        let Ok(()) = try_for_each_signed_type(item, &mut |_, ty| {
+    for item in &module.items {
+        for_each_signed_type(item, &mut |ty| {
             ty.for_each(&mut |ty| {
                 if let Type::Named(n) = ty
                     && let Some(source) = local_names.get(&n.name)
@@ -1890,7 +1928,6 @@ fn collect_named_type_sources(
                     sources.entry(n.id).or_insert_with(|| source.clone());
                 }
             });
-            Ok::<(), Infallible>(())
         });
     }
     sources
@@ -2100,9 +2137,9 @@ impl CmInterfaceRegistry {
         // is declared in a different module than the world.
         let mut resolved_modules: Vec<(&'static str, ast::Module)> =
             Vec::with_capacity(modules.len());
-        for (path, mut module) in modules {
+        for (path, module) in modules {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
-            let sources = collect_named_type_sources(&mut module, &local_names);
+            let sources = collect_named_type_sources(&module, &local_names);
             registry.extend_source_interfaces(sources);
             if let Err(msg) = registry.register_module_decls(&module, &CmDeclScope::Module) {
                 panic!("the stdlib binds each `Interface::method` once: {msg}");
@@ -3194,13 +3231,8 @@ impl CmInterfaceRegistry {
     fn resolve_newtype_ref(&self, named: &NamedType) -> Option<&Type> {
         match self.source_interface(named) {
             Some(source) => self.get_newtype_by_source(&source, &DeclName::new(&named.name)),
-            None => self.prelude_newtype_base(named),
+            None => self.type_decls.newtype_base(named),
         }
-    }
-
-    /// The base of the prelude newtype `named` refers to.
-    pub fn prelude_newtype_base(&self, named: &NamedType) -> Option<&Type> {
-        self.type_decls.newtype_base(named)
     }
 
     /// The registration source and base type of a newtype the compiled package
@@ -3523,7 +3555,8 @@ impl CmInterfaceRegistry {
                 {
                     list_args.push(i);
                     let list =
-                        self.type_decls.item_type(CompilerItem::List, g.args.clone(), ty.span());
+                        self.type_decls
+                            .item_type(CompilerItem::List, g.args.clone(), ty.span());
                     return (name, cm_name, self.value_type(&list));
                 }
                 if !matches!(ty, Type::Function(_)) {
@@ -5022,7 +5055,8 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
             }
             let Some(source) = registry.resolve_cm_source_for(named) else {
                 return registry
-                    .prelude_newtype_base(named)
+                    .type_decls()
+                    .newtype_base(named)
                     .map_or(HANDLE, |base| cm_layout_with_registry(base, registry));
             };
             if let Some(resolved) =
@@ -5115,7 +5149,7 @@ mod tests {
     fn registry_from(module_path: &'static str, source: &str) -> CmInterfaceRegistry {
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lexer error: {:?}", lexed.errors);
-        let mut module = parser::Parser::new(lexed.tokens)
+        let module = parser::Parser::new(lexed.tokens)
             .parse_strict()
             .expect("parser error");
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
@@ -5123,7 +5157,7 @@ mod tests {
         defs_by_module.insert(module_path, collect_cm_definitions(&module));
         let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
         let mut registry = CmInterfaceRegistry::new();
-        registry.extend_source_interfaces(collect_named_type_sources(&mut module, &local_names));
+        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
         registry
             .register_module_decls(&module, &CmDeclScope::Module)
             .unwrap();
@@ -5499,7 +5533,11 @@ mod tests {
             structs: IndexSet::default(),
         };
         for ty in [array_string, array_tuple, option_string] {
-            assert!(known.return_supported(&ty), "{} should be supported", render_ast_type(&ty));
+            assert!(
+                known.return_supported(&ty),
+                "{} should be supported",
+                render_ast_type(&ty)
+            );
         }
     }
 

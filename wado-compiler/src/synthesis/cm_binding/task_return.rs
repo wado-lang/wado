@@ -36,11 +36,10 @@ use crate::synthesis::common::{
     synth_span, unreachable_call,
 };
 
-use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
+use super::cm_free::{FlatSlot, synthesize_free_cm_flat};
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
-    LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id,
-    variant_decl_of,
+    LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id, variant_decl_of,
 };
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -438,9 +437,6 @@ fn generate_inline_task_return(
         cm_package,
         interner,
     };
-    let shape_ctx = CmShapeContext {
-        cm_interface_registry,
-    };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
 
@@ -674,7 +670,7 @@ fn generate_inline_task_return(
         stmts.extend(synthesize_free_cm_flat(
             declared_result(return_type),
             &FlatSlot::joined(&flat_locals, flat_return_types),
-            &shape_ctx,
+            cm_interface_registry,
             next_local,
             locals,
         ));
@@ -727,7 +723,7 @@ fn generate_inline_task_return(
             stmts.extend(synthesize_free_cm_flat(
                 declared_result(return_type),
                 &FlatSlot::lowered(&lowered),
-                &shape_ctx,
+                cm_interface_registry,
                 next_local,
                 locals,
             ));

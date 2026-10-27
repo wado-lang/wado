@@ -7,7 +7,7 @@ use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::ast::{AstId, GenericType, Item, Module, NamedType, Type};
 use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
-use crate::component_model::try_for_each_signed_type;
+use crate::component_model::for_each_signed_type;
 use crate::hashmap::IndexMap;
 use crate::resolve::Resolutions;
 use crate::token::Span;
@@ -74,11 +74,7 @@ impl CmTypeDecls {
             }
         }
         for item in signing.into_iter().flat_map(|module| &module.items) {
-            let mut item = item.clone();
-            let _ = try_for_each_signed_type::<()>(&mut item, &mut |_, ty| {
-                self.bind_sites(ty, resolutions);
-                Ok(())
-            });
+            for_each_signed_type(item, &mut |ty| self.bind_sites(ty, resolutions));
         }
     }
 
@@ -86,18 +82,16 @@ impl CmTypeDecls {
         let defs = resolutions.defs();
         let mut sites = self.sites.write();
         ty.for_each(&mut |ty| {
-            let site = match ty {
-                Type::Named(n) => n.id,
-                Type::Generic(g) => g.id,
-                _ => return,
-            };
-            if let Some(def) = resolutions.declared_if_walked(site) {
+            if let Some(site) = ty.id()
+                && let Some(def) = resolutions.declared_if_walked(site)
+            {
                 sites.insert(site, defs.ast_id(def));
             }
         });
     }
 
     /// Whether the site `site` was answered.
+    #[cfg(test)]
     #[must_use]
     pub fn binds(&self, site: AstId) -> bool {
         self.sites.get(site).is_some()
@@ -119,11 +113,7 @@ impl CmTypeDecls {
     /// The compiler item `ty` names, if it names one.
     #[must_use]
     pub fn item_of(&self, ty: &Type) -> Option<CompilerItem> {
-        match ty {
-            Type::Named(n) => self.item_at(n.id),
-            Type::Generic(g) => self.item_at(g.id),
-            _ => None,
-        }
+        self.item_at(ty.id()?)
     }
 
     /// Whether `ty` names `item`.

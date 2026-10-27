@@ -922,7 +922,10 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
 /// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
-pub(super) fn scalar_store_op(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> &'static str {
+pub(super) fn scalar_store_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+) -> &'static str {
     if cm_interface_registry.extern_handle(ty).is_some() {
         return "i64_store";
     }

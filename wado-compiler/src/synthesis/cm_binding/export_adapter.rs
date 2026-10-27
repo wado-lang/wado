@@ -31,9 +31,7 @@ use crate::synthesis::common::{
     synth_param, synth_span,
 };
 
-use super::cm_free::{
-    CmShapeContext, FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value,
-};
+use super::cm_free::{FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value};
 use super::import_adapter::make_binding_function;
 use super::lift::{lift_string_and_free, materialize_if_needed, synthesize_lift_into};
 use super::lower::buffer_bytes;
@@ -1489,12 +1487,6 @@ impl<'a> ExportBindingEnv<'a> {
             names: CmStdlibNames::from_type_table(&self.type_table.borrow()),
         }
     }
-
-    fn shape_ctx(&self) -> CmShapeContext<'a> {
-        CmShapeContext {
-            cm_interface_registry: self.cm_interface_registry,
-        }
-    }
 }
 
 /// Synthesize the CM export binding for a world export: lift flat CM params
@@ -1743,7 +1735,7 @@ pub(super) fn synthesize_post_return(
         return None;
     }
 
-    let shape = cm_shape(ty, &env.shape_ctx());
+    let shape = cm_shape(ty, env.cm_interface_registry);
 
     let ptr = param_local("$ret_ptr", TypeTable::I32, false);
     let mut locals = vec![ptr];
@@ -1918,7 +1910,7 @@ fn push_result_task_return_epilogue(
     body_stmts.extend(synthesize_free_cm_flat(
         return_ast,
         &FlatSlot::joined(&flat_locals, &flat_return_types),
-        &env.shape_ctx(),
+        env.cm_interface_registry,
         next_local,
         locals,
     ));

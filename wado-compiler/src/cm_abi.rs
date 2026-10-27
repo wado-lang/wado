@@ -429,18 +429,38 @@ mod tests {
         let string = abi.string();
         // A record lays out as the tuple of its field types.
         for (elems, expected, offsets) in [
-            (vec![named_type("i32"), named_type("i32")], (8, 4), vec![0, 4]),
+            (
+                vec![named_type("i32"), named_type("i32")],
+                (8, 4),
+                vec![0, 4],
+            ),
             (vec![string.clone(), string.clone()], (16, 4), vec![0, 8]),
-            (vec![named_type("bool"), named_type("i32")], (8, 4), vec![0, 4]),
-            (vec![named_type("i32"), named_type("bool")], (8, 4), vec![0, 4]),
+            (
+                vec![named_type("bool"), named_type("i32")],
+                (8, 4),
+                vec![0, 4],
+            ),
+            (
+                vec![named_type("i32"), named_type("bool")],
+                (8, 4),
+                vec![0, 4],
+            ),
             (
                 vec![named_type("u8"), named_type("u16"), named_type("u32")],
                 (8, 4),
                 vec![0, 2, 4],
             ),
-            (vec![named_type("bool"), named_type("i64")], (16, 8), vec![0, 8]),
+            (
+                vec![named_type("bool"), named_type("i64")],
+                (16, 8),
+                vec![0, 8],
+            ),
             (vec![string, named_type("i32")], (12, 4), vec![0, 8]),
-            (vec![named_type("i32"), named_type("u64")], (16, 8), vec![0, 8]),
+            (
+                vec![named_type("i32"), named_type("u64")],
+                (16, 8),
+                vec![0, 8],
+            ),
         ] {
             let layout = layout_tuple_with_registry(&elems, &abi.0);
             assert_eq!(layout.size_align(), expected, "{elems:?}");

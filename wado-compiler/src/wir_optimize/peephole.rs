@@ -512,7 +512,9 @@ fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
 }
 
 /// The operands of the i32 comparison `instr` is, and what it answers on them.
-pub(super) fn i32_comparison(instr: &WirInstr) -> Option<(&WirInstr, &WirInstr, fn(i32, i32) -> bool)> {
+pub(super) fn i32_comparison(
+    instr: &WirInstr,
+) -> Option<(&WirInstr, &WirInstr, fn(i32, i32) -> bool)> {
     let (l, r, op): (_, _, fn(i32, i32) -> bool) = match instr {
         WirInstr::I32Eq(l, r) => (l, r, |a, b| a == b),
         WirInstr::I32Ne(l, r) => (l, r, |a, b| a != b),

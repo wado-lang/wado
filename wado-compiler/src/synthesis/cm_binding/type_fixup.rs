@@ -403,28 +403,33 @@ impl CallRewriteWalker<'_> {
     ) -> Vec<CallArg> {
         let registry = self.call_sites.registry;
         adapter_params_of(func_info, args.into_iter(), param_offset, registry)
-        .into_iter()
-        .map(|(param_idx, param_type, CallArg { expr: arg, .. })| {
-            let is_gc_passthrough = is_gc_passthrough_param(param_type, registry);
-            let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
-                // The source null's inner type may be unknown; the registry's is not.
-                let mut tt = self.type_table.borrow_mut();
-                let option_type_id =
-                    cm_type_to_type_id(param_type, &mut tt, registry, &func_info.package);
-                option_none(option_type_id, tt.compiler_items())
-            } else {
-                arg
-            };
-            fixup_adapter_param_from_call_site(adapter, param_idx, arg.type_id, is_gc_passthrough);
-            let param_type = adapter.params[param_idx].type_id;
-            let arg = if arg.type_id == param_type {
-                arg
-            } else {
-                cast(arg, param_type)
-            };
-            CallArg::new(arg, false)
-        })
-        .collect()
+            .into_iter()
+            .map(|(param_idx, param_type, CallArg { expr: arg, .. })| {
+                let is_gc_passthrough = is_gc_passthrough_param(param_type, registry);
+                let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
+                    // The source null's inner type may be unknown; the registry's is not.
+                    let mut tt = self.type_table.borrow_mut();
+                    let option_type_id =
+                        cm_type_to_type_id(param_type, &mut tt, registry, &func_info.package);
+                    option_none(option_type_id, tt.compiler_items())
+                } else {
+                    arg
+                };
+                fixup_adapter_param_from_call_site(
+                    adapter,
+                    param_idx,
+                    arg.type_id,
+                    is_gc_passthrough,
+                );
+                let param_type = adapter.params[param_idx].type_id;
+                let arg = if arg.type_id == param_type {
+                    arg
+                } else {
+                    cast(arg, param_type)
+                };
+                CallArg::new(arg, false)
+            })
+            .collect()
     }
 
     /// Replace `expr` with a call of `adapter` on `args`, then rewrite inside them.

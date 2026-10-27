@@ -10,17 +10,16 @@ use crate::canonical::{
     CanonicalIntrinsic, CmDecl, CmDeclKind, CmFuturePayload, CmPayloadType, CmScalarType,
     CmStreamPayload,
 };
-use crate::codegen::emit::emit_core_module;
 use crate::cm_type_decls::CmTypeDecls;
+use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeKind,
     CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME, FIELDS_WADO_NAME, InstanceSink,
     RESPONSE_WADO_NAME, ResKind, WorldFunctionSite, classify_future_payload_from_ast,
-    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
-    cm_primitive_of, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name,
-    parse_resource_func,
+    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key, cm_primitive_of,
+    cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
 };
 use crate::coverage;
 use crate::defs::DefId;

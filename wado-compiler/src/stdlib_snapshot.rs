@@ -289,10 +289,13 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
             .await
     })
     .expect("every bundled binding loads");
-    let mut analyzer =
-        Analyzer::new(&logger).with_interner(Rc::new(RefCell::new(load.interner)));
+    let mut analyzer = Analyzer::new(&logger).with_interner(Rc::new(RefCell::new(load.interner)));
     analyzer
-        .analyze_loaded_modules(&load.modules, &load.entry_module_source, load.implicit_modules)
+        .analyze_loaded_modules(
+            &load.modules,
+            &load.entry_module_source,
+            load.implicit_modules,
+        )
         .expect("every bundled binding analyzes");
     let symbols = analyzer.into_symbols();
     let defs = Arc::new(DefTable::build(&load.modules, &symbols));
@@ -373,7 +376,7 @@ impl CompilerHost for SnapshotHost {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::component_model::try_for_each_signed_type;
+    use crate::component_model::for_each_signed_type;
     use crate::module_source::ModuleSource;
 
     #[test]
@@ -455,11 +458,12 @@ mod tests {
         let bindings = stdlib_bindings();
         let mut unbound = Vec::new();
         for (path, module) in &bindings.modules {
-            let mut module = module.clone();
-            for item in &mut module.items {
-                let _ = try_for_each_signed_type::<()>(item, &mut |_, ty| {
+            for item in &module.items {
+                for_each_signed_type(item, &mut |ty| {
                     ty.for_each(&mut |t| match t {
-                        ast::Type::Named(n) if n.name != "Self" && !bindings.type_decls.binds(n.id) => {
+                        ast::Type::Named(n)
+                            if n.name != "Self" && !bindings.type_decls.binds(n.id) =>
+                        {
                             unbound.push(format!("{path}: {}", n.name));
                         }
                         ast::Type::Generic(g) if !bindings.type_decls.binds(g.id) => {
@@ -467,7 +471,6 @@ mod tests {
                         }
                         _ => {}
                     });
-                    Ok(())
                 });
             }
         }

@@ -22,8 +22,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
-    cm_flags_byte_size, cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
+    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
+    cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -74,7 +74,10 @@ pub(super) fn synthesize_lift_into(
         return synthesize_lift_into(ty, addr, base, next_local, stmts, locals, ctx);
     }
     let value_type = ctx.cm_interface_registry.value_type(ty);
-    match (ctx.cm_interface_registry.type_decls().item_of(&value_type), value_type) {
+    match (
+        ctx.cm_interface_registry.type_decls().item_of(&value_type),
+        value_type,
+    ) {
         (Some(CompilerItem::List), Type::Generic(g)) => synthesize_lift_list(
             &g.args[0],
             addr,

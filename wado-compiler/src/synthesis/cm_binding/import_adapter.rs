@@ -23,9 +23,7 @@ use crate::synthesis::common::{
     struct_literal, synth_param, synth_span, unreachable_call,
 };
 
-use super::cm_free::{
-    CmShapeContext, FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value,
-};
+use super::cm_free::{FlatSlot, cm_shape, synthesize_free_cm_flat, synthesize_free_cm_value};
 use super::lift::{lift_variant_from_disc, materialize_if_needed, synthesize_lift};
 use super::lower::{
     buffer_bytes, list_element, list_len, synthesize_flatten_value_to_flat_args,
@@ -524,7 +522,7 @@ pub(super) fn synthesize_adapter(
             &plans,
             &local_ref(buf.local, "$params_buf", TypeTable::I32),
             buf,
-            &shape_ctx(&builder.lower_ctx),
+            builder.lower_ctx.cm_interface_registry,
             &mut builder.next_local,
             &mut builder.locals,
         )
@@ -610,10 +608,7 @@ struct ParamPlan<'a> {
 
 /// Whether the import adapter takes `ty` as one GC value, which the call site
 /// passes through rather than flattening.
-pub(super) fn is_gc_passthrough_param(
-    ty: &Type,
-    registry: &CmInterfaceRegistry,
-) -> bool {
+pub(super) fn is_gc_passthrough_param(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
     !flatten_param_type(ty, registry).is_empty()
         && !matches!(classify_param(ty, registry), ParamLowering::Direct)
 }
@@ -626,10 +621,7 @@ fn list_elem(param_type: &Type) -> &Type {
     }
 }
 
-fn classify_param<'t>(
-    param_type: &'t Type,
-    registry: &CmInterfaceRegistry,
-) -> ParamLowering<'t> {
+fn classify_param<'t>(param_type: &'t Type, registry: &CmInterfaceRegistry) -> ParamLowering<'t> {
     let item = registry.type_decls().item_of(param_type);
     match param_type {
         Type::Named(_) if item == Some(CompilerItem::String) => ParamLowering::PackedPtrLen {
@@ -685,12 +677,6 @@ struct OutptrBuffer {
     align: u32,
 }
 
-fn shape_ctx<'c>(lower_ctx: &'c LowerContext<'_>) -> CmShapeContext<'c> {
-    CmShapeContext {
-        cm_interface_registry: lower_ctx.cm_interface_registry,
-    }
-}
-
 fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
     offset_addr(
         local_ref(params_buf_local, "$params_buf", TypeTable::I32),
@@ -708,8 +694,9 @@ fn offset_addr(base: TirExpr, offset: u32) -> TirExpr {
 
 /// Whether the caller frees the memory `plan`'s argument was lowered into once
 /// the callee has read it. A view's block is the view's to free.
-fn owns_lowered(plan: &ParamPlan<'_>, ctx: &CmShapeContext<'_>) -> bool {
-    !matches!(plan.lowering, ParamLowering::ListView { .. }) && cm_shape(plan.ty, ctx).owns_memory()
+fn owns_lowered(plan: &ParamPlan<'_>, registry: &CmInterfaceRegistry) -> bool {
+    !matches!(plan.lowering, ParamLowering::ListView { .. })
+        && cm_shape(plan.ty, registry).owns_memory()
 }
 
 /// The frees of what the arguments in the params buffer at `base` own, then of
@@ -718,19 +705,19 @@ fn buffered_arg_frees(
     plans: &[ParamPlan<'_>],
     base: &TirExpr,
     buf: OutptrBuffer,
-    ctx: &CmShapeContext<'_>,
+    registry: &CmInterfaceRegistry,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
 ) -> Vec<TirStmt> {
     let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
-    let offsets = layout_tuple_with_registry(&param_types, ctx.cm_interface_registry).offsets;
+    let offsets = layout_tuple_with_registry(&param_types, registry).offsets;
     let mut frees = Vec::new();
     for (plan, offset) in plans.iter().zip(offsets) {
-        if !owns_lowered(plan, ctx) {
+        if !owns_lowered(plan, registry) {
             continue;
         }
         frees.extend(synthesize_free_cm_value(
-            &cm_shape(plan.ty, ctx),
+            &cm_shape(plan.ty, registry),
             &offset_addr(base.clone(), offset),
             next_local,
             locals,
@@ -950,7 +937,7 @@ impl<'a> AdapterBuilder<'a> {
     ) -> Vec<(&'a Type, Vec<FlatSlot>)> {
         let mut owning = Vec::new();
         for (plan, range) in plans.iter().zip(ranges) {
-            if !owns_lowered(plan, &shape_ctx(&self.lower_ctx)) {
+            if !owns_lowered(plan, self.lower_ctx.cm_interface_registry) {
                 continue;
             }
             let mut slots = Vec::with_capacity(range.len());
@@ -978,7 +965,7 @@ impl<'a> AdapterBuilder<'a> {
             frees.extend(synthesize_free_cm_flat(
                 ty,
                 &slots,
-                &shape_ctx(&self.lower_ctx),
+                self.lower_ctx.cm_interface_registry,
                 &mut self.next_local,
                 &mut self.locals,
             ));
@@ -1019,7 +1006,7 @@ impl<'a> AdapterBuilder<'a> {
                 TypeTable::UNIT,
             )));
         }
-        let release = self.push_release_function(|record, ctx, next_local, locals| {
+        let release = self.push_release_function(|record, registry, next_local, locals| {
             let mut frees = Vec::new();
             let mut index = 0u32;
             for (ty, slots) in &owning {
@@ -1041,7 +1028,7 @@ impl<'a> AdapterBuilder<'a> {
                     index += 1;
                 }
                 frees.extend(synthesize_free_cm_flat(
-                    ty, &loaded, ctx, next_local, locals,
+                    ty, &loaded, registry, next_local, locals,
                 ));
             }
             frees.push(linear_free(
@@ -1058,8 +1045,8 @@ impl<'a> AdapterBuilder<'a> {
     /// the params buffer `buf`: the buffer, which its release function frees
     /// with what the arguments in it own.
     fn buffered_arg_buffer(&mut self, plans: &[ParamPlan<'a>], buf: OutptrBuffer) -> TirExpr {
-        let release = self.push_release_function(|record, ctx, next_local, locals| {
-            buffered_arg_frees(plans, &record, buf, ctx, next_local, locals)
+        let release = self.push_release_function(|record, registry, next_local, locals| {
+            buffered_arg_frees(plans, &record, buf, registry, next_local, locals)
         });
         let ptr = local_ref(buf.local, "$params_buf", TypeTable::I32);
         arg_buffer(self.lower_ctx.type_table, Some((ptr, release)))
@@ -1070,7 +1057,7 @@ impl<'a> AdapterBuilder<'a> {
     /// it.
     fn push_release_function(
         &mut self,
-        frees: impl FnOnce(TirExpr, &CmShapeContext<'_>, &mut u32, &mut Vec<TirLocal>) -> Vec<TirStmt>,
+        frees: impl FnOnce(TirExpr, &CmInterfaceRegistry, &mut u32, &mut Vec<TirLocal>) -> Vec<TirStmt>,
     ) -> TirExpr {
         let mut next_local = 0;
         let mut locals = Vec::new();
@@ -1078,7 +1065,7 @@ impl<'a> AdapterBuilder<'a> {
         let params = vec![synth_param("$args", record, TypeTable::I32)];
         let body = frees(
             local_ref(record, "$args", TypeTable::I32),
-            &shape_ctx(&self.lower_ctx),
+            self.lower_ctx.cm_interface_registry,
             &mut next_local,
             &mut locals,
         );

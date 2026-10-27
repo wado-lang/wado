@@ -20,15 +20,8 @@ use crate::synthesis::common::{
 
 use super::export_adapter::FlatLocal;
 use super::types::{
-    binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift,
-    disc_load_op,
+    binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift, disc_load_op,
 };
-
-/// Lighter than `LowerContext`: freeing reads the value out of memory or out of
-/// flat slots rather than out of a GC object, so it never lowers an expression.
-pub(super) struct CmShapeContext<'a> {
-    pub cm_interface_registry: &'a CmInterfaceRegistry,
-}
 
 /// A part of a CM value: a record field, a variant payload, or a list element.
 pub(super) struct CmField {
@@ -84,39 +77,38 @@ impl CmShape {
 
 /// Classify `ty` by how it owns linear memory at the CM boundary, mirroring the
 /// dispatch of `lower::synthesize_lower_wasi_type_to_memory`.
-pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
-    let resolved = ctx.cm_interface_registry.resolve_type(ty);
-    let item = ctx.cm_interface_registry.type_decls().item_of(&resolved);
+pub(super) fn cm_shape(ty: &Type, registry: &CmInterfaceRegistry) -> CmShape {
+    let resolved = registry.resolve_type(ty);
+    let item = registry.type_decls().item_of(&resolved);
     match &resolved {
         Type::Named(_) if item == Some(CompilerItem::String) => CmShape::Str,
-        Type::Named(named) => named_shape(named, ctx),
+        Type::Named(named) => named_shape(named, registry),
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
-        Type::Tuple(elems) => CmShape::Record(field_list(elems, ctx)),
+        Type::Tuple(elems) => CmShape::Record(field_list(elems, registry)),
         Type::Generic(g) if item == Some(CompilerItem::List) => {
-            CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
+            CmShape::List(Box::new(field_of(&g.args[0], 0, registry)))
         }
         Type::Generic(g) if item == Some(CompilerItem::TreeMap) => {
             // A `map<K, V>` owns what the `list<tuple<K, V>>` it despecializes
             // to owns: the pair buffer, and what each key and value own.
             let pair = Type::Tuple(vec![g.args[0].clone(), g.args[1].clone()]);
-            CmShape::List(Box::new(field_of(&pair, 0, ctx)))
+            CmShape::List(Box::new(field_of(&pair, 0, registry)))
         }
         Type::Generic(g) if item == Some(CompilerItem::Option) => {
             let payload_offset =
-                cm_abi::layout_option_with_registry(&g.args[0], ctx.cm_interface_registry)
-                    .payload_offset();
-            CmShape::Variant(vec![None, payload_case(&g.args[0], payload_offset, ctx)])
+                cm_abi::layout_option_with_registry(&g.args[0], registry).payload_offset();
+            CmShape::Variant(vec![
+                None,
+                payload_case(&g.args[0], payload_offset, registry),
+            ])
         }
         Type::Generic(g) if item == Some(CompilerItem::Result) => {
-            let payload_offset = cm_abi::layout_result_with_registry(
-                &g.args[0],
-                &g.args[1],
-                ctx.cm_interface_registry,
-            )
-            .payload_offset();
+            let payload_offset =
+                cm_abi::layout_result_with_registry(&g.args[0], &g.args[1], registry)
+                    .payload_offset();
             CmShape::Variant(vec![
-                payload_case(&g.args[0], payload_offset, ctx),
-                payload_case(&g.args[1], payload_offset, ctx),
+                payload_case(&g.args[0], payload_offset, registry),
+                payload_case(&g.args[1], payload_offset, registry),
             ])
         }
         Type::Generic(_) if let Some(CompilerItem::Stream | CompilerItem::Future) = item => {
@@ -131,29 +123,24 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
 }
 
 /// A registry record, a registry variant, or a fixed-width leaf.
-fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
-    let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) else {
+fn named_shape(named: &NamedType, registry: &CmInterfaceRegistry) -> CmShape {
+    let Some(source) = registry.resolve_cm_source_for(named) else {
         return CmShape::Scalar;
     };
-    if let Some(fields) = ctx
-        .cm_interface_registry
-        .get_struct_fields_with_wado_names_by_source(&source, &named.name)
+    if let Some(fields) = registry.get_struct_fields_with_wado_names_by_source(&source, &named.name)
     {
         let field_types: Vec<Type> = fields
             .iter()
-            .map(|(_, _, ty)| ctx.cm_interface_registry.resolve_type(ty))
+            .map(|(_, _, ty)| registry.resolve_type(ty))
             .collect();
-        return CmShape::Record(field_list(&field_types, ctx));
+        return CmShape::Record(field_list(&field_types, registry));
     }
-    if let Some(cases) = ctx
-        .cm_interface_registry
-        .get_variant_cases_by_source(&source, &named.name)
-    {
+    if let Some(cases) = registry.get_variant_cases_by_source(&source, &named.name) {
         let payloads: Vec<Option<Type>> = cases.iter().map(|c| c.payload.clone()).collect();
         let payload_offset = cm_abi::variant_payload_offset_with_registry(
             payloads.len(),
             payloads.iter().flatten(),
-            ctx.cm_interface_registry,
+            registry,
         );
         return CmShape::Variant(
             payloads
@@ -161,7 +148,7 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
                 .map(|payload| {
                     payload
                         .as_ref()
-                        .and_then(|ty| payload_case(ty, payload_offset, ctx))
+                        .and_then(|ty| payload_case(ty, payload_offset, registry))
                 })
                 .collect(),
         );
@@ -169,39 +156,38 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     CmShape::Scalar
 }
 
-fn field_list(types: &[Type], ctx: &CmShapeContext<'_>) -> Vec<CmField> {
-    let offsets =
-        cm_abi::layout_fields_with_registry(types.iter(), ctx.cm_interface_registry).offsets;
+fn field_list(types: &[Type], registry: &CmInterfaceRegistry) -> Vec<CmField> {
+    let offsets = cm_abi::layout_fields_with_registry(types.iter(), registry).offsets;
     types
         .iter()
         .zip(offsets)
-        .map(|(ty, offset)| field_of(ty, offset, ctx))
+        .map(|(ty, offset)| field_of(ty, offset, registry))
         .collect()
 }
 
-fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
-    let (size, align) = cm_layout_with_registry(ty, ctx.cm_interface_registry);
+fn field_of(ty: &Type, offset: u32, registry: &CmInterfaceRegistry) -> CmField {
+    let (size, align) = cm_layout_with_registry(ty, registry);
     CmField {
-        shape: cm_shape(ty, ctx),
+        shape: cm_shape(ty, registry),
         offset,
         size,
         align,
-        flat_slots: flat_slot_count(ty, ctx),
+        flat_slots: flat_slot_count(ty, registry),
     }
 }
 
 /// How many flat CM slots `ty` flattens to, from the same function that lays
 /// out an export's flat signature — the slot list this walk indexes into.
-fn flat_slot_count(ty: &Type, ctx: &CmShapeContext<'_>) -> usize {
-    ctx.cm_interface_registry.cm_flatten(ty).len()
+fn flat_slot_count(ty: &Type, registry: &CmInterfaceRegistry) -> usize {
+    registry.cm_flatten(ty).len()
 }
 
 /// A case's payload, or `None` when it is unit and so carries nothing to free.
-fn payload_case(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> Option<CmField> {
+fn payload_case(ty: &Type, offset: u32, registry: &CmInterfaceRegistry) -> Option<CmField> {
     if ty.is_unit() {
         return None;
     }
-    Some(field_of(ty, offset, ctx))
+    Some(field_of(ty, offset, registry))
 }
 
 /// Free every linear-memory buffer the CM value at `addr` owns. `addr` is
@@ -277,18 +263,18 @@ impl FlatSlot {
 pub(super) fn synthesize_free_cm_flat(
     ty: &Type,
     slots: &[FlatSlot],
-    ctx: &CmShapeContext<'_>,
+    registry: &CmInterfaceRegistry,
     next_local: &mut u32,
     locals: &mut Vec<TirLocal>,
 ) -> Vec<TirStmt> {
     assert_eq!(
-        flat_slot_count(ty, ctx),
+        flat_slot_count(ty, registry),
         slots.len(),
         "`{ty:?}` flattens to a different slot count than the {} slots it was \
          lowered into; the free walk would index the wrong slots",
         slots.len(),
     );
-    free_flat(&cm_shape(ty, ctx), 0, slots, next_local, locals)
+    free_flat(&cm_shape(ty, registry), 0, slots, next_local, locals)
 }
 
 /// Free the buffers of a value occupying `slots[base..]`, in the slot order
