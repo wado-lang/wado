@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793120090125,
+  "lastUpdate": 1793135127944,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -5807,6 +5807,360 @@ window.BENCHMARK_DATA = {
           {
             "name": "gale_gen/generate (-O3)",
             "value": 628979273,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O1)",
+            "value": 189651157,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O2)",
+            "value": 185184249,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O3)",
+            "value": 175654516,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O1)",
+            "value": 148332048,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O2)",
+            "value": 145659140,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O3)",
+            "value": 145659136,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O1)",
+            "value": 76375047,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O2)",
+            "value": 68566598,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O3)",
+            "value": 67802027,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O1)",
+            "value": 25014919,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O2)",
+            "value": 24527541,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O3)",
+            "value": 24527539,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O1)",
+            "value": 41020160,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O2)",
+            "value": 39566677,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O3)",
+            "value": 39472648,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O1)",
+            "value": 24191406,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O2)",
+            "value": 23992610,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O3)",
+            "value": 23992262,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O1)",
+            "value": 1930724364,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O2)",
+            "value": 1930724356,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O3)",
+            "value": 1930724354,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O1)",
+            "value": 509347727,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O2)",
+            "value": 498770439,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O3)",
+            "value": 501693829,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O1)",
+            "value": 760752325,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O2)",
+            "value": 754699560,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O3)",
+            "value": 756383825,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O1)",
+            "value": 148789055,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O2)",
+            "value": 101749702,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O3)",
+            "value": 101749700,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O1)",
+            "value": 9162670,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O2)",
+            "value": 9145803,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O3)",
+            "value": 9145799,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O1)",
+            "value": 12282843,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O2)",
+            "value": 11443834,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O3)",
+            "value": 11383765,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 100924730,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 100924437,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 100924426,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 20825534,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 20793983,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 20793980,
+            "unit": "fuel"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "545408841dd5f3a7f2dda9d2eeb47a674db7f5b1",
+          "message": "Merge pull request #2476 from wado-lang/claude/upbeat-knuth-rwam10\n\nfeat(core:process)!: a portable WIT, with timeouts composed in the guest",
+          "timestamp": "2026-10-28T05:51:27+09:00",
+          "tree_id": "786b6441214d8f2034b209668bf5eb418d782df6",
+          "url": "https://github.com/wado-lang/wado/commit/545408841dd5f3a7f2dda9d2eeb47a674db7f5b1"
+        },
+        "date": 1793135126290,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cbor/canada/de (-O1)",
+            "value": 79986389,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O2)",
+            "value": 79653003,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O3)",
+            "value": 79653001,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O1)",
+            "value": 55974433,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O2)",
+            "value": 52844940,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O3)",
+            "value": 52622396,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O1)",
+            "value": 26583810,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O2)",
+            "value": 26436866,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O3)",
+            "value": 26431033,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O1)",
+            "value": 10219173,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O2)",
+            "value": 9274714,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O3)",
+            "value": 8780272,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O1)",
+            "value": 17380702,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O2)",
+            "value": 17380730,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O3)",
+            "value": 17380730,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O1)",
+            "value": 5219514,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O2)",
+            "value": 4949213,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O3)",
+            "value": 4686082,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O1)",
+            "value": 1158271719,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O2)",
+            "value": 1145271711,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O3)",
+            "value": 1145271709,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O1)",
+            "value": 690786513,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O2)",
+            "value": 631313614,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O3)",
+            "value": 628983462,
             "unit": "fuel"
           },
           {
