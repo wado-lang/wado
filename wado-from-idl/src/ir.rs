@@ -212,6 +212,9 @@ pub struct WadoParam {
     pub wit_name: String,
     /// The default argument, as Wado source
     pub default: Option<String>,
+    /// Whether a `list<T>` it is typed takes a `&ListView<T>`, as
+    /// `wit_consume::lent_list_elem` decides.
+    pub lends_view: bool,
 }
 
 #[derive(Debug, Clone)]

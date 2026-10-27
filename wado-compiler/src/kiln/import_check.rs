@@ -486,7 +486,8 @@ fn check_module<H: CompilerHost>(
             let message = format!(
                 "kiln generator `{which}` imports `{src}`: {reason}. \
                  Generators must be deterministic and can only import \
-                 `core:*` modules, {provided_text}and project-relative paths. \
+                 `core:*` modules, {provided_text}project-relative paths, and \
+                 remote modules, which are pinned. \
                  See WEP 2026-04-12 §\"Design principles\".",
                 src = decl.source,
             );
@@ -556,11 +557,6 @@ fn forbid_reason(source: &str, provided_wasi: &[ProvidedInterface<'_>]) -> Optio
     {
         return Some("the generator world imports none of its interfaces");
     }
-    // Any explicit scheme other than `core:` or a project-relative path.
-    // Bare URLs (`http://…`, `https://…`) are rejected on the same grounds.
-    if source.starts_with("http:") || source.starts_with("https:") {
-        return Some("network imports are not allowed");
-    }
     None
 }
 
@@ -599,18 +595,16 @@ mod tests {
     }
 
     #[test]
-    fn forbid_reason_flags_unprovided_wasi_and_http() {
+    fn forbid_reason_flags_unprovided_wasi() {
         let provided = provided();
         let provided = provided.as_slice();
         assert!(forbid_reason("wasi:clocks", provided).is_some());
         assert!(forbid_reason("wasi:cli/stdout", provided).is_some());
         assert!(forbid_reason("wasi:randomness", provided).is_some());
-        assert!(forbid_reason("https://example.com/foo.wado", provided).is_some());
-        assert!(forbid_reason("http://example.com/foo.wado", provided).is_some());
     }
 
     #[test]
-    fn forbid_reason_allows_core_provided_wasi_and_relative() {
+    fn forbid_reason_allows_core_provided_wasi_relative_and_remote() {
         let provided = provided();
         let provided = provided.as_slice();
         assert!(forbid_reason("core:kiln", provided).is_none());
@@ -622,5 +616,6 @@ mod tests {
         assert!(forbid_reason("wasi:random/insecure_seed.wado", provided).is_none());
         assert!(forbid_reason("./options.wado", provided).is_none());
         assert!(forbid_reason("../shared.wado", provided).is_none());
+        assert!(forbid_reason("https://example.com/foo.wado", provided).is_none());
     }
 }

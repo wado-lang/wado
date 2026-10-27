@@ -4,17 +4,63 @@
 
 # core:process
 
-Run a host program, confined to the guest's own grants.
+Run a host program as a child of the guest.
 
-A child reads and writes only beneath the directories the guest was
-granted, plus a fixed system baseline (the loader, shared libraries,
-installed programs), and reaches the network only where the guest does.
-Spawning never extends the guest's authority. The host offers it only where
-its OS can enforce that, and [`availability`] says whether this one does.
-Every other function requires it to answer `Available`, and traps
-otherwise. See WEP 2026-10-21 (`core:process`).
+A host offers spawning or not, and [`availability`] says which, with an
+answer fixed for the guest's lifetime. Every other function requires it to
+answer `Available`, and traps otherwise.
 
-A child's output is bytes, so it comes back as a `ByteList`, never decoded.
+## Children
+
+- `program` holding a `/` is a path, relative to where the child starts.
+  Any other is a name the host looks up.
+- A child starts in the guest's first preopened directory, the one `core:fs`
+  resolves paths against. Where the guest has none, the host picks one.
+- A child's environment is what the host gives every child, with
+  [`Command::env`] laid over it. The guest's own is never passed on.
+- A child gets no stream of the guest's unless asked: stdin reads nothing,
+  and stdout and stderr go nowhere. `inherit_*` passes on a stream the guest
+  holds, so each declares that stream's effect.
+- [`Child`] is `affine`. Dropping it, or [`Child::kill`], ends the child and
+  every process it started, and the host ends every child when the guest
+  exits, so none outlives the guest. [`Child::terminate`] asks instead, and
+  the child may ignore it.
+- A timeout is the guest's: [`Child::wait_timeout`] waits a bounded time,
+  and [`Child::stop`] asks, waits a grace period, then kills.
+- A child's output is bytes, so it comes back as a `ByteList`, never decoded.
+
+## Errors
+
+[`ProcessError`] names the program, as `FsError` names its path. The host
+reports why a child did not run as an [`ErrorCode`]. Only `read` fails on
+how the child ended, since it returns stdout alone and has nowhere else to
+report it: `output` and `status` return the [`ExitStatus`] as a value.
+
+## The `wado` Host
+
+`wado run`, `wado serve` and `wado test` offer spawning, and confine each
+child so that spawning never extends the guest's authority.
+
+- A child reads and writes only beneath the directories the guest was
+  granted, plus a fixed system baseline: the loader, shared libraries,
+  installed programs and the system configuration. It reaches the network
+  only where the guest does.
+- `--process-read <path>` lets a child read and execute `path` as well, and
+  so does `read` under `[process]` in the user config. The guest itself
+  gains nothing.
+- `--deny-process` turns spawning off (`Denied`). A host whose OS cannot
+  confine a child answers `Unsupported`: Linux needs Landlock ABI 6 (Linux
+  6.12), and macOS confines through `sandbox-exec`.
+- A name is looked up on the host's `PATH`, skipping empty and relative
+  entries.
+- Every child gets `PATH`, a private `HOME` and `TMPDIR` removed once it
+  exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream. A guest
+  with no preopened directory starts its children in that `HOME`.
+- `terminate` sends the child's process group `SIGTERM`, and `kill`
+  `SIGKILL`.
+- A child that fails after the sandbox refused it something is reported on
+  `wado`'s stderr, with the grant that would allow it. `--process-trace`
+  also names each file refused, on Linux.
 
 ## Synopsis
 
@@ -63,9 +109,9 @@ What a value is as a [`cmd`] hole.
 
 ### `pub interface Process`
 
-Spawning a child confined to the guest's grants plus a fixed system
-baseline: spawning never extends the guest's authority.
+Running a host program as a child of the guest.
 
+A host may offer it or not, and confines a child as its own policy says.
 Every function but `get-availability` requires it to answer `available`,
 and traps otherwise.
 
@@ -85,18 +131,12 @@ Start `cmd` in `cwd`, or in the first preopened directory with `none`.
 
 ### `pub struct Command`
 
-A program to run and how: its arguments, environment, streams and timeout.
-
-A child gets no stream of the guest's unless asked: stdin reads nothing,
-and its stdout and stderr go nowhere. `output` and `read` pipe what they
-read themselves.
+A program to run and how: its arguments, environment and streams.
+`output` and `read` pipe what they read themselves.
 
 _Fields are private._
 
 #### `pub fn new(program: String) -> Command`
-
-`program` holding a `/` is a path, relative to where the child starts.
-Any other is looked up on the host's `PATH`.
 
 #### `pub fn arg(&self, arg: String) -> Command`
 
@@ -104,9 +144,7 @@ Any other is looked up on the host's `PATH`.
 
 #### `pub fn env(&self, key: String, value: String) -> Command`
 
-Set `key` in the child's environment, over the baseline the host
-gives it (`PATH`, a private `HOME` and `TMPDIR`, the locale). The
-guest's own environment is never passed on.
+Set `key` in the child's environment, over what the host gives it.
 
 #### `pub fn stdin_piped(&self) -> Command`
 
@@ -137,19 +175,14 @@ The child writes to the guest's own stderr.
 
 All three of the guest's own streams.
 
-#### `pub fn timeout(&self, timeout: Duration) -> Command`
-
-End the child at `timeout`: the host sends its process group
-`SIGTERM`, then `SIGKILL` after a grace period, and it exits
-`ExitStatus::TimedOut`. There is no default.
-
 #### `pub fn capture_limit(&self, bytes: i32) -> Command`
 
 - `contract bytes >= 0`
 
 The bytes `output` and `read` keep of each stream. Past it, stderr
-keeps its tail, and stdout is an `OutputTooLarge` error: the host
-kills the child the moment stdout passes it.
+keeps its tail, and stdout is an `OutputTooLarge` error, since output
+with its middle cut out is wrong rather than short: the child is
+killed the moment stdout passes it.
 
 #### `pub fn spawn(&self) -> Result<Child, ProcessError> with Process`
 
@@ -157,9 +190,8 @@ Start the child and hand back its piped streams.
 
 #### `pub fn output(&self) -> Result<Output, ProcessError> with Process`
 
-Run the child to its end, reading stdout and stderr together. A
-timeout is not an error: the status says `TimedOut`, beside what was
-read.
+Run the child to its end, reading stdout and stderr together, so a
+child filling one pipe never blocks against a guest reading the other.
 
 #### `pub fn status(&self) -> Result<ExitStatus, ProcessError> with Process`
 
@@ -172,8 +204,7 @@ Run the child to its end and return its stdout. Any end but
 
 ### `pub affine struct Child`
 
-A running child. Dropping it kills its process group, and the host kills
-every child when the guest exits, so a child never outlives its guest.
+A running child.
 
 #### `stdin: Option<StreamWritable<u8>>`
 
@@ -194,9 +225,24 @@ Wait for the child to end. Nothing can reach a stream still left in the
 `Child` once it is waited on, so `wait` closes each first: take a piped
 stream out to use it.
 
+#### `pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with MonotonicClock`
+
+Wait at most `how_long` for the child to end: `None` where it has not.
+The streams stay open, so a child blocked on a pipe nobody reads waits
+out the time.
+
+#### `pub fn terminate(&self)`
+
+Ask the child and every process it started to end. A child may ignore
+it, so [`Child::stop`] follows it with a kill.
+
 #### `pub fn kill(&self)`
 
-Kill the child's process group now.
+End the child and every process it started, now.
+
+#### `pub fn stop(self, grace: Duration) -> Result<ExitStatus, ProcessError> with MonotonicClock`
+
+Ask the child to end, and end it if it has not after `grace`.
 
 ### `pub struct Output`
 
@@ -225,16 +271,9 @@ Why a program did not run, or did not run as asked. Names the program, as
 
 ### `pub variant ProcessErrorKind`
 
-#### `NotFound`
+#### `Spawn(ErrorCode)`
 
-No such program, on `PATH` or at the path given.
-
-#### `NotPermitted`
-
-The sandbox refused to execute the program: it lies outside the
-grants and the baseline.
-
-#### `Io(ErrorCode)`
+The host did not run the child, or lost it, for this reason.
 
 #### `Failed([ExitStatus, ByteList])`
 
@@ -257,17 +296,50 @@ One hole of a [`cmd`] template: one argument, or one per element.
 
 How a child ended.
 
-#### `Exited(u8)`
+#### `Exited(i32)`
 
-It exited with this status.
+It exited with this status, as the host's OS reports it.
 
-#### `Signaled(u8)`
+#### `Signaled(i32)`
 
-A signal ended it.
+The host's OS ended it with this signal.
 
-#### `TimedOut`
+### `pub variant ErrorCode`
 
-The host ended it at its timeout.
+#### `NotFound`
+
+No program by that name, or nothing at the path given.
+
+#### `NotPermitted`
+
+The host's policy does not let a child run this program.
+
+#### `NotExecutable`
+
+What the name or path leads to is not a program the host can run.
+
+#### `InvalidArgument`
+
+`program`, an argument, or an environment variable is not one the
+host can pass: it holds a NUL, or a variable's name is empty or
+holds `=`.
+
+#### `ArgumentListTooLong`
+
+The arguments and the environment together are more than the host
+can pass.
+
+#### `NotDirectory`
+
+`cwd` is not a directory.
+
+#### `ResourceExhausted`
+
+The host lacks a resource that running a child takes.
+
+#### `Other(Option<String>)`
+
+Anything else, with a message for a person where the host has one.
 
 ## Enums
 
@@ -283,18 +355,4 @@ The host turned spawning off.
 
 #### `Unsupported`
 
-The OS cannot confine a child.
-
-### `pub enum ErrorCode`
-
-#### `NotFound`
-
-No such program.
-
-#### `NotPermitted`
-
-The sandbox refused to execute this program.
-
-#### `ResourceExhausted`
-
-#### `Io`
+The host cannot run a child as its policy requires.

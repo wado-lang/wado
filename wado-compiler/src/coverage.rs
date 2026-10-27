@@ -11,12 +11,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Range;
 
+use sha2::{Digest, Sha256};
+
 use crate::ast::{
     self, AstId, AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr,
     Stmt, walk_condition, walk_expr, walk_stmt,
 };
 use crate::attribute;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::lexer::normalize_line_breaks;
 use crate::module_source::ModuleSource;
 use crate::token::Span;
 
@@ -169,6 +172,9 @@ pub struct PlannedFunction {
     pub line: u32,
     /// Its body region.
     pub region: u32,
+    /// What a profile's counts for it were recorded against: see
+    /// [`function_hash`].
+    pub hash: u64,
 }
 
 /// The regions a module's source implies, numbered from zero.
@@ -336,6 +342,7 @@ impl CoverageMap {
                 w.str(&f.name);
                 w.u32(f.line);
                 w.u32(f.region);
+                w.u64(f.hash);
             }
             w.u32(plan.regions.len() as u32);
             for r in &plan.regions {
@@ -387,6 +394,7 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
                 name: r.str()?,
                 line: r.u32()?,
                 region: r.u32()?,
+                hash: r.u64()?,
             });
         }
         for _ in 0..r.u32()? {
@@ -440,6 +448,10 @@ impl Writer {
         self.0.extend_from_slice(&v.to_le_bytes());
     }
 
+    fn u64(&mut self, v: u64) {
+        self.0.extend_from_slice(&v.to_le_bytes());
+    }
+
     fn pos(&mut self, p: Pos) {
         self.u32(p.line);
         self.u32(p.column);
@@ -467,6 +479,12 @@ impl Reader<'_> {
         let bytes = self.data.get(self.pos..self.pos + 4)?;
         self.pos += 4;
         Some(u32::from_le_bytes(bytes.try_into().ok()?))
+    }
+
+    fn u64(&mut self) -> Option<u64> {
+        let bytes = self.data.get(self.pos..self.pos + 8)?;
+        self.pos += 8;
+        Some(u64::from_le_bytes(bytes.try_into().ok()?))
     }
 
     fn pos(&mut self) -> Option<Pos> {
@@ -524,6 +542,7 @@ pub(crate) fn plan_module(
         owner: None,
         last_choice: Vec::new(),
         for_of_bodies: Vec::new(),
+        texts: Vec::new(),
     };
     if !module.has_coverage_off() {
         for item in &module.items {
@@ -533,11 +552,16 @@ pub(crate) fn plan_module(
     planner.plan.lines.sort_unstable();
     planner.plan.lines.dedup();
     let Planner {
-        plan,
+        mut plan,
         mut sites,
         for_of_bodies,
+        texts,
         ..
     } = planner;
+    for (index, ids) in plan.regions_by_function().iter().enumerate() {
+        let regions = ids.iter().map(|&id| &plan.regions[id as usize]);
+        plan.functions[index].hash = function_hash(module.source(), &texts[index], regions);
+    }
     sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
     (plan, sites, for_of_bodies)
 }
@@ -554,6 +578,40 @@ struct Planner<'a> {
     /// The sides of the choice the walk finished last.
     last_choice: Vec<u32>,
     for_of_bodies: ForOfBodies,
+    /// Where each function's text lies, from its name to the end of its body.
+    texts: Vec<FunctionText>,
+}
+
+struct FunctionText {
+    bytes: Range<usize>,
+    start: Pos,
+}
+
+/// What a profile's counts for a function were recorded against: its text,
+/// and each of its `regions`' kind and span relative to where the text starts.
+/// The text catches an edit that changes which region runs, the regions what
+/// decides them from outside the text, such as a `#[coverage(off)]` on the
+/// enclosing `impl`. See WEP 2026-10-25 (Profile-Guided Optimization).
+fn function_hash<'r>(
+    source: &str,
+    text: &FunctionText,
+    regions: impl Iterator<Item = &'r Region>,
+) -> u64 {
+    let mut h = Sha256::new();
+    h.update(normalize_line_breaks(&source[text.bytes.clone()]).as_bytes());
+    for region in regions {
+        h.update([region.kind.code()]);
+        for pos in [region.start, region.end] {
+            h.update((pos.line - text.start.line).to_le_bytes());
+            h.update(pos.column.to_le_bytes());
+        }
+    }
+    let digest = h.finalize();
+    u64::from_le_bytes(
+        digest[..8]
+            .try_into()
+            .expect("a digest is longer than 8 bytes"),
+    )
 }
 
 impl Planner<'_> {
@@ -606,6 +664,11 @@ impl Planner<'_> {
             name,
             line: at.line as u32,
             region: self.plan.regions.len() as u32,
+            hash: 0,
+        });
+        self.texts.push(FunctionText {
+            bytes: at.start..body.end,
+            start: Pos::start(at),
         });
         self.new_region(kind, Pos::start(body), Pos::end(body), None)
     }
@@ -1076,11 +1139,12 @@ pub struct Coverage {
     pub files: BTreeMap<String, FileCoverage>,
 }
 
-/// One module's plan and the regions any test ran.
+/// One module's plan and how often the tests ran each region.
 #[derive(Debug, Clone, Default)]
 pub struct FileCoverage {
     pub plan: ModulePlan,
-    pub hit: BTreeSet<u32>,
+    /// The runs of each region that ran; a region absent never ran.
+    pub counts: BTreeMap<u32, i64>,
     /// The tests that ran each region, by region.
     pub tests: BTreeMap<u32, BTreeSet<String>>,
 }
@@ -1120,7 +1184,7 @@ impl Coverage {
                     .entry(plan.path.clone())
                     .or_insert_with(|| FileCoverage {
                         plan: plan.clone(),
-                        hit: BTreeSet::new(),
+                        counts: BTreeMap::new(),
                         tests: BTreeMap::new(),
                     });
                 if file.plan != plan {
@@ -1134,46 +1198,122 @@ impl Coverage {
             .collect()
     }
 
-    /// Record the global ids `test` hit in the plans `registered` names.
-    pub fn record(&mut self, registered: &[Registered], hits: &BTreeSet<u32>, test: Option<&str>) {
+    /// Record the runs `test` counted, by global id, in the plans `registered`
+    /// names.
+    pub fn record(
+        &mut self,
+        registered: &[Registered],
+        counts: &BTreeMap<u32, i64>,
+        test: Option<&str>,
+    ) {
         for Registered { path, ids } in registered {
             let file = self.files.get_mut(path).expect("`register` added the file");
-            let mut local: BTreeSet<u32> =
-                hits.range(ids.clone()).map(|id| id - ids.start).collect();
+            let mut local: BTreeMap<u32, i64> = counts
+                .range(ids.clone())
+                .map(|(id, count)| (id - ids.start, *count))
+                .collect();
             file.plan.derive(&mut local);
-            if let Some(test) = test {
-                for &region in &local {
+            for (region, count) in local {
+                if let Some(test) = test {
                     file.tests
                         .entry(region)
                         .or_default()
                         .insert(test.to_string());
                 }
+                let total = file.counts.entry(region).or_default();
+                *total = total.saturating_add(count);
             }
-            file.hit.extend(local);
         }
     }
 }
 
+/// What one test reported through `core:coverage`, by global id: each region as
+/// it first ran, and, once the test returned, the runs of each that ran more
+/// than once.
+#[derive(Debug, Default)]
+pub struct TestReport {
+    hits: BTreeSet<u32>,
+    repeated: BTreeMap<u32, i64>,
+}
+
+impl TestReport {
+    pub fn hit(&mut self, id: u32) {
+        self.hits.insert(id);
+    }
+
+    pub fn count(&mut self, id: u32, runs: i64) {
+        self.repeated.insert(id, runs);
+    }
+
+    /// The runs of each region the test counted: each region it hit ran once,
+    /// unless it reported more. A test that traps reports no more. Test code can
+    /// call `core:coverage` itself, so a region counted but never hit counts
+    /// too, and a count runs at least once.
+    #[must_use]
+    pub fn counts(&self) -> BTreeMap<u32, i64> {
+        let mut counts: BTreeMap<u32, i64> = self.hits.iter().map(|&id| (id, 1)).collect();
+        for (&id, &runs) in &self.repeated {
+            counts.insert(id, runs.max(1));
+        }
+        counts
+    }
+}
+
 impl ModulePlan {
-    /// Add to `hit` each derived region one of whose children it holds. A
-    /// child is numbered after its parent, so one pass from the last region
-    /// reaches a derived region's children before it.
-    pub fn derive(&self, hit: &mut BTreeSet<u32>) {
+    /// Each function's region ids in plan order, by function; the first is
+    /// its body.
+    #[must_use]
+    pub fn regions_by_function(&self) -> Vec<Vec<u32>> {
+        let mut out = vec![Vec::new(); self.functions.len()];
+        for (id, region) in self.regions.iter().enumerate() {
+            out[region.function as usize].push(id as u32);
+        }
+        for (function, ids) in self.functions.iter().zip(&out) {
+            assert_eq!(
+                ids.first(),
+                Some(&function.region),
+                "a function's body is its first region"
+            );
+        }
+        out
+    }
+
+    /// Count each derived region as the sum of its children: every run of it
+    /// enters exactly one. A child is numbered after its parent, so one pass
+    /// from the last region reaches a derived region's children before it.
+    pub fn derive(&self, counts: &mut BTreeMap<u32, i64>) {
         for (index, region) in self.regions.iter().enumerate().rev() {
-            if region.derived.iter().any(|child| hit.contains(child)) {
-                hit.insert(index as u32);
+            let runs = region
+                .derived
+                .iter()
+                .filter_map(|child| counts.get(child))
+                .fold(0, |sum: i64, count| sum.saturating_add(*count));
+            if runs > 0 {
+                counts.insert(index as u32, runs);
             }
         }
     }
 }
 
 impl FileCoverage {
-    /// Each countable line and whether a statement on it ran.
+    /// How often region `region` ran.
     #[must_use]
-    pub fn lines(&self) -> BTreeMap<u32, bool> {
+    pub fn count(&self, region: u32) -> i64 {
+        self.counts.get(&region).copied().unwrap_or(0)
+    }
+
+    #[must_use]
+    pub fn ran(&self, region: u32) -> bool {
+        self.counts.contains_key(&region)
+    }
+
+    /// Each countable line and how often the busiest statement on it ran.
+    #[must_use]
+    pub fn lines(&self) -> BTreeMap<u32, i64> {
         let mut out = BTreeMap::new();
         for &(line, region) in &self.plan.lines {
-            *out.entry(line).or_insert(false) |= self.hit.contains(&region);
+            let count = out.entry(line).or_insert(0);
+            *count = (*count).max(self.count(region));
         }
         out
     }
@@ -1183,12 +1323,12 @@ impl FileCoverage {
     pub fn uncovered_lines(&self) -> Vec<u32> {
         self.lines()
             .into_iter()
-            .filter_map(|(line, ran)| (!ran).then_some(line))
+            .filter_map(|(line, count)| (count == 0).then_some(line))
             .collect()
     }
 
     /// Each branch region, in source order: where its choice is written, its
-    /// side, its kind, and whether it ran.
+    /// side, its kind, and how often it ran.
     #[must_use]
     pub fn branches(&self) -> Vec<Branch> {
         let mut out: Vec<Branch> = self
@@ -1202,7 +1342,7 @@ impl FileCoverage {
                     at,
                     side,
                     kind: region.kind,
-                    taken: self.hit.contains(&(index as u32)),
+                    count: self.count(index as u32),
                 })
             })
             .collect();
@@ -1210,13 +1350,13 @@ impl FileCoverage {
         out
     }
 
-    /// Each function and whether its body ran.
+    /// Each function and how often its body ran.
     #[must_use]
-    pub fn functions(&self) -> Vec<(&PlannedFunction, bool)> {
+    pub fn functions(&self) -> Vec<(&PlannedFunction, i64)> {
         self.plan
             .functions
             .iter()
-            .map(|f| (f, self.hit.contains(&f.region)))
+            .map(|f| (f, self.count(f.region)))
             .collect()
     }
 }
@@ -1227,10 +1367,15 @@ pub struct Branch {
     pub at: Pos,
     pub side: u32,
     pub kind: RegionKind,
-    pub taken: bool,
+    pub count: i64,
 }
 
 impl Branch {
+    #[must_use]
+    pub fn taken(&self) -> bool {
+        self.count > 0
+    }
+
     /// How a fixture and a report name it: `12:5 else`, `20:9 arm 2`.
     #[must_use]
     pub fn describe(&self) -> String {
@@ -1255,14 +1400,14 @@ pub fn to_lcov(coverage: &Coverage) -> String {
         for (f, _) in &functions {
             let _ = writeln!(out, "FN:{},{}", f.line, f.name);
         }
-        for (f, ran) in &functions {
-            let _ = writeln!(out, "FNDA:{},{}", u8::from(*ran), f.name);
+        for (f, count) in &functions {
+            let _ = writeln!(out, "FNDA:{count},{}", f.name);
         }
         let _ = writeln!(out, "FNF:{}", functions.len());
         let _ = writeln!(
             out,
             "FNH:{}",
-            functions.iter().filter(|(_, ran)| *ran).count()
+            functions.iter().filter(|(_, count)| *count > 0).count()
         );
         let branches = file.branches();
         let mut blocks: Vec<Pos> = branches.iter().map(|b| b.at).collect();
@@ -1272,17 +1417,20 @@ pub fn to_lcov(coverage: &Coverage) -> String {
                 .iter()
                 .position(|at| *at == b.at)
                 .expect("`blocks` lists every branch's choice");
-            let taken = if b.taken { "1" } else { "0" };
-            let _ = writeln!(out, "BRDA:{},{block},{},{taken}", b.at.line, b.side);
+            let _ = writeln!(out, "BRDA:{},{block},{},{}", b.at.line, b.side, b.count);
         }
         let _ = writeln!(out, "BRF:{}", branches.len());
-        let _ = writeln!(out, "BRH:{}", branches.iter().filter(|b| b.taken).count());
+        let _ = writeln!(out, "BRH:{}", branches.iter().filter(|b| b.taken()).count());
         let lines = file.lines();
-        for (line, ran) in &lines {
-            let _ = writeln!(out, "DA:{line},{}", u8::from(*ran));
+        for (line, count) in &lines {
+            let _ = writeln!(out, "DA:{line},{count}");
         }
         let _ = writeln!(out, "LF:{}", lines.len());
-        let _ = writeln!(out, "LH:{}", lines.values().filter(|ran| **ran).count());
+        let _ = writeln!(
+            out,
+            "LH:{}",
+            lines.values().filter(|count| **count > 0).count()
+        );
         let _ = writeln!(out, "end_of_record");
     }
     out
@@ -1340,6 +1488,7 @@ mod tests {
                 name: "f".to_string(),
                 line: 1,
                 region: 0,
+                hash: 0x0123_4567_89ab_cdef,
             }],
             regions: vec![
                 Region {
@@ -1389,20 +1538,75 @@ mod tests {
     }
 
     #[test]
-    fn a_derived_region_ran_when_a_child_did() {
+    fn a_derived_region_runs_as_often_as_its_children() {
         let plan = plan();
-        let mut hit = BTreeSet::from([2]);
-        plan.derive(&mut hit);
-        assert_eq!(hit, BTreeSet::from([0, 2]));
-        let mut none = BTreeSet::new();
+        let mut counts = BTreeMap::from([(1, 3), (2, 4)]);
+        plan.derive(&mut counts);
+        assert_eq!(counts, BTreeMap::from([(0, 7), (1, 3), (2, 4)]));
+        let mut none = BTreeMap::new();
         plan.derive(&mut none);
         assert!(none.is_empty());
+    }
+
+    #[test]
+    fn lcov_carries_the_counts_of_every_test() {
+        let plan = plan();
+        let mut coverage = Coverage::default();
+        let registered = coverage
+            .register(&vec![(plan, 0)], str::to_string)
+            .expect("one plan");
+        coverage.record(&registered, &BTreeMap::from([(1, 3)]), None);
+        let mut trapped = TestReport::default();
+        trapped.hit(1);
+        coverage.record(&registered, &trapped.counts(), None);
+        let lcov = to_lcov(&coverage);
+        for line in [
+            "FNDA:4,f",
+            "BRDA:2,0,0,4",
+            "BRDA:2,0,1,0",
+            "DA:2,4",
+            "DA:3,4",
+        ] {
+            assert!(lcov.lines().any(|l| l == line), "{line} in\n{lcov}");
+        }
+    }
+
+    #[test]
+    fn a_report_takes_what_test_code_forged() {
+        let mut forged = TestReport::default();
+        forged.count(3, 7);
+        forged.count(4, -2);
+        assert_eq!(forged.counts(), BTreeMap::from([(3, 7), (4, 1)]));
     }
 
     fn parse(source: &str) -> ast::Module {
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lex error: {:?}", lexed.errors);
-        Parser::new(lexed.tokens).parse_strict().expect("parse")
+        Parser::from_lex(lexed).parse_strict().expect("parse")
+    }
+
+    /// Each function's hash in `source`, by name.
+    fn hashes(source: &str) -> BTreeMap<String, u64> {
+        let module = parse(source);
+        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default());
+        plan.functions
+            .into_iter()
+            .map(|f| (f.name, f.hash))
+            .collect()
+    }
+
+    #[test]
+    fn a_function_hash_follows_its_own_text_alone() {
+        let f = "fn f(x: i32) -> i32 {\n    if x == 0 { return 1; }\n    return 2;\n}\n";
+        let g = "fn g() -> i32 {\n    return 3;\n}\n";
+        let base = hashes(&format!("{f}{g}"));
+        let edited = hashes(&format!("{}{g}", f.replace("x == 0", "x <= 0")));
+        assert_ne!(base["f"], edited["f"]);
+        assert_eq!(base["g"], edited["g"]);
+        let moved = hashes(&format!("{g}\n\n{f}"));
+        assert_eq!(base, moved);
+        let crlf = hashes(&format!("{f}{g}").replace('\n', "\r\n"));
+        assert_eq!(base, crlf);
     }
 
     /// The kinds of the regions `body` plans as `fn f`'s, with every callee

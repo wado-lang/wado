@@ -68,21 +68,21 @@ struct core:prelude//List<i32> {  // TypeId(15)
     mut used: i32,
 }
 
-type "functype/$canonical_closure_fn_0" = fn(ref null struct) -> i32;  // TypeId(16)
+type "functype/$canonical_closure_fn_0" = fn(ref null struct, i32);  // TypeId(16)
 
 struct canonical//CanonicalClosure_0 {  // TypeId(17)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_0",
 }
 
-type "functype/$canonical_closure_fn_1" = fn(ref null struct, i32) -> i32;  // TypeId(18)
+type "functype/$canonical_closure_fn_1" = fn(ref null struct) -> i32;  // TypeId(18)
 
 struct canonical//CanonicalClosure_1 {  // TypeId(19)
     env: ref null struct,
     func: ref "functype/$canonical_closure_fn_1",
 }
 
-type "functype/$canonical_closure_fn_2" = fn(ref null struct, i32);  // TypeId(20)
+type "functype/$canonical_closure_fn_2" = fn(ref null struct, i32) -> i32;  // TypeId(20)
 
 struct canonical//CanonicalClosure_2 {  // TypeId(21)
     env: ref null struct,
@@ -203,14 +203,14 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     let xs_26: ref "core:prelude//List<i32>";
     let $cm_pair_7_53: i64;
     h_0 = struct.new "effect_handler_resume_positions.wado//H" { seen: 0 };
-    global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = struct.new "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/A" { outer: local.tee $save_effect_handler_resume_positions.wado/A(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A), op_pick: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resume_positions.wado//$Closure_2" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_1" }, op_note: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_3" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_2" }, op_nested: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resume_positions.wado//$Closure_4" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_3" }, op_first: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resume_positions.wado//$Closure_5" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_4" }, op_via_closure: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resume_positions.wado//$Closure_6" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_5" } };
+    global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = struct.new "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/A" { outer: local.tee $save_effect_handler_resume_positions.wado/A(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A), op_pick: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_2" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_1" }, op_note: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resume_positions.wado//$Closure_3" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_2" }, op_nested: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_4" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_3" }, op_first: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resume_positions.wado//$Closure_5" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_4" }, op_via_closure: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resume_positions.wado//$Closure_6" { $capture_0: h_0 }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_5" } };
     $mv_arg_1 = block -> ref "core:prelude/string.wado//String" {
         $local_3_7 = $inline__effect_dispatch__effect_handler_resume_positions_wado_A__pick_1: block -> i32 {
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_7 = block -> i32 {
-                    let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_pick)).env, 0);
+                    let $indirect_call_2: ref "canonical//CanonicalClosure_2";
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_pick)).env, 0);
                 };
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
                 break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__pick_1: $local_3_7;
@@ -225,7 +225,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_11 = block -> i32 {
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_pick)).env, 1);
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_pick)).env, 1);
                 };
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
                 break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__pick_2: $local_3_11;
@@ -239,7 +239,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_15 = block -> i32 {
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_pick)).env, 9);
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_pick)).env, 9);
                 };
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
                 break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__pick_3: $local_3_15;
@@ -261,8 +261,8 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     $inline__effect_dispatch__effect_handler_resume_positions_wado_A__note_4: block {
         if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
             global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
-            let $indirect_call_19: ref "canonical//CanonicalClosure_2";
-            call_ref "functype/$canonical_closure_fn_2"($indirect_call_19.func, local.tee $indirect_call_19(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_note)).env, 0);
+            let $indirect_call_19: ref "canonical//CanonicalClosure_0";
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_19.func, local.tee $indirect_call_19(ref.cast "canonical//CanonicalClosure_0"($local_2_6.op_note)).env, 0);
             break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__note_4: global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_resume_positions.wado::$const_obj_5).repr, $mv_arg_1.used);
@@ -272,7 +272,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
     $inline__effect_dispatch__effect_handler_resume_positions_wado_A__note_5: block {
         if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
             global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
-            call_ref "functype/$canonical_closure_fn_2"($indirect_call_19.func, local.tee $indirect_call_19(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_note)).env, 5);
+            call_ref "functype/$canonical_closure_fn_0"($indirect_call_19.func, local.tee $indirect_call_19(ref.cast "canonical//CanonicalClosure_0"($local_2_6.op_note)).env, 5);
             break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__note_5: global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
         } else {
             "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_resume_positions.wado::$const_obj_5).repr, $mv_arg_1.used);
@@ -283,7 +283,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
         if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
             global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
             $local_3_15 = block -> i32 {
-                call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_nested)).env, 1);
+                call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_nested)).env, 1);
             };
             global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
             break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__nested_6: $local_3_15;
@@ -357,7 +357,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_11 = block -> i32 {
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_via_closure)).env, 8);
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_via_closure)).env, 8);
                 };
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
                 break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__via_closure_11: $local_3_11;
@@ -371,7 +371,7 @@ fn "effect_handler_resume_positions.wado/run"() with Stdout {
             if @likely(ref.is_null(local.tee $local_1_5(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A)) == 0) {
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = local.tee $local_2_6(ref.as_non_null($local_1_5)).outer;
                 $local_3_7 = block -> i32 {
-                    call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($local_2_6.op_via_closure)).env, 3);
+                    call_ref "functype/$canonical_closure_fn_2"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_2"($local_2_6.op_via_closure)).env, 3);
                 };
                 global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/A = $local_1_5;
                 break $inline__effect_dispatch__effect_handler_resume_positions_wado_A__via_closure_12: $local_3_7;
@@ -419,8 +419,8 @@ fn "effect_handler_resume_positions.wado/$effect_dispatch__effect_handler_resume
     if @likely(ref.is_null(local.tee $saved(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B)) == 0) {
         global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B = local.tee $local_1(ref.as_non_null($saved)).outer;
         $local_2 = block -> i32 {
-            let $indirect_call_3: ref "canonical//CanonicalClosure_0";
-            call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_1.op_bump)).env);
+            let $indirect_call_3: ref "canonical//CanonicalClosure_1";
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_1"($local_1.op_bump)).env);
         };
         global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B = $saved;
         return $local_2;
@@ -561,58 +561,94 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_13: i32;
-    let i: i32;
-    let ptr_24: i32;
-    let count_25: i32;
-    let ws: i32;
-    let evt_ptr: i32;
+    let ptr_19: i32;
+    let count_20: i32;
     let status: i32;
+    let i: i32;
+    let at: i32;
+    let w: i64;
+    let $licm_arith_7: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b47: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b47: block {
         l48: loop {
-            break_if b47 i >= $mv$data$end;
+            break_if b47 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l48;
+        };
+    }; b49: block {
+        l50: loop {
+            break_if b49 i > $licm_arith_7;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l50;
+        };
+    }; b51: block {
+        l52: loop {
+            break_if b51 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l48;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l52;
+        };
+    }; b53: block {
+        l54: loop {
+            break_if b53 i >= $mv$data$end;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l54;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l50: loop {
-            ptr_24 = ptr_13 + i;
-            count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_7: $mv$data$start;
+        l56: loop {
+            ptr_19 = ptr_13 + i;
+            count_20 = $mv$data$end - i;
+            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: $mv$data$start;
                 }
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                at = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, at);
+                $licm_arith_7 = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(at, $licm_arith_7));
+                status = builtin::load_i32($licm_arith_7 + 4);
+                drop("mem/realloc"($licm_arith_7, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_7: status;
+                "wasi/waitable-set-drop"(at);
+                break $inline_cm_await_blocked_6: status;
             }) >>u 4;
-            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_19 = (if local.tee ptr_19(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_25;
-            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
+            i = i + count_20;
+            if ((ptr_19 != 0) | (count_20 <= 0)) | (i >= $mv$data$end) {
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return ptr_24;
+                return ptr_19;
             }
-            continue l50;
+            continue l56;
         };
     };
 }
@@ -676,7 +712,7 @@ fn "effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$C
     let $save_effect_handler_resume_positions.wado/B: ref null "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/B";
     let $sroa_$exit_6_1_10: i32;
     cold_path;
-    global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B = struct.new "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/B" { outer: local.tee $save_effect_handler_resume_positions.wado/B(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B), op_bump: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resume_positions.wado//$Closure_0" {  }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_0" } };
+    global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B = struct.new "effect_handler_resume_positions.wado//$Dispatch_effect_handler_resume_positions.wado/B" { outer: local.tee $save_effect_handler_resume_positions.wado/B(global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B), op_bump: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resume_positions.wado//$Closure_0" {  }, func: ref.func "closure/effect_handler_resume_positions.wado/$closure_wrapper_0" } };
     $sroa_$exit_6_1_10 = 0;
     $sroa_$exit_6_1_10 = n + "effect_handler_resume_positions.wado/$effect_dispatch__effect_handler_resume_positions.wado/B__bump"();
     global:effect_handler_resume_positions.wado::$effect_effect_handler_resume_positions.wado/B = $save_effect_handler_resume_positions.wado/B;
@@ -686,7 +722,6 @@ fn "effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$C
 fn "effect_handler_resume_positions.wado/effect_handler_resume_positions.wado/$Closure_5::$call$dae[self]"(xs) {
     cold_path;
     return $inline_effect_handler_resume_positions_wado_H_effect_handler_resume_positions_wado_A__first_sroa_self_seen__0: block -> i32 {
-        cold_path;
         cold_path;
         let $mv$$local_3$0: i32;
         let $mv$$local_3$1: i32;

@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
-    RefRule, SolverType, TraitDeclId, TypeDeclId,
+    Asker, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
+    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -74,7 +74,7 @@ pub fn holds_with_args(
     Query {
         program,
         env,
-        scope,
+        asker: Asker::Module(scope),
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
@@ -171,7 +171,7 @@ struct Open {
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
-    scope: ModuleId,
+    asker: Asker,
     asking: Vec<Open>,
     /// Whether the next question asks about a member of the type a pin
     /// bound it from, rather than about a bound's subject.
@@ -293,7 +293,10 @@ impl Query<'_> {
             && fact
                 .visible_from
                 .as_ref()
-                .is_none_or(|modules| modules.contains(&self.scope))
+                .is_none_or(|modules| match self.asker {
+                    Asker::Module(module) => modules.contains(&module),
+                    Asker::Instance => true,
+                })
         {
             let matched = || -> Vec<Option<SolverType>> {
                 let SolverType::Decl(_, args) = ty else {
@@ -751,7 +754,7 @@ struct Answer {
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,
-    scope: ModuleId,
+    asker: Asker,
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
@@ -760,7 +763,7 @@ pub(super) fn impl_applies(
         Query {
             program,
             env,
-            scope,
+            asker,
             asking: Vec::new(),
             member_next: false,
             at_itself: Some(ty.clone()),
@@ -839,6 +842,35 @@ pub(super) fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
+    answers_args_by(program, def, ty, subject, written, args, SolverType::eq)
+}
+
+/// Whether the impl answers a call that names `args` at an instance, as
+/// [`answers_args`] answers a bound. A parameter in `args` is a binder the
+/// call's own frame leaves unsettled, and fits any type.
+pub(super) fn answers_named_args(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    subject: &SolverType,
+    written: &[SolverType],
+    args: &[SolverType],
+) -> bool {
+    answers_args_by(program, def, ty, Some(subject), written, args, fits)
+}
+
+/// At every parameter, whether an argument `args` says `fits` one `written`
+/// says: each side its written argument, or the trait's default at `ty` where
+/// it wrote none.
+fn answers_args_by(
+    program: &Program,
+    def: &ImplDef,
+    ty: &SolverType,
+    subject: Option<&SolverType>,
+    written: &[SolverType],
+    args: &[SolverType],
+    fits: impl Fn(&SolverType, &SolverType) -> bool,
+) -> bool {
     let written = program.per_param(def.trait_, written);
     let args = program.per_param(def.trait_, args);
     // A `Self` default lowers to the impl's target, which the match bound to
@@ -855,13 +887,39 @@ pub(super) fn answers_args(
     };
     (0..written.len().max(args.len())).all(|i| {
         let asks = said(i, args.get(i).and_then(Option::as_ref));
+        let offered = said(i, written.get(i).and_then(Option::as_ref));
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
         asks.is_empty()
             || asks
                 .iter()
-                .any(|ask| said(i, written.get(i).and_then(Option::as_ref)).contains(ask))
+                .any(|ask| offered.iter().any(|offer| fits(ask, offer)))
     })
+}
+
+/// Whether `offered` is `asked`, a parameter in `asked` fitting any type.
+fn fits(asked: &SolverType, offered: &SolverType) -> bool {
+    match (asked, offered) {
+        (SolverType::Param(_) | SolverType::Pack(_), _) => true,
+        (SolverType::Decl(head, args), SolverType::Decl(other, offered)) => {
+            head == other && all_fit(args, offered)
+        }
+        (
+            SolverType::Ref { is_mut, inner },
+            SolverType::Ref {
+                is_mut: other,
+                inner: offered,
+            },
+        ) => is_mut == other && fits(inner, offered),
+        (SolverType::Tuple(elems), SolverType::Tuple(offered)) => {
+            elems.iter().any(|e| matches!(e, SolverType::Pack(_))) || all_fit(elems, offered)
+        }
+        _ => asked == offered,
+    }
+}
+
+fn all_fit(asked: &[SolverType], offered: &[SolverType]) -> bool {
+    asked.len() == offered.len() && asked.iter().zip(offered).all(|(a, o)| fits(a, o))
 }
 
 /// Whether the impl answers its trait at the declared defaults, as a derived

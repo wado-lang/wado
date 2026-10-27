@@ -1,0 +1,38 @@
+// Two struct blankets differ only in a bound that is not a reflection trait.
+// `S` holds `Quiet` alone, so the instance of `via` takes the blanket the call
+// `S::describe()` takes. Reading the reflection kind alone, monomorphization
+// once took the first blanket and collided with that call's instance.
+trait Describe with () {
+    fn describe() -> String;
+}
+
+trait Loud with () {}
+
+trait Quiet with () {}
+
+impl<T: ReflectStruct + Loud> Describe for T {
+    fn describe() -> String {
+        return "loud";
+    }
+}
+
+impl<T: ReflectStruct + Quiet> Describe for T {
+    fn describe() -> String {
+        return "quiet";
+    }
+}
+
+struct S {
+    x: i32,
+}
+
+impl Quiet for S {}
+
+fn via<T: Describe>() -> String {
+    return T::describe();
+}
+
+test "a generic body's instance takes the blanket whose bounds hold" {
+    assert S::describe() == "quiet";
+    assert via::<S>() == "quiet";
+}

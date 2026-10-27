@@ -8,6 +8,7 @@ pub mod affine_drop;
 pub mod cm_binding;
 pub mod common;
 pub mod effect_dispatch;
+pub mod list_view;
 pub mod reflect_bridge;
 pub mod serde_synth;
 pub mod template;
@@ -113,6 +114,7 @@ pub fn synthesize(project: Package) -> Result<Package, Vec<SynthesisError>> {
     for module in project.tir_modules.values_mut() {
         let tt = module.type_table.clone();
         template::synthesize_hole_fmt_helpers(module, &tt, &trait_env);
+        list_view::expand_list_views(module, &tt, &trait_env);
     }
 
     // Effect-dispatch wrapper synthesis and call-site rewriting run before

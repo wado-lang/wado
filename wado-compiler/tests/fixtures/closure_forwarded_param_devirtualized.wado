@@ -1,0 +1,30 @@
+// A closure a function takes as a parameter and passes on to another function
+// is called directly there too: the callee is specialized for the closure the
+// caller was specialized for, so no call goes through a canonical closure.
+// `summed` recurses, so the inliner never splices it into `total`, and it
+// passes the closure on to itself.
+use { println, Stdout } from "core:cli";
+
+fn total(n: i32, at: fn(i32) -> i32) -> i32 {
+    return summed(0, n, at);
+}
+
+fn summed(from: i32, to: i32, at: fn(i32) -> i32) -> i32 {
+    if from >= to {
+        return 0;
+    }
+    return at(from) + summed(from + 1, to, at);
+}
+
+export fn run() with Stdout {
+    let scale = builtin::black_box(3);
+    println(`${total(builtin::black_box(5), |i| i * scale)}`);
+}
+
+__DATA__
+{
+    "stdout": "30\n",
+    "wir_not_expect:O2": [
+        "call_ref"
+    ]
+}

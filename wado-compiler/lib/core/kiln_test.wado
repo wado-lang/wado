@@ -72,7 +72,7 @@ struct ScriptedInput {
 }
 
 impl Stream<u8> for ScriptedInput {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let items = self.chunks[self.at];
         self.at += 1;
         let result = if self.at == self.chunks.len() { CopyResult::Dropped } else { CopyResult::Completed };

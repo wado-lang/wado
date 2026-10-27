@@ -41,6 +41,7 @@ pub mod publish;
 pub mod query;
 pub mod query_adapter;
 pub mod registry;
+pub mod remote;
 mod rss;
 pub mod run;
 pub mod run_cache;

@@ -26,6 +26,7 @@ use { Slice } from "core:prelude/slice.wado";
 use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
+use { memory_into_gc_array } from "core:rt";
 
 /// Why a byte sequence is not valid UTF-8: where the valid part ends, and
 /// whether what follows is malformed or merely cut short.
@@ -651,9 +652,7 @@ impl String {
             return;
         }
         let start = self.internal_reserve_uninit(len);
-        for let mut i = 0; i < len; i += 1 {
-            self.internal_set_byte_unchecked(start + i, builtin::i32_load8_u(ptr + i));
-        }
+        memory_into_gc_array(&mut self.repr as &mut Array<u8>, start, ptr, len);
     }
 
     /// Append `n` copies of `byte` to this string.

@@ -902,6 +902,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // land before the decls are registered: registration resolves a
             // parameter's newtype through the interface its reference names.
             cm_interface_registry.extend_source_interfaces(cm_source_interfaces.clone());
+            Arc::make_mut(&mut cm_interface_registry).bind_program_types(modules, &resolutions);
             // Resolve `Interface::method` calls into CM components during
             // annotate — the same role build_from_stdlib plays for WASI.
             fold_component_interfaces(&mut cm_interface_registry, modules, &stdlib_set)
@@ -941,6 +942,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             CompilerItem::Ref,
             CompilerItem::RefMut,
             CompilerItem::AffineResource,
+            CompilerItem::AnyBits,
             CompilerItem::Waitable,
         ]) {
             let Some(sealed) = type_table.borrow().compiler_items().trait_def(sealed_item) else {

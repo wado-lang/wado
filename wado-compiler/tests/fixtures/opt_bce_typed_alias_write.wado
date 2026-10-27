@@ -1,0 +1,36 @@
+// A store into a `List` cannot change a `Buf`'s field, so the loop's writes to
+// `out` leave `self.len` standing, and the contract `index < self.len` the
+// loop guard already proves is removed.
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    data: List<i32>,
+    len: i32,
+}
+
+impl Buf {
+    fn at(&self, index: i32) -> i32
+        contract 0 <= index < self.len
+    {
+        return self.data[index] * 3;
+    }
+
+    fn tripled(&self) -> List<i32> {
+        let mut out = List::<i32>::with_capacity(self.len);
+        for let i of 0..<self.len {
+            out.push(self.at(i));
+        }
+        return out;
+    }
+}
+
+export fn run() with Stdout {
+    let b = Buf { data: [1, 2, 3], len: builtin::black_box(3) };
+    println(`${b.tripled():?}`);
+}
+
+__DATA__
+{
+  "stdout": "[3, 6, 9]\n",
+  "wir_not_expect:O2": ["Buf::at$contract_report0"]
+}

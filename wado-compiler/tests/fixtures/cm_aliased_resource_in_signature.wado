@@ -1,0 +1,22 @@
+// A signature may spell a CM type by the alias it was imported under. The
+// type is its declaration, so the alias names the same resource.
+
+use { Device as Dev } from "./sub/cm_aliased_resource_dep.wado";
+
+interface Maker {
+    #[cm("wasi:demo/maker@0.1.0#get-device")]
+    fn get_device() -> Dev;
+}
+
+export fn run() with (Maker, Dev) {
+    let _ = Maker::get_device().id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"wasi:demo/maker@0.1.0\""], "count": 1 },
+    { "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 }
+  ]
+}

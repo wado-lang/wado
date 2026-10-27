@@ -782,6 +782,15 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.load_source_prefix(path, extent).await
     }
 
+    async fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<wado_compiler::remote::Integrity>,
+    ) -> Result<Vec<u8>, wado_compiler::SourceError> {
+        self.inner.load_remote(url, extent, integrity).await
+    }
+
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {
         // Capture for the snapshot cache, then forward so the inner host's
         // own side effects (e.g. CLI stderr logging) still happen.

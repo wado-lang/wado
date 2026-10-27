@@ -6,67 +6,85 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-variant core:prelude/types.wado//Result<u32,()> {  // TypeId(2)
+array Array<i64> (mut i64);  // TypeId(2)
+
+variant core:prelude/types.wado//Result<u32,()> {  // TypeId(3)
     Ok(u32),
     Err,
 }
 
-struct core:prelude/types.wado//Result<u32,()>::Ok {  // TypeId(3)
+struct core:prelude/types.wado//Result<u32,()>::Ok {  // TypeId(4)
     discriminant: i32,
     payload_0: u32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(5)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(7)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(8)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(9)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
-type "functype//wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok" = fn(i32, i32, i32);  // TypeId(10)
+type "functype//wasi/$core:coverage/coverage-host@0.1.0#hit" = fn(i32);  // TypeId(11)
 
-type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
+type "functype//wasi/$core:coverage/coverage-host@0.1.0#count" = fn(i32, i64);  // TypeId(12)
 
-type "functype//coverage_composed_component.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok" = fn(ref "core:prelude/types.wado//Result<u32,()>") -> ref "core:prelude/types.wado//Result<u32,()>";  // TypeId(12)
+type "functype//wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok" = fn(i32, i32, i32);  // TypeId(13)
 
-type "functype//coverage_composed_component.wado/$cm_export__$test_0" = fn();  // TypeId(13)
+type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(14)
 
-type "functype//coverage_composed_component.wado/$test_0$cold0" = fn();  // TypeId(14)
+type "functype//coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#hit" = fn(i32);  // TypeId(15)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
+type "functype//coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count" = fn(i32, i64);  // TypeId(16)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(16)
+type "functype//coverage_composed_component.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok" = fn(ref "core:prelude/types.wado//Result<u32,()>") -> ref "core:prelude/types.wado//Result<u32,()>";  // TypeId(17)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(17)
+type "functype//coverage_composed_component.wado/$cm_export__$test_0" = fn();  // TypeId(18)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(18)
+type "functype//coverage_composed_component.wado/$test_0$cold0" = fn();  // TypeId(19)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(19)
+type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(20)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(20)
+type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(21)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(22)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(22)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(23)
 
-type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(23)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(24)
+type "functype//core:rt/coverage_report" = fn();  // TypeId(25)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//core:rt/unreachable" = fn();  // TypeId(26)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(27)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
+type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
+type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(29)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
+
+type "functype//core:rt/$initialize_module" = fn();  // TypeId(31)
+
+type "functype//core:rt/coverage_probe$cold0" = fn(i32, i32);  // TypeId(32)
+
+type "functype//core:rt/coverage_probe$spec0$dae[id]" = fn();  // TypeId(33)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
+
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(37)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(38)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -74,6 +92,8 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
+import fn wasi/$core:coverage/coverage-host@0.1.0#hit from "wasi/$core:coverage/coverage-host@0.1.0#hit";
+import fn wasi/$core:coverage/coverage-host@0.1.0#count from "wasi/$core:coverage/coverage-host@0.1.0#count";
 import fn wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok from "wasi/$wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
@@ -82,7 +102,17 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 
+global mut global:core:rt::COVERAGE_COUNTS: ref null Array<i64> = ref.null none;
+global mut global:coverage_composed_component.wado::$modules_initialized: bool = 0;
 global global:core:builtin::$unit_case$core:prelude/types.wado//Result<u32,()>$1: ref "core:prelude/types.wado//Result<u32,()>" = struct.new "core:prelude/types.wado//Result<u32,()>" { 1 };
+
+fn "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#hit"(id) with CoverageHost {
+    "wasi/$core:coverage/coverage-host@0.1.0#hit"(id);
+}
+
+fn "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs) with CoverageHost {
+    "wasi/$core:coverage/coverage-host@0.1.0#count"(id, runs);
+}
 
 fn "coverage_composed_component.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok"(v) with CmCatalog {
     let $v_disc: i32;
@@ -107,11 +137,18 @@ fn "coverage_composed_component.wado/$cm_binding__wado-lang:cm-catalog-dependenc
 
 fn "coverage_composed_component.wado/$cm_export__$test_0"() {
     let self_2: ref "core:prelude/types.wado//Result<u32,()>";
-    if @unlikely($inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__4: block -> bool {
+    $inline__initialize_modules_0: block {
+        break_if $inline__initialize_modules_0 @likely(global:coverage_composed_component.wado::$modules_initialized);
+        cold_path;
+        "core:rt/$initialize_module"();
+        global:coverage_composed_component.wado::$modules_initialized = 1;
+    };
+    "core:rt/coverage_probe$spec0$dae[id]"();
+    if @unlikely($inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__3: block -> bool {
         if ref.test "core:prelude/types.wado//Result<u32,()>::Ok"(local.tee self_2("coverage_composed_component.wado/$cm_binding__wado-lang:cm-catalog-dependency9bf6585faebfc63c/cm-catalog@0.0.36#id-result-ok"(struct.new "core:prelude/types.wado//Result<u32,()>::Ok" { discriminant: 0, payload_0: 7 }))) {
-            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__4: ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(self_2).payload_0 == 7;
+            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__3: ref.cast "core:prelude/types.wado//Result<u32,()>::Ok"(self_2).payload_0 == 7;
         } else {
-            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__4: 0;
+            break $inline_core_prelude_types_wado_Result_u32_____core_prelude_traits_wado_Eq__eq_sroa_self_value_other_value__3: 0;
         }
         unreachable;
     } == 0) {
@@ -119,6 +156,7 @@ fn "coverage_composed_component.wado/$cm_export__$test_0"() {
         "coverage_composed_component.wado/$test_0$cold0"();
         unreachable;
     }
+    "core:rt/coverage_report"();
     "wasi/task-return"(0);
 }
 
@@ -159,13 +197,55 @@ fn "core:prelude/types.wado/cm_await_copy"(handle) {
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let i: i32;
+    let at: i32;
+    let w: i64;
+    let $licm_arith_7: i32;
     i = 0;
+    $licm_arith_7 = len - 8;
     b7: block {
         l8: loop {
-            break_if b7 i >= len;
+            break_if b7 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l8;
+        };
+    };
+    b9: block {
+        l10: loop {
+            break_if b9 i > $licm_arith_7;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l10;
+        };
+    };
+    b11: block {
+        l12: loop {
+            break_if b11 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l8;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l12;
+        };
+    };
+    b13: block {
+        l14: loop {
+            break_if b13 i >= len;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l14;
         };
     };
 }
@@ -202,6 +282,46 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
+fn "core:rt/coverage_report"() {
+    let len: i32;
+    let id: i32;
+    let runs: i64;
+    len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
+    id = 0;
+    b16: block {
+        l17: loop {
+            break_if b16 (((id >= len) | ((id + 1) >= len)) | (((id + 1) + 1) >= len)) | ((((id + 1) + 1) + 1) >= len);
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l17;
+        };
+    };
+    b22: block {
+        l23: loop {
+            break_if b22 id >= len;
+            if local.tee runs(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, id)) > 1_i64 {
+                "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#count"(id, runs);
+            }
+            id = id + 1;
+            continue l23;
+        };
+    };
+}
+
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;
@@ -236,7 +356,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l13: loop {
+        l28: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             result_7 = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -244,9 +364,37 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return result_7;
             }
-            continue l13;
+            continue l28;
         };
     };
+}
+
+fn "core:rt/$initialize_module"() {
+    global:core:rt::COVERAGE_COUNTS = builtin::array_new<i64>(0);
+}
+
+fn "core:rt/coverage_probe$cold0"(id, len) {
+    let grown: ref Array<i64>;
+    if id >= len {
+        builtin::array_copy<i64>(local.tee grown(builtin::array_new<i64>(select i32(id < (len * 2), len * 2, id + 1))), 0, global:core:rt::COVERAGE_COUNTS, 0, len);
+        global:core:rt::COVERAGE_COUNTS = grown;
+    }
+    builtin::array_set<i64>(global:core:rt::COVERAGE_COUNTS, id, 1_i64);
+    "coverage_composed_component.wado/$cm_binding__core:coverage/coverage-host@0.1.0#hit"(id);
+}
+
+fn "core:rt/coverage_probe$spec0$dae[id]"() {
+    let len: i32;
+    let count: i64;
+    len = builtin::array_len(global:core:rt::COVERAGE_COUNTS);
+    if 1 < len {
+        if local.tee count(builtin::array_get_value<i64>(global:core:rt::COVERAGE_COUNTS, 1)) != 0_i64 {
+            builtin::array_set<i64>(global:core:rt::COVERAGE_COUNTS, 1, count + 1_i64);
+            return;
+        }
+    }
+    cold_path;
+    "core:rt/coverage_probe$cold0"(1, len);
 }
 
 export fn "coverage_composed_component.wado/$cm_export__$test_0" as "$test_0"

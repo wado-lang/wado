@@ -81,6 +81,20 @@ impl WadoCodeGenerator {
             let names = import.type_names.join(", ");
             self.writeln(&format!("use {{ {names} }} from \"{}\";", import.from_path));
         }
+        let lends_lists = module
+            .interfaces
+            .iter()
+            .flat_map(|interface| &interface.functions)
+            .chain(
+                module
+                    .resources
+                    .iter()
+                    .flat_map(|resource| &resource.methods),
+            )
+            .any(|f| f.params.iter().any(|p| p.lends_view));
+        if lends_lists {
+            self.writeln("use { ListView } from \"core:linear\";");
+        }
     }
 
     fn write_type_def(&mut self, type_def: &WadoTypeDef) {
@@ -394,7 +408,13 @@ impl WadoCodeGenerator {
                         .as_ref()
                         .map(|value| format!(" = {value}"))
                         .unwrap_or_default();
-                    format!("{}: {}{default}", p.name, Self::format_type(&p.ty))
+                    let ty = match &p.ty {
+                        WadoType::List(elem) if p.lends_view => {
+                            format!("&ListView<{}>", Self::format_type(elem))
+                        }
+                        ty => Self::format_type(ty),
+                    };
+                    format!("{}: {ty}{default}", p.name)
                 }
             })
             .collect::<Vec<_>>()

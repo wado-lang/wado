@@ -251,6 +251,18 @@ impl ImplOrigin {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ModuleId(pub u32);
 
+/// Who asks a question: code in a module, or an instance of a generic body.
+/// Only a `Reflect*` fact's visibility gate tells them apart. The use site that
+/// settled an instance's parameters proved its bounds where it stands
+/// (spec-reflection.md § Visibility), so the instance sees every member.
+/// Asking again from the module declaring the body refused an impl that use
+/// site had chosen (`reflect_derivation_nested_private_fields.wado`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Asker {
+    Module(ModuleId),
+    Instance,
+}
+
 /// The default a trait's type parameter declares — the `Self` in
 /// `trait Mul<Rhs = Self>`.
 #[derive(Clone, PartialEq, Eq, Debug)]

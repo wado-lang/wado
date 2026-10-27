@@ -25,6 +25,7 @@ use crate::name::{
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
+use std::sync::Arc;
 use wit_parser::{
     Handle, Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem,
 };
@@ -224,11 +225,17 @@ pub fn build_bindings(
     };
 
     if b.uses_tree_map {
-        let tree_map_use = b.tree_map_use();
+        let tree_map_use = b.use_item("core:collections", "TreeMap");
         b.items.insert(0, tree_map_use);
+    }
+    if b.uses_list_view {
+        let list_view_use = b.use_item("core:linear", "ListView");
+        b.items.insert(0, list_view_use);
     }
     let source_interfaces = b.source_interfaces;
     let module = Module::with_metadata(
+        // Synthesized from WIT: there is no text.
+        Arc::from(""),
         b.items,
         inner_attributes,
         None,
@@ -237,7 +244,7 @@ pub fn build_bindings(
         b.space,
         b.count,
         false,
-        // Synthesized from WIT, never highlighted: no source text to key on.
+        // Never highlighted: no source text to key on.
         Vec::new(),
     );
     let interfaces = b
@@ -336,6 +343,7 @@ struct Builder {
     errors: Vec<String>,
     source_interfaces: SourceInterfaceBatch,
     uses_tree_map: bool,
+    uses_list_view: bool,
     names: InterfaceNames,
     /// Each interface the component exports -> the one the program imports it
     /// as ([`cm_dependency_interface`]).
@@ -351,6 +359,7 @@ impl Builder {
             errors: Vec::new(),
             source_interfaces: SourceInterfaceBatch::default(),
             uses_tree_map: false,
+            uses_list_view: false,
             names,
             exports,
         }
@@ -370,20 +379,20 @@ impl Builder {
         }
     }
 
-    /// `use { TreeMap } from "core:collections";`, the one binding type the
-    /// prelude does not supply.
-    fn tree_map_use(&mut self) -> Item {
+    /// `use { name } from "source";`, for a binding type or trait the prelude
+    /// does not supply.
+    fn use_item(&mut self, source: &str, name: &str) -> Item {
         Item::Use(UseDecl {
             id: self.id(),
             attrs: Vec::new(),
             visibility: Visibility::Private,
             is_export: false,
-            source: StrLit::new("core:collections"),
+            source: StrLit::new(source),
             source_span: syn(),
             source_id: self.id(),
             items: vec![UseItem::Simple {
                 id: self.id(),
-                name: "TreeMap".to_string(),
+                name: name.to_string(),
                 spelling: UseNameSpelling::Ident,
                 name_span: syn(),
                 alias: None,
@@ -455,40 +464,10 @@ impl Builder {
 
         let mut methods = Vec::new();
         for (fname, func) in &iface.functions {
-            let cm_params: Vec<AttrArg> = func
-                .params
-                .iter()
-                .map(|p| AttrArg::Str(StrLit::new(p.name.as_str())))
-                .collect();
-            let params: Vec<Param> = func
-                .params
-                .iter()
-                .map(|p| {
-                    let ty = self.map_type(resolve, p.ty, fq);
-                    Param {
-                        id: self.id(),
-                        attrs: Vec::new(),
-                        name: wado_identifier(&p.name),
-                        name_span: syn(),
-                        ty,
-                        self_kind: SelfKind::None,
-                        is_mut: false,
-                        default: None,
-                        span: syn(),
-                    }
-                })
-                .collect();
+            let signature = self.signature(resolve, func, fq);
             let is_async = is_async_func(func);
             let return_type = self.func_return_type(resolve, func, fq);
-            let attrs = vec![
-                self.cm_import_attr(fq, Some(fname)),
-                Attribute {
-                    name: CM_PARAMS.to_string(),
-                    args: cm_params,
-                    cm_boundary: None,
-                    span: syn(),
-                },
-            ];
+            let attrs = vec![self.cm_import_attr(fq, Some(fname)), signature.cm_params];
             methods.push(Function {
                 id: self.id(),
                 name: wado_identifier(fname),
@@ -499,7 +478,7 @@ impl Builder {
                 is_async,
                 type_params: Vec::new(),
                 attrs,
-                params,
+                params: signature.params,
                 params_span: syn(),
                 return_type,
                 effects: Vec::new(),
@@ -531,6 +510,43 @@ impl Builder {
         }));
     }
 
+    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT.
+    fn signature(&mut self, resolve: &Resolve, func: &wit_parser::Function, fq: &str) -> Signature {
+        let cm_params = Attribute {
+            name: CM_PARAMS.to_string(),
+            args: func
+                .params
+                .iter()
+                .map(|p| AttrArg::Str(StrLit::new(p.name.as_str())))
+                .collect(),
+            cm_boundary: None,
+            span: syn(),
+        };
+        let mut params = Vec::with_capacity(func.params.len());
+        for p in &func.params {
+            let ty = match lent_list_elem(resolve, func, p.ty) {
+                Some(elem) => {
+                    let elem = self.map_leaf(resolve, elem, fq);
+                    self.uses_list_view = true;
+                    Type::Reference(Box::new(self.generic("ListView", vec![elem])))
+                }
+                None => self.map_type(resolve, p.ty, fq),
+            };
+            params.push(Param {
+                id: self.id(),
+                attrs: Vec::new(),
+                name: wado_identifier(&p.name),
+                name_span: syn(),
+                ty,
+                self_kind: SelfKind::None,
+                is_mut: false,
+                default: None,
+                span: syn(),
+            });
+        }
+        Signature { params, cm_params }
+    }
+
     /// A WIT result, wrapped in `AsyncCall<T>` for an `async func` — the shape
     /// the consumer drives the subtask through.
     fn func_return_type(
@@ -551,40 +567,10 @@ impl Builder {
     /// (Phase 9); the consumer calls it as a free function and codegen
     /// synthesizes the CM import trampoline from the `#[cm]` boundary.
     fn emit_world_function(&mut self, resolve: &Resolve, func: &wit_parser::Function) {
-        let cm_params: Vec<AttrArg> = func
-            .params
-            .iter()
-            .map(|p| AttrArg::Str(StrLit::new(p.name.as_str())))
-            .collect();
-        let params: Vec<Param> = func
-            .params
-            .iter()
-            .map(|p| {
-                let ty = self.map_type(resolve, p.ty, "");
-                Param {
-                    id: self.id(),
-                    attrs: Vec::new(),
-                    name: wado_identifier(&p.name),
-                    name_span: syn(),
-                    ty,
-                    self_kind: SelfKind::None,
-                    is_mut: false,
-                    default: None,
-                    span: syn(),
-                }
-            })
-            .collect();
         let is_async = is_async_func(func);
+        let signature = self.signature(resolve, func, "");
         let return_type = self.func_return_type(resolve, func, "");
-        let attrs = vec![
-            self.cm_world_import_attr(&func.name),
-            Attribute {
-                name: CM_PARAMS.to_string(),
-                args: cm_params,
-                cm_boundary: None,
-                span: syn(),
-            },
-        ];
+        let attrs = vec![self.cm_world_import_attr(&func.name), signature.cm_params];
         let id = self.id();
         self.items.push(Item::Function(Function {
             id,
@@ -596,7 +582,7 @@ impl Builder {
             is_async,
             type_params: Vec::new(),
             attrs,
-            params,
+            params: signature.params,
             params_span: syn(),
             return_type,
             effects: Vec::new(),
@@ -873,6 +859,49 @@ impl Builder {
             span: syn(),
         })
     }
+}
+
+/// A function's parameters as the bindings declare them.
+struct Signature {
+    params: Vec<Param>,
+    /// `#[cm_params]`, the WIT name of each parameter.
+    cm_params: Attribute,
+}
+
+/// The `T` an import `func` takes its parameter typed `ty` as a `&ListView<T>`
+/// at, so a `LinearArray` lends its own block (WEP: Linear Arrays): a
+/// `list<T>` of numbers, on a synchronous function. An async one has not read
+/// its arguments by the time it returns, so it keeps the `List`.
+pub fn lent_list_elem(
+    resolve: &Resolve,
+    func: &wit_parser::Function,
+    ty: WitType,
+) -> Option<WitType> {
+    (!is_async_func(func))
+        .then(|| list_view_elem(resolve, ty))
+        .flatten()
+}
+
+/// The `T` of `ty` when it is a `list<T>` of a Component Model number type,
+/// which a `ListView<T>` lays out as the Canonical ABI does.
+fn list_view_elem(resolve: &Resolve, ty: WitType) -> Option<WitType> {
+    let CmShape::List(elem) = classify_wit(resolve, ty) else {
+        return None;
+    };
+    matches!(
+        elem,
+        WitType::U8
+            | WitType::U16
+            | WitType::U32
+            | WitType::U64
+            | WitType::S8
+            | WitType::S16
+            | WitType::S32
+            | WitType::S64
+            | WitType::F32
+            | WitType::F64
+    )
+    .then_some(elem)
 }
 
 /// Classify a WIT type into its [`CmShape`]. Named type references and

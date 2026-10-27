@@ -33,9 +33,9 @@ use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
     COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
-    case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
-    hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name, template_segment_helper_name,
-    variant_tag_helper_name,
+    case_extract_helper_name, case_ref_helper_name, closure_capture_field, field_get_helper_name,
+    field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name,
+    template_segment_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -2010,8 +2010,8 @@ impl FunctionTranslator<'_, '_> {
             captures,
             ..
         } = &expr.kind
-            && let Some(functor) = self.base.closure.functor_infos.get(*closure_id as usize)
         {
+            let functor = &self.base.closure.functor_infos[*closure_id as usize];
             let nir_struct = self.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,
@@ -2373,6 +2373,9 @@ impl FunctionTranslator<'_, '_> {
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
+            }
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),
@@ -2516,7 +2519,7 @@ impl FunctionTranslator<'_, '_> {
 
     /// Rewrites the `Case<V, P>` bridge markers (WEP 2026-06-13 §3e):
     /// `builtin::variant_tag` becomes a direct tag read, and
-    /// `builtin::variant_case_extract` / `_construct` become calls to the
+    /// `builtin::variant_case_extract` / `_ref` / `_construct` become calls to the
     /// per-(variant, payload-type) helpers synthesized with `ReflectVariant`.
     /// Returns `None` for every other callee.
     fn convert_case_bridge_call(
@@ -2612,6 +2615,8 @@ impl FunctionTranslator<'_, '_> {
         let helper_name_for: fn(&str, &str) -> String =
             if func.is_builtin_named("variant_case_extract") {
                 case_extract_helper_name
+            } else if func.is_builtin_named("variant_case_ref") {
+                case_ref_helper_name
             } else if func.is_builtin_named("variant_case_construct") {
                 case_construct_helper_name
             } else {

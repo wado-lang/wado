@@ -47,6 +47,7 @@
 //! swapped for a symlink fails rather than resolving through it.
 
 use { DescriptorFlags, DescriptorType, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
+use { LinearArray } from "core:linear";
 
 pub use { Preopens, Descriptor, ErrorCode } from "wasi:filesystem";
 pub use { Instant } from "wasi:clocks";
@@ -154,6 +155,27 @@ pub fn root() -> Result<Descriptor, FsError> with Preopens {
 /// — a directory, a device, a pipe — fails rather than reading, and the kind
 /// is read off the open descriptor rather than by resolving the path twice.
 pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens {
+    let [stream, done, expected] = open_read(path)?;
+    let bytes = stream.read_to_end_sized(expected) as ByteList;
+    stream.drop();
+    finish(path, done)?;
+    return Result::Ok(bytes);
+}
+
+/// The whole content of `path` in linear memory: what [`read`] returns, with
+/// no byte lifted into the GC heap. A file of `f32`s becomes a
+/// `LinearArray<f32>` by `cast`, with no element copied.
+pub fn read_linear<S: AsStrSlice>(path: S) -> Result<LinearArray<u8>, FsError> with Preopens {
+    let [stream, done, expected] = open_read(path)?;
+    let array = LinearArray::<u8>::internal_read_stream(&stream, expected);
+    stream.drop();
+    finish(path, done)?;
+    return Result::Ok(array);
+}
+
+/// The read stream of the regular file at `path`, the future it reports its
+/// end on, and the size the file states.
+fn open_read<S: AsStrSlice>(path: S) -> Result<[Stream<u8>, Future<Result<(), ErrorCode>>, i32], FsError> with Preopens {
     let file = open(path, OpenFlags::none(), DescriptorFlags::Read)?;
     // No open flag says "a regular file", and `read_via_stream` traps rather
     // than failing on anything else, so the kind is checked here instead.
@@ -175,10 +197,7 @@ pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens {
         Err(_) => 0,
     };
     let [stream, done] = file.read_via_stream(0 as Filesize);
-    let bytes = stream.read_to_end_sized(expected) as ByteList;
-    stream.drop();
-    finish(path, done)?;
-    return Result::Ok(bytes);
+    return Result::Ok([stream, done, expected]);
 }
 
 /// The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.

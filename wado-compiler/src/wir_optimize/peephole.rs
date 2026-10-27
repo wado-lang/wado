@@ -334,7 +334,7 @@ fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, CopySource>) {
 /// nothing changes: folding a `RefTest` to a constant hands the next sub-pass a
 /// dead branch. Value-copy elision runs whole-function, needing to see every
 /// trailing instruction reachable after the copy, enclosing scopes included.
-pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: &[WirTypeDef]) {
+pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, types: &[WirTypeDef]) {
     const MAX_ROUNDS: u32 = 8;
     let mut rounds = 0;
     loop {
@@ -352,6 +352,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_short_fill(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_get_of_new(instr, null, types));
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
         });
@@ -443,6 +444,59 @@ fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
     true
 }
 
+/// `struct.get(struct.new(…), f)` → `f`'s operand: the struct is fresh, so
+/// nothing wrote the field since. A reference into a variant payload leaves
+/// this behind, a `Box<T>` built and read back at once, often as the tail of a
+/// `Seq` behind the case check. The other operands are dropped, so each must be
+/// side-effect free and unable to trap.
+fn try_fold_get_of_new(instr: &mut WirInstr, null: &Nullability, types: &[WirTypeDef]) -> bool {
+    let WirInstr::StructGet {
+        type_id,
+        field_name,
+        expr,
+        ..
+    } = instr
+    else {
+        return false;
+    };
+    let mut tail = expr.as_mut();
+    while let WirInstr::Seq(stmts) = tail {
+        let Some(last) = stmts.last_mut() else {
+            return false;
+        };
+        tail = last;
+    }
+    let WirInstr::StructNew {
+        type_id: built,
+        fields,
+    } = tail
+    else {
+        return false;
+    };
+    if built != type_id {
+        return false;
+    }
+    // A variant case is built and read through its variant's type id too.
+    let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
+        return false;
+    };
+    let index = def
+        .fields
+        .iter()
+        .position(|field| field.name == *field_name)
+        .expect("`struct.get` names a field of its type");
+    let dropped_unobservable = fields.iter().enumerate().all(|(i, operand)| {
+        i == index || (is_side_effect_free(operand) && !may_trap_in(operand, null))
+    });
+    if !dropped_unobservable {
+        return false;
+    }
+    let value = fields.swap_remove(index);
+    *tail = value;
+    *instr = std::mem::replace(expr.as_mut(), WirInstr::Nop);
+    true
+}
+
 /// Try to evaluate a WIR condition to a boolean constant. Looks through a
 /// `BranchHint` wrapper — a hinted branch whose condition became constant
 /// must still fold (the hint disappears with the branch).
@@ -511,6 +565,26 @@ fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     true
 }
 
+/// The operands of the i32 comparison `instr` is, and what it answers on them.
+pub(super) fn i32_comparison(
+    instr: &WirInstr,
+) -> Option<(&WirInstr, &WirInstr, fn(i32, i32) -> bool)> {
+    let (l, r, op): (_, _, fn(i32, i32) -> bool) = match instr {
+        WirInstr::I32Eq(l, r) => (l, r, |a, b| a == b),
+        WirInstr::I32Ne(l, r) => (l, r, |a, b| a != b),
+        WirInstr::I32LtS(l, r) => (l, r, |a, b| a < b),
+        WirInstr::I32LeS(l, r) => (l, r, |a, b| a <= b),
+        WirInstr::I32GtS(l, r) => (l, r, |a, b| a > b),
+        WirInstr::I32GeS(l, r) => (l, r, |a, b| a >= b),
+        WirInstr::I32LtU(l, r) => (l, r, |a, b| a.cast_unsigned() < b.cast_unsigned()),
+        WirInstr::I32LeU(l, r) => (l, r, |a, b| a.cast_unsigned() <= b.cast_unsigned()),
+        WirInstr::I32GtU(l, r) => (l, r, |a, b| a.cast_unsigned() > b.cast_unsigned()),
+        WirInstr::I32GeU(l, r) => (l, r, |a, b| a.cast_unsigned() >= b.cast_unsigned()),
+        _ => return None,
+    };
+    Some((l, r, op))
+}
+
 /// Fold a constant comparison (i32 and i64, all ten operators each; f32 and
 /// f64, all six, as IEEE answers them) or a constant `I32Eqz` / `I64Eqz` to
 /// its boolean `I32Const` result.
@@ -552,17 +626,7 @@ fn try_fold_comparison(instr: &mut WirInstr) -> bool {
         Some(op(f64c(l)?, f64c(r)?))
     }
     let folded = match instr {
-        // i32
-        WirInstr::I32Eq(l, r) => cmp32(l, r, |a, b| a == b),
-        WirInstr::I32Ne(l, r) => cmp32(l, r, |a, b| a != b),
-        WirInstr::I32LtS(l, r) => cmp32(l, r, |a, b| a < b),
-        WirInstr::I32LeS(l, r) => cmp32(l, r, |a, b| a <= b),
-        WirInstr::I32GtS(l, r) => cmp32(l, r, |a, b| a > b),
-        WirInstr::I32GeS(l, r) => cmp32(l, r, |a, b| a >= b),
-        WirInstr::I32LtU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() < b.cast_unsigned()),
-        WirInstr::I32LeU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() <= b.cast_unsigned()),
-        WirInstr::I32GtU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() > b.cast_unsigned()),
-        WirInstr::I32GeU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() >= b.cast_unsigned()),
+        _ if let Some((l, r, op)) = i32_comparison(instr) => cmp32(l, r, op),
         // i64
         WirInstr::I64Eq(l, r) => cmp64(l, r, |a, b| a == b),
         WirInstr::I64Ne(l, r) => cmp64(l, r, |a, b| a != b),

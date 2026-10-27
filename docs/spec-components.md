@@ -58,12 +58,29 @@ value such as a `List<T>` or a `String` instead.
 A signature that names one of them, anywhere within it, is a compile error at
 that parameter, or at the function's declaration for its result. This holds for
 every `export fn`, not only a world's entry point, because each one lands on the
-component's surface, and for every imported operation.
+component's surface, and for every imported operation, but for the
+`&ListView<T>` of a [list argument](#list-arguments).
 
 An anonymous struct never crosses either: no signature can name one yet
 ([Anonymous Structs](./spec-types.md#anonymous-structs)).
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+
+### List Arguments
+
+A synchronous import takes a `list<T>` parameter, for `T` a number type
+(`u8`…`u64`, `s8`…`s64`, `f32`, `f64`), as a `&ListView<T>` from `core:linear`:
+a component's world function and an operation of an interface or a resource
+alike. The reference crosses as the `list<T>` it views. An
+argument converts to it from any `ListArg<T>`
+([List View Arguments](./spec-functions.md#list-view-arguments)), so a
+`&LinearArray<T>` lends its own block, which the callee reads in place. A
+handler serving such an operation reads the view it is handed.
+
+An asynchronous import takes the `List<T>`, since the host reads its arguments
+after it returns.
+
+Rationale: [WEP: Linear Arrays](./wep-2026-10-26-linear-arrays.md).
 
 ### Published Types
 
@@ -204,19 +221,22 @@ with Fetch => &Canned {} do {
 #### Waiting on Several
 
 A `WaitableSet<W>` owns what it waits on. `insert` moves a member in, and
-`wait` blocks until one has an event, then moves that member back out in a
-`Ready<W>` beside the event. `poll` asks without blocking. The event is a
-`ReadyEvent`: `Call` with the `CallState` a call moved to, `Copied` with the
-`CopyResult` a started stream copy ended on, or `Unreported` for a member that
+`wait` blocks until one is ready, then moves that member back out in a
+`Ready<W>` beside the event. A call is ready once it resolved: an event that
+only moves it from `Starting` to `Started` keeps it waiting. `poll` asks
+without blocking. The event is a `ReadyEvent`: `Call` with the `CallState` a
+call resolved in, `Copied` with the `CopyResult` a started stream or future
+copy ended on, or `Unreported` for a member that
 neither has a handle for the host to report nor an event of its own. A member
 whose event is already known enters ready with that event, whether the host
 reported it to another set or the call or copy settled as it started. A set
-that drops drops its remaining members first.
+that drops drops its remaining members first. `drain` instead moves every
+member out, the ready ones first, so a race keeps its losers.
 
 A member is any type implementing `Waitable`, whose `wait_on` answers either the
 handle the host reports the member by or the event it is ready with. The trait
 is sealed: the standard library implements it on the calls and on the started
-stream copies (`ReadCopy`, `WriteCopy`), since a hand-written `wait_on` could
+copies (`ReadCopy`, `WriteCopy`, `FutureReadCopy`), since a hand-written `wait_on` could
 name a handle its value does not own. A bare stream or future end is no member: no
 copy on it is in flight, so the host has no event to report for it. A set
 waiting on two kinds takes a variant over them, which
@@ -319,6 +339,12 @@ settled one as `ReadyEvent::Copied`. Dropping a copy that has not settled
 cancels it. `read_to_end`, `read_to_end_bytes`, `write_all` and `write_raw_all`
 borrow the end and copy until the stream ends.
 
+A future read starts the same way. `Future::start_read(self)` moves the end into
+a `FutureReadCopy<T>`, which a set waits on as it waits on a stream copy.
+`finish` waits where the read has not settled and returns the value, or `None`
+where the writer dropped without writing. Dropping a read that has not settled
+cancels it, and dropping one that read a value drops the value.
+
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not
 take. `FutureWritable::write` returns a `FutureWrite<T> { rest: Option<T>, result }`, and `WriteCopy::finish` a `StreamWrite<T> { rest: List<T>, result }`. A caller that ignores the result drops the rest.
@@ -330,6 +356,10 @@ started on another end, so every copy a program makes goes through it, a
 started one included. A copy dropped in flight is cancelled by `cancel_read` or
 `cancel_write` on the end the program holds. A handler that started the copy on
 another end answers that operation by cancelling there.
+
+`begin_read` also takes a `ReadInto`: where a host copy lands, in memory the
+copy allocates or in memory `core:*` lends it. A handler that settles the copy
+ignores it, and one that starts the copy on another end passes it on.
 
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands

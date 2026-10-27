@@ -351,9 +351,8 @@ pub(super) fn freeze_pure_arith(
                 &first_param_types,
                 &call_immutability,
             );
-            let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
             let local_count = locals.len();
-            let param_set: hashmap::IndexSet<u32> = param_locals.iter().copied().collect();
+            let param_set: hashmap::IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
             // Locals a call may mutate through a `&mut` escape (`reference`'s
             // `set_bool(&mut c, …)`). A constant read of one is point-specific and the
             // build-once graph cannot keep it across the structural passes; an
@@ -365,10 +364,10 @@ pub(super) fn freeze_pure_arith(
                 .as_ref()
                 .map(|e| e.body_call_writes(body))
                 .unwrap_or_default();
-            let mut engine = Engine::new(body, buffers, locals);
+            let mut engine = Engine::new(body, buffers, locals, params);
             engine.set_alias_sets(alias);
             engine.set_value_graph_type_table(type_table);
-            engine.set_param_locals(param_locals);
+            engine.seed_params();
             engine.set_call_verdicts(verdicts.pure, verdicts.receiver_immutable);
             engine.set_call_writes(call_writes);
             engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -958,7 +957,7 @@ mod tests {
 
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let mut eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let mut eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         let rule = ExtractLiteralRule;
         let rules: Vec<&dyn Rule> = vec![&rule];
         let changed = eng.run(&rules);
@@ -1003,7 +1002,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         // Uses at positions 0 and 2 -> insert before position 0.
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, eng.body.root());
@@ -1040,7 +1039,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         let (s, b) = materialise_point(&eng, &[tu, eu]).unwrap();
         // Common dominator is the root block, at the `if` statement (position 1),
         // not inside either branch.
@@ -1076,7 +1075,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         let (s, b) = materialise_point(&eng, &[tu, outer_u]).unwrap();
         assert_eq!(b, eng.body.root());
         assert_eq!(s, outer_s);
@@ -1098,7 +1097,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         assert_eq!(materialise_point(&eng, &[in_u, out_u]), None);
     }
 
@@ -1118,7 +1117,7 @@ mod tests {
         body.set_root(root);
         let mut locals = Tracked::new(Vec::new());
         let mut buf = EngineBuffers::default();
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         let (s, b) = materialise_point(&eng, &[u2, u0]).unwrap();
         assert_eq!(b, loop_body);
         assert_eq!(s, s0);
@@ -1153,7 +1152,7 @@ mod tests {
         body.set_root(root);
         let mut buf = EngineBuffers::default();
         let mut locals = Tracked::new(Vec::new());
-        let eng = Engine::new(&mut body, &mut buf, &mut locals);
+        let eng = Engine::new(&mut body, &mut buf, &mut locals, &[]);
         let (s, b) = materialise_point(&eng, &[bu2, bu0]).unwrap();
         assert_eq!(b, then_b);
         assert_eq!(s, b0);

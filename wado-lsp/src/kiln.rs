@@ -50,8 +50,8 @@ pub async fn prepare_invocations<H: CompilerHost>(
         &wado_compiler::hashmap::IndexSet::default(),
         &host.dependency_index(),
         host,
-        async |identity| {
-            let bytes = host.load_source(identity).await.ok()?;
+        async |identity, pin| {
+            let bytes = host.load_file(identity, None, pin).await.ok()?;
             String::from_utf8(bytes).ok()
         },
     )

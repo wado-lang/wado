@@ -107,6 +107,17 @@ impl PrimitiveType {
         })
     }
 
+    /// Bytes the primitive takes in linear memory, where it is `AnyBits`:
+    /// every bit pattern of that width is a value of it. `None` for `bool` and
+    /// `char`, which leave patterns out.
+    #[must_use]
+    pub fn any_bits_width(self) -> Option<usize> {
+        match self {
+            Self::V128 => Some(16),
+            _ => self.data_width(),
+        }
+    }
+
     /// The largest value a scalar integer holds; `None` for every other
     /// primitive.
     #[must_use]

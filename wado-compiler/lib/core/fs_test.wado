@@ -27,6 +27,66 @@ test "bytes round-trip" {
     assert fs::read(&path).unwrap() == bytes;
 }
 
+test "read_linear reads what read does, into linear memory" {
+    let dir = scratch("linear");
+    let path = `${dir}/raw.bin`;
+    let mut bytes = ByteList::with_capacity(10000);
+    for let i of 0..<10000 {
+        bytes.push((i * 7) as u8);
+    }
+    fs::write(&path, &bytes).unwrap();
+    let array = fs::read_linear(&path).unwrap();
+    assert array.len() == 10000;
+    assert array.to_list() == fs::read(&path).unwrap() as List<u8>;
+}
+
+test "read_linear reads an empty file as an empty array" {
+    let dir = scratch("linear-empty");
+    let path = `${dir}/empty.bin`;
+    fs::write(&path, &ByteList::filled(0, 0)).unwrap();
+    assert fs::read_linear(&path).unwrap().is_empty();
+}
+
+test "read_linear's bytes cast to the numbers they encode" {
+    let dir = scratch("linear-cast");
+    let path = `${dir}/floats.bin`;
+    let bytes: ByteList = [0x00, 0x00, 0x80, 0x3F, 0x00, 0x00, 0x00, 0xC0];
+    fs::write(&path, &bytes).unwrap();
+    let floats = fs::read_linear(&path).unwrap().cast::<f32>();
+    assert floats.to_list() == [1.0, -2.0];
+}
+
+test "read_linear reports what read reports" {
+    let dir = scratch("linear-missing");
+    assert fs::read_linear(`${dir}/nope.bin`).unwrap_err().kind matches { NotFound };
+    assert fs::read_linear(&dir).unwrap_err().kind matches { Io(IsDirectory) };
+}
+
+/// A file's stream that serves fixed bytes in place of the file's own. The
+/// drop reaches the host, whose write of the file then ends.
+struct Substitute {
+    content: List<u8>,
+}
+
+impl Stream<u8> for Substitute {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        resume StartedRead::settled(StreamChunk { items: self.content, result: CopyResult::Dropped });
+    }
+
+    ..forward
+}
+
+test "read_linear reads what a Stream handler serves" {
+    let dir = scratch("linear-handled");
+    let path = `${dir}/real.bin`;
+    fs::write(&path, &b"real").unwrap();
+    let mut substitute = Substitute { content: b"virtual" as List<u8> };
+    let array = with &mut substitute do {
+        fs::read_linear(&path).unwrap();
+    };
+    assert array.to_list() == b"virtual" as List<u8>;
+}
+
 // One Component Model copy moves at most 2^28 - 1 elements, and the host takes
 // 8 KiB of each.
 #[timeout_ms(30000)]

@@ -1461,7 +1461,12 @@ not valid UTF-8 is a compile error. `#include_bytes("path")` is the raw bytes as
 a `ByteList`, with no UTF-8 check.
 
 The argument is a parenthesized string literal. Any other expression is a
-compile error. A local path starts with `./` or `../` and resolves relative to the source file containing the expression, as [Module Path Validation](./spec-modules.md#module-path-validation) states for every path literal. A file that does not exist is a compile error.
+compile error. The path starts with `./` or `../`, and any other path is a
+compile error. It resolves relative to the source file containing the
+expression, as [Module Path Validation](./spec-modules.md#module-path-validation)
+states for every path literal. In a [remote module](./spec-modules.md#remote-modules)
+it names the URL beside the module. A file that does not exist is a compile
+error.
 
 <!-- {"fixture":"spec_literals_location.wado"} -->
 

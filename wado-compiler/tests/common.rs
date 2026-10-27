@@ -7,7 +7,7 @@
 //! - Test fixture parsing (__DATA__ sections)
 //! - Tokio runtime management
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
@@ -26,12 +26,14 @@ use wasmtime_wasi_tls::{
 };
 
 use wado_compiler::ast::TodoMark;
+pub use wado_compiler::coverage::TestReport;
 use wado_compiler::world_registry::WorldSurface;
 use wado_compiler::{
     CompileError, CompileFailure, CompilerHost, CompilerOptions, Diagnostic, InMemoryCompilerHost,
     OptLevel,
 };
 use wado_host::engine::default_config;
+pub use wado_host::fixture::opt_level_name;
 use wado_host::kiln::local::run_local_generators;
 use wado_host::timezone;
 pub use wado_host::tls_trust::install_default_crypto_provider;
@@ -716,8 +718,8 @@ pub struct WasiState {
     pub http_ctx: WasiHttpCtx,
     pub http_hooks: TestHttpCtx,
     pub tls_ctx: WasiTlsCtx,
-    /// The coverage regions the guest reported, under `CompilerOptions::coverage`.
-    pub coverage_hits: BTreeSet<u32>,
+    /// What the guest reported under `CompilerOptions::coverage`.
+    pub coverage: TestReport,
 }
 
 impl WasiView for WasiState {
@@ -761,7 +763,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: BTreeSet::new(),
+            coverage: TestReport::default(),
         }
     }
 
@@ -774,7 +776,7 @@ impl WasiState {
             http_ctx: WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: build_tls_ctx(indexmap::IndexMap::new()),
-            coverage_hits: BTreeSet::new(),
+            coverage: TestReport::default(),
         }
     }
 }
@@ -795,14 +797,18 @@ pub fn linker(engine: &Engine) -> anyhow::Result<Linker<WasiState>> {
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_tls::p3::add_to_linker(&mut linker)?;
     timezone::add_to_linker(&mut linker)?;
-    linker
-        .root()
-        .instance("core:coverage/coverage-host@0.1.0")?
-        .func_wrap("hit", |mut store, (id,): (u32,)| {
-            let state: &mut WasiState = store.data_mut();
-            state.coverage_hits.insert(id);
-            Ok(())
-        })?;
+    let mut root = linker.root();
+    let mut coverage = root.instance("core:coverage/coverage-host@0.1.0")?;
+    coverage.func_wrap("hit", |mut store, (id,): (u32,)| {
+        let state: &mut WasiState = store.data_mut();
+        state.coverage.hit(id);
+        Ok(())
+    })?;
+    coverage.func_wrap("count", |mut store, (id, runs): (u32, i64)| {
+        let state: &mut WasiState = store.data_mut();
+        state.coverage.count(id, runs);
+        Ok(())
+    })?;
     Ok(linker)
 }
 
@@ -1223,17 +1229,6 @@ pub fn parse_data_section<T: serde::de::DeserializeOwned>(data_section: &str, co
     })
 }
 
-/// Get human-readable name for optimization level
-pub fn opt_level_name(opt: OptLevel) -> &'static str {
-    match opt {
-        OptLevel::O0 => "O0",
-        OptLevel::O1 => "O1",
-        OptLevel::O2 => "O2",
-        OptLevel::O3 => "O3",
-        OptLevel::Os => "Os",
-    }
-}
-
 /// Result of running a Wasm component with captured output
 #[derive(Debug)]
 pub struct WasmRunResult {
@@ -1246,8 +1241,9 @@ pub struct WasmRunResult {
     /// Set on a clean `wasi:cli/exit` (recorded here, not as a trap); `None`
     /// otherwise.
     pub exit_code: Option<i32>,
-    /// The coverage regions any test reported, under `CompilerOptions::coverage`.
-    pub coverage_hits: BTreeSet<u32>,
+    /// The runs of each coverage region, one map per test, under
+    /// `CompilerOptions::coverage`.
+    pub coverage_counts: Vec<BTreeMap<u32, i64>>,
 }
 
 /// Run a compiled Wasm component and capture its output
@@ -1331,7 +1327,7 @@ pub fn run_wasm_with_full_options(
                 mocks: outgoing_mocks,
             },
             tls_ctx: build_tls_ctx(tls_mocks),
-            coverage_hits: BTreeSet::new(),
+            coverage: TestReport::default(),
         };
         let mut store = Store::new(engine, state);
         limit_store(&mut store, DEFAULT_TIMEOUT_MS);
@@ -1365,7 +1361,7 @@ pub fn run_wasm_with_full_options(
             stderr,
             trapped,
             exit_code,
-            coverage_hits: BTreeSet::new(),
+            coverage_counts: Vec::new(),
         })
     })
 }
@@ -1445,7 +1441,7 @@ pub fn run_test_world(
 
         let mut all_stdout = String::new();
         let mut all_stderr = String::new();
-        let mut coverage_hits = BTreeSet::new();
+        let mut coverage_counts = Vec::new();
 
         for test_name in &test_names {
             let expect_trap = test_name.starts_with("test-trap-");
@@ -1507,7 +1503,7 @@ pub fn run_test_world(
                 }
             }
 
-            coverage_hits.append(&mut store.data_mut().coverage_hits);
+            coverage_counts.push(store.data().coverage.counts());
             all_stdout.push_str(&String::from_utf8_lossy(&stdout_clone.contents()));
             all_stderr.push_str(&String::from_utf8_lossy(&stderr_clone.contents()));
         }
@@ -1517,7 +1513,7 @@ pub fn run_test_world(
             stderr: all_stderr,
             trapped: false,
             exit_code: None,
-            coverage_hits,
+            coverage_counts,
         })
     })
 }

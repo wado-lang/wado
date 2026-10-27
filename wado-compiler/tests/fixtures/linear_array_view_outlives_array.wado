@@ -1,0 +1,17 @@
+// A view an array lends refers into the array, so it is read only while the
+// array lives, though the call that lent it returned it.
+use { LinearArray, ListArg, ListView } from "core:linear";
+
+fn lent(array: &LinearArray<u8>) -> ListView<u8> {
+    return array.lowered();
+}
+
+test {
+    let array = LinearArray::<u8>::filled(4, 1);
+    let view = lent(&array);
+    builtin::drop(array);
+    assert view.at(0) == 1;
+}
+
+__DATA__
+{"compile_error": ":13:12: analysis error: `view` refers into `array`, which moved at 12:19"}

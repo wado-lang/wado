@@ -21,7 +21,7 @@ impl Stream<u8> for MockStream {
     // `read_to_end` loops until a copy reports something other than
     // `Completed`, so the drained handler reports `Dropped` rather than an
     // empty chunk — an empty `Completed` would spin forever.
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let _ = this;
         let _ = max;
         let snapshot = self.log;

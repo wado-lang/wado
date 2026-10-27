@@ -188,7 +188,8 @@ randomness, the filesystem, the network, or `core:eval` hands a test what no
 compile reads.
 
 `--no-cache` runs every file and still records the passes. `--coverage`,
-`--profile`, `--report-fuel` and `--no-run` neither read nor record them.
+`--pgo`, `--profile`, `--report-fuel` and `--no-run` neither read nor record
+them.
 Results live in `build/test/` under the file's package root. A file in no
 package keeps them in the user cache, `$XDG_CACHE_HOME/wado/test/` (else
 `~/.cache/wado/test/`), so a test run writes nothing beside it.
@@ -304,11 +305,9 @@ counts as run once any test runs its start.
 
 Each region also counts how often it ran, and LCOV carries the counts: a
 function's is its body region's, a branch's the region it starts, and a line's
-its innermost region's. A test hands its counts over when it returns, so a test
-that traps loses them and adds one run for each region it reached.
-
-> Not yet implemented: a region reports only whether it ran, and LCOV gives
-> every region that ran a count of one.
+the largest among the innermost regions of the statements starting on it. A
+test hands its counts over when it returns, so a test that traps loses them and
+adds one run for each region it reached.
 
 A region that leads to nothing but a call to `unreachable()` is not one: the
 call, returned or not, is all it holds, or it holds nothing and only the call
@@ -336,6 +335,59 @@ function, an `impl` or a module unmeasured.
 exactly those FILE lists. `--coverage=baseline` writes such a file.
 
 Rationale: [WEP: Test Coverage](./wep-2026-09-28-test-coverage.md).
+
+## Profiles
+
+`wado test --pgo` runs only the [`#[workload]`](./spec-attributes.md#workload)
+tests, and records how often each region of the modules they reach ran. A
+region is as [Coverage](#coverage) defines it. It measures the package's
+modules, its dependencies' and the `core:` modules.
+
+A package records all of its workloads into one profile, `pgo/default.pgo`
+under its root. A file in no package records into `pgo/<stem>.pgo` in its own
+directory. A run that leaves out a test file of a package it reaches is an
+error, since it would overwrite the profile with part of the workloads. So
+`--filter`, `--test-name` and `--exclude` are errors with `--pgo`, as is a path
+argument naming part of a package. So are `--coverage` and `--no-run`.
+
+The profile is written only when the run passes with no pending `#[TODO]`, ran
+a workload, and saw no source file change while it ran. Otherwise the run
+fails, and an existing profile is kept. When it is written, the profile of a
+package the run holds no workload of is removed: it would hold counts from
+workloads that are gone.
+
+A profile is text, one record per line:
+
+```text
+wado-pgo 1
+module src/lib.wado
+fn 3f2a9c0d1e2b4a59 12 pick
+0 5
+1 4
+```
+
+A `module` line names a module the same way on any machine:
+
+- A file of the package is relative to the package's root, or for a program in
+  no package, to the program's directory.
+- A dependency's file is the dependency's `namespace:name@version`, then the
+  file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
+- A `core:` module is its import path.
+
+Each `fn` line gives a function's hash, its line and its name. The hash covers
+the function's source text, a CRLF read as LF, and its regions' kinds and
+positions relative to it. The lines after it give how often each of the
+function's regions ran, the regions numbered from zero within the function. A
+region not listed never ran.
+
+A count of zero and no profile are different things. Every function of a
+module the profile lists has a `fn` line, one the workloads never ran
+included, and each of its regions has a count, zero where no line gives one.
+A function with no `fn` line has no profile at all, and neither does one whose
+hash differs from its current source's: nothing measured it as it stands, so
+no count applies to it.
+
+Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 ## Example Test File
 

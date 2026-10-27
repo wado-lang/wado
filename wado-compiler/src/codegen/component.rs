@@ -14,16 +14,16 @@ use crate::canonical::{
 };
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeKind,
     CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME, FIELDS_WADO_NAME, InstanceSink,
     RESPONSE_WADO_NAME, ResKind, WorldFunctionSite, classify_future_payload_from_ast,
-    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
+    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key, cm_primitive_of,
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
-    wado_primitive_name_to_cm,
 };
 use crate::coverage;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
@@ -150,7 +150,7 @@ pub fn build_component(
         .iter()
         .find(|e| e.is_lib)
         .map(|e| {
-            CmTypeGen::with_interface_hint(
+            CmTypeGen::emitting_into(
                 e.from_interface_fq
                     .as_deref()
                     .expect("a library export sits in its default interface"),
@@ -493,7 +493,7 @@ fn emit_cm_val_type(
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
     enum_export_indices: &IndexMap<String, u32>,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    resource_handles: &ResourceHandles,
     type_gen: &mut CmTypeGen,
     project: &NirPackage,
     ctx: &mut ComponentModelContext,
@@ -514,29 +514,29 @@ fn emit_cm_val_type(
             ctx,
         )
     };
+    let item = project.cm_interface_registry.type_decls().item_of(ty);
     match ty {
-        Type::Generic(g) if g.name == "Stream" => {
+        Type::Generic(g) if item == Some(CompilerItem::Stream) => {
             let element = g
                 .args
                 .first()
                 .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().stream(element);
         }
-        Type::Generic(g) if g.name == "Future" => {
+        Type::Generic(g) if item == Some(CompilerItem::Future) => {
             let payload = g
                 .args
                 .first()
                 .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().future(payload);
         }
-        Type::Generic(g) if g.name == "Result" => {
+        Type::Generic(g) if item == Some(CompilerItem::Result) => {
             let [ok, err] = g.args.as_slice() else {
                 panic!("`Result` takes two type arguments, not {}", g.args.len())
             };
             let err_type = if err.is_unit() {
                 None
             } else if let Type::Named(named) = err
-                && named.name == ERROR_CODE_WADO_NAME
                 && let Some(idx) = error_code_idx(
                     instance_type,
                     local_type_idx,
@@ -554,7 +554,7 @@ fn emit_cm_val_type(
             let ok_type = if ok.is_unit() {
                 None
             } else if let Type::Named(named) = ok
-                && let Some(handles) = resource_handles.get(&named.name)
+                && let Some(handles) = resource_handles.of(named, &project.cm_interface_registry)
             {
                 Some(ComponentValType::Type(handles.own))
             } else {
@@ -569,11 +569,11 @@ fn emit_cm_val_type(
             };
             instance_type.ty().defined_type().result(ok_type, err_type);
         }
-        Type::Generic(g) if g.name == "List" && !g.args.is_empty() => {
+        Type::Generic(g) if item == Some(CompilerItem::List) => {
             let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
             instance_type.ty().defined_type().list(element);
         }
-        Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
+        Type::Generic(g) if item == Some(CompilerItem::Option) => {
             let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
             instance_type.ty().defined_type().option(element);
         }
@@ -589,8 +589,10 @@ fn emit_cm_val_type(
         {
             return ComponentValType::Type(idx);
         }
-        Type::Named(named) if resource_handles.contains_key(&named.name) => {
-            return ComponentValType::Type(resource_handles[&named.name].own);
+        Type::Named(named)
+            if let Some(handles) = resource_handles.of(named, &project.cm_interface_registry) =>
+        {
+            return ComponentValType::Type(handles.own);
         }
         _ => {
             return shared_cm_val_type(
@@ -613,7 +615,7 @@ fn shared_cm_val_type(
     ty: &Type,
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    resource_handles: &ResourceHandles,
     type_gen: &mut CmTypeGen,
     project: &NirPackage,
 ) -> ComponentValType {
@@ -635,21 +637,19 @@ fn own_export_idx(
     type_gen: &CmTypeGen,
     project: &NirPackage,
 ) -> Option<u32> {
-    let emitting = type_gen.interface_hint()?;
-    let source = project
-        .cm_interface_registry
-        .cm_source_of_named_type(named, Some(emitting))?;
+    let emitting = type_gen.emitting()?;
+    let source = project.cm_interface_registry.source_interface(named)?;
     if source != emitting {
         return None;
     }
     enum_export_indices.get(&named.name).copied()
 }
 
-/// The index of the `error-code` `named` refers to, where the instance already
-/// has it: its own export, or an alias of the one its declaring interface put in
-/// outer scope. A WASI package spells `error-code` once and the others `use`
-/// it, so the declaration decides which one, never the name. `None` leaves it
-/// to be spelled in place.
+/// The index of `named`, where it is an interface's `error-code` the instance
+/// already has: its own export, or an alias of the one its declaring interface
+/// put in outer scope. A WASI package spells `error-code` once and the others
+/// `use` it, so the declaration decides which one, never the name. `None`
+/// leaves it to be spelled in place.
 fn error_code_idx(
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
@@ -659,13 +659,16 @@ fn error_code_idx(
     project: &NirPackage,
     ctx: &ComponentModelContext,
 ) -> Option<u32> {
+    let registry = &project.cm_interface_registry;
+    let source = registry.source_interface(named)?;
+    let def = error_code_def(project, &source)?;
+    if registry.declared_def(named, project.type_table.borrow().defs()) != Some(def) {
+        return None;
+    }
     if let Some(idx) = own_export_idx(named, enum_export_indices, type_gen, project) {
         return Some(idx);
     }
-    let source = project
-        .cm_interface_registry
-        .cm_source_of_named_type(named, type_gen.interface_hint())?;
-    let outer = error_code_def(project, &source).and_then(|def| ctx.decl_type_idx(def))?;
+    let outer = ctx.decl_type_idx(def)?;
     instance_type.alias(Alias::Outer {
         kind: ComponentOuterAliasKind::Type,
         count: 1,
@@ -702,21 +705,40 @@ impl ResourceTypeIndices {
     }
 }
 
+/// The resources an instance type defines handles over, by declaring interface
+/// and Wado name.
+#[derive(Default)]
+struct ResourceHandles(IndexMap<(String, String), ResourceTypeIndices>);
+
+impl ResourceHandles {
+    fn insert(&mut self, source: &str, wado_name: &str, handles: ResourceTypeIndices) {
+        self.0
+            .insert((source.to_string(), wado_name.to_string()), handles);
+    }
+
+    /// The handles over the resource `named` refers to.
+    fn of(&self, named: &NamedType, registry: &CmInterfaceRegistry) -> Option<ResourceTypeIndices> {
+        let source = registry.source_interface(named)?;
+        self.0.get(&(source, named.name.clone())).copied()
+    }
+}
+
 /// The resources under their CM names, as [`CmTypeGen`] asks for them, with
 /// the handles the instance already defines registered in `type_gen`.
 fn resource_exports_for<'a>(
     type_gen: &mut CmTypeGen,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    resource_handles: &ResourceHandles,
     registry: &'a CmInterfaceRegistry,
 ) -> IndexMap<&'a str, u32> {
-    let emitting = type_gen.interface_hint().map(str::to_string);
     resource_handles
+        .0
         .iter()
-        .filter_map(|(wado_name, handles)| {
-            let source = registry.resource_source_in(emitting.as_deref(), wado_name)?;
-            let cm_name = registry.get_resource_cm_name_by_source(source, wado_name)?;
+        .map(|((source, wado_name), handles)| {
+            let cm_name = registry
+                .get_resource_cm_name_by_source(source, wado_name)
+                .expect("an instance defines handles only over a registered resource");
             type_gen.register_resource_handles(cm_name, handles.own, handles.borrow);
-            Some((cm_name, handles.resource))
+            (cm_name, handles.resource)
         })
         .collect()
 }
@@ -737,38 +759,43 @@ fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         .is_some()
 }
 
+/// `ty` as `emitting`'s instance spells it, where `enum_type_indices` and
+/// `flags_type_indices` hold that interface's own types by name.
 fn wado_type_to_cm_val_type(
     ty: &Type,
+    emitting: &str,
     stream_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    resource_handles: &ResourceHandles,
+    registry: &CmInterfaceRegistry,
 ) -> ComponentValType {
+    let decls = registry.type_decls();
     match ty {
         Type::Named(named) => {
-            if let Some(&enum_idx) = enum_type_indices.get(&named.name) {
-                return ComponentValType::Type(enum_idx);
+            if registry.source_interface(named).as_deref() == Some(emitting)
+                && let Some(&idx) = enum_type_indices
+                    .get(&named.name)
+                    .or_else(|| flags_type_indices.get(&named.name))
+            {
+                return ComponentValType::Type(idx);
             }
-            if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
-                return ComponentValType::Type(flags_idx);
-            }
-            let prim = wado_primitive_name_to_cm(&named.name)
+            let prim = cm_primitive_of(named, decls)
                 .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
             ComponentValType::Primitive(prim)
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
             // borrow<resource> - WASI resource methods take self as &Resource
             if let Type::Named(named) = inner.as_ref()
-                && let Some(handles) = resource_handles.get(&named.name)
+                && let Some(handles) = resource_handles.of(named, registry)
             {
                 return ComponentValType::Type(handles.borrow);
             }
             panic!("unsupported reference param type for CM: {ty:?}")
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" => ComponentValType::Type(stream_type_idx.expect("stream type not defined")),
-            _ => panic!("unsupported generic param type for CM: {}", generic.name),
-        },
+        Type::Generic(generic) if decls.is(generic.id, CompilerItem::Stream) => {
+            ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
+        }
         _ => panic!("unsupported Wado param type for CM: {ty:?}"),
     }
 }
@@ -1789,7 +1816,8 @@ fn lib_task_return_valtype(
         return None;
     }
     let result_type = export.result_type.as_ref()?;
-    if matches!(result_type, ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream") {
+    let decls = project.cm_interface_registry.type_decls();
+    if let Some(CompilerItem::Future | CompilerItem::Stream) = decls.item_of(result_type) {
         return None;
     }
     let type_gen = lib_type_gen.as_mut()?;
@@ -1822,7 +1850,8 @@ fn resolve_task_return_valtype(
         && let Some(ast::Type::Generic(g)) = &export.result_type
         && g.args.len() == 1
     {
-        if g.name == "Future" {
+        let item = project.cm_interface_registry.type_decls().item_at(g.id);
+        if item == Some(CompilerItem::Future) {
             let payload = classify_future_payload_from_ast(
                 &project.type_table.borrow(),
                 &g.args[0],
@@ -1837,7 +1866,7 @@ fn resolve_task_return_valtype(
             );
             return ComponentValType::Type(idx);
         }
-        if g.name == "Stream" {
+        if item == Some(CompilerItem::Stream) {
             let payload = classify_stream_payload_from_ast(
                 &project.type_table.borrow(),
                 &g.args[0],
@@ -1898,8 +1927,8 @@ fn cm_export_type_to_idx(
 ) -> u32 {
     match ty {
         CmExportType::Unit => result_unit_type,
-        CmExportType::Primitive(name) => panic!(
-            "primitive CM export type `{name}` has no defined-type index; \
+        CmExportType::Primitive(primitive) => panic!(
+            "primitive CM export type `{primitive:?}` has no defined-type index; \
              use cm_export_type_to_valtype for primitive boundary types"
         ),
         CmExportType::Named {
@@ -1951,18 +1980,10 @@ fn cm_export_type_to_valtype(
     result_unit_type: u32,
 ) -> ComponentValType {
     match ty {
-        CmExportType::Primitive(name) => cm_primitive_name_to_valtype(name),
+        CmExportType::Primitive(primitive) => ComponentValType::Primitive(*primitive),
         other => {
             ComponentValType::Type(cm_export_type_to_idx(ctx, project, other, result_unit_type))
         }
-    }
-}
-
-/// Map a Wado primitive type name to its Component Model `PrimitiveValType`.
-fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
-    match wado_primitive_name_to_cm(name) {
-        Some(prim) => ComponentValType::Primitive(prim),
-        None => panic!("unsupported CM primitive type name: {name}"),
     }
 }
 
@@ -2311,7 +2332,7 @@ fn generate_cm_imports(
         // categorized `ResourceUsingInterface` and handled by Phase 3 instead).
         let needed_resources = project
             .cm_interface_registry
-            .resources_in_signatures(&cm_functions, Some(interface_info.path.as_str()));
+            .resources_in_signatures(&cm_functions);
 
         let instance_type_name = format!("{}-instance-type", interface_info.interface);
         let instance_type_idx = ctx.register_type(&instance_type_name);
@@ -2321,7 +2342,7 @@ fn generate_cm_imports(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            let mut resource_handles: IndexMap<String, ResourceTypeIndices> = IndexMap::default();
+            let mut resource_handles = ResourceHandles::default();
             for (source, resource_name) in &needed_resources {
                 if let Some(cm_name) = project
                     .cm_interface_registry
@@ -2334,7 +2355,8 @@ fn generate_cm_imports(
                     let resource_idx = local_type_idx;
                     local_type_idx += 1;
                     resource_handles.insert(
-                        resource_name.clone(),
+                        source,
+                        resource_name,
                         ResourceTypeIndices::define(
                             &mut instance_type,
                             &mut local_type_idx,
@@ -2350,11 +2372,20 @@ fn generate_cm_imports(
                     .map(|(_, _, ty)| ty)
                     .chain(&func.return_type)
             });
+            // Only types declared in `interface_info.path` are emitted here;
+            // types that live in other interfaces get their declarations from
+            // those interfaces' own emit loop and are referenced via outer
+            // aliases.
+            let iface = interface_info.path.as_str();
             let mut referenced_types: Vec<String> = Vec::new();
             for ty in signature_types {
                 ty.for_each(&mut |ty| {
                     if let Type::Named(named) = ty
-                        && !ty.is_unit()
+                        && project
+                            .cm_interface_registry
+                            .source_interface(named)
+                            .as_deref()
+                            == Some(iface)
                         && !referenced_types.contains(&named.name)
                     {
                         referenced_types.push(named.name.clone());
@@ -2362,12 +2393,6 @@ fn generate_cm_imports(
                 });
             }
 
-            // Partition into enums, variants, and flags by querying this
-            // interface directly. Only types declared in
-            // `interface_info.path` are emitted here; types that live in
-            // other interfaces get their declarations from those interfaces'
-            // own emit loop and are referenced via outer aliases.
-            let iface = interface_info.path.as_str();
             let needed_variants: Vec<String> = referenced_types
                 .iter()
                 .filter(|name| {
@@ -2445,11 +2470,8 @@ fn generate_cm_imports(
                 .collect();
             // Shared CmInstanceTypeGen for complex types across variant payloads and functions.
             // Created early so variant payload types (e.g. Instant in NewTimestamp) are cached
-            // and reused when the same types appear in function signatures. The
-            // `interface_hint` lets `ast_type_to_cm` resolve ambiguous names
-            // (e.g. `ErrorCode`, declared independently in multiple WASI
-            // packages) against this emitter's owning interface.
-            let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
+            // and reused when the same types appear in function signatures.
+            let mut shared_type_gen = CmTypeGen::emitting_into(&interface_info.path);
             for (name, &idx) in &enum_export_indices {
                 shared_type_gen.register_named(CmTypeKind::Enum, iface, name, idx);
             }
@@ -2499,16 +2521,9 @@ fn generate_cm_imports(
             // Emit flags types in the instance type (scoped to wasi:).
             let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
-                let Some(source) = project
-                    .cm_interface_registry
-                    .flags_source_in(Some(&interface_info.path), flags_name)
-                else {
-                    continue;
-                };
-                let source = source.to_string();
                 if let Some(members) = project
                     .cm_interface_registry
-                    .get_flags_members_by_source(&source, flags_name)
+                    .get_flags_members_by_source(iface, flags_name)
                 {
                     instance_type
                         .ty()
@@ -2519,7 +2534,7 @@ fn generate_cm_imports(
 
                     if let Some(cm_name) = project
                         .cm_interface_registry
-                        .get_flags_cm_name_by_source(&source, flags_name)
+                        .get_flags_cm_name_by_source(iface, flags_name)
                     {
                         instance_type.export(
                             cm_name,
@@ -2528,7 +2543,7 @@ fn generate_cm_imports(
                         flags_export_indices.insert(flags_name.clone(), local_type_idx);
                         shared_type_gen.register_named(
                             CmTypeKind::Flags,
-                            &source,
+                            iface,
                             flags_name,
                             local_type_idx,
                         );
@@ -2556,11 +2571,12 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
             );
 
+            let decls = project.cm_interface_registry.type_decls();
             for func in &cm_functions {
                 let needs_stream_u8 = func
                     .params
                     .iter()
-                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
+                    .any(|(_, _, ty)| decls.names(ty, CompilerItem::Stream));
                 let stream_type_idx = if needs_stream_u8 {
                     instance_type
                         .ty()
@@ -2587,7 +2603,7 @@ fn generate_cm_imports(
                         // payloads; `wado_type_to_cm_val_type` spells only the
                         // flat shapes and the pre-defined `Stream`.
                         let is_composite = match &resolved_ty {
-                            Type::Generic(g) => g.name != "Stream",
+                            Type::Generic(g) => !decls.is(g.id, CompilerItem::Stream),
                             Type::Tuple(_) => true,
                             Type::Named(_)
                             | Type::NamespacedGeneric(_)
@@ -2612,10 +2628,12 @@ fn generate_cm_imports(
                         } else {
                             wado_type_to_cm_val_type(
                                 &resolved_ty,
+                                iface,
                                 stream_type_idx,
                                 &enum_export_indices,
                                 &flags_export_indices,
                                 &resource_handles,
+                                &project.cm_interface_registry,
                             )
                         };
                         (cm_name.clone(), val_type)
@@ -2986,7 +3004,7 @@ fn import_resource_defining_interface(
         // Type indices start after the SubResource exports; the sink shares
         // this counter with the func-type allocations below.
         let mut type_idx = http_resources.len() as u32;
-        let mut type_gen = CmTypeGen::with_interface_hint(types_fq);
+        let mut type_gen = CmTypeGen::emitting_into(types_fq);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()
@@ -3121,19 +3139,17 @@ fn component_type_idx_for_signature_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
-    emitting: &str,
     ty: &Type,
 ) -> u32 {
     let registry = &project.cm_interface_registry;
+    let item = registry.type_decls().item_of(ty);
     match ty {
-        Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
-            component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0])
+        Type::Generic(g) if item == Some(CompilerItem::AsyncCall) => {
+            component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
         }
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-            let ok =
-                component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0]);
-            let err =
-                component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[1]);
+        Type::Generic(g) if item == Some(CompilerItem::Result) => {
+            let ok = component_type_idx_for_signature_type(builder, ctx, project, &g.args[0]);
+            let err = component_type_idx_for_signature_type(builder, ctx, project, &g.args[1]);
             intern_cm_type(
                 builder,
                 ctx,
@@ -3145,24 +3161,22 @@ fn component_type_idx_for_signature_type(
             )
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            component_type_idx_for_signature_type(builder, ctx, project, emitting, inner)
+            component_type_idx_for_signature_type(builder, ctx, project, inner)
         }
         Type::Named(named) => {
-            if let Some(source) = registry
-                .resource_source_in(Some(emitting), &named.name)
-                .map(str::to_string)
-                .filter(|source| {
-                    registry
-                        .get_resource_cm_name_by_source(source, &named.name)
-                        .is_some()
-                })
-            {
-                let def = cm_decl_def(project, &source, &named.name).unwrap_or_else(|| {
-                    panic!(
-                        "`{source}` declares no resource `{}` for a composite signature",
-                        named.name
-                    )
-                });
+            let (def, kind) = {
+                let type_table = project.type_table.borrow();
+                let def = registry
+                    .declared_def(named, type_table.defs())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "composite signature type `{}` names no declaration",
+                            named.name
+                        )
+                    });
+                (def, type_table.defs().kind(def))
+            };
+            if kind == DefKind::Resource {
                 return own_handle_idx(ctx, def).unwrap_or_else(|| {
                     unaliased(&format!("the `own<>` handle of `{}`", named.name))
                 });
@@ -3171,13 +3185,8 @@ fn component_type_idx_for_signature_type(
             // variant) resolves to the component type the resource-defining pass
             // aliased to the outer scope, which fails loudly if it was not
             // exposed there.
-            let source = registry.source_interface(named).unwrap_or_else(|| {
-                panic!(
-                    "composite signature type `{}` has no source interface",
-                    named.name
-                )
-            });
-            cm_decl_type_idx(ctx, project, &source, &named.name)
+            ctx.decl_type_idx(def)
+                .unwrap_or_else(|| unaliased(&format!("`{}`", named.name)))
         }
         other => panic!("unsupported composite signature type: {other:?}"),
     }
@@ -3225,15 +3234,13 @@ fn import_resource_using_composite_interface(
                     let resolved = project.cm_interface_registry.resolve_type(ty);
                     (
                         cm_name.clone(),
-                        component_type_idx_for_signature_type(
-                            builder, ctx, project, iface_fq, &resolved,
-                        ),
+                        component_type_idx_for_signature_type(builder, ctx, project, &resolved),
                     )
                 })
                 .collect();
             let result = f.return_type.as_ref().map(|ty| {
                 let resolved = project.cm_interface_registry.resolve_type(ty);
-                component_type_idx_for_signature_type(builder, ctx, project, iface_fq, &resolved)
+                component_type_idx_for_signature_type(builder, ctx, project, &resolved)
             });
             ResolvedSig {
                 wasi_name: f.wasi_func_name.clone(),
@@ -3324,7 +3331,7 @@ fn import_interface_with_resource(
     project: &NirPackage,
     interface_info: &CmInterfaceInfo,
 ) {
-    let Some((resource_wado_name, resource_cm_name)) = &interface_info.resource_type else {
+    let Some(resource) = &interface_info.resource_type else {
         return;
     };
 
@@ -3342,13 +3349,13 @@ fn import_interface_with_resource(
 
     // The getter's resource may be declared by another interface, so the
     // declaring one answers which declaration this is.
-    let declaring = project
-        .cm_interface_registry
-        .resource_source_in(Some(&interface_info.path), resource_wado_name)
-        .map(str::to_string);
-    let outer_resource_idx = declaring.as_deref().and_then(|source| {
-        aliased_type_idx(ctx, project, source, resource_wado_name, resource_cm_name)
-    });
+    let outer_resource_idx = aliased_type_idx(
+        ctx,
+        project,
+        &resource.source,
+        &resource.wado_name,
+        &resource.cm_name,
+    );
 
     let instance_type_name = format!("{}-instance-type", interface_info.interface);
     let instance_type_idx = ctx.register_type(&instance_type_name);
@@ -3364,7 +3371,7 @@ fn import_interface_with_resource(
             });
         } else {
             instance_type.export(
-                resource_cm_name,
+                &resource.cm_name,
                 wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
             );
         }
@@ -3402,9 +3409,9 @@ fn import_interface_with_resource(
             builder,
             ctx,
             project,
-            declaring.as_deref().unwrap_or(&interface_info.path),
-            resource_wado_name,
-            resource_cm_name,
+            &resource.source,
+            &resource.wado_name,
+            &resource.cm_name,
             &interface_info.instance_key(),
         );
     }
@@ -3524,7 +3531,7 @@ fn emit_error_code_export(
         .get_variant_cases_by_source(source_path, ERROR_CODE_WADO_NAME)
         .map(<[CmVariantCase]>::to_vec)
     {
-        let mut type_gen = CmTypeGen::with_interface_hint(source_path);
+        let mut type_gen = CmTypeGen::emitting_into(source_path);
         let no_resources: IndexMap<&str, u32> = IndexMap::default();
         let cm_cases: Vec<(&str, Option<ComponentValType>)> = cases
             .iter()
@@ -3632,7 +3639,7 @@ fn resource_using_references_defining_interface(
         .filter(|func| emits_function(project, func))
         .collect();
     registry
-        .resources_in_signatures(&emitted, Some(iface_fq))
+        .resources_in_signatures(&emitted)
         .iter()
         .any(|(source, _)| {
             import_plan
@@ -3690,7 +3697,7 @@ fn import_resource_using_interfaces(
         // Collect resources used in function signatures
         let needed_resources = project
             .cm_interface_registry
-            .resources_in_signatures(&cm_functions, Some(interface_info.path.as_str()));
+            .resources_in_signatures(&cm_functions);
 
         // Only handle interfaces that reference resources from other interfaces.
         // Interfaces with no resources are already handled in generate_cm_imports.
@@ -3741,7 +3748,7 @@ fn import_resource_using_interfaces(
             let mut instance_type = InstanceType::new();
             let mut local_type_idx = 0u32;
 
-            let mut resource_handles: IndexMap<String, ResourceTypeIndices> = IndexMap::default();
+            let mut resource_handles = ResourceHandles::default();
 
             for (source, resource_name) in &needed_resources {
                 let Some(cm_name) = project
@@ -3773,7 +3780,8 @@ fn import_resource_using_interfaces(
                 let resource_idx = local_type_idx;
                 local_type_idx += 1;
                 resource_handles.insert(
-                    resource_name.clone(),
+                    source,
+                    resource_name,
                     ResourceTypeIndices::define(
                         &mut instance_type,
                         &mut local_type_idx,
@@ -3782,7 +3790,7 @@ fn import_resource_using_interfaces(
                 );
             }
 
-            let mut type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
+            let mut type_gen = CmTypeGen::emitting_into(&interface_info.path);
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
             for func in &cm_functions {
@@ -3801,12 +3809,14 @@ fn import_resource_using_interfaces(
                             _ => ty,
                         };
                         let val = if let Type::Named(named) = borrow_check_ty
-                            && let Some(handles) = resource_handles.get(&named.name)
+                            && let Some(handles) =
+                                resource_handles.of(named, &project.cm_interface_registry)
                             && cm_name == "self"
                         {
                             ComponentValType::Type(handles.borrow)
                         } else if let Type::Named(named) = ty
-                            && let Some(handles) = resource_handles.get(&named.name)
+                            && let Some(handles) =
+                                resource_handles.of(named, &project.cm_interface_registry)
                         {
                             ComponentValType::Type(handles.own)
                         } else {

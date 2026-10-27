@@ -10,7 +10,9 @@ mod rank;
 #[cfg(test)]
 mod testing;
 
-pub use candidates::{Candidates, applies, bound_candidates, candidates};
+pub use candidates::{
+    Candidates, bound_candidates, candidates, cmp_giving_eq, instance_candidates,
+};
 pub use coherence::{CoherenceError, coherence_errors, mark_duplicates};
 pub use derive::{derive, derive_alongside, pair_comparisons};
 pub use holds::{Holds, comparison_row, holds, holds_with_args, owed, written_comparison};

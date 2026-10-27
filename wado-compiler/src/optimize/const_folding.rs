@@ -166,7 +166,12 @@ fn fold_function(
 ) -> bool {
     let mut func = func_rc.borrow_mut();
     compiler_trace!("region_seed", "folding {}", func.name);
-    let FuncParts { body, locals, .. } = func.parts();
+    let FuncParts {
+        body,
+        locals,
+        params,
+        ..
+    } = func.parts();
     let Some(body) = body else {
         return false;
     };
@@ -177,7 +182,7 @@ fn fold_function(
     visitor
         .interpreter
         .record_alias_classes(alias_classes(body, type_table).to_classes());
-    let mut engine = Engine::new(body, buffers, locals);
+    let mut engine = Engine::new(body, buffers, locals, params);
     let root = engine.body.root();
     visitor.visit_block(&mut engine, root)
 }

@@ -120,6 +120,33 @@ impl FormatterField {
     }
 }
 
+/// The fields of `core:linear::ListView` an import adapter reads, each at its
+/// declaration index.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ListViewField {
+    Ptr = 0,
+    Len = 1,
+    Released = 3,
+}
+
+impl ListViewField {
+    /// The Wado-side field name.
+    #[must_use]
+    pub const fn field_name(self) -> &'static str {
+        match self {
+            Self::Ptr => "ptr",
+            Self::Len => "len",
+            Self::Released => "released",
+        }
+    }
+
+    /// The field's positional index within the struct.
+    #[must_use]
+    pub const fn index(self) -> u32 {
+        self as u32
+    }
+}
+
 /// Every compiler-recognized stdlib item. Each variant's canonical
 /// [`CompilerItem::attr_name`] must match the `#[compiler_item("…")]` argument
 /// on the Wado declaration. Names are flat `snake_case`: `<type>_<method>` for a
@@ -183,9 +210,21 @@ pub enum CompilerItem {
     AsyncCall,
     /// `ResultBuffer` — the linear memory an `AsyncCall` lifts its result from.
     ResultBuffer,
+    /// `ArgBuffer` — the linear memory an `AsyncCall`'s arguments were lowered
+    /// into, released once its subtask resolves.
+    ArgBuffer,
     /// `CopyBuffer` — the linear memory a started stream copy moves through,
     /// with the copy it belongs to.
     CopyBuffer,
+    /// `ReadInto` — where a `Stream::begin_read` copy lands, the last
+    /// parameter of every read binding.
+    ReadInto,
+    /// `core:linear::ListArg<T>` — what converts to a `&ListView<T>` argument,
+    /// through its `lowered`.
+    ListArg,
+    /// `core:linear::ListView<T>` — what a sync import's `list<T>` parameter
+    /// of numbers takes.
+    ListView,
 
     // ── Resources ─────────────────────────────────────────────────────
     /// `Future<T>` — the CM future handle a `future` type lowers to.
@@ -266,6 +305,9 @@ pub enum CompilerItem {
     /// `AffineResource` — sealed marker every affine resource holds, so
     /// `ResourceId::of` takes one and nothing else.
     AffineResource,
+    /// `AnyBits` — sealed marker of a type every bit pattern of its width is a
+    /// value of, so `builtin::load` may read one from any bytes.
+    AnyBits,
     /// `Waitable` — what a `WaitableSet` holds, sealed: the standard library
     /// implements it, and a variant derives it from its cases.
     Waitable,
@@ -683,6 +725,8 @@ pub enum CompilerItem {
     I64MulWideSSoft,
     /// `core:rt::coverage_probe`.
     CoverageProbe,
+    /// `core:rt::coverage_report`.
+    CoverageReport,
     /// `core:rt::handle_class`.
     HandleClass,
     /// `core:rt::inspect_handle`.
@@ -802,7 +846,11 @@ impl CompilerItem {
         Self::Slice,
         Self::AsyncCall,
         Self::ResultBuffer,
+        Self::ArgBuffer,
         Self::CopyBuffer,
+        Self::ReadInto,
+        Self::ListArg,
+        Self::ListView,
         Self::Future,
         Self::FutureWritable,
         Self::Subtask,
@@ -818,6 +866,7 @@ impl CompilerItem {
         Self::Ref,
         Self::RefMut,
         Self::AffineResource,
+        Self::AnyBits,
         Self::Waitable,
         Self::Copyable,
         Self::IndexValue,
@@ -982,6 +1031,7 @@ impl CompilerItem {
         Self::I64MulWideUSoft,
         Self::I64MulWideSSoft,
         Self::CoverageProbe,
+        Self::CoverageReport,
         Self::HandleClass,
         Self::InspectHandle,
         Self::MemoryToGcString,
@@ -1073,7 +1123,11 @@ impl CompilerItem {
             Self::Slice => "slice",
             Self::AsyncCall => "async_call",
             Self::ResultBuffer => "result_buffer",
+            Self::ArgBuffer => "arg_buffer",
             Self::CopyBuffer => "copy_buffer",
+            Self::ReadInto => "read_into",
+            Self::ListArg => "list_arg",
+            Self::ListView => "list_view",
             Self::Future => "future",
             Self::FutureWritable => "future_writable",
             Self::Subtask => "subtask",
@@ -1089,6 +1143,7 @@ impl CompilerItem {
             Self::Ref => "ref",
             Self::RefMut => "ref_mut",
             Self::AffineResource => "affine_resource",
+            Self::AnyBits => "any_bits",
             Self::Waitable => "waitable",
             Self::Copyable => "copyable",
             Self::IndexValue => "index_value",
@@ -1194,6 +1249,7 @@ impl CompilerItem {
             Self::I64MulWideUSoft => "i64_mul_wide_u_soft",
             Self::I64MulWideSSoft => "i64_mul_wide_s_soft",
             Self::CoverageProbe => "coverage_probe",
+            Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
@@ -1308,6 +1364,7 @@ impl CompilerItem {
             | Self::I64MulWideUSoft
             | Self::I64MulWideSSoft
             | Self::CoverageProbe
+            | Self::CoverageReport
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
@@ -1385,7 +1442,9 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
+            | Self::ArgBuffer
             | Self::CopyBuffer
+            | Self::ReadInto
             | Self::Future
             | Self::FutureWritable
             | Self::Subtask
@@ -1401,6 +1460,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
             | Self::IndexValue
@@ -1503,6 +1563,9 @@ impl CompilerItem {
             | Self::ForOf => true,
             // Kiln generator world only.
             Self::KilnRequest | Self::KilnNoOptions => generator_world,
+            // Loaded only when a module imports `core:linear`, which every one
+            // declaring a `&ListView<T>` parameter does.
+            Self::ListArg | Self::ListView => false,
             // Loaded only when the user imports `core:collections`.
             Self::TreeMap
             | Self::MapEntriesIter
@@ -1588,6 +1651,8 @@ impl CompilerItem {
                 | Self::Member
                 // Called by every drop `synthesis::affine_drop` writes.
                 | Self::Drop
+                // Called at every argument converted to a `&ListView<T>`.
+                | Self::ListArg
         )
     }
 
@@ -1605,6 +1670,7 @@ impl CompilerItem {
             | Self::I64MulWideUSoft
             | Self::I64MulWideSSoft
             | Self::CoverageProbe
+            | Self::CoverageReport
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
@@ -1652,7 +1718,10 @@ impl CompilerItem {
             | Self::Slice
             | Self::AsyncCall
             | Self::ResultBuffer
-            | Self::CopyBuffer => CompilerItemKind::Struct,
+            | Self::ArgBuffer
+            | Self::CopyBuffer
+            | Self::ReadInto
+            | Self::ListView => CompilerItemKind::Struct,
             Self::Future
             | Self::FutureWritable
             | Self::Stream
@@ -1683,6 +1752,7 @@ impl CompilerItem {
             | Self::Ref
             | Self::RefMut
             | Self::AffineResource
+            | Self::AnyBits
             | Self::Waitable
             | Self::Copyable
             | Self::IndexValue
@@ -1728,6 +1798,7 @@ impl CompilerItem {
             | Self::BitNot
             | Self::Shl
             | Self::Shr
+            | Self::ListArg
             | Self::UpperExp => CompilerItemKind::Trait,
             Self::ListPush
             | Self::ListSplitOff

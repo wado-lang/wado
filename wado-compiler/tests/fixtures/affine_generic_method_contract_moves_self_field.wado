@@ -1,0 +1,31 @@
+// A method with a type parameter of its own and a contract moves a field out
+// of its by-value `self`. The contract is checked at the call; the instance
+// the call reaches still moves the field out.
+
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {}
+}
+
+affine struct Holder {
+    tok: Tok,
+}
+
+impl Holder {
+    fn take<U>(self) -> Tok
+        contract self.tok.id > 0
+    {
+        return self.tok;
+    }
+}
+
+test {
+    let h = Holder { tok: Tok { id: 3 } };
+    assert h.take::<f32>().id == 3;
+}
+
+__DATA__
+{"test": {}}
