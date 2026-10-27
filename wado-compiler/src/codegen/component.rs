@@ -721,58 +721,6 @@ fn resource_exports_for<'a>(
         .collect()
 }
 
-/// A named type the shared generator spells as a declared CM type: a record,
-/// or a local newtype kept as its alias so the boundary matches `wado wit`.
-fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    let Type::Named(named) = ty else {
-        return false;
-    };
-    let source = registry.source_interface(named);
-    source.as_deref().is_some_and(|s| {
-        registry
-            .get_struct_fields_by_source(s, &named.name)
-            .is_some()
-    }) || registry
-        .local_newtype_base(source.as_deref(), &named.name)
-        .is_some()
-}
-
-fn wado_type_to_cm_val_type(
-    ty: &Type,
-    stream_type_idx: Option<u32>,
-    enum_type_indices: &IndexMap<String, u32>,
-    flags_type_indices: &IndexMap<String, u32>,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
-) -> ComponentValType {
-    match ty {
-        Type::Named(named) => {
-            if let Some(&enum_idx) = enum_type_indices.get(&named.name) {
-                return ComponentValType::Type(enum_idx);
-            }
-            if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
-                return ComponentValType::Type(flags_idx);
-            }
-            let prim = wado_primitive_name_to_cm(&named.name)
-                .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
-            ComponentValType::Primitive(prim)
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            // borrow<resource> - WASI resource methods take self as &Resource
-            if let Type::Named(named) = inner.as_ref()
-                && let Some(handles) = resource_handles.get(&named.name)
-            {
-                return ComponentValType::Type(handles.borrow);
-            }
-            panic!("unsupported reference param type for CM: {ty:?}")
-        }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" => ComponentValType::Type(stream_type_idx.expect("stream type not defined")),
-            _ => panic!("unsupported generic param type for CM: {}", generic.name),
-        },
-        _ => panic!("unsupported Wado param type for CM: {ty:?}"),
-    }
-}
-
 /// Emit the memory/allocator core module.
 fn build_memory_module(
     strip_names: bool,
@@ -2497,7 +2445,6 @@ fn generate_cm_imports(
             }
 
             // Emit flags types in the instance type (scoped to wasi:).
-            let mut flags_export_indices: IndexMap<String, u32> = IndexMap::default();
             for flags_name in &needed_flags {
                 let Some(source) = project
                     .cm_interface_registry
@@ -2525,7 +2472,6 @@ fn generate_cm_imports(
                             cm_name,
                             wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(type_idx)),
                         );
-                        flags_export_indices.insert(flags_name.clone(), local_type_idx);
                         shared_type_gen.register_named(
                             CmTypeKind::Flags,
                             &source,
@@ -2557,84 +2503,11 @@ fn generate_cm_imports(
             );
 
             for func in &cm_functions {
-                let needs_stream_u8 = func
-                    .params
-                    .iter()
-                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
-                let stream_type_idx = if needs_stream_u8 {
-                    instance_type
-                        .ty()
-                        .defined_type()
-                        .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-                    let idx = local_type_idx;
-                    local_type_idx += 1;
-                    Some(idx)
-                } else {
-                    None
-                };
-
-                let kebab_params: Vec<(String, ComponentValType)> = func
-                    .params
-                    .iter()
-                    .map(|(_, cm_name, ty)| {
-                        let resolved_ty = project
-                            .cm_interface_registry
-                            .resolve_type_preserving_local_newtypes(ty);
-                        let is_named =
-                            has_named_cm_form(&resolved_ty, &project.cm_interface_registry);
-                        // A composite (`Option<T>`, `Result<T, E>`, `List<T>`, a
-                        // tuple) needs the shared generator, which spells its
-                        // payloads; `wado_type_to_cm_val_type` spells only the
-                        // flat shapes and the pre-defined `Stream`.
-                        let is_composite = match &resolved_ty {
-                            Type::Generic(g) => g.name != "Stream",
-                            Type::Tuple(_) => true,
-                            Type::Named(_)
-                            | Type::NamespacedGeneric(_)
-                            | Type::Function(_)
-                            | Type::Reference(_)
-                            | Type::MutReference(_)
-                            | Type::TypePackSpread(..)
-                            | Type::Infer(_)
-                            | Type::Error(_) => false,
-                        };
-                        let val_type = if is_component_import || is_named || is_composite {
-                            let mut sink = InstanceSink {
-                                it: &mut instance_type,
-                                next_idx: &mut local_type_idx,
-                            };
-                            shared_type_gen.ast_type_to_cm(
-                                &mut sink,
-                                &resolved_ty,
-                                &project.cm_interface_registry,
-                                &resource_exports,
-                            )
-                        } else {
-                            wado_type_to_cm_val_type(
-                                &resolved_ty,
-                                stream_type_idx,
-                                &enum_export_indices,
-                                &flags_export_indices,
-                                &resource_handles,
-                            )
-                        };
-                        (cm_name.clone(), val_type)
-                    })
-                    .collect();
-                let params: Vec<(&str, ComponentValType)> = kebab_params
-                    .iter()
-                    .map(|(name, val_type)| (name.as_str(), *val_type))
-                    .collect();
-
-                // Component imports and record returns route through
-                // `ast_type_to_cm`; other WASI returns use `emit_cm_val_type`.
-                let result_type = func.return_type.as_ref().map(|ty| {
+                let mut signature_type = |ty: &Type| {
                     let resolved_ty = project
                         .cm_interface_registry
                         .resolve_type_preserving_local_newtypes(ty);
-                    if is_component_import
-                        || has_named_cm_form(&resolved_ty, &project.cm_interface_registry)
-                    {
+                    if is_component_import {
                         let mut sink = InstanceSink {
                             it: &mut instance_type,
                             next_idx: &mut local_type_idx,
@@ -2657,7 +2530,17 @@ fn generate_cm_imports(
                             ctx,
                         )
                     }
-                });
+                };
+                let kebab_params: Vec<(String, ComponentValType)> = func
+                    .params
+                    .iter()
+                    .map(|(_, cm_name, ty)| (cm_name.clone(), signature_type(ty)))
+                    .collect();
+                let result_type = func.return_type.as_ref().map(&mut signature_type);
+                let params: Vec<(&str, ComponentValType)> = kebab_params
+                    .iter()
+                    .map(|(name, val_type)| (name.as_str(), *val_type))
+                    .collect();
 
                 let mut func_encoder = instance_type.ty().function();
                 if func.is_async {

@@ -1,0 +1,12 @@
+// A program leaves a dependency's guest effect open, and that effect takes a
+// type from a types-only interface. The program re-imports the effect for the
+// host to answer, so it imports the interface the type comes from as well.
+use { println, Stdout } from "core:cli";
+use { Tag, Types } from "./sub/wasm_import_cm_guest_effect_types.wat" with { type: "wat" };
+
+export fn run() with (Stdout, Tag) {
+    println(`${Tag::tag(Types::Level::High)}`);
+}
+
+__DATA__
+{"compile_only": true}

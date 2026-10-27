@@ -22,7 +22,7 @@ use crate::component_model::{
 };
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::module_source::{ModuleSource, is_bundled_specifier};
+use crate::module_source::ModuleSource;
 use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
@@ -1298,7 +1298,7 @@ fn collect_named_type_sources(
     match ty {
         AstType::Named(named) => {
             if let Some(src) = registry.source_interface(named)
-                && is_bundled_specifier(&src)
+                && registry.is_cm_source(&src)
             {
                 out.push(src);
             }
