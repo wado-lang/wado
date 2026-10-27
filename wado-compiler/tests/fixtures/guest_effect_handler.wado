@@ -1,0 +1,23 @@
+// A `with` handler for a dependency component's guest effect (`test:hlc/highlight`)
+// satisfies the import: `Hlc::wrap` calls back into the consumer's handler rather
+// than leaving the import for the host (#2471).
+use { println, Stdout } from "core:cli";
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = Tag {};
+    with Highlight => &mut h do {
+        println(Hlc::wrap("x", "wado").text);
+    }
+}
+
+__DATA__
+{"stdout": "[wado:x]\n"}

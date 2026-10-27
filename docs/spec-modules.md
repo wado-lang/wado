@@ -508,7 +508,32 @@ component requires the effects its own host imports map to
 (`wasi:clocks/monotonic-clock` requires `MonotonicClock`), and a component that
 imports nothing from the host requires no effect. A component that imports an
 interface no host provides (a guest effect) makes that interface an effect its
-caller must handle. `with { provider: "./impl.wado" }` supplies it instead: the
+caller must handle. The handler installed where the caller calls into the
+component answers each call the component makes to the interface, while the
+component is still running:
+
+<!-- {"fixture":"spec_modules_guest_effect_handler.wado"} -->
+
+```wado
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`
+    }
+}
+
+test {
+    let mut tag = Tag {};
+    with Highlight => &mut tag do {
+        assert Hlc::wrap("x", "wado").text == "[wado:x]";
+    }
+}
+```
+
+`with { provider: "./impl.wado" }` supplies the interface instead: the
 named Wado file is compiled into a component that exports the interface, bound
 by operation name, and composed in, so the caller needs no handler. A `provider`
 on a component that imports no guest effect is an error. So is one that does not

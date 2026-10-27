@@ -1003,6 +1003,9 @@ pub struct CmInterfaceRegistry {
     /// same-named types from distinct interfaces structurally distinct.
     newtypes: IndexMap<(String, String), Type>,
 
+    /// The CM name each of [`Self::newtypes`] is declared under (`duration`).
+    newtype_cm_names: IndexMap<(String, String), String>,
+
     /// Resource types collected from WASI modules (e.g., `TerminalInput`).
     /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
     resources: IndexMap<(String, String), String>,
@@ -1293,16 +1296,6 @@ impl CmTypeKind {
         Self::Enum,
         Self::Flags,
     ];
-}
-
-/// The first name a `(source_interface, name)` key set holds under `iface_fq`,
-/// which says that some module already declares into it.
-fn first_name_in_interface<'a>(
-    mut keys: impl Iterator<Item = &'a (String, String)>,
-    iface_fq: &str,
-) -> Option<&'a str> {
-    keys.find(|(source, _)| source == iface_fq)
-        .map(|(_, name)| name.as_str())
 }
 
 /// Return the `source_interface` when `name` has exactly one registrant under
@@ -2132,6 +2125,10 @@ impl CmInterfaceRegistry {
                 if !scope.admits(&source_interface) {
                     continue;
                 }
+                self.newtype_cm_names.insert(
+                    (source_interface.clone(), alias.name.clone()),
+                    cm_attr_cm_name(&alias.attrs, &alias.name),
+                );
                 register_unique(
                     &mut self.newtypes,
                     "newtype",
@@ -2548,6 +2545,21 @@ impl CmInterfaceRegistry {
         self.component_host_leaf_imports
             .get(fq)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// Whether `fq` is a guest effect some component dependency imports: an
+    /// imported interface outside WASI, which is the host's.
+    #[must_use]
+    pub fn is_dependency_guest_import(&self, fq: &str) -> bool {
+        !fq.starts_with("wasi:") && self.is_dependency_import(fq)
+    }
+
+    /// Whether some component dependency imports `fq`.
+    fn is_dependency_import(&self, fq: &str) -> bool {
+        self.component_host_leaf_imports
+            .values()
+            .flatten()
+            .any(|import| import == fq)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
@@ -3132,10 +3144,8 @@ impl CmInterfaceRegistry {
     /// interface is absent from `cm_interface_module_sources` by design, so that
     /// map alone reports the whole stdlib as unowned; what the keyspaces hold is
     /// the fact itself.
-    fn existing_cm_decl(&self, iface_fq: &str) -> Option<&str> {
-        CmTypeKind::ALL
-            .into_iter()
-            .find_map(|kind| first_name_in_interface(self.kind_keys(kind), iface_fq))
+    fn existing_cm_decl<'a>(&'a self, iface_fq: &'a str) -> Option<&'a str> {
+        self.declared_type_names(iface_fq).next()
     }
 
     /// The declaration a lib-local named type publishes, when it lies outside
@@ -3262,6 +3272,30 @@ impl CmInterfaceRegistry {
     /// the payload has no CM type to lower against.
     pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
         self.interface_declaring(source, name).is_some()
+    }
+
+    /// Whether `interface_fq` declares a function, which a types-only interface
+    /// (`wasi:cli/types`) does not.
+    pub fn declares_functions(&self, interface_fq: &str) -> bool {
+        self.interfaces.contains_key(interface_fq)
+    }
+
+    /// The CM name and base of the newtype `interface_fq` declares as `name`.
+    pub fn newtype(&self, interface_fq: &str, name: &str) -> Option<(&str, &Type)> {
+        let key = (interface_fq.to_string(), name.to_string());
+        Some((self.newtype_cm_names.get(&key)?, self.newtypes.get(&key)?))
+    }
+
+    /// The Wado name of every type `interface_fq` declares.
+    pub fn declared_type_names<'a>(
+        &'a self,
+        interface_fq: &'a str,
+    ) -> impl Iterator<Item = &'a str> + 'a {
+        CmTypeKind::ALL.into_iter().flat_map(move |kind| {
+            self.kind_keys(kind)
+                .filter(move |(fq, _)| fq == interface_fq)
+                .map(|(_, name)| name.as_str())
+        })
     }
 
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
@@ -3709,6 +3743,7 @@ impl CmInterfaceRegistry {
         CmNamespace::split_specifier(source).is_some()
             || stdlib::is_wit_core_interface(source)
             || self.component_interfaces.contains(source)
+            || self.is_dependency_import(source)
     }
 
     /// Flatten a CM type into its canonical-ABI core value sequence. Single
@@ -4250,6 +4285,38 @@ impl CmTypeGen {
         export_idx
     }
 
+    /// Export `base` under `cm_name`: the named alias `owner`'s newtype `name`
+    /// is (`type meters = f64`).
+    pub fn define_alias(
+        &mut self,
+        sink: &mut dyn CmTypeSink,
+        owner: &str,
+        name: &str,
+        cm_name: &str,
+        base: &Type,
+        cm_interface_registry: &CmInterfaceRegistry,
+        resource_exports: &IndexMap<&str, u32>,
+    ) -> ComponentValType {
+        // The owner keys the cache so same-named newtypes stay distinct and
+        // every reference dedups to one alias.
+        let cache_key = Self::named_key(CmTypeKind::Newtype, owner, name);
+        if let Some(&idx) = self.cache.get(&cache_key) {
+            return ComponentValType::Type(idx);
+        }
+        // Peel the base first: an imported-newtype base resolves to its
+        // primitive, avoiding the unsupported-name panic in `ast_type_to_cm`; a
+        // local-newtype base recurses as a nested alias.
+        let base = cm_interface_registry.resolve_type_preserving_local_newtypes(base);
+        let base_idx =
+            match self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports) {
+                ComponentValType::Primitive(prim) => sink.define(CmDefined::Primitive(prim)),
+                ComponentValType::Type(idx) => idx,
+            };
+        let named_idx = self.export_named(sink, cm_name, base_idx);
+        self.cache.insert(cache_key, named_idx);
+        ComponentValType::Type(named_idx)
+    }
+
     /// Define a record (struct) type and its named export, returning the exported type index.
     fn define_record(
         &mut self,
@@ -4448,27 +4515,15 @@ impl CmTypeGen {
                     .local_newtype_base(source.as_deref(), name)
                     .map(|(s, ty)| (s.to_string(), ty.clone()))
                 {
-                    // Canonical source keys the cache so same-named locals
-                    // stay distinct and every reference dedups to one alias.
-                    let cache_key = format!("newtype:{canonical_source}:{name}");
-                    if let Some(&idx) = self.cache.get(&cache_key) {
-                        return ComponentValType::Type(idx);
-                    }
-                    // Peel the base first: an imported-newtype base resolves
-                    // to its primitive, avoiding the unsupported-name panic
-                    // below; a local-newtype base recurses as a nested alias.
-                    let base = cm_interface_registry.resolve_type_preserving_local_newtypes(&base);
-                    let base_val =
-                        self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports);
-                    let base_idx = match base_val {
-                        ComponentValType::Primitive(prim) => {
-                            sink.define(CmDefined::Primitive(prim))
-                        }
-                        ComponentValType::Type(idx) => idx,
-                    };
-                    let named_idx = self.export_named(sink, &to_cm_name(name), base_idx);
-                    self.cache.insert(cache_key, named_idx);
-                    return ComponentValType::Type(named_idx);
+                    return self.define_alias(
+                        sink,
+                        &canonical_source,
+                        name,
+                        &to_cm_name(name),
+                        &base,
+                        cm_interface_registry,
+                        resource_exports,
+                    );
                 }
                 // Every branch here is emitting a WASI interface
                 // declaration. The type reference must have a resolved

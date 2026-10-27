@@ -584,19 +584,14 @@ fn register_exports(ctx: &mut WirContext<'_>) {
         }
 
         if let Some(post_return) = &export.post_return_core_name {
-            let fq = MangledName::in_module(entry_source, post_return);
-            let Some(func_id) = ctx.func_map.get(&fq) else {
-                panic!(
-                    "[WIR] post-return function '{post_return}' not found (fq: {fq}); available: {:?}",
-                    ctx.func_map.keys().collect::<Vec<_>>()
-                );
-            };
-            ctx.exports.push(WirExport {
-                name: post_return.clone(),
-                desc: WirExportDesc::Func {
-                    func_id: func_id.clone(),
-                },
-            });
+            export_under_own_name(ctx, post_return);
+        }
+    }
+
+    for callback in &component_plan.guest_callbacks {
+        export_under_own_name(ctx, &callback.core_func_name);
+        if let Some(post_return) = &callback.post_return_core_name {
+            export_under_own_name(ctx, post_return);
         }
     }
 
@@ -614,6 +609,23 @@ fn register_exports(ctx: &mut WirContext<'_>) {
             });
         }
     }
+}
+
+/// Export the entry module's function `name` under that same name.
+fn export_under_own_name(ctx: &mut WirContext<'_>, name: &str) {
+    let fq = MangledName::in_module(&ctx.package.entry_module_source, name);
+    let Some(func_id) = ctx.func_map.get(&fq) else {
+        panic!(
+            "[WIR] function '{name}' not found (fq: {fq}); available: {:?}",
+            ctx.func_map.keys().collect::<Vec<_>>()
+        );
+    };
+    ctx.exports.push(WirExport {
+        name: name.to_string(),
+        desc: WirExportDesc::Func {
+            func_id: func_id.clone(),
+        },
+    });
 }
 
 /// Register global variables from all TIR modules.
