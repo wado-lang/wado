@@ -21,7 +21,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::nir_visitor::NirRefVisitor;
 use crate::optimize::alias::bound_value;
-use crate::optimize::arena_query::is_local;
+use crate::optimize::arena_query::{is_local, stmt_diverges};
 use crate::optimize::gate::FunctionGate;
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapEffectsCache, HeapFrame};
 use crate::tir::{ResolvedType, TypeId};
@@ -1695,41 +1695,6 @@ fn bind_for_sync(
     }
     let (let_sid, read, tmp_idx, type_id) = bind_temp(body, value, ctx, span);
     (vec![let_sid], read, vec![(tmp_idx, type_id)])
-}
-
-/// Whether `stmt` never falls through to the statement after it — a `loop`
-/// does not when its only exits are labeled breaks to an enclosing block.
-fn stmt_diverges(body: &Body, stmt: StmtId, type_table: &TypeTable) -> bool {
-    match &body.stmts[stmt].kind {
-        StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue => true,
-        StmtKind::Expr(e) => e
-            .as_expr()
-            .is_some_and(|e| type_table.is_never(body.exprs[e].type_id)),
-        StmtKind::Loop { body: b } => !block_breaks_innermost_loop(body, *b),
-        _ => false,
-    }
-}
-
-/// Whether an unlabeled `break` binds to the loop whose body is `block`. A
-/// nested loop captures its own, so its subtree is skipped.
-fn block_breaks_innermost_loop(body: &Body, block: BlockId) -> bool {
-    struct Search(bool);
-    impl NirRefVisitor for Search {
-        fn visit_node(&mut self, body: &Body, node: NodeRef) {
-            if let NodeRef::Stmt(s) = node {
-                if matches!(body.stmts[s].kind, StmtKind::Loop { .. }) {
-                    return;
-                }
-                if matches!(body.stmts[s].kind, StmtKind::Break { label: None, .. }) {
-                    self.0 = true;
-                }
-            }
-            self.walk_node(body, node);
-        }
-    }
-    let mut search = Search(false);
-    search.visit_node(body, NodeRef::Block(block));
-    search.0
 }
 
 /// Append `sync_stmts` to `block`, preserving a trailing value by binding it

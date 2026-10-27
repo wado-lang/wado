@@ -157,6 +157,15 @@ pub const CONTRACT_CLAUSE_INTRINSIC: &str = "$contract_clause";
 /// clause's own where a call reaches the function through a value.
 pub const CONTRACT_SITE_INTRINSIC: &str = "$contract_site";
 
+/// The `core:builtin` intrinsic marking a path rare, the one marker NIR has.
+pub const COLD_PATH_INTRINSIC: &str = "cold_path";
+
+/// The `core:builtin` intrinsic marking a path the program itself makes rare:
+/// ahead of a trap, or past a global's once-guard. Reify and lowering write it
+/// where an author would write `cold_path`, and `lower::translate` turns it
+/// into one. No source spells it.
+pub const KNOWN_COLD_PATH_INTRINSIC: &str = "$known_cold_path";
+
 /// The name of the hidden default method a trait declares to hold the
 /// `contract` clauses of its method `method`, which every impl of the method
 /// calls at its head.
@@ -410,6 +419,12 @@ pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> Strin
 /// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
 pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
     format!("$hole_get${mangled_shape}${mangled_hole}")
+}
+
+/// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
+/// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
+pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
+    format!("$hole_ref${mangled_shape}${mangled_hole}")
 }
 
 /// Name of the synthesized segment-read helper for a template shape. Lowering

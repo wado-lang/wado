@@ -30,11 +30,12 @@ use crate::compiler_item::{CompilerItem, SeqField};
 use crate::lower::plan::boxing::BoxPlan;
 use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
-use crate::lower::{bare_asserts, wide_arith, wide_int_literal};
+use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
-    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
-    field_get_helper_name, field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    template_segment_helper_name, variant_tag_helper_name,
+    COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
+    case_extract_helper_name, closure_capture_field, field_get_helper_name, field_ref_helper_name,
+    hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name, template_segment_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -74,6 +75,10 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         closure,
         value_copy,
     } = plan;
+    // After the plan, whose global once-guards place a marker of their own.
+    if !flat.codegen_flags.cold_paths {
+        cold_paths::drop_markers(&flat);
+    }
     // Before pattern lowering, which keeps a destructure of a multi-value
     // builtin whole: a software form returns its tuple like any call, and its
     // destructure is lowered like any other.
@@ -2567,12 +2572,16 @@ impl FunctionTranslator<'_, '_> {
             return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
         }
 
+        // A field read names the struct and the field type, a hole read the
+        // shape and the hole type.
         for (builtin, helper_name) in [
             (
                 "struct_field_get",
                 field_get_helper_name as fn(&str, &str) -> String,
             ),
             ("struct_field_ref", field_ref_helper_name),
+            ("hole_get", hole_get_helper_name),
+            ("hole_ref", hole_ref_helper_name),
         ] {
             if func.is_builtin_named(builtin) {
                 let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
@@ -2587,19 +2596,7 @@ impl FunctionTranslator<'_, '_> {
             }
         }
 
-        // `hole_get<T, V>` names the shape and the hole type; `hole_fmt<T>`
-        // and `template_segment<T>` the shape only.
-        if func.is_builtin_named("hole_get") {
-            let ta = Self::marker_type_args::<2>(type_args, mi, "hole_get");
-            let name = {
-                let tt = self.base.type_table.borrow();
-                hole_get_helper_name(
-                    &tt.mangle_type_arg_unboxed(ta[0]),
-                    &tt.mangle_type_arg_unboxed(ta[1]),
-                )
-            };
-            return Some(self.bridge_call(ta[0], name, args, "hole_get"));
-        }
+        // `hole_fmt<T>` and `template_segment<T>` name the shape only.
         for (builtin, helper_name) in [
             ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
             ("template_segment", template_segment_helper_name),
@@ -3209,9 +3206,15 @@ fn convert_monomorph_info(info: &MonomorphInfo) -> nir::MonomorphInfo {
 }
 
 pub(super) fn convert_function_ref(func: &FunctionRef) -> nir::FunctionRef {
+    // Who placed a cold marker matters only up to NIR, which has one.
+    let name = if func.is_builtin_named(KNOWN_COLD_PATH_INTRINSIC) {
+        COLD_PATH_INTRINSIC
+    } else {
+        &func.name
+    };
     nir::FunctionRef {
         module_source: func.module_source.clone(),
-        name: func.name.clone(),
+        name: name.to_string(),
         monomorph_info: func.monomorph_info.as_ref().map(convert_monomorph_info),
         method_info: func.method_info.clone(),
     }

@@ -1,0 +1,27 @@
+// A dependency answered by a handler also imports types-only interfaces, one
+// of whose types the guest effect takes. They declare no operation, so neither
+// is an effect the program must name, and the program defines their types for
+// the dependency rather than importing them.
+use { println, Stdout } from "core:cli";
+use { Lvl, Tag, Types } from "./sub/wasm_import_cm_guest_effect_types.wat" with { type: "wat" };
+
+struct ByLevel {}
+
+impl Tag for ByLevel {
+    fn tag(&mut self, l: Types::Level) -> u32 {
+        resume match l {
+            Low => 10,
+            High => 41,
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut h = ByLevel {};
+    with Tag => &mut h do {
+        println(`${Lvl::stamp()}`);
+    }
+}
+
+__DATA__
+{"stdout": "42\n"}

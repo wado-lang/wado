@@ -95,8 +95,10 @@ use crate::name::{
 };
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
-use crate::synthesis::common::builtin_call;
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
+use crate::synthesis::common::{
+    builtin_call, cold_path_stmt, is_cold_marker_stmt, known_cold_path_stmt,
+};
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
     agree_branch_types,
@@ -2416,7 +2418,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         self.mark_diverging_stmts(stmts)
     }
 
-    /// Open the cold tail of a block at its first statement that cannot return.
+    /// Mark a block cold ahead of its first statement that cannot return.
     ///
     /// Marking here rather than at each synthesis site is what gives a
     /// `panic(…)` written in source the same treatment as the ones this file
@@ -2429,21 +2431,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if !stmts.iter().any(diverges) {
             return stmts;
         }
-        let is_marker = |s: &TirStmt| {
-            matches!(&s.kind, TirStmtKind::Expr(e)
-                if matches!(&e.kind, TirExprKind::Call { func, .. }
-                    if func.is_builtin_named("cold_path")))
-        };
         let mut out: Vec<TirStmt> = Vec::with_capacity(stmts.len() + 1);
-        // A marker makes the rest of its block cold, which is where `block_cut`
-        // stops pricing and where `cold_outline`'s region starts, so the first
-        // one in a block is the only one worth placing — and a synthesis site
-        // that placed its own ahead of the statements it built keeps it.
+        // A marker makes its whole basic block cold, so one per block is all
+        // there is to place, and a synthesis site that placed its own keeps it.
         let mut marked = false;
         for s in stmts {
-            marked = marked || is_marker(&s);
+            marked = marked || is_cold_marker_stmt(&s);
             if diverges(&s) && !marked {
-                out.push(self.make_cold_path_stmt(s.span));
+                out.push(known_cold_path_stmt(s.span));
                 marked = true;
             }
             out.push(s);
@@ -3337,17 +3332,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         spliced
     }
 
-    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
-    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
-    /// Mirrors [`super::Elaborator::desugar_assert`].
-    /// Build a `builtin::cold_path()` marker statement for a compiler-synthesized
-    /// cold branch (an `assert` failure, a `?` error propagation, …). Codegen
-    /// then hints the enclosing branch unlikely and the inliner skips the branch.
-    fn make_cold_path_stmt(&self, span: Span) -> TirStmt {
-        let call = builtin_call("cold_path", Vec::new(), TypeTable::UNIT);
-        TirStmt::new(TirStmtKind::Expr(call), span)
-    }
-
     /// A conditional slot's failure-message text, chosen in the cold branch so
     /// an unreached slot says so instead of quoting its zero value.
     fn assert_slot_text_let(
@@ -3447,6 +3431,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         (choice, None)
     }
 
+    /// Reify `assert cond[, msg];` into the power-assert expansion, from the
+    /// slots annotate recorded in [`super::sem::types::AssertCaptureInfo`].
+    /// Mirrors [`super::Elaborator::desugar_assert`].
     fn reify_assert(
         &mut self,
         assert_stmt: &ast::AssertStmt,
@@ -3665,7 +3652,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
 
         let mut then_stmts = Vec::with_capacity(text_lets.len() + 2);
-        then_stmts.push(self.make_cold_path_stmt(span));
+        then_stmts.push(known_cold_path_stmt(span));
         then_stmts.extend(text_lets);
         then_stmts.push(TirStmt::new(TirStmtKind::Expr(panic_call), span));
         let then_block = TirBlock::new(then_stmts, span);
@@ -5952,7 +5939,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        self.make_cold_path_stmt(span),
+                        // A failure is no trap, so its rarity is a guess.
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 // `Option<U>` and the operand's `Option<T>`
@@ -6085,7 +6073,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
                     vec![
-                        self.make_cold_path_stmt(span),
+                        cold_path_stmt(span),
                         TirStmt::new(
                             TirStmtKind::Return {
                                 value: Some(err_variant),

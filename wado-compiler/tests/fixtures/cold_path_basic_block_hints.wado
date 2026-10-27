@@ -1,0 +1,74 @@
+// A branch hint reads the same cold run every other pass does. An arm whose
+// marker some path can skip is not cold, so `escapes_first`'s outer branch
+// gets no hint; its inner guard does, since its fall-through reaches the
+// marker. An arm every path through which passes a marker is cold, so
+// `covered_by_arms`'s outer branch is hinted unlikely although neither of its
+// markers sits in it directly. `||` runs its right operand only when the left
+// is false, so a marker there leaves `short_circuit`'s outer branch hot. A
+// `match` arm that binds a name ahead of its marker is still cold throughout.
+
+fn escapes_first(x: i32, y: i32) -> i32 {
+    if x > 0 {
+        if y > 0 {
+            return 1;
+        }
+        builtin::cold_path();
+        return 2;
+    }
+    return 3;
+}
+
+fn covered_by_arms(x: i32, y: i32) -> i32 {
+    if x > 10 {
+        if y > 0 {
+            builtin::cold_path();
+            return 4;
+        } else {
+            builtin::cold_path();
+            return 5;
+        }
+    }
+    return 6;
+}
+
+fn short_circuit(x: i32, y: i32) -> i32 {
+    if x > 20 {
+        if x > 30 || rare: {
+            builtin::cold_path();
+            y > 0
+        } {
+            return 7;
+        }
+        return 8;
+    }
+    return 9;
+}
+
+fn bound_arm(r: Result<i32, i32>) -> i32 {
+    return match r {
+        Ok(v) => v,
+        Err(e) => {
+            builtin::cold_path();
+            e * 2
+        },
+    };
+}
+
+export fn run() {
+    assert escapes_first(builtin::black_box(1), builtin::black_box(1)) == 1;
+    assert covered_by_arms(builtin::black_box(1), builtin::black_box(1)) == 6;
+    assert short_circuit(builtin::black_box(1), builtin::black_box(1)) == 9;
+    assert bound_arm(builtin::black_box(Result::<i32, i32>::Ok(10))) == 10;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O0": [
+        "if x > 0 {",
+        "if @likely(y > 0) {",
+        "if @unlikely(x > 10) {",
+        "if x > 20 {",
+        "if @likely(ref.test"
+    ]
+}

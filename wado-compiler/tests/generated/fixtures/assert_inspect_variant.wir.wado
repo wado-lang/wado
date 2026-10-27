@@ -203,6 +203,7 @@ global global:core:prelude/traits.wado::$const_obj_18: ref "core:prelude/string.
 fn "assert_inspect_variant.wado/$cm_export__run"() {
     let v: ref "core:prelude/types.wado//Option<i32>";
     let expected: ref "core:prelude/types.wado//Option<i32>";
+    cold_path;
     v = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 42 };
     expected = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 99 };
     cold_path;
@@ -396,6 +397,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;

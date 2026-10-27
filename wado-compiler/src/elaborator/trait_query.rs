@@ -157,16 +157,7 @@ impl OnBoundTrait {
     }
 
     pub(super) fn is_reflect(self) -> bool {
-        matches!(
-            self,
-            Self::Reflect
-                | Self::ReflectStruct
-                | Self::ReflectVariant
-                | Self::ReflectEnum
-                | Self::ReflectFlags
-                | Self::ReflectNewtype
-                | Self::ReflectTemplate
-        )
+        CompilerItem::REFLECT_KINDS.contains(&self.compiler_item())
     }
 
     /// The associated type listing a reflection kind's member types, which a

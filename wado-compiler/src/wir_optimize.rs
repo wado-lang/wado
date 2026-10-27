@@ -27,7 +27,6 @@ mod sroa_variant_return;
 mod unbox_handle;
 mod util;
 
-use crate::codegen_flags::CodegenFlags;
 use crate::compiler_host::{SpanEmitter, in_span};
 use crate::optimize::OptLevel;
 use crate::optimize::pass_dump::{self, Phase};
@@ -100,34 +99,26 @@ fn wir_pass(
 /// exception, running before that gate: the frontend already emits `None` as
 /// `ref.null`, and this picks the matching WIR repr, so skipping it miscompiles
 /// rather than merely slowing things down.
-pub fn optimize_wir(
-    module: &mut WirPackage,
-    opt_level: OptLevel,
-    flags: CodegenFlags,
-    profiler: &dyn SpanEmitter,
-) {
-    optimize_scoped(module, opt_level, flags, profiler, PassScope(None));
+pub fn optimize_wir(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
+    optimize_scoped(module, opt_level, profiler, PassScope(None));
 }
 
 fn optimize_scoped(
     module: &mut WirPackage,
     opt_level: OptLevel,
-    flags: CodegenFlags,
     profiler: &dyn SpanEmitter,
     scope: PassScope,
 ) {
-    optimize_wasm_modules(module, opt_level, flags, profiler);
+    optimize_wasm_modules(module, opt_level, profiler);
 
     // Mandatory representation lowering — runs before the `-O0` gate. See above.
     lower_nullable_refs(module);
 
     if opt_level == OptLevel::O0 {
         // Branch hints are independent of `-O`, like build-time cold-path hints.
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
+        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
+            infer_branch_hints(m);
+        });
         dce::compact_dead_items(module);
         finalize_locals(module);
         return;
@@ -281,11 +272,9 @@ fn optimize_scoped(
         wir_pass(scope, "elide_empty_work", module, profiler, |m| {
             elide_empty_work(m);
         });
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
+        wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
+            infer_branch_hints(m);
+        });
     });
 
     // Phase 8: mark functions/types/globals orphaned by earlier passes dead,
@@ -335,12 +324,7 @@ fn optimize_scoped(
 ///
 /// Recursion terminates at one level: such a package has no nested
 /// `wasm_modules` of its own.
-fn optimize_wasm_modules(
-    module: &mut WirPackage,
-    opt_level: OptLevel,
-    flags: CodegenFlags,
-    profiler: &dyn SpanEmitter,
-) {
+fn optimize_wasm_modules(module: &mut WirPackage, opt_level: OptLevel, profiler: &dyn SpanEmitter) {
     let mut wasm_modules = std::mem::take(&mut module.wasm_modules);
     for (name, wasm_module) in &mut wasm_modules {
         dce::mark_unreachable_defined_functions(wasm_module);
@@ -350,13 +334,7 @@ fn optimize_wasm_modules(
         for i in wasm_module.dead_func_indices.clone() {
             wasm_module.dead_type_indices.insert(i);
         }
-        optimize_scoped(
-            wasm_module,
-            opt_level,
-            flags,
-            profiler,
-            PassScope(Some(name)),
-        );
+        optimize_scoped(wasm_module, opt_level, profiler, PassScope(Some(name)));
     }
     module.wasm_modules = wasm_modules;
 }

@@ -1612,7 +1612,7 @@ pub enum WirInstr {
     /// `apply_cold_path_hints` consumes it during WIR finalization, wrapping
     /// the enclosing conditional's condition in a `BranchHint` so the side
     /// reaching the marker is hinted cold (see that pass for the recognized
-    /// shapes). Lowered to `Nop` under `-f no-branch-hinting`.
+    /// shapes).
     ColdPath,
     /// Optimization barrier for `builtin::black_box(value)`: every WIR pass
     /// reads it as an unknown value, and codegen emits the operand in its place.
@@ -1749,16 +1749,55 @@ pub enum WirInstr {
 }
 
 impl WirInstr {
-    /// True when the branch `body` contains a `cold_path()` marker. Descends
-    /// through transparent grouping (`Block` / `Seq`), so desugarings still
-    /// match, but stops at nested control flow (`If` / `Loop`): a marker inside
-    /// an inner branch belongs to that branch, not this one.
+    /// True when the branch `body` is cold throughout: it reaches a
+    /// `cold_path()` marker, which `wir_build` puts where each cold run starts,
+    /// with nothing ahead of it able to leave the branch. Descends through
+    /// transparent grouping (`Block` / `Seq`), so desugarings still match.
     pub fn marks_cold_path(body: &[Self]) -> bool {
-        body.iter().any(|instr| match instr {
-            Self::ColdPath => true,
-            Self::Block { body, .. } | Self::Seq(body) => Self::marks_cold_path(body),
-            _ => false,
-        })
+        for instr in body {
+            let grouped = matches!(instr, Self::Block { body, .. } | Self::Seq(body)
+                if Self::marks_cold_path(body));
+            if matches!(instr, Self::ColdPath) || grouped {
+                return true;
+            }
+            if instr.leaves(0) {
+                return false;
+            }
+        }
+        false
+    }
+
+    /// Whether control can leave `self` other than by falling through, where
+    /// `labels` is how many labels a branch out of `self` crosses before it
+    /// leaves.
+    fn leaves(&self, labels: u32) -> bool {
+        let under = |body: &[Self]| body.iter().any(|i| i.leaves(labels + 1));
+        match self {
+            Self::Return { .. } => true,
+            Self::Br { depth } => *depth >= labels,
+            Self::BrIf { depth, condition } => *depth >= labels || condition.leaves(labels),
+            Self::BrTable {
+                index,
+                targets,
+                default,
+            } => targets.iter().chain([default]).any(|&d| d >= labels) || index.leaves(labels),
+            Self::If {
+                condition,
+                then_body,
+                else_body,
+                ..
+            } => {
+                condition.leaves(labels)
+                    || under(then_body)
+                    || else_body.as_deref().is_some_and(under)
+            }
+            Self::Block { body, .. } | Self::Loop { body, .. } => under(body),
+            other => {
+                let mut leaves = false;
+                other.for_each_child(&mut |c| leaves = leaves || c.leaves(labels));
+                leaves
+            }
+        }
     }
 
     /// Returns true if this instruction always diverges (all execution paths

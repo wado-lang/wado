@@ -200,6 +200,7 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 fn "array_bounds_elim_oob_complex.wado/run"() with Stdout {
     let $load_1: ref Array<i32>;
     let arr: ref "core:prelude//List<i32>";
+    cold_path;
     arr = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     if @unlikely(0 >= builtin::array_len(arr.repr)) {
         cold_path;
@@ -484,6 +485,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
+    cold_path;
     "core:rt/log_stderr"($mv$message$repr, $mv$message$used);
     cold_path;
     unreachable;

@@ -166,7 +166,9 @@ Today such a type is a `struct` with a private field and a checked
 constructor. A newtype that carries an invariant would state the same at no
 cost, but it redesigns newtypes: `as` would convert only toward the base type,
 and a conversion toward the newtype would go through `TryFrom`. That belongs
-in a proposal of its own.
+in a proposal of its own:
+[Refined Types](./wep-2026-10-25-refined-types.md) states the invariant on a
+type of its own rather than on a newtype.
 
 ### Syntax: `contract` and `unchecked`
 

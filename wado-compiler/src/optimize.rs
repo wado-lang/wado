@@ -6,7 +6,7 @@
 
 mod aggregate_forward;
 mod alias;
-mod arena_query;
+pub(crate) mod arena_query;
 mod body_memo;
 mod bounds;
 mod census;
@@ -756,7 +756,7 @@ fn run_optimization_passes(
     // the function it copies. Ahead of the gate too, so the call graph is built
     // over the split shape rather than growing into it.
     run_pass("nir/cold_outline", project, profiler, |p| {
-        cold_outline::outline_cold_regions(p, descriptor_cache)
+        cold_outline::outline_cold_regions(p)
     });
     // Per-function dirty-set gate. Every loop pass is gate-aware:
     // a per-function pass (`gated!`) skips functions unchanged since it last ran;
@@ -1026,7 +1026,7 @@ fn run_optimization_passes(
     // `wir_optimize::const_global`; the final `run_dce` reclaims the dead
     // binding locals.
     run_pass("nir/const_object_globalization", project, profiler, |p| {
-        globalize_const_objects(p, descriptor_cache, exec)
+        globalize_const_objects(p, exec)
     });
     // Clean up after globalization: fold the `global:X.used` length reads it
     // exposes (recovered via `const_folding`'s `GlobalFieldEnv`) and prune the
