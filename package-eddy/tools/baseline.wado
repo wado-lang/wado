@@ -1,0 +1,215 @@
+//! Measures a plain one-pass review on the evaluation set: a model reviews each
+//! culprit pull request's whole diff, and a grader asks whether any finding
+//! names the defect the fix pull request later corrected. Each entry is
+//! reviewed `RUNS` times, since one review is not repeatable.
+//!
+//! Run it from the repository root. The reviewer is a build input:
+//! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
+//!
+//! ```sh
+//! CLAUDE_API_KEY=... wado run package-eddy/tools/baseline.wado -- \
+//!     package-eddy/eval/szz.json package-eddy/eval/checked.json \
+//!     package-eddy/eval/judged.json package-eddy/eval/baseline.json
+//! ```
+
+use { args, env, eprintln, Stderr, Environment } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Client } from "wasi:http";
+use { to_bytes_pretty, to_string, from_string } from "core:json";
+use { TreeMap } from "core:collections";
+use { changed_paths, source_diff, ask_json, merge_title, Census, Checked, FixResult, Judged } from "./eval.wado";
+
+#[param(from_env = "CLAUDE_MODEL")]
+global CLAUDE_MODEL: String = "claude-opus-5-5";
+
+#[param(name = "grader")]
+global GRADER: String = "claude-opus-5-5";
+
+#[param(name = "runs")]
+global RUNS: i32 = 3;
+
+#[param(name = "diff_limit")]
+global LIMIT: i32 = 2_000_000;
+
+global REVIEW: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
+Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
+Answer with one JSON object and nothing else:
+{\"findings\": [{\"file\": \"<path>\", \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
+Report at most 10 findings, the most severe first. An empty list is a valid answer.";
+
+global GRADE: String = "You grade a code review against one known defect.
+The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
+A finding is a hit when it points at the same root cause: the same code and the same wrong behaviour, even if worded differently or only partly explained. A finding about something else in the same area is not a hit.
+Answer with one JSON object and nothing else:
+{\"hit\": bool, \"finding\": <the index of the hit, or -1>, \"reason\": \"<one sentence>\"}";
+
+struct Finding {
+    file: String,
+    summary: String,
+    detail: String,
+}
+
+struct Review {
+    findings: List<Finding>,
+}
+
+struct Grade {
+    hit: bool,
+    finding: i32,
+    reason: String,
+}
+
+struct Run {
+    findings: List<Finding> = [],
+    grade: Option<Grade> = null,
+    error: Option<String> = null,
+}
+
+struct Entry {
+    fix: i32,
+    culprit: i32,
+    defect: String,
+    runs: List<Run>,
+}
+
+struct Baseline {
+    reviewer: String,
+    grader: String,
+    entries: List<Entry>,
+}
+
+export fn run() with (Stderr, Environment, Preopens, Process, Client) {
+    let arguments = args();
+    assert arguments.len() == 4, "usage: baseline.wado <szz.json> <checked.json> <judged.json> <out.json>";
+    let Some(api_key) = env("CLAUDE_API_KEY") else {
+        panic("CLAUDE_API_KEY is not set");
+    };
+    let census = from_string::<Census, String>(fs::read_to_string(&arguments[0]).unwrap()).unwrap();
+    let checked = from_string::<Checked, String>(fs::read_to_string(&arguments[1]).unwrap()).unwrap();
+    let judged = from_string::<Judged, String>(fs::read_to_string(&arguments[2]).unwrap()).unwrap();
+    let out_path = arguments[3];
+    let earlier = earlier_runs(&out_path);
+
+    let mut out = Baseline { reviewer: CLAUDE_MODEL, grader: GRADER, entries: [] };
+    for let c of &checked.pairs {
+        if !c.usable() {
+            continue;
+        }
+        let r = fix_result(&census, c.fix);
+        let culprit = &r.blamed[0];
+        assert culprit.pr == c.culprit, "the census must still blame the checked culprit";
+        let defect = judged_defect(&judged, c.fix);
+        let review_prompt = match source_diff(&culprit.sha, &changed_paths(&culprit.sha), "culprit", LIMIT) {
+            Ok(diff) => `PULL REQUEST #${c.culprit}: ${merge_title(&culprit.sha)}
+
+<diff>
+${diff}
+</diff>`,
+            Err(e) => panic(`#${c.fix}: ${e}`),
+        };
+        let fix_diff = source_diff(&r.sha, &changed_paths(&r.sha), "fix", LIMIT).unwrap();
+        let known = `KNOWN DEFECT, fixed by #${c.fix}: ${r.title}
+${defect}
+
+<fix_diff>
+${fix_diff}
+</fix_diff>`;
+
+        let mut entry = Entry { fix: c.fix, culprit: c.culprit, defect, runs: [] };
+        for let graded of earlier.get(c.fix).unwrap_or([]) {
+            if graded.grade matches { Some(_) } && entry.runs.len() < RUNS {
+                entry.runs.push(graded);
+            }
+        }
+        out.entries.push(entry);
+        let last = out.entries.len() - 1;
+        while out.entries[last].runs.len() < RUNS {
+            out.entries[last].runs.push(review_once(&api_key, &review_prompt, &known));
+            // Written after every run, so a run that dies keeps what it paid for.
+            fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+            eprintln(`#${c.fix} run ${out.entries[last].runs.len()}`);
+        }
+    }
+    fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
+    report(&out);
+}
+
+fn fix_result(census: &Census, fix: i32) -> FixResult {
+    for let r of &census.results {
+        if r.pr == fix {
+            return *r;
+        }
+    }
+    panic(`#${fix} is not in the census`);
+}
+
+/// The defect the judge named for `fix`'s pair.
+fn judged_defect(judged: &Judged, fix: i32) -> String {
+    for let p of &judged.pairs {
+        if p.fix == fix && let Some(v) = &p.verdict {
+            return v.defect;
+        }
+    }
+    panic(`#${fix} has no verdict to name its defect`);
+}
+
+/// One review of the culprit, graded against the known defect.
+fn review_once(api_key: &String, review_prompt: &String, known: &String) -> Run with Client {
+    // Thinking spends from the same budget as the answer.
+    let findings = match ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000) {
+        Ok(r) => r.findings,
+        Err(e) => {
+            return Run { error: Some(e) };
+        },
+    };
+    let grade_prompt = `${*known}
+
+<findings>
+${to_string(&findings).unwrap()}
+</findings>`;
+    return match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
+        Ok(g) => Run { findings, grade: Some(g) },
+        Err(e) => Run { findings, error: Some(e) },
+    };
+}
+
+/// The graded runs an earlier run of this reviewer and grader left at `path`,
+/// by fix. A rerun only tops each entry up to `RUNS`.
+fn earlier_runs(path: &String) -> TreeMap<i32, List<Run>> with Preopens {
+    let mut by_fix = TreeMap::<i32, List<Run>>::new();
+    let Ok(text) = fs::read_to_string(path) else {
+        return by_fix;
+    };
+    let earlier = from_string::<Baseline, String>(text).unwrap();
+    if earlier.reviewer != CLAUDE_MODEL || earlier.grader != GRADER {
+        return by_fix;
+    }
+    for let e of earlier.entries {
+        by_fix[e.fix] = e.runs;
+    }
+    return by_fix;
+}
+
+fn report(out: &Baseline) with Stderr {
+    let [mut hits, mut graded, mut any_hit, mut findings] = [0, 0, 0, 0];
+    for let e of &out.entries {
+        let mut hits_here = 0;
+        for let r of &e.runs {
+            if let Some(g) = &r.grade {
+                graded += 1;
+                findings += r.findings.len();
+                if g.hit {
+                    hits_here += 1;
+                }
+            }
+        }
+        hits += hits_here;
+        if hits_here > 0 {
+            any_hit += 1;
+        }
+        eprintln(`#${e.fix}: ${hits_here}/${e.runs.len()}`);
+    }
+    eprintln(`hits: ${hits}/${graded} runs; entries hit at least once: ${any_hit}/${out.entries.len()}; findings: ${findings}`);
+}
