@@ -330,6 +330,10 @@ faults while decoding against 30, all from guest code.
   it yet. A harness timing `next_token` alone on the same ids reads the
   `LinearArray` faster on the prompt too, the GC heap's initial size does not
   move it, and the model's code compiles the same under both harnesses.
+- Each call converting to a `&ListView<T>` allocates two GC objects: the view
+  and the `Box<bool>` holding its `released` cell. The final WIR keeps both
+  even where the view never outlives the call, so a lent `LinearArray` still
+  costs the GC heap two objects per call.
 - The rules in
   [References into Affine Values](./spec-affine.md#references-into-affine-values)
   are what rule out a use after free. A gap in them is a use after free here,
