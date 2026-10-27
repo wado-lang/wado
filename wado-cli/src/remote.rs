@@ -329,9 +329,9 @@ fn is_extent(
 
 /// Hold `bytes`, the first `extent` bytes of `url`, to every pin the lock of
 /// the package at `root` records for `url`, and record `actual`, their pin,
-/// where none covers `extent`. What may need the network is checked outside the hold,
-/// which only asks whether another compile recorded a pin meanwhile, and goes
-/// round again to check it if one did.
+/// where none covers `extent`. What may need the network is checked outside
+/// the hold, which only asks whether another compile recorded a pin
+/// meanwhile, and goes round again to check it if one did.
 async fn hold_and_record(
     root: &Path,
     url: &str,
@@ -420,11 +420,13 @@ async fn learn_len(
     size: u64,
 ) -> Result<Option<u64>, SourceError> {
     let (fetched, len) = fetch_prefix(url, Some(size)).await?;
-    let Some(len) = len.filter(|_| std::fs::read(path).is_ok_and(|kept| kept == fetched)) else {
+    if !std::fs::read(path).is_ok_and(|kept| kept == fetched) {
         return Ok(None);
-    };
-    store_len(url, pin, len);
-    Ok(Some(len))
+    }
+    if let Some(len) = len {
+        store_len(url, pin, len);
+    }
+    Ok(len)
 }
 
 /// What pins `url`: the `use`'s pin, which holds whatever extent is read, else
@@ -719,9 +721,6 @@ impl SourceReader for KeptPrefix {
 
     fn read_at(&self, start: u64, buf: &mut [u8]) -> Result<usize, SourceError> {
         let buf = up_to(buf, start, self.len);
-        if buf.is_empty() {
-            return Ok(0);
-        }
         let kept = self.kept.read_at(start, buf)?;
         if kept == buf.len() {
             return Ok(kept);
@@ -871,7 +870,10 @@ mod tests {
             b"the whole",
             &[(None, pin)],
         ));
-        assert!(matches!(held, Err(SourceError::IntegrityMismatch { .. })), "{held:?}");
+        assert!(
+            matches!(held, Err(SourceError::IntegrityMismatch { .. })),
+            "{held:?}"
+        );
     }
 
     /// A read at the end answers nothing without opening the server.

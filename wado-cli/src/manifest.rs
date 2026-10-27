@@ -58,7 +58,8 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
 }
 
 /// A package's `wado.lock`, held against every other writer until this drops.
-/// A function that writes the lock takes one, so it cannot be called unheld.
+/// A writer relying on its caller to hold the lock takes one, so it cannot be
+/// called unheld.
 pub(crate) struct LockFileHeld(#[expect(dead_code, reason = "held for its drop")] fs::File);
 
 /// Hold the `wado.lock` of the package at `root`. A writer replaces the lock
