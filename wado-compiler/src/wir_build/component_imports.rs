@@ -237,17 +237,20 @@ fn collect_export_interface_fqs(ty: &CmExportType, out: &mut IndexSet<String>) {
 ///
 /// An `ImportKind::Component` entry's interface is composed away, so it is
 /// substituted with the dependency's own host-leaf import FQs (empty for a pure
-/// dependency); the list then mirrors the composed binary, not the
-/// pre-composition core.
+/// dependency), less those the program's handlers answer; the list then
+/// mirrors the composed binary, not the pre-composition core.
 #[must_use]
 pub fn imported_cm_interface_fqs(project: &NirPackage, plan: &[ImportEntry]) -> Vec<String> {
     let registry = &project.cm_interface_registry;
+    let answered = project.component_plan.answered_interfaces();
     let mut out: IndexSet<String> = IndexSet::default();
     for entry in plan {
         match entry.kind {
             ImportKind::Component => {
                 for fq in registry.host_leaf_imports_for(&entry.fq) {
-                    out.insert(fq.clone());
+                    if !answered.contains(fq.as_str()) {
+                        out.insert(fq.clone());
+                    }
                 }
             }
             // Composed away by `wasm-compose`; a pure dependency function

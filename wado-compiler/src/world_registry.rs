@@ -43,6 +43,18 @@ pub struct CallbackExport {
     pub params: Vec<(String, &'static str)>,
 }
 
+/// An operation of a guest effect a dependency component imports, which the
+/// program answers through its handler: composition wires the dependency's
+/// import to a lift of the binding that calls `wrapper`.
+#[derive(Debug, Clone)]
+pub struct GuestCallback {
+    /// The operation's registry key, its CM function path
+    /// (`test:hlc/highlight@0.1.0#highlight`), which also names its binding.
+    pub function_key: String,
+    /// The dispatch wrapper the binding calls.
+    pub wrapper: String,
+}
+
 /// What a compiled component imports, and the callback exports it adds: the
 /// part of its world only the backend knows.
 #[derive(Debug, Clone, Default)]

@@ -3,6 +3,8 @@
 //! canonical intrinsics, core-module instantiation, and the canonical lifting
 //! for world exports.
 
+mod guest_callbacks;
+
 use super::ProviderMismatch;
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use crate::ast::{AstId, CmImport, NamedType, Type, cm_function_path};
@@ -51,10 +53,19 @@ pub fn build_component(
     let mut builder = ComponentBuilder::default();
     let mut ctx = ComponentModelContext::new();
 
+    let nested = project.nested_dependencies();
+    let nested_imports = guest_callbacks::nested_imports(&nested);
+
     // Generate CM imports. Which interfaces are imported, and in what category,
     // is decided by the WIR-level plan (the single source of truth); codegen
     // reads it rather than re-deriving, and its job is to encode each.
-    generate_cm_imports(&mut builder, &mut ctx, project, &wir_package.import_plan);
+    generate_cm_imports(
+        &mut builder,
+        &mut ctx,
+        project,
+        &wir_package.import_plan,
+        &nested_imports,
+    );
     generate_cm_world_func_imports(&mut builder, &mut ctx, project);
 
     // Type: result unit for run function (needed for task.return)
@@ -113,6 +124,9 @@ pub fn build_component(
         "realloc",
         ExportKind::Func,
     );
+
+    let callback_table =
+        guest_callbacks::nest_dependencies(&mut builder, &mut ctx, project, core_module, &nested);
 
     embed_imported_wasm_modules(
         &mut builder,
@@ -393,6 +407,9 @@ pub fn build_component(
         main_args.push((namespace.as_str(), ModuleArg::Instance(*instance)));
     }
     builder.core_instantiate(Some("main"), ctx.core_module_idx("main-mod"), main_args);
+    if let Some(callback_table) = &callback_table {
+        guest_callbacks::fill_callback_table(&mut builder, &mut ctx, callback_table);
+    }
 
     // World exports
     emit_world_exports(
@@ -454,6 +471,7 @@ pub fn build_component(
         component_bytes,
         project,
         &wir_package.import_plan,
+        &nested_imports,
         providers,
     )
 }
@@ -2184,6 +2202,7 @@ fn generate_cm_imports(
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
     import_plan: &[ImportEntry],
+    nested_imports: &IndexSet<&str>,
 ) {
     let has_kind = |kind: ImportKind| import_plan.iter().any(|e| e.kind == kind);
     let needs_cli_types = has_kind(ImportKind::SharedTypes);
@@ -2262,7 +2281,8 @@ fn generate_cm_imports(
                     e.kind,
                     ImportKind::FunctionInterface | ImportKind::Component
                 )
-        }) {
+        }) || nested_imports.contains(interface_info.path.as_str())
+        {
             continue;
         }
 
@@ -3915,6 +3935,7 @@ fn compose_dependency_components(
     program_bytes: Vec<u8>,
     project: &NirPackage,
     import_plan: &[ImportEntry],
+    nested_imports: &IndexSet<&str>,
     providers: &[ProviderComponent],
 ) -> Result<Vec<u8>, ProviderMismatch> {
     use wasm_compose::graph::{
@@ -3924,7 +3945,7 @@ fn compose_dependency_components(
 
     let dependency_fqs: IndexSet<&str> = import_plan
         .iter()
-        .filter(|e| e.kind == ImportKind::Component)
+        .filter(|e| e.kind == ImportKind::Component && !nested_imports.contains(e.fq.as_str()))
         .map(|e| e.fq.as_str())
         .collect();
     // A world function (Phase 9) is imported under its label and wired to its

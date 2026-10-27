@@ -2550,6 +2550,18 @@ impl CmInterfaceRegistry {
             .map_or(&[], Vec::as_slice)
     }
 
+    /// Whether `fq` is a guest effect some component dependency imports: an
+    /// imported interface outside WASI, which is the host's.
+    #[must_use]
+    pub fn is_dependency_guest_import(&self, fq: &str) -> bool {
+        !fq.starts_with("wasi:")
+            && self
+                .component_host_leaf_imports
+                .values()
+                .flatten()
+                .any(|import| import == fq)
+    }
+
     /// Register a `--lib` entry module's own named types under the synthesized
     /// default-interface FQ. These carry no `#[cm(…)]` — they are the package's
     /// declarations, not WIT bindings — so CM names come from kebab-casing the

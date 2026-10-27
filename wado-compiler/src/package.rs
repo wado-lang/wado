@@ -14,7 +14,9 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::TirModule;
-use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
+use crate::world_registry::{
+    self, CallbackExport, ExportMappings, GuestCallback, WorldInfo, WorldRegistry,
+};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -87,6 +89,13 @@ pub struct Package {
     pub post_return_binding_names: IndexMap<String, String>,
     /// One per closure signature an import takes. Populated by `synthesis::cm_binding`.
     pub callback_exports: Vec<CallbackExport>,
+    /// The guest-effect interfaces a provider component satisfies, which no
+    /// handler of the program answers.
+    pub provided_import_fqs: IndexSet<String>,
+    /// One per operation of a guest effect a dependency imports and a handler
+    /// of the program answers. Populated by `synthesis::effect_dispatch`, and
+    /// given its binding by `synthesis::cm_binding`.
+    pub guest_callbacks: Vec<GuestCallback>,
 
     /// Wasm assets loaded by the loader from
     /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
@@ -168,6 +177,8 @@ impl Package {
             export_binding_names: IndexMap::default(),
             post_return_binding_names: IndexMap::default(),
             callback_exports: Vec::new(),
+            provided_import_fqs: IndexSet::default(),
+            guest_callbacks: Vec::new(),
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
             resource_wrappers: IndexMap::default(),
