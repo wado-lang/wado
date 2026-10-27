@@ -37,10 +37,15 @@ pub fn opt_level_name(level: OptLevel) -> &'static str {
 }
 
 /// Whether a fixture is written to fail its compile: its `__DATA__` expects a
-/// `compile_error`, or the module is `#![TODO]`.
+/// `compile_error` message, as the e2e harness reads it, or the module is
+/// `#![TODO]`. A `__DATA__` that is not JSON expects none: the grammar corpus
+/// reads sources that are no fixture.
 #[must_use]
 pub fn expects_compile_failure(source: &str) -> bool {
-    if data_section(source).is_some_and(|data| data.contains("\"compile_error\"")) {
+    let expects_error = data_section(source)
+        .and_then(|data| serde_json::from_str::<serde_json::Value>(data.trim()).ok())
+        .is_some_and(|spec| spec.get("compile_error").is_some_and(serde_json::Value::is_string));
+    if expects_error {
         return true;
     }
     for line in source.lines() {
@@ -243,5 +248,26 @@ impl CompileInputs {
     #[must_use]
     pub fn coverage_scope(&self) -> Option<CoverageScope> {
         self.coverage.as_ref().map(|_| CoverageScope::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expects_compile_failure;
+
+    #[test]
+    fn compile_error_is_read_as_the_harness_reads_it() {
+        assert!(expects_compile_failure(
+            "fn f() {}\n__DATA__\n{\"compile_error\": \"boom\"}\n"
+        ));
+        assert!(!expects_compile_failure(
+            "fn f() {}\n__DATA__\n{\"compile_error\": null}\n"
+        ));
+        assert!(!expects_compile_failure(
+            "fn f() {}\n__DATA__\n{\"stdout\": \"\\\"compile_error\\\"\"}\n"
+        ));
+        assert!(!expects_compile_failure(
+            "fn f() {}\n__DATA__\nnot json \"compile_error\"\n"
+        ));
     }
 }

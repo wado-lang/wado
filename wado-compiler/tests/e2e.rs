@@ -894,7 +894,10 @@ fn prune_orphan_wir_goldens() {
     for entry in std::fs::read_dir(GOLDEN_DIR).unwrap() {
         let golden = entry.unwrap().path();
         let name = golden.file_name().unwrap().to_string_lossy();
-        let stem = name.strip_suffix(".wir.wado").unwrap();
+        // A host may drop its own files here (`.DS_Store`).
+        let Some(stem) = name.strip_suffix(".wir.wado") else {
+            continue;
+        };
         let keeps = std::fs::read_to_string(format!("fixtures/{stem}.wado")).is_ok_and(|source| {
             let inputs = compile_inputs(&source).unwrap_or_else(|e| panic!("{stem}: {e}"));
             has_wir_golden(&source, &inputs)
