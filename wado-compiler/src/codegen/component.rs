@@ -483,23 +483,26 @@ fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
         && project.used_wasi_functions.contains(&func.cm_identifier())
 }
 
-/// Point `type_gen` at each `error-code` the outer scope already holds, other
-/// than its own interface's. A WASI package spells `error-code` once and the
-/// others `use` it, so an instance reaching one aliases that type.
-fn register_outer_error_codes(
-    type_gen: &mut CmTypeGen,
+/// The type generator for the instance type importing `interface`. A WASI
+/// package spells `error-code` once and the others `use` it, so each one the
+/// outer scope already holds, other than `interface`'s own, is aliased where
+/// the instance reaches it.
+fn import_type_gen(
+    interface: &str,
     project: &NirPackage,
     ctx: &ComponentModelContext,
-) {
+) -> CmTypeGen {
     let registry = &project.cm_interface_registry;
+    let mut type_gen = CmTypeGen::with_interface_hint(interface);
     for source in registry.error_code_declarers() {
-        if type_gen.interface_hint() == Some(source) {
+        if source == interface {
             continue;
         }
         if let Some(idx) = error_code_def(project, source).and_then(|def| ctx.decl_type_idx(def)) {
             type_gen.register_outer(registry, source, ERROR_CODE_WADO_NAME, idx);
         }
     }
+    type_gen
 }
 
 /// The type indices one resource holds in an instance type: the resource and
@@ -2115,10 +2118,7 @@ fn generate_cm_imports(
                 }
             }
 
-            // The `interface_hint` lets `ast_type_to_cm` resolve a name several
-            // WASI packages declare (`ErrorCode`) against this interface.
-            let mut shared_type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
-            register_outer_error_codes(&mut shared_type_gen, project, ctx);
+            let mut shared_type_gen = import_type_gen(&interface_info.path, project, ctx);
             let resource_exports = resource_exports_for(
                 &mut shared_type_gen,
                 &resource_handles,
@@ -2427,15 +2427,10 @@ fn import_resource_defining_interface(
             );
         }
 
-        // Type generation starts after the SubResource exports.
-        // CmInstanceTypeGen emits error-code and its payload structs
-        // on demand when the parameter/return types are processed.
-        // Use interface hint to disambiguate types shared across packages
-        // (e.g., ErrorCode exists in http, filesystem, sockets).
         // Type indices start after the SubResource exports; the sink shares
         // this counter with the func-type allocations below.
         let mut type_idx = http_resources.len() as u32;
-        let mut type_gen = CmTypeGen::with_interface_hint(types_fq);
+        let mut type_gen = import_type_gen(types_fq, project, ctx);
         let resource_exports: IndexMap<&str, u32> = http_resources
             .iter()
             .enumerate()
@@ -3230,8 +3225,7 @@ fn import_resource_using_interfaces(
                 );
             }
 
-            let mut type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
-            register_outer_error_codes(&mut type_gen, project, ctx);
+            let mut type_gen = import_type_gen(&interface_info.path, project, ctx);
             let resource_exports = resource_exports_for(
                 &mut type_gen,
                 &resource_handles,
