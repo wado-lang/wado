@@ -358,8 +358,8 @@ The specification is the `core:process` module documentation, generated into
 comments for the interface. What follows is why it takes the shape it does.
 
 - The WIT describes running a child, not confining one. Confinement is the
-  `wado` host's policy, so the WIT names no sandbox, no `PATH`, no signal and no
-  process group: another host may confine differently, or run on an OS that has
+  `wado` host's policy, so the WIT names no sandbox, no `PATH`, no particular
+  signal and no process group: another host may confine differently, or run on an OS that has
   none of them. Each such word lives in the module documentation's section on
   the `wado` host.
 - `get-availability` stays in the WIT. Not every WASI host should offer

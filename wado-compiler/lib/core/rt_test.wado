@@ -130,6 +130,25 @@ test "a drained set hands back every member, the ready ones first" {
     assert read.finish() == Option::Some(1);
 }
 
+test "a drained set hands back a member the host resolved before one it did not" {
+    let [pending, pending_tx] = Future::<i32>::new();
+    let [resolved, resolved_tx] = Future::<i32>::new();
+    let mut ws = WaitableSet::<Raced>::new();
+    ws.insert(Raced::Value(pending.start_read()));
+    ws.insert(Raced::Value(resolved.start_read()));
+    assert resolved_tx.write(5).result == FutureWriteResult::Completed;
+    let mut drained = ws.drain();
+    let Some(Value(still_pending)) = drained.pop() else {
+        unreachable();
+    };
+    builtin::drop(still_pending);
+    assert pending_tx.write(6).result == FutureWriteResult::Dropped;
+    let Some(Value(read)) = drained.pop() else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(5);
+}
+
 /// A call the host resolves after it starts, handed back by the set that
 /// delivered its resolution.
 fn delivered_call() -> AsyncCall<()> with MonotonicClock {
