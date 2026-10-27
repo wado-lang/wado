@@ -76,6 +76,21 @@ test "a started future read dropped once it read drops the value" {
     builtin::drop(rx.start_read());
 }
 
+test "poll reports a host member once the host resolved it" {
+    let [rx, tx] = Future::<i32>::new();
+    let mut set = WaitableSet::<Raced>::new();
+    set.insert(Raced::Value(rx.start_read()));
+    assert set.poll() matches { None };
+    assert tx.write(4).result == FutureWriteResult::Completed;
+    let Some(ready) = set.poll() else {
+        unreachable();
+    };
+    let Value(read) = ready.member else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(4);
+}
+
 test "an empty waitable set has nothing to poll" {
     let mut ws = WaitableSet::<Subtask>::new();
     assert ws.poll() matches { None };
