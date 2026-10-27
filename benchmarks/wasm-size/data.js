@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793099892358,
+  "lastUpdate": 1793109913637,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71513,6 +71513,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/58a9c63124c3dee26a2a129d76549b1383003485"
         },
         "date": 1793099891481,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295291,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bf2d7dfd015d53c9451a177093599ec6cae067ba",
+          "message": "Merge pull request #2478 from wado-lang/claude/determined-keller-oxytgd\n\nperf(test): compile each e2e fixture once in the development cycle",
+          "timestamp": "2026-10-27T22:52:11+09:00",
+          "tree_id": "3b44076a22a04e05bccd059c64fee0f51b3ec6d7",
+          "url": "https://github.com/wado-lang/wado/commit/bf2d7dfd015d53c9451a177093599ec6cae067ba"
+        },
+        "date": 1793109912583,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
