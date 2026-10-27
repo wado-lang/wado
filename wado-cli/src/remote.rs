@@ -7,7 +7,8 @@
 //! file in no package has no lock to record in, so its `use` must pin it.
 //!
 //! Fetched bytes live at `{root}/remote/sha256/<hex>`, so a pinned read needs
-//! the network only the first time any project reads them.
+//! the network only the first time any project reads them. A Kiln probe reads
+//! the URL every time: no pin applies before the probe settles what it reads.
 
 use std::error::Error;
 use std::ops::Range;
@@ -275,6 +276,7 @@ async fn hold_to_other_extents(
             Some(other) if extent.is_none_or(|extent| other <= extent) => {
                 Integrity::of(part(bytes, 0..other))
             }
+            _ if cached(pin).is_some_and(|kept| kept.starts_with(bytes)) => continue,
             _ => Integrity::of(&fetch_prefix(url, other).await?),
         };
         check_digest(url, digest, pin, PinnedBy::Lock)?;

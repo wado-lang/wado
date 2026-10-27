@@ -507,6 +507,40 @@ fn a_moved_extent_is_held_to_the_pin_of_the_old_one() {
     assert!(!lock.contains("extent = 3"), "{lock}");
 }
 
+/// A probe reading less than the lock pins is held to the bytes kept for that
+/// pin rather than to a fresh fetch of them.
+#[test]
+fn a_shorter_extent_is_held_to_the_bytes_kept_for_the_longer_one() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"10\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("10\n");
+
+    let generator = project.path().join("src/gen.wado");
+    let two_bytes = std::fs::read_to_string(&generator)
+        .unwrap()
+        .replace("chunk.items[0] == b'\\n'", "n == 2");
+    std::fs::write(&generator, two_bytes).unwrap();
+    let before = server.requests().len();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("10\n");
+    let requests = server.requests();
+    assert!(
+        requests[before..]
+            .iter()
+            .all(|r| r.range.as_deref() != Some("bytes=0-2")),
+        "{requests:?}"
+    );
+}
+
 /// A lock that cannot be read is reported, never replaced by one holding only
 /// the new pin.
 #[test]
