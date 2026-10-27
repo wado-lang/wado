@@ -5,7 +5,9 @@
 //! re-executing `wado`, so a host embedded in another binary spawns as `wado`
 //! does.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
+use std::fmt;
 use std::fs::File;
 use std::io;
 use std::os::fd::OwnedFd;
@@ -14,6 +16,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::sync::lock;
 
+#[cfg(unix)]
+mod exec;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -42,8 +46,8 @@ pub fn availability() -> Availability {
     backend::availability()
 }
 
-/// What a child may do beneath one subtree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What a child may do beneath one subtree, the lesser first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Access {
     ReadExecute,
     /// Read, write, create, remove, and execute.
@@ -64,6 +68,17 @@ pub struct Rule {
     pub path: PathBuf,
     pub access: Access,
     pub dir: Option<Arc<File>>,
+}
+
+impl Rule {
+    /// The real path the sandbox matches: a directory's is the one its
+    /// descriptor holds, however `path` has moved since.
+    fn real_path(&self) -> io::Result<PathBuf> {
+        match &self.dir {
+            Some(dir) => backend::descriptor_path(dir),
+            None => std::fs::canonicalize(&self.path),
+        }
+    }
 }
 
 /// Everything a child may reach: the baseline, the guest's grants, and the
@@ -114,6 +129,17 @@ impl Policy {
         self.grant_path("/dev/tty", Access::ReadWrite);
     }
 
+    /// The rules at the real paths they name, as the sandbox matches them.
+    #[must_use]
+    pub fn resolved(&self) -> ResolvedPolicy {
+        ResolvedPolicy(
+            self.rules
+                .iter()
+                .filter_map(|rule| Some((rule.real_path().ok()?, rule.access)))
+                .collect(),
+        )
+    }
+
     #[must_use]
     pub fn rules(&self) -> &[Rule] {
         &self.rules
@@ -122,6 +148,38 @@ impl Policy {
     #[must_use]
     pub fn network(&self) -> Network {
         self.network
+    }
+}
+
+/// A [`Policy`]'s rules at their real paths, a rule naming no file left out.
+#[derive(Clone, Debug)]
+pub struct ResolvedPolicy(Vec<(PathBuf, Access)>);
+
+impl ResolvedPolicy {
+    /// Whether a rule grants `access` to `path`, itself a real path.
+    #[must_use]
+    pub fn permits(&self, path: &Path, access: Access) -> bool {
+        self.0
+            .iter()
+            .any(|(root, granted)| path.starts_with(root) && *granted >= access)
+    }
+
+    /// The first interpreter that `exec` of `program`, a real path, opens and
+    /// the policy does not let the child execute. Landlock refuses the `exec`
+    /// there even where `program` itself is granted.
+    #[cfg(unix)]
+    #[must_use]
+    pub fn refused_interpreter(&self, program: &Path) -> Option<PathBuf> {
+        exec::interpreters(program)
+            .find(|interpreter| !self.permits(interpreter, Access::ReadExecute))
+    }
+
+    /// What Linux grants the child `pid` beyond its policy: its own `/proc`
+    /// entry.
+    #[cfg(target_os = "linux")]
+    fn grant_own_proc(&mut self, pid: libc::pid_t) {
+        self.0
+            .push((PathBuf::from(format!("/proc/{pid}")), Access::ReadExecute));
     }
 }
 
@@ -144,6 +202,16 @@ const BASELINE_READ: &[&str] = &[
     "/dev/urandom",
     "/dev/random",
     "/dev/zero",
+    // What the system says of itself, which every user reads. A process's
+    // own entry is granted per child, never another's.
+    "/proc/cpuinfo",
+    "/proc/meminfo",
+    "/proc/stat",
+    "/proc/loadavg",
+    "/proc/uptime",
+    "/proc/version",
+    "/proc/filesystems",
+    "/proc/sys",
 ];
 
 #[cfg(target_os = "macos")]
@@ -185,6 +253,17 @@ pub struct Command<'a> {
     pub stdout: Stdio,
     pub stderr: Stdio,
     pub policy: &'a Policy,
+    pub trace: Trace,
+}
+
+/// What the host watches a child do, beyond the calls the filter refuses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Trace {
+    Off,
+    /// Each call that names a path the sandbox mediates, recording a path the
+    /// policy does not grant as a [`Refusal::Path`]. Every such call waits on
+    /// the host, so a child runs slower. Linux alone watches.
+    Files,
 }
 
 /// A child that started, with the host's ends of its piped streams.
@@ -193,6 +272,119 @@ pub struct Spawned {
     pub stdin: Option<OwnedFd>,
     pub stdout: Option<OwnedFd>,
     pub stderr: Option<OwnedFd>,
+    pub refusals: Refusals,
+    /// Why `refusals` stays empty whatever the sandbox refuses the child,
+    /// where it does.
+    pub unobserved: Option<&'static str>,
+}
+
+/// What the sandbox refused a child. Linux alone reports one.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Refusal {
+    /// A path a call names, at its real path, asking `access` the policy does
+    /// not grant. `dir` is the directory a grant must cover: the one holding
+    /// the file opened or the entry made, removed or moved, or the directory
+    /// opened itself. Seen under [`Trace::Files`]. Landlock refuses the call,
+    /// which the child sees fail with `EACCES`.
+    Path {
+        path: PathBuf,
+        dir: PathBuf,
+        access: Access,
+    },
+    /// A path in a process's `/proc` entry: of any process but the child,
+    /// a descendant's own included, or one the child writes, its own being
+    /// granted for reading alone. Seen under
+    /// [`Trace::Files`], and named without the pid, which no grant can name
+    /// ahead of the process.
+    ProcessEntry {
+        access: Access,
+    },
+    // The rest are calls the filter refuses, which the child sees fail with
+    // `EPERM`.
+    /// A socket, with the network not granted.
+    Network,
+    /// A UNIX socket, which a path can connect to a service outside.
+    UnixSocket,
+    /// `setsid` or `setpgid`, out of the group the host kills.
+    LeaveGroup,
+    Trace,
+    /// `io_uring`, whose operations the filter never sees.
+    IoUring,
+    /// `TIOCSTI` or `TIOCLINUX`, typing into the terminal.
+    TerminalInput,
+}
+
+impl fmt::Display for Refusal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Refusal::Path {
+                path,
+                access: Access::ReadExecute,
+                ..
+            } => write!(f, "reading {}", path.display()),
+            Refusal::Path {
+                path,
+                access: Access::ReadWrite,
+                ..
+            } => write!(f, "writing {}", path.display()),
+            Refusal::ProcessEntry {
+                access: Access::ReadExecute,
+            } => f.write_str("reading a /proc entry other than the child's own"),
+            Refusal::ProcessEntry {
+                access: Access::ReadWrite,
+            } => f.write_str("writing a process's /proc entry, which no grant allows"),
+            Refusal::Network => f.write_str("a network socket, with no network granted"),
+            Refusal::UnixSocket => {
+                f.write_str("a UNIX socket, which can reach a service outside the sandbox")
+            }
+            Refusal::LeaveGroup => f.write_str("leaving its process group"),
+            Refusal::Trace => f.write_str("tracing another process"),
+            Refusal::IoUring => {
+                f.write_str("io_uring, whose operations the sandbox cannot inspect")
+            }
+            Refusal::TerminalInput => f.write_str("typing into a terminal"),
+        }
+    }
+}
+
+/// What a child's group has been refused so far. A refused call blocks until
+/// it is recorded, so once [`Child::wait`] returns, the set holds every refusal
+/// the child itself met; a descendant that outlives it may add more.
+#[derive(Clone, Default)]
+pub struct Refusals(Arc<Mutex<Seen>>);
+
+#[derive(Default)]
+struct Seen {
+    refused: BTreeSet<Refusal>,
+    /// A file call whose path the host may not read, so whether Landlock
+    /// refused it goes unsaid.
+    unseen: bool,
+}
+
+impl Refusals {
+    #[must_use]
+    pub fn collect(&self) -> BTreeSet<Refusal> {
+        lock(&self.0).refused.clone()
+    }
+
+    /// Why [`Trace::Files`] missed a file call, where it did.
+    #[must_use]
+    pub fn unseen(&self) -> Option<&'static str> {
+        lock(&self.0).unseen.then_some(
+            "the host may not read the path of a file call (Yama's `ptrace_scope`, or a \
+             process that made itself non-dumpable)",
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn record(&self, refusal: Refusal) {
+        lock(&self.0).refused.insert(refusal);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn record_unseen(&self) {
+        lock(&self.0).unseen = true;
+    }
 }
 
 /// Start `command` confined to its policy, in a process group of its own,

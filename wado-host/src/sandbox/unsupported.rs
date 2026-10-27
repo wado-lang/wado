@@ -18,5 +18,5 @@ pub(super) fn spawn(_command: &Command<'_>) -> io::Result<Spawned> {
 }
 
 pub(super) fn descriptor_path(_file: &File) -> io::Result<PathBuf> {
-    unreachable!("`sandbox::descriptor_path` asserts availability first")
+    unreachable!("a granted directory is resolved only where a child can be confined")
 }

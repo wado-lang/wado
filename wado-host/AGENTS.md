@@ -35,7 +35,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
   its input.
 - `sync.rs` — how production code locks a mutex and joins a task or thread. A
   poisoned guard is recovered, and test mocks may still `unwrap`. A panic in a
-  joined task continues in the caller.
+  joined task continues in the caller, and one in a thread nobody joins ends
+  the process.
 - `sandbox.rs` — spawning a child confined to the guest's grants plus a fixed
   baseline, for `core:process`: Landlock and seccomp in `sandbox/linux.rs`,
   `sandbox-exec` in `sandbox/macos.rs`. `wado-cli`'s `process_host` is its
