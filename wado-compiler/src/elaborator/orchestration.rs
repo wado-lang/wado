@@ -18,12 +18,13 @@ use crate::ast::{
 };
 use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::{Code, CompilerHost};
+use crate::compiler_host::{Code, CompilerHost, DiagnosticSpan};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::pgo::{ColdMap, Profile};
 use crate::symbol::SymbolTable;
 use crate::tir::{ResolvedType, TirModule, TypeId, positional_substitution};
 use crate::type_table::TypeTable;
@@ -471,6 +472,8 @@ pub(crate) struct AnnotateState {
     /// The coverage plan reify instruments with, planned in
     /// [`Self::build_tir_from_state`] once the bodies' callees resolve.
     pub(crate) coverage: Option<CoverageMap>,
+    /// Where the profile marks code cold, applied alongside the coverage plan.
+    pub(crate) cold: Option<ColdMap>,
 }
 
 impl<'a, H: CompilerHost> Elaborator<'a, H> {
@@ -1275,6 +1278,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             transpositions: Rc::default(),
             liveness: Liveness::default(),
             coverage: None,
+            cold: None,
         })
     }
 
@@ -1386,6 +1390,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         snapshot: Option<&Semantics>,
         build_tir: bool,
         coverage: Option<CoverageScope>,
+        profile: Option<&Profile>,
         liveness_scope: &LivenessScope,
     ) -> Result<IndexMap<ModuleSource, TirModule>, Bail> {
         let mut result = IndexMap::default();
@@ -1735,13 +1740,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // The plan reads which callee names `core:rt`'s `unreachable`, so it
         // waits for the bodies to resolve.
+        let unreachable_calls = rt_unreachable_calls(state, symbols);
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(
                 snapshot.and_then(|s| s.coverage.as_ref()),
                 modules.iter().filter(|(source, _)| scope.measures(source)),
-                &rt_unreachable_calls(state, symbols),
+                &unreachable_calls,
             )
         });
+        state.cold = profile.map(|profile| {
+            ColdMap::build(
+                snapshot.and_then(|s| s.cold.as_ref()),
+                modules,
+                profile,
+                &unreachable_calls,
+            )
+        });
+        for (span, message) in state.cold.iter().flat_map(ColdMap::remarks) {
+            logger.remark(message.clone(), DiagnosticSpan::from_span(span, None));
+        }
 
         // Phase 2 — `reify`: rehydrate stdlib TIR from the snapshot and reify
         // the eligible user modules, gating item emission on `emit_live`.
@@ -1799,6 +1816,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         gate,
                     );
                     reify.coverage = state.coverage.as_ref();
+                    reify.cold = state.cold.as_ref();
                     if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
                         result.insert(module_source.clone(), reified);
                     }

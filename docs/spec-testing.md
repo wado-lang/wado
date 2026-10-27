@@ -387,6 +387,20 @@ A function with no `fn` line has no profile at all, and neither does one whose
 hash differs from its current source's: nothing measured it as it stands, so
 no count applies to it.
 
+### Applying a Profile
+
+A compile applying a profile marks cold, as
+[`builtin::cold_path()`](./spec-control-flow.md#branch-hints) does, the start
+of each region whose count is zero and whose enclosing region in the same
+function ran. A function that never ran is marked once, at its start. A
+function the profile has no count for is compiled as without one. Where that
+is because its hash differs, the compile says so at `--log-level info`.
+
+A profile never removes a marker. Where the profile ran an author's
+`cold_path()`, or the failure path of a `?`, which the compiler marks cold as
+an author would, the marker stays, and the compile names it and the count at
+`--log-level info`.
+
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 ## Example Test File

@@ -5,6 +5,7 @@
 //! closure.
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::fmt::Write as _;
 use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
@@ -25,6 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
+use crate::pgo::Profile;
 use crate::resolve::Resolutions;
 use crate::semantics::{Semantics, semantics_with_logger};
 use crate::stdlib;
@@ -36,6 +38,11 @@ thread_local! {
     /// The snapshot a compile measuring the stdlib seeds from, its stdlib
     /// reified with probes.
     static PROBED_SNAPSHOT: OnceCell<Rc<Semantics>> = const { OnceCell::new() };
+    /// The snapshot a compile applying a profile to the stdlib seeds from,
+    /// keyed by what it measures and the profile's stdlib part. One at a time:
+    /// a thread compiles one package's programs in turn.
+    static PROFILED_SNAPSHOT: RefCell<Option<(ProfiledKey, Rc<Semantics>)>> =
+        const { RefCell::new(None) };
     /// Re-entry guard for [`get_or_init_snapshot`].  Set to `true`
     /// while [`build_snapshot`] is running.  The synthetic snapshot
     /// build calls through `semantics_with_logger` (which itself looks up
@@ -52,44 +59,66 @@ pub(crate) fn is_building() -> bool {
     BUILDING.with(Cell::get)
 }
 
+/// What a profiled snapshot was built for: the coverage it measures the
+/// stdlib with, and the stdlib part of the profile it applied.
+type ProfiledKey = (Option<CoverageScope>, Profile);
+
 /// Return the current thread's stdlib [`Semantics`] snapshot for a compile
-/// measuring `coverage`, building it on first call by driving the loader and
-/// [`semantics_with_logger`] over an empty entry source. [`None`] under
-/// [`build_snapshot`] itself, where reading the still-being-built cache would
-/// re-enter the `OnceCell` initialiser.
+/// measuring `coverage` and applying `profile`, building it on first call by
+/// driving the loader and [`semantics_with_logger`] over an empty entry
+/// source. [`None`] under [`build_snapshot`] itself, where reading the
+/// still-being-built cache would re-enter the `OnceCell` initialiser.
 ///
 /// # Panics
 /// If the stdlib closure fails to load or analyze — a build-time inconsistency
 /// in the shipped stdlib, which is not recoverable.
-pub(crate) fn get_or_init_snapshot(coverage: Option<CoverageScope>) -> Option<Rc<Semantics>> {
+pub(crate) fn get_or_init_snapshot(
+    coverage: Option<CoverageScope>,
+    profile: Option<&Profile>,
+) -> Option<Rc<Semantics>> {
     if is_building() {
         return None;
     }
     let probed = coverage.filter(|scope| scope.stdlib);
+    let key = profile
+        .map(Profile::stdlib_part)
+        .filter(|part| !part.is_empty())
+        .map(|part| (probed, part));
+    if let Some(key) = key {
+        return Some(PROFILED_SNAPSHOT.with(|cell| {
+            if let Some((built, snap)) = &*cell.borrow()
+                && *built == key
+            {
+                return snap.clone();
+            }
+            let snap = Rc::new(build_guarded(probed, Some(&key.1)));
+            *cell.borrow_mut() = Some((key, snap.clone()));
+            snap
+        }));
+    }
     let slot = if probed.is_some() {
         &PROBED_SNAPSHOT
     } else {
         &SNAPSHOT
     };
-    Some(slot.with(|cell| {
-        cell.get_or_init(|| {
-            // Drop guard so the flag is cleared even if `build_snapshot`
-            // panics — otherwise an upstream `catch_unwind` (test
-            // harness, fuzzer) would leave `BUILDING` stuck at `true`
-            // for the rest of the thread's lifetime, permanently
-            // disabling the cache on that thread.
-            struct ResetGuard;
-            impl Drop for ResetGuard {
-                fn drop(&mut self) {
-                    BUILDING.with(|c| c.set(false));
-                }
-            }
-            BUILDING.with(|c| c.set(true));
-            let _guard = ResetGuard;
-            Rc::new(build_snapshot(probed))
-        })
-        .clone()
-    }))
+    Some(slot.with(|cell| cell.get_or_init(|| Rc::new(build_guarded(probed, None))).clone()))
+}
+
+/// [`build_snapshot`] with [`BUILDING`] set while it runs.
+fn build_guarded(coverage: Option<CoverageScope>, profile: Option<&Profile>) -> Semantics {
+    // Drop guard so the flag is cleared even if `build_snapshot` panics —
+    // otherwise an upstream `catch_unwind` (test harness, fuzzer) would leave
+    // `BUILDING` stuck at `true` for the rest of the thread's lifetime,
+    // permanently disabling the cache on that thread.
+    struct ResetGuard;
+    impl Drop for ResetGuard {
+        fn drop(&mut self) {
+            BUILDING.with(|c| c.set(false));
+        }
+    }
+    BUILDING.with(|c| c.set(true));
+    let _guard = ResetGuard;
+    build_snapshot(coverage, profile)
 }
 
 /// Build the current thread's snapshot for compiles measuring `coverage` now,
@@ -101,7 +130,7 @@ pub(crate) fn get_or_init_snapshot(coverage: Option<CoverageScope>) -> Option<Rc
 /// No-op if the snapshot is already built on this thread, or if
 /// called re-entrantly from inside `build_snapshot`.
 pub fn prewarm(coverage: Option<CoverageScope>) {
-    let _ = get_or_init_snapshot(coverage);
+    let _ = get_or_init_snapshot(coverage, None);
 }
 
 /// Every name `core:prelude` puts in scope in every module, with what it
@@ -111,7 +140,7 @@ pub fn prewarm(coverage: Option<CoverageScope>) {
 /// If called from inside [`build_snapshot`].
 pub fn prelude_names() -> Vec<(String, DefKind)> {
     let snap =
-        get_or_init_snapshot(None).expect("prelude_names is not called while the snapshot builds");
+        get_or_init_snapshot(None, None).expect("prelude_names is not called while the snapshot builds");
     let resolutions = snap.resolutions().expect("the stdlib snapshot is complete");
     let defs = resolutions.defs();
     let mut names: Vec<(String, DefKind)> = resolutions
@@ -126,8 +155,9 @@ pub fn prelude_names() -> Vec<(String, DefKind)> {
 /// entry source.  The loader's implicit-modules pass pulls in
 /// `core:prelude` and its transitive closure, matching the stdlib
 /// subset every real compile loads. Under `coverage`, the stdlib takes the
-/// probes a compile measuring it would.
-fn build_snapshot(coverage: Option<CoverageScope>) -> Semantics {
+/// probes a compile measuring it would, and under `profile` the cold markers a
+/// compile applying it would.
+fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<&Profile>) -> Semantics {
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
 
@@ -153,6 +183,7 @@ fn build_snapshot(coverage: Option<CoverageScope>) -> Semantics {
         &logger,
         true,
         coverage,
+        profile,
         &LivenessScope::Compilation,
     );
     assert!(
@@ -288,11 +319,10 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
         .map(|(path, _)| *path)
         .chain(stdlib::wit_core_submodules().map(|(path, _)| path))
         .collect();
-    let entry: String = paths
-        .iter()
-        .enumerate()
-        .map(|(i, path)| format!("use binding{i} from \"{path}\";\n"))
-        .collect();
+    let mut entry = String::new();
+    for (i, path) in paths.iter().enumerate() {
+        let _ = writeln!(entry, "use binding{i} from \"{path}\";");
+    }
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
     let load = poll_to_completion(async {
@@ -404,7 +434,7 @@ mod tests {
 
     #[test]
     fn snapshot_builds_and_contains_stdlib_closure() {
-        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None, None).expect("not re-entering the builder");
 
         // The implicit-modules pass always pulls in `core:prelude` and
         // its closure.  Verify the snapshot covers them so downstream
@@ -447,7 +477,7 @@ mod tests {
     /// silently re-elaborates the stdlib.
     #[test]
     fn a_plain_compile_carries_the_snapshot_parses() {
-        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None, None).expect("not re-entering the builder");
         let host = SnapshotHost;
         let load_result = poll_to_completion(async {
             ModuleLoader::new(&host, LogLevel::Off)
@@ -489,8 +519,8 @@ mod tests {
 
     #[test]
     fn snapshot_is_cached_per_thread() {
-        let a = get_or_init_snapshot(None).expect("not building");
-        let b = get_or_init_snapshot(None).expect("not building");
+        let a = get_or_init_snapshot(None, None).expect("not building");
+        let b = get_or_init_snapshot(None, None).expect("not building");
         assert!(
             Rc::ptr_eq(&a, &b),
             "second call on same thread must return the cached Rc"
