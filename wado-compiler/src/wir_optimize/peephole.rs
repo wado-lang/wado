@@ -511,6 +511,24 @@ fn try_eliminate_const_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     true
 }
 
+/// The operands of the i32 comparison `instr` is, and what it answers on them.
+pub(super) fn i32_comparison(instr: &WirInstr) -> Option<(&WirInstr, &WirInstr, fn(i32, i32) -> bool)> {
+    let (l, r, op): (_, _, fn(i32, i32) -> bool) = match instr {
+        WirInstr::I32Eq(l, r) => (l, r, |a, b| a == b),
+        WirInstr::I32Ne(l, r) => (l, r, |a, b| a != b),
+        WirInstr::I32LtS(l, r) => (l, r, |a, b| a < b),
+        WirInstr::I32LeS(l, r) => (l, r, |a, b| a <= b),
+        WirInstr::I32GtS(l, r) => (l, r, |a, b| a > b),
+        WirInstr::I32GeS(l, r) => (l, r, |a, b| a >= b),
+        WirInstr::I32LtU(l, r) => (l, r, |a, b| a.cast_unsigned() < b.cast_unsigned()),
+        WirInstr::I32LeU(l, r) => (l, r, |a, b| a.cast_unsigned() <= b.cast_unsigned()),
+        WirInstr::I32GtU(l, r) => (l, r, |a, b| a.cast_unsigned() > b.cast_unsigned()),
+        WirInstr::I32GeU(l, r) => (l, r, |a, b| a.cast_unsigned() >= b.cast_unsigned()),
+        _ => return None,
+    };
+    Some((l, r, op))
+}
+
 /// Fold a constant comparison (i32 and i64, all ten operators each; f32 and
 /// f64, all six, as IEEE answers them) or a constant `I32Eqz` / `I64Eqz` to
 /// its boolean `I32Const` result.
@@ -552,17 +570,7 @@ fn try_fold_comparison(instr: &mut WirInstr) -> bool {
         Some(op(f64c(l)?, f64c(r)?))
     }
     let folded = match instr {
-        // i32
-        WirInstr::I32Eq(l, r) => cmp32(l, r, |a, b| a == b),
-        WirInstr::I32Ne(l, r) => cmp32(l, r, |a, b| a != b),
-        WirInstr::I32LtS(l, r) => cmp32(l, r, |a, b| a < b),
-        WirInstr::I32LeS(l, r) => cmp32(l, r, |a, b| a <= b),
-        WirInstr::I32GtS(l, r) => cmp32(l, r, |a, b| a > b),
-        WirInstr::I32GeS(l, r) => cmp32(l, r, |a, b| a >= b),
-        WirInstr::I32LtU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() < b.cast_unsigned()),
-        WirInstr::I32LeU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() <= b.cast_unsigned()),
-        WirInstr::I32GtU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() > b.cast_unsigned()),
-        WirInstr::I32GeU(l, r) => cmp32(l, r, |a, b| a.cast_unsigned() >= b.cast_unsigned()),
+        _ if let Some((l, r, op)) = i32_comparison(instr) => cmp32(l, r, op),
         // i64
         WirInstr::I64Eq(l, r) => cmp64(l, r, |a, b| a == b),
         WirInstr::I64Ne(l, r) => cmp64(l, r, |a, b| a != b),

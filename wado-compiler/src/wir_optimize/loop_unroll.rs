@@ -25,6 +25,7 @@ use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
 use super::nullability::Nullability;
+use super::peephole::i32_comparison;
 use super::util::{Footprint, is_side_effect_free, may_trap_in};
 
 /// The most nodes the copy's iterations may hold together, which picks the
@@ -223,6 +224,9 @@ fn eval_i32(instr: &WirInstr, var: &str, value: i32) -> Option<i32> {
     use WirInstr as I;
     let eval = |operand: &WirInstr| eval_i32(operand, var, value);
     let both = |a: &WirInstr, b: &WirInstr| Some((eval(a)?, eval(b)?));
+    if let Some((a, b, op)) = i32_comparison(instr) {
+        return both(a, b).map(|(a, b)| i32::from(op(a, b)));
+    }
     Some(match instr {
         I::I32Const(c) => *c,
         I::LocalGet { name, .. } if name == var => value,
@@ -232,16 +236,6 @@ fn eval_i32(instr: &WirInstr, var: &str, value: i32) -> Option<i32> {
         I::I32Or(a, b) => both(a, b).map(|(a, b)| a | b)?,
         I::I32And(a, b) => both(a, b).map(|(a, b)| a & b)?,
         I::I32Eqz(a) => i32::from(eval(a)? == 0),
-        I::I32Eq(a, b) => both(a, b).map(|(a, b)| i32::from(a == b))?,
-        I::I32Ne(a, b) => both(a, b).map(|(a, b)| i32::from(a != b))?,
-        I::I32LtS(a, b) => both(a, b).map(|(a, b)| i32::from(a < b))?,
-        I::I32LeS(a, b) => both(a, b).map(|(a, b)| i32::from(a <= b))?,
-        I::I32GtS(a, b) => both(a, b).map(|(a, b)| i32::from(a > b))?,
-        I::I32GeS(a, b) => both(a, b).map(|(a, b)| i32::from(a >= b))?,
-        I::I32LtU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) < (b as u32)))?,
-        I::I32LeU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) <= (b as u32)))?,
-        I::I32GtU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) > (b as u32)))?,
-        I::I32GeU(a, b) => both(a, b).map(|(a, b)| i32::from((a as u32) >= (b as u32)))?,
         _ => return None,
     })
 }

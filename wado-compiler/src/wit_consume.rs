@@ -494,11 +494,7 @@ impl Builder {
         }));
     }
 
-    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT. A
-    /// synchronous function takes each `list<T>` of numbers as a
-    /// `&ListView<T>`, so a `LinearArray` lends its own block (WEP: Linear
-    /// Arrays). An async one has not read its arguments by the time it
-    /// returns, so it keeps the `List`.
+    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT.
     fn signature(&mut self, resolve: &Resolve, func: &wit_parser::Function, fq: &str) -> Signature {
         let cm_params = Attribute {
             name: CM_PARAMS.to_string(),
@@ -510,10 +506,9 @@ impl Builder {
             cm_boundary: None,
             span: syn(),
         };
-        let lends_lists = !is_async_func(func);
         let mut params = Vec::with_capacity(func.params.len());
         for p in &func.params {
-            let ty = match list_view_elem(resolve, p.ty).filter(|_| lends_lists) {
+            let ty = match lent_list_elem(resolve, func, p.ty) {
                 Some(elem) => {
                     let elem = self.map_leaf(resolve, elem, fq);
                     self.uses_list_view = true;
@@ -855,6 +850,20 @@ struct Signature {
     params: Vec<Param>,
     /// `#[cm_params]`, the WIT name of each parameter.
     cm_params: Attribute,
+}
+
+/// The `T` an import `func` takes its parameter typed `ty` as a `&ListView<T>`
+/// at, so a `LinearArray` lends its own block (WEP: Linear Arrays): a
+/// `list<T>` of numbers, on a synchronous function. An async one has not read
+/// its arguments by the time it returns, so it keeps the `List`.
+pub fn lent_list_elem(
+    resolve: &Resolve,
+    func: &wit_parser::Function,
+    ty: WitType,
+) -> Option<WitType> {
+    (!is_async_func(func))
+        .then(|| list_view_elem(resolve, ty))
+        .flatten()
 }
 
 /// The `T` of `ty` when it is a `list<T>` of a Component Model number type,

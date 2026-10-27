@@ -264,6 +264,9 @@ struct PendingBind {
     /// an aliased store changes it only through one of these.
     reads: Option<Vec<TypeKey>>,
     aliased: bool,
+    /// The tick up to which the aliased stores were tested against this bind,
+    /// so each is tested once however often the bind is read.
+    aliased_checked: u64,
     escaped: bool,
 }
 
@@ -365,32 +368,38 @@ impl BindWalk<'_, '_> {
                 deps: deps.into_iter().collect(),
                 reads: kinds,
                 aliased,
+                aliased_checked: self.tick,
                 escaped,
             },
         );
     }
 
     fn read(&mut self, t: u32) {
-        let Some(p) = self.pending.get(&t) else {
+        // A stale bind stays stale, so a read of one tests nothing.
+        if self.stale.contains(&t) {
+            return;
+        }
+        let Some(p) = self.pending.get_mut(&t) else {
             return;
         };
-        let written_since = |at: u64| at > p.since;
+        let since = p.since;
+        let checked = std::mem::replace(&mut p.aliased_checked, self.tick);
         let stale = p
             .deps
             .iter()
-            .any(|d| self.last_write.get(d).is_some_and(|&at| written_since(at)))
+            .any(|d| self.last_write.get(d).is_some_and(|&at| at > since))
             || (p.aliased
                 && self
                     .aliased_writes
                     .iter()
                     .rev()
-                    .take_while(|&&(at, _)| written_since(at))
+                    .take_while(|&&(at, _)| at > checked)
                     .any(|&(_, stored)| {
                         p.reads.as_ref().is_none_or(|kinds| {
                             stored.may_change(self.engine, kinds, &mut self.reached)
                         })
                     }))
-            || (p.escaped && written_since(self.last_call));
+            || (p.escaped && self.last_call > since);
         if stale {
             self.stale.insert(t);
         }

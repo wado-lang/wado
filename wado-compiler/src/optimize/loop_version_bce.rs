@@ -938,9 +938,11 @@ fn limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Op
 /// (the stride `1` where it has none), compared in `i64`: the largest `var`
 /// the guard admits (`H - g`, or `H - g - 1` under `<`) lands under `B`, with
 /// `local >= 0` and `stride >= 1`. With the check's demanded `var >= 0`, every
-/// partial sum the loop computes then lies in `0..B`, so none wraps.
-/// `stride >= 1` also puts `H - g` under `B`, the headroom a `+ 1` step's wrap
-/// rests on (see [`induction_entry`]).
+/// partial sum the loop computes then lies in `0..B`, so none wraps. Where that
+/// largest `var` is `>= 0`, the only case the loop runs an iteration in,
+/// `stride >= 1`, `local >= 0` and `konst >= 0` also keep it under `B`: the
+/// headroom a `+ 1` step's wrap under a `<=` guard rests on (see
+/// [`induction_entry`]).
 fn wide_limit_terms(engine: &mut Engine, plan: &Plan, limit: Limit, span: Span) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
     let wide = |e: &mut Engine, expr: Operand| {

@@ -91,7 +91,7 @@ impl WadoCodeGenerator {
                     .iter()
                     .flat_map(|resource| &resource.methods),
             )
-            .any(|f| !f.is_async && f.params.iter().any(|p| list_view_elem(&p.ty).is_some()));
+            .any(|f| f.params.iter().any(|p| p.lends_view));
         if lends_lists {
             self.writeln("use { ListView } from \"core:linear\";");
         }
@@ -304,10 +304,7 @@ impl WadoCodeGenerator {
             self.writeln(&format!("#[cm_params({})]", wit_names.join(", ")));
         }
 
-        // A synchronous call has read its arguments by the time it returns, so
-        // it takes a list of numbers as a view any `ListArg` converts to; an
-        // async one keeps the `List`.
-        let params = Self::format_params(&func.params, !func.is_async);
+        let params = Self::format_params(&func.params);
 
         // For CM `async func` imports, the Wado-level signature returns
         // `AsyncCall<T>` instead of `T` (or `AsyncCall<()>` for WIT-void async
@@ -384,7 +381,7 @@ impl WadoCodeGenerator {
     fn write_world_export_fn(&mut self, func: &WadoWorldExportFn) {
         // World function exports keep `async` because it is part of the ABI.
         let async_kw = if func.is_async { "async " } else { "" };
-        let params = Self::format_params(&func.params, false);
+        let params = Self::format_params(&func.params);
         let return_type = func
             .return_type
             .as_ref()
@@ -396,8 +393,7 @@ impl WadoCodeGenerator {
         ));
     }
 
-    /// `lends_lists` takes each list of numbers as a `&ListView<T>`.
-    fn format_params(params: &[WadoParam], lends_lists: bool) -> String {
+    fn format_params(params: &[WadoParam]) -> String {
         params
             .iter()
             .map(|p| {
@@ -412,9 +408,11 @@ impl WadoCodeGenerator {
                         .as_ref()
                         .map(|value| format!(" = {value}"))
                         .unwrap_or_default();
-                    let ty = match list_view_elem(&p.ty).filter(|_| lends_lists) {
-                        Some(elem) => format!("&ListView<{}>", Self::format_type(elem)),
-                        None => Self::format_type(&p.ty),
+                    let ty = match &p.ty {
+                        WadoType::List(elem) if p.lends_view => {
+                            format!("&ListView<{}>", Self::format_type(elem))
+                        }
+                        ty => Self::format_type(ty),
                     };
                     format!("{}: {ty}{default}", p.name)
                 }
@@ -505,28 +503,6 @@ impl WadoCodeGenerator {
             writeln!(self.output, "{indent}{line}").unwrap();
         }
     }
-}
-
-/// The `T` of a `list<T>` of a Component Model number type, which a
-/// `ListView<T>` lays out as the Canonical ABI does.
-fn list_view_elem(ty: &WadoType) -> Option<&WadoType> {
-    let WadoType::List(elem) = ty else {
-        return None;
-    };
-    matches!(
-        **elem,
-        WadoType::I8
-            | WadoType::I16
-            | WadoType::I32
-            | WadoType::I64
-            | WadoType::U8
-            | WadoType::U16
-            | WadoType::U32
-            | WadoType::U64
-            | WadoType::F32
-            | WadoType::F64
-    )
-    .then_some(elem)
 }
 
 impl Default for WadoCodeGenerator {
