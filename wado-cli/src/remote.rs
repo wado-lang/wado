@@ -57,7 +57,10 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
     Client::builder()
         .tls_certs_merge(certs)
         .redirect(Policy::custom(|attempt| {
-            let from = attempt.previous().last().expect("a redirect follows a request");
+            let from = attempt
+                .previous()
+                .last()
+                .expect("a redirect follows a request");
             let fault = url_fault(attempt.url().as_str())
                 .or_else(|| redirect_fault(from, attempt.url(), reach_of));
             if let Some(fault) = fault {
@@ -76,6 +79,9 @@ static CLIENT: LazyLock<Result<Client, String>> = LazyLock::new(|| {
 });
 
 const MAX_REDIRECTS: usize = 10;
+/// A host that stops answering fails the build rather than hanging it.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Which side of the boundary between this network and the internet a host
 /// is on.
@@ -91,11 +97,11 @@ enum Reach {
 /// off `https://`, or across the boundary `reach` draws, either way.
 fn redirect_fault(from: &Url, to: &Url, reach: impl Fn(&Url) -> Reach) -> Option<&'static str> {
     if from.scheme() == "https" && to.scheme() != "https" {
-        return Some("a redirect never leaves `https://`");
+        return Some("it leaves `https://`");
     }
     match (reach(from), reach(to)) {
-        (Reach::Internet, Reach::Intranet) => Some("a redirect from the internet never reaches this network"),
-        (Reach::Intranet, Reach::Internet) => Some("a redirect from this network never reaches the internet"),
+        (Reach::Internet, Reach::Intranet) => Some("it leads from the internet into this network"),
+        (Reach::Intranet, Reach::Internet) => Some("it leads from this network to the internet"),
         _ => None,
     }
 }
@@ -123,16 +129,20 @@ fn is_intranet(ip: IpAddr) -> bool {
         IpAddr::V4(ip) => {
             let [a, b, ..] = ip.octets();
             let shared = a == 100 && b & 0xc0 == 64;
-            ip.is_loopback() || ip.is_private() || ip.is_link_local() || ip.is_unspecified() || shared
+            ip.is_loopback()
+                || ip.is_private()
+                || ip.is_link_local()
+                || ip.is_unspecified()
+                || shared
         }
         IpAddr::V6(ip) => {
-            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local() || ip.is_unspecified()
+            ip.is_loopback()
+                || ip.is_unique_local()
+                || ip.is_unicast_link_local()
+                || ip.is_unspecified()
         }
     }
 }
-/// A host that stops answering fails the build rather than hanging it.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
-const READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// What one GET answered: the bytes read of it, and the file's whole length
 /// where the server said. `whole` where the server ignored `Range` and sent the

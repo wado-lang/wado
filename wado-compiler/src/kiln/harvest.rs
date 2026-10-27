@@ -79,9 +79,11 @@ where
     let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
         VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
     let mut unpinned = VecDeque::new();
-    while let Some((key, source, ast)) = next_in_pin_order(&mut queue, &mut unpinned, |(_, s, _)| {
-        matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str()))
-    }) {
+    while let Some((key, source, ast)) = next_in_pin_order(
+        &mut queue,
+        &mut unpinned,
+        |(_, s, _)| matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str())),
+    ) {
         if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
@@ -501,8 +503,14 @@ mod tests {
         let url = "https://example.com/r.wado";
         let pin = Integrity::of(b"pub fn r() {}\n");
         let sources = [
-            ("./a.wado".to_string(), format!("use {{ r }} from \"{url}\";\n")),
-            ("./b.wado".to_string(), "use { c } from \"./c.wado\";\n".to_string()),
+            (
+                "./a.wado".to_string(),
+                format!("use {{ r }} from \"{url}\";\n"),
+            ),
+            (
+                "./b.wado".to_string(),
+                "use { c } from \"./c.wado\";\n".to_string(),
+            ),
             (
                 "./c.wado".to_string(),
                 format!("use {{ r }} from \"{url}\" with {{ integrity: \"{pin}\" }};\n"),
@@ -517,7 +525,10 @@ mod tests {
             &IndexSet::default(),
             async |path: &str, pin| {
                 asked.borrow_mut().push((path.to_string(), pin));
-                sources.iter().find(|(p, _)| p == path).map(|(_, s)| s.clone())
+                sources
+                    .iter()
+                    .find(|(p, _)| p == path)
+                    .map(|(_, s)| s.clone())
             },
         ));
 

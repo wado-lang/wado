@@ -385,7 +385,7 @@ fn a_redirect_stays_on_its_side_of_the_internet() {
 
     run("near.wado").success().stdout("remote!\n");
     run("far.wado").failure().stderr(predicate::str::contains(
-        "a redirect from this network never reaches the internet",
+        "it leads from this network to the internet",
     ));
 }
 

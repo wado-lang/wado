@@ -1605,11 +1605,11 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         self.logger.span_end(&format!("load {entry_name}"));
 
         let mut unpinned = VecDeque::new();
-        while let Some((module_source, site)) =
-            next_in_pin_order(&mut pending, &mut unpinned, |(s, _)| {
-                matches!(s, ModuleSource::Remote { url, .. } if !self.remote_pins.contains_key(url.as_str()))
-            })
-        {
+        while let Some((module_source, site)) = next_in_pin_order(
+            &mut pending,
+            &mut unpinned,
+            |(s, _)| matches!(s, ModuleSource::Remote { url, .. } if !self.remote_pins.contains_key(url.as_str())),
+        ) {
             // Skip if already loaded
             if self.loaded.contains_key(&module_source) {
                 continue;

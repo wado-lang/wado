@@ -1354,7 +1354,10 @@ mod tests {
             .remove(0)
         };
         let repinned = Integrity::of(b"").to_string();
-        assert_eq!(invocation(None).output_dir, invocation(Some(PIN)).output_dir);
+        assert_eq!(
+            invocation(None).output_dir,
+            invocation(Some(PIN)).output_dir
+        );
         assert_eq!(
             invocation(Some(PIN)).output_dir,
             invocation(Some(&repinned)).output_dir

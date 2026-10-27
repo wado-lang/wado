@@ -57,27 +57,17 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     Ok(Some(ProjectManifest { manifest, root }))
 }
 
-/// Hold the `wado.lock` of the package at `root` against every other writer, in
-/// this process or another, until the returned file drops. A writer replaces
-/// the lock whole, so the hold is on a file of its own, in the cache.
+/// Hold the `wado.lock` of the package at `root` against every other writer
+/// until the returned file drops. A writer replaces the lock whole, so the hold
+/// is on a file of its own, in the cache.
 ///
 /// # Errors
 ///
-/// The cache's root cannot be found, or its lock file cannot be opened or held.
+/// `root` cannot be resolved, or [`cache::hold`] fails.
 pub(crate) fn hold_lock_file(root: &Path) -> Result<fs::File, String> {
-    let locks = cache::root()?.join(".locks");
-    let held = (|| {
-        fs::create_dir_all(&locks)?;
-        let key = Integrity::of(fs::canonicalize(root)?.as_os_str().as_encoded_bytes()).hex();
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(locks.join(format!("{key}.{LOCK_FILENAME}")))?;
-        file.lock()?;
-        Ok(file)
-    })();
-    held.map_err(|e: io::Error| format!("{}: {e}", locks.display()))
+    let root = fs::canonicalize(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    let key = Integrity::of(root.as_os_str().as_encoded_bytes()).hex();
+    cache::hold(&format!("{key}.{LOCK_FILENAME}"))
 }
 
 /// The nearest directory at or above `start_dir` holding a `wado.toml`, short
