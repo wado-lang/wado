@@ -505,8 +505,9 @@ fn import_type_gen(
     type_gen
 }
 
-/// Spell each value type `interface` provides into its instance type, ahead
-/// of its functions, so the instance exports it for the readers.
+/// Spell each type `interface` provides into its instance type, ahead of its
+/// functions, so the instance exports it for the readers: a newtype as its
+/// alias, any other as its declaration.
 fn export_provided_types(
     instance_type: &mut InstanceType,
     type_idx: &mut u32,
@@ -2181,8 +2182,11 @@ fn import_cli_types(
     );
 }
 
-/// Import a function-bearing interface whose signatures touch only the
-/// resources it defines itself.
+/// Import a function-bearing interface. A resource it defines is declared in
+/// its instance, as the CM requires of `[constructor]X` / `[method]X.foo`; one
+/// another interface defines (`wasi:filesystem/preopens` returning `descriptor`
+/// from `wasi:filesystem/types`) is aliased from outer scope, where the plan
+/// imported that interface first.
 fn import_function_interface(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -2202,10 +2206,6 @@ fn import_function_interface(
     // describes the imported interface, which exports each name once.
     let cm_functions = one_per_cm_name(supported_functions.iter().copied());
 
-    // Collect resource types referenced in any function signature. The plan
-    // guarantees these resolve to resources this interface defines itself
-    // (a signature touching an externally-defined resource would have been
-    // categorized `ResourceUsingInterface` instead).
     let needed_resources = project
         .cm_interface_registry
         .resources_in_signatures(&cm_functions);
@@ -2221,26 +2221,33 @@ fn import_function_interface(
 
         let mut resource_handles = ResourceHandles::default();
         for (source, resource_name) in &needed_resources {
-            if let Some(cm_name) = project
+            let Some(cm_name) = project
                 .cm_interface_registry
                 .get_resource_cm_name_by_source(source, resource_name)
-            {
+            else {
+                continue;
+            };
+            if source == &interface_info.path {
                 instance_type.export(
                     cm_name,
                     wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
                 );
-                let resource_idx = local_type_idx;
-                local_type_idx += 1;
-                resource_handles.insert(
-                    source,
-                    resource_name,
-                    ResourceTypeIndices::define(
-                        &mut instance_type,
-                        &mut local_type_idx,
-                        resource_idx,
-                    ),
-                );
+            } else {
+                let outer_idx = aliased_type_idx(ctx, project, source, resource_name, cm_name)
+                    .unwrap_or_else(|| unaliased(&format!("resource `{cm_name}` of `{source}`")));
+                instance_type.alias(Alias::Outer {
+                    kind: ComponentOuterAliasKind::Type,
+                    count: 1,
+                    index: outer_idx,
+                });
             }
+            let resource_idx = local_type_idx;
+            local_type_idx += 1;
+            resource_handles.insert(
+                source,
+                resource_name,
+                ResourceTypeIndices::define(&mut instance_type, &mut local_type_idx, resource_idx),
+            );
         }
 
         let resource_exports = resource_exports_for(
@@ -2288,27 +2295,7 @@ fn import_function_interface(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Expose any resources defined in this interface at the outer component scope.
-    // This allows other interfaces (e.g., wasi:filesystem/preopens which uses
-    // wasi:filesystem/types::descriptor) to alias them via `alias outer`.
-    for (source, resource_name) in &needed_resources {
-        if let Some(cm_name) = project
-            .cm_interface_registry
-            .get_resource_cm_name_by_source(source, resource_name)
-            .map(str::to_string)
-        {
-            alias_resource_type(
-                builder,
-                ctx,
-                project,
-                source,
-                resource_name,
-                &cm_name,
-                &interface_info.instance_key(),
-            );
-        }
-    }
-
+    expose_self_owned_resources(builder, ctx, project, interface_info, &needed_resources);
     alias_own_error_code(
         builder,
         ctx,
@@ -3078,8 +3065,7 @@ fn resource_using_references_defining_interface(
 }
 
 /// Import an interface whose signatures reference resources another interface
-/// defines (`wasi:filesystem/preopens` returning `descriptor` from
-/// `wasi:filesystem/types`), which the plan imports first.
+/// defines, which the plan imports first.
 fn import_resource_using_interface(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -3099,114 +3085,8 @@ fn import_resource_using_interface(
             interface_info.path
         );
         import_resource_using_composite_interface(builder, ctx, project, interface_info);
-        return;
-    }
-
-    let supported_functions: Vec<_> = interface_info
-        .functions
-        .iter()
-        .filter(|func| project.emits_cm_function(func))
-        .collect();
-    let cm_functions = one_per_cm_name(supported_functions.iter().copied());
-    let needed_resources = project
-        .cm_interface_registry
-        .resources_in_signatures(&cm_functions);
-
-    // Build a map: resource_wado_name -> local_type_idx_in_instance_type
-    // First alias outer resources, then build own<>/borrow<> types.
-    let instance_type_name = format!("{}-instance-type", interface_info.interface);
-    let instance_type_idx = ctx.register_type(&instance_type_name);
-    let mut type_gen = import_type_gen(&interface_info.path, project, ctx);
-    {
-        let (_, enc) = builder.ty(Some(&instance_type_name));
-        let mut instance_type = InstanceType::new();
-        let mut local_type_idx = 0u32;
-
-        let mut resource_handles = ResourceHandles::default();
-
-        for (source, resource_name) in &needed_resources {
-            let Some(cm_name) = project
-                .cm_interface_registry
-                .get_resource_cm_name_by_source(source, resource_name)
-            else {
-                continue;
-            };
-            if source == &interface_info.path {
-                // Declare the resource inline so [constructor]X /
-                // [method]X.foo / [static]X.foo are valid in this
-                // instance.
-                instance_type.export(
-                    cm_name,
-                    wasm_encoder::ComponentTypeRef::Type(TypeBounds::SubResource),
-                );
-            } else {
-                let outer_idx = aliased_type_idx(ctx, project, source, resource_name, cm_name)
-                    .unwrap_or_else(|| unaliased(&format!("resource `{cm_name}` of `{source}`")));
-                instance_type.alias(Alias::Outer {
-                    kind: ComponentOuterAliasKind::Type,
-                    count: 1,
-                    index: outer_idx,
-                });
-            }
-            let resource_idx = local_type_idx;
-            local_type_idx += 1;
-            resource_handles.insert(
-                source,
-                resource_name,
-                ResourceTypeIndices::define(&mut instance_type, &mut local_type_idx, resource_idx),
-            );
-        }
-
-        let resource_exports = resource_exports_for(
-            &mut type_gen,
-            &resource_handles,
-            &project.cm_interface_registry,
-        );
-        export_provided_types(
-            &mut instance_type,
-            &mut local_type_idx,
-            &mut type_gen,
-            project,
-            &resource_exports,
-            &interface_info.path,
-            provides,
-        );
-        for func in &cm_functions {
-            export_func_in_instance_type(
-                &mut instance_type,
-                &mut local_type_idx,
-                &mut type_gen,
-                project,
-                &resource_exports,
-                func,
-            );
-        }
-
-        enc.instance(&instance_type);
-    }
-
-    ctx.register_instance(&interface_info.instance_key());
-    builder.import(
-        &interface_info.path,
-        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
-    );
-
-    // Declared inline in the instance type above, as the CM spec requires
-    // for `[constructor]X` / `[method]X.foo`; `resource.drop` needs them at
-    // outer scope too.
-    expose_self_owned_resources(builder, ctx, project, interface_info, &needed_resources);
-    alias_provided_types(
-        builder,
-        ctx,
-        project,
-        &type_gen,
-        &interface_info.path,
-        &interface_info.instance_key(),
-        provides,
-    );
-
-    for func in &supported_functions {
-        alias_interface_func(builder, ctx, interface_info, func);
+    } else {
+        import_function_interface(builder, ctx, project, interface_info, provides);
     }
 }
 

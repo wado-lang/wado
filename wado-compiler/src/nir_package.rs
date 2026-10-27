@@ -963,8 +963,7 @@ impl NirPackage {
         // emits, such as `RequestOptions`.
         let methods = functions.iter().filter(|func| {
             of_resource(func)
-                && !is_constructor_or_static(func)
-                && matches!(kind(func), Some(ResKind::Method | ResKind::Static))
+                && matches!(kind(func), Some(ResKind::Method))
                 && self.used_wasi_functions.contains(&func.cm_identifier())
         });
         constructors.chain(own).chain(methods).collect()

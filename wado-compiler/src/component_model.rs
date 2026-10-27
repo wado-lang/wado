@@ -2909,18 +2909,7 @@ impl CmInterfaceRegistry {
                 return;
             }
             let (source, name) = &key;
-            let members: Vec<&Type> =
-                if let Some(fields) = self.get_struct_fields_by_source(source, name) {
-                    fields.iter().map(|(_, field)| field).collect()
-                } else if let Some(cases) = self.get_variant_cases_by_source(source, name) {
-                    cases
-                        .iter()
-                        .filter_map(|case| case.payload.as_ref())
-                        .collect()
-                } else {
-                    Vec::new()
-                };
-            for member in members {
+            for member in self.member_types(source, name) {
                 self.resources_in_type(member, out, visited);
             }
             if self.get_resource_cm_name_by_source(source, name).is_some() {
@@ -3166,21 +3155,25 @@ impl CmInterfaceRegistry {
                 if !visited.insert(name.clone()) {
                     return;
                 }
-                let members: Vec<&Type> =
-                    if let Some(fields) = self.get_struct_fields_by_source(&source, name) {
-                        fields.iter().map(|(_, field)| field).collect()
-                    } else if let Some(cases) = self.get_variant_cases_by_source(&source, name) {
-                        cases
-                            .iter()
-                            .filter_map(|case| case.payload.as_ref())
-                            .collect()
-                    } else {
-                        Vec::new()
-                    };
-                for member in members {
+                for member in self.member_types(&source, name) {
                     self.foreign_types_in_type(interface, member, out, visited);
                 }
             });
+    }
+
+    /// The field types of the record, or the payload types of the variant,
+    /// `interface_fq` declares as `name`; none for any other type.
+    fn member_types(&self, interface_fq: &str, name: &str) -> Vec<&Type> {
+        if let Some(fields) = self.get_struct_fields_by_source(interface_fq, name) {
+            fields.iter().map(|(_, field)| field).collect()
+        } else if let Some(cases) = self.get_variant_cases_by_source(interface_fq, name) {
+            cases
+                .iter()
+                .filter_map(|case| case.payload.as_ref())
+                .collect()
+        } else {
+            Vec::new()
+        }
     }
 
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
