@@ -88,6 +88,43 @@
           "error": null
         }
       ]
+    },
+    {
+      "fix": 1088,
+      "culprit": 627,
+      "defect": "compile_one used a silent host and threw away the compiler's diagnostics, both through `map_err(|_| \"compilation failed\")` and by silently producing empty output when the dump returned None, so fixture-generation failures were reported with no reason.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "scripts/update-golden-format-fixtures.sh",
+              "summary": "Every phase is run with `--skip-empty`, which also swallows compilation failures and deletes the existing golden file instead of failing.",
+              "detail": "In `run_pipeline`, when `skip_empty` is set, the `Err(e)` branch removes the output file, logs \"Skipped\", counts it as skipped and continues. The final assertion still passes. The old script ran `exit 1` on any failed dump. Now a compiler regression that breaks a format fixture silently deletes its `.tir`/`.lower`/`.optimize`/`.wir`/`.wat` golden files, and the script reports success."
+            },
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "Concurrency is now one 16 MB-stack compiler thread per CPU, dropping the cap that was added to avoid memory exhaustion and SIGSEGV.",
+              "detail": "The removed `run_bulk` capped parallelism at half the available CPUs (minimum 2) because each compilation uses a 16 MB stack plus a large heap, and full parallelism caused SIGSEGV under memory pressure. `run_pipeline` spawns `available_parallelism()` workers, each also leaking an 8 MB alternate signal stack. This brings back the crashes the cap was meant to prevent on many-core or memory-constrained machines."
+            },
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "The `tir` phase now emits only the entry-point module, so the format golden `.tir`/`.optimize` files lost all other modules.",
+              "detail": "The old script used `wado dump --tir`, which dumped every module (allocator, builtin, prelude, wasi, etc.). `compile_one` for `Phase::Tir` breaks after the entry-point module. The regenerated `all.tir.wado`, `mess.optimize.wado` and the others drop large amounts of previously covered output. Changes in non-entry module TIR are no longer caught, and the files no longer match what `wado dump --tir` produces."
+            },
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "Workers and the skip path build output paths differently, so they disagree when the out template contains more than one `{name}`.",
+              "detail": "Workers build the path from `split(\"{name}\").next()` and `.nth(1)`, which drops everything after a second `{name}`. The skip path uses `Template::output_path` (`split_once`), which keeps the rest of the template. With such a template, skipped files remove a different path than the one compiled files are written to, and written files land at truncated paths."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding covers compile_one discarding the silent host's diagnostics or producing empty output without a reason; finding 0 is about --skip-empty swallowing errors, which is a different problem."
+          },
+          "error": null
+        }
+      ]
     }
   ]
 }
