@@ -3,11 +3,11 @@
 use std::fmt::Write as _;
 use std::fs;
 
-use wado_manifest::LockFile;
+use wado_manifest::{LOCK_FILENAME, LockFile};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::resolve_build_dependencies;
-use crate::manifest::{discover, emit_manifest_warnings};
+use crate::manifest::{discover, emit_manifest_warnings, hold_lock_file};
 use crate::registry::FilesystemProvider;
 
 #[derive(Debug)]
@@ -66,14 +66,19 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
         build_dependencies.push(dep.locked_package(integrity));
     }
 
+    let lock_path = project.root.join(LOCK_FILENAME);
     let count = packages.len() + build_dependencies.len();
+    // A remote pin is dropped: the next build records what it reads then, as
+    // only a build knows how far a Kiln probe reads.
     let lock = LockFile {
         version: 1,
         deps_hash: project.manifest.deps_hash(),
         packages,
         build_dependencies,
+        remotes: Vec::new(),
     };
-    let lock_path = project.root.join("wado.lock");
+    let _held = hold_lock_file(&project.root)
+        .map_err(|e| CliExit::error(format!("holding wado.lock: {e}")))?;
     fs::write(&lock_path, lock.to_toml())
         .map_err(|e| CliExit::error(format!("writing wado.lock: {e}")))?;
     eprintln!("Locked {count} package(s) → {}", lock_path.display());

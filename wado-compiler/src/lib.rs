@@ -67,6 +67,7 @@ pub mod path;
 mod prelower_reach;
 pub mod primitive;
 pub mod remarks;
+pub mod remote;
 pub mod resolve;
 pub mod self_comparison;
 pub mod semantics;

@@ -25,17 +25,18 @@ Rationale: [WEP: Kiln](./wep-2026-04-12-kiln.md).
 ### The `generator` Fields
 
 The literal after `from` is the primary input. It is a `./` or `../` path
-resolved against the declaring file, like a local module import. The
-`generator` object holds the rest of the invocation.
+resolved against the declaring file, like a local module import, or the URL of
+a [remote file](#remote-inputs). The `generator` object holds the rest of the
+invocation.
 
-| Field        | Required | Meaning                                                                                                                                                                                                                      |
-| ------------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                   |
-| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                        |
-| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                       |
-| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                         |
-| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path, or `{ path, type }`. A schema that refers to other files lists every one of them here. |
-| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                             |
+| Field        | Required | Meaning                                                                                                                                                                                                                                          |
+| ------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `module`     | yes      | The generator: a `./` / `../` path to its source, or a `<namespace>:<name>[@<version>]` coordinate or `lib:<nick>` alias resolved against `[build-dependencies]`. A bare name is an error.                                                       |
+| `version`    | no       | Exact version of a coordinate `module`, for a file with no `wado.toml`. An error beside a path `module`, or when the manifest declares the generator.                                                                                            |
+| `registry`   | no       | Registry of a coordinate `module` (`oci://<host>[/<prefix>]`), under the same conditions as `version`.                                                                                                                                           |
+| `options`    | no       | Record literal whose shape matches the generator's `export struct Options`. See [Options](#options).                                                                                                                                             |
+| `inputs`     | no       | Supplementary inputs the generator cannot discover from the primary alone, such as a sibling lexer grammar: each a `./` / `../` path or a URL, or `{ path, type, integrity }`. A schema that refers to other files lists every one of them here. |
+| `output_dir` | no       | A `./` / `../` directory, resolved against the declaring file, that receives the generated files. Default `build/kiln/<synthesized-id>/` under the package root.                                                                                 |
 
 Each field has one type, and any other key or type is an error at the use site.
 
@@ -45,11 +46,14 @@ file being compiled stands in for it. Every path a generator receives is
 relative to the package root, and so is the default output directory.
 
 A file's `type` says how the generator reads it, since no generator looks at
-an extension. The primary input's is the `type` beside `generator`, the only
-other key the `with` clause may hold; a supplementary input's is the `type` in
-its `{ path, type }`. Each is a string the generator receives as the file's
-`InputFile.type`, and decides the meaning of. A `type` makes the invocation a
-different one, so the same file under two types is generated twice.
+an extension. The primary input's is the `type` beside `generator`; a
+supplementary input's is the `type` in its `{ path, type }`. Each is a string
+the generator receives as the file's `InputFile.type`, and decides the meaning
+of. A `type` makes the invocation a different one, so the same file under two
+types is generated twice.
+
+Beside `generator`, the `with` clause holds only `type` and `integrity`. The
+`integrity` pins a remote primary input ([Remote Inputs](#remote-inputs)).
 
 A `[build-dependencies]` coordinate names a published generator. Here Gale, a
 generator that builds a parser from an ANTLR4 grammar
@@ -91,6 +95,37 @@ use { highlight as highlight_impl } from "../grammar/Wado.g4"
 Every file a generator sees is named literally at the use site. There is no
 glob and no directory listing, so the whole input set is known before any
 generator runs.
+
+### Remote Inputs
+
+An input may be a URL, under the rules of
+[Remote Modules](./spec-modules.md#remote-modules). Its pin covers what the
+generator reads: the bytes up to the input's [extent](#the-probe), or the whole
+file when the generator exports no probe. The host fetches no byte past the
+extent, so a model's header crosses the network and its weights do not.
+
+<!-- {"fixture": "kiln_remote_from_pinned_to_its_extent.wado"} -->
+
+```wado
+use { hello } from "https://example.com/data/header_and_payload.schema"
+    with {
+        generator: { module: "./sub/kiln/header_probe_generator.wado" },
+        integrity: "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+    };
+
+test {
+    assert hello() == 7;
+}
+```
+
+The pin of the primary input is the `integrity` beside `generator`. A
+supplementary input writes its own as `{ path, integrity }`. A pin, like a
+`type`, makes the invocation a different one.
+
+A generated import inside a remote module works as one in a local module, with
+two differences. Its generator is named by a `[build-dependencies]` specifier,
+never a path. It writes into the build's default output directory, and an
+`output_dir` is an error.
 
 ### Binding the Import
 
@@ -704,13 +739,17 @@ options.
 - A generator that imports a `wasi:*` interface its world does not import,
   directly or through a `core:*` module, is a compile error
   (`KILN_GENERATOR_FORBIDDEN_IMPORT`).
+- A generator's source may import a
+  [remote module](./spec-modules.md#remote-modules). Its pin fixes what the
+  build compiles in, and the generator itself still reaches no network.
 
 ### Running Again
 
 A generator runs again only when something it depends on changes:
 
 - the generator's identity and source, including the generated modules its own
-  source imports;
+  source imports, and the `wado.lock` entry of each remote module it reads that
+  no `use` pins;
 - the content of each input, up to its extent;
 - the options;
 - the name the use site invoked it under;

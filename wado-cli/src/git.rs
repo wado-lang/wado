@@ -11,7 +11,7 @@ use std::process::Command;
 
 use wado_manifest::{GitTagInfo, Manifest, ProviderError};
 
-use crate::cache::root;
+use crate::cache::{hold, root};
 use crate::registry::parse_version_tag;
 
 /// List a repository's semver tags via `git ls-remote --tags`.
@@ -319,39 +319,15 @@ fn is_hex_sha(s: &str) -> bool {
     s.len() >= 4 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-/// An exclusive advisory lock over one repository's mutations, held for the
-/// guard's lifetime. On unix it is a `flock` on a per-repo lock file under
-/// `<root>/.locks/`; elsewhere it degrades to a no-op (best effort).
-struct RepoLock {
-    #[cfg(unix)]
-    _file: fs::File,
-}
-
-fn lock_repo(repo_rel: &str) -> Result<RepoLock, ProviderError> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::io::AsRawFd;
-        let locks = wado_root()?.join(".locks");
-        fs::create_dir_all(&locks).map_err(|e| io_err(&locks, &e))?;
-        let path = locks.join(format!("{}.lock", repo_rel.replace('/', "_")));
-        let file = fs::OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(&path)
-            .map_err(|e| io_err(&path, &e))?;
-        // SAFETY: `file` owns the fd for the duration of the flock call; the lock
-        // is released when the returned guard (and its `File`) is dropped.
-        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) } != 0 {
-            return Err(io_err(&path, &std::io::Error::last_os_error()));
+/// Hold one repository against every other mutation of it until the returned
+/// file drops.
+fn lock_repo(repo_rel: &str) -> Result<fs::File, ProviderError> {
+    hold(&format!("{}.lock", repo_rel.replace('/', "_"))).map_err(|message| {
+        ProviderError::IoError {
+            path: "<wado-root>/.locks".to_string(),
+            message,
         }
-        Ok(RepoLock { _file: file })
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = repo_rel;
-        Ok(RepoLock {})
-    }
+    })
 }
 
 #[cfg(test)]

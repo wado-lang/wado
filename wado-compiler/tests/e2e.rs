@@ -29,9 +29,15 @@ use wasmtime_wasi_http::p3::Request;
 use wasmtime_wasi_http::p3::bindings::Service;
 
 use wado_compiler::ast::TodoMark;
-use wado_compiler::coverage::{Branch, Coverage, CoverageScope, read_from_component, render_plan};
+use wado_compiler::coverage::{Branch, Coverage, read_from_component, render_plan};
 use wado_compiler::{CompilerOptions, OptLevel};
-use wado_host::fixture::{CompileInputs, data_section};
+use wado_host::fixture::{
+    CompileInputs, CoverageSpec, GOLDEN_OPT_LEVEL, compile_inputs, data_section, has_wir_golden,
+    wir_golden,
+};
+
+/// Where each fixture's WIR golden lives, written by its `GOLDEN_OPT_LEVEL` run.
+const GOLDEN_DIR: &str = "generated/fixtures";
 
 // ---------------------------------------------------------------------------
 // __DATA__ spec
@@ -200,11 +206,6 @@ struct TestSpec {
     #[serde(default)]
     skip_os: bool,
 
-    /// Run this test only at the listed optimization levels (e.g. `["O3"]`).
-    /// When set, all other levels are skipped.
-    #[serde(default)]
-    only_opt: Vec<String>,
-
     /// Stdin data to pipe into the program.
     /// If set, the program's stdin will receive this UTF-8 string.
     #[serde(default)]
@@ -214,12 +215,6 @@ struct TestSpec {
     /// Presence of this key implies `world = "wasi:http/service"`.
     #[serde(rename = "wasi:http/service")]
     http_service: Option<HttpServiceSpec>,
-
-    /// The allocators to run under, one run each: a name (`"debug"`,
-    /// `"freelist"`) or a list of them. Unset runs `debug`, which catches a
-    /// use-after-free.
-    #[serde(default, deserialize_with = "one_or_many")]
-    allocator: Vec<String>,
 
     /// The keys that say how to compile the fixture, shared with the golden
     /// dumps.
@@ -296,29 +291,6 @@ struct TestSpec {
     /// compiler emits, and whose imports the runner hosts nothing for.
     #[serde(default)]
     compile_only: bool,
-
-    /// Measure the fixture's own code under its `test` blocks, as
-    /// `wado test --coverage` does, and state what they left unrun.
-    #[serde(default)]
-    coverage: Option<CoverageSpec>,
-}
-
-/// What a fixture's tests leave unrun in the fixture itself. Each list is the
-/// whole set, so a region the plan gains or loses is a failure too.
-#[derive(Debug, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CoverageSpec {
-    #[serde(default)]
-    uncovered_lines: Vec<u32>,
-
-    /// Each as [`Branch::describe`] spells it:
-    /// `"12:5 else"`.
-    #[serde(default)]
-    uncovered_branches: Vec<String>,
-
-    /// Qualified names, closures as `outer::{closure:LINE}`.
-    #[serde(default)]
-    uncovered_functions: Vec<String>,
 }
 
 /// One text the compiler emits, a WAT line or a remark: the substrings it
@@ -378,34 +350,7 @@ impl TestSpec {
     /// Whether `opt_level` runs this fixture. The runner skips on it, and the
     /// WAT guard asks it of `-Os`, which strips the symbols a needle may name.
     fn runs_at(&self, opt_level: OptLevel) -> bool {
-        let name = common::opt_level_name(opt_level);
-        !(self.skip_os && opt_level == OptLevel::Os)
-            && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == name))
-    }
-
-    /// The allocators the fixture runs under, in order.
-    fn allocators(&self) -> Vec<&str> {
-        if self.allocator.is_empty() {
-            return vec!["debug"];
-        }
-        self.allocator.iter().map(String::as_str).collect()
-    }
-}
-
-/// A `__DATA__` value that is one string or a list of them.
-fn one_or_many<'de, D: serde::Deserializer<'de>>(de: D) -> Result<Vec<String>, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum OneOrMany {
-        One(String),
-        Many(Vec<String>),
-    }
-    match OneOrMany::deserialize(de)? {
-        OneOrMany::One(one) => Ok(vec![one]),
-        OneOrMany::Many(many) if many.is_empty() => {
-            Err(serde::de::Error::custom("an empty list names no allocator"))
-        }
-        OneOrMany::Many(many) => Ok(many),
+        !(self.skip_os && opt_level == OptLevel::Os) && self.compile.compiles_at(opt_level)
     }
 }
 
@@ -922,25 +867,68 @@ fn run_normal_test(
     spec: &TestSpec,
     test_id: &str,
 ) {
-    let allocators = spec.allocators();
-    for allocator in &allocators {
+    let allocators = spec.compile.allocators();
+    let golden = opt_level == GOLDEN_OPT_LEVEL && has_wir_golden(source, &spec.compile);
+    for (index, allocator) in allocators.iter().enumerate() {
         let test_id = if allocators.len() > 1 {
             format!("{test_id} [{allocator}]")
         } else {
             test_id.to_string()
         };
-        run_with_allocator(fixture_path, source, opt_level, spec, allocator, &test_id);
+        run_with_allocator(
+            fixture_path,
+            source,
+            opt_level,
+            spec,
+            allocator,
+            golden && index == 0,
+            &test_id,
+        );
+    }
+}
+
+/// Remove each WIR golden whose fixture is gone or no longer has one. A
+/// fixture's own run writes its golden; nothing runs for one that has none.
+#[test]
+fn prune_orphan_wir_goldens() {
+    for entry in std::fs::read_dir(GOLDEN_DIR).unwrap() {
+        let golden = entry.unwrap().path();
+        let name = golden.file_name().unwrap().to_string_lossy();
+        // A host may drop its own files here (`.DS_Store`).
+        let Some(stem) = name.strip_suffix(".wir.wado") else {
+            continue;
+        };
+        let keeps = std::fs::read_to_string(format!("fixtures/{stem}.wado")).is_ok_and(|source| {
+            let inputs = compile_inputs(&source).unwrap_or_else(|e| panic!("{stem}: {e}"));
+            has_wir_golden(&source, &inputs)
+        });
+        if !keeps {
+            std::fs::remove_file(&golden).unwrap();
+        }
+    }
+}
+
+/// Rewrite `fixture`'s WIR golden when `wir` differs from it.
+fn update_wir_golden(fixture: &Path, wir: &str) {
+    let name = fixture.file_name().unwrap().to_string_lossy();
+    let stem = name.strip_suffix(".wado").unwrap();
+    let golden = Path::new(GOLDEN_DIR).join(format!("{stem}.wir.wado"));
+    let text = wir_golden(&format!("wado-compiler/tests/fixtures/{name}"), wir);
+    if std::fs::read_to_string(&golden).ok().as_deref() != Some(text.as_str()) {
+        std::fs::write(&golden, text)
+            .unwrap_or_else(|e| panic!("cannot write {}: {e}", golden.display()));
     }
 }
 
 /// Run a normal (non-TODO) test under `allocator`, dispatching to the
-/// appropriate world runner.
+/// appropriate world runner, and update the fixture's WIR golden if `golden`.
 fn run_with_allocator(
     fixture_path: &Path,
     source: &str,
     opt_level: OptLevel,
     spec: &TestSpec,
     allocator: &str,
+    golden: bool,
     test_id: &str,
 ) {
     // Determine target world from the world key present in the spec
@@ -956,11 +944,11 @@ fn run_with_allocator(
         opt_level,
         target_world,
         skip_validation: false,
-        retain_wir: spec.has_wir_expectations(opt_level),
+        retain_wir: golden || spec.has_wir_expectations(opt_level),
         allocator: Some(allocator.to_string()),
         codegen_flags: spec.compile.codegen_flags.clone(),
         params: spec.compile.param_inputs(),
-        coverage: spec.coverage.as_ref().map(|_| CoverageScope::default()),
+        coverage: spec.compile.coverage_scope(),
         // More than one, so every fixture runs the optimizer's parallel path
         // against expectations no thread count may change.
         parallelism: 2,
@@ -1077,6 +1065,9 @@ fn run_with_allocator(
     let wasm = wasm.unwrap_or_else(|e| {
         panic!("[{test_id}] compilation failed: {e}");
     });
+    if golden {
+        update_wir_golden(fixture_path, wir_text.as_deref().unwrap());
+    }
 
     // Optional: dump the compiled wasm (and a wat next to it) so the
     // bytes the e2e runner produces can be diffed against `wado compile`.
@@ -1134,7 +1125,7 @@ fn run_with_allocator(
             panic!("[{test_id}] test world error: {e:?}");
         });
         verify_result(&result, spec, test_id, opt_level);
-        if let Some(coverage) = &spec.coverage {
+        if let Some(coverage) = &spec.compile.coverage {
             assert_coverage(
                 &wasm,
                 fixture_path,
@@ -1225,13 +1216,14 @@ fn assert_wir_expectations(
     opt_level: OptLevel,
     test_id: &str,
 ) {
-    let Some(wir_text) = wir_text else {
-        assert!(
-            !spec.has_wir_expectations(opt_level),
-            "[{test_id}] the fixture states WIR expectations but no WIR was retained"
-        );
+    // A golden retains WIR at a level the patterns may not name, where
+    // `wir_scope` may name a function that level inlines away.
+    if !spec.has_wir_expectations(opt_level) {
         return;
-    };
+    }
+    let wir_text = wir_text.unwrap_or_else(|| {
+        panic!("[{test_id}] the fixture states WIR expectations but no WIR was retained")
+    });
     let (expect, not_expect) = spec.wir_expectations(opt_level);
     let opt_name = common::opt_level_name(opt_level);
     let wir_text = match spec.wir_scope.as_deref() {
@@ -1323,6 +1315,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Test function for O0 (no optimization)
+/// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O0`.
 fn fixture_test_o0(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O0);
     Ok(())
@@ -1336,7 +1330,7 @@ fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for O1 (development optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O1`.
 fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O1);
     Ok(())
@@ -1344,7 +1338,7 @@ fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for O3 (aggressive optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O3`.
 fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O3);
     Ok(())
@@ -1352,7 +1346,7 @@ fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for Os (size optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level Os`.
 fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
@@ -1430,11 +1424,12 @@ datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
     // (subdirectories contain helper modules that are imported, not run as tests).
     //
-    // O1/O3/Os are `#[ignore]`d unless CI or WADO_FULL_TEST is set at build time.
-    // The env is read at macro expansion, so toggling requires re-expanding the
-    // macro (touch this file or `cargo clean`); locally, run them on demand with
-    // `cargo test -- --ignored`.
-    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    // Every level but O2 is `#[ignore]`d unless CI or WADO_FULL_TEST is set at
+    // build time. The env is read at macro expansion, so toggling requires
+    // re-expanding the macro (touch this file or `cargo clean`); locally, run
+    // one on demand with `mise run test-e2e-level <LEVEL>`.
+    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$",
+      ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
     { test = fixture_test_o1, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
     { test = fixture_test_o2, root = "fixtures", pattern = r"^[^/]+\.wado$" },

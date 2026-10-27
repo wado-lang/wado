@@ -24,8 +24,8 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::data_section::should_skip_file;
 use lexopt::Arg::{Long, Value};
+use wado_host::fixture::expects_compile_failure;
 
 /// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
 /// dumps, not Wado source.
@@ -240,7 +240,7 @@ fn declares_compile_error(path: &str) -> bool {
     let Ok(source) = fs::read_to_string(path) else {
         return false;
     };
-    should_skip_file(&source)
+    expects_compile_failure(&source)
 }
 
 fn compare_with_gale(corpus: &[String], gale_tsv: &Path, report_path: &Path) {

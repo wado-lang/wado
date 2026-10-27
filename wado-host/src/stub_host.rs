@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
+use wado_compiler::remote::is_remote;
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
@@ -29,6 +30,8 @@ pub struct HostStubs {
     /// The `[build-dependencies]` a clause's `module: "lib:name"` names: the
     /// nickname → the generator's `.wado` file, relative to the host's base.
     pub build_dependencies: IndexMap<String, String>,
+    /// What each URL serves: the URL → a file, relative to the host's base.
+    pub remote: IndexMap<String, String>,
 }
 
 /// A [`FilesystemCompilerHost`] that answers the dependency index and the
@@ -74,6 +77,20 @@ impl StubHost {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         self.filesystem.diagnostics()
     }
+
+    /// The file `path` names: itself, or the one stubbed for a URL.
+    fn local<'p>(&'p self, path: &'p str) -> Result<&'p str, SourceError> {
+        if !is_remote(path) {
+            return Ok(path);
+        }
+        self.stubs
+            .remote
+            .get(path)
+            .map(String::as_str)
+            .ok_or_else(|| SourceError::NotFound {
+                path: path.to_string(),
+            })
+    }
 }
 
 impl CompilerHost for StubHost {
@@ -86,7 +103,7 @@ impl CompilerHost for StubHost {
     }
 
     async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-        self.filesystem.open_source(path).await
+        self.filesystem.open_source(self.local(path)?).await
     }
 
     async fn load_source_prefix(
@@ -94,7 +111,9 @@ impl CompilerHost for StubHost {
         path: &str,
         extent: Option<u64>,
     ) -> Result<Vec<u8>, SourceError> {
-        self.filesystem.load_source_prefix(path, extent).await
+        self.filesystem
+            .load_source_prefix(self.local(path)?, extent)
+            .await
     }
 
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {

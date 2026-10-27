@@ -112,6 +112,7 @@ fn roundtrip_preserves_data() {
             },
         ],
         build_dependencies: vec![],
+        remotes: vec![],
     };
 
     let serialized = lock.to_toml();

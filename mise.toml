@@ -37,7 +37,8 @@ cargo build
 
 mise run clippy-fix
 # mise run update-bundled # platform affects the WAT
-mise run update-golden-fixtures
+# The WIR goldens are rewritten by `mise run test` below: each e2e fixture's
+# -O2 run writes its own.
 mise run update-golden-format-fixtures
 mise run doc-stdlib
 mise run update-docs-index
@@ -248,13 +249,35 @@ n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 """
 
 [tasks.test-e2e]
-description = "Run the compiler's e2e fixtures at O0 and O2: the check for a compiler change"
+description = "Run the compiler's e2e fixtures at O2: the check for a compiler change"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 ./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- --test-threads="$threads"
+"""
+
+[tasks.test-e2e-level]
+description = "Run the compiler's e2e fixtures at one other optimization level: O0, O1, O3 or Os; CI runs each, the development cycle none"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# The level is spelled without its dash so mise does not read it as a flag of
+# its own. Outside CI the level's tests are `#[ignore]`d, and in CI they are
+# not, so `--include-ignored` runs them either way.
+level="${1:?expected O0, O1, O3 or Os}"
+case "${level}" in
+    O0 | O1 | O3 | Os) ;;
+    *)
+        echo "error: unknown optimization level '${level}' (expected O0, O1, O3 or Os)" >&2
+        exit 1
+        ;;
+esac
+touch wado-compiler/tests/e2e.rs
+n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
+./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- \
+    --include-ignored "fixture_test_${level,,}" --test-threads="$threads"
 """
 
 [tasks.test-wado]
