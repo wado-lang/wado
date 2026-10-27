@@ -1,0 +1,52 @@
+// `sroa` splits a struct local taken whole: `self.l = x` repoints the field,
+// which leaves `o.l = x` after inlining, and `let v = s.name` binds a copy.
+// Each is one scalar write per field, so `through_self` folds to a constant and
+// `take` keeps no `String` around its `repr`. The copies stay independent of
+// their sources: writes after the copy reach only the one written.
+use { println, Stdout } from "core:cli";
+
+struct O {
+    l: List<i32>,
+}
+
+impl O {
+    fn set(&mut self, x: List<i32>) {
+        self.l = x;
+    }
+}
+
+#[inline("never")]
+fn through_self() -> i32 {
+    let mut x: List<i32> = [1];
+    let mut o = O { l: [] };
+    o.set(x);
+    x.push(2);
+    return o.l.len() * 10 + x.len();
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline("never")]
+fn copy_then_write(seed: i32) -> i32 {
+    let mut a = Point { x: seed, y: seed + 1 };
+    let b = a;
+    a.x = 100;
+    let mut c = Point { x: 0, y: 0 };
+    c = a;
+    a.y = 200;
+    return b.x * 1000 + b.y * 100 + c.x + c.y;
+}
+
+export fn run() with Stdout {
+    println(`${through_self()}`);
+    println(`${copy_then_write(builtin::black_box(1))}`);
+}
+
+__DATA__
+{
+    "stdout": "12\n1302\n",
+    "wir_not_expect:O2": ["through_self", "struct.new \"sroa_whole_local_copy.wado//Point\""]
+}
