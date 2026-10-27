@@ -992,8 +992,9 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
             result_ty: WirType::U16,
             ..
         } => Some(16),
-        WirInstr::I32Const(v) => (*v >= 0).then(|| v.cast_unsigned().bit_width()),
-        WirInstr::I64Const(v) => (*v >= 0).then(|| v.cast_unsigned().bit_width()),
+        WirInstr::I32Const(_) | WirInstr::I64Const(_) => {
+            u64::try_from(const_int(instr)?).ok().map(u64::bit_width)
+        }
         WirInstr::LocalTee { value, .. } => unsigned_bit_width(value),
         WirInstr::I32And(l, r) | WirInstr::I64And(l, r) => {
             // Result is bounded by the narrower of the two operands' masks.
@@ -1009,28 +1010,25 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
         | WirInstr::I32Xor(l, r)
         | WirInstr::I64Or(l, r)
         | WirInstr::I64Xor(l, r) => Some(unsigned_bit_width(l)?.max(unsigned_bit_width(r)?)),
-        WirInstr::I32Add(l, r) => {
-            let sum = unsigned_bit_width(l)?.max(unsigned_bit_width(r)?) + 1;
-            (sum <= 32).then_some(sum)
+        WirInstr::I32Add(l, r) => sum_width(32, l, r),
+        WirInstr::I64Add(l, r) => sum_width(64, l, r),
+        // A divisor `const_int` reads as negative is a huge unsigned one, which
+        // bounds nothing.
+        WirInstr::I32RemU(_, k) | WirInstr::I64RemU(_, k) => {
+            Some(u64::try_from(const_int(k)?).ok()?.checked_sub(1)?.bit_width())
         }
-        WirInstr::I64Add(l, r) => {
-            let sum = unsigned_bit_width(l)?.max(unsigned_bit_width(r)?) + 1;
-            (sum <= 64).then_some(sum)
-        }
-        WirInstr::I32RemU(_, k) => match k.as_ref() {
-            WirInstr::I32Const(k) if *k != 0 => Some((k.cast_unsigned() - 1).bit_width()),
-            _ => None,
-        },
-        WirInstr::I64RemU(_, k) => match k.as_ref() {
-            WirInstr::I64Const(k) if *k != 0 => Some((k.cast_unsigned() - 1).bit_width()),
-            _ => None,
-        },
         WirInstr::I32ShrU(x, n) => shifted_width(32, x, n),
         WirInstr::I64ShrU(x, n) => shifted_width(64, x, n),
         WirInstr::I32WrapI64(x) => unsigned_bit_width(x).filter(|w| *w <= 32),
         WirInstr::I64ExtendI32U(x) => Some(unsigned_bit_width(x).unwrap_or(32)),
         _ => None,
     }
+}
+
+/// The width of `l + r` where it cannot wrap past `width` bits.
+fn sum_width(width: u32, l: &WirInstr, r: &WirInstr) -> Option<u32> {
+    let sum = unsigned_bit_width(l)?.max(unsigned_bit_width(r)?) + 1;
+    (sum <= width).then_some(sum)
 }
 
 /// The width of `x >>u n` for a constant `n`, which Wasm reduces mod `width`.
@@ -1253,18 +1251,7 @@ fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
         WirType::I16 | WirType::U16 => 16,
         _ => return false,
     };
-    let mut changed = false;
-    while let WirInstr::I32And(l, r) = value.as_mut() {
-        let kept = match (l.as_ref(), r.as_ref()) {
-            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => l,
-            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => r,
-            _ => break,
-        };
-        let kept = std::mem::replace(kept.as_mut(), WirInstr::Nop);
-        **value = kept;
-        changed = true;
-    }
-    changed
+    drop_low_bits_masks(value, width)
 }
 
 /// If `v` has the form `2^n - 1` with `1 <= n <= 31`, return `n`.
@@ -1359,25 +1346,10 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     let (WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner)) = instr else {
         return false;
     };
-    let mut changed = false;
 
-    // Step 1: drop a redundant `x & mask` whose low `width` bits are all set —
-    // the mask cannot change what `extend*_s` observes. Doing this first
-    // canonicalises `inner` so step 2 can still see an exposed load/extend
-    // (e.g. `extend8_s((load8_u a) & 0xFF)` → `extend8_s(load8_u a)` → folded
-    // to `load8_s a` below).
-    if let WirInstr::I32And(l, r) = inner.as_mut() {
-        let unmasked = match (l.as_ref(), r.as_ref()) {
-            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => Some(l),
-            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => Some(r),
-            _ => None,
-        };
-        if let Some(slot) = unmasked {
-            let value = std::mem::replace(slot.as_mut(), WirInstr::Nop);
-            **inner = value;
-            changed = true;
-        }
-    }
+    // Step 1 goes first so step 2 still sees an exposed load/extend:
+    // `extend8_s((load8_u a) & 0xFF)` → `extend8_s(load8_u a)` → `load8_s a`.
+    let mut changed = drop_low_bits_masks(inner, width);
 
     // Step 2: collapse the (possibly newly exposed) inner load/extend.
     match inner.as_mut() {
@@ -1425,8 +1397,24 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     changed
 }
 
-/// True if the low `width` bits of `mask` are all set (so a `& mask` preserves
-/// every bit a `width`-bit sign extension reads).
+/// Strip every `x & mask` around `value` whose mask keeps the low `width` bits,
+/// for a reader that sees only those bits.
+fn drop_low_bits_masks(value: &mut WirInstr, width: u32) -> bool {
+    let mut changed = false;
+    while let WirInstr::I32And(l, r) = value {
+        let kept = match (l.as_ref(), r.as_ref()) {
+            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => l,
+            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => r,
+            _ => break,
+        };
+        *value = std::mem::replace(kept.as_mut(), WirInstr::Nop);
+        changed = true;
+    }
+    changed
+}
+
+/// True if the low `width` bits of `mask` are all set, so a `& mask` preserves
+/// every bit a `width`-bit reader sees.
 fn low_bits_all_set(mask: i32, width: u32) -> bool {
     let low = (1u32 << width) - 1;
     (mask.cast_unsigned() & low) == low
