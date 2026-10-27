@@ -28,7 +28,7 @@ use wado_host::tls_trust::extra_ca_certs;
 use wado_manifest::{LOCK_FILENAME, LockFile, LockFileError, LockedRemote};
 
 use crate::cache;
-use crate::manifest::discover;
+use crate::manifest::{discover, hold_lock_file};
 
 /// How much a [`RemoteReader`] fetches at once: a probe reads a header a few
 /// bytes at a time, and each read of its own would be a round trip.
@@ -75,10 +75,6 @@ const MAX_REDIRECTS: usize = 10;
 /// A host that stops answering fails the build rather than hanging it.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 const READ_TIMEOUT: Duration = Duration::from_secs(60);
-
-/// Serializes each read-modify-write of a `wado.lock`, as the hosts of one run
-/// record pins at once.
-static LOCK_WRITE: Mutex<()> = Mutex::new(());
 
 /// What one GET answered: the bytes read of it, and the file's whole length
 /// where the server said. `whole` where the server ignored `Range` and sent the
@@ -364,7 +360,7 @@ fn record_pin(
     extent: Option<u64>,
     actual: Integrity,
 ) -> Result<(), SourceError> {
-    let _held = lock(&LOCK_WRITE);
+    let _held = hold_lock_file(root).map_err(|message| lock_error(root, message))?;
     let mut lock_file = match read_lock(root)? {
         Some(lock_file) => {
             if let Some(pin) = pin_in(&lock_file, root, url, extent)? {

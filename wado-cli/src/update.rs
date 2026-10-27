@@ -7,7 +7,7 @@ use wado_manifest::{LOCK_FILENAME, LockFile};
 
 use crate::args::{self, CliExit};
 use crate::build_dep::resolve_build_dependencies;
-use crate::manifest::{discover, emit_manifest_warnings};
+use crate::manifest::{discover, emit_manifest_warnings, hold_lock_file};
 use crate::registry::FilesystemProvider;
 
 #[derive(Debug)]
@@ -77,6 +77,8 @@ pub async fn run(_opts: UpdateOptions) -> Result<(), CliExit> {
         build_dependencies,
         remotes: Vec::new(),
     };
+    let _held = hold_lock_file(&project.root)
+        .map_err(|e| CliExit::error(format!("holding wado.lock: {e}")))?;
     fs::write(&lock_path, lock.to_toml())
         .map_err(|e| CliExit::error(format!("writing wado.lock: {e}")))?;
     eprintln!("Locked {count} package(s) → {}", lock_path.display());

@@ -3,6 +3,7 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
+use wado_compiler::remote::Integrity;
 use wado_lsp::host::discovery::{
     absolutize, governing_workspace, normalize_path, resolve_member_manifest,
 };
@@ -12,6 +13,7 @@ use wado_manifest::{
 };
 
 use crate::args::CliExit;
+use crate::cache;
 
 /// A discovered manifest with its root directory.
 #[derive(Debug, Clone)]
@@ -53,6 +55,29 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     };
     let manifest = manifest_in(&root)?.expect("`package_root` found a `wado.toml` there");
     Ok(Some(ProjectManifest { manifest, root }))
+}
+
+/// Hold the `wado.lock` of the package at `root` against every other writer, in
+/// this process or another, until the returned file drops. A writer replaces
+/// the lock whole, so the hold is on a file of its own, in the cache.
+///
+/// # Errors
+///
+/// The cache's root cannot be found, or its lock file cannot be opened or held.
+pub(crate) fn hold_lock_file(root: &Path) -> Result<fs::File, String> {
+    let locks = cache::root()?.join(".locks");
+    let held = (|| {
+        fs::create_dir_all(&locks)?;
+        let key = Integrity::of(fs::canonicalize(root)?.as_os_str().as_encoded_bytes()).hex();
+        let file = fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(locks.join(format!("{key}.{LOCK_FILENAME}")))?;
+        file.lock()?;
+        Ok(file)
+    })();
+    held.map_err(|e: io::Error| format!("{}: {e}", locks.display()))
 }
 
 /// The nearest directory at or above `start_dir` holding a `wado.toml`, short

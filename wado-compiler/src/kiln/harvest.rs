@@ -79,12 +79,9 @@ where
     let mut queue: VecDeque<(String, ModuleSource, Option<Module>)> =
         VecDeque::from([(entry_key.to_string(), entry.clone(), Some(entry_ast))]);
     let mut unpinned = VecDeque::new();
-    loop {
-        let Some((key, source, ast)) = next_in_pin_order(&mut queue, &mut unpinned, |(_, s, _)| {
-            matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str()))
-        }) else {
-            break;
-        };
+    while let Some((key, source, ast)) = next_in_pin_order(&mut queue, &mut unpinned, |(_, s, _)| {
+        matches!(s, ModuleSource::Remote { url, .. } if !pins.contains_key(url.as_str()))
+    }) {
         if modules.contains_key(&key) || settled.contains(&key) {
             continue;
         }
