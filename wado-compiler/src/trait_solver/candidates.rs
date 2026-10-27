@@ -188,10 +188,24 @@ fn collect(
         }
         withheld.extend(written_only_at(program, ty));
     }
+    // A marker asks for a body, which any other impl answering at its level
+    // already gives: beside one it is a no-op.
+    let answered_besides = |c: &Candidate, all: &[Candidate]| {
+        all.iter()
+            .any(|o| o.trait_ == c.trait_ && o.depth == c.depth && !is_marker(program, o))
+    };
+    for list in [&mut found.in_scope, &mut found.out_of_scope] {
+        let all = list.clone();
+        list.retain(|c| !is_marker(program, c) || !answered_besides(c, &all));
+    }
     if !found.in_scope.is_empty() {
         found.out_of_scope.clear();
     }
     found
+}
+
+fn is_marker(program: &Program, c: &Candidate) -> bool {
+    program.impls()[&c.impl_].origin == ImplOrigin::Marker
 }
 
 /// How many of [`chain`]'s levels are the receiver's own, before any newtype

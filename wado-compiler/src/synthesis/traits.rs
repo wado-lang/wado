@@ -3722,7 +3722,6 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
         let mut func = generate_eq_from_cmp_fn(
             &cmp,
             ctx.trait_env,
-            &module_source,
             &eq_trait_name,
             &mut tt,
             ctx.names,
@@ -3899,7 +3898,6 @@ fn eq_target(
 fn generate_eq_from_cmp_fn(
     cmp: &WrittenCmp,
     trait_env: &TraitEnv,
-    module_source: &ModuleSource,
     eq_trait_name: &FqTraitName,
     tt: &mut TypeTable,
     names: &TraitsStdlibNames,
@@ -3917,14 +3915,25 @@ fn generate_eq_from_cmp_fn(
     let qualified_name = method_info.to_mangled_name();
     let ref_type = tt.make_ref(ty);
     let ordering_type = tt.make_compiler_enum(CompilerItem::Ordering);
-    let order = cmp_call_expr(
-        deref_local(0, "self", ref_type, ty, span),
-        deref_local(1, "other", ref_type, ty, span),
-        ty,
+    // The `cmp` this `eq` pairs with, which the block's open parameters leave
+    // nothing to select.
+    let template = trait_env
+        .method_template(cmp.block, "cmp")
+        .expect("a written `cmp` is its block's method");
+    let order = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(local_expr(0, "self", ref_type, span)),
+            FunctionRef {
+                module_source: template.home(&trait_env.defs),
+                name: cmp.method_info.to_mangled_name(),
+                template: Some(template),
+                monomorph_info: None,
+                method_info: Some(cmp.method_info.clone()),
+            },
+            vec![],
+            vec![CallArg::new(local_expr(1, "other", ref_type, span), false)],
+        ),
         ordering_type,
-        trait_env,
-        module_source,
-        tt,
         span,
     );
     let equal = TirExpr::new(

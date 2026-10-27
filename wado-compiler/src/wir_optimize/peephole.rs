@@ -334,7 +334,7 @@ fn apply_in_instr(instr: &mut WirInstr, subst: &IndexMap<String, CopySource>) {
 /// nothing changes: folding a `RefTest` to a constant hands the next sub-pass a
 /// dead branch. Value-copy elision runs whole-function, needing to see every
 /// trailing instruction reachable after the copy, enclosing scopes included.
-pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: &[WirTypeDef]) {
+pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, types: &[WirTypeDef]) {
     const MAX_ROUNDS: u32 = 8;
     let mut rounds = 0;
     loop {
@@ -352,6 +352,9 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_short_fill(instr, null));
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
+        changed |= rewrite_everywhere(instrs, &mut |instr| {
+            try_fold_get_of_new(instr, null, types)
+        });
         changed |= rewrite_everywhere(instrs, &mut |instr| {
             try_relax_gc_operands(instr, null.locals())
         });
@@ -440,6 +443,59 @@ fn try_fold_short_fill(instr: &mut WirInstr, null: &Nullability) -> bool {
         index: std::mem::replace(offset, Box::new(WirInstr::Nop)),
         value: std::mem::replace(value, Box::new(WirInstr::Nop)),
     };
+    true
+}
+
+/// `struct.get(struct.new(…), f)` → `f`'s operand: the struct is fresh, so
+/// nothing wrote the field since. A reference into a variant payload leaves
+/// this behind, a `Box<T>` built and read back at once, often as the tail of a
+/// `Seq` behind the case check. The other operands are dropped, so each must be
+/// side-effect free and unable to trap.
+fn try_fold_get_of_new(instr: &mut WirInstr, null: &Nullability, types: &[WirTypeDef]) -> bool {
+    let WirInstr::StructGet {
+        type_id,
+        field_name,
+        expr,
+        ..
+    } = instr
+    else {
+        return false;
+    };
+    let mut tail = expr.as_mut();
+    while let WirInstr::Seq(stmts) = tail {
+        let Some(last) = stmts.last_mut() else {
+            return false;
+        };
+        tail = last;
+    }
+    let WirInstr::StructNew {
+        type_id: built,
+        fields,
+    } = tail
+    else {
+        return false;
+    };
+    if built != type_id {
+        return false;
+    }
+    let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
+        unreachable!("`struct.get` reads a struct type");
+    };
+    let index = def
+        .fields
+        .iter()
+        .position(|field| field.name == *field_name)
+        .expect("`struct.get` names a field of its type");
+    let dropped_unobservable = fields
+        .iter()
+        .enumerate()
+        .all(|(i, operand)| i == index || (is_side_effect_free(operand) && !may_trap_in(operand, null)));
+    if !dropped_unobservable {
+        return false;
+    }
+    let value = fields.swap_remove(index);
+    *tail = value;
+    *instr = std::mem::replace(expr.as_mut(), WirInstr::Nop);
     true
 }
 
