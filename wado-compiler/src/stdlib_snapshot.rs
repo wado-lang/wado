@@ -101,7 +101,10 @@ pub(crate) fn get_or_init_snapshot(
     } else {
         &SNAPSHOT
     };
-    Some(slot.with(|cell| cell.get_or_init(|| Rc::new(build_guarded(probed, None))).clone()))
+    Some(slot.with(|cell| {
+        cell.get_or_init(|| Rc::new(build_guarded(probed, None)))
+            .clone()
+    }))
 }
 
 /// [`build_snapshot`] with [`BUILDING`] set while it runs.
@@ -139,8 +142,8 @@ pub fn prewarm(coverage: Option<CoverageScope>) {
 /// # Panics
 /// If called from inside [`build_snapshot`].
 pub fn prelude_names() -> Vec<(String, DefKind)> {
-    let snap =
-        get_or_init_snapshot(None, None).expect("prelude_names is not called while the snapshot builds");
+    let snap = get_or_init_snapshot(None, None)
+        .expect("prelude_names is not called while the snapshot builds");
     let resolutions = snap.resolutions().expect("the stdlib snapshot is complete");
     let defs = resolutions.defs();
     let mut names: Vec<(String, DefKind)> = resolutions

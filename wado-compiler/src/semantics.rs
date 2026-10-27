@@ -15,7 +15,6 @@ use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
 use crate::component_model::{CmInterfaceRegistry, UserCmError, declares_cm_binding};
 use crate::coverage::{CoverageMap, CoverageScope, plan_module, render_plan};
-use crate::pgo::{ColdMap, Profile};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::render_plans;
@@ -32,6 +31,7 @@ use crate::logger::Logger;
 use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
+use crate::pgo::{ColdMap, Profile};
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
@@ -2003,7 +2003,11 @@ mod tests {
              fn never(x: i32) -> i32 { if x > 0 { return 1; } return 0; }
              export fn run() { ran(1); never(1); }";
         let plain = analyzed(source, Some(CoverageScope::default()), None);
-        let plan = &plain.coverage.as_ref().expect("the compile measures").modules[0];
+        let plan = &plain
+            .coverage
+            .as_ref()
+            .expect("the compile measures")
+            .modules[0];
         let hash = |name: &str| {
             plan.functions
                 .iter()

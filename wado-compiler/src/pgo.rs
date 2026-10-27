@@ -11,7 +11,9 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
 use crate::ast::{self, AstId};
-use crate::coverage::{Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module, plan_path};
+use crate::coverage::{
+    Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module, plan_path,
+};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::stdlib::core_module_file;
@@ -54,17 +56,17 @@ pub struct Profile {
 
 /// What a profile holds for one function.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProfiledFunction {
-    pub name: String,
-    pub hash: u64,
+struct ProfiledFunction {
+    name: String,
+    hash: u64,
     /// The runs of each region that ran, by its number within the function.
-    pub counts: BTreeMap<u32, i64>,
+    counts: BTreeMap<u32, i64>,
 }
 
 impl Profile {
     /// The part naming `core:` modules: what the stdlib snapshot applies.
     #[must_use]
-    pub fn stdlib_part(&self) -> Self {
+    pub(crate) fn stdlib_part(&self) -> Self {
         Self {
             modules: self
                 .modules
@@ -76,7 +78,7 @@ impl Profile {
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.modules.is_empty()
     }
 }
@@ -104,7 +106,10 @@ pub fn parse(text: &str) -> Result<Profile, ParseError> {
         line,
         reason: reason.to_string(),
     };
-    let mut lines = text.lines().enumerate().map(|(index, line)| (index + 1, line));
+    let mut lines = text
+        .lines()
+        .enumerate()
+        .map(|(index, line)| (index + 1, line));
     if lines.next().map(|(_, line)| line) != Some(HEADER) {
         return Err(error(1, &format!("a profile starts with `{HEADER}`")));
     }
@@ -161,7 +166,7 @@ fn parse_count(line: &str) -> Option<(u32, i64)> {
 /// Where a profile marks a compile's code cold, and the remarks applying it
 /// makes.
 #[derive(Debug, Clone, Default)]
-pub struct ColdMap {
+pub(crate) struct ColdMap {
     /// The sites reify puts a cold marker at.
     sites: IndexSet<(ProbeSite, AstId)>,
     /// The modules applied, which a compile seeded with this map leaves alone.
@@ -241,7 +246,8 @@ impl ColdMap {
                 continue;
             }
             for (index, id) in ids.into_iter().enumerate() {
-                counts[id as usize] = Some(profiled.counts.get(&(index as u32)).copied().unwrap_or(0));
+                counts[id as usize] =
+                    Some(profiled.counts.get(&(index as u32)).copied().unwrap_or(0));
             }
         }
         let site_of: IndexMap<u32, (ProbeSite, AstId)> = sites
@@ -300,14 +306,14 @@ impl ColdMap {
 
     /// Each region marked, as `path:line:column kind`.
     #[must_use]
-    pub fn regions(&self) -> &[String] {
+    pub(crate) fn regions(&self) -> &[String] {
         &self.regions
     }
 
     /// What applying the profile says about its counts: a function's
     /// discarded, a marker on a path the profile ran.
     #[must_use]
-    pub fn remarks(&self) -> &[(Span, String)] {
+    pub(crate) fn remarks(&self) -> &[(Span, String)] {
         &self.remarks
     }
 }
@@ -405,7 +411,10 @@ mod tests {
             ("wado-pgo 1\nmodule a\n0 5\n", 3),
             ("wado-pgo 1\nmodule a\nfn ab 1 f\n", 3),
             ("wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 0\n", 4),
-            ("wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n", 5),
+            (
+                "wado-pgo 1\nmodule a\nfn 00000000000000ab 1 f\n0 1\n0 2\n",
+                5,
+            ),
             ("wado-pgo 1\nmodule a\nmodule a\n", 3),
         ];
         for (text, line) in cases {

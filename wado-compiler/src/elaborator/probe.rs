@@ -24,7 +24,10 @@ impl<H: CompilerHost> Reify<'_, H> {
             .cold
             .is_some_and(|cold| cold.marks(site, id))
             .then(|| known_cold_path_stmt(span));
-        marker.into_iter().chain(self.probe(site, id, span)).collect()
+        marker
+            .into_iter()
+            .chain(self.probe(site, id, span))
+            .collect()
     }
 
     /// The probe `site` on node `id` takes, as a statement, when the plan puts
@@ -95,11 +98,7 @@ impl<H: CompilerHost> Reify<'_, H> {
                 let (type_id, span) = (expr.type_id, expr.span);
                 let inner = TirExpr::new(kind, type_id, span);
                 head.push(TirStmt::new(TirStmtKind::Expr(inner), span));
-                TirExpr::new(
-                    TirExprKind::Block(TirBlock::new(head, span)),
-                    type_id,
-                    span,
-                )
+                TirExpr::new(TirExprKind::Block(TirBlock::new(head, span)), type_id, span)
             }
         }
     }

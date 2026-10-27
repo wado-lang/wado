@@ -54,7 +54,6 @@ use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
-use crate::pgo::ColdMap;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
@@ -94,6 +93,7 @@ use crate::name::{
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
     widened_half_local_name,
 };
+use crate::pgo::ColdMap;
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
