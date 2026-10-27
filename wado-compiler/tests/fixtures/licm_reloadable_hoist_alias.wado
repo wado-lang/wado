@@ -44,5 +44,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1 9 9 \n",
-    "wir_expect:O2": ["n = h.used;", "$licm_repr_{} = h.repr;", "array_get_value<i32>($licm_repr_{}, i)"]
+    "wir_expect:O2": ["n = local.tee $load_{}(h.data).used;", "$load_{} = h.data;", "array_get_value<i32>($load_{}.repr, i)"]
 }
