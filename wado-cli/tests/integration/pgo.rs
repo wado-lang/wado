@@ -127,7 +127,7 @@ fn a_dependency_is_named_by_its_package() {
     wado_in(&app).args(["test", "--pgo"]).assert().success();
     let profile = fs::read_to_string(app.join("pgo/default.pgo")).unwrap();
     assert!(
-        profile.contains("\nmodule acme:dep/src/lib.wado\n"),
+        profile.contains("\nmodule acme:dep@0.1.0/src/lib.wado\n"),
         "{profile}"
     );
     assert!(profile.contains("\nmodule bench_test.wado\n"), "{profile}");
@@ -179,6 +179,32 @@ fn a_run_with_nothing_sound_to_record_keeps_the_profile() {
             "pgo: no `#[workload]` test ran, so no profile was written",
         ));
     assert_eq!(fs::read_to_string(&profile).unwrap(), "kept\n");
+}
+
+#[test]
+fn a_package_left_with_no_workload_loses_its_profile() {
+    let tmp = tempfile::tempdir().unwrap();
+    for name in ["a", "b"] {
+        let root = tmp.path().join(name);
+        fs::create_dir_all(&root).unwrap();
+        write_package(&root);
+    }
+
+    wado_in(tmp.path())
+        .args(["test", "--pgo"])
+        .assert()
+        .success();
+    let stale = tmp.path().join("b/pgo/default.pgo");
+    assert!(stale.exists());
+
+    fs::remove_file(tmp.path().join("b/bench_test.wado")).unwrap();
+    wado_in(tmp.path())
+        .args(["test", "--pgo"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("pgo: wrote a/pgo/default.pgo"))
+        .stdout(predicate::str::contains("pgo: removed b/pgo/default.pgo"));
+    assert!(!stale.exists());
 }
 
 #[test]

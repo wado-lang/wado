@@ -352,7 +352,9 @@ argument naming part of a package. So are `--coverage` and `--no-run`.
 
 The profile is written only when the run passes with no pending `#[TODO]`, ran
 a workload, and saw no source file change while it ran. Otherwise the run
-fails, and an existing profile is kept.
+fails, and an existing profile is kept. When it is written, the profile of a
+package the run holds no workload of is removed: it would hold counts from
+workloads that are gone.
 
 A profile is text, one record per line:
 
@@ -368,8 +370,8 @@ A `module` line names a module the same way on any machine:
 
 - A file of the package is relative to the package's root, or for a program in
   no package, to the program's directory.
-- A dependency's file is the dependency's `namespace:name`, then the file
-  relative to its root. The version is not part of it.
+- A dependency's file is the dependency's `namespace:name@version`, then the
+  file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
 - A `core:` module is its import path.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers

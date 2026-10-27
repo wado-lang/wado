@@ -23,7 +23,7 @@ use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::coverage_host::{
     CoverageFormats, CoverageOptions, CoverageRun, Measurement, Registration,
-    parse_coverage_include,
+    parse_coverage_include, profile_file,
 };
 use crate::discover;
 use crate::eval_host::{EvalHost, EvalSession, TestClock};
@@ -150,7 +150,7 @@ impl TestOptions {
             target_world: Some("test".to_string()),
             test_selection: TestSelection {
                 names: self.test_name_filters.clone(),
-                workloads_only: matches!(self.measurement, Some(Measurement::Pgo)),
+                workloads_only: matches!(self.measurement, Some(Measurement::Pgo { .. })),
             },
             coverage: self.measurement.as_ref().map(Measurement::scope),
             ..CompileFlags::default()
@@ -537,9 +537,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         }
     }
     package_runs.retain(|run| !run.paths.is_empty());
-    if pgo {
-        check_whole_packages(&package_runs)?;
-    }
+    let pgo_profiles = if pgo {
+        Some(pgo_profiles(&package_runs)?)
+    } else {
+        None
+    };
 
     if package_runs.is_empty() {
         let message = if filters.is_empty() {
@@ -597,7 +599,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     }
     let measurement = match coverage {
         Some(coverage) => Some(Measurement::Coverage(coverage)),
-        None => pgo.then_some(Measurement::Pgo),
+        None => pgo_profiles.map(|profiles| Measurement::Pgo { profiles }),
     };
 
     Ok(TestOptions {
@@ -617,9 +619,10 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     })
 }
 
-/// Fail unless `runs` hold every test file of each package they reach into:
-/// `--pgo` writes one profile per package, from all of its workloads.
-fn check_whole_packages(runs: &[PackageRun]) -> Result<(), CliExit> {
+/// The profiles `--pgo` records `runs` into, one for each package they reach
+/// into. Fails unless `runs` hold every test file of each such package: a
+/// profile is recorded from all of its package's workloads.
+fn pgo_profiles(runs: &[PackageRun]) -> Result<BTreeSet<PathBuf>, CliExit> {
     let canonical = |path: &Path| {
         path.canonicalize()
             .map_err(|e| CliExit::error(format!("reading {}: {e}", path.display())))
@@ -644,7 +647,7 @@ fn check_whole_packages(runs: &[PackageRun]) -> Result<(), CliExit> {
             }
         }
     }
-    Ok(())
+    Ok(files.iter().filter_map(|file| profile_file(file)).collect())
 }
 
 /// Compile-stage output. Flows into the load stage, or — under `--no-run`

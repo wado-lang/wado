@@ -91,6 +91,10 @@ path argument naming part of a package.
 A run that records no workload is an error as well, and the existing profile is
 kept. An empty profile would read as code no workload ran.
 
+A run that records some workloads removes the profile of each package it holds
+no workload of. Such a profile carries counts from workloads that are gone, and
+its hashes still match every function that did not change.
+
 ### Coverage counts too
 
 The probe that coverage inserts counts every run, in every coverage build. The
@@ -147,10 +151,11 @@ Every name in a profile resolves the same on any machine and from any entry:
 
 - A module of the package is a file relative to the package root, or for a
   program without a manifest, relative to the program's directory.
-- A dependency's module is the dependency's package name and the file relative
-  to its root, never the cache path it was fetched to. The name carries no
-  version: after an upgrade, the hash already drops the counts of each function
-  the new version changed and keeps the rest.
+- A dependency's module is the dependency's package name and version and the
+  file relative to its root, never the cache path it was fetched to. Two
+  versions of one package can be two packages in one build, so the version
+  keeps their names apart. After an upgrade the profile holds no counts for the
+  dependency until the workloads are recorded again.
 - A `core:` module is its import path.
 
 Coverage names a module relative to the entry module's directory instead, which

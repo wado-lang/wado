@@ -139,8 +139,11 @@ pub struct CoverageOptions {
 pub enum Measurement {
     Coverage(CoverageOptions),
     /// `--pgo`: each workload's package, or its program where it has none,
-    /// records into its own profile.
-    Pgo,
+    /// records into its own profile. `profiles` are those of every test file
+    /// the run holds, whether or not it has a workload.
+    Pgo {
+        profiles: BTreeSet<PathBuf>,
+    },
 }
 
 impl Measurement {
@@ -150,7 +153,7 @@ impl Measurement {
     pub fn scope(&self) -> CoverageScope {
         match self {
             Self::Coverage(options) => options.scope,
-            Self::Pgo => CoverageScope {
+            Self::Pgo { .. } => CoverageScope {
                 include_deps: true,
                 stdlib: true,
             },
@@ -195,7 +198,7 @@ impl CoverageRun {
     pub fn measures(&self, tests: usize) -> bool {
         match self.measurement {
             Measurement::Coverage(_) => true,
-            Measurement::Pgo => tests > 0,
+            Measurement::Pgo { .. } => tests > 0,
         }
     }
 
@@ -214,7 +217,7 @@ impl CoverageRun {
                     .map(|path| (path, self.report_path(base, path)))
                     .collect(),
             ),
-            Measurement::Pgo => {
+            Measurement::Pgo { .. } => {
                 let profile = Profile::of(Path::new(entry))?;
                 let names = paths
                     .map(|path| (path, profile.module_name(base, path)))
@@ -289,7 +292,7 @@ impl CoverageRun {
     ) -> Result<(), CliExit> {
         let label = match self.measurement {
             Measurement::Coverage(_) => "coverage",
-            Measurement::Pgo => "pgo",
+            Measurement::Pgo { .. } => "pgo",
         };
         let out_dir = self.coverage_dir();
         let mut reports = self
@@ -307,15 +310,20 @@ impl CoverageRun {
                 let coverage = reports.remove(&out_dir).unwrap_or_default();
                 write_coverage(&coverage, options, &out_dir, reporter)
             }
-            Measurement::Pgo => write_profiles(&reports, totals, &self.root, reporter),
+            Measurement::Pgo { profiles } => {
+                write_profiles(&reports, profiles, totals, &self.root, reporter)
+            }
         }
     }
 }
 
 /// `--pgo`'s profiles, each only once every workload has passed: a trap stops
-/// the counts short, and a profile from a broken workload would mislead.
+/// the counts short, and a profile from a broken workload would mislead. Each
+/// of `owned`, the run's profiles, that no workload recorded into is removed:
+/// its counts came from workloads that are gone.
 fn write_profiles(
     profiles: &BTreeMap<PathBuf, Coverage>,
+    owned: &BTreeSet<PathBuf>,
     totals: &PackageTotals,
     root: &Path,
     reporter: &dyn TestReporter,
@@ -343,8 +351,24 @@ fn write_profiles(
             .map_err(|e| CliExit::error(format!("pgo: writing {shown}: {e}")))?;
         let _ = writeln!(written, "pgo: wrote {shown}");
     }
+    for file in owned.iter().filter(|file| !profiles.contains_key(*file)) {
+        let shown = file.strip_prefix(root).unwrap_or(file).display();
+        match std::fs::remove_file(file) {
+            Ok(()) => {
+                let _ = writeln!(written, "pgo: removed {shown}");
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(CliExit::error(format!("pgo: removing {shown}: {e}"))),
+        }
+    }
     reporter.on_measured(&written);
     Ok(())
+}
+
+/// The profile `--pgo` records `entry`'s workloads into, or `None` once
+/// `entry` is gone.
+pub fn profile_file(entry: &Path) -> Option<PathBuf> {
+    Profile::of(entry).map(|profile| profile.file)
 }
 
 /// The profile `--pgo` records an entry's workloads into, and the directory it
@@ -397,9 +421,10 @@ impl Profile {
             })) = manifest_in(&root)
         {
             let rel = relative_to(&root, &file).expect("a module lies under its package's root");
+            let version = &package.version;
             return match package.namespace {
-                Some(namespace) => format!("{namespace}:{}/{rel}", package.name),
-                None => format!("{}/{rel}", package.name),
+                Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
+                None => format!("{}@{version}/{rel}", package.name),
             };
         }
         relative_to(&self.root, &file).expect("both paths are absolute")
