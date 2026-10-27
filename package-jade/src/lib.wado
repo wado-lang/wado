@@ -55,7 +55,7 @@ impl Schema {
         return Schema { const_: Option::Some(value) };
     }
 
-    fn each_keyword<K: Keywords>(&self, k: &mut K) -> Result<(), SerializeError> {
+    fn each_keyword<K: KeywordSink>(&self, k: &mut K) -> Result<(), SerializeError> {
         k.some("$schema", &self.dialect)?;
         k.some("$ref", &self.reference)?;
         k.some("title", &self.title)?;
@@ -96,7 +96,7 @@ impl Schema {
 /// Where `Schema::each_keyword` sends each keyword it writes: once to count
 /// them, as a map must know its length before its first entry, and once to
 /// write them.
-trait Keywords with () {
+trait KeywordSink with () {
     fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError>;
 
     fn some<V: Serialize>(&mut self, key: String, value: &Option<V>) -> Result<(), SerializeError> {
@@ -118,7 +118,7 @@ struct KeywordCount {
     n: i32,
 }
 
-impl Keywords for KeywordCount {
+impl KeywordSink for KeywordCount {
     fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
         self.n += 1;
         return Result::Ok(());
@@ -129,7 +129,7 @@ struct KeywordWriter<M> {
     map: M,
 }
 
-impl<M: SerializeMap> Keywords for KeywordWriter<M> {
+impl<M: SerializeMap> KeywordSink for KeywordWriter<M> {
     fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
         self.map.key(&key)?;
         return self.map.value(value);

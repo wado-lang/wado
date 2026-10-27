@@ -94,12 +94,12 @@ impl FuncInstState {
         instance: TypeId,
         type_table: &TypeTable,
     ) -> Option<ModuleSource> {
-        if let Some(trait_) = info.trait_decl() {
+        if let Some(trait_name) = &info.trait_name {
             let instance = type_table.peel_refs(instance);
-            if self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(instance), trait_)
-                && !written_impl_at(&self.trait_env, trait_, instance, type_table)
+            if self.trait_env.has_any_methodful_impl_by_receiver(
+                &type_table.impl_receiver_key(instance),
+                trait_name.called_decl(),
+            ) && !written_impl_at(&self.trait_env, trait_name, instance, type_table)
             {
                 return None;
             }
@@ -480,13 +480,9 @@ impl Monomorphizer {
     ) -> Option<FqTypeName> {
         type_table
             .newtype_link_owning(type_id, |tid| match trait_name {
-                Some(trait_name) => self
-                    .functions
-                    .trait_env
-                    .trait_def_of_fq(trait_name)
-                    .is_some_and(|trait_| {
-                        written_impl_at(&self.functions.trait_env, trait_, tid, type_table)
-                    }),
+                Some(trait_name) => {
+                    written_impl_at(&self.functions.trait_env, trait_name, tid, type_table)
+                }
                 None => self.functions.trait_env.has_inherent_method_by_receiver(
                     &type_table.impl_receiver_key(tid),
                     method_name,

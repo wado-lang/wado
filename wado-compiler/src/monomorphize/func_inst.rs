@@ -21,7 +21,6 @@ use crate::type_table::{AnonStructId, TypeTable};
 
 use super::state::Monomorphizer;
 use super::{Templates, module_source_for_trait_impl};
-use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
@@ -891,20 +890,14 @@ impl Monomorphizer {
                 tid
             };
         }
-        if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
-            if written_impl_at(&self.functions.trait_env, decl, tid, type_table) {
-                return tid;
-            }
-            if let Some(link) =
-                written_newtype_link(&self.functions.trait_env, decl, tid, type_table)
-            {
-                return link;
-            }
+        let trait_env = &self.functions.trait_env;
+        if written_impl_at(trait_env, trait_name, tid, type_table) {
+            return tid;
         }
-        if trait_name
-            .canonical()
-            .is_some_and(|trait_| self.value_blanket_serves(tid, trait_, type_table))
-        {
+        if let Some(link) = written_newtype_link(trait_env, trait_name, tid, type_table) {
+            return link;
+        }
+        if ranked_value_blanket(trait_env, trait_name, tid, type_table).is_some() {
             return tid;
         }
         base
@@ -919,13 +912,9 @@ impl Monomorphizer {
         tid: TypeId,
         info: &LocalMethodName,
     ) -> Option<ModuleSource> {
-        let link = info
-            .trait_name
-            .as_ref()
-            .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-            .and_then(|trait_| {
-                written_newtype_link(&self.functions.trait_env, trait_, tid, type_table)
-            });
+        let link = info.trait_name.as_ref().and_then(|trait_name| {
+            written_newtype_link(&self.functions.trait_env, trait_name, tid, type_table)
+        });
         match link {
             Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
             None => module_source_for_trait_impl(type_table, tid),
@@ -939,7 +928,7 @@ impl Monomorphizer {
         &self,
         type_table: &TypeTable,
         id: TypeId,
-        trait_decl: Option<DefId>,
+        trait_name: Option<&FqTraitName>,
     ) -> bool {
         if !type_table.is_scalar_primitive_like(id) {
             return false;
@@ -947,14 +936,15 @@ impl Monomorphizer {
         if matches!(type_table.get(id), ResolvedType::Primitive(_)) {
             return true;
         }
-        let Some(trait_) = trait_decl else {
+        let Some(trait_name) = trait_name else {
             return true;
         };
         // `enum` and `flags` erase to a scalar without being a newtype link,
         // and an impl a link below the receiver wrote is still inherited.
         // Relowering over either takes the primitive's instruction instead.
-        !written_impl_at(&self.functions.trait_env, trait_, id, type_table)
-            && written_newtype_link(&self.functions.trait_env, trait_, id, type_table).is_none()
+        let trait_env = &self.functions.trait_env;
+        !written_impl_at(trait_env, trait_name, id, type_table)
+            && written_newtype_link(trait_env, trait_name, id, type_table).is_none()
     }
 
     /// `a.cmp(&b) == Ordering::Less` and its five siblings, on a receiver whose
@@ -993,10 +983,10 @@ impl Monomorphizer {
             return None;
         }
         let info = func.method_info.as_ref()?;
-        let trait_decl = info.trait_name.as_ref().and_then(FqTraitName::canonical)?;
+        let trait_name = info.trait_name.as_ref()?;
         let item = type_table
             .compiler_items()
-            .trait_item_of_decl(type_table.defs().ast_id(trait_decl));
+            .trait_item_of_decl(type_table.defs().ast_id(trait_name.canonical()?));
         if item != Some(CompilerItem::Ord) || info.method_name != "cmp" {
             return None;
         }
@@ -1004,7 +994,7 @@ impl Monomorphizer {
             return None;
         };
         let receiver_type = type_table.peel_refs(receiver.expr.type_id);
-        if !self.operator_lowers_to_scalar(type_table, receiver_type, Some(trait_decl)) {
+        if !self.operator_lowers_to_scalar(type_table, receiver_type, Some(trait_name)) {
             return None;
         }
         let items = type_table.compiler_items();
@@ -1024,10 +1014,6 @@ impl Monomorphizer {
             left: Box::new(unref_operand(&receiver.expr, type_table)),
             right: Box::new(unref_operand(&other.expr, type_table)),
         })
-    }
-
-    fn value_blanket_serves(&self, tid: TypeId, trait_: DefId, type_table: &TypeTable) -> bool {
-        ranked_value_blanket(&self.functions.trait_env, trait_, tid, type_table).is_some()
     }
 
     /// What synthesis gave open shape `origin` — its associated types and
@@ -1695,7 +1681,6 @@ impl Monomorphizer {
                             // `&List<i32>^Inspect` to List's impl instead of the
                             // ref blanket's, dropping the leading `&` at codegen.
                             // A generic impl lives in the receiver's own module.
-                            let trait_name_for_blanket = new_info.trait_decl();
                             let generic_or_concrete =
                                 self.functions.generic_or_concrete_impl_module(
                                     &new_info,
@@ -1704,7 +1689,7 @@ impl Monomorphizer {
                                     type_table,
                                 );
                             let blanket = if generic_or_concrete.is_none() {
-                                trait_name_for_blanket.and_then(|tn| {
+                                new_info.trait_name.as_ref().and_then(|tn| {
                                     ranked_value_blanket(
                                         &self.functions.trait_env,
                                         tn,
@@ -1887,7 +1872,9 @@ impl Monomorphizer {
                 // Capture trait info before substitution clears is_type_param_receiver
                 let type_param_trait_info = method_func.method_info.as_ref().and_then(|i| {
                     if i.is_type_param_receiver {
-                        Some((i.trait_name.clone(), i.method_name.clone()))
+                        let at_instance =
+                            self.trait_named_at_instance(i.clone(), substitution, type_table);
+                        Some((at_instance.trait_name, i.method_name.clone()))
                     } else {
                         None
                     }
@@ -1918,7 +1905,11 @@ impl Monomorphizer {
                     let unary = trait_method_to_unary_op(item, &method_name_before);
                     let binary = trait_method_to_binary_op(item, &method_name_before);
                     let lowers_to_scalar = (unary.is_some() || binary.is_some())
-                        && self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
+                        && self.operator_lowers_to_scalar(
+                            type_table,
+                            recv_inner,
+                            trait_name_before.as_ref(),
+                        );
                     if let Some(unary_op) = unary
                         && lowers_to_scalar
                     {
@@ -2799,14 +2790,9 @@ impl Monomorphizer {
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
                 candidate
-            } else if let Some(link) = info
-                .trait_name
-                .as_ref()
-                .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-                .and_then(|trait_| {
-                    written_newtype_link(&self.functions.trait_env, trait_, inner, type_table)
-                })
-            {
+            } else if let Some(link) = info.trait_name.as_ref().and_then(|trait_name| {
+                written_newtype_link(&self.functions.trait_env, trait_name, inner, type_table)
+            }) {
                 self.named_by_impl(
                     info.with_substituted_struct_name(&type_table.fq_type_name(link)),
                 )
@@ -2881,7 +2867,7 @@ impl Monomorphizer {
         receiver: TypeId,
         type_table: &TypeTable,
     ) -> bool {
-        let Some(trait_name) = info.trait_decl() else {
+        let Some(trait_name) = &info.trait_name else {
             return false;
         };
         if !has_reflect_kind(receiver, type_table) {
@@ -2920,7 +2906,6 @@ impl Monomorphizer {
         // ref blanket's, dropping the leading `&` at codegen. With no concrete
         // impl, a generic one lives in the receiver type's own module — how
         // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
-        let trait_name_for_blanket = new_info.trait_decl();
         let generic_or_concrete = self.functions.generic_or_concrete_impl_module(
             &new_info,
             receiver_module.as_ref(),
@@ -2931,7 +2916,7 @@ impl Monomorphizer {
         // call-site type-param head matches only a direct `T::method` call.
         let blanket = if generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            trait_name_for_blanket.and_then(|tn| {
+            new_info.trait_name.as_ref().and_then(|tn| {
                 ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table).cloned()
             })
         } else {

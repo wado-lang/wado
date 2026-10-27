@@ -391,17 +391,22 @@ fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
         .then(|| "char can only be cast to integer types".to_string())
 }
 
+/// Whether `id` is a `&mut` or a `&`, and its referent; `None` for anything
+/// else.
+fn reference_parts(tt: &TypeTable, id: TypeId) -> Option<(bool, TypeId)> {
+    match tt.get(tt.representation_head(id)) {
+        ResolvedType::Ref(referent) => Some((false, *referent)),
+        ResolvedType::MutRef(referent) => Some((true, *referent)),
+        _ => None,
+    }
+}
+
 /// The reason a cast to a reference is refused: only a reference converts to
 /// one, whose referent it already is, and `&mut` narrows to `&`. A cast to
 /// anything else reads through its operand's references first.
 fn ref_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let reference = |id| match tt.get(tt.representation_head(id)) {
-        ResolvedType::Ref(referent) => Some((false, *referent)),
-        ResolvedType::MutRef(referent) => Some((true, *referent)),
-        _ => None,
-    };
-    let (to_mut, to) = reference(target)?;
-    match reference(source) {
+    let (to_mut, to) = reference_parts(tt, target)?;
+    match reference_parts(tt, source) {
         Some((false, _)) if to_mut => {
             Some("`as` narrows `&mut` to `&`, never the reverse".to_string())
         }
@@ -3636,28 +3641,32 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// yields no value or already failed, a newtype step, or one a
     /// `ReflectNewtype` bound proves for every type that settles it.
     fn cast_needs_no_judgment(&mut self, source: TypeId, target: TypeId) -> bool {
-        let referents = {
+        let (source, target) = {
             let tt = self.tysys.type_table.borrow();
-            if imposes_no_representation(&tt, source)
-                || imposes_no_representation(&tt, target)
-                || tt.share_common_base(source, target)
-            {
-                return true;
+            let (mut source, mut target) = (source, target);
+            let mut outermost = true;
+            loop {
+                if imposes_no_representation(&tt, source)
+                    || imposes_no_representation(&tt, target)
+                    || tt.share_common_base(source, target)
+                {
+                    return true;
+                }
+                // A newtype step a bound proves holds behind a reference too.
+                // Only the outermost `&mut` narrows to `&`, as `ref_cast_hint`
+                // judges: through an inner one, a `&` stored in the slot would
+                // still read as `&mut` from the source.
+                match (reference_parts(&tt, source), reference_parts(&tt, target)) {
+                    (Some((from_mut, from)), Some((to_mut, to)))
+                        if from_mut == to_mut || (outermost && from_mut) =>
+                    {
+                        (source, target) = (from, to);
+                        outermost = false;
+                    }
+                    _ => break (source, target),
+                }
             }
-            let referent = |id| match tt.get(tt.representation_head(id)) {
-                ResolvedType::Ref(referent) => Some((false, *referent)),
-                ResolvedType::MutRef(referent) => Some((true, *referent)),
-                _ => None,
-            };
-            (referent(source), referent(target))
         };
-        // A newtype step a bound proves holds behind a reference too, which
-        // `&mut` narrows to `&` across.
-        if let (Some((from_mut, from)), Some((to_mut, to))) = referents
-            && (from_mut || !to_mut)
-        {
-            return self.cast_needs_no_judgment(from, to);
-        }
         [(source, target), (target, source)]
             .into_iter()
             .any(|(newtype, other)| {
