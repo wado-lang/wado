@@ -4188,9 +4188,8 @@ pub fn wado_primitive_name_to_cm(name: &str) -> Option<PrimitiveValType> {
 /// Given a Wado [`Type`] and the [`CmInterfaceRegistry`], it walks the type,
 /// resolves named types to their CM metadata, and emits the corresponding CM
 /// defined types through a [`CmTypeSink`] — an [`InstanceSink`] for interface
-/// instance types, or the codegen top-level sink for bare world exports. It
-/// owns only the dedup cache and the disambiguation hint; type-index allocation
-/// lives in the sink, so one engine serves both targets.
+/// instance types, or the codegen top-level sink for bare world exports.
+/// Type-index allocation lives in the sink, so one engine serves both targets.
 pub struct CmTypeGen {
     cache: IndexMap<String, u32>,
     /// Optional interface path hint for disambiguating types with the same name

@@ -483,24 +483,6 @@ fn emits_function(project: &NirPackage, func: &CmFunctionInfo) -> bool {
         && project.used_wasi_functions.contains(&func.cm_identifier())
 }
 
-/// `ty` spelled by the shared generator, over this instance's resources.
-fn shared_cm_val_type(
-    ty: &Type,
-    instance_type: &mut InstanceType,
-    local_type_idx: &mut u32,
-    resource_handles: &IndexMap<String, ResourceTypeIndices>,
-    type_gen: &mut CmTypeGen,
-    project: &NirPackage,
-) -> ComponentValType {
-    let registry = &project.cm_interface_registry;
-    let resource_exports = resource_exports_for(type_gen, resource_handles, registry);
-    let mut sink = InstanceSink {
-        it: instance_type,
-        next_idx: local_type_idx,
-    };
-    type_gen.ast_type_to_cm(&mut sink, ty, registry, &resource_exports)
-}
-
 /// Point `type_gen` at each `error-code` the outer scope already holds, other
 /// than its own interface's. A WASI package spells `error-code` once and the
 /// others `use` it, so an instance reaching one aliases that type.
@@ -3289,61 +3271,46 @@ fn import_resource_using_interfaces(
 
             let mut type_gen = CmTypeGen::with_interface_hint(&interface_info.path);
             register_outer_error_codes(&mut type_gen, project, ctx);
+            let resource_exports = resource_exports_for(
+                &mut type_gen,
+                &resource_handles,
+                &project.cm_interface_registry,
+            );
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
             for func in &cm_functions {
-                // Resolve params: for `self` borrow params use the borrow handle,
-                // for owned-resource params use the own handle, otherwise lower
-                // the type through the shared generator.
-                let params: Vec<(String, ComponentValType)> = func
+                let mut signature_type = |ty: &Type| {
+                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
+                    let mut sink = InstanceSink {
+                        it: &mut instance_type,
+                        next_idx: &mut local_type_idx,
+                    };
+                    type_gen.ast_type_to_cm(
+                        &mut sink,
+                        &resolved_ty,
+                        &project.cm_interface_registry,
+                        &resource_exports,
+                    )
+                };
+                let param_refs: Vec<(&str, ComponentValType)> = func
                     .params
                     .iter()
-                    .map(|(_wado_name, cm_name, ty)| {
-                        // `self: &Resource` is the canonical Wado-side form for
-                        // a borrow self-param. Unwrap `Type::Reference` so the
-                        // borrow handle matches both `Resource` and `&Resource`.
-                        let borrow_check_ty = match ty {
-                            Type::Reference(inner) => inner.as_ref(),
-                            _ => ty,
-                        };
-                        let val = if let Type::Named(named) = borrow_check_ty
+                    .map(|(_, cm_name, ty)| {
+                        // A `self` declared as the bare resource is still the
+                        // borrow a method takes.
+                        let val = if let Type::Named(named) = ty
                             && let Some(handles) = resource_handles.get(&named.name)
                             && cm_name == "self"
                         {
                             ComponentValType::Type(handles.borrow)
-                        } else if let Type::Named(named) = ty
-                            && let Some(handles) = resource_handles.get(&named.name)
-                        {
-                            ComponentValType::Type(handles.own)
                         } else {
-                            let resolved = project.cm_interface_registry.resolve_type(ty);
-                            shared_cm_val_type(
-                                &resolved,
-                                &mut instance_type,
-                                &mut local_type_idx,
-                                &resource_handles,
-                                &mut type_gen,
-                                project,
-                            )
+                            signature_type(ty)
                         };
-                        (cm_name.clone(), val)
+                        (cm_name.as_str(), val)
                     })
                     .collect();
+                let result_type = func.return_type.as_ref().map(&mut signature_type);
 
-                let result_type = func.return_type.as_ref().map(|ty| {
-                    let resolved_ty = project.cm_interface_registry.resolve_type(ty);
-                    shared_cm_val_type(
-                        &resolved_ty,
-                        &mut instance_type,
-                        &mut local_type_idx,
-                        &resource_handles,
-                        &mut type_gen,
-                        project,
-                    )
-                });
-
-                let param_refs: Vec<(&str, ComponentValType)> =
-                    params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
                 let mut func_encoder = instance_type.ty().function();
                 if func.is_async {
                     func_encoder
