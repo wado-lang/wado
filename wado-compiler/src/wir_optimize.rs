@@ -274,7 +274,6 @@ fn optimize_scoped(
         wir_pass(scope, "elide_empty_work", module, profiler, |m| {
             elide_empty_work(m);
         });
-<<<<<<< HEAD
         // After `select_br_if`, which gives a loop's exit the `br_if` it reads,
         // and before branch hints wrap that exit's condition.
         if opt_level != OptLevel::Os {
@@ -282,22 +281,9 @@ fn optimize_scoped(
                 unroll_array_loops(m);
             });
         }
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
-||||||| 73611c2bfc0
-        if flags.branch_hinting {
-            wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
-                infer_branch_hints(m);
-            });
-        }
-=======
         wir_pass(scope, "infer_branch_hints", module, profiler, |m| {
             infer_branch_hints(m);
         });
->>>>>>> origin/main
     });
 
     // Phase 8: mark functions/types/globals orphaned by earlier passes dead,

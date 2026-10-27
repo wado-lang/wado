@@ -2373,19 +2373,9 @@ impl FunctionTranslator<'_, '_> {
                 case_index: *case_index,
                 payload_type: *payload_type,
             },
-<<<<<<< HEAD
-            TirExprKind::TemplateString { .. } => unreachable!(
-                "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
-            ),
             TirExprKind::ListViewOf { .. } => {
                 unreachable!("synthesis::list_view expands every conversion")
             }
-||||||| 73611c2bfc0
-            TirExprKind::TemplateString { .. } => unreachable!(
-                "TirExprKind::TemplateString should be expanded by synthesis::template before lower::translate runs"
-            ),
-=======
->>>>>>> origin/main
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),

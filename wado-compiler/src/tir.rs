@@ -1373,17 +1373,6 @@ pub enum TirExprKind {
         payload_type: TypeId,
     },
 
-<<<<<<< HEAD
-    /// Unresolved template string expression.
-    ///
-    /// Created by the elaborator with resolved sub-expressions but without
-    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
-    /// expands this into the `$tmpl` labeled block with `String::with_capacity`,
-    /// `push_str`, `Formatter`, and `Display`/inspect calls.
-    TemplateString {
-        parts: Vec<TirTemplatePart>,
-    },
-
     /// A call argument converted to the `&ListView<T>` parameter it meets
     /// (the node's type) from a `ListArg<T>`. The synthesis phase
     /// (pre-monomorphize) expands it to `&ListArg::lowered(&value)`.
@@ -1391,19 +1380,6 @@ pub enum TirExprKind {
         value: Box<TirExpr>,
     },
 
-||||||| 73611c2bfc0
-    /// Unresolved template string expression.
-    ///
-    /// Created by the elaborator with resolved sub-expressions but without
-    /// expanding to formatting code. The synthesis phase (pre-monomorphize)
-    /// expands this into the `$tmpl` labeled block with `String::with_capacity`,
-    /// `push_str`, `Formatter`, and `Display`/inspect calls.
-    TemplateString {
-        parts: Vec<TirTemplatePart>,
-    },
-
-=======
->>>>>>> origin/main
     /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///

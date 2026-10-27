@@ -1258,197 +1258,9 @@ impl CmTypeKind {
     ];
 }
 
-<<<<<<< HEAD
-/// The first name a `(source_interface, name)` key set holds under `iface_fq`,
-/// which says that some module already declares into it.
-fn first_name_in_interface<'a>(
-    mut keys: impl Iterator<Item = &'a (String, String)>,
-    iface_fq: &str,
-) -> Option<&'a str> {
-    keys.find(|(source, _)| source == iface_fq)
-        .map(|(_, name)| name.as_str())
-}
-
 /// Spell `Self` as the enclosing resource's name in a receiver type. The site
 /// keeps its id, which [`CmTypeDecls`] binds to the resource.
 fn substitute_self_in_type(ty: &Type, resource_name: &str) -> Type {
-||||||| 73611c2bfc0
-/// The first name a `(source_interface, name)` key set holds under `iface_fq`,
-/// which says that some module already declares into it.
-fn first_name_in_interface<'a>(
-    mut keys: impl Iterator<Item = &'a (String, String)>,
-    iface_fq: &str,
-) -> Option<&'a str> {
-    keys.find(|(source, _)| source == iface_fq)
-        .map(|(_, name)| name.as_str())
-}
-
-/// Return the `source_interface` when `name` has exactly one registrant under
-/// `prefix`.
-fn find_unique_source_with_prefix<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    prefix: &str,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| src.starts_with(prefix))
-}
-
-/// The unique source interface registering `name` across the bundled CM
-/// namespaces. A name two interfaces declare is ambiguous: `None`.
-fn find_unique_source_in_binding<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| {
-        CmNamespace::split_specifier(src).is_some()
-    })
-}
-
-/// The unique source interface registering `name` among sources for which
-/// `is_member` holds, or `None` when there is no or more than one match.
-fn find_unique_source_in_set<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-    is_member: &dyn Fn(&str) -> bool,
-) -> Option<&'a str> {
-    let mut found: Option<&str> = None;
-    for (src, n) in keys {
-        if n != name || !is_member(src) {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        found = Some(src.as_str());
-    }
-    found
-}
-
-/// Return the `source_interface` when `name` has exactly one registrant,
-/// ignoring empty source strings.
-fn find_unique_source_in<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| !src.is_empty())
-}
-
-/// A source string without a trailing `.wado` suffix or `@version` tag, so a
-/// loader identity (`wasi:http/types.wado`) and its CM registration key
-/// (`wasi:http/types@0.3.0`) reduce to the same stem.
-fn interface_stem(source: &str) -> &str {
-    let source = source.strip_suffix(".wado").unwrap_or(source);
-    source.split_once('@').map_or(source, |(base, _)| base)
-}
-
-/// Look up a `ModuleSourceIndex` kind map by a coarse [`ModuleSource`] display
-/// string. Tries the exact identity first (a `--lib`/component interface,
-/// keyed by its `ModuleSource` display), then the interface stem (stdlib
-/// `wasi:`/`core:` types, whose loader path stems match their registration
-/// source stem). O(1) in both cases.
-fn lookup_by_module<'a>(
-    index: &'a IndexMap<(String, String), String>,
-    module_source: &str,
-    name: &str,
-) -> Option<&'a str> {
-    index
-        .get(&(module_source.to_string(), name.to_string()))
-        .or_else(|| index.get(&(interface_stem(module_source).to_string(), name.to_string())))
-        .map(String::as_str)
-}
-
-/// Resolve a `Type::Named` reference through the newtype-alias map by its
-/// declaring interface (`source_interface`). A source-less reference, or one
-/// naming no newtype, is returned unchanged, as are other type shapes.
-fn resolve_type(
-    ty: &Type,
-    aliases: &IndexMap<(String, String), Type>,
-    sources: &SourceInterfaces,
-) -> Type {
-=======
-/// Return the `source_interface` when `name` has exactly one registrant under
-/// `prefix`.
-fn find_unique_source_with_prefix<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    prefix: &str,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| src.starts_with(prefix))
-}
-
-/// The unique source interface registering `name` across the bundled CM
-/// namespaces. A name two interfaces declare is ambiguous: `None`.
-fn find_unique_source_in_binding<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| {
-        CmNamespace::split_specifier(src).is_some()
-    })
-}
-
-/// The unique source interface registering `name` among sources for which
-/// `is_member` holds, or `None` when there is no or more than one match.
-fn find_unique_source_in_set<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-    is_member: &dyn Fn(&str) -> bool,
-) -> Option<&'a str> {
-    let mut found: Option<&str> = None;
-    for (src, n) in keys {
-        if n != name || !is_member(src) {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        found = Some(src.as_str());
-    }
-    found
-}
-
-/// Return the `source_interface` when `name` has exactly one registrant,
-/// ignoring empty source strings.
-fn find_unique_source_in<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| !src.is_empty())
-}
-
-/// A source string without a trailing `.wado` suffix or `@version` tag, so a
-/// loader identity (`wasi:http/types.wado`) and its CM registration key
-/// (`wasi:http/types@0.3.0`) reduce to the same stem.
-fn interface_stem(source: &str) -> &str {
-    let source = source.strip_suffix(".wado").unwrap_or(source);
-    source.split_once('@').map_or(source, |(base, _)| base)
-}
-
-/// Look up a `ModuleSourceIndex` kind map by a coarse [`ModuleSource`] display
-/// string. Tries the exact identity first (a `--lib`/component interface,
-/// keyed by its `ModuleSource` display), then the interface stem (stdlib
-/// `wasi:`/`core:` types, whose loader path stems match their registration
-/// source stem). O(1) in both cases.
-fn lookup_by_module<'a>(
-    index: &'a IndexMap<(String, String), String>,
-    module_source: &str,
-    name: &str,
-) -> Option<&'a str> {
-    index
-        .get(&(module_source.to_string(), name.to_string()))
-        .or_else(|| index.get(&(interface_stem(module_source).to_string(), name.to_string())))
-        .map(String::as_str)
-}
-
-/// Resolve a `Type::Named` reference through the newtype-alias map by its
-/// declaring interface (`source_interface`). A source-less reference, or one
-/// naming no newtype, is returned unchanged, as are other type shapes.
-fn resolve_type(
-    ty: &Type,
-    aliases: &IndexMap<(String, String), Type>,
-    sources: &SourceInterfaces,
-) -> Type {
->>>>>>> origin/main
     match ty {
         Type::Named(n) if n.name == "Self" => Type::Named(NamedType {
             name: resource_name.to_string(),
@@ -3228,31 +3040,6 @@ impl CmInterfaceRegistry {
             .or_else(|| self.get_enum_cm_name_by_source(interface_path, ERROR_CODE_WADO_NAME))
     }
 
-<<<<<<< HEAD
-||||||| 73611c2bfc0
-    /// Keying on the declaration's own module source keeps a user type from
-    /// being confused with a same-named WASI or dependency declaration.
-    ///
-    /// A `--lib` entry declaration is registered under the package default
-    /// interface, whose source [`Self::register_lib_local_decls`] maps to the entry
-    /// module; outside `--lib` it is registered nowhere, so this is `false` and
-    /// the payload has no CM type to lower against.
-    pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        self.interface_declaring(source, name).is_some()
-    }
-
-=======
-    /// Keying on the declaration's own module source keeps a user type from
-    /// being confused with a same-named WASI or dependency declaration.
-    ///
-    /// A `--lib` entry declaration is registered under the package default
-    /// interface, whose source [`Self::register_lib_local_decls`] maps to the entry
-    /// module; outside `--lib` it is registered nowhere, so this is `false` and
-    /// the payload has no CM type to lower against.
-    pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        self.interface_declaring(source, name).is_some()
-    }
-
     /// Whether `interface_fq` declares a function, which a types-only interface
     /// (`wasi:cli/types`) does not.
     pub fn declares_functions(&self, interface_fq: &str) -> bool {
@@ -3277,7 +3064,24 @@ impl CmInterfaceRegistry {
         })
     }
 
->>>>>>> origin/main
+    /// Every type declaration registered under `interface_fq`, with its
+    /// registered name and a type site bound to it.
+    pub fn declared_types<'a>(
+        &'a self,
+        interface_fq: &'a str,
+    ) -> impl Iterator<Item = (&'a str, Type)> + 'a {
+        self.registrations
+            .iter()
+            .filter(move |(_, registration)| registration.interface == interface_fq)
+            .map(|(&decl, registration)| {
+                let name = registration.name.as_str();
+                let site =
+                    self.type_decls
+                        .decl_type(decl, name.to_string(), Vec::new(), Span::default());
+                (name, site)
+            })
+    }
+
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
     /// at the CM boundary can name.
     pub fn declares_wado_name(&self, interface_fq: &str, name: &str) -> bool {

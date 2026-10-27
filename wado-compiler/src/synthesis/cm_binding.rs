@@ -736,7 +736,6 @@ fn synthesize_guest_callback_bindings(project: &mut Package) {
             world_params: &params,
             world_return: info.return_type.as_ref(),
             cm_interface_registry: &project.cm_interface_registry,
-            cm_package: &info.package,
             interner: &project.interner,
         };
         let name = &callback.function_key;

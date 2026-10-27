@@ -31,19 +31,9 @@ use crate::synthesis::common::{
 };
 use crate::tir;
 use crate::tir::{
-<<<<<<< HEAD
     FunctionRef, MonomorphInfo, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
     TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId,
-||||||| 73611c2bfc0
-    FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirTemplatePart, TirUnaryOp, TypeId,
-=======
-    FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId,
->>>>>>> origin/main
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;

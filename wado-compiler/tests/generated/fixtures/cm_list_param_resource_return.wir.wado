@@ -93,13 +93,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
     let $entries_i: i32;
     let $entries_addr: i32;
     let $entries_elem: u32;
-<<<<<<< HEAD
-    let $licm_repr_28: ref Array<u32>;
-||||||| 73611c2bfc0
-    let $licm_repr_23: ref Array<u32>;
-=======
-    let $licm_repr_21: ref Array<u32>;
->>>>>>> origin/main
+    let $licm_repr_26: ref Array<u32>;
     $entries_len = entries.used;
     if @unlikely(536870911 <u $entries_len) {
         cold_path;
@@ -108,36 +102,24 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
     }
     $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 4);
     $entries_i = 0;
-<<<<<<< HEAD
-    $licm_repr_28 = entries.repr;
-||||||| 73611c2bfc0
-    $licm_repr_23 = entries.repr;
-=======
-    $licm_repr_21 = entries.repr;
->>>>>>> origin/main
+    $licm_repr_26 = entries.repr;
     b1: block {
         l2: loop {
             break_if b1 ((($entries_i >= $entries_len) | (($entries_i + 1) >= $entries_len)) | ((($entries_i + 1) + 1) >= $entries_len)) | (((($entries_i + 1) + 1) + 1) >= $entries_len);
             $entries_addr = $entries_base + ($entries_i * 4);
-<<<<<<< HEAD
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_28, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_26, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_28, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_26, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_28, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_26, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_28, $entries_i);
-||||||| 73611c2bfc0
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_23, $entries_i);
-=======
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_21, $entries_i);
->>>>>>> origin/main
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_26, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l2;
@@ -147,7 +129,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__wasi:demo/gfx@0.1.0#make-lay
         l4: loop {
             break_if b3 $entries_i >= $entries_len;
             $entries_addr = $entries_base + ($entries_i * 4);
-            $entries_elem = builtin::array_get_value<u32>($licm_repr_28, $entries_i);
+            $entries_elem = builtin::array_get_value<u32>($licm_repr_26, $entries_i);
             builtin::store_i32($entries_addr, $entries_elem);
             $entries_i = $entries_i + 1;
             continue l4;

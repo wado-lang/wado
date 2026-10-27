@@ -248,47 +248,6 @@ impl TypeSystem {
     /// it or at what it holds at any depth, through a newtype either way. A
     /// type parameter on either side may be bound to anything.
     fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
-<<<<<<< HEAD
-||||||| 73611c2bfc0
-        let open = |resolved: &ResolvedType| {
-            matches!(
-                resolved,
-                ResolvedType::TypeParam { .. }
-                    | ResolvedType::AssocParam { .. }
-                    | ResolvedType::TypePack { .. }
-                    | ResolvedType::AssocTypeProjection { .. }
-            )
-        };
-        let head_key = |ty: TypeId| {
-            let tt = self.type_table.borrow();
-            tt.type_key(tt.representation_head(ty))
-        };
-        let pointee = self.type_table.borrow().representation_head(pointee);
-        if open(self.type_table.borrow().get(pointee)) {
-            return true;
-        }
-        let target = head_key(pointee);
-=======
-        let open = |resolved: &ResolvedType| {
-            matches!(
-                resolved,
-                ResolvedType::TypeParam { .. }
-                    | ResolvedType::AssocParam { .. }
-                    | ResolvedType::TypePack { .. }
-                    | ResolvedType::PackElement { .. }
-                    | ResolvedType::AssocTypeProjection { .. }
-            )
-        };
-        let head_key = |ty: TypeId| {
-            let tt = self.type_table.borrow();
-            tt.type_key(tt.representation_head(ty))
-        };
-        let pointee = self.type_table.borrow().representation_head(pointee);
-        if open(self.type_table.borrow().get(pointee)) {
-            return true;
-        }
-        let target = head_key(pointee);
->>>>>>> origin/main
         self.reaches(place, &|ty, resolved| {
             is_open(resolved) || may_name_one_type(&self.type_table.borrow(), ty, pointee)
         })
@@ -906,6 +865,7 @@ fn is_open(resolved: &ResolvedType) -> bool {
         ResolvedType::TypeParam { .. }
             | ResolvedType::AssocParam { .. }
             | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
             | ResolvedType::AssocTypeProjection { .. }
     )
 }

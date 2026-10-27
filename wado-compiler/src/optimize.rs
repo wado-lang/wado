@@ -6,14 +6,8 @@
 
 mod aggregate_forward;
 mod alias;
-<<<<<<< HEAD
-mod arena_query;
-mod assign_to_let;
-||||||| 73611c2bfc0
-mod arena_query;
-=======
 pub(crate) mod arena_query;
->>>>>>> origin/main
+mod assign_to_let;
 mod body_memo;
 mod bounds;
 mod census;

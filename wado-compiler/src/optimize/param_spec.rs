@@ -1737,16 +1737,8 @@ impl BranchSettler {
         types: &TypeTable,
     ) {
         let fold = ConstFoldRule::new(types, &self.callees, &self.ctfe_builtins);
-<<<<<<< HEAD
-        let prune = BranchPruneRule::new(PruneMode::Fixpoint);
-        let mut engine = Engine::new(body, buffers, locals, params);
-||||||| 73611c2bfc0
-        let prune = BranchPruneRule::new(PruneMode::Fixpoint);
-        let mut engine = Engine::new(body, buffers, locals);
-=======
         let prune = BranchPruneRule;
-        let mut engine = Engine::new(body, buffers, locals);
->>>>>>> origin/main
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.set_value_graph_type_table(types);
         engine.set_pure_builtin_callees(&self.pure_builtin_callees);
         engine.run(&[&fold, &prune]);

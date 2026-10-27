@@ -212,12 +212,8 @@
 - [Concurrent Stream Copies](./wep-2026-10-22-concurrent-stream-copies.md)
 - [Fuel Benchmarks](./wep-2026-10-25-fuel-benchmarks.md)
 - [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
-<<<<<<< HEAD
-- [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
-||||||| 73611c2bfc0
-=======
 - [Refined Types — Types That Carry a Contract](./wep-2026-10-25-refined-types.md)
->>>>>>> origin/main
+- [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
 
 ## Standard Library
 

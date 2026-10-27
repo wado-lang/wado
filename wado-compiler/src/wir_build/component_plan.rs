@@ -4,17 +4,9 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-<<<<<<< HEAD
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, cm_primitive_of, wado_primitive_name_to_cm};
-use crate::hashmap::IndexMap;
-||||||| 73611c2bfc0
-use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
-use crate::hashmap::IndexMap;
-=======
-use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
 use crate::hashmap::{IndexMap, IndexSet};
->>>>>>> origin/main
 use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::test_selected;
 use crate::tir::TirTest;

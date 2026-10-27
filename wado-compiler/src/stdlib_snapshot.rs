@@ -18,14 +18,8 @@ use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, SourceError,
 };
-<<<<<<< HEAD
-use crate::defs::{DefId, DefKind, DefTable};
-||||||| 73611c2bfc0
-use crate::defs::{DefId, DefKind};
-=======
 use crate::coverage::CoverageScope;
-use crate::defs::{DefId, DefKind};
->>>>>>> origin/main
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::liveness::LivenessScope;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::{ModuleLoader, cached_stdlib_module};
