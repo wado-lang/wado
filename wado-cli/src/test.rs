@@ -1110,7 +1110,7 @@ fn load_module(
                 .filter(|run| run.measures(tests.len()))
                 .and_then(|run| {
                     let plans = read_from_component(&artifact.wasm)?;
-                    Some((Arc::clone(run), run.register(&artifact.path, &plans)))
+                    Some((Arc::clone(run), run.register(&artifact.path, &plans)?))
                 });
             let cache_reads = artifact.reads.filter(|_| {
                 test_cache::cacheable(component_ty.imports(&engine).map(|(name, _)| name))

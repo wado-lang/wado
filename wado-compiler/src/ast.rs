@@ -157,11 +157,23 @@ pub struct AstPtr {
     pub span: Span,
 }
 
+/// The text a module was parsed from. Its `Debug` leaves the text out, so the
+/// AST's says only what was parsed: two spellings of one program, such as a
+/// source and its formatted form, read the same.
+#[derive(Clone)]
+struct SourceText(Arc<str>);
+
+impl fmt::Debug for SourceText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SourceText(..)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Module {
     /// The text parsed, which every span's byte offsets index. Empty for a
     /// module built from tokens or by hand.
-    source: Arc<str>,
+    source: SourceText,
     pub items: Vec<Item>,
     /// Inner attributes like `#![no_prelude]`
     pub inner_attributes: Vec<InnerAttribute>,
@@ -240,7 +252,7 @@ impl Module {
     /// Creates a new module with the given items and no data section.
     pub fn new(items: Vec<Item>) -> Self {
         Self {
-            source: Arc::from(""),
+            source: SourceText(Arc::from("")),
             items,
             inner_attributes: Vec::new(),
             shebang: None,
@@ -267,7 +279,7 @@ impl Module {
         contextual_keywords: Vec<Span>,
     ) -> Self {
         Self {
-            source,
+            source: SourceText(source),
             items,
             inner_attributes,
             shebang,
@@ -281,7 +293,7 @@ impl Module {
     }
 
     pub fn source(&self) -> &str {
-        &self.source
+        &self.source.0
     }
 
     /// Span of every token this module's parse read against its lexical class:

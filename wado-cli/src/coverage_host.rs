@@ -200,41 +200,41 @@ impl CoverageRun {
     }
 
     /// Add the plans of the component compiled from `entry`: where the hits
-    /// of each land, or nowhere once plans have disagreed.
-    pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Registration {
+    /// of each land, or nowhere once plans have disagreed. `None` once `entry`
+    /// is gone, a change the run reports at its end.
+    pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Option<Registration> {
         let base = Path::new(entry).parent().unwrap_or(Path::new(""));
-        match &self.measurement {
-            Measurement::Coverage(_) => self.register_into(self.coverage_dir(), plans, |path| {
-                self.report_path(base, path)
-            }),
+        let paths = plans.iter().map(|(plan, _)| plan.path.as_str());
+        // Naming reads the filesystem, so it is done before taking the lock
+        // every load worker shares.
+        let (report, names): (PathBuf, BTreeMap<&str, String>) = match &self.measurement {
+            Measurement::Coverage(_) => (
+                self.coverage_dir(),
+                paths
+                    .map(|path| (path, self.report_path(base, path)))
+                    .collect(),
+            ),
             Measurement::Pgo => {
-                let profile = Profile::of(Path::new(entry));
-                self.register_into(profile.file.clone(), plans, |path| {
-                    profile.module_name(base, path)
-                })
+                let profile = Profile::of(Path::new(entry))?;
+                let names = paths
+                    .map(|path| (path, profile.module_name(base, path)))
+                    .collect();
+                (profile.file, names)
             }
-        }
-    }
-
-    fn register_into(
-        &self,
-        report: PathBuf,
-        plans: &DecodedPlans,
-        rename: impl FnMut(&str) -> String,
-    ) -> Registration {
+        };
         let mut guard = lock(&self.reports);
         let registered = match guard.as_mut() {
             Ok(reports) => reports
                 .entry(report.clone())
                 .or_default()
-                .register(plans, rename)
+                .register(plans, |path| names[path].clone())
                 .unwrap_or_else(|mismatch| {
                     *guard = Err(mismatch);
                     Vec::new()
                 }),
             Err(_) => Vec::new(),
         };
-        Registration { report, registered }
+        Some(Registration { report, registered })
     }
 
     /// Record what `test` ran in the plans `registration` names.
@@ -357,30 +357,31 @@ struct Profile {
 }
 
 impl Profile {
-    fn of(entry: &Path) -> Self {
-        let entry = entry.canonicalize().expect("an entry just compiled exists");
+    fn of(entry: &Path) -> Option<Self> {
+        let entry = entry.canonicalize().ok()?;
         let dir = entry.parent().expect("an entry is a file");
         if let Some(root) = package_root(dir) {
-            return Self {
+            return Some(Self {
                 file: root.join("pgo").join("default.pgo"),
                 root,
-            };
+            });
         }
         let stem = entry
             .file_stem()
             .expect("an entry is a file")
             .to_string_lossy();
-        Self {
+        Some(Self {
             file: dir.join("pgo").join(format!("{stem}.pgo")),
             root: dir.to_path_buf(),
-        }
+        })
     }
 
     /// How the profile names the module a plan, made for an entry in `base`,
     /// names `path`. The name is the same on any machine: a `core:` module is
     /// its import path, another package's module is the package's name and
-    /// the file relative to its root, and any other file is relative to this
-    /// profile's root.
+    /// the file relative to its root, any other file is relative to this
+    /// profile's root, and a module that is no file, such as a remote one, is
+    /// its plan's path.
     fn module_name(&self, base: &Path, path: &str) -> String {
         if core_module_file(path).is_some() {
             return path.to_string();

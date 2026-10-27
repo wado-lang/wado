@@ -1191,7 +1191,9 @@ fn sync_wasi_export_strategy(
     }
     // The simple void adapter applies only with no params AND unit return.
     if export.params.is_empty() && matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
-        return ExportReturnStrategy::VoidTaskReturn;
+        return ExportReturnStrategy::VoidTaskReturn {
+            report_coverage: false,
+        };
     }
     // Sync export returning a plain value (not a `Result`), e.g. a `--lib`
     // export like `fn count() -> u32`. It uses the synchronous canon lift —
@@ -1212,10 +1214,8 @@ fn generate_test_world_bindings(project: &mut Package) {
     let entry_source = project.entry_module_source.clone();
     let test_selection = project.test_selection.clone();
     let entry_type_table = entry_type_table(project);
-    let strategy = if project.coverage_section.is_some() {
-        ExportReturnStrategy::CoveredTestTaskReturn
-    } else {
-        ExportReturnStrategy::VoidTaskReturn
+    let strategy = ExportReturnStrategy::VoidTaskReturn {
+        report_coverage: project.coverage_section.is_some(),
     };
 
     // Test functions have is_export=false (they're not world exports),
@@ -1243,7 +1243,12 @@ fn generate_test_world_bindings(project: &mut Package) {
             .iter()
             .filter(|f| {
                 let name = f.borrow().name.clone();
-                is_test_function(&name) && test_selection.selects(tests[name.as_str()])
+                is_test_function(&name)
+                    && test_selection.selects(
+                        tests
+                            .get(name.as_str())
+                            .expect("reify emits each test function with its test"),
+                    )
             })
             .map(|f| (f.borrow().name.clone(), f.clone()))
             .collect()

@@ -1484,11 +1484,12 @@ fn build_export_adapter_params(
 pub(super) enum ExportReturnStrategy {
     /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
     /// discriminant of the `result<>` it lifts through, so it shares that canon.
-    VoidTaskReturn,
-    /// A test under `wado test --coverage` or `--pgo`:
-    /// [`Self::VoidTaskReturn`], with `core:rt::coverage_report` called between
-    /// the call and the `task-return`, so a test that traps reports no counts.
-    CoveredTestTaskReturn,
+    VoidTaskReturn {
+        /// A test under `wado test --coverage` or `--pgo`: calls
+        /// `core:rt::coverage_report` between the call and the `task-return`,
+        /// so a test that traps reports no counts.
+        report_coverage: bool,
+    },
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value
     /// result (string, list, tuple, record, option, result) via an i32
@@ -1572,9 +1573,9 @@ pub(super) fn synthesize_export_binding(
     let mut next_local = param_count;
 
     let call_return_type = match strategy {
-        ExportReturnStrategy::VoidTaskReturn
-        | ExportReturnStrategy::CoveredTestTaskReturn
-        | ExportReturnStrategy::AsyncTaskReturn => TypeTable::UNIT,
+        ExportReturnStrategy::VoidTaskReturn { .. } | ExportReturnStrategy::AsyncTaskReturn => {
+            TypeTable::UNIT
+        }
         ExportReturnStrategy::SyncReturn | ExportReturnStrategy::ResultTaskReturn => {
             user_return_type
         }
@@ -1582,9 +1583,9 @@ pub(super) fn synthesize_export_binding(
     let call_user = build_call_user(user_func, callee_module, call_args, call_return_type);
 
     let adapter_return = match strategy {
-        ExportReturnStrategy::VoidTaskReturn | ExportReturnStrategy::CoveredTestTaskReturn => {
+        ExportReturnStrategy::VoidTaskReturn { report_coverage } => {
             body_stmts.push(expr_stmt(call_user));
-            if matches!(strategy, ExportReturnStrategy::CoveredTestTaskReturn) {
+            if report_coverage {
                 body_stmts.push(expr_stmt(internal_call(
                     CompilerItem::CoverageReport.attr_name(),
                     Vec::new(),

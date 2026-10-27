@@ -1246,17 +1246,16 @@ impl TestReport {
     }
 
     /// The runs of each region the test counted: each region it hit ran once,
-    /// unless it reported more. A test that traps reports none.
+    /// unless it reported more. A test that traps reports none. Test code can
+    /// call `core:coverage` itself, so a region counted but never hit counts
+    /// too, and a count runs at least once.
     #[must_use]
     pub fn counts(&self) -> BTreeMap<u32, i64> {
-        assert!(
-            self.repeated.keys().all(|id| self.hits.contains(id)),
-            "a region reported repeated runs must have reported its first"
-        );
-        self.hits
-            .iter()
-            .map(|&id| (id, self.repeated.get(&id).copied().unwrap_or(1)))
-            .collect()
+        let mut counts: BTreeMap<u32, i64> = self.hits.iter().map(|&id| (id, 1)).collect();
+        for (&id, &runs) in &self.repeated {
+            counts.insert(id, runs.max(1));
+        }
+        counts
     }
 }
 
@@ -1570,6 +1569,14 @@ mod tests {
         ] {
             assert!(lcov.lines().any(|l| l == line), "{line} in\n{lcov}");
         }
+    }
+
+    #[test]
+    fn a_report_takes_what_test_code_forged() {
+        let mut forged = TestReport::default();
+        forged.count(3, 7);
+        forged.count(4, -2);
+        assert_eq!(forged.counts(), BTreeMap::from([(3, 7), (4, 1)]));
     }
 
     fn parse(source: &str) -> ast::Module {
