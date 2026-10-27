@@ -430,7 +430,6 @@ fn lower_inline(
         &module,
         use_type.as_deref(),
         from.as_str(),
-        integrity,
         &inputs,
         None,
         &written_options,
@@ -771,26 +770,25 @@ fn module_key(module: &GeneratorModule) -> String {
     }
 }
 
+/// Two clauses that pin one file differently are two invocations, so each
+/// stays held to its own pin.
 fn identity_key(inv: &Invocation) -> String {
     let (module, _, use_type, from, integrity, inputs, output_dir, options) = inv.identity_tuple();
-    clause_digest(
-        module,
-        use_type,
-        from,
-        integrity,
-        inputs,
-        Some(output_dir),
-        &options,
-    )
+    let mut key = clause_digest(module, use_type, from, inputs, Some(output_dir), &options);
+    for pin in std::iter::once(integrity).chain(inputs.iter().map(|input| input.integrity)) {
+        key.push(' ');
+        key.push_str(&pin.map_or_else(|| "-".to_string(), |pin| pin.to_string()));
+    }
+    key
 }
 
-/// The hex SHA-256 of what a clause names. The synthetic id leaves out the
+/// The hex SHA-256 of what a clause names, its pins aside: a pin follows the
+/// content, as a local file's digest does. The synthetic id leaves out the
 /// output directory, since by default the directory is named for it.
 fn clause_digest(
     module: &GeneratorModule,
     use_type: Option<&str>,
     from: &str,
-    integrity: Option<Integrity>,
     inputs: &[InvocationInput],
     output_dir: Option<&str>,
     options: &[u8],
@@ -799,11 +797,9 @@ fn clause_digest(
     h.update(module_key(module).as_bytes());
     hash_type(&mut h, use_type);
     h.update(from.as_bytes());
-    hash_pin(&mut h, integrity);
     for input in inputs {
         h.update(input.path.as_str().as_bytes());
         hash_type(&mut h, input.use_type.as_deref());
-        hash_pin(&mut h, input.integrity);
         h.update([0u8]);
     }
     if let Some(dir) = output_dir {
@@ -820,14 +816,6 @@ fn hash_type(h: &mut Sha256, use_type: Option<&str>) {
         h.update([1u8]);
         h.update((t.len() as u64).to_le_bytes());
         h.update(t.as_bytes());
-    }
-}
-
-/// Only a pin adds bytes, so an unpinned file keeps the id it had.
-fn hash_pin(h: &mut Sha256, integrity: Option<Integrity>) {
-    if let Some(pin) = integrity {
-        h.update([2u8]);
-        h.update(pin.to_string().as_bytes());
     }
 }
 
@@ -1345,6 +1333,45 @@ mod tests {
         assert_ne!(
             digest_of(input_object(&[("path", "./a.scm")])),
             digest_of(input_object(&[("path", "./a.scm"), ("type", "highlights")])),
+        );
+    }
+
+    /// A pin follows the content, as a local file's digest does, so re-pinning
+    /// leaves the output where it was.
+    #[test]
+    fn a_pin_leaves_the_output_directory_where_it_was() {
+        let url = "https://huggingface.co/o/m/resolve/0123/model.onnx";
+        let invocation = |pin: Option<&str>| {
+            let mut attrs = attr_with_generator(&[
+                ("module", AttrValue::string("lib:gen".to_string())),
+                (
+                    "inputs",
+                    AttrValue::Array(vec![AttrItem {
+                        span: span(),
+                        value: match pin {
+                            Some(pin) => input_object(&[("path", url), ("integrity", pin)]),
+                            None => input_object(&[("path", url)]),
+                        },
+                    }]),
+                ),
+            ]);
+            if let Some(pin) = pin {
+                attrs
+                    .entries
+                    .insert("integrity".to_string(), entry(AttrValue::string(pin)));
+            }
+            expect_ok(collect_inline_invocations(
+                [("src/main.wado", &module_with_use(url, attrs))],
+                &IndexMap::default(),
+                "",
+            ))
+            .remove(0)
+        };
+        let repinned = Integrity::of(b"").to_string();
+        assert_eq!(invocation(None).output_dir, invocation(Some(PIN)).output_dir);
+        assert_eq!(
+            invocation(Some(PIN)).output_dir,
+            invocation(Some(&repinned)).output_dir
         );
     }
 
