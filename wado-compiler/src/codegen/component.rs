@@ -21,7 +21,7 @@ use crate::component_model::{
     cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
 };
 use crate::coverage;
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
@@ -741,8 +741,11 @@ fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
         .is_some()
 }
 
+/// `ty` as `emitting`'s instance spells it, where `enum_type_indices` and
+/// `flags_type_indices` hold that interface's own types by name.
 fn wado_type_to_cm_val_type(
     ty: &Type,
+    emitting: &str,
     stream_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
@@ -752,11 +755,12 @@ fn wado_type_to_cm_val_type(
     let decls = registry.type_decls();
     match ty {
         Type::Named(named) => {
-            if let Some(&enum_idx) = enum_type_indices.get(&named.name) {
-                return ComponentValType::Type(enum_idx);
-            }
-            if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
-                return ComponentValType::Type(flags_idx);
+            if registry.source_interface(named).as_deref() == Some(emitting)
+                && let Some(&idx) = enum_type_indices
+                    .get(&named.name)
+                    .or_else(|| flags_type_indices.get(&named.name))
+            {
+                return ComponentValType::Type(idx);
             }
             let prim = cm_primitive_of(named, decls)
                 .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
@@ -2345,11 +2349,20 @@ fn generate_cm_imports(
                     .map(|(_, _, ty)| ty)
                     .chain(&func.return_type)
             });
+            // Only types declared in `interface_info.path` are emitted here;
+            // types that live in other interfaces get their declarations from
+            // those interfaces' own emit loop and are referenced via outer
+            // aliases.
+            let iface = interface_info.path.as_str();
             let mut referenced_types: Vec<String> = Vec::new();
             for ty in signature_types {
                 ty.for_each(&mut |ty| {
                     if let Type::Named(named) = ty
-                        && !ty.is_unit()
+                        && project
+                            .cm_interface_registry
+                            .source_interface(named)
+                            .as_deref()
+                            == Some(iface)
                         && !referenced_types.contains(&named.name)
                     {
                         referenced_types.push(named.name.clone());
@@ -2357,12 +2370,6 @@ fn generate_cm_imports(
                 });
             }
 
-            // Partition into enums, variants, and flags by querying this
-            // interface directly. Only types declared in
-            // `interface_info.path` are emitted here; types that live in
-            // other interfaces get their declarations from those interfaces'
-            // own emit loop and are referenced via outer aliases.
-            let iface = interface_info.path.as_str();
             let needed_variants: Vec<String> = referenced_types
                 .iter()
                 .filter(|name| {
@@ -2598,6 +2605,7 @@ fn generate_cm_imports(
                         } else {
                             wado_type_to_cm_val_type(
                                 &resolved_ty,
+                                iface,
                                 stream_type_idx,
                                 &enum_export_indices,
                                 &flags_export_indices,
@@ -3133,22 +3141,19 @@ fn component_type_idx_for_signature_type(
             component_type_idx_for_signature_type(builder, ctx, project, inner)
         }
         Type::Named(named) => {
-            let source = registry.source_interface(named).unwrap_or_else(|| {
-                panic!(
-                    "composite signature type `{}` has no source interface",
-                    named.name
-                )
-            });
-            if registry
-                .get_resource_cm_name_by_source(&source, &named.name)
-                .is_some()
-            {
-                let def = cm_decl_def(project, &source, &named.name).unwrap_or_else(|| {
-                    panic!(
-                        "`{source}` declares no resource `{}` for a composite signature",
-                        named.name
-                    )
-                });
+            let (def, kind) = {
+                let type_table = project.type_table.borrow();
+                let def = registry
+                    .declared_def(named, type_table.defs())
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "composite signature type `{}` names no declaration",
+                            named.name
+                        )
+                    });
+                (def, type_table.defs().kind(def))
+            };
+            if kind == DefKind::Resource {
                 return own_handle_idx(ctx, def).unwrap_or_else(|| {
                     unaliased(&format!("the `own<>` handle of `{}`", named.name))
                 });
@@ -3157,7 +3162,8 @@ fn component_type_idx_for_signature_type(
             // variant) resolves to the component type the resource-defining pass
             // aliased to the outer scope, which fails loudly if it was not
             // exposed there.
-            cm_decl_type_idx(ctx, project, &source, &named.name)
+            ctx.decl_type_idx(def)
+                .unwrap_or_else(|| unaliased(&format!("`{}`", named.name)))
         }
         other => panic!("unsupported composite signature type: {other:?}"),
     }

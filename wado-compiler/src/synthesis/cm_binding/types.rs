@@ -21,7 +21,7 @@ use crate::type_table::TypeTable;
 
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
-use crate::defs::{DefId, DefKind};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::common::{
     binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
@@ -111,44 +111,30 @@ pub struct LiftContext<'a> {
 impl LiftContext<'_> {
     /// The declaration the CM named type `named` refers to.
     pub(super) fn cm_decl(&self, named: &NamedType) -> DefId {
-        self.cm_interface_registry
-            .declared_def(named, self.type_table.borrow().defs())
-            .unwrap_or_else(|| panic!("CM type `{}` names no declaration", named.name))
+        cm_decl_of(
+            named,
+            self.cm_interface_registry,
+            self.type_table.borrow().defs(),
+        )
     }
 
     /// [`cm_type_to_type_id`], except that a record or variant of an interface a
     /// module declares is interned here rather than required to be interned
     /// already: a lib-local one may not be yet.
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        let registry = self.cm_interface_registry;
         match ty {
-            Type::Named(n) => {
-                if let Some(src) = self.cm_interface_registry.source_interface(n)
-                    && self
-                        .cm_interface_registry
-                        .cm_interface_module_source_of(&src)
-                        .is_some()
-                {
-                    let def = || {
-                        self.cm_interface_registry
-                            .declared_def(n, tt.defs())
-                            .unwrap_or_else(|| panic!("CM type `{}` names no declaration", n.name))
-                    };
-                    if self
-                        .cm_interface_registry
-                        .get_struct_fields_by_source(&src, &n.name)
-                        .is_some()
-                    {
-                        return tt.make_struct(StructDef::Decl(def()));
-                    }
-                    if self
-                        .cm_interface_registry
-                        .get_variant_cases_by_source(&src, &n.name)
-                        .is_some()
-                    {
-                        return tt.make_variant(def());
-                    }
+            Type::Named(n)
+                if registry
+                    .source_interface(n)
+                    .is_some_and(|src| registry.cm_interface_module_source_of(&src).is_some()) =>
+            {
+                let def = cm_decl_of(n, registry, tt.defs());
+                match tt.defs().kind(def) {
+                    DefKind::Struct => tt.make_struct(StructDef::Decl(def)),
+                    DefKind::Variant => tt.make_variant(def),
+                    _ => cm_type_to_type_id(ty, tt, registry),
                 }
-                cm_type_to_type_id(ty, tt, self.cm_interface_registry)
             }
             Type::Tuple(elems) if !elems.is_empty() => {
                 let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_held_type_id(e, tt)).collect();
@@ -194,6 +180,14 @@ pub struct LowerContext<'a> {
     pub names: CmStdlibNames,
 }
 
+/// The declaration the CM named type `named` refers to. Every type a CM
+/// signature names is bound to one.
+fn cm_decl_of(named: &NamedType, registry: &CmInterfaceRegistry, defs: &DefTable) -> DefId {
+    registry
+        .declared_def(named, defs)
+        .unwrap_or_else(|| panic!("CM type `{}` names no declaration", named.name))
+}
+
 /// Convert a CM signature `Type` to a `TypeId`. A named type is the `TypeId` its
 /// declaration was interned under.
 pub fn cm_type_to_type_id(
@@ -223,9 +217,7 @@ pub fn cm_type_to_type_id(
             UNIT_TYPE_NAME => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
             _ => {
-                let def = registry
-                    .declared_def(named, type_table.defs())
-                    .unwrap_or_else(|| panic!("CM type `{}` names no declaration", named.name));
+                let def = cm_decl_of(named, registry, type_table.defs());
                 type_table
                     .find_named_type_by_def(def)
                     // Resources are bare i32 handles at the CM boundary and
