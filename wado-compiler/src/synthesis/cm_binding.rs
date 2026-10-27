@@ -29,6 +29,7 @@ use crate::component_model::{
     CmInterfaceRegistry, CmNameSink, CmTypeGen, cm_payload_type_from_type_id,
     future_payload_rejection, is_cm_record_stream_element, stream_payload_rejection,
 };
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -44,7 +45,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_type_into;
-use crate::world_registry::{TEST_WORLD, WorldExportInfo, WorldInfo, fq_name_package};
+use crate::world_registry::{WorldExportInfo, WorldInfo};
 
 use callback_export::{Callbacks, synthesize_callback_exports};
 use export_adapter::{
@@ -347,22 +348,22 @@ fn future_stream_payload_site(tt: &TypeTable, expr: &TirExpr) -> Option<(TypeId,
     Some((*tt.generic_type_args(handle)?.first()?, is_future))
 }
 
-/// Keyed on `module_source`, never the bare name: a homonym of an imported
-/// WASI or dependency declaration lives under a different source and carries a
-/// different shape.
+/// A `--lib` entry declaration is registered under the package default
+/// interface; outside `--lib` it is registered nowhere, so the payload has no
+/// CM type to lower against.
 fn unresolvable_record_in_payload(
     tt: &TypeTable,
     registry: &CmInterfaceRegistry,
     type_id: TypeId,
 ) -> Option<String> {
-    if let Some((name, module_source)) = named_decl_of(tt, tt.get(type_id))
+    if let Some(def) = named_decl_of(tt.get(type_id))
         && matches!(
             cm_payload_type_from_type_id(tt, type_id),
             Some(CmPayloadType::Named(_))
         )
-        && !registry.is_named_type_registered_from(module_source, name)
+        && registry.interface_of_decl(tt.defs().ast_id(def)).is_none()
     {
-        return Some(name.to_string());
+        return Some(tt.def_name(def).to_string());
     }
     // Codegen peels aliases, so check through them here too.
     if let ResolvedType::Newtype { base_type, .. } = tt.get(type_id) {
@@ -387,17 +388,15 @@ fn unresolvable_record_in_payload(
     None
 }
 
-/// The declared name and module of a nominal type, or `None` for one that
-/// names no declaration.
-fn named_decl_of<'a>(tt: &'a TypeTable, ty: &ResolvedType) -> Option<(&'a str, &'a ModuleSource)> {
-    let def = match ty {
-        ResolvedType::Struct { def, .. } => def.decl()?,
+/// The declaration of a nominal type, or `None` for one that names none.
+fn named_decl_of(ty: &ResolvedType) -> Option<DefId> {
+    match ty {
+        ResolvedType::Struct { def, .. } => def.decl(),
         ResolvedType::Enum { def }
         | ResolvedType::Variant { def }
-        | ResolvedType::Flags { def } => *def,
-        _ => return None,
-    };
-    Some((tt.def_name(def), tt.def_module(def)))
+        | ResolvedType::Flags { def } => Some(*def),
+        _ => None,
+    }
 }
 
 /// Phase entry point: generate CM binding functions and rewrite call sites.
@@ -555,16 +554,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisErro
             .get(&entry_source)
             .expect("entry module should exist");
 
-        // Package hint for CM name resolution inside export adapters.
-        // For `wasi:http/service` this is `"http"`; for
-        // `core:kiln/generator` it is `"kiln"`. The hint biases bare-name
-        // resolution towards the binding's owning package (e.g.
-        // `ErrorCode` in `wasi:http` bindings) and feeds
-        // `resolve_cm_source_for` as a fallback anchor. Derived from
-        // the world's `fq_name` — the attribute-sourced identity is
-        // the single source of truth.
-        let binding_cm_package = world_info.package().to_string();
-
         for export in &world_info.exports {
             // A library spreads its `export fn`s across submodules; an
             // export defined outside the entry module carries its origin
@@ -616,7 +605,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisErro
                     &project.tir_modules,
                     &entry_type_table,
                     &project.cm_interface_registry,
-                    &binding_cm_package,
                     &project.interner,
                 );
                 binding_callee = Rc::clone(&task_entry);
@@ -643,7 +631,6 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), SynthesisErro
                 world_params: &export.params,
                 world_return: export.return_type.as_ref(),
                 cm_interface_registry: &project.cm_interface_registry,
-                cm_package: &binding_cm_package,
                 interner: &project.interner,
             };
             let adapter = synthesize_export_binding(
@@ -785,7 +772,7 @@ fn exported_cm_type_names(
         .first()
         .and_then(|e| e.from_interface_fq.as_deref())
     {
-        Some(fq) => CmTypeGen::with_interface_hint(fq),
+        Some(fq) => CmTypeGen::emitting_into(fq),
         None => CmTypeGen::new(),
     };
     let mut sink = CmNameSink::default();
@@ -1104,7 +1091,7 @@ fn validate_world_signature_compatibility(
     let Some(world_return) = export.return_type.as_ref() else {
         return Ok(());
     };
-    validate_result_wrapper_agrees(user_func, export, world_return, tt)
+    validate_result_wrapper_agrees(user_func, export, world_return, tt, registry)
         .map_err(at(user_func.span))?;
     if matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
         // The unit the wrapper check let through is delivered as the world's
@@ -1130,14 +1117,17 @@ fn validate_result_wrapper_agrees(
     export: &WorldExportInfo,
     world_return: &Type,
     tt: &TypeTable,
+    registry: &CmInterfaceRegistry,
 ) -> Result<(), String> {
-    let result_name = tt.compiler_variant_name(CompilerItem::Result);
     let Type::Generic(world) = world_return else {
         return Ok(());
     };
-    if world.name != result_name || tt.is_result(user_func.return_type) {
+    if registry.type_decls().item_of(world_return) != Some(CompilerItem::Result)
+        || tt.is_result(user_func.return_type)
+    {
         return Ok(());
     }
+    let result_name = tt.compiler_variant_name(CompilerItem::Result);
     let user_is_unit = matches!(tt.get(user_func.return_type), ResolvedType::Unit);
     if user_is_unit && world.args.first().is_some_and(Type::is_unit) {
         return Ok(());
@@ -1256,7 +1246,6 @@ fn generate_test_world_bindings(project: &mut Package) {
         world_params: &[],
         world_return: None,
         cm_interface_registry: &project.cm_interface_registry,
-        cm_package: fq_name_package(TEST_WORLD),
         interner: &project.interner,
     };
     let adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = test_funcs

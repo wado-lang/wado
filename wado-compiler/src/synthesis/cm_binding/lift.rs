@@ -244,7 +244,7 @@ fn synthesize_lift_inner(
                 UNIT_TYPE_NAME => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
                 _ => {
                     // A non-CM reference falls through to the i32-handle default.
-                    if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {
+                    if let Some(source) = ctx.cm_interface_registry.source_interface(named) {
                         let source = source.as_str();
                         if let Some(lifted) = try_lift_wasi_variant_or_enum(
                             named,
@@ -340,7 +340,6 @@ fn lift_handle(ty: &Type, addr: TirExpr, ctx: &LiftContext<'_>) -> TirExpr {
         ty,
         &mut ctx.type_table.borrow_mut(),
         ctx.cm_interface_registry,
-        ctx.cm_package,
     );
     cast(builtin_call(load, vec![addr], loaded), resource)
 }
@@ -365,7 +364,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let cases = cases.to_vec();
         let variant_type = {
-            let def = ctx.cm_decl(source, &named.name);
+            let def = ctx.cm_decl(named);
             ctx.type_table.borrow_mut().make_variant(def)
         };
         return Some(synthesize_lift_wasi_variant(
@@ -384,7 +383,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let case_names = case_names.to_vec();
         let enum_type = {
-            let def = ctx.cm_decl(source, &named.name);
+            let def = ctx.cm_decl(named);
             ctx.type_table.borrow_mut().make_enum(def)
         };
         return Some(synthesize_lift_wasi_enum(
@@ -433,7 +432,7 @@ fn try_lift_wasi_struct(
     // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
-        let def = ctx.cm_decl(source, &named.name);
+        let def = ctx.cm_decl(named);
         ctx.type_table
             .borrow_mut()
             .make_struct(StructDef::Decl(def))
@@ -998,8 +997,7 @@ fn synthesize_lift_option_inner(
     // use the correct GC reference type.
     let option_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let inner_type_id =
-            cm_held_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        let inner_type_id = cm_held_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry);
         tt.make_option(inner_type_id)
     };
 
@@ -1090,10 +1088,8 @@ fn synthesize_lift_result_inner(
 
     let result_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id =
-            cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
-        let err_type_id =
-            cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        let ok_type_id = cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry);
+        let err_type_id = cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry);
         tt.make_result(ok_type_id, err_type_id)
     };
 

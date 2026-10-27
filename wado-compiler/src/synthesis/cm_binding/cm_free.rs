@@ -124,7 +124,7 @@ pub(super) fn cm_shape(ty: &Type, registry: &CmInterfaceRegistry) -> CmShape {
 
 /// A registry record, a registry variant, or a fixed-width leaf.
 fn named_shape(named: &NamedType, registry: &CmInterfaceRegistry) -> CmShape {
-    let Some(source) = registry.resolve_cm_source_for(named) else {
+    let Some(source) = registry.source_interface(named) else {
         return CmShape::Scalar;
     };
     if let Some(fields) = registry.get_struct_fields_with_wado_names_by_source(&source, &named.name)

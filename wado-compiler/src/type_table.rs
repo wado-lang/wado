@@ -2866,8 +2866,7 @@ impl TypeTable {
     /// generated module and `name` the single declaration in it. A name that
     /// declares nothing answers `None`.
     ///
-    /// Only the Component Model boundary may ask it: `synthesis::cm_binding`
-    /// and [`crate::component_model::cm_decl_in_interface`]. A Wado name
+    /// Only [`crate::component_model::cm_decl_in_interface`] may ask it. A Wado name
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].
     #[must_use]
@@ -2877,16 +2876,6 @@ impl TypeTable {
             .copied()
     }
 
-    /// The interned type the CM declaration `module` names `name` was
-    /// registered under, whichever nominal shape it is.
-    pub fn find_named_type_by_source(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<TypeId> {
-        self.find_named_type_by_def(self.cm_decl_in(name, module_source)?)
-    }
-
     /// The type `def` declares, of any kind a Component Model interface names.
     pub fn find_named_type_by_def(&self, def: DefId) -> Option<TypeId> {
         self.find_struct_type(StructDef::Decl(def))
@@ -2894,6 +2883,16 @@ impl TypeTable {
             .or_else(|| self.find_enum_type(def))
             .or_else(|| self.find_flags_type(def))
             .or_else(|| self.find_resource_type(def))
+            .or_else(|| self.find_newtype_type(def))
+    }
+
+    /// The non-generic newtype `def` declares, once interned. Its base is part
+    /// of the intern key, so the declaration alone is no key into it.
+    fn find_newtype_type(&self, def: DefId) -> Option<TypeId> {
+        self.all_types().find_map(|(id, ty)| {
+            matches!(ty, ResolvedType::Newtype { def: d, type_args, .. } if *d == def && type_args.is_empty())
+                .then_some(id)
+        })
     }
 
     /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
@@ -2909,85 +2908,6 @@ impl TypeTable {
         self.cm_decl_index
             .get(&(name.to_string(), namespace, module_name.to_string()))
             .copied()
-    }
-
-    /// Find any decl-backed named type scoped to a single CM *interface*,
-    /// addressed by the namespace that owns it and the module it maps to (e.g.
-    /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a
-    /// `core:` module, which carries none.
-    ///
-    /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
-    /// holds several interfaces — two can declare the same name, and that scan
-    /// returns whichever registered first.
-    #[must_use]
-    pub fn find_named_type_by_module_name(
-        &self,
-        name: &str,
-        module_name: &str,
-        namespace: Option<CmNamespace>,
-    ) -> Option<TypeId> {
-        for (type_id, _) in self.all_types() {
-            let Some((n, ms)) = self.nominal_head(type_id) else {
-                continue;
-            };
-            if n != name {
-                continue;
-            }
-            let matches = match ms {
-                ModuleSource::Binding {
-                    namespace: ns,
-                    interface,
-                } => namespace == Some(ns) && interface.as_str() == module_name,
-                ModuleSource::Core { name: cm_name } => {
-                    namespace.is_none() && cm_name.as_str() == module_name
-                }
-                _ => false,
-            };
-            if matches {
-                return Some(type_id);
-            }
-        }
-        None
-    }
-
-    /// Find a decl-backed named type scoped to a CM package: any
-    /// `module_source` under the `{cm_package}/` prefix, restricted to
-    /// `namespace` when the caller knows it and searching every bundled one
-    /// when it does not. `cm_package` is the bare segment (`"http"`, `"kiln"`),
-    /// not a fully-qualified source; same-named types in distinct packages stay
-    /// distinct because `module_source` is part of the intern key.
-    pub fn find_named_type_by_cm_package(
-        &self,
-        name: &str,
-        cm_package: &str,
-        namespace: Option<CmNamespace>,
-    ) -> Option<TypeId> {
-        let prefix = format!("{cm_package}/");
-        for (type_id, _) in self.all_types() {
-            let Some((n, ms)) = self.nominal_head(type_id) else {
-                continue;
-            };
-            if n != name {
-                continue;
-            }
-            match ms {
-                ModuleSource::Binding {
-                    namespace: ns,
-                    interface,
-                } if namespace.is_none_or(|want| want == ns) && interface.starts_with(&prefix) => {
-                    return Some(type_id);
-                }
-                // Core-packaged CM types (e.g. `core:kiln/types.wado`) are
-                // registered under `ModuleSource::Core`; match them by the
-                // same package-prefix contract so generator bindings reach
-                // their stdlib types through this lookup.
-                ModuleSource::Core { name: cm_name } if cm_name.starts_with(&prefix) => {
-                    return Some(type_id);
-                }
-                _ => {}
-            }
-        }
-        None
     }
 
     /// The interned instance of `def` at `type_args`, if one exists.

@@ -6,14 +6,13 @@
 
 use std::cell::RefCell;
 
-use crate::ast::{AstId, GenericType, NamedType, Type};
+use crate::ast::{AstId, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
+use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::primitive::PrimitiveType;
-use crate::stdlib::is_wit_core_module;
 use crate::tir::{
     ResolvedType, TemplateId, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId,
@@ -22,7 +21,7 @@ use crate::type_table::TypeTable;
 
 use crate::component_model::map_key_rejection;
 use crate::component_model::{future_payload_rejection, stream_payload_rejection};
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::name::{FqTraitName, FqTypeName, UNIT_TYPE_NAME};
 use crate::synthesis::common::{
     binary, builtin_call, cast, f64_const, i32_const, i64_const, synth_span,
@@ -101,14 +100,6 @@ impl CmStdlibNames {
 pub struct LiftContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub type_table: &'a RefCell<TypeTable>,
-    /// CM package owning the binding being synthesized (e.g., `"http"`
-    /// for `wasi:http/*` bindings, `"kiln"` for `core:kiln/*` bindings).
-    /// Required: every CM binding is emitted inside a known package,
-    /// and named-type lookups are always scoped by `(name, package)` to
-    /// prevent collisions such as `wasi:cli/ErrorCode` vs.
-    /// `wasi:http/ErrorCode` — or, across schemes,
-    /// `wasi:http/types::Response` vs. `core:kiln/types::Response`.
-    pub cm_package: &'a str,
     /// `ModuleSource` interner shared with the package, used to canonicalise a
     /// synthesised type's module identity so it matches the elaborator's
     /// registered `StructName`s pointer-equal. The lift chain may `borrow_mut`
@@ -118,103 +109,68 @@ pub struct LiftContext<'a> {
 }
 
 impl LiftContext<'_> {
-    /// Resolve the `ModuleSource` for a CM named type declared by interface FQ
-    /// `source`. A lib-local interface returns its recorded entry source; a
-    /// WASI/core interface derives its source from the FQ by the canonical
-    /// naming convention. Provenance comes from the registry, not an FQ prefix
-    /// check, so the resulting struct/variant `TypeId` matches the
-    /// elaborator-registered one in every world.
-    pub(super) fn module_source_for(&self, source: &str) -> ModuleSource {
-        if let Some(entry) = self
-            .cm_interface_registry
-            .cm_interface_module_source_of(source)
-        {
-            return entry.clone();
-        }
-        module_source_for_cm_interface(&mut self.interner.borrow_mut(), source)
+    /// The declaration the CM named type `named` refers to.
+    pub(super) fn cm_decl(&self, named: &NamedType) -> DefId {
+        self.cm_interface_registry
+            .declared_def(named, self.type_table.borrow().defs())
+            .unwrap_or_else(|| panic!("CM type `{}` names no declaration", named.name))
     }
 
-    /// The declaration behind a CM named type — see
-    /// [`TypeTable::cm_decl_in`] for why the WIT boundary resolves
-    /// a name rather than following a reference site.
-    pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
-        self.cm_decl_at(&self.type_table.borrow(), source, name)
-    }
-
-    /// [`Self::cm_decl`] in `type_table`, for a caller already holding it.
-    fn cm_decl_at(&self, type_table: &TypeTable, source: &str, name: &str) -> DefId {
-        let module_source = self.module_source_for(source);
-        type_table
-            .cm_decl_in(name, &module_source)
-            // A lib-local type declared outside the entry module: the interface
-            // FQ maps to the entry module, so resolve via the type's recorded
-            // declaration.
-            .or_else(|| self.cm_interface_registry.lib_local_type_def(name))
-            .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
-    }
-
-    /// Resolve a CM `Type` to its elaborator-registered `TypeId`, lib-aware:
-    /// unlike [`cm_type_to_type_id`], a lib-local named type resolves through its
-    /// recorded entry `ModuleSource` and yields the concrete GC id rather than
-    /// falling back to `i32`. Provenance comes from the registry, not an FQ
-    /// prefix check, and containers recurse. WASI and core types go by package.
+    /// [`cm_type_to_type_id`], except that a record or variant of an interface a
+    /// module declares is interned here rather than required to be interned
+    /// already: a lib-local one may not be yet.
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
         match ty {
             Type::Named(n) => {
-                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n)
+                if let Some(src) = self.cm_interface_registry.source_interface(n)
                     && self
                         .cm_interface_registry
                         .cm_interface_module_source_of(&src)
                         .is_some()
                 {
+                    let def = || {
+                        self.cm_interface_registry
+                            .declared_def(n, tt.defs())
+                            .unwrap_or_else(|| panic!("CM type `{}` names no declaration", n.name))
+                    };
                     if self
                         .cm_interface_registry
                         .get_struct_fields_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let def = self.cm_decl_at(tt, &src, &n.name);
-                        return tt.make_struct(StructDef::Decl(def));
+                        return tt.make_struct(StructDef::Decl(def()));
                     }
                     if self
                         .cm_interface_registry
                         .get_variant_cases_by_source(&src, &n.name)
                         .is_some()
                     {
-                        let def = self.cm_decl_at(tt, &src, &n.name);
-                        return tt.make_variant(def);
+                        return tt.make_variant(def());
                     }
                 }
-                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
+                cm_type_to_type_id(ty, tt, self.cm_interface_registry)
             }
             Type::Tuple(elems) if !elems.is_empty() => {
                 let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_held_type_id(e, tt)).collect();
                 tt.make_tuple(ids)
             }
-            Type::Generic(g) => {
-                let (list_name, option_name, result_name) = {
-                    let items = tt.compiler_items();
-                    (
-                        items.struct_name(CompilerItem::List).to_string(),
-                        items.variant_name(CompilerItem::Option).to_string(),
-                        items.variant_name(CompilerItem::Result).to_string(),
-                    )
-                };
-                if g.name == list_name && g.args.len() == 1 {
+            Type::Generic(g) => match self.cm_interface_registry.type_decls().item_of(ty) {
+                Some(CompilerItem::List) => {
                     let elem = self.cm_held_type_id(&g.args[0], tt);
-                    return tt.make_list(elem);
+                    tt.make_list(elem)
                 }
-                if g.name == option_name && g.args.len() == 1 {
+                Some(CompilerItem::Option) => {
                     let inner = self.cm_held_type_id(&g.args[0], tt);
-                    return tt.make_option(inner);
+                    tt.make_option(inner)
                 }
-                if g.name == result_name && g.args.len() == 2 {
+                Some(CompilerItem::Result) => {
                     let ok = self.cm_held_type_id(&g.args[0], tt);
                     let err = self.cm_held_type_id(&g.args[1], tt);
-                    return tt.make_result(ok, err);
+                    tt.make_result(ok, err)
                 }
-                cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
-            }
-            _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
+                _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry),
+            },
+            _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry),
         }
     }
 
@@ -234,23 +190,16 @@ impl LiftContext<'_> {
 pub struct LowerContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
     pub type_table: &'a RefCell<TypeTable>,
-    /// CM package owning the binding being synthesized (same semantics as
-    /// `LiftContext::cm_package`).
-    pub wasi_package: &'a str,
     /// Stdlib-name snapshot; built once per binding instead of per call.
     pub names: CmStdlibNames,
 }
 
-/// Convert a WASI AST `Type` to a `TypeId`. Every WASI binding is emitted inside
-/// a known package, so both the registry and the owner are required. A named
-/// type resolves by `(name, wasi_package)`, falling back to the registry's
-/// canonical owner of the bare name, since `http` bindings may reference an
-/// `ErrorCode` declared in `filesystem`.
+/// Convert a CM signature `Type` to a `TypeId`. A named type is the `TypeId` its
+/// declaration was interned under.
 pub fn cm_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
     registry: &CmInterfaceRegistry,
-    wasi_package: &str,
 ) -> TypeId {
     let item = registry.type_decls().item_of(ty);
     match ty {
@@ -273,73 +222,31 @@ pub fn cm_type_to_type_id(
             "char" => TypeTable::CHAR,
             UNIT_TYPE_NAME => TypeTable::UNIT,
             // Resource/enum/variant types - look up the already-resolved TypeId.
-            //
-            // The type's own `source_interface` leads: a package holds several
-            // interfaces and two can declare the same name (`wasi:sockets/types`
-            // and `wasi:sockets/ip-name-lookup` both declare `ErrorCode`), so
-            // scoping by package alone returns whichever registered first. The
-            // package lookups behind it cover a type with no recorded interface;
-            // neither is ever a bare-name scan.
-            _ => registry
-                .source_interface(named)
-                .and_then(|fq| registry.cm_interface_module_source_of(&fq))
-                .and_then(|ms| type_table.find_named_type_by_source(&named.name, ms))
-                // A stdlib WASI interface has no recorded `ModuleSource`, so
-                // derive the module the FQ maps to and match it exactly.
-                .or_else(|| {
-                    registry
-                        .source_interface(named)
-                        .and_then(|fq| cm_interface_module(&fq))
-                        .and_then(|(ns, m)| {
-                            type_table.find_named_type_by_module_name(&named.name, &m, ns)
-                        })
-                })
-                // The binding's own package, whose namespace it does not carry.
-                .or_else(|| {
-                    type_table.find_named_type_by_cm_package(
-                        named.name.as_str(),
-                        wasi_package,
-                        None,
-                    )
-                })
-                .or_else(|| {
-                    canonical_cm_package(registry, named.name.as_str()).and_then(|(ns, pkg)| {
-                        type_table.find_named_type_by_cm_package(named.name.as_str(), pkg, Some(ns))
-                    })
-                })
-                // A lib-local type declared outside the entry module: the
-                // interface FQ maps to the entry module, so resolve via the
-                // type's recorded declaration instead.
-                .or_else(|| {
-                    registry
-                        .lib_local_type_def(&named.name)
-                        .and_then(|def| type_table.find_named_type_by_def(def))
-                })
-                // Resources are bare i32 handles at the CM boundary and need no
-                // registered GC type. Anything else without a TypeId would
-                // miscompile (e.g. FieldAccess on an i32), so fail loudly.
-                .unwrap_or_else(|| {
-                    let is_resource = registry.resolve_cm_source_for(named).is_some_and(|s| {
-                        registry
-                            .get_resource_cm_name_by_source(&s, &named.name)
-                            .is_some()
-                    });
-                    if is_resource {
-                        TypeTable::I32
-                    } else {
-                        panic!(
-                            "CM type `{}` (package `{wasi_package}`) has no registered TypeId",
+            _ => {
+                let def = registry
+                    .declared_def(named, type_table.defs())
+                    .unwrap_or_else(|| panic!("CM type `{}` names no declaration", named.name));
+                type_table
+                    .find_named_type_by_def(def)
+                    // Resources are bare i32 handles at the CM boundary and
+                    // need no registered GC type. Anything else without a
+                    // TypeId would miscompile (e.g. FieldAccess on an i32).
+                    .unwrap_or_else(|| {
+                        assert!(
+                            type_table.defs().kind(def) == DefKind::Resource,
+                            "CM type `{}` has no registered TypeId",
                             named.name
-                        )
-                    }
-                }),
+                        );
+                        TypeTable::I32
+                    })
+            }
         },
         Type::Generic(g) => {
             let held = |i: usize, type_table: &mut TypeTable| {
-                cm_held_type_to_type_id(&g.args[i], type_table, registry, wasi_package)
+                cm_held_type_to_type_id(&g.args[i], type_table, registry)
             };
             let bare = |i: usize, type_table: &mut TypeTable| {
-                cm_type_to_type_id(&g.args[i], type_table, registry, wasi_package)
+                cm_type_to_type_id(&g.args[i], type_table, registry)
             };
             match item {
                 Some(CompilerItem::List) => {
@@ -379,14 +286,14 @@ pub fn cm_type_to_type_id(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
+                .map(|t| cm_held_type_to_type_id(t, type_table, registry))
                 .collect();
             type_table.make_tuple(resolved)
         }
         Type::Reference(inner) | Type::MutReference(inner)
             if registry.extern_handle(ty).is_some() =>
         {
-            cm_type_to_type_id(inner, type_table, registry, wasi_package)
+            cm_type_to_type_id(inner, type_table, registry)
         }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
@@ -400,11 +307,8 @@ pub fn cm_held_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
     registry: &CmInterfaceRegistry,
-    wasi_package: &str,
 ) -> TypeId {
-    held_type(ty, type_table, |t, tt| {
-        cm_type_to_type_id(t, tt, registry, wasi_package)
-    })
+    held_type(ty, type_table, |t, tt| cm_type_to_type_id(t, tt, registry))
 }
 
 /// A container's element type, resolved by `element`. Only a bare `borrow<t>`
@@ -424,41 +328,6 @@ fn held_type(
             type_table.make_mut_ref(inner)
         }
         _ => element(ty, type_table),
-    }
-}
-
-/// Given a bare type name, ask the registry for its canonical owner and return
-/// the namespace and package that own it (e.g. `(Wasi, "filesystem")`). Used to
-/// disambiguate name lookups for types whose canonical owner differs from the
-/// currently-processed package (e.g. `ErrorCode` is owned by `filesystem` but
-/// referenced from `http` bindings).
-pub(super) fn canonical_cm_package<'a>(
-    registry: &'a CmInterfaceRegistry,
-    name: &str,
-) -> Option<(CmNamespace, &'a str)> {
-    for kind in CmTypeKind::ALL {
-        if let Some(source) = registry.bare_name_owner(kind, name)
-            && let Some(found) = CmNamespace::split_package(source)
-        {
-            return Some(found);
-        }
-    }
-    None
-}
-
-/// Resolve a CM source interface (e.g. `wasi:filesystem/types@0.3.0`,
-/// `core:kiln/types@0.1.0`) to the `ModuleSource` the elaborator uses when
-/// registering its types. Keeps the lift path's fabricated `TypeId`s
-/// matching the `StructName`s under which the WIR types pass registered
-/// them (see `wir_build::types::register_struct`).
-pub(super) fn module_source_for_cm_interface(
-    interner: &mut ModuleSourceInterner,
-    source_interface: &str,
-) -> ModuleSource {
-    match cm_interface_module(source_interface) {
-        Some((Some(namespace), module)) => interner.binding(namespace, &module),
-        Some((None, module)) => interner.core(&module),
-        None => ModuleSource::default(),
     }
 }
 
@@ -1338,79 +1207,47 @@ pub(super) fn type_id_to_ast_type(
             .type_decls()
             .item_type(item, args, span);
     }
-    let named_no_source =
-        |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
-    // The declaring module answers first, so no by-name search can offer
-    // another module's `ErrorCode` and lift a record as its enum.
-    let cm_named = |name: &str, ms: &ModuleSource| {
-        let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let searchable = match ms {
-            ModuleSource::Binding { .. } => true,
-            ModuleSource::Core { name: core } => is_wit_core_module(core),
-            _ => false,
-        };
-        let source = cm_interface_registry
-            .interface_declaring(ms, name)
-            .map(str::to_string)
-            .or_else(|| {
-                searchable
-                    .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
-                    .flatten()
-            });
-        if let Some(source) = source {
-            cm_interface_registry.set_source_interface(nt.id, source);
-        }
-        Type::Named(nt)
+    // The type names its declaration, so the registry answers its interface
+    // from the declaration and no by-name search can offer another module's
+    // `ErrorCode` and lift a record as its enum.
+    let declared = |def: DefId, args: Vec<Type>| {
+        let (name, _) = type_table
+            .nominal_head(type_id)
+            .expect("a nominal type names a declaration");
+        cm_interface_registry.type_decls().decl_type(
+            type_table.defs().ast_id(def),
+            name,
+            args,
+            span,
+        )
     };
     match resolved {
-        ResolvedType::Primitive(p) => named_no_source(p.as_str()),
+        ResolvedType::Primitive(p) => {
+            Type::Named(NamedType::new(AstId::fresh(), p.as_str().to_string(), span))
+        }
         ResolvedType::Unit => Type::unit(AstId::fresh(), span),
         // `Flags` joins them: its own CM type, 1 byte at <=8 labels, not a
         // four-byte `i32`.
         ResolvedType::Struct { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::Enum { .. }
-        | ResolvedType::Flags { .. } => {
-            let (name, module_source) = type_table
-                .nominal_head(type_id)
-                .expect("a nominal type names a declaration");
-            cm_named(&name, &module_source)
+        | ResolvedType::Flags { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::Newtype { .. } => declared(
+            type_table
+                .nominal_def(type_id)
+                .expect("a type crossing the boundary is declared"),
+            Vec::new(),
+        ),
+        // The tuple family is a `GenericInstance`, but its CM surface is a
+        // structural tuple — emit `Type::Tuple` so lift/lower dispatch on the
+        // tuple arm rather than the generic catch-all.
+        ResolvedType::GenericInstance { def, type_args } if type_table.is_tuple_def(*def) => {
+            Type::Tuple(type_args.iter().map(to_ast).collect())
         }
-        ResolvedType::Resource { def } => {
-            cm_named(type_table.def_name(*def), type_table.def_module(*def))
-        }
-        ResolvedType::GenericInstance { def, type_args } => {
-            let name = &type_table.def_name(*def).to_string();
-            let args: Vec<Type> = type_args.iter().map(to_ast).collect();
-            // The tuple family is a `GenericInstance`, but its CM surface is a
-            // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
-            // the tuple arm rather than the generic catch-all.
-            if type_table.is_tuple_def(*def) {
-                Type::Tuple(args)
-            } else {
-                Type::Generic(GenericType {
-                    id: AstId::fresh(),
-                    name: name.clone(),
-                    args,
-                    span,
-                })
-            }
-        }
-        ResolvedType::GenericResource { def, type_args } => {
-            let name = &type_table.def_name(*def).to_string();
-            let args: Vec<Type> = type_args.iter().map(to_ast).collect();
-            Type::Generic(GenericType {
-                id: AstId::fresh(),
-                name: name.clone(),
-                args,
-                span,
-            })
-        }
-        ResolvedType::Newtype { .. } => {
-            let (name, module_source) = type_table
-                .nominal_head(type_id)
-                .expect("a newtype names a declaration");
-            cm_named(&name, &module_source)
+        ResolvedType::GenericInstance { def, type_args }
+        | ResolvedType::GenericResource { def, type_args } => {
+            declared(*def, type_args.iter().map(to_ast).collect())
         }
         ResolvedType::Ref(inner) => Type::Reference(Box::new(to_ast(inner))),
         ResolvedType::MutRef(inner) => Type::MutReference(Box::new(to_ast(inner))),

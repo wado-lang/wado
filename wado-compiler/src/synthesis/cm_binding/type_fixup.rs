@@ -409,8 +409,7 @@ impl CallRewriteWalker<'_> {
                 let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
                     // The source null's inner type may be unknown; the registry's is not.
                     let mut tt = self.type_table.borrow_mut();
-                    let option_type_id =
-                        cm_type_to_type_id(param_type, &mut tt, registry, &func_info.package);
+                    let option_type_id = cm_type_to_type_id(param_type, &mut tt, registry);
                     option_none(option_type_id, tt.compiler_items())
                 } else {
                     arg

@@ -230,12 +230,7 @@ pub(super) fn synthesize_lower_tuple(
         // type lacks args (shouldn't happen for a well-formed tuple value).
         let field_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_held_type_to_type_id(
-                elem_ty,
-                &mut tt,
-                ctx.cm_interface_registry,
-                ctx.wasi_package,
-            )
+            cm_held_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry)
         });
 
         // Extract the i-th field from the tuple using FieldAccess
@@ -414,12 +409,7 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
             let payload = case.payload.map(|ty| {
                 let tid = {
                     let mut tt = ctx.type_table.borrow_mut();
-                    cm_held_type_to_type_id(
-                        &ty,
-                        &mut tt,
-                        ctx.cm_interface_registry,
-                        ctx.wasi_package,
-                    )
+                    cm_held_type_to_type_id(&ty, &mut tt, ctx.cm_interface_registry)
                 };
                 (ty, tid)
             });
@@ -505,7 +495,6 @@ pub(super) fn synthesize_lower_option_to_memory(
                     inner_type,
                     &mut ctx.type_table.borrow_mut(),
                     ctx.cm_interface_registry,
-                    ctx.wasi_package,
                 )
             }
         }
@@ -727,12 +716,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
             _ => {
                 drop(tt);
                 let mut tt = ctx.type_table.borrow_mut();
-                cm_held_type_to_type_id(
-                    &elem_resolved,
-                    &mut tt,
-                    ctx.cm_interface_registry,
-                    ctx.wasi_package,
-                )
+                cm_held_type_to_type_id(&elem_resolved, &mut tt, ctx.cm_interface_registry)
             }
         }
     };
@@ -1307,12 +1291,7 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
                     if let Some(payload_ty) = &case.payload {
                         let payload_type_id = {
                             let mut tt = ctx.type_table.borrow_mut();
-                            cm_held_type_to_type_id(
-                                payload_ty,
-                                &mut tt,
-                                ctx.cm_interface_registry,
-                                ctx.wasi_package,
-                            )
+                            cm_held_type_to_type_id(payload_ty, &mut tt, ctx.cm_interface_registry)
                         };
                         let binding_local = alloc_local(next_local, locals, payload_type_id);
                         let binding_name = format!("$variant_payload_{binding_local}");
@@ -1520,12 +1499,7 @@ fn synthesize_flatten_tuple_to_flat_args(
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_type_id = elem_type_ids.get(i).copied().unwrap_or_else(|| {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_held_type_to_type_id(
-                elem_ty,
-                &mut tt,
-                ctx.cm_interface_registry,
-                ctx.wasi_package,
-            )
+            cm_held_type_to_type_id(elem_ty, &mut tt, ctx.cm_interface_registry)
         });
         let elem_expr = field_access(
             local_ref(val_local, &val_name, tuple_type_id),
@@ -1568,12 +1542,7 @@ pub(super) fn flatten_cm_record_fields(
         let resolved_field = ctx.cm_interface_registry.value_type(field_ty);
         let field_type_id = {
             let mut tt = ctx.type_table.borrow_mut();
-            cm_held_type_to_type_id(
-                &resolved_field,
-                &mut tt,
-                ctx.cm_interface_registry,
-                ctx.wasi_package,
-            )
+            cm_held_type_to_type_id(&resolved_field, &mut tt, ctx.cm_interface_registry)
         };
         let field_expr = field_access(
             local_ref(val_local, val_name, value_type_id),
@@ -1868,12 +1837,7 @@ fn flatten_result_case_arm(
 
     let payload_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        cm_held_type_to_type_id(
-            payload_type,
-            &mut tt,
-            ctx.cm_interface_registry,
-            ctx.wasi_package,
-        )
+        cm_held_type_to_type_id(payload_type, &mut tt, ctx.cm_interface_registry)
     };
     let binding_local = alloc_local(next_local, locals, payload_type_id);
     let binding_name = format!("$result_payload_{binding_local}");
@@ -1950,7 +1914,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // `core:kiln/*` records share one path. Resolution goes through the
             // registry, which also finds a lib-local record — carrying no
             // `source_interface` — under its package's default-interface FQ.
-            let source = ctx.cm_interface_registry.resolve_cm_source_for(n);
+            let source = ctx.cm_interface_registry.source_interface(n);
             if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
@@ -1973,12 +1937,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     let offset = offsets[field_idx];
                     let field_type_id = {
                         let mut tt = ctx.type_table.borrow_mut();
-                        cm_held_type_to_type_id(
-                            field_ty,
-                            &mut tt,
-                            ctx.cm_interface_registry,
-                            ctx.wasi_package,
-                        )
+                        cm_held_type_to_type_id(field_ty, &mut tt, ctx.cm_interface_registry)
                     };
                     let field_expr = TirExpr::new(
                         TirExprKind::FieldAccess {

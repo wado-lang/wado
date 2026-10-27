@@ -55,7 +55,6 @@ pub(super) fn expand_task_returns_in_func(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) {
     let mut func = user_func.borrow_mut();
@@ -72,7 +71,6 @@ pub(super) fn expand_task_returns_in_func(
         tir_modules,
         type_table,
         cm_interface_registry,
-        cm_package,
         interner,
     };
     expander.visit_block(&mut body);
@@ -191,7 +189,6 @@ struct TaskReturnExpander<'a> {
     tir_modules: &'a IndexMap<ModuleSource, TirModule>,
     type_table: &'a Rc<RefCell<TypeTable>>,
     cm_interface_registry: &'a CmInterfaceRegistry,
-    cm_package: &'a str,
     interner: &'a RefCell<ModuleSourceInterner>,
 }
 
@@ -211,7 +208,6 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                     self.tir_modules,
                     self.type_table,
                     self.cm_interface_registry,
-                    self.cm_package,
                     self.interner,
                 )),
                 None => new_stmts.push(stmt),
@@ -424,7 +420,6 @@ fn generate_inline_task_return(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
     assert!(
@@ -434,7 +429,6 @@ fn generate_inline_task_return(
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package,
         interner,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();

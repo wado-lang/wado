@@ -1251,7 +1251,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
         Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            if let Some(source) = registry.resolve_cm_source_for(named)
+            if let Some(source) = registry.source_interface(named)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
             {
                 return Some(cm);
@@ -1940,11 +1940,7 @@ fn compile_after_load<H: CompilerHost>(
         let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
-        registry.register_lib_local_items(
-            lib_surface.published_type_decls(),
-            fq,
-            tysys.resolutions.defs(),
-        );
+        registry.register_lib_local_items(lib_surface.published_type_decls(), fq);
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every
         // submodule, since a library spreads its effects (like its types).

@@ -369,14 +369,14 @@ pub fn cm_payload_type_from_ast(
             if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
                 return Some(CmPayloadType::Scalar(scalar));
             }
-            let src = registry.resolve_cm_source_for(n)?;
+            let src = registry.source_interface(n)?;
             let declares = |kinds: &[CmTypeKind]| {
                 kinds
                     .iter()
                     .any(|&kind| registry.declares_kind(kind, &src, &n.name))
             };
             let declared = || {
-                let def = cm_decl_in_interface(type_table, registry, &src, &n.name)?;
+                let def = registry.declared_def(n, type_table.defs())?;
                 Some(CmDecl::new(type_table.defs(), def))
             };
             // Before the CM-owned bail below: a WASI resource counts.
@@ -491,7 +491,7 @@ fn wasi_error_code_decl_from_ast(
     let ast::Type::Named(n) = &registry.resolve_type(ty) else {
         return None;
     };
-    let source = registry.resolve_cm_source_for(n)?;
+    let source = registry.source_interface(n)?;
     if !source.starts_with("wasi:") {
         return None;
     }
@@ -501,7 +501,7 @@ fn wasi_error_code_decl_from_ast(
     {
         return None;
     }
-    let def = cm_decl_in_interface(type_table, registry, &source, &n.name)?;
+    let def = registry.declared_def(n, type_table.defs())?;
     Some(CmDecl::new(type_table.defs(), def))
 }
 
@@ -524,7 +524,7 @@ fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegi
         return false;
     };
     registry
-        .resolve_cm_source_for(inner)
+        .source_interface(inner)
         .is_some_and(|source| registry.declares_kind(CmTypeKind::Resource, &source, &inner.name))
 }
 
@@ -843,11 +843,7 @@ impl CmFunctionInfo {
         registry: &CmInterfaceRegistry,
         seen: &mut IndexSet<String>,
     ) -> bool {
-        let Some(source) = registry.source_interface(named).or_else(|| {
-            registry
-                .find_binding_source(CmTypeKind::Variant, &named.name)
-                .map(str::to_string)
-        }) else {
+        let Some(source) = registry.source_interface(named) else {
             return false;
         };
         // A record has several fields and exceeds MAX_FLAT_RESULTS (1) in canon
@@ -919,10 +915,18 @@ pub struct CmInterfaceInfo {
     pub version: Option<String>,
     /// Functions in this interface
     pub functions: Vec<CmFunctionInfo>,
-    /// Resource type exported by this interface (if any).
-    /// Format: (Wado name, CM kebab-case name)
-    /// e.g., ("`TerminalInput`", "terminal-input")
-    pub resource_type: Option<(String, String)>,
+    /// The resource a getter of this interface answers, if any.
+    pub resource_type: Option<CmGetterResource>,
+}
+
+/// The resource a getter interface answers (`TerminalInput` from
+/// `wasi:cli/terminal-stdin`), which another interface may declare.
+#[derive(Debug, Clone)]
+pub struct CmGetterResource {
+    pub wado_name: String,
+    pub cm_name: String,
+    /// The interface declaring the resource.
+    pub source: String,
 }
 
 /// The codegen component-instance key `"{package}-{interface}"` (e.g.
@@ -961,6 +965,10 @@ pub struct CmInterfaceRegistry {
 
     /// The declaration each type name the registry holds resolves to.
     type_decls: CmTypeDecls,
+
+    /// The interface each registered type declaration is registered under, so
+    /// a reference bound to its declaration answers its interface.
+    declared_in: IndexMap<AstId, String>,
 
     /// Every bound CM function, by [`CmFunctionInfo::cm_identifier`].
     functions: IndexMap<String, CmFunctionInfo>,
@@ -1010,17 +1018,9 @@ pub struct CmInterfaceRegistry {
     structs: IndexMap<(String, String), (String, Vec<(String, Type)>, Vec<(String, String, Type)>)>,
 
     /// CM interface FQ -> `ModuleSource` for non-stdlib namespaces (`--lib`
-    /// locals and component imports). WASI/core interfaces are absent; their
-    /// source is derived from the FQ by `module_source_for_cm_interface`.
+    /// locals and component imports). WASI/core interfaces are absent: their
+    /// module path is their FQ.
     cm_interface_module_sources: IndexMap<String, ModuleSource>,
-
-    /// Lib-local named type published from outside the entry module -> its
-    /// declaration. A library spreads its public types across submodules and
-    /// adopts others' under its own names, so the interface FQ (which maps to
-    /// the entry module) cannot alone locate `HeadingInfo` or an
-    /// `export use { T as U }`. Keyed by published name — unique within a
-    /// library's API.
-    lib_local_type_defs: IndexMap<String, DefId>,
 
     /// FQs of interfaces imported from a CM component dependency. The plan
     /// classifies these as [`crate::wir::ImportKind::Component`] for composition.
@@ -1219,19 +1219,6 @@ fn cm_function_name(cm_import: &CmImport, operation: &str) -> String {
         .unwrap_or_else(|| to_cm_name(operation))
 }
 
-/// `emitting` itself, where it declares `wado_name` in a
-/// `(source_interface, wado_name)`-keyed map. Borrowed from the map rather than
-/// from the argument, so a caller may pass a short-lived interface name.
-fn declaring_source<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
-    emitting: Option<&str>,
-    wado_name: &str,
-) -> Option<&'a str> {
-    let iface = emitting?;
-    map.get_key_value(&(iface.to_string(), wado_name.to_string()))
-        .map(|((source, _), _)| source.as_str())
-}
-
 /// The Wado name a `(source_interface, wado_name)`-keyed map of CM names holds
 /// under `iface_fq` for `cm_name`.
 fn wado_name_under_cm_name<'a>(
@@ -1282,56 +1269,6 @@ fn first_name_in_interface<'a>(
         .map(|(_, name)| name.as_str())
 }
 
-/// Return the `source_interface` when `name` has exactly one registrant under
-/// `prefix`.
-fn find_unique_source_with_prefix<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    prefix: &str,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| src.starts_with(prefix))
-}
-
-/// The unique source interface registering `name` across the bundled CM
-/// namespaces. A name two interfaces declare is ambiguous: `None`.
-fn find_unique_source_in_binding<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| {
-        CmNamespace::split_specifier(src).is_some()
-    })
-}
-
-/// The unique source interface registering `name` among sources for which
-/// `is_member` holds, or `None` when there is no or more than one match.
-fn find_unique_source_in_set<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-    is_member: &dyn Fn(&str) -> bool,
-) -> Option<&'a str> {
-    let mut found: Option<&str> = None;
-    for (src, n) in keys {
-        if n != name || !is_member(src) {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        found = Some(src.as_str());
-    }
-    found
-}
-
-/// Return the `source_interface` when `name` has exactly one registrant,
-/// ignoring empty source strings.
-fn find_unique_source_in<'a>(
-    keys: impl Iterator<Item = &'a (String, String)>,
-    name: &str,
-) -> Option<&'a str> {
-    find_unique_source_in_set(keys, name, &|src| !src.is_empty())
-}
-
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
 /// loader identity (`wasi:http/types.wado`) and its CM registration key
 /// (`wasi:http/types@0.3.0`) reduce to the same stem.
@@ -1356,59 +1293,20 @@ fn lookup_by_module<'a>(
         .map(String::as_str)
 }
 
-/// Resolve a `Type::Named` reference through the newtype-alias map by its
-/// declaring interface (`source_interface`). A source-less reference, or one
-/// naming no newtype, is returned unchanged, as are other type shapes.
-fn resolve_type(
-    ty: &Type,
-    aliases: &IndexMap<(String, String), Type>,
-    sources: &SourceInterfaces,
-) -> Type {
+/// Spell `Self` as the enclosing resource's name in a receiver type. The site
+/// keeps its id, which [`CmTypeDecls`] binds to the resource.
+fn substitute_self_in_type(ty: &Type, resource_name: &str) -> Type {
     match ty {
-        Type::Named(named) => sources
-            .get(named.id)
-            .and_then(|source| aliases.get(&(source, named.name.clone())))
-            .cloned()
-            .unwrap_or_else(|| ty.clone()),
-        _ => ty.clone(),
-    }
-}
-
-/// Replace `Self` with the enclosing resource's name (and its source interface)
-/// in a receiver type. The `self` / `&self` / `&mut self` forms carry `Self`,
-/// but the CM registry stores concrete types, so `&self` on `resource
-/// Descriptor` must register as `&Descriptor` carrying `Descriptor`'s source
-/// interface — the type the old `self: &Descriptor` spelling produced. Losing
-/// the source interface would make [`CmInterfaceRegistry::resources_in_type`]
-/// miss the borrow.
-fn substitute_self_in_type(
-    sources: &SourceInterfaces,
-    ty: &Type,
-    resource_name: &str,
-    source_interface: &str,
-) -> Type {
-    match ty {
-        Type::Named(n) if n.name == "Self" => {
-            if !source_interface.is_empty() {
-                sources.set(n.id, source_interface.to_string());
-            }
-            Type::Named(NamedType {
-                name: resource_name.to_string(),
-                ..n.clone()
-            })
+        Type::Named(n) if n.name == "Self" => Type::Named(NamedType {
+            name: resource_name.to_string(),
+            ..n.clone()
+        }),
+        Type::Reference(inner) => {
+            Type::Reference(Box::new(substitute_self_in_type(inner, resource_name)))
         }
-        Type::Reference(inner) => Type::Reference(Box::new(substitute_self_in_type(
-            sources,
-            inner,
-            resource_name,
-            source_interface,
-        ))),
-        Type::MutReference(inner) => Type::MutReference(Box::new(substitute_self_in_type(
-            sources,
-            inner,
-            resource_name,
-            source_interface,
-        ))),
+        Type::MutReference(inner) => {
+            Type::MutReference(Box::new(substitute_self_in_type(inner, resource_name)))
+        }
         other => other.clone(),
     }
 }
@@ -1442,9 +1340,7 @@ impl InterfaceDeclTable {
     fn export_lookup(
         &self,
         name: &str,
-        newtypes: &IndexMap<(String, String), Type>,
-        sources: &SourceInterfaces,
-        decls: &CmTypeDecls,
+        registry: &CmInterfaceRegistry,
     ) -> Option<InterfaceExportLookup> {
         let entry = self.by_name.get(name)?;
         let methods = entry
@@ -1456,12 +1352,18 @@ impl InterfaceDeclTable {
                 params: m
                     .params
                     .iter()
-                    .map(|(n, ty)| (n.clone(), resolve_type(ty, newtypes, sources)))
+                    .map(|(n, ty)| (n.clone(), registry.peel_cm_newtype(ty)))
                     .collect(),
                 return_type: m
                     .return_type
                     .as_ref()
-                    .map(|ty| unwrap_async_call_if_async(m.is_async, &Some(ty.clone()), decls))
+                    .map(|ty| {
+                        unwrap_async_call_if_async(
+                            m.is_async,
+                            &Some(ty.clone()),
+                            &registry.type_decls,
+                        )
+                    })
                     .unwrap_or(None)
                     .or_else(|| m.return_type.clone()),
             })
@@ -1984,7 +1886,20 @@ impl CmInterfaceRegistry {
     /// reference and stays the resource; other newtypes resolve.
     fn cm_param_type(&self, ty: &Type) -> Type {
         self.extern_handle(ty)
-            .unwrap_or_else(|| resolve_type(ty, &self.newtypes, &self.source_interfaces))
+            .unwrap_or_else(|| self.peel_cm_newtype(ty))
+    }
+
+    /// `ty` with a CM newtype it names replaced by the newtype's base. A
+    /// reference with no interface, or naming no newtype, is returned
+    /// unchanged, as are other type shapes.
+    fn peel_cm_newtype(&self, ty: &Type) -> Type {
+        let Type::Named(named) = ty else {
+            return ty.clone();
+        };
+        self.source_interface(named)
+            .and_then(|source| self.newtypes.get(&(source, named.name.clone())))
+            .cloned()
+            .unwrap_or_else(|| ty.clone())
     }
 
     /// `func`'s parameters as `(wado_name, cm_name, type)`. `fallback` names a
@@ -2031,7 +1946,22 @@ impl CmInterfaceRegistry {
     /// no pass has answered for that site.
     #[must_use]
     pub fn source_interface(&self, named: &NamedType) -> Option<String> {
-        self.source_interfaces.get(named.id)
+        self.source_interfaces.get(named.id).or_else(|| {
+            self.interface_of_decl(self.type_decls.decl_at(named.id)?)
+                .map(str::to_string)
+        })
+    }
+
+    /// The declaration the type site `named` refers to.
+    #[must_use]
+    pub fn declared_def(&self, named: &NamedType, defs: &DefTable) -> Option<DefId> {
+        Some(defs.def_at(self.type_decls.decl_at(named.id)?))
+    }
+
+    /// The CM interface the type declaration `decl` is registered under.
+    #[must_use]
+    pub fn interface_of_decl(&self, decl: AstId) -> Option<&str> {
+        self.declared_in.get(&decl).map(String::as_str)
     }
 
     /// A span-insensitive key for `ty`, which names a CM type by its declaring
@@ -2072,13 +2002,6 @@ impl CmInterfaceRegistry {
     /// Merge a batch of site answers, first-writer-wins per site.
     pub fn extend_source_interfaces(&self, batch: SourceInterfaceBatch) {
         self.source_interfaces.extend(batch);
-    }
-
-    /// The canonical source interface owning `(kind, name)` — the `#[cm("…")]`
-    /// fragment before the `#`, e.g. `"wasi:filesystem/types@0.3.0"`. `Some`
-    /// only when exactly one interface declares the bare name under `kind`.
-    pub fn bare_name_owner(&self, kind: CmTypeKind, name: &str) -> Option<&str> {
-        find_unique_source_in(self.kind_keys(kind), name)
     }
 
     /// Extract the source interface (the part before the `#` fragment,
@@ -2169,6 +2092,24 @@ impl CmInterfaceRegistry {
         module: &ast::Module,
         scope: &CmDeclScope,
     ) -> Result<(), String> {
+        for item in &module.items {
+            if !matches!(
+                item,
+                Item::Newtype(_)
+                    | Item::Resource(_)
+                    | Item::Struct(_)
+                    | Item::Flags(_)
+                    | Item::Enum(_)
+                    | Item::Variant(_)
+            ) {
+                continue;
+            }
+            let source_interface = Self::cm_source_interface(item.attrs());
+            if !source_interface.is_empty() {
+                self.declared_in.insert(item.id(), source_interface);
+            }
+        }
+
         // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Newtype(alias) = item {
@@ -2351,14 +2292,7 @@ impl CmInterfaceRegistry {
                         let params = self.cm_params_of(
                             method,
                             |param| scope.param_fallback(param, &resource.name, &method.name),
-                            |ty| {
-                                substitute_self_in_type(
-                                    &self.source_interfaces,
-                                    ty,
-                                    &resource.name,
-                                    &resource_source,
-                                )
-                            },
+                            |ty| substitute_self_in_type(ty, &resource.name),
                         );
 
                         // Keep original return type for newtype semantics.
@@ -2662,7 +2596,7 @@ impl CmInterfaceRegistry {
                         (
                             p.name.clone(),
                             to_cm_name(&p.name),
-                            resolve_type(&p.ty, &self.newtypes, &self.source_interfaces),
+                            self.peel_cm_newtype(&p.ty),
                         )
                     })
                     .collect();
@@ -2696,19 +2630,11 @@ impl CmInterfaceRegistry {
         &mut self,
         items: impl IntoIterator<Item = &'a (ModuleSource, Item)>,
         iface_fq: &str,
-        defs: &DefTable,
     ) {
         for (_, item) in items {
-            let decl = item
-                .type_decl()
-                .expect("a library publishes only types beyond its entry module");
-            let earlier = self
-                .lib_local_type_defs
-                .insert(decl.name.to_string(), defs.def_at(item.id()));
             assert!(
-                earlier.is_none(),
-                "a surface publishing `{}` twice is refused before registration",
-                decl.name
+                item.type_decl().is_some(),
+                "a library publishes only types beyond its entry module"
             );
             self.register_lib_local_item(item, iface_fq);
         }
@@ -2717,6 +2643,9 @@ impl CmInterfaceRegistry {
     /// `item`'s type references must already answer their source interface: the
     /// caller binds them by declaration.
     fn register_lib_local_item(&mut self, item: &Item, iface_fq: &str) {
+        if item.type_decl().is_some() {
+            self.declared_in.insert(item.id(), iface_fq.to_string());
+        }
         match item {
             Item::Newtype(alias) => register_unique(
                 &mut self.newtypes,
@@ -2806,14 +2735,7 @@ impl CmInterfaceRegistry {
             if let Item::World(world) = item {
                 world_registry.register(
                     world,
-                    |name| {
-                        interface_decls.export_lookup(
-                            name,
-                            &self.newtypes,
-                            &self.source_interfaces,
-                            &self.type_decls,
-                        )
-                    },
+                    |name| interface_decls.export_lookup(name, self),
                     |name| interface_decls.import_cm_fq(name),
                 );
             }
@@ -2988,67 +2910,11 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// The unique source interface registering `name` across every kind, among
-    /// those `is_member` admits. Two kinds disagreeing is an ambiguity, not a race.
-    fn find_unique_source_across_kinds(
-        &self,
-        name: &str,
-        is_member: &dyn Fn(&str) -> bool,
-    ) -> Option<&str> {
-        let mut found: Option<&str> = None;
-        for kind in CmTypeKind::ALL {
-            let Some(src) = find_unique_source_in_set(self.kind_keys(kind), name, is_member) else {
-                continue;
-            };
-            match found {
-                None => found = Some(src),
-                Some(prev) if prev != src => return None,
-                Some(_) => {}
-            }
-        }
-        found
-    }
-
-    /// The source interface of a `kind` declaration in a bundled CM namespace,
-    /// when exactly one such interface registers the name.
-    pub fn find_binding_source(&self, kind: CmTypeKind, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(self.kind_keys(kind), name)
-    }
-
-    /// The source interface of a `kind` declaration in a WIT-generated `core:*`
-    /// package, when exactly one such interface registers the name. Kept apart
-    /// from [`Self::find_binding_source`], whose bare-name WASI lookups stay
-    /// scoped to `wasi:*` so `wasi:http/types::Response` and
-    /// `core:kiln/types::Response` remain distinct.
-    pub fn find_wit_core_source(&self, kind: CmTypeKind, name: &str) -> Option<&str> {
-        find_unique_source_in_set(self.kind_keys(kind), name, &stdlib::is_wit_core_interface)
-    }
-
-    /// The interface declaring the resource `wado_name`, asking `emitting`
-    /// first. A user module is free to name a resource what a bundled interface
-    /// also names one, and the bundled index then has no unique answer, so an
-    /// emitter that knows which interface it is describing must say so.
-    pub fn resource_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
-        declaring_source(&self.resources, emitting, wado_name)
-            .or_else(|| find_unique_source_in(self.resources.keys(), wado_name))
-            .or_else(|| self.find_binding_source(CmTypeKind::Resource, wado_name))
-    }
-
     /// The CM resources `ty` references at any depth, inside the records and
     /// variants it names too, as `(declaring_interface, wado_name)`.
-    pub fn resources_in_type(
+    fn resources_in_type(
         &self,
         ty: &Type,
-        emitting: Option<&str>,
-        out: &mut IndexSet<(String, String)>,
-    ) {
-        self.resources_in_type_inner(ty, emitting, out, &mut IndexSet::default());
-    }
-
-    fn resources_in_type_inner(
-        &self,
-        ty: &Type,
-        emitting: Option<&str>,
         out: &mut IndexSet<(String, String)>,
         visited: &mut IndexSet<(String, String)>,
     ) {
@@ -3056,7 +2922,7 @@ impl CmInterfaceRegistry {
             let Type::Named(named) = ty else {
                 return;
             };
-            let Some(source) = self.cm_source_of_named_type(named, emitting) else {
+            let Some(source) = self.source_interface(named) else {
                 return;
             };
             let key = (source, named.name.clone());
@@ -3076,7 +2942,7 @@ impl CmInterfaceRegistry {
                     Vec::new()
                 };
             for member in members {
-                self.resources_in_type_inner(member, Some(source), out, visited);
+                self.resources_in_type(member, out, visited);
             }
             if self.get_resource_cm_name_by_source(source, name).is_some() {
                 out.insert(key);
@@ -3085,40 +2951,20 @@ impl CmInterfaceRegistry {
     }
 
     /// The CM resources every signature of `funcs` references, as
-    /// `(declaring_interface, wado_name)`, for the interface `emitting`.
-    pub fn resources_in_signatures(
-        &self,
-        funcs: &[&CmFunctionInfo],
-        emitting: Option<&str>,
-    ) -> IndexSet<(String, String)> {
+    /// `(declaring_interface, wado_name)`.
+    pub fn resources_in_signatures(&self, funcs: &[&CmFunctionInfo]) -> IndexSet<(String, String)> {
         let mut out = IndexSet::default();
+        let mut visited = IndexSet::default();
         for func in funcs {
-            if let Some(ret) = &func.return_type {
-                self.resources_in_type(ret, emitting, &mut out);
-            }
-            for (_, _, ty) in &func.params {
-                self.resources_in_type(ty, emitting, &mut out);
+            for ty in func
+                .return_type
+                .iter()
+                .chain(func.params.iter().map(|(_, _, ty)| ty))
+            {
+                self.resources_in_type(ty, &mut out, &mut visited);
             }
         }
         out
-    }
-
-    /// The interface declaring the flags `wado_name`, asking `emitting` first.
-    /// See [`Self::resource_source_in`].
-    pub fn flags_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
-        declaring_source(&self.flags, emitting, wado_name)
-            .or_else(|| self.find_binding_source(CmTypeKind::Flags, wado_name))
-    }
-
-    /// The owning interface FQ of a component-imported named type, when exactly
-    /// one composed dependency interface declares `name`. Mirrors the
-    /// `find_binding_*` fallbacks for a type re-exported from a CM component
-    /// dependency (whose FQ carries no `wasi:` / `core:kiln/` prefix). `None` if
-    /// no or more than one dependency interface declares `name`, across all type
-    /// kinds — so a struct in one dependency and an enum in another are
-    /// ambiguous, not silently resolved to the first kind.
-    pub fn find_component_type_source(&self, name: &str) -> Option<&str> {
-        self.find_unique_source_across_kinds(name, &|s| self.component_interfaces.contains(s))
     }
 
     /// The `ModuleSource` a CM interface FQ was registered under — the entry
@@ -3180,50 +3026,6 @@ impl CmInterfaceRegistry {
             .find_map(|kind| first_name_in_interface(self.kind_keys(kind), iface_fq))
     }
 
-    /// The declaration a lib-local named type publishes, when it lies outside
-    /// the entry module: a submodule's (`HeadingInfo` inside a facade library)
-    /// or an adopted one, which the interface-FQ mapping alone cannot locate.
-    pub fn lib_local_type_def(&self, name: &str) -> Option<DefId> {
-        self.lib_local_type_defs.get(name).copied()
-    }
-
-    /// The source interface of a named type: its own where the reference carries
-    /// one, else the bare-name search [WEP: Declaration Identity] calls a gap.
-    ///
-    /// [WEP: Declaration Identity]: ../../docs/wep-2026-08-12-declaration-identity.md
-    pub fn resolve_cm_source_for(&self, named: &NamedType) -> Option<String> {
-        if let Some(s) = self.source_interface(named) {
-            return Some(s);
-        }
-        self.find_wit_core_source(CmTypeKind::Struct, &named.name)
-            .or_else(|| self.find_wit_core_source(CmTypeKind::Variant, &named.name))
-            .or_else(|| self.find_wit_core_source(CmTypeKind::Enum, &named.name))
-            // Lib-local types (`wado compile --lib`) are registered by name
-            // under the package's default-interface FQ (neither `wasi:` nor
-            // `core:`), so the prefix-scoped lookups above miss them. A bare
-            // by-name scan resolves them when the name is unambiguous.
-            .or_else(|| self.find_unique_source_across_kinds(&named.name, &|src| !src.is_empty()))
-            .map(str::to_string)
-    }
-
-    /// Resolve a named type to a source interface within `namespace_prefix`
-    /// (e.g. `"core:kiln/"`, `"wasi:http/"`). Used to scope a world export's
-    /// type to the world's own package, so a name that also exists in another
-    /// package (e.g. `Response` in both `wasi:http` and `core:kiln`) resolves
-    /// to the world's own. Returns `None` for an empty prefix or no unique match.
-    pub fn resolve_cm_source_with_prefix<'a>(
-        &'a self,
-        named: &NamedType,
-        namespace_prefix: &str,
-    ) -> Option<&'a str> {
-        if namespace_prefix.is_empty() {
-            return None;
-        }
-        CmTypeKind::ALL.into_iter().find_map(|kind| {
-            find_unique_source_with_prefix(self.kind_keys(kind), namespace_prefix, &named.name)
-        })
-    }
-
     /// Resolve a newtype *reference* to its aliased base type by its declaring
     /// interface (`NamedType::source_interface`), so two modules that declare a
     /// same-named newtype resolve to their own base — never a bare-name guess.
@@ -3252,31 +3054,6 @@ impl CmInterfaceRegistry {
         &self.newtypes
     }
 
-    /// The CM interface a named type belongs to: its recorded source, else the
-    /// emitting interface when that one declares the name, else the bundled
-    /// binding that declares it, else a component dependency's re-export. The
-    /// one chain codegen resolves a reference by.
-    pub fn cm_source_of_named_type(
-        &self,
-        named: &NamedType,
-        interface_hint: Option<&str>,
-    ) -> Option<String> {
-        let name = &named.name;
-        let declared_at_hint = interface_hint
-            .filter(|hint| self.declares_wado_name(hint, name))
-            .map(str::to_string);
-        self.source_interface(named)
-            .filter(|source| self.is_cm_source(source))
-            .or(declared_at_hint)
-            .or_else(|| {
-                self.find_unique_source_across_kinds(name, &|src| {
-                    CmNamespace::split_specifier(src).is_some()
-                })
-                .map(str::to_string)
-            })
-            .or_else(|| self.find_component_type_source(name).map(str::to_string))
-    }
-
     /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
     /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
@@ -3286,31 +3063,12 @@ impl CmInterfaceRegistry {
             .or_else(|| self.get_enum_cm_name_by_source(interface_path, ERROR_CODE_WADO_NAME))
     }
 
-    /// Keying on the declaration's own module source keeps a user type from
-    /// being confused with a same-named WASI or dependency declaration.
-    ///
-    /// A `--lib` entry declaration is registered under the package default
-    /// interface, whose source [`Self::register_lib_local_decls`] maps to the entry
-    /// module; outside `--lib` it is registered nowhere, so this is `false` and
-    /// the payload has no CM type to lower against.
-    pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        self.interface_declaring(source, name).is_some()
-    }
-
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
     /// at the CM boundary can name.
     pub fn declares_wado_name(&self, interface_fq: &str, name: &str) -> bool {
         CmTypeKind::ALL
             .into_iter()
             .any(|kind| self.declares_kind(kind, interface_fq, name))
-    }
-
-    /// The interface declaring `name` among those `source` registers. Keying by
-    /// the module is what keeps a bundled interface spelling `name` out of it.
-    pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
-        self.module_interfaces(source)
-            .into_iter()
-            .find(|fq| self.declares_wado_name(fq, name))
     }
 
     /// The interface declaring `decl`, and the CM name it exports `decl` under.
@@ -3444,7 +3202,7 @@ impl CmInterfaceRegistry {
     pub fn get_resource_from_return_type(
         &self,
         return_type: &Option<Type>,
-    ) -> Option<(String, String)> {
+    ) -> Option<CmGetterResource> {
         let ty = return_type.as_ref()?;
 
         // Check for Option<ResourceName> pattern
@@ -3454,7 +3212,11 @@ impl CmInterfaceRegistry {
             && let Some(source) = self.source_interface(inner)
             && let Some(cm_name) = self.get_resource_cm_name_by_source(&source, &inner.name)
         {
-            return Some((inner.name.clone(), cm_name.to_string()));
+            return Some(CmGetterResource {
+                wado_name: inner.name.clone(),
+                cm_name: cm_name.to_string(),
+                source,
+            });
         }
 
         None
@@ -3791,7 +3553,7 @@ impl CmInterfaceRegistry {
                 "f64" => out.push(CmValType::F64),
                 UNIT_TYPE_NAME => {}
                 name => {
-                    if let Some(source) = self.resolve_cm_source_for(named) {
+                    if let Some(source) = self.source_interface(named) {
                         if let Some(fields) = self
                             .get_struct_fields_by_source(&source, name)
                             .map(<[(String, Type)]>::to_vec)
@@ -4181,14 +3943,13 @@ pub fn cm_primitive_of(named: &NamedType, decls: &CmTypeDecls) -> Option<Primiti
 /// resolves named types to their CM metadata, and emits the corresponding CM
 /// defined types through a [`CmTypeSink`] — an [`InstanceSink`] for interface
 /// instance types, or the codegen top-level sink for bare world exports. It
-/// owns only the dedup cache and the disambiguation hint; type-index allocation
-/// lives in the sink, so one engine serves both targets.
+/// owns only the dedup cache and the interface it emits into; type-index
+/// allocation lives in the sink, so one engine serves both targets.
 pub struct CmTypeGen {
     cache: IndexMap<String, u32>,
-    /// Optional interface path hint for disambiguating types with the same name
-    /// across different WASI interfaces (e.g., "wasi:http/types@..." to select
-    /// HTTP's `ErrorCode` over filesystem's `ErrorCode`).
-    interface_hint: Option<String>,
+    /// The interface whose instance type the sink builds, so a caller can tell
+    /// the types that instance exports itself from those another declares.
+    emitting: Option<String>,
     /// The CM names this engine has exported into its sink, so a caller can ask
     /// what the walk put into the interface's namespace instead of predicting it.
     named_exports: IndexSet<String>,
@@ -4204,22 +3965,20 @@ impl CmTypeGen {
     pub fn new() -> Self {
         Self {
             cache: IndexMap::default(),
-            interface_hint: None,
+            emitting: None,
             named_exports: IndexSet::default(),
         }
     }
 
-    /// Create a new generator with an interface hint for type disambiguation.
-    pub fn with_interface_hint(interface_hint: &str) -> Self {
+    pub fn emitting_into(interface: &str) -> Self {
         Self {
-            cache: IndexMap::default(),
-            interface_hint: Some(interface_hint.to_string()),
-            named_exports: IndexSet::default(),
+            emitting: Some(interface.to_string()),
+            ..Self::new()
         }
     }
 
-    pub fn interface_hint(&self) -> Option<&str> {
-        self.interface_hint.as_deref()
+    pub fn emitting(&self) -> Option<&str> {
+        self.emitting.as_deref()
     }
 
     /// Whether this engine exported `cm_name` into its sink's namespace. An
@@ -4524,16 +4283,8 @@ impl CmTypeGen {
                     self.cache.insert(cache_key, named_idx);
                     return ComponentValType::Type(named_idx);
                 }
-                // Every branch here is emitting a WASI interface
-                // declaration. The type reference must have a resolved
-                // `wasi:*` source_interface from stdlib bootstrap, or
-                // fall back to the emitting interface (`interface_hint`)
-                // when the reference is synthesized, or to the unique
-                // `wasi:*` registrant as a last resort. If none match
-                // we panic — that would mean the caller handed us an
-                // unresolved reference to a type no interface declares.
                 let source_owned: String = cm_interface_registry
-                    .cm_source_of_named_type(named, self.interface_hint.as_deref())
+                    .source_interface(named)
                     .unwrap_or_else(|| {
                         panic!(
                             "unresolved CM named type reference `{name}` while emitting CM instance"
@@ -4561,35 +4312,17 @@ impl CmTypeGen {
                     let idx = sink.define(CmDefined::Own(export_idx));
                     self.cache.insert(cache_key, idx);
                     ComponentValType::Type(idx)
-                } else if let Some(owner) = {
-                    // Prefer the explicit `interface_hint` for cross-
-                    // interface aliases (e.g. re-exported variants), but fall
-                    // back to the resolved source when the hinted interface
-                    // does not own the variant. A kiln generator's export
-                    // interface is hinted, yet its `generate` returns shared
-                    // `core:kiln/types` variants (e.g. `Error`) sourced
-                    // elsewhere.
-                    self.interface_hint
-                        .clone()
-                        .into_iter()
-                        .chain([source.to_string()])
-                        .find(|owner| {
-                            cm_interface_registry
-                                .get_variant_cases_by_source(owner, name)
-                                .is_some()
-                        })
-                } {
-                    let cases = cm_interface_registry
-                        .get_variant_cases_by_source(&owner, name)
-                        .expect("the owner declares the variant")
-                        .to_vec();
+                } else if let Some(cases) =
+                    cm_interface_registry.get_variant_cases_by_source(source, name)
+                {
+                    let cases = cases.to_vec();
                     let cm_name = cm_interface_registry
-                        .get_variant_cm_name_by_source(&owner, name)
+                        .get_variant_cm_name_by_source(source, name)
                         .expect("variant cm_name present when cases are")
                         .to_string();
                     let idx = self.define_variant(
                         sink,
-                        &owner,
+                        source,
                         &cm_name,
                         &cases,
                         cm_interface_registry,
@@ -4666,11 +4399,6 @@ impl CmTypeGen {
                     && let Some(source) = cm_interface_registry
                         .source_interface(n)
                         .filter(|s| s.starts_with("wasi:"))
-                        .or_else(|| {
-                            cm_interface_registry
-                                .find_binding_source(CmTypeKind::Resource, &n.name)
-                                .map(str::to_string)
-                        })
                     && let Some(cm_name) =
                         cm_interface_registry.get_resource_cm_name_by_source(&source, &n.name)
                 {
@@ -5033,7 +4761,7 @@ pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool
 /// The CM canonical-ABI size and alignment of a registered variant, `None` for
 /// a type that is not one.
 fn cm_variant_size_align(named: &NamedType, registry: &CmInterfaceRegistry) -> Option<(u32, u32)> {
-    let source = registry.resolve_cm_source_for(named)?;
+    let source = registry.source_interface(named)?;
     let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
     let payloads = cases.iter().filter_map(|case| case.payload.as_ref());
     Some(layout_variant_with_registry(cases.len(), payloads, registry).size_align())
@@ -5053,7 +4781,7 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
             if let Some(primitive) = primitive_size_align(&named.name) {
                 return primitive;
             }
-            let Some(source) = registry.resolve_cm_source_for(named) else {
+            let Some(source) = registry.source_interface(named) else {
                 return registry
                     .type_decls()
                     .newtype_base(named)
@@ -5133,35 +4861,77 @@ impl CmPrimitiveType {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::analyze::Analyzer;
     use crate::ast::{AstId, GenericType, NamedType};
+    use crate::compiler_host::{InMemoryCompilerHost, LogLevel};
     use crate::lexer::lex;
-    use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
+    use crate::logger::Logger;
+    use crate::module_source::ModuleSourceInterner;
     use crate::parser;
     use crate::token::Span;
     use std::assert_matches;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use std::sync::Arc;
 
     fn make_span() -> Span {
         Span::new(0, 0, 1, 1)
     }
 
     /// One binding module, registered the way [`CmInterfaceRegistry::build_from_stdlib`]
-    /// registers each of its own.
+    /// registers each of its own, its type sites bound to their declarations.
     fn registry_from(module_path: &'static str, source: &str) -> CmInterfaceRegistry {
         let lexed = lex(source);
         assert!(lexed.errors.is_empty(), "lexer error: {:?}", lexed.errors);
         let module = parser::Parser::new(lexed.tokens)
             .parse_strict()
             .expect("parser error");
+        let interner = Rc::new(RefCell::new(ModuleSourceInterner::new()));
+        let entry = interner.borrow_mut().local("./binding.wado");
+        let modules: IndexMap<ModuleSource, ast::Module> =
+            [(entry.clone(), module)].into_iter().collect();
+        let host = InMemoryCompilerHost::new();
+        let logger = Logger::new(&host, LogLevel::Off);
+        let mut analyzer = Analyzer::new(&logger).with_interner(interner);
+        let _ = analyzer.analyze_loaded_modules(&modules, &entry, IndexSet::default());
+        let symbols = analyzer.into_symbols();
+        let defs = Arc::new(DefTable::build(&modules, &symbols));
+        let resolutions = Resolutions::build(&modules, &symbols, defs);
+        let mut registry = CmInterfaceRegistry::new();
+        registry
+            .type_decls
+            .bind(modules.values(), modules.values(), &resolutions);
+
+        let module = &modules[&entry];
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
-        defs_by_module.insert(module_path, collect_cm_definitions(&module));
-        let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
-        let mut registry = CmInterfaceRegistry::new();
-        registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
+        defs_by_module.insert(module_path, collect_cm_definitions(module));
+        let local_names = build_local_name_resolver(module_path, module, &defs_by_module);
+        registry.extend_source_interfaces(collect_named_type_sources(module, &local_names));
         registry
-            .register_module_decls(&module, &CmDeclScope::Module)
+            .register_module_decls(module, &CmDeclScope::Module)
             .unwrap();
         registry
+    }
+
+    /// A type site naming the one declaration `interface` registers, spelled
+    /// `name`.
+    fn sole_declaration_of(registry: &CmInterfaceRegistry, interface: &str, name: &str) -> Type {
+        let decls: Vec<AstId> = registry
+            .declared_in
+            .iter()
+            .filter(|(_, fq)| fq.as_str() == interface)
+            .map(|(decl, _)| *decl)
+            .collect();
+        let [decl] = decls.as_slice() else {
+            panic!(
+                "`{interface}` registers one declaration, not {}",
+                decls.len()
+            )
+        };
+        registry
+            .type_decls
+            .decl_type(*decl, name.to_string(), Vec::new(), make_span())
     }
 
     /// The registered parameter types of `interface::method`.
@@ -5243,42 +5013,6 @@ mod tests {
         );
     }
 
-    /// The bare-name fallback searches the bundled namespaces alone: a type an
-    /// open namespace declares is reached through its own source.
-    #[test]
-    fn a_bare_name_resolves_within_the_bundled_namespaces_alone() {
-        let registry = registry_from(
-            "wasi:demo",
-            r#"
-            #[cm("wasi:demo/types@0.1.0")]
-            pub interface Types {}
-
-            #[cm("wasi:demo/types@0.1.0")]
-            pub struct Rect {
-                #[cm("x")]
-                pub x: u32,
-            }
-
-            #[cm("wado-lang:web/types")]
-            pub interface WebTypes {}
-
-            #[cm("wado-lang:web/types")]
-            pub struct Point {
-                #[cm("x")]
-                pub x: u32,
-            }
-            "#,
-        );
-        assert_eq!(
-            registry.find_binding_source(CmTypeKind::Struct, "Rect"),
-            Some("wasi:demo/types@0.1.0")
-        );
-        assert_eq!(
-            registry.find_binding_source(CmTypeKind::Struct, "Point"),
-            None
-        );
-    }
-
     /// Sizing a payload-less variant as the 4-byte handle of an unregistered
     /// name moves every later field of an enclosing record.
     #[test]
@@ -5295,11 +5029,7 @@ mod tests {
             }
             "#,
         );
-        let status = Type::Named(NamedType {
-            id: AstId::fresh(),
-            name: "Status".to_string(),
-            span: make_span(),
-        });
+        let status = sole_declaration_of(&registry, "wasi:demo/types@0.1.0", "Status");
         assert_eq!(cm_layout_with_registry(&status, &registry), (1, 1));
     }
 
@@ -5636,13 +5366,13 @@ mod tests {
         }
     }
 
-    /// One list drives every search over the kinds, so a declaration of any
-    /// kind answers all of them. A kind one search misses resolves to nothing.
+    /// One list drives every walk over the kinds, so a declaration of any kind
+    /// answers all of them. A kind one walk misses resolves to nothing.
     // Spelled out rather than read from `ALL`, so a kind dropped from `ALL`
     // fails here; `register_of_kind` matches exhaustively, so a new kind will
     // not compile until it is listed.
     #[test]
-    fn every_type_kind_answers_every_kind_search() {
+    fn every_type_kind_answers_every_kind_walk() {
         let fq = "wasi:probe/types@0.3.0";
         for kind in [
             CmTypeKind::Newtype,
@@ -5658,44 +5388,9 @@ mod tests {
             );
             let mut registry = CmInterfaceRegistry::new();
             register_of_kind(&mut registry, kind, fq, "Probe");
-            registry.component_interfaces.insert(fq.to_string());
-            let ty = named("Probe");
-            let Type::Named(reference) = &ty else {
-                unreachable!()
-            };
 
             assert!(registry.declares_wado_name(fq, "Probe"), "{kind:?}");
             assert_eq!(registry.existing_cm_decl(fq), Some("Probe"), "{kind:?}");
-            assert_eq!(
-                registry.bare_name_owner(kind, "Probe"),
-                Some(fq),
-                "{kind:?}"
-            );
-            assert_eq!(
-                registry.resolve_cm_source_for(reference).as_deref(),
-                Some(fq),
-                "{kind:?}"
-            );
-            assert_eq!(
-                registry.resolve_cm_source_with_prefix(reference, "wasi:"),
-                Some(fq),
-                "{kind:?}"
-            );
-            assert_eq!(
-                registry.find_component_type_source("Probe"),
-                Some(fq),
-                "{kind:?}"
-            );
-            assert_eq!(
-                registry.cm_source_of_named_type(reference, None).as_deref(),
-                Some(fq),
-                "{kind:?}"
-            );
-            assert_eq!(
-                registry.find_binding_source(kind, "Probe"),
-                Some(fq),
-                "{kind:?}"
-            );
         }
     }
 
@@ -5710,6 +5405,10 @@ mod tests {
         );
 
         let filesize = named("Filesize");
+        let Type::Named(site) = &filesize else {
+            unreachable!()
+        };
+        registry.set_source_interface(site.id, "wasi:filesystem/types@0.3.0".into());
         assert_eq!(cm_layout_with_registry(&filesize, &registry), (8, 8));
         assert_eq!(
             layout_tuple_with_registry(&[filesize, named("u8")], &registry).size,
@@ -5752,39 +5451,6 @@ mod tests {
                 .is_none()
         );
         assert!(registry.local_newtype_base(None, "Temp").is_none());
-    }
-
-    #[test]
-    fn a_component_s_later_interface_declares_as_much_as_its_first() {
-        let mut interner = ModuleSourceInterner::new();
-        let dep = interner.wasm("./brotli.wasm", WasmAssetKind::Wasm);
-        let mut registry = CmInterfaceRegistry::new();
-
-        // One component exporting two interfaces: every FQ it exports maps back
-        // to the single binding module the loader synthesizes for it.
-        for fq in ["acme:brotli/compress@1.0.0", "acme:brotli/decompress@1.0.0"] {
-            registry
-                .cm_interface_module_sources
-                .insert(fq.into(), dep.clone());
-        }
-        registry.structs.insert(
-            ("acme:brotli/compress@1.0.0".into(), "Level".into()),
-            ("level".into(), Vec::new(), Vec::new()),
-        );
-        registry.structs.insert(
-            ("acme:brotli/decompress@1.0.0".into(), "Window".into()),
-            ("window".into(), Vec::new(), Vec::new()),
-        );
-
-        assert_eq!(
-            registry.interface_declaring(&dep, "Level"),
-            Some("acme:brotli/compress@1.0.0")
-        );
-        assert_eq!(
-            registry.interface_declaring(&dep, "Window"),
-            Some("acme:brotli/decompress@1.0.0")
-        );
-        assert_eq!(registry.interface_declaring(&dep, "Absent"), None);
     }
 
     #[test]

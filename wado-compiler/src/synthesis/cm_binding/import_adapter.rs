@@ -197,7 +197,6 @@ fn synthesize_async_lift_function(
         let lift_ctx = LiftContext {
             cm_interface_registry,
             type_table,
-            cm_package: &func_info.package,
             interner,
         };
         let lifted = synthesize_lift(
@@ -487,7 +486,6 @@ pub(super) fn synthesize_adapter(
     let lower_ctx = LowerContext {
         cm_interface_registry,
         type_table,
-        wasi_package: &func_info.package,
         names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     let mut builder = AdapterBuilder {
@@ -762,23 +760,16 @@ impl<'a> AdapterBuilder<'a> {
     }
 
     fn lift_ctx(&self) -> LiftContext<'a> {
-        let func_info = self.func_info;
         LiftContext {
             cm_interface_registry: self.lower_ctx.cm_interface_registry,
             type_table: self.lower_ctx.type_table,
-            cm_package: &func_info.package,
             interner: self.interner,
         }
     }
 
     fn cm_type_id(&self, ty: &Type) -> TypeId {
         let mut tt = self.lower_ctx.type_table.borrow_mut();
-        cm_type_to_type_id(
-            ty,
-            &mut tt,
-            self.lower_ctx.cm_interface_registry,
-            &self.func_info.package,
-        )
+        cm_type_to_type_id(ty, &mut tt, self.lower_ctx.cm_interface_registry)
     }
 
     /// The Wado type of a parameter that is an affine resource, owned or
@@ -786,12 +777,7 @@ impl<'a> AdapterBuilder<'a> {
     fn affine_resource_param(&self, ty: &Type) -> Option<TypeId> {
         let held = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
-            cm_held_type_to_type_id(
-                ty,
-                &mut tt,
-                self.lower_ctx.cm_interface_registry,
-                &self.func_info.package,
-            )
+            cm_held_type_to_type_id(ty, &mut tt, self.lower_ctx.cm_interface_registry)
         };
         is_affine_resource(&self.lower_ctx.type_table.borrow(), held).then_some(held)
     }
@@ -1104,7 +1090,7 @@ impl<'a> AdapterBuilder<'a> {
     fn list_view_type(&self, elem: &Type) -> TypeId {
         let mut tt = self.lower_ctx.type_table.borrow_mut();
         let registry = self.lower_ctx.cm_interface_registry;
-        let elem = cm_held_type_to_type_id(elem, &mut tt, registry, &self.func_info.package);
+        let elem = cm_held_type_to_type_id(elem, &mut tt, registry);
         tt.make_list_view(elem)
     }
 
@@ -1164,8 +1150,7 @@ impl<'a> AdapterBuilder<'a> {
 
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
-            let elem_tid =
-                cm_held_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package);
+            let elem_tid = cm_held_type_to_type_id(elem_type, &mut tt, registry);
             let list_tid = tt.make_list(elem_tid);
             (elem_tid, list_tid)
         };
@@ -1594,7 +1579,7 @@ impl<'a> AdapterBuilder<'a> {
             return None;
         };
         let registry = self.registry();
-        let source = registry.resolve_cm_source_for(named)?;
+        let source = registry.source_interface(named)?;
         let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
         if cases.iter().any(|case| case.payload.is_some()) {
             return None;
@@ -1602,7 +1587,7 @@ impl<'a> AdapterBuilder<'a> {
         let cases = cases.to_vec();
         let lift_ctx = self.lift_ctx();
         let variant_type = {
-            let def = lift_ctx.cm_decl(&source, &named.name);
+            let def = lift_ctx.cm_decl(named);
             lift_ctx.type_table.borrow_mut().make_variant(def)
         };
         Some(lift_variant_from_disc(
@@ -1633,7 +1618,7 @@ impl<'a> AdapterBuilder<'a> {
         let is_flat_struct = return_flat.len() == 1
             && matches!(&resolved, Type::Named(n)
             if registry
-                .resolve_cm_source_for(n)
+                .source_interface(n)
                 .is_some_and(|s| {
                     registry.get_struct_fields_by_source(&s, &n.name).is_some()
                 }));

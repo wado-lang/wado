@@ -182,7 +182,6 @@ fn lower_to_flat_inner(
             let lower_ctx = LowerContext {
                 cm_interface_registry: ctx.cm_interface_registry,
                 type_table: ctx.type_table,
-                wasi_package: ctx.cm_package,
                 names,
             };
             let elem_type_id = type_args[0];
@@ -417,7 +416,6 @@ fn lower_to_flat_inner(
             let lower_ctx = LowerContext {
                 cm_interface_registry: ctx.cm_interface_registry,
                 type_table: ctx.type_table,
-                wasi_package: ctx.cm_package,
                 names,
             };
             let (key_ast, value_ast) = {
@@ -1465,7 +1463,6 @@ pub(super) struct ExportBindingEnv<'a> {
     /// World-declared export return type (CM surface type).
     pub world_return: Option<&'a Type>,
     pub cm_interface_registry: &'a CmInterfaceRegistry,
-    pub cm_package: &'a str,
     pub interner: &'a RefCell<ModuleSourceInterner>,
 }
 
@@ -1474,7 +1471,6 @@ impl<'a> ExportBindingEnv<'a> {
         LiftContext {
             cm_interface_registry: self.cm_interface_registry,
             type_table: self.type_table,
-            cm_package: self.cm_package,
             interner: self.interner,
         }
     }
@@ -1483,7 +1479,6 @@ impl<'a> ExportBindingEnv<'a> {
         LowerContext {
             cm_interface_registry: self.cm_interface_registry,
             type_table: self.type_table,
-            wasi_package: self.cm_package,
             names: CmStdlibNames::from_type_table(&self.type_table.borrow()),
         }
     }

@@ -271,7 +271,6 @@ fn build_world_export_plans(
     // The synthesized library world (`--lib`) takes priority over the static
     // registry, which cannot hold a per-package world.
     let world = lib_world.or_else(|| world_registry.get(target_world));
-    let world_namespace_prefix = world.map(WorldInfo::namespace_prefix);
     let exports: Vec<WorldExportInfo> = world.map(|w| w.exports.clone()).unwrap_or_else(|| {
         // Fallback to a default run export for unknown worlds
         vec![WorldExportInfo {
@@ -319,11 +318,7 @@ fn build_world_export_plans(
                     .map(|(name, ty)| {
                         (
                             to_cm_name(name),
-                            resolve_cm_export_type(
-                                ty,
-                                cm_interface_registry,
-                                world_namespace_prefix,
-                            ),
+                            resolve_cm_export_type(ty, cm_interface_registry),
                         )
                     })
                     .collect();
@@ -331,13 +326,7 @@ fn build_world_export_plans(
                     export
                         .return_type
                         .as_ref()
-                        .map(|ty| {
-                            resolve_cm_export_type(
-                                ty,
-                                cm_interface_registry,
-                                world_namespace_prefix,
-                            )
-                        })
+                        .map(|ty| resolve_cm_export_type(ty, cm_interface_registry))
                         .unwrap_or(CmExportType::Unit),
                 );
                 (cm_params, cm_result, Vec::new(), None)
@@ -371,11 +360,7 @@ fn build_world_export_plans(
 /// `Result` with a non-unit arm to [`CmExportType::HandlerResult`], any other
 /// registry-known named type to [`CmExportType::Named`]. Panics otherwise —
 /// world signatures come from the stdlib, so an unresolved name is a bug there.
-fn resolve_cm_export_type(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    world_namespace_prefix: Option<&str>,
-) -> CmExportType {
+fn resolve_cm_export_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> CmExportType {
     if ty.is_unit() {
         return CmExportType::Unit;
     }
@@ -390,12 +375,10 @@ fn resolve_cm_export_type(
             ok: Box::new(resolve_cm_export_type(
                 &generic.args[0],
                 cm_interface_registry,
-                world_namespace_prefix,
             )),
             err: Box::new(resolve_cm_export_type(
                 &generic.args[1],
                 cm_interface_registry,
-                world_namespace_prefix,
             )),
         };
     }
@@ -405,26 +388,10 @@ fn resolve_cm_export_type(
         return CmExportType::Primitive(primitive);
     }
     if let Type::Named(named) = ty {
-        // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
-        // reference type names like `Response` / `OutputFile` directly without
-        // a `use { ... } from "..."` import, so `populate_named_type_sources`
-        // leaves `source_interface = None`, and only a by-name scan resolves it.
         let interface_fq = cm_interface_registry
             .source_interface(named)
-            .or_else(|| {
-                world_namespace_prefix
-                    .and_then(|prefix| {
-                        cm_interface_registry.resolve_cm_source_with_prefix(named, prefix)
-                    })
-                    .map(str::to_string)
-            })
-            .or_else(|| cm_interface_registry.resolve_cm_source_for(named))
             .unwrap_or_else(|| {
-                panic!(
-                    "world export type `{}` has no source interface — neither the \
-                 AST source_interface nor any registry index resolved it",
-                    named.name,
-                )
+                panic!("world export type `{}` has no source interface", named.name)
             });
         let resource_cm =
             cm_interface_registry.get_resource_cm_name_by_source(&interface_fq, &named.name);
@@ -458,7 +425,6 @@ fn test_export_name(function_name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::component_model::CmInterfaceRegistry;
     use std::assert_matches;
     #[test]
     fn test_export_names() {
@@ -508,7 +474,8 @@ mod tests {
     /// Helpers for the resolver tests below.
     mod resolver_helpers {
         use super::super::*;
-        use crate::ast::{AstId, NamedType};
+        use crate::ast::{AstId, Item};
+        use crate::stdlib_snapshot::stdlib_bindings;
         use crate::token::Span;
 
         pub fn span() -> Span {
@@ -523,8 +490,28 @@ mod tests {
             Type::unit(AstId::fresh(), span())
         }
 
-        pub fn named(name: &str) -> Type {
-            Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span()))
+        /// A type naming the declaration `name` that an interface starting with
+        /// `interface` registers.
+        pub fn declared(registry: &CmInterfaceRegistry, interface: &str, name: &str) -> Type {
+            let decl = stdlib_bindings()
+                .modules
+                .iter()
+                .flat_map(|(_, module)| &module.items)
+                .find(|item| {
+                    let item_name = match item {
+                        Item::Resource(r) => Some(r.name.as_str()),
+                        _ => item.type_decl().map(|d| d.name),
+                    };
+                    item_name == Some(name)
+                        && registry
+                            .interface_of_decl(item.id())
+                            .is_some_and(|fq| fq.starts_with(interface))
+                })
+                .unwrap_or_else(|| panic!("`{interface}` declares `{name}`"))
+                .id();
+            registry
+                .type_decls()
+                .decl_type(decl, name.to_string(), Vec::new(), span())
         }
 
         pub fn result_of(registry: &CmInterfaceRegistry, ok: Type, err: Type) -> Type {
@@ -543,14 +530,14 @@ mod tests {
         // of its own with no CM representation, rejected at the boundary before
         // a world export resolves — see `tests/integration/empty_tuple_boundary.rs`.
         assert_matches!(
-            resolve_cm_export_type(&unit_named(), &registry, None),
+            resolve_cm_export_type(&unit_named(), &registry),
             CmExportType::Unit
         );
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
         let unit_result = result_of(&registry, unit_named(), unit_named());
         assert_matches!(
-            resolve_cm_export_type(&unit_result, &registry, None),
+            resolve_cm_export_type(&unit_result, &registry),
             CmExportType::Unit
         );
     }
@@ -560,10 +547,14 @@ mod tests {
         use resolver_helpers::*;
         let registry = registry();
 
-        // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
-        // http world scope. The arms resolve to wasi:http/types.
-        let http = result_of(&registry, named("Response"), named("ErrorCode"));
-        match resolve_cm_export_type(&http, &registry, Some("wasi:http/")) {
+        // wasi:http handler shape: Result<Response, ErrorCode>. The arms
+        // resolve to wasi:http/types.
+        let http = result_of(
+            &registry,
+            declared(&registry, "wasi:http/types", "Response"),
+            declared(&registry, "wasi:http/types", "ErrorCode"),
+        );
+        match resolve_cm_export_type(&http, &registry) {
             CmExportType::HandlerResult { ok, err } => {
                 assert_matches!(
                     *ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -578,10 +569,14 @@ mod tests {
         }
 
         // core:kiln generator shape: Result<Response, Error>. `Response` also
-        // exists in wasi:http; the kiln world scope must resolve it to
-        // core:kiln/types rather than the http resource.
-        let kiln = result_of(&registry, named("Response"), named("Error"));
-        match resolve_cm_export_type(&kiln, &registry, Some("core:kiln/")) {
+        // exists in wasi:http; kiln's resolves to core:kiln/types rather than
+        // the http resource.
+        let kiln = result_of(
+            &registry,
+            declared(&registry, "core:kiln/types", "Response"),
+            declared(&registry, "core:kiln/types", "Error"),
+        );
+        match resolve_cm_export_type(&kiln, &registry) {
             CmExportType::HandlerResult { ok, err } => {
                 assert_matches!(
                     *ok, CmExportType::Named { ref cm_name, ref interface_fq, .. }
@@ -599,11 +594,11 @@ mod tests {
     #[test]
     fn test_resolve_named_resource() {
         use resolver_helpers::*;
-        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let registry = registry();
 
-        // `Request` is a resource declared in `wasi:http/types`, reached under
-        // the prefix its own world carries — the one production always passes.
-        match resolve_cm_export_type(&named("Request"), &registry, Some("wasi:http/")) {
+        // `Request` is a resource declared in `wasi:http/types`.
+        let request = declared(&registry, "wasi:http/types", "Request");
+        match resolve_cm_export_type(&request, &registry) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,
@@ -623,12 +618,11 @@ mod tests {
     #[test]
     fn test_resolve_named_kiln_record() {
         use resolver_helpers::*;
-        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let registry = registry();
 
-        // `OutputFile` is a struct declared in `core:kiln/types` (and, unlike
-        // `Response`, collides with no WASI type) — exercises the `find_kiln_*`
-        // half of `resolve_cm_source_for`.
-        match resolve_cm_export_type(&named("OutputFile"), &registry, None) {
+        // `OutputFile` is a struct declared in `core:kiln/types`.
+        let output_file = declared(&registry, "core:kiln/types", "OutputFile");
+        match resolve_cm_export_type(&output_file, &registry) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

@@ -451,8 +451,8 @@ mod tests {
         );
     }
 
-    /// Every type a binding signs names a declaration, but a resource method's
-    /// `Self`, which the registry reads as the resource.
+    /// Every type a binding signs names a declaration; a resource method's
+    /// `Self` names the resource.
     #[test]
     fn every_binding_type_resolves() {
         let bindings = stdlib_bindings();
@@ -461,12 +461,10 @@ mod tests {
             for item in &module.items {
                 for_each_signed_type(item, &mut |ty| {
                     ty.for_each(&mut |t| match t {
-                        ast::Type::Named(n)
-                            if n.name != "Self" && !bindings.type_decls.binds(n.id) =>
-                        {
+                        ast::Type::Named(n) if bindings.type_decls.decl_at(n.id).is_none() => {
                             unbound.push(format!("{path}: {}", n.name));
                         }
-                        ast::Type::Generic(g) if !bindings.type_decls.binds(g.id) => {
+                        ast::Type::Generic(g) if bindings.type_decls.decl_at(g.id).is_none() => {
                             unbound.push(format!("{path}: {}", g.name));
                         }
                         _ => {}

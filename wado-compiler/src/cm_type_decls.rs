@@ -5,7 +5,7 @@
 
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::ast::{AstId, GenericType, Item, Module, NamedType, Type};
+use crate::ast::{AstId, GenericType, Item, Module, NamedType, ResourceDecl, Type};
 use crate::compiler_item::{CompilerItem, parse_compiler_item_attrs};
 use crate::component_model::for_each_signed_type;
 use crate::hashmap::IndexMap;
@@ -75,6 +75,30 @@ impl CmTypeDecls {
         }
         for item in signing.into_iter().flat_map(|module| &module.items) {
             for_each_signed_type(item, &mut |ty| self.bind_sites(ty, resolutions));
+            if let Item::Resource(resource) = item {
+                self.bind_self(resource);
+            }
+        }
+    }
+
+    /// A resource method's `Self` names the resource.
+    fn bind_self(&self, resource: &ResourceDecl) {
+        let mut sites = self.sites.write();
+        for method in &resource.methods {
+            for ty in method
+                .params
+                .iter()
+                .map(|p| &p.ty)
+                .chain(&method.return_type)
+            {
+                ty.for_each(&mut |ty| {
+                    if let Type::Named(n) = ty
+                        && n.name == "Self"
+                    {
+                        sites.insert(n.id, resource.id);
+                    }
+                });
+            }
         }
     }
 
@@ -90,11 +114,10 @@ impl CmTypeDecls {
         });
     }
 
-    /// Whether the site `site` was answered.
-    #[cfg(test)]
+    /// The declaration the type site `site` names.
     #[must_use]
-    pub fn binds(&self, site: AstId) -> bool {
-        self.sites.get(site).is_some()
+    pub fn decl_at(&self, site: AstId) -> Option<AstId> {
+        self.sites.get(site)
     }
 
     /// The compiler item the type site `site` names, if it names one.
@@ -136,6 +159,12 @@ impl CmTypeDecls {
             .find(|(_, (declared, _))| *declared == item)
             .map(|(decl, (_, name))| (*decl, name.clone()))
             .unwrap_or_else(|| panic!("`{item}` is declared where the registry reads"));
+        self.decl_type(decl, name, args, span)
+    }
+
+    /// A type naming the declaration `decl`, spelled `name`, over `args`, as a
+    /// site of its own.
+    pub fn decl_type(&self, decl: AstId, name: String, args: Vec<Type>, span: Span) -> Type {
         let id = AstId::fresh();
         self.sites.write().insert(id, decl);
         if args.is_empty() {
