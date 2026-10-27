@@ -2675,13 +2675,9 @@ impl Monomorphizer {
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
         let trait_fq = at_bound.trait_name.as_ref()?;
         let trait_env = &self.functions.trait_env;
-        let block = trait_env.answering_impl(
-            at_bound.receiver(),
-            trait_env.trait_def_of_fq(trait_fq)?,
-            trait_fq.args(),
-        )?;
-        let written = self.impl_written_trait_args(&at_bound)?;
-        let named = at_bound.with_trait_type_args(written);
+        let trait_ = trait_env.trait_def_of_fq(trait_fq)?;
+        let block = trait_env.answering_impl(at_bound.receiver(), trait_, trait_fq.args())?;
+        let named = at_bound.with_trait_type_args(trait_env.spelled_trait_args(block, trait_));
         let template = trait_env
             .method_template(block, named.declared_method_name())?
             .called_by(&named);
