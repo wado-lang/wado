@@ -1120,8 +1120,8 @@ impl ModuleSource {
 
     /// Create a module-qualified name using `//` as separator.
     ///
-    /// The `//` separator cannot appear in file paths, making it safe
-    /// for disambiguating same-named types from different modules.
+    /// A file path spells no `//`, and a URL spells one only after its scheme,
+    /// which [`crate::name::unqualified_name`] skips.
     ///
     /// Examples:
     /// - `ModuleSource::prelude().qualify_name("Option")` → `"core:prelude//Option"`

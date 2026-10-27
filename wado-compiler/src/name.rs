@@ -2680,6 +2680,15 @@ pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
     format!("{module_source}//{name}")
 }
 
+/// The name a [`wir_type_key`] qualifies, or `key` itself where no module
+/// qualifies it. A URL module spells a `//` of its own, ahead of the separator,
+/// and a name may spell one in a type argument after it.
+#[must_use]
+pub fn unqualified_name(key: &str) -> &str {
+    let (_, rest) = split_uri_origin(key);
+    rest.split_once("//").map_or(key, |(_, name)| name)
+}
+
 /// Key of a plain `enum`, prefixed so a same-named variant keeps
 /// [`wir_type_key`].
 ///
@@ -2837,6 +2846,17 @@ mod tests {
     use crate::compiler_host::DependencyIndex;
     use crate::hashmap::IndexSet;
     use std::assert_matches;
+
+    #[test]
+    fn a_key_names_what_follows_its_module_whatever_either_spells() {
+        assert_eq!(unqualified_name("core:prelude//Option"), "Option");
+        assert_eq!(unqualified_name("tuple//[core:prelude//String]"), "[core:prelude//String]");
+        assert_eq!(
+            unqualified_name("https://example.com/a.wado//Hole<https://example.com/b.wado/$t>"),
+            "Hole<https://example.com/b.wado/$t>"
+        );
+        assert_eq!(unqualified_name("List<i32>"), "List<i32>");
+    }
 
     #[test]
     fn cm_names() {
