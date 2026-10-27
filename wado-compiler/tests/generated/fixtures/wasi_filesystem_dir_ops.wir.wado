@@ -383,9 +383,9 @@ type "functype//wasi_filesystem_dir_ops.wado/$cm_stream_read_DirectoryEntry" = f
 
 type "functype//wasi_filesystem_dir_ops.wado/$cm_stream_lift_DirectoryEntry" = fn(i32, i32, i32) -> ref "core:prelude//List<wasi:filesystem/types.wado/DirectoryEntry>";  // TypeId(84)
 
-type "functype//wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode" = fn(ref "wasi:filesystem/types.wado//ErrorCode") -> ref "wasi:filesystem/types.wado//ErrorCode";  // TypeId(85)
+type "functype//wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry" = fn(ref "wasi:filesystem/types.wado//DirectoryEntry") -> ref "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(85)
 
-type "functype//wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry" = fn(ref "wasi:filesystem/types.wado//DirectoryEntry") -> ref "wasi:filesystem/types.wado//DirectoryEntry";  // TypeId(86)
+type "functype//wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode" = fn(ref "wasi:filesystem/types.wado//ErrorCode") -> ref "wasi:filesystem/types.wado//ErrorCode";  // TypeId(86)
 
 type "functype//wasi_filesystem_dir_ops.wado/run$cold0$dae[$contract_arg_0]" = fn(i32);  // TypeId(87)
 
@@ -1890,6 +1890,36 @@ fn "wasi_filesystem_dir_ops.wado/$cm_stream_lift_DirectoryEntry"(handle, ptr, co
     return arr_3;
 }
 
+fn "wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry"(v) {
+    let $load_1: i32;
+    let v_1: ref "wasi:filesystem/types.wado//DescriptorType";
+    let $vc_payload_7: ref null "core:prelude/string.wado//String";
+    let $vc_payload_1: ref "core:prelude/string.wado//String";
+    return struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: (if local.tee $load_1(local.tee v_1(v.type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 2 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 3 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 4 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 5 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else if $load_1 == 6 -> ref "wasi:filesystem/types.wado//DescriptorType" {
+        v_1;
+    } else {
+        $vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_1).payload_0;
+        struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) -> ref null "core:prelude/string.wado//String" {
+            $vc_payload_7;
+        } else {
+            $vc_payload_1 = ref.as_non_null($vc_payload_7);
+            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
+        }) };
+    }), name: struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = local.tee $vc_payload_1(v.name).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_1($vc_payload_1.used))), 0, $array_clone_dst_2, 0, $load_1); $array_clone_src_1, used: $load_1 } };
+}
+
 fn "wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(v) {
     let $load_0: i32;
     let $vc_payload_36: ref null "core:prelude/string.wado//String";
@@ -1975,36 +2005,6 @@ fn "wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/ErrorCod
             struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_0 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_0)), 0, $array_clone_src_1, 0, $load_0); $array_clone_dst_2, used: $load_0 };
         }) };
     });
-}
-
-fn "wasi_filesystem_dir_ops.wado/$value_copy$wasi:filesystem/types.wado/DirectoryEntry"(v) {
-    let $load_1: i32;
-    let v_1: ref "wasi:filesystem/types.wado//DescriptorType";
-    let $vc_payload_7: ref null "core:prelude/string.wado//String";
-    let $vc_payload_1: ref "core:prelude/string.wado//String";
-    return struct.new "wasi:filesystem/types.wado//DirectoryEntry" { type: (if local.tee $load_1(local.tee v_1(v.type).discriminant) == 0 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 1 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 2 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 3 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 4 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 5 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else if $load_1 == 6 -> ref "wasi:filesystem/types.wado//DescriptorType" {
-        v_1;
-    } else {
-        $vc_payload_7 = ref.cast "wasi:filesystem/types.wado//DescriptorType::Other"(v_1).payload_0;
-        struct.new "wasi:filesystem/types.wado//DescriptorType::Other" { discriminant: 7, payload_0: (if ref.is_null($vc_payload_7) -> ref null "core:prelude/string.wado//String" {
-            $vc_payload_7;
-        } else {
-            $vc_payload_1 = ref.as_non_null($vc_payload_7);
-            struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $vc_payload_1.repr; $load_1 = $vc_payload_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
-        }) };
-    }), name: struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = local.tee $vc_payload_1(v.name).repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_1($vc_payload_1.used))), 0, $array_clone_dst_2, 0, $load_1); $array_clone_src_1, used: $load_1 } };
 }
 
 fn "wasi_filesystem_dir_ops.wado/run$cold0$dae[$contract_arg_0]"($v1) with Stdout, Stderr, Preopens {
