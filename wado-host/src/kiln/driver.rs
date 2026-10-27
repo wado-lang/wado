@@ -43,7 +43,7 @@ use wado_compiler::kiln::{
     hex_digest, validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
-use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
+use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
 
 use super::metadata::{
     self as kiln_metadata, FileHash as MetaFileHash, METADATA_VERSION, Metadata,
@@ -1085,6 +1085,9 @@ pub fn generator_compile_options(invocations: InvocationIndex) -> CompilerOption
         opt_level: OptLevel::O1,
         target_world: Some(GENERATOR_WORLD_FQ.to_string()),
         invocations,
+        // Compiling a generator to run it is no check of its package, which
+        // a build reaching it as a dependency has no business linting.
+        lints: Lints::Off,
         ..CompilerOptions::default()
     }
 }

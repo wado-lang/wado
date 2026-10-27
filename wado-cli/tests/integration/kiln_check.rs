@@ -6,7 +6,7 @@ use predicates::prelude::*;
 
 const GREETING_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-export fn generate(req: Request) -> Result<Response, Error> {
+export fn generate(_req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "hello.wado",
@@ -124,6 +124,25 @@ fn a_package_check_reports_a_shared_module_kiln_warning_once() {
         .stderr(predicate::function(|stderr: &str| {
             stderr.matches("has been modified after generation").count() == 1
         }));
+}
+
+/// Compiling a generator to run it lints nothing: the generator's own package
+/// check is where its lints belong.
+#[test]
+fn compiling_a_generator_lints_none_of_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let generator = GREETING_GENERATOR.replace(
+        "export fn generate(_req: Request)",
+        "export fn generate(unread_request: Request)",
+    );
+    write_kiln_project(root, "pkg", &generator, b"schema\n");
+
+    wado_in(root)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[kiln generator compile]").not());
 }
 
 /// Output a generator writes inside the package is the importing module's, not
