@@ -111,9 +111,9 @@ impl<T: AnyBits> IndexValue<i32> for ListView<T> {
 
 /// A live view of `len` `T`s at `ptr`, freeing `owned_bytes` where it drops.
 /// An owned block is aligned to one `T`, as the view frees it.
-fn view_of<T: AnyBits>(ptr: i32, len: i32, owned_bytes: i32) -> ListView<T> {
+fn view_of<T: AnyBits>(ptr: i32, len: i32, owned_bytes: i32, owner: Option<&LinearArray<T>>) -> ListView<T> {
     let mut released = false;
-    return ListView::<T> { ptr, len, owned_bytes, released: &mut released, owner: null };
+    return ListView::<T> { ptr, len, owned_bytes, released: &mut released, owner };
 }
 
 impl<T: AnyBits> ListArg<T> for List<T> {
@@ -126,7 +126,7 @@ impl<T: AnyBits> ListArg<T> for List<T> {
         for let i of 0..<self.len() {
             builtin::store(ptr + i * width, self[i]);
         }
-        return view_of(ptr, self.len(), bytes);
+        return view_of(ptr, self.len(), bytes, null);
     }
 }
 
@@ -135,20 +135,13 @@ impl ListArg<u8> for List<u8> {
     fn lowered(&self) -> ListView<u8> {
         let len = self.len();
         let ptr = cm_lower_list_u8(self.internal_raw_data_ref(), 0, len) as i32;
-        return view_of(ptr, len, len);
+        return view_of(ptr, len, len, null);
     }
 }
 
 impl<T: AnyBits> ListArg<T> for &LinearArray<T> {
     fn lowered(&self) -> ListView<T> {
-        let mut released = false;
-        return ListView::<T> {
-            ptr: self.block.ptr,
-            len: self.len,
-            owned_bytes: 0,
-            released: &mut released,
-            owner: Option::Some(*self),
-        };
+        return view_of(self.block.ptr, self.len, 0, Option::Some(*self));
     }
 }
 

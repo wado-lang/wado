@@ -248,12 +248,6 @@ impl TypeSystem {
     /// it or at what it holds at any depth, through a newtype either way. A
     /// type parameter on either side may be bound to anything.
     fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
-        {
-            let tt = self.type_table.borrow();
-            if is_open(tt.get(tt.representation_head(pointee))) {
-                return true;
-            }
-        }
         self.reaches(place, &|ty, resolved| {
             is_open(resolved) || may_name_one_type(&self.type_table.borrow(), ty, pointee)
         })
@@ -883,7 +877,10 @@ fn may_name_one_type(table: &TypeTable, a: TypeId, b: TypeId) -> bool {
         return true;
     }
     let both = |x: Vec<TypeId>, y: Vec<TypeId>| {
-        x.len() == y.len() && x.into_iter().zip(y).all(|(x, y)| may_name_one_type(table, x, y))
+        x.len() == y.len()
+            && x.into_iter()
+                .zip(y)
+                .all(|(x, y)| may_name_one_type(table, x, y))
     };
     if let (
         ResolvedType::Struct {
@@ -898,8 +895,13 @@ fn may_name_one_type(table: &TypeTable, a: TypeId, b: TypeId) -> bool {
     {
         let (x, y) = (table.anon_struct_fields(*x), table.anon_struct_fields(*y));
         return !x.is_empty()
-            && x.iter().map(|(name, _)| name).eq(y.iter().map(|(name, _)| name))
-            && both(x.iter().map(|(_, ty)| *ty).collect(), y.iter().map(|(_, ty)| *ty).collect());
+            && x.iter()
+                .map(|(name, _)| name)
+                .eq(y.iter().map(|(name, _)| name))
+            && both(
+                x.iter().map(|(_, ty)| *ty).collect(),
+                y.iter().map(|(_, ty)| *ty).collect(),
+            );
     }
     let ((x_head, x), (y_head, y)) = (constituents(table, a), constituents(table, b));
     match x_head {

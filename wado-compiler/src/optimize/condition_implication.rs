@@ -386,9 +386,9 @@ impl BindWalk<'_, '_> {
                     .rev()
                     .take_while(|&&(at, _)| written_since(at))
                     .any(|&(_, stored)| {
-                        p.reads
-                            .as_ref()
-                            .is_none_or(|kinds| stored.may_change(self.engine, kinds, &mut self.reached))
+                        p.reads.as_ref().is_none_or(|kinds| {
+                            stored.may_change(self.engine, kinds, &mut self.reached)
+                        })
                     }))
             || (p.escaped && written_since(self.last_call));
         if stale {
