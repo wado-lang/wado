@@ -391,8 +391,7 @@ fn char_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<Stri
         .then(|| "char can only be cast to integer types".to_string())
 }
 
-/// Whether `id` is a `&mut` or a `&`, and its referent; `None` for anything
-/// else.
+/// Whether the reference `id` is `&mut`, and its referent.
 fn reference_parts(tt: &TypeTable, id: TypeId) -> Option<(bool, TypeId)> {
     match tt.get(tt.representation_head(id)) {
         ResolvedType::Ref(referent) => Some((false, *referent)),

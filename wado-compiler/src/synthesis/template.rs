@@ -653,10 +653,7 @@ pub(crate) fn answering_link(
     tt: &TypeTable,
 ) -> Option<(TypeId, TemplateId)> {
     let trait_ = trait_name.called_decl();
-    match trait_env
-        .solver()
-        .instance_order(tt, receiver, trait_, trait_name.args())?
-    {
+    match instance_order(trait_env, trait_name, receiver, tt)? {
         InstanceOrder::One(chosen) => Some((
             chain_link(receiver, chosen.depth, tt),
             instance_template(trait_env, chosen.body, trait_, method)?,
@@ -894,10 +891,11 @@ pub(crate) fn ranked_ref_blanket<'a>(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<&'a BlanketImpl> {
-    ranked_blanket(trait_env, trait_name, receiver, tt).filter(|(blanket, link)| {
-        matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
-    })
-    .map(|(blanket, _)| blanket)
+    ranked_blanket(trait_env, trait_name, receiver, tt)
+        .filter(|(blanket, link)| {
+            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
+        })
+        .map(|(blanket, _)| blanket)
 }
 
 /// The blanket the order selects for `receiver`, with the link of its chain
@@ -919,8 +917,8 @@ fn ranked_blanket<'a>(
     Some((blanket, chain_link(receiver, depth, tt)))
 }
 
-/// What the order selects for `trait_name` on `receiver`, at the trait's own
-/// arguments: with none, two impls of `From<T>` at different `T` tie.
+/// What the order selects for `trait_name`, its arguments included, on
+/// `receiver`.
 fn instance_order(
     trait_env: &TraitEnv,
     trait_name: &FqTraitName,
