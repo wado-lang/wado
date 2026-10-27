@@ -431,7 +431,7 @@ impl Dom for SurfaceDom {
 }
 
 impl Window for SurfaceDom {
-    fn document(&mut self, this: &Window) -> Document {
+    fn document(&mut self, _this: &Window) -> Document {
         resume self.handle(DOCUMENT_INDEX) as Document;
     }
 
@@ -494,16 +494,16 @@ impl Event for SurfaceDom {
 }
 
 impl Document for SurfaceDom {
-    fn create_element(&mut self, this: &Document, local_name: String, options: Option<String>) -> Element {
+    fn create_element(&mut self, _this: &Document, local_name: String, _options: Option<String>) -> Element {
         assert is_valid_element_local_name(&local_name), "InvalidCharacterError: not a valid element name";
         resume self.handle(self.create(local_name.to_ascii_lowercase())) as Element;
     }
 
-    fn document_element(&mut self, this: &Document) -> Option<Element> {
+    fn document_element(&mut self, _this: &Document) -> Option<Element> {
         resume self.element(self.child_named(DOCUMENT_INDEX, "html"));
     }
 
-    fn body(&mut self, this: &Document) -> Option<HtmlElement> {
+    fn body(&mut self, _this: &Document) -> Option<HtmlElement> {
         let body = self.html_child("body");
         if body == NO_NODE {
             resume null;
@@ -512,12 +512,12 @@ impl Document for SurfaceDom {
         }
     }
 
-    fn get_element_by_id(&mut self, this: &Document, element_id: String) -> Option<Element> {
+    fn get_element_by_id(&mut self, _this: &Document, element_id: String) -> Option<Element> {
         resume self.element(self.first_inclusive_descendant_where(DOCUMENT_INDEX, |n| !element_id.is_empty()
             && n.attributes.get("id") == Option::Some(element_id)));
     }
 
-    fn title(&mut self, this: &Document) -> String {
+    fn title(&mut self, _this: &Document) -> String {
         let title = self.title_index();
         let mut text = "";
         if title != NO_NODE {
@@ -530,7 +530,7 @@ impl Document for SurfaceDom {
         resume strip_and_collapse_ascii_whitespace(&text);
     }
 
-    fn set_title(&mut self, this: &Document, value: String) {
+    fn set_title(&mut self, _this: &Document, value: String) {
         let mut title = self.title_index();
         let head = self.html_child("head");
         if title == NO_NODE && head != NO_NODE {

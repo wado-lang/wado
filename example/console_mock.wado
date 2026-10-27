@@ -43,14 +43,14 @@ impl MockStdio {
 }
 
 impl Stdout for MockStdio {
-    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+    fn write_via_stream(&mut self, _data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         self.to_stderr = false;
         resume self.pending();
     }
 }
 
 impl Stderr for MockStdio {
-    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+    fn write_via_stream(&mut self, _data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         self.to_stderr = true;
         resume self.pending();
     }
@@ -66,7 +66,7 @@ impl Stdin for MockStdio {
 
 // Reads replay `input`; the stream itself is a real one.
 impl Stream<u8> for MockStdio {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+    fn begin_read(&mut self, _this: &Stream<u8>, max: i32, _into: ReadInto) -> StartedRead<u8> {
         let end = i32::min(self.input_pos + max, self.input.len());
         let mut chunk: List<u8> = [];
         chunk.extend_from_slice(self.input.slice(self.input_pos, end));
@@ -82,7 +82,7 @@ impl Stream<u8> for MockStdio {
 }
 
 impl StreamWritable<u8> for MockStdio {
-    fn begin_write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
+    fn begin_write(&mut self, _this: &StreamWritable<u8>, data: List<u8>) -> StartedWrite<u8> {
         if self.to_stderr {
             self.err.extend(&data);
         } else {
@@ -91,7 +91,7 @@ impl StreamWritable<u8> for MockStdio {
         resume StartedWrite::settled(StreamWrite { rest: [], result: CopyResult::Completed });
     }
 
-    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+    fn write_raw_all(&mut self, _this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         if self.to_stderr {
             self.err.extend_from_slice(data);
         } else {

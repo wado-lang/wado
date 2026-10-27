@@ -95,49 +95,49 @@ fn ends_operand(kind: i32) -> bool {
 }
 
 impl JavaScriptLexerBase for JsLexerBase {
-    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
+    fn emit(&mut self, _view: LexerView, ty: i32, channel: i32) -> i32 {
         if channel == 0 {
             self.last_token = ty;
         }
         resume ty;
     }
 
-    fn is_start_of_file(&self, view: LexerView) -> bool {
+    fn is_start_of_file(&self, _view: LexerView) -> bool {
         resume self.last_token < 0;
     }
 
-    fn is_regex_possible(&self, view: LexerView) -> bool {
+    fn is_regex_possible(&self, _view: LexerView) -> bool {
         resume !ends_operand(self.last_token);
     }
 
-    fn is_in_template_string(&self, view: LexerView) -> bool {
+    fn is_in_template_string(&self, _view: LexerView) -> bool {
         resume self.template_depths.last() matches { Some(d) && d == self.depth };
     }
 
-    fn is_strict_mode(&self, view: LexerView) -> bool {
+    fn is_strict_mode(&self, _view: LexerView) -> bool {
         resume self.strict;
     }
 
-    fn process_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_open_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.depth += 1;
         self.scope_strict_modes.push(self.strict);
         resume ();
     }
 
-    fn process_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_close_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         // An unbalanced `}` closes nothing, so it leaves the mode alone.
         self.strict = self.scope_strict_modes.pop().unwrap_or(self.strict);
         self.depth -= 1;
         resume ();
     }
 
-    fn process_template_open_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_template_open_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.depth += 1;
         self.template_depths.push(self.depth);
         resume ();
     }
 
-    fn process_template_close_brace(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_template_close_brace(&mut self, _view: LexerView, _lx: &mut Lexer) {
         self.template_depths.pop();
         self.depth -= 1;
         resume ();
@@ -145,7 +145,7 @@ impl JavaScriptLexerBase for JsLexerBase {
 
     /// A `"use strict"` directive opening a file or a block makes that scope
     /// strict, which turns `let`, `static` and the rest into keywords.
-    fn process_string_literal(&mut self, view: LexerView, lx: &mut Lexer) {
+    fn process_string_literal(&mut self, view: LexerView, _lx: &mut Lexer) {
         if self.last_token < 0 || self.last_token == TK_OpenBrace {
             let text = view.text();
             if text == "'use strict'" || text == "\"use strict\"" {
