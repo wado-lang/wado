@@ -984,7 +984,6 @@ impl<affine W: Waitable> WaitableSet<W> {
 
     /// Moves every member out, the ready ones first, leaving the set empty. A
     /// race keeps its losers this way, where dropping the set would drop them.
-    #[benign(RawWaitableSet)]
     pub fn drain(&mut self) -> List<W> {
         let mut drained: List<W> = [];
         while let Some(ready) = self.poll() {
