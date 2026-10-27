@@ -190,7 +190,6 @@ pub fn link(package: Package) -> FlatPackage {
         builtin_registry: package.builtin_registry,
         wasm_assets: package.wasm_assets,
         trait_env: package.trait_env,
-        #[cfg(debug_assertions)]
         pruned: IndexSet::default(),
     }
 }

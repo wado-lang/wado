@@ -46,9 +46,9 @@ use crate::nir_arena::{
     StmtKind, StmtNode, Tracked,
 };
 use crate::nir_package::NirPackage;
-use crate::reflect_marker::{BridgeCallee, bridge_callee};
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
+use crate::reflect_marker::{BridgeCallee, bridge_callee};
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
     ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirCapture, TirEnum, TirEnumCase,
@@ -131,7 +131,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         builtin_registry,
         wasm_assets,
         trait_env,
-        #[cfg(debug_assertions)]
         pruned,
     } = flat;
 
@@ -163,7 +162,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
             base_len,
             #[cfg(debug_assertions)]
             shadowed: Vec::new(),
-            #[cfg(debug_assertions)]
             pruned,
         }),
     };
@@ -291,7 +289,6 @@ struct Interner {
     #[cfg(debug_assertions)]
     shadowed: Vec<String>,
     /// What `prelower_reach` dropped before this phase — see `resolve`.
-    #[cfg(debug_assertions)]
     pruned: IndexSet<FunctionId>,
 }
 
@@ -303,7 +300,8 @@ impl Interner {
         if let Some(&id) = self.ids.get(&key) {
             return id;
         }
-        #[cfg(debug_assertions)]
+        // Checked in every build: a release build would otherwise bind the call
+        // to a body-less stub and emit a component that fails to link.
         assert!(
             !self.pruned.contains(&key),
             "[lower] `{key:?}` was pruned before `lower` and then minted here: \

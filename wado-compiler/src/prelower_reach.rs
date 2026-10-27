@@ -11,11 +11,9 @@ use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{
-    FunctionId, LocalMethodName, global_init_target, is_marker_bridge, is_type_bridge,
-};
+use crate::name::{FunctionId, LocalMethodName, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
-use crate::reflect_marker::bridge_callee;
+use crate::reflect_marker::{bridge_callee, is_marker_bridge};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
@@ -191,20 +189,15 @@ pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
 fn prune(flat: &mut FlatPackage) {
     let reached = reach(flat);
     let before = flat.functions.len();
-    #[cfg(debug_assertions)]
-    {
-        let dropped: Vec<FunctionId> = flat
-            .functions
-            .iter()
-            .filter_map(|func_rc| {
-                let key = function_key(&func_rc.borrow());
-                (!reached.contains(&key)).then_some(key)
-            })
-            .collect();
-        flat.pruned.extend(dropped);
-    }
-    flat.functions
-        .retain(|func_rc| reached.contains(&function_key(&func_rc.borrow())));
+    let pruned = &mut flat.pruned;
+    flat.functions.retain(|func_rc| {
+        let key = function_key(&func_rc.borrow());
+        let keep = reached.contains(&key);
+        if !keep {
+            pruned.insert(key);
+        }
+        keep
+    });
     compiler_trace!(
         TRACE_TARGET,
         "pruned {} of {before} functions",

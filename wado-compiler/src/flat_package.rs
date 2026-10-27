@@ -113,7 +113,6 @@ pub struct FlatPackage {
 
     /// What `prelower_reach` dropped. Minting a stub for one of these means the
     /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.
-    #[cfg(debug_assertions)]
     pub pruned: IndexSet<FunctionId>,
 }
 
