@@ -34,8 +34,9 @@ pub enum ImportKind {
     /// `descriptor`). Deferred to the resource-using phase, which imports it
     /// after the resource-defining interfaces it depends on.
     ResourceUsingInterface,
-    /// A resource-defining interface imported so its resource type is available.
-    ResourceSource,
+    /// An interface imported for its types alone: the resources it defines, its
+    /// own `error-code`, and the value types its entry `provides`. No function.
+    TypeSource,
     /// A getter interface returning `option<resource>` for a resource defined by
     /// another interface (e.g. `wasi:cli/terminal-stdin` → `terminal-input`).
     /// Emitted by codegen's resource phase (after the resource sources it depends
@@ -65,6 +66,10 @@ pub enum ImportKind {
 pub struct ImportEntry {
     pub fq: String,
     pub kind: ImportKind,
+    /// The value types this interface declares that another import reaches, by
+    /// Wado name. Its instance exports each, and the component aliases each into
+    /// outer scope for the readers to alias in turn, as a WIT `use` reads.
+    pub provides: IndexSet<String>,
 }
 
 /// A complete Wasm module in WIR form.

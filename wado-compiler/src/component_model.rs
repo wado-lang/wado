@@ -3031,15 +3031,6 @@ impl CmInterfaceRegistry {
         &self.newtypes
     }
 
-    /// The interfaces declaring an `ErrorCode`, in either shape.
-    pub fn error_code_declarers(&self) -> impl Iterator<Item = &str> {
-        self.enums
-            .keys()
-            .chain(self.variants.keys())
-            .filter(|(_, name)| name == ERROR_CODE_WADO_NAME)
-            .map(|(source, _)| source.as_str())
-    }
-
     /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
     /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
@@ -3089,6 +3080,107 @@ impl CmInterfaceRegistry {
                         .decl_type(decl, name.to_string(), Vec::new(), Span::default());
                 (name, site)
             })
+    }
+
+    /// A type site bound to the declaration `interface_fq` registers as `name`.
+    pub fn declared_type(&self, interface_fq: &str, name: &str) -> Option<Type> {
+        self.declared_types(interface_fq)
+            .find(|(declared, _)| *declared == name)
+            .map(|(_, site)| site)
+    }
+
+    /// The kind of the value type `interface_fq` declares as `name`, asked in
+    /// the order [`CmTypeGen::ast_type_to_cm`] asks: a variant, a record, an
+    /// enum, then flags. `None` for a resource or a newtype, which no instance
+    /// spells as a type of its own.
+    pub fn value_type_kind(&self, interface_fq: &str, name: &str) -> Option<CmTypeKind> {
+        if self.declares_kind(CmTypeKind::Resource, interface_fq, name) {
+            return None;
+        }
+        [
+            CmTypeKind::Variant,
+            CmTypeKind::Struct,
+            CmTypeKind::Enum,
+            CmTypeKind::Flags,
+        ]
+        .into_iter()
+        .find(|&kind| self.declares_kind(kind, interface_fq, name))
+    }
+
+    /// The CM name of the value type `interface_fq` declares as `name`.
+    pub fn value_type_cm_name(&self, interface_fq: &str, name: &str) -> Option<&str> {
+        match self.value_type_kind(interface_fq, name)? {
+            CmTypeKind::Variant => self.get_variant_cm_name_by_source(interface_fq, name),
+            CmTypeKind::Struct => self.get_struct_cm_name_by_source(interface_fq, name),
+            CmTypeKind::Enum => self.get_enum_cm_name_by_source(interface_fq, name),
+            CmTypeKind::Flags => self.get_flags_cm_name_by_source(interface_fq, name),
+            CmTypeKind::Resource | CmTypeKind::Newtype => unreachable!(),
+        }
+    }
+
+    /// The types another interface declares that `interface`'s instance type
+    /// reaches through `types`, as `(declaring_interface, wado_name)`: the
+    /// resources it aliases and the value types it aliases rather than spells.
+    /// A type `interface` declares itself is spelled there, so the walk goes on
+    /// into its fields and payloads.
+    pub fn foreign_types_in<'a>(
+        &self,
+        interface: &str,
+        types: impl IntoIterator<Item = &'a Type>,
+    ) -> IndexSet<(String, String)> {
+        let mut out = IndexSet::default();
+        let mut visited = IndexSet::default();
+        for ty in types {
+            self.foreign_types_in_type(interface, ty, &mut out, &mut visited);
+        }
+        out
+    }
+
+    fn foreign_types_in_type(
+        &self,
+        interface: &str,
+        ty: &Type,
+        out: &mut IndexSet<(String, String)>,
+        visited: &mut IndexSet<String>,
+    ) {
+        self.resolve_type_preserving_local_newtypes(ty)
+            .for_each(&mut |ty| {
+                let Type::Named(named) = ty else {
+                    return;
+                };
+                let Some(source) = self
+                    .source_interface(named)
+                    .filter(|source| self.is_cm_source(source))
+                else {
+                    return;
+                };
+                let name = &named.name;
+                if source != interface {
+                    if self.declares_kind(CmTypeKind::Resource, &source, name)
+                        || self.value_type_kind(&source, name).is_some()
+                    {
+                        out.insert((source, name.clone()));
+                    }
+                    return;
+                }
+                if !visited.insert(name.clone()) {
+                    return;
+                }
+                let members: Vec<&Type> =
+                    if let Some(fields) = self.get_struct_fields_by_source(&source, name) {
+                        fields.iter().map(|(_, field)| field).collect()
+                    } else if let Some(cases) = self.get_variant_cases_by_source(&source, name) {
+                        cases
+                            .iter()
+                            .filter_map(|case| case.payload.as_ref())
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
+                for member in members {
+                    self.foreign_types_in_type(interface, member, out, visited);
+                }
+            });
     }
 
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
@@ -4040,28 +4132,13 @@ impl CmTypeGen {
         }
     }
 
-    /// Let the walk reach the enum or variant `name` that `owner` declares
+    /// Let the walk reach the value type `name` that `owner` declares as `kind`
     /// through `outer_idx`, a type of the enclosing component. Aliasing keeps
     /// the one type its declaring interface exports, where a structural copy
     /// would be a type of its own.
-    pub fn register_outer(
-        &mut self,
-        registry: &CmInterfaceRegistry,
-        owner: &str,
-        name: &str,
-        outer_idx: u32,
-    ) {
-        let key = match registry.get_variant_cm_name_by_source(owner, name) {
-            Some(cm_name) => Self::named_key(CmTypeKind::Variant, owner, cm_name),
-            None => {
-                assert!(
-                    registry.declares_kind(CmTypeKind::Enum, owner, name),
-                    "`{owner}` declares `{name}` as an enum or a variant"
-                );
-                Self::named_key(CmTypeKind::Enum, owner, name)
-            }
-        };
-        self.outer.insert(key, outer_idx);
+    pub fn register_outer(&mut self, kind: CmTypeKind, owner: &str, name: &str, outer_idx: u32) {
+        self.outer
+            .insert(Self::named_key(kind, owner, name), outer_idx);
     }
 
     /// The type the walk already has under `key`, aliased in from the
@@ -4094,7 +4171,7 @@ impl CmTypeGen {
     }
 
     /// A type name is unique only within the interface declaring it:
-    /// `error-code` is one type in `wasi:http/types` and another in
+    /// `ErrorCode` is one type in `wasi:http/types` and another in
     /// `wasi:filesystem/types`.
     fn named_key(kind: CmTypeKind, owner: &str, name: &str) -> String {
         format!("{kind:?}:{owner}#{name}")
@@ -4122,12 +4199,13 @@ impl CmTypeGen {
         &mut self,
         sink: &mut dyn CmTypeSink,
         owner: &str,
+        name: &str,
         cm_name: &str,
         cases: &[CmVariantCase],
         cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
-        let cache_key = Self::named_key(CmTypeKind::Variant, owner, cm_name);
+        let cache_key = Self::named_key(CmTypeKind::Variant, owner, name);
         if let Some(idx) = self.existing(sink, &cache_key) {
             return idx;
         }
@@ -4193,13 +4271,14 @@ impl CmTypeGen {
         &mut self,
         sink: &mut dyn CmTypeSink,
         owner: &str,
+        name: &str,
         cm_name: &str,
         fields: &[(String, Type)],
         cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> u32 {
-        let cache_key = Self::named_key(CmTypeKind::Struct, owner, cm_name);
-        if let Some(&idx) = self.cache.get(&cache_key) {
+        let cache_key = Self::named_key(CmTypeKind::Struct, owner, name);
+        if let Some(idx) = self.existing(sink, &cache_key) {
             return idx;
         }
 
@@ -4427,6 +4506,7 @@ impl CmTypeGen {
                     let idx = self.define_variant(
                         sink,
                         source,
+                        name,
                         &cm_name,
                         &cases,
                         cm_interface_registry,
@@ -4444,6 +4524,7 @@ impl CmTypeGen {
                     let idx = self.define_record(
                         sink,
                         source,
+                        name,
                         &cm_name,
                         &fields,
                         cm_interface_registry,
@@ -4476,7 +4557,7 @@ impl CmTypeGen {
                     .map(<[String]>::to_vec)
                 {
                     let cache_key = Self::named_key(CmTypeKind::Flags, source, name);
-                    if let Some(&idx) = self.cache.get(&cache_key) {
+                    if let Some(idx) = self.existing(sink, &cache_key) {
                         return ComponentValType::Type(idx);
                     }
                     let member_refs: Vec<&str> = members.iter().map(String::as_str).collect();
