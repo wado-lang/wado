@@ -1,0 +1,42 @@
+// A one-field aggregate takes the multi-value return ABI too: its one result
+// is a plain Wasm return, so the call allocates no `Box<T>` for the caller to
+// read straight back out.
+
+struct Wrapped {
+    value: i32,
+}
+
+#[inline("never")]
+fn wrap(v: i32) -> Wrapped {
+    return Wrapped { value: v * 2 };
+}
+
+#[inline("never")]
+fn single(v: i32) -> [i32] {
+    return [v + 1];
+}
+
+#[inline("never")]
+fn unwrap_both(v: i32) -> i32 {
+    let w = wrap(v);
+    let s = single(v);
+    return w.value + s.0;
+}
+
+export fn run() {
+    assert unwrap_both(builtin::black_box(10)) == 31;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "wrap\" = fn(i32) -> i32",
+        "single\" = fn(i32) -> i32",
+        "multivalue_bind ["
+    ],
+    "wir_not_expect:O2": [
+        "struct.new \"opt_multi_value_one_field.wado//Wrapped\"",
+        "struct.new \"tuple//[i32]\""
+    ]
+}
