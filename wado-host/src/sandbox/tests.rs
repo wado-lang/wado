@@ -445,6 +445,7 @@ fn sh_traced(policy: &Policy, script: &str) -> (ExitStatus, BTreeSet<Refusal>) {
 /// [`sh_traced`]'s refused paths. A tool the shell runs is a grandchild,
 /// refused its own `/proc` entry wherever it reads one (uutils `cat` does,
 /// GNU's does not), so that refusal is left out.
+#[cfg(target_os = "linux")]
 fn sh_traced_paths(policy: &Policy, script: &str) -> BTreeSet<Refusal> {
     sh_traced(policy, script)
         .1
