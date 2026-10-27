@@ -2658,13 +2658,14 @@ impl Monomorphizer {
     }
 
     /// The impl written on the reference a type-param receiver binds
-    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one.
+    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one:
+    /// the call named as it names itself, and the template it instantiates.
     fn ref_impl_at_instance(
         &self,
         info: &LocalMethodName,
         substitution: &IndexMap<u32, TypeId>,
         type_table: &TypeTable,
-    ) -> Option<LocalMethodName> {
+    ) -> Option<(LocalMethodName, TemplateId)> {
         let binder = info.fq_struct_name();
         let key = self
             .current_param_substitution_key
@@ -2672,8 +2673,19 @@ impl Monomorphizer {
         let bound = *substitution.get(key)?;
         RefKind::from_resolved(type_table.get(bound))?;
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
+        let trait_fq = at_bound.trait_name.as_ref()?;
+        let trait_env = &self.functions.trait_env;
+        let block = trait_env.answering_impl(
+            at_bound.receiver(),
+            trait_env.trait_def_of_fq(trait_fq)?,
+            trait_fq.args(),
+        )?;
         let written = self.impl_written_trait_args(&at_bound)?;
-        Some(at_bound.with_trait_type_args(written))
+        let named = at_bound.with_trait_type_args(written);
+        let template = trait_env
+            .method_template(block, named.declared_method_name())?
+            .called_by(&named);
+        Some((named, template))
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
@@ -2707,10 +2719,11 @@ impl Monomorphizer {
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
         // An impl written for the reference itself outranks the `&T` blanket.
-        let ref_impl = info
+        let (ref_impl, ref_impl_template) = info
             .is_type_param_receiver
             .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
-            .flatten();
+            .flatten()
+            .unzip();
         if ref_impl.is_none()
             && self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table)
         {
@@ -2846,7 +2859,13 @@ impl Monomorphizer {
             module_source,
         };
         if info.is_type_param_receiver {
-            self.resolve_type_param_dispatch(method_func, receiver_type_id, type_table, call);
+            self.resolve_type_param_dispatch(
+                method_func,
+                receiver_type_id,
+                ref_impl_template,
+                type_table,
+                call,
+            );
         } else {
             self.resolve_generic_dispatch(
                 method_func,
@@ -2885,10 +2904,13 @@ impl Monomorphizer {
     /// module, or — when the type has none — a blanket impl in the blanket's
     /// module. Only claims the blanket if the receiver satisfies its param
     /// bound, and keys the `ReflectStruct` struct blanket by `[T, Fields]`.
+    /// `ref_impl` is the template of an impl written on the reference the
+    /// receiver binds, which answers ahead of any lookup on the receiver.
     fn resolve_type_param_dispatch(
         &self,
         method_func: &mut FunctionRef,
         receiver_type_id: TypeId,
+        ref_impl: Option<TemplateId>,
         type_table: &mut TypeTable,
         call: SubstitutedCall,
     ) {
@@ -2917,7 +2939,7 @@ impl Monomorphizer {
         );
         // Module and receiver param must be read off this same blanket: the
         // call-site type-param head matches only a direct `T::method` call.
-        let blanket = if generic_or_concrete.is_none() {
+        let blanket = if ref_impl.is_none() && generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
             new_info.trait_name.as_ref().and_then(|tn| {
                 ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table).cloned()
@@ -2926,14 +2948,15 @@ impl Monomorphizer {
             None
         };
         let blanket_module = blanket.as_ref().map(|b| b.module.clone());
-        // Unpeeled: an impl written on the reference is found through it.
-        let template = self.served_template(
-            blanket.as_ref(),
-            &new_info,
-            receiver_type_id,
-            receiver_module.as_ref().unwrap_or(&module_source),
-            type_table,
-        );
+        let template = ref_impl.or_else(|| {
+            self.served_template(
+                blanket.as_ref(),
+                &new_info,
+                type_table.peel_refs(receiver_type_id),
+                receiver_module.as_ref().unwrap_or(&module_source),
+                type_table,
+            )
+        });
         let concrete_module = template
             .as_ref()
             .map(|template| template.home(type_table.defs()))
