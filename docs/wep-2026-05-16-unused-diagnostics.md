@@ -246,16 +246,17 @@ emitted file.
 
 ### Source files
 
-| File                                              | Description                                                                                                                                                                               |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).     |
-| `wado-compiler/src/elaborator/liveness/unused.rs` | This WEP's contribution: walks the `Liveness` output plus `ModuleSemantics.bindings` and emits the five diagnostics. Stdlib exclusion, underscore suppression, and root policy live here. |
-| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                |
-| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                              |
-| `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                               |
-| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                          |
-| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                             |
-| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.             |
+| File                                              | Description                                                                                                                                                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).            |
+| `wado-compiler/src/lib.rs` (`unused_diagnostics`) | This WEP's contribution: walks the `Liveness` output and emits `DeadFunction` / `DeadGlobal` / `TestOnly*`, then the reference-pass emitters below. `Lints::reports_in` is the stdlib exclusion. |
+| `wado-compiler/src/unused_import.rs`              | The import emitter: `UnusedImport`.                                                                                                                                                              |
+| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                       |
+| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                     |
+| `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                                      |
+| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                                 |
+| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                                    |
+| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.                    |
 
 ### Algorithms
 

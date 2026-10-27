@@ -122,6 +122,10 @@ struct Binders<'a, 'w> {
 }
 
 impl<'a> Binders<'a, '_> {
+    fn bind_parameter(&mut self, attrs: &'a [Attribute], id: AstId, name: &'a str, span: Span) {
+        self.visit_attributed(attrs, |s| s.bind(BinderKind::Parameter, id, name, span));
+    }
+
     fn bind(&mut self, kind: BinderKind, id: AstId, name: &'a str, span: Span) {
         if self.waived || name.starts_with('_') {
             return;
@@ -150,14 +154,7 @@ impl<'a> AstVisitor<'a> for Binders<'a, '_> {
         if func.body.is_some() {
             for param in &func.params {
                 if param.self_kind == SelfKind::None {
-                    self.visit_attributed(&param.attrs, |s| {
-                        s.bind(
-                            BinderKind::Parameter,
-                            param.id,
-                            &param.name,
-                            param.name_span,
-                        );
-                    });
+                    self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
                 }
             }
         }
@@ -180,14 +177,7 @@ impl<'a> AstVisitor<'a> for Binders<'a, '_> {
             }
             Expr::Closure(closure) => {
                 for param in &closure.params {
-                    self.visit_attributed(&param.attrs, |s| {
-                        s.bind(
-                            BinderKind::Parameter,
-                            param.id,
-                            &param.name,
-                            param.name_span,
-                        );
-                    });
+                    self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
                 }
             }
             _ => {}

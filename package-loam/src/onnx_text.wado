@@ -180,12 +180,7 @@ fn read_constant_data(
 
 /// A value's inline elements as their literal tokens, or `None` where the value
 /// is written without any.
-fn inline_tokens(
-    s: &onnx::CstStore,
-    vi: i32,
-    name: &String,
-    rank: &Rank,
-) -> Result<Option<List<i32>>, String> {
+fn inline_tokens(s: &onnx::CstStore, vi: i32, name: &String, rank: &Rank) -> Result<Option<List<i32>>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
         return Result::Ok(null);
     };
@@ -198,12 +193,7 @@ fn inline_tokens(
 }
 
 /// A `tensorValues`'s elements as their literal tokens, as many as `rank` says.
-fn element_tokens(
-    s: &onnx::CstStore,
-    values: i32,
-    name: &String,
-    rank: &Rank,
-) -> Result<List<i32>, String> {
+fn element_tokens(s: &onnx::CstStore, values: i32, name: &String, rank: &Rank) -> Result<List<i32>, String> {
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };

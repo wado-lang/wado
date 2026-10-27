@@ -1085,8 +1085,8 @@ pub fn generator_compile_options(invocations: InvocationIndex) -> CompilerOption
         opt_level: OptLevel::O1,
         target_world: Some(GENERATOR_WORLD_FQ.to_string()),
         invocations,
-        // Compiling a generator to run it is no check of its package, which
-        // a build reaching it as a dependency has no business linting.
+        // A generator is compiled to run, not to be checked: its lints belong
+        // to its own package's check, not to a build that depends on it.
         lints: Lints::Off,
         ..CompilerOptions::default()
     }
