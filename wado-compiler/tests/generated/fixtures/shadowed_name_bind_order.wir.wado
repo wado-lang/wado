@@ -164,7 +164,7 @@ type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(41)
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(42)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<i32>") -> i32;  // TypeId(43)
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<i32>") -> ref "core:prelude/types.wado//Box<i32>";  // TypeId(43)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(44)
 
@@ -673,7 +673,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
             if shown > 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/array.wado::$const_obj_26);
             }
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
             shown = shown + 1;
             i = i + 1;
             continue l66;
@@ -711,7 +711,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>$d
                 break b72;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>(repr, i) }.value, f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<i32>(repr, i), f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
             shown = shown + 1;
             i = i + 1;
@@ -745,11 +745,11 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i3
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_33);
 }
 
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(v) {
+fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(v) {
     if @unlikely(v.discriminant != 1) {
         unreachable;
     }
-    return ref.cast "core:prelude/types.wado//Option<i32>::Some"(v).payload_0;
+    return struct.new "core:prelude/types.wado//Box<i32>" { value: ref.cast "core:prelude/types.wado//Option<i32>::Some"(v).payload_0 };
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle, data) {
@@ -1190,7 +1190,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_38);
         s_10 = $mv_1_2.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(self), f);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<i32>$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
     }
 }
 

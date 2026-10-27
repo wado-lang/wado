@@ -8,8 +8,8 @@ enum core:prelude/traits.wado//enum:Ordering { Less = 0, Equal = 1, Greater = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(2)
 
-struct core:prelude/types.wado//Box<u16> {  // TypeId(3)
-    mut value: u16,
+struct core:prelude/types.wado//Box<u64> {  // TypeId(3)
+    mut value: u64,
 }
 
 struct core:prelude/string.wado//StrSlice {  // TypeId(4)
@@ -437,7 +437,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u64>$sroa[payload.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(125)
 
-type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<u64>") -> u64;  // TypeId(126)
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]" = fn(ref "core:prelude/types.wado//Option<u64>") -> ref "core:prelude/types.wado//Box<u64>";  // TypeId(126)
 
 type "functype//core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec0$dae[index]" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//String";  // TypeId(127)
 
@@ -1677,7 +1677,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<u16>$dae[s
             if shown > 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/array.wado::$const_obj_49);
             }
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<u16>" { value: builtin::array_get_value<u16>(repr, i) }.value, f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u16>(repr, i), f);
             shown = shown + 1;
             i = i + 1;
             continue l143;
@@ -1715,7 +1715,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<u16>$d
                 break b149;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(struct.new "core:prelude/types.wado//Box<u16>" { value: builtin::array_get_value<u16>(repr, i) }.value, f);
+            "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(builtin::array_get_value<u16>(repr, i), f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
             shown = shown + 1;
             i = i + 1;
@@ -1908,11 +1908,11 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u6
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_71);
 }
 
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]"(v) {
+fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]"(v) {
     if @unlikely(v.discriminant != 1) {
         unreachable;
     }
-    return ref.cast "core:prelude/types.wado//Option<u64>::Some"(v).payload_0;
+    return struct.new "core:prelude/types.wado//Box<u64>" { value: ref.cast "core:prelude/types.wado//Option<u64>::Some"(v).payload_0 };
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec0$dae[index]"(v) {
@@ -3243,7 +3243,7 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<u64>^core:prelude/tr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_88);
         s_10 = $mv_1_2.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u64>$sroa[payload.value]"("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]"(self), f);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<u64>$sroa[payload.value]"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<u64>$u64$sroa[v.value]$spec0$dae[index]"(self).value, f);
     }
 }
 

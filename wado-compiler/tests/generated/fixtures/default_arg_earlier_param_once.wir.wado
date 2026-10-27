@@ -688,11 +688,11 @@ fn "default_arg_earlier_param_once.wado/$cm_export__$test_8_a_place_receiver_s_s
 }
 
 fn "default_arg_earlier_param_once.wado/$cm_export__$test_9_a_static_method_s_default_reads_its_argument_once"() {
-    let $v0: i32;
     global:default_arg_earlier_param_once.wado::trace = 0;
-    if @unlikely(local.tee $v0(global:default_arg_earlier_param_once.wado::trace = (global:default_arg_earlier_param_once.wado::trace * 10) + 8; struct.new "default_arg_earlier_param_once.wado//Acc" { base: 89 }.base) != 89) {
+    global:default_arg_earlier_param_once.wado::trace = (global:default_arg_earlier_param_once.wado::trace * 10) + 8;
+    if @unlikely(89 != 89) {
         cold_path;
-        "default_arg_earlier_param_once.wado/$test_9_a_static_method_s_default_reads_its_argument_once$cold1"($v0);
+        "default_arg_earlier_param_once.wado/$test_9_a_static_method_s_default_reads_its_argument_once$cold1"(89);
         unreachable;
     }
     if @unlikely((global:default_arg_earlier_param_once.wado::trace == 8) == 0) {

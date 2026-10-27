@@ -2041,7 +2041,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .variant_of_callee(&callee_kind, receiver_site, prefix)
                 .is_some()
             {
-                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
+                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -2055,7 +2055,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A type, resource included, with no such static method.
             else if self.names_type_at(receiver_site, prefix) {
-                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
+                return self.blanket_static_or_unknown(prefix, suffix, ident, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -5034,12 +5034,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         prefix: &str,
         suffix: &str,
+        ident: &ast::IdentExpr,
         call: &ast::CallExpr,
         args: &[TypeId],
         ctx: &mut FunctionContext,
     ) -> TypeId {
+        let method_id = ident.segments.last().map(|seg| seg.id);
         if let Some(return_type) = self.resolve_named_type_blanket_static(
-            prefix, suffix, call.id, args, &call.args, call.span, ctx,
+            prefix, suffix, call.id, method_id, args, &call.args, call.span, ctx,
         ) {
             return return_type;
         }
@@ -5055,6 +5057,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_name: &str,
         method: &str,
         call_id: AstId,
+        method_id: Option<AstId>,
         args: &[TypeId],
         raw_args: &[Expr],
         span: Span,
@@ -5098,6 +5101,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             receiver_ty,
             method,
             call_id,
+            method_id,
             &[],
             args,
             &arg_sites,

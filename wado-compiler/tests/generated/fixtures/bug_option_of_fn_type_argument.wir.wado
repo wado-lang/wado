@@ -293,7 +293,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/primitive.wado/char::is_scalar_value" = fn(u32) -> bool;  // TypeId(87)
 
+<<<<<<< HEAD
 type "functype//core:prelude/primitive.wado/i64::abs" = fn(i64) -> i64;  // TypeId(88)
+||||||| 57ecea5a318
+type "functype//core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]" = fn(ref null struct) -> ref struct;  // TypeId(95)
+=======
+type "functype//core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]" = fn(ref null struct) -> ref "core:prelude/types.wado//Box<fn(char)->bool>";  // TypeId(95)
+>>>>>>> origin/main
 
 type "functype//core:prelude/primitive.wado/core:prelude/primitive.wado/$tmpl$c8d78b43997053ab^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/primitive.wado//$tmpl$c8d78b43997053ab") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(89)
 
@@ -1203,11 +1209,11 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     unreachable;
 }
 
-fn "core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]"(v) {
+fn "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]"(v) {
     if @unlikely((ref.is_null(v) == 0) != 1) {
         unreachable;
     }
-    return ref.as_non_null(v);
+    return struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: ref.as_non_null(v) };
 }
 
 fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b145b32c9a586330$spec0$dae[index]"(v) {
@@ -2236,6 +2242,66 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
     };
 }
 
+<<<<<<< HEAD
+||||||| 57ecea5a318
+fn "core:prelude/traits.wado/core:prelude/types.wado/Option<fn(char)->bool>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: ref "core:prelude/string.wado//String";
+    let s_10: ref "core:prelude/string.wado//String";
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_30) {
+        let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,()>";
+        let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,fn(char)->bool>";
+        multivalue_bind [$mv_0_1, $mv_1_2] = "core:prelude/types.wado/core:prelude/types.wado/Option<fn(char)->bool>^core:prelude/traits.wado/ReflectVariant::members"();
+        global:core:prelude/traits.wado::$const_obj_30 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,()>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,fn(char)->bool>]" { 0: $mv_0_1, 1: $mv_1_2 };
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_30.0;
+    if ref.is_null(self) {
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee $load_0(f.buf), s_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_28);
+        s_10 = $mv_0_1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, s_10);
+    }
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_30.1;
+    if ref.is_null(self) == 0 {
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee $load_0(f.buf), s_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_28);
+        s_10 = $mv_1_2.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, s_10);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<fn(char)->bool>"(struct.new "core:prelude/types.wado//Box<fn(char)->bool>" { value: ref.as_non_null("core:prelude/types.wado/$case_extract$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]"(self)) }, f);
+    }
+}
+
+=======
+fn "core:prelude/traits.wado/core:prelude/types.wado/Option<fn(char)->bool>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
+    let $load_0: ref "core:prelude/string.wado//String";
+    let s_10: ref "core:prelude/string.wado//String";
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_30) {
+        let $mv_0_1: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,()>";
+        let $mv_1_2: ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,fn(char)->bool>";
+        multivalue_bind [$mv_0_1, $mv_1_2] = "core:prelude/types.wado/core:prelude/types.wado/Option<fn(char)->bool>^core:prelude/traits.wado/ReflectVariant::members"();
+        global:core:prelude/traits.wado::$const_obj_30 = struct.new "tuple//[core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,()>, core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Option<fn(char)->bool>,fn(char)->bool>]" { 0: $mv_0_1, 1: $mv_1_2 };
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_30.0;
+    if ref.is_null(self) {
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee $load_0(f.buf), s_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_28);
+        s_10 = $mv_0_1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, s_10);
+    }
+    $mv_1_2 = global:core:prelude/traits.wado::$const_obj_30.1;
+    if ref.is_null(self) == 0 {
+        s_10 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option"), used: 6 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee $load_0(f.buf), s_10);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_28);
+        s_10 = $mv_1_2.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, s_10);
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<fn(char)->bool>"("core:prelude/types.wado/$case_ref$core:prelude/types.wado/Option<fn(char)->bool>$fn(char)->bool$sroa[v.value]$spec0$dae[index]"(self), f);
+    }
+}
+
+>>>>>>> origin/main
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
     let new_used: i32;
     let start_7: i32;
