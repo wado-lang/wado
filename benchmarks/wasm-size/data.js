@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793120094546,
+  "lastUpdate": 1793135133200,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71645,6 +71645,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a142dc457d4ad2c617f64a4581df2aaf51433629"
         },
         "date": 1793120093555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295756,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "545408841dd5f3a7f2dda9d2eeb47a674db7f5b1",
+          "message": "Merge pull request #2476 from wado-lang/claude/upbeat-knuth-rwam10\n\nfeat(core:process)!: a portable WIT, with timeouts composed in the guest",
+          "timestamp": "2026-10-28T05:51:27+09:00",
+          "tree_id": "786b6441214d8f2034b209668bf5eb418d782df6",
+          "url": "https://github.com/wado-lang/wado/commit/545408841dd5f3a7f2dda9d2eeb47a674db7f5b1"
+        },
+        "date": 1793135131960,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
