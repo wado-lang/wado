@@ -1,0 +1,21 @@
+// A remote `from` is read only as far as the probe declares, and the
+// `integrity` beside `generator` pins that part: here the header line `7\n`,
+// not the payload behind it.
+
+use { hello } from "https://example.com/data/header_and_payload.schema"
+    with {
+        generator: { module: "./sub/kiln/header_probe_generator.wado" },
+        integrity: "sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58",
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{
+  "test": {},
+  "remote": {
+    "https://example.com/data/header_and_payload.schema": "sub/kiln/header_and_payload.schema"
+  }
+}

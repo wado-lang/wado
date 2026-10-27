@@ -181,7 +181,9 @@ fragment RAW_STRING_CONTENT: '#' RAW_STRING_CONTENT '#' | '"' .*? '"';
 BYTE_LITERAL: 'b\'' (~['\\] | QUOTE_ESCAPE | BYTE_ESCAPE) '\'';
 
 // LOCAL: `~["\\]` — the byte-string twin of the `STRING_LITERAL` note above.
-BYTE_STRING_LITERAL: 'b"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE)* '"';
+// LOCAL: a byte string continues past a `\` ending a line, as the Rust
+// reference's STRING_CONTINUE says and the upstream grammar leaves out.
+BYTE_STRING_LITERAL: 'b"' (~["\\] | QUOTE_ESCAPE | BYTE_ESCAPE | ESC_NEWLINE)* '"';
 
 RAW_BYTE_STRING_LITERAL: 'br' RAW_STRING_CONTENT;
 

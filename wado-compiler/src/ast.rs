@@ -2495,7 +2495,7 @@ impl ImportAttributes {
     pub const TYPE: &str = "type";
 
     /// Every other key a clause may carry, each taking a string.
-    pub const STRING_KEYS: [&str; 8] = [
+    pub const STRING_KEYS: [&str; 9] = [
         Self::TYPE,
         "provider",
         "git",
@@ -2504,7 +2504,11 @@ impl ImportAttributes {
         "registry",
         "package",
         "version",
+        Self::INTEGRITY,
     ];
+
+    /// The key pinning a remote file to the digest of its content.
+    pub const INTEGRITY: &str = "integrity";
 
     fn get_str(&self, key: &str) -> Option<String> {
         assert!(
@@ -2559,6 +2563,12 @@ impl ImportAttributes {
     #[must_use]
     pub fn type_hint(&self) -> Option<String> {
         self.get_str(Self::TYPE)
+    }
+
+    /// The `integrity` entry, a remote file's pin as written.
+    #[must_use]
+    pub fn integrity(&self) -> Option<&AttrEntry> {
+        self.entries.get(Self::INTEGRITY)
     }
 
     /// Whether the file is Wado source: the clause names neither a generator

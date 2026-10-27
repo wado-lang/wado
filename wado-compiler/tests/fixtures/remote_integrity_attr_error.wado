@@ -1,0 +1,12 @@
+// `integrity` pins a remote file, so a local import cannot carry one.
+
+use { greeting } from "./sub/use_reads_txt_as_wado.txt"
+    with { integrity: "sha256:164934fab162dfbe7d27aa4662174d5f4f6763ea3f6106ab5272de10f0497513" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":4:12: analysis error: import attribute `integrity` pins a remote file, and `./sub/use_reads_txt_as_wado.txt` is not one",
+  "compile_error_codes": ["IMPORT_ATTR_INVALID"]
+}
