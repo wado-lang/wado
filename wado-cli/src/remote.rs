@@ -324,6 +324,7 @@ pub async fn open(
 ) -> Result<Arc<dyn SourceReader>, SourceError> {
     let kept = Pins::of(url, use_pin, lock_root)?
         .all()
+        .into_iter()
         .filter_map(|pin| Some((cached(pin)?, kept_len(url, pin)?)))
         .max_by_key(|(bytes, _)| bytes.len());
     Ok(match kept {
@@ -373,12 +374,11 @@ impl Pins {
         }
     }
 
-    fn all(&self) -> impl Iterator<Item = Integrity> + '_ {
-        let (one, lock) = match self {
-            Self::Use(pin) => (Some(*pin), &[][..]),
-            Self::Lock(pins) => (None, &pins[..]),
-        };
-        one.into_iter().chain(lock.iter().map(|&(_, pin)| pin))
+    fn all(&self) -> Vec<Integrity> {
+        match self {
+            Self::Use(pin) => vec![*pin],
+            Self::Lock(pins) => pins.iter().map(|&(_, pin)| pin).collect(),
+        }
     }
 }
 
@@ -470,19 +470,6 @@ fn pins_of(
         .collect()
 }
 
-/// What `lock`, the lock of the package at `root`, pins `url`'s first
-/// `extent` bytes to.
-fn pin_in(
-    lock: &LockFile,
-    root: &Path,
-    url: &str,
-    extent: Option<u64>,
-) -> Result<Option<Integrity>, SourceError> {
-    Ok(pins_of(lock, root, url)?
-        .into_iter()
-        .find_map(|(other, pin)| (other == extent).then_some(pin)))
-}
-
 /// What the `wado.lock` of the package at `root` pins `url`'s first `extent`
 /// bytes to.
 ///
@@ -510,8 +497,8 @@ fn record_pin(
     let _held = hold_lock_file(root).map_err(|message| lock_error(root, message))?;
     let mut lock_file = match read_lock(root)? {
         Some(lock_file) => {
-            if let Some(pin) = pin_in(&lock_file, root, url, extent)? {
-                return check_digest(url, actual, pin, PinnedBy::Lock);
+            if let Some((pin, pinned_by)) = Pins::Lock(pins_of(&lock_file, root, url)?).at(extent) {
+                return check_digest(url, actual, pin, pinned_by);
             }
             lock_file
         }
@@ -546,7 +533,11 @@ fn blob_path(integrity: Integrity) -> Option<PathBuf> {
 /// length.
 fn len_path(url: &str, integrity: Integrity) -> Option<PathBuf> {
     let root = cache::root().ok()?;
-    let name = format!("{}-{}", Integrity::of(url.as_bytes()).hex(), integrity.hex());
+    let name = format!(
+        "{}-{}",
+        Integrity::of(url.as_bytes()).hex(),
+        integrity.hex()
+    );
     Some(root.join("remote").join("len").join(name))
 }
 

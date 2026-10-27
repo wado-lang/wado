@@ -289,8 +289,8 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     /// Nothing read through the reader is recorded: the part of the file a
-    /// compile depends on is read again through [`Self::load_source_prefix`].
-    /// A file that fails to open is recorded, as one that fails to load is.
+    /// compile depends on is read again through [`Self::load_file`]. A file
+    /// that fails to open is recorded, as one that fails to load is.
     async fn open_source(
         &self,
         path: &str,

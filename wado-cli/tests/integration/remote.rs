@@ -615,6 +615,31 @@ fn a_kiln_input_is_probed_from_the_cache_once_fetched() {
         .stdout("7\n");
 }
 
+/// A probe reading a whole kept file to its end reads its end from the cache
+/// too.
+#[test]
+fn a_whole_kiln_input_is_probed_from_the_cache_to_its_end() {
+    let server = Server::start();
+    server.serve("model.bin", b"7");
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    server.withdraw("model.bin");
+    let generator = project.path().join("src/gen.wado");
+    let changed = std::fs::read_to_string(&generator).unwrap() + "// changed\n";
+    std::fs::write(&generator, changed).unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
 /// A probe reading past the bytes kept for a pin reads on from the server.
 #[test]
 fn a_probe_reads_past_the_kept_bytes_from_the_server() {
