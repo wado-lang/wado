@@ -2,6 +2,8 @@
 //! once for both the e2e harness and the golden dumps, so the goldens record
 //! the program the tests run.
 
+use std::collections::BTreeMap;
+
 use indexmap::IndexMap;
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer};
@@ -178,6 +180,10 @@ pub struct CoverageSpec {
     /// Qualified names, closures as `outer::{closure:LINE}`.
     #[serde(default)]
     pub uncovered_functions: Vec<String>,
+
+    /// How often each countable line ran, over every test, as LCOV's `DA`
+    /// lines carry it.
+    pub line_counts: Option<BTreeMap<u32, i64>>,
 }
 
 /// A `__DATA__` value that is one string or a list of them.

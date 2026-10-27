@@ -291,60 +291,6 @@ struct TestSpec {
     /// compiler emits, and whose imports the runner hosts nothing for.
     #[serde(default)]
     compile_only: bool,
-<<<<<<< HEAD
-
-    /// Measure the fixture's own code under its `test` blocks, as
-    /// `wado test --coverage` does, and state what they left unrun.
-    #[serde(default)]
-    coverage: Option<CoverageSpec>,
-}
-
-/// What a fixture's tests leave unrun in the fixture itself. Each list is the
-/// whole set, so a region the plan gains or loses is a failure too.
-#[derive(Debug, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CoverageSpec {
-    #[serde(default)]
-    uncovered_lines: Vec<u32>,
-
-    /// Each as [`Branch::describe`] spells it:
-    /// `"12:5 else"`.
-    #[serde(default)]
-    uncovered_branches: Vec<String>,
-
-    /// Qualified names, closures as `outer::{closure:LINE}`.
-    #[serde(default)]
-    uncovered_functions: Vec<String>,
-
-    /// How often each countable line ran, over every test, as LCOV's `DA`
-    /// lines carry it.
-    line_counts: Option<BTreeMap<u32, i64>>,
-||||||| 57ecea5a3
-
-    /// Measure the fixture's own code under its `test` blocks, as
-    /// `wado test --coverage` does, and state what they left unrun.
-    #[serde(default)]
-    coverage: Option<CoverageSpec>,
-}
-
-/// What a fixture's tests leave unrun in the fixture itself. Each list is the
-/// whole set, so a region the plan gains or loses is a failure too.
-#[derive(Debug, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CoverageSpec {
-    #[serde(default)]
-    uncovered_lines: Vec<u32>,
-
-    /// Each as [`Branch::describe`] spells it:
-    /// `"12:5 else"`.
-    #[serde(default)]
-    uncovered_branches: Vec<String>,
-
-    /// Qualified names, closures as `outer::{closure:LINE}`.
-    #[serde(default)]
-    uncovered_functions: Vec<String>,
-=======
->>>>>>> origin/main
 }
 
 /// One text the compiler emits, a WAT line or a remark: the substrings it
