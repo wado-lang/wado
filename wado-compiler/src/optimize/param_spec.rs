@@ -42,8 +42,12 @@ use crate::nir::NirLocal;
 use crate::parallel::Executor;
 
 /// Whole-module cap on synthesized clones, so a pathological program cannot
-/// trade unbounded code size for constant propagation.
-const MAX_TOTAL_SPECIALIZATIONS: usize = 128;
+/// trade unbounded code size for constant propagation. Clones are minted first
+/// come, first served and a dead one still counts, so a cap a real program
+/// reaches decides by visit order which calls specialize: at 128, nine of the
+/// fifteen benchmarks reached it, and json-catalog lost the `Formatter` fold in
+/// `prepare_int_write` (15.7%). gale-gen needs between 1024 and 4096.
+const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 
 /// Largest callee body (expression nodes) worth cloning. A body this large
 /// costs more in duplicated code than its folded branches can return.
