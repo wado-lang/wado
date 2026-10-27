@@ -89,7 +89,10 @@ optimize-time and silent.
 
 ### What is out of scope (deferred to follow-up WEPs / PRs)
 
-- `unused_mut`, `unused_type_param`, `unused_assignment`
+- `unused_mut`, `unused_type_param`
+- `unused_assignments`: a value overwritten before anything reads it. A
+  variable nothing ever reads, however often it is written, is
+  `UnusedVariable`.
 - `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
 - The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
   item- and module-level, is implemented — see Suppression)
@@ -250,7 +253,7 @@ emitted file.
 | `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                |
 | `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                              |
 | `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                               |
-| `wado-compiler/src/ast_index.rs`                  | Adds `is_param(id)` predicate (1-bit table) so the reference pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                                |
+| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                          |
 | `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                             |
 | `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.             |
 
@@ -293,23 +296,25 @@ name.
 
 #### Unused variables and parameters
 
-Build a single inverted index from `Semantics::iter_references()`:
+`unused_variable.rs` walks the AST of every module a lint reports in. The
+walk collects each binder with its kind: a parameter of a function with a
+body or of a closure is a parameter, and a pattern's name is a variable. It
+skips a name starting with `_` and one an `#[allow(unused_variables)]` waives.
+It also collects the sites an assignment writes: an identifier on the left of
+`=`, of a destructuring assignment, or of a compound assignment.
 
-```
-use_count: IndexMap<SymbolKey, usize>
-for (_use_key, def_key) in annotated.iter_references():
-    *use_count.entry(def_key).or_insert(0) += 1
-```
+The elaborator records a use→def edge for every name that reaches a local
+(`Semantics::iter_references`). An edge from a write site marks its binder
+written, and any other edge marks it read. A binder the elaborator did not
+bind as a local (`SymbolKind::Variable`) is a case or a constant the pattern
+tests against, and is dropped. Each remaining binder that nothing reads is
+reported at its name: "never used" when nothing writes it either, "assigned
+to, but never read" otherwise.
 
-Walk `Semantics::locals`. For each `(key, sym)` whose kind is
-`Variable`:
-
-- Skip if `sym.name` starts with `_`.
-- Skip if `use_count.get(&key) > 0`.
-- Determine `is_param` via `AstIndex::is_param(key.ast_id)` on the
-  module's index. Emit `UnusedParameter` or `UnusedVariable` at
-  `sym.span` (which is the `name_span` recorded by
-  `record_local_symbol`).
+An or-pattern binds a name once per alternative, but the elaborator resolves
+every use to the first alternative's binder. The walk merges the binders of
+one name across the alternatives, and the merged binder is read when any of
+them is.
 
 #### Dead functions and globals
 
@@ -385,14 +390,14 @@ land with stage 6 of the rearchitecture (see
   reference pass.)
 - [x] Add `Logger::warn_at(code, message, span)`.
 - [x] Add `CompilerOptions::unused_diagnostics` (default `true`).
-- [ ] Add `AstIndex::is_param(id)` and tests (reference pass).
 
 #### Phase 2 — reference pass
 
 - [x] Record each module's used import entries in the resolver.
 - [x] Implement the import emitter (`unused_import.rs`), wired through
   `unused_diagnostics`, with `unused_import.wado`.
-- [ ] Implement the locals and params emitter.
+- [x] Implement the locals and params emitter (`unused_variable.rs`), with
+  `unused_variable.wado`.
 
 #### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
@@ -583,7 +588,7 @@ the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
 - [x] `wado-cli`: `--no-lint`, `--lint` and `--lint-generated` on every
   compiling subcommand, in place of an unused-only `--no-unused`.
 - [x] Reference pass: `UnusedImport`.
-- [ ] Reference pass: `UnusedVariable` / `UnusedParameter`.
+- [x] Reference pass: `UnusedVariable` / `UnusedParameter`.
 - [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan

@@ -34,6 +34,7 @@ The lints are:
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
+| [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
 
 ## The `shadowed_name` Lint
 
@@ -332,6 +333,44 @@ written. Beyond that:
 
 A `pub` or `internal` `use` re-exports what it names, and an `export use`
 publishes it, so neither is reported: its users are the modules that import it.
+
+Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+## The `unused_variables` Lint
+
+The `unused_variables` lint warns about a variable or parameter that nothing
+reads. Every binder of a value counts: a `let`, a function or closure
+parameter, and a pattern binding. A parameter of a function without a body,
+such as a trait method's requirement, is not reported, since nothing could read
+it.
+
+A name used only as the target of an assignment is not read. That covers `=`, a
+destructuring assignment, and a compound assignment such as `+=`. Such a
+variable warns that it is assigned to, but never read.
+
+<!-- {"fixture":"spec_diagnostics_unused_variables.wado"} -->
+
+```wado
+fn first(a: i32, b: i32) -> i32 {   // warns: `b` is never used
+    return a;
+}
+
+test {
+    let unread = 1;                       // warns: never used
+    let mut total = 0;                    // warns: assigned to, but never read
+    total += first(1, 2);
+    let _kept = 2;                        // starts with `_`: no warning
+    let { x, y } = Point { x: 1, y: 2 };  // warns: write `y: _`
+    assert x == 1;
+}
+```
+
+A name that starts with `_` is never reported, which is how to keep a binding
+on purpose. A struct pattern's `{ y }` binds the field's own name, so `_y` would
+name another field. Write `y: _` there instead, or leave the field to `..`.
+
+The alternatives of an or-pattern bind one variable, so `A(n) | B(n)` is read
+when either `n` is.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
