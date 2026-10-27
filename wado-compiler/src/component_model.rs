@@ -4665,13 +4665,7 @@ impl CmTypeGen {
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(n) = inner.as_ref()
                     && let Some(source) = cm_interface_registry
-                        .source_interface(n)
-                        .filter(|s| s.starts_with("wasi:"))
-                        .or_else(|| {
-                            cm_interface_registry
-                                .find_binding_source(CmTypeKind::Resource, &n.name)
-                                .map(str::to_string)
-                        })
+                        .cm_source_of_named_type(n, self.interface_hint.as_deref())
                     && let Some(cm_name) =
                         cm_interface_registry.get_resource_cm_name_by_source(&source, &n.name)
                 {
