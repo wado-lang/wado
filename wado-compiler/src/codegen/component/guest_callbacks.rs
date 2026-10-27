@@ -414,8 +414,8 @@ fn core_val_type(ty: wasmparser::ValType) -> ValType {
     }
 }
 
-/// Defines the types a callback's signature reaches at the top level, and
-/// records each named one for the interface's instance to export.
+/// Defines the types an interface the program defines reaches at the top
+/// level, and records each named one for the interface's instance to export.
 struct InstanceExportSink<'a> {
     builder: &'a mut wasm_encoder::ComponentBuilder,
     ctx: &'a mut ComponentModelContext,

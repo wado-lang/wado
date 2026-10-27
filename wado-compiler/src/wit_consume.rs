@@ -174,29 +174,24 @@ pub fn build_bindings(
     // imported interface FQ so effect reconstruction can map them onto the
     // consumer's effects; imported world-level functions/types are not a v1
     // effect surface and are ignored.
-    let host_leaf_imports: Vec<String> = resolve.worlds[world]
-        .imports
-        .iter()
-        .filter_map(|(_, item)| match item {
-            WorldItem::Interface { id, .. } => Some(interface_fq(resolve, *id)),
-            WorldItem::Function(_) | WorldItem::Type { .. } => None,
-        })
-        .collect();
-    let imported_functions: Vec<String> = resolve.worlds[world]
+    let imported: Vec<(wit_parser::InterfaceId, String)> = resolve.worlds[world]
         .imports
         .values()
         .filter_map(|item| match item {
-            WorldItem::Interface { id, .. } => Some(*id),
+            WorldItem::Interface { id, .. } => Some((*id, interface_fq(resolve, *id))),
             WorldItem::Function(_) | WorldItem::Type { .. } => None,
         })
-        .flat_map(|id| {
-            let fq = interface_fq(resolve, id);
-            resolve.interfaces[id]
+        .collect();
+    let imported_functions: Vec<String> = imported
+        .iter()
+        .flat_map(|(id, fq)| {
+            resolve.interfaces[*id]
                 .functions
                 .keys()
-                .map(move |name| cm_function_path(&fq, name))
+                .map(|name| cm_function_path(fq, name))
         })
         .collect();
+    let host_leaf_imports: Vec<String> = imported.into_iter().map(|(_, fq)| fq).collect();
 
     // A guest effect becomes an impl-able `#[cm]` interface, so effect
     // reconstruction resolves the requirement and a `with h do` handler can

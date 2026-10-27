@@ -1298,16 +1298,6 @@ impl CmTypeKind {
     ];
 }
 
-/// The first name a `(source_interface, name)` key set holds under `iface_fq`,
-/// which says that some module already declares into it.
-fn first_name_in_interface<'a>(
-    mut keys: impl Iterator<Item = &'a (String, String)>,
-    iface_fq: &str,
-) -> Option<&'a str> {
-    keys.find(|(source, _)| source == iface_fq)
-        .map(|(_, name)| name.as_str())
-}
-
 /// Return the `source_interface` when `name` has exactly one registrant under
 /// `prefix`.
 fn find_unique_source_with_prefix<'a>(
@@ -2561,12 +2551,15 @@ impl CmInterfaceRegistry {
     /// imported interface outside WASI, which is the host's.
     #[must_use]
     pub fn is_dependency_guest_import(&self, fq: &str) -> bool {
-        !fq.starts_with("wasi:")
-            && self
-                .component_host_leaf_imports
-                .values()
-                .flatten()
-                .any(|import| import == fq)
+        !fq.starts_with("wasi:") && self.is_dependency_import(fq)
+    }
+
+    /// Whether some component dependency imports `fq`.
+    fn is_dependency_import(&self, fq: &str) -> bool {
+        self.component_host_leaf_imports
+            .values()
+            .flatten()
+            .any(|import| import == fq)
     }
 
     /// Register a `--lib` entry module's own named types under the synthesized
@@ -3151,10 +3144,8 @@ impl CmInterfaceRegistry {
     /// interface is absent from `cm_interface_module_sources` by design, so that
     /// map alone reports the whole stdlib as unowned; what the keyspaces hold is
     /// the fact itself.
-    fn existing_cm_decl(&self, iface_fq: &str) -> Option<&str> {
-        CmTypeKind::ALL
-            .into_iter()
-            .find_map(|kind| first_name_in_interface(self.kind_keys(kind), iface_fq))
+    fn existing_cm_decl<'a>(&'a self, iface_fq: &'a str) -> Option<&'a str> {
+        self.declared_type_names(iface_fq).next()
     }
 
     /// The declaration a lib-local named type publishes, when it lies outside
@@ -3752,11 +3743,7 @@ impl CmInterfaceRegistry {
         CmNamespace::split_specifier(source).is_some()
             || stdlib::is_wit_core_interface(source)
             || self.component_interfaces.contains(source)
-            || self
-                .component_host_leaf_imports
-                .values()
-                .flatten()
-                .any(|import| import == source)
+            || self.is_dependency_import(source)
     }
 
     /// Flatten a CM type into its canonical-ABI core value sequence. Single
@@ -4320,11 +4307,11 @@ impl CmTypeGen {
         // primitive, avoiding the unsupported-name panic in `ast_type_to_cm`; a
         // local-newtype base recurses as a nested alias.
         let base = cm_interface_registry.resolve_type_preserving_local_newtypes(base);
-        let base_idx = match self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports)
-        {
-            ComponentValType::Primitive(prim) => sink.define(CmDefined::Primitive(prim)),
-            ComponentValType::Type(idx) => idx,
-        };
+        let base_idx =
+            match self.ast_type_to_cm(sink, &base, cm_interface_registry, resource_exports) {
+                ComponentValType::Primitive(prim) => sink.define(CmDefined::Primitive(prim)),
+                ComponentValType::Type(idx) => idx,
+            };
         let named_idx = self.export_named(sink, cm_name, base_idx);
         self.cache.insert(cache_key, named_idx);
         ComponentValType::Type(named_idx)
