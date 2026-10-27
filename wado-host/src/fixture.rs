@@ -24,6 +24,18 @@ pub fn data_section(source: &str) -> Option<&str> {
     }
 }
 
+/// A level as `__DATA__` spells it (`only_opt`, `wir_expect:O2`).
+#[must_use]
+pub fn opt_level_name(level: OptLevel) -> &'static str {
+    match level {
+        OptLevel::O0 => "O0",
+        OptLevel::O1 => "O1",
+        OptLevel::O2 => "O2",
+        OptLevel::O3 => "O3",
+        OptLevel::Os => "Os",
+    }
+}
+
 /// Whether a fixture is written to fail its compile: its `__DATA__` expects a
 /// `compile_error`, or the module is `#![TODO]`.
 #[must_use]
@@ -79,7 +91,11 @@ pub fn golden_header(title: &str, input_path: &str) -> String {
 /// A WIR golden's whole text.
 #[must_use]
 pub fn wir_golden(input_path: &str, unparsed_wir: &str) -> String {
-    let mut text = golden_header("WIR with -O2 optimization", input_path);
+    let title = format!(
+        "WIR with -{} optimization",
+        opt_level_name(GOLDEN_OPT_LEVEL)
+    );
+    let mut text = golden_header(&title, input_path);
     text.push_str(unparsed_wir);
     text
 }
@@ -219,13 +235,7 @@ impl CompileInputs {
     /// Whether `only_opt` admits `level`.
     #[must_use]
     pub fn compiles_at(&self, level: OptLevel) -> bool {
-        let name = match level {
-            OptLevel::O0 => "O0",
-            OptLevel::O1 => "O1",
-            OptLevel::O2 => "O2",
-            OptLevel::O3 => "O3",
-            OptLevel::Os => "Os",
-        };
+        let name = opt_level_name(level);
         self.only_opt.is_empty() || self.only_opt.iter().any(|only| only == name)
     }
 

@@ -195,8 +195,7 @@ pub fn run_pipeline(
     for (name, path) in &files {
         let source = fs::read_to_string(path)
             .unwrap_or_else(|e| panic!("Failed to read {}: {e}", path.display()));
-        let inputs =
-            compile_inputs(&source).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let inputs = compile_inputs(&source).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
         if expects_compile_failure(&source) || !inputs.compiles_at(opt_level) {
             prefiltered += 1;
             continue;

@@ -895,11 +895,10 @@ fn prune_orphan_wir_goldens() {
         let golden = entry.unwrap().path();
         let name = golden.file_name().unwrap().to_string_lossy();
         let stem = name.strip_suffix(".wir.wado").unwrap();
-        let keeps = std::fs::read_to_string(format!("fixtures/{stem}.wado"))
-            .is_ok_and(|source| {
-                let inputs = compile_inputs(&source).unwrap_or_else(|e| panic!("{stem}: {e}"));
-                has_wir_golden(&source, &inputs)
-            });
+        let keeps = std::fs::read_to_string(format!("fixtures/{stem}.wado")).is_ok_and(|source| {
+            let inputs = compile_inputs(&source).unwrap_or_else(|e| panic!("{stem}: {e}"));
+            has_wir_golden(&source, &inputs)
+        });
         if !keeps {
             std::fs::remove_file(&golden).unwrap();
         }

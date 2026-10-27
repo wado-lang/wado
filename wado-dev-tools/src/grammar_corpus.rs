@@ -24,8 +24,8 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use wado_host::fixture::expects_compile_failure;
 use lexopt::Arg::{Long, Value};
+use wado_host::fixture::expects_compile_failure;
 
 /// Corpus roots. `tests/generated` is excluded: its `*.wir.wado` files are IR
 /// dumps, not Wado source.
