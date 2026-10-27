@@ -478,8 +478,9 @@ fn try_fold_get_of_new(instr: &mut WirInstr, null: &Nullability, types: &[WirTyp
     if built != type_id {
         return false;
     }
+    // A variant case is built and read through its variant's type id too.
     let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
-        unreachable!("`struct.get` reads a struct type");
+        return false;
     };
     let index = def
         .fields

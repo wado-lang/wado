@@ -699,7 +699,7 @@ fn instance_template(
 /// reference, whichever level of its pointee's chain answers.
 fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
     let (steps, mut level) = match tt.get_unerased(receiver) {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth % 2 == 0 => return receiver,
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth.is_multiple_of(2) => return receiver,
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (depth / 2, *inner),
         _ => (depth, receiver),
     };
