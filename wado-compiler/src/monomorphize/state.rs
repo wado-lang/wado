@@ -4,13 +4,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::monomorphize::Templates;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
-use crate::synthesis::template::{eq_from_written_cmp, written_impl_reaches};
+use crate::synthesis::template::written_impl_at;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
 use crate::token::Span;
 use crate::type_table::{AnonStructId, ReceiverAssocTypes, TypeTable};
@@ -86,7 +85,8 @@ impl FuncInstState {
     }
 
     /// Module of a non-blanket impl, generic ones included, defining `info` on
-    /// `instance`; `None` where the head's written impls all miss `instance`.
+    /// `instance`; `None` where the head writes impls of the trait but the order
+    /// selects none of them for `instance` itself.
     pub fn generic_or_concrete_impl_module(
         &self,
         info: &LocalMethodName,
@@ -94,12 +94,12 @@ impl FuncInstState {
         instance: TypeId,
         type_table: &TypeTable,
     ) -> Option<ModuleSource> {
-        if let Some(trait_) = info.trait_decl() {
+        if let Some(trait_name) = &info.trait_name {
             let instance = type_table.peel_refs(instance);
-            if self
-                .trait_env
-                .has_any_methodful_impl_by_receiver(&type_table.impl_receiver_key(instance), trait_)
-                && !written_impl_reaches(&self.trait_env, trait_, instance, type_table)
+            if self.trait_env.has_any_methodful_impl_by_receiver(
+                &type_table.impl_receiver_key(instance),
+                trait_name.called_decl(),
+            ) && !written_impl_at(&self.trait_env, trait_name, instance, type_table)
             {
                 return None;
             }
@@ -480,11 +480,9 @@ impl Monomorphizer {
     ) -> Option<FqTypeName> {
         type_table
             .newtype_link_owning(type_id, |tid| match trait_name {
-                Some(trait_name) => self
-                    .functions
-                    .trait_env
-                    .trait_def_of_fq(trait_name)
-                    .is_some_and(|trait_| self.has_own_trait_impl(type_table, tid, trait_)),
+                Some(trait_name) => {
+                    written_impl_at(&self.functions.trait_env, trait_name, tid, type_table)
+                }
                 None => self.functions.trait_env.has_inherent_method_by_receiver(
                     &type_table.impl_receiver_key(tid),
                     method_name,
@@ -493,32 +491,6 @@ impl Monomorphizer {
             // The head an `impl` header writes: the declaration, with any
             // arguments left beside it rather than fused in.
             .map(|tid| type_table.fq_base_type_name(tid))
-    }
-
-    /// Whether the declaration `tid` names carries its own `impl <trait> for`
-    /// block reaching `tid`, or the `Eq` a `cmp` it writes alone gives it.
-    pub(super) fn has_own_trait_impl(
-        &self,
-        type_table: &TypeTable,
-        tid: TypeId,
-        trait_: DefId,
-    ) -> bool {
-        let trait_env = &self.functions.trait_env;
-        written_impl_reaches(trait_env, trait_, tid, type_table)
-            || eq_from_written_cmp(trait_env, trait_env.solver(), trait_, tid, type_table).is_some()
-    }
-
-    /// The first newtype link at or below `type_id` writing its own impl of
-    /// `trait_`.
-    pub(super) fn newtype_link_with_trait_impl(
-        &self,
-        type_id: TypeId,
-        type_table: &TypeTable,
-        trait_: DefId,
-    ) -> Option<TypeId> {
-        type_table.newtype_link_owning(type_id, |tid| {
-            self.has_own_trait_impl(type_table, tid, trait_)
-        })
     }
 
     pub fn receiver_keeps_newtype_own_impl(

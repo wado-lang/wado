@@ -1,0 +1,12 @@
+// Only the outermost `&mut` narrows to `&`. Through `p`, `*p = &y` would store
+// a `&i32` in `r`, which still reads as `&mut i32`, and `*r = 7` would write
+// through it.
+
+test "inner mut through outer mut" {
+    let mut x = 1;
+    let mut r: &mut i32 = &mut x;
+    let p = &mut r as &mut &i32;
+}
+
+__DATA__
+{"compile_error": "cannot cast '&mut &mut i32' to '&mut &i32': `&mut i32` and `&i32` share no representation; `as` reinterprets only across a newtype boundary"}
