@@ -239,7 +239,9 @@ A URL names a [Wasm asset](#wasm-module-and-component-imports) the same way,
 pinned by the same rules.
 
 A remote module reaches no local file. A `./` or `../` path inside it, whether
-in a `use` or an `#include_*`, names the URL beside the module. No `use` names
+in a `use` or an `#include_*`, names the URL beside the module, resolved as
+[RFC 3986](https://www.rfc-editor.org/rfc/rfc3986#section-5) resolves a
+reference: an empty segment in the module's path stays. No `use` names
 an included file, so only `wado.lock` pins it, and a file in no package cannot
 import a remote module that includes one.
 
