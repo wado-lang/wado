@@ -974,10 +974,12 @@ impl<affine W: Waitable> WaitableSet<W> {
         if !self.ready.is_empty() {
             return Option::Some(self.ready.remove(0));
         }
-        let Some(event) = self.raw.poll() else {
-            return null;
-        };
-        return self.take_reported(event);
+        while let Some(event) = self.raw.poll() {
+            if let Some(ready) = self.take_reported(event) {
+                return Option::Some(ready);
+            }
+        }
+        return null;
     }
 
     /// Moves every member out, the ready ones first, leaving the set empty. A

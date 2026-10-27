@@ -218,7 +218,7 @@ that drops drops its remaining members first.
 A member is any type implementing `Waitable`, whose `wait_on` answers either the
 handle the host reports the member by or the event it is ready with. The trait
 is sealed: the standard library implements it on the calls and on the started
-stream copies (`ReadCopy`, `WriteCopy`), since a hand-written `wait_on` could
+copies (`ReadCopy`, `WriteCopy`, `FutureReadCopy`), since a hand-written `wait_on` could
 name a handle its value does not own. A bare stream or future end is no member: no
 copy on it is in flight, so the host has no event to report for it. A set
 waiting on two kinds takes a variant over them, which
@@ -320,6 +320,16 @@ end with what the copy moved. Both copies are `Waitable`, and a set reports a
 settled one as `ReadyEvent::Copied`. Dropping a copy that has not settled
 cancels it. `read_to_end`, `read_to_end_bytes`, `write_all` and `write_raw_all`
 borrow the end and copy until the stream ends.
+
+A future read starts the same way. `Future::start_read(self)` moves the end into
+a `FutureReadCopy<T>`, which a set waits on as it waits on a stream copy.
+`finish` waits where the read has not settled and returns the value, or `None`
+where the writer dropped without writing. Dropping a read that has not settled
+cancels it, and dropping one that read a value drops the value.
+
+`WaitableSet::drain` moves every member out and leaves the set empty, the ready
+members first. A race keeps its losers this way, where dropping the set would
+drop them.
 
 A write hands back what it did not deliver: the part of the value a reader
 dropped before taking, or the suffix of a stream write the reader did not

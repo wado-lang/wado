@@ -446,8 +446,9 @@ stdout and stderr together.
 
 ### The `cmd` template
 
-`` cmd`…` `` builds an argument vector without a shell, so a hole can neither
-split into several arguments nor run as shell syntax. Its rules are in the
+`` cmd`…` `` builds an argument vector without a shell, so a hole never runs as
+shell syntax and splits only as its type says: a `List<String>` hole is one
+argument per element, and any other hole is one argument. Its rules are in the
 `cmd` documentation. It can still be read as an option: a value starting with
 `-` is one to the program, so a hole that may hold one goes after `--` where
 the program accepts it.
