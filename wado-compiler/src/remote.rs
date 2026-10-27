@@ -33,18 +33,24 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
         .then_some("`http://` names only `localhost`, `127.0.0.1` or `[::1]`; use `https://`")
 }
 
-/// The URL `relative`, a `./` or `../` path, names beside `base`, as RFC 3986
-/// §5 resolves such a reference. A URL's path is the server's, so its empty
-/// segments stay, and its query and fragment are not part of the directory.
+/// The URL `relative` names beside `base`, as RFC 3986 §5 resolves it. A URL's
+/// path is the server's, so its empty segments stay, and its query and
+/// fragment are not part of the directory.
 #[must_use]
 pub fn resolve_url(base: &str, relative: &str) -> String {
-    assert!(is_cwd_relative(relative), "a reference beside a URL is relative");
+    assert!(
+        is_cwd_relative(relative),
+        "a reference beside a URL is relative"
+    );
     let authority = base.find("://").expect("a remote URL names its scheme") + 3;
     let (origin, rest) = base.split_at(authority + authority_len(&base[authority..]));
     let (base_path, _) = split_query(rest);
     let (path, tail) = split_query(relative);
     let dir = base_path.rfind('/').map_or("/", |at| &base_path[..=at]);
-    format!("{origin}{}{tail}", remove_dot_segments(&format!("{dir}{path}")))
+    format!(
+        "{origin}{}{tail}",
+        remove_dot_segments(&format!("{dir}{path}"))
+    )
 }
 
 /// The length of the authority opening `rest`, a URL past its `scheme://`.
