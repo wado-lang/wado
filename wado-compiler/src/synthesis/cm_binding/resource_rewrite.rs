@@ -824,61 +824,14 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         ],
     ))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "value".to_string(),
-                local_index: value_idx,
-                type_id: payload_type_id,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-        ],
-        return_type: write_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
+    binding_function(
+        func_name,
+        &[handle_idx, value_idx],
+        write_type_id,
+        stmts,
+        next_local,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: true,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
+    )
 }
 
 /// The `(payload, Option<payload>)` types of a `future-read` call, or `None`
@@ -909,6 +862,14 @@ fn future_payload_package(payload: &CmFuturePayload) -> String {
         CmFuturePayload::Trailers => "http".to_string(),
         CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
     }
+}
+
+/// The `handle` a copy binding takes, then the `ptr` of its buffer, both `i32`.
+fn handle_and_ptr_locals(next_local: &mut u32, locals: &mut Vec<TirLocal>) -> (u32, u32) {
+    let mut local = |name: &str| {
+        alloc_named_local(next_local, locals, Some(name.to_string()), TypeTable::I32, false)
+    };
+    (local("handle"), local("ptr"))
 }
 
 /// `let ptr = realloc(0, 0, align, size)`: the buffer one future payload is
@@ -962,22 +923,7 @@ fn synthesize_future_read_func(
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut stmts: Vec<TirStmt> = Vec::new();
 
-    // Param: handle (i32).
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
+    let (handle_idx, ptr_idx) = handle_and_ptr_locals(&mut next_local, &mut locals);
     stmts.push(alloc_payload_buffer(ptr_idx, size, align));
 
     let status_idx = alloc_named_local(
@@ -1073,51 +1019,14 @@ fn synthesize_future_read_func(
         option_type_id,
     ))));
 
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![TirParam {
-            name: "handle".to_string(),
-            local_index: handle_idx,
-            type_id: TypeTable::I32,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }],
-        return_type: option_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
+    binding_function(
+        func_name,
+        &[handle_idx],
+        option_type_id,
+        stmts,
+        next_local,
         locals,
-        address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
-        is_cm_binding: true,
-        is_dispatch_wrapper: false,
-        is_cm_export: false,
-        is_ambient: false,
-        inline_hint: InlineHint::Auto,
-        compiler_item: None,
-        export_name: None,
-        allocator_tag: None,
-        kind: FunctionKind::Regular,
-        return_abi: tir::ReturnAbi::default(),
-    }
+    )
 }
 
 /// The payload of a `future-begin-read` or `future-lift` call, the two halves
@@ -1170,30 +1079,16 @@ fn synthesize_future_started_read_funcs(
 
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
+    let (handle_idx, ptr_idx) = handle_and_ptr_locals(&mut next_local, &mut locals);
     let handle = || local_ref(handle_idx, "handle", TypeTable::I32);
     let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
     let allocate = alloc_payload_buffer(ptr_idx, size, align);
     let packed = cm_canonical_call(read_name, vec![handle(), ptr()], TypeTable::I32);
     let buffer = copy_buffer_literal(handle(), packed, ptr(), i32_const(size), align, type_table);
-    let buffer_type = type_table.borrow_mut().make_copy_buffer();
     let begin = binding_function(
         cm_future_begin_read_func_name(&mangled),
         &[handle_idx],
-        buffer_type,
+        buffer.type_id,
         vec![allocate, return_stmt(Some(buffer))],
         next_local,
         locals,
@@ -1202,20 +1097,7 @@ fn synthesize_future_started_read_funcs(
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut stmts: Vec<TirStmt> = Vec::new();
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
+    let (handle_idx, ptr_idx) = handle_and_ptr_locals(&mut next_local, &mut locals);
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
@@ -1444,20 +1326,7 @@ fn synthesize_stream_lift_func(
     let mut next_local: u32 = 0;
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut stmts: Vec<TirStmt> = Vec::new();
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
+    let (handle_idx, ptr_idx) = handle_and_ptr_locals(&mut next_local, &mut locals);
     let count_idx = alloc_named_local(
         &mut next_local,
         &mut locals,

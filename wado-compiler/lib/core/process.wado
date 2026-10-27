@@ -10,7 +10,7 @@
 //! - `program` holding a `/` is a path, relative to where the child starts.
 //!   Any other is a name the host looks up.
 //! - A child starts in the guest's first preopened directory, the one `core:fs`
-//!   resolves paths against.
+//!   resolves paths against. Where the guest has none, the host picks one.
 //! - A child's environment is what the host gives every child, with
 //!   [`Command::env`] laid over it. The guest's own is never passed on.
 //! - A child gets no stream of the guest's unless asked: stdin reads nothing,
@@ -49,7 +49,8 @@
 //! - A name is looked up on the host's `PATH`, skipping empty and relative
 //!   entries.
 //! - Every child gets `PATH`, a private `HOME` and `TMPDIR` removed once it
-//!   exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream.
+//!   exits, `LANG` and `LC_*`, and `TERM` where it inherits a stream. A guest
+//!   with no preopened directory starts its children in that `HOME`.
 //! - `terminate` sends the child's process group `SIGTERM`, and `kill`
 //!   `SIGKILL`.
 //! - A child that fails after the sandbox refused it something is reported on
@@ -258,8 +259,7 @@ impl Command {
             stdout,
             stderr,
             program: self.program,
-            exit: Option::Some(exit.start_read()),
-            ended: null,
+            exit: Option::Some(Exit::Running(exit.start_read())),
             resource: child,
         });
     }
@@ -296,15 +296,23 @@ pub affine struct Child {
     /// Where `Command::stderr_piped` asked for it.
     pub stderr: Option<Stream<u8>>,
     program: String,
-    /// The read of how the child ended, until `wait_timeout` sees it end.
-    exit: Option<FutureReadCopy<Result<ExitStatus, ErrorCode>>>,
-    /// How the child ended, once `wait_timeout` has seen it.
-    ended: Option<Result<ExitStatus, ErrorCode>>,
+    /// None only while `wait_timeout` races the read.
+    exit: Option<Exit>,
     resource: ChildResource,
 }
 
+affine variant Exit {
+    /// The read of how the child ended, started at spawn.
+    Running(FutureReadCopy<Result<ExitStatus, ErrorCode>>),
+    Ended(Result<ExitStatus, ErrorCode>),
+}
+
+fn exit_of(read: FutureReadCopy<Result<ExitStatus, ErrorCode>>) -> Result<ExitStatus, ErrorCode> {
+    return read.finish().expect("a host reports how every child ended");
+}
+
 affine variant Race {
-    Exit(FutureReadCopy<Result<ExitStatus, ErrorCode>>),
+    Read(FutureReadCopy<Result<ExitStatus, ErrorCode>>),
     Timer(AsyncCall<()>),
 }
 
@@ -319,31 +327,36 @@ impl Child {
         builtin::drop(child.stdin.take());
         builtin::drop(child.stdout.take());
         builtin::drop(child.stderr.take());
-        if child.ended matches { None } {
-            child.ended = child.exit.take().unwrap().finish();
-        }
-        return child.status();
+        let ended = match child.exit.take().unwrap() {
+            Running(read) => exit_of(read),
+            Ended(ended) => ended,
+        };
+        return child.status(ended);
     }
 
     /// Wait at most `how_long` for the child to end: `None` where it has not.
     /// The streams stay open, so a child blocked on a pipe nobody reads waits
     /// out the time.
     pub fn wait_timeout(&mut self, how_long: Duration) -> Result<Option<ExitStatus>, ProcessError> with MonotonicClock {
-        if self.ended matches { None } {
-            let mut set = WaitableSet::<Race>::new();
-            set.insert(Race::Exit(self.exit.take().unwrap()));
-            set.insert(Race::Timer(MonotonicClock::wait_for(how_long)));
-            if let Exit(read) = set.wait().member {
-                self.ended = read.finish();
-            } else {
-                let Exit(read) = set.drain().pop().unwrap() else {
-                    unreachable();
-                };
-                self.exit = Option::Some(read);
-                return Result::Ok(null);
-            }
-        }
-        return Result::Ok(Option::Some(self.status()?));
+        let ended = match self.exit.take().unwrap() {
+            Ended(ended) => ended,
+            Running(read) => {
+                let mut set = WaitableSet::<Race>::new();
+                set.insert(Race::Read(read));
+                set.insert(Race::Timer(MonotonicClock::wait_for(how_long)));
+                if let Read(read) = set.wait().member {
+                    exit_of(read);
+                } else {
+                    let Read(read) = set.drain().pop().unwrap() else {
+                        unreachable();
+                    };
+                    self.exit = Option::Some(Exit::Running(read));
+                    return Result::Ok(null);
+                }
+            },
+        };
+        self.exit = Option::Some(Exit::Ended(ended));
+        return Result::Ok(Option::Some(self.status(ended)?));
     }
 
     /// Ask the child and every process it started to end. A child may ignore
@@ -368,8 +381,8 @@ impl Child {
         return child.wait();
     }
 
-    fn status(&self) -> Result<ExitStatus, ProcessError> {
-        return match self.ended.unwrap() {
+    fn status(&self, ended: Result<ExitStatus, ErrorCode>) -> Result<ExitStatus, ProcessError> {
+        return match ended {
             Ok(status) => Result::Ok(status),
             Err(code) => Result::Err(child_error(&self.program, ProcessErrorKind::Spawn(code))),
         };

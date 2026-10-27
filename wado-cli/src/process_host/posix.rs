@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::iter;
 use std::os::fd::OwnedFd;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -32,7 +31,7 @@ use wado_host::sync::{join, lock};
 
 use super::types::{ExitStatus, Input, Output};
 use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
-use crate::external::find_program;
+use crate::external::{find_program, is_executable};
 use crate::user_config::{config_path, user_config};
 
 const PIPE_BUFFER: usize = 8192;
@@ -219,6 +218,11 @@ fn start(
             policy.grant_terminal();
         }
         if let Ok(real) = fs::canonicalize(&path) {
+            // `exec` answers it as it answers a refusal, with `EACCES`, and no
+            // grant would let it run.
+            if !is_executable(&real) {
+                return Err(ErrorCode::NotExecutable);
+            }
             let resolved = policy.resolved();
             let refused = if resolved.permits(&real, Reach::ReadExecute) {
                 resolved.refused_interpreter(&real)
@@ -229,9 +233,6 @@ fn start(
                 view.ctx
                     .spawning
                     .warn(refused_warning(program, &path, &real, &refused));
-            } else if !is_executable(&real) {
-                // `exec` answers it as it answers a refusal, with `EACCES`.
-                return Err(ErrorCode::NotExecutable);
             }
         }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
@@ -279,10 +280,6 @@ fn invalid_argument(program: &str, args: &[String], env: &[(String, String)]) ->
             .iter()
             .any(|(key, _)| key.is_empty() || key.contains('='));
     invalid.then_some(ErrorCode::InvalidArgument)
-}
-
-fn is_executable(path: &Path) -> bool {
-    fs::metadata(path).is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
 }
 
 impl Spawning {

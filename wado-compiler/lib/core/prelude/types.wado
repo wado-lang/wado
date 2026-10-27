@@ -951,20 +951,24 @@ impl<affine W: Waitable> WaitableSet<W> {
         }
     }
 
-    /// Blocks until a member has an event, and moves it out. A member ready
-    /// without the host comes first. Traps on an empty set.
+    /// Blocks until a member is ready, and moves it out: a copy once it
+    /// settled, a call once it resolved. A member ready without the host comes
+    /// first. Traps on an empty set.
     #[benign(RawWaitableSet)]
     pub fn wait(&mut self) -> Ready<W> {
         assert !self.is_empty(), "a set waits on a member";
         if !self.ready.is_empty() {
             return self.ready.remove(0);
         }
-        let event = self.raw.wait();
-        return self.take_reported(event);
+        loop {
+            if let Some(ready) = self.take_reported(self.raw.wait()) {
+                return ready;
+            }
+        }
     }
 
-    /// The member that has an event, moved out, or None where none has one
-    /// yet.
+    /// The member that is ready, as `wait` means it, moved out, or None where
+    /// none is yet.
     #[benign(RawWaitableSet)]
     pub fn poll(&mut self) -> Option<Ready<W>> {
         if !self.ready.is_empty() {
@@ -973,7 +977,7 @@ impl<affine W: Waitable> WaitableSet<W> {
         let Some(event) = self.raw.poll() else {
             return null;
         };
-        return Option::Some(self.take_reported(event));
+        return self.take_reported(event);
     }
 
     /// Moves every member out, the ready ones first, leaving the set empty. A
@@ -1001,20 +1005,24 @@ impl<affine W: Waitable> WaitableSet<W> {
         return self.len() == 0;
     }
 
-    fn take_reported(&mut self, reported: WaitEvent) -> Ready<W> {
-        builtin::waitable_join(reported.handle, 0);
+    /// The member `reported` settles, moved out, or None where it reports a
+    /// call that moved on without resolving, which stays joined: a member is
+    /// ready only once it has nothing left to wait for.
+    fn take_reported(&mut self, reported: WaitEvent) -> Option<Ready<W>> {
         // Found before the event is recorded, which settles the member.
         let at = self.member_at(reported.handle);
         match reported.event {
             Call(state) => {
-                if state.is_resolved() {
-                    DELIVERED.push(Resolution { handle: reported.handle, state });
+                if !state.is_resolved() {
+                    return null;
                 }
+                DELIVERED.push(Resolution { handle: reported.handle, state });
             },
             Copied(_) => SETTLED_COPIES.push(CopySettlement { handle: reported.handle, packed: reported.payload }),
             Unreported => unreachable(),
         }
-        return Ready { member: self.members.remove(at), event: reported.event };
+        builtin::waitable_join(reported.handle, 0);
+        return Option::Some(Ready { member: self.members.remove(at), event: reported.event });
     }
 
     fn member_at(&self, handle: i32) -> i32 {
@@ -1107,14 +1115,7 @@ impl<affine T> AsyncCall<T> {
         if let Some(subtask) = call.subtask.take() {
             let mut set = WaitableSet::<Subtask>::new();
             set.insert(subtask);
-            loop {
-                let ready = set.wait();
-                if ready.event matches { Call(state) && state.is_resolved() } {
-                    drop_resolved(ready.member);
-                    break;
-                }
-                set.insert(ready.member);
-            }
+            drop_resolved(set.wait().member);
         }
         // The buffer drops, freed, once the lift has read it.
         return match call.buffer.take() {

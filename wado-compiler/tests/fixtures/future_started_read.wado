@@ -1,0 +1,38 @@
+// `Future::start_read` binds `future-begin-read` and `future-lift`, synthesized
+// per payload. An `f64`, which one component may pass itself, takes an 8-byte
+// buffer aligned to 8. The read waits in a set beside a write the same
+// component makes, a completed read dropped unfinished lifts its value, and one
+// dropped in flight cancels through `future-cancel-read`, whose `u32` result
+// the core import must declare, so its writer sees the reader gone.
+use { println, Stdout } from "core:cli";
+
+fn finished() with Stdout {
+    let [rx, tx] = Future::<f64>::new();
+    let mut set = WaitableSet::<FutureReadCopy<f64>>::new();
+    set.insert(rx.start_read());
+    println(`write ${tx.write(1.5).result:?}`);
+    let ready = set.wait();
+    println(`${ready.event:?} ${ready.member.finish():?}`);
+}
+
+fn completed_then_dropped() with Stdout {
+    let [rx, tx] = Future::<f64>::new();
+    let read = rx.start_read();
+    println(`write ${tx.write(2.5).result:?}`);
+    builtin::drop(read);
+}
+
+fn dropped_in_flight() with Stdout {
+    let [rx, tx] = Future::<f64>::new();
+    builtin::drop(rx.start_read());
+    println(`write ${tx.write(3.5).result:?}`);
+}
+
+export fn run() with Stdout {
+    finished();
+    completed_then_dropped();
+    dropped_in_flight();
+}
+
+__DATA__
+{"stdout": "write FutureWriteResult::Completed\nReadyEvent::Copied(CopyResult::Completed) Option::Some(1.5)\nwrite FutureWriteResult::Completed\nwrite FutureWriteResult::Dropped\n"}
