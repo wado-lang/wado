@@ -108,6 +108,11 @@ fn redirect_fault(from: &Url, to: &Url, reach: impl Fn(&Url) -> Reach) -> Option
 
 /// Where `url`'s host is. A name this machine cannot resolve is left to a
 /// proxy, which reaches the internet.
+///
+/// A name is resolved here, not where the connection is made, so a name whose
+/// answer changes in between (DNS rebinding) passes. Checking the address
+/// connected to would mean replacing the client's resolver, which a proxy
+/// bypasses: it resolves the name itself.
 fn reach_of(url: &Url) -> Reach {
     let host = url.host_str().unwrap_or_default();
     let addresses: Vec<IpAddr> = match host.trim_matches(['[', ']']).parse() {
