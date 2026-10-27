@@ -1,10 +1,10 @@
 //! Spawning on a POSIX host, where `wado_host::sandbox` confines the child.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::os::fd::OwnedFd;
-use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -27,12 +27,13 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
+use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
+use wado_host::sync::{join, lock};
 
 use super::types::{ExitStatus, Input, Output};
-use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned};
+use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
 use crate::external::find_program;
-use crate::user_config::user_config;
+use crate::user_config::{config_path, user_config};
 
 /// How long a child has between `SIGTERM` at its timeout and `SIGKILL`.
 const TIMEOUT_GRACE: Duration = Duration::from_secs(3);
@@ -82,6 +83,7 @@ struct Started {
     stdout: Route,
     stderr: Route,
     scratch: TempDir,
+    trace: Trace,
 }
 
 pub(super) fn spawn<U>(
@@ -112,6 +114,7 @@ pub(super) fn spawn<U>(
         stdout,
         stderr,
         scratch,
+        trace,
     } = match started {
         Ok(started) => started,
         Err(code) => {
@@ -130,7 +133,18 @@ pub(super) fn spawn<U>(
     let mut copies = Vec::new();
     let stdout = route(&mut store, stdout, spawned.stdout, &mut copies)?;
     let stderr = route(&mut store, stderr, spawned.stderr, &mut copies)?;
-    let exited = supervise(child, timeout.map(Duration::from_nanos), scratch, copies)?;
+    let exited = supervise(
+        Supervised {
+            child,
+            refusals: spawned.refusals,
+            program,
+            spawning: store.get().ctx.spawning.clone(),
+            trace,
+        },
+        timeout.map(Duration::from_nanos),
+        scratch,
+        copies,
+    )?;
     let exit = FutureReader::new(&mut store, async move {
         wasmtime::error::Ok(exited.await.expect("the waiter reports every child"))
     })?;
@@ -186,7 +200,7 @@ fn start(
             Some(cwd) => cwd,
             None => Arc::new(File::open(scratch.home())?),
         };
-        let program = resolve(program, &cwd)?;
+        let path = resolve(program, &cwd)?;
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
@@ -198,9 +212,22 @@ fn start(
         if inherits {
             policy.grant_terminal();
         }
+        if let Ok(real) = fs::canonicalize(&path) {
+            let resolved = policy.resolved();
+            let refused = if resolved.permits(&real, Reach::ReadExecute) {
+                resolved.refused_interpreter(&real)
+            } else {
+                Some(real.clone())
+            };
+            if let Some(refused) = refused {
+                view.ctx
+                    .spawning
+                    .warn(refused_warning(program, &path, &real, &refused));
+            }
+        }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
-            program: &program,
+            program: &path,
             args: &args,
             env: &child_env(env, &scratch, inherits),
             cwd: Some(&cwd),
@@ -208,7 +235,15 @@ fn start(
             stdout: stdout.stdio(),
             stderr: stderr.stdio(),
             policy: &policy,
+            trace: grants.trace,
         })?;
+        if grants.trace == Trace::Files
+            && let Some(reason) = spawned.unobserved
+        {
+            view.ctx.spawning.warn(format!(
+                "warning: core:process: `--process-trace` sees nothing here: {reason}"
+            ));
+        }
         io::Result::Ok((spawned, scratch))
     })();
     Ok(match launched {
@@ -217,9 +252,95 @@ fn start(
             stdout,
             stderr,
             scratch: scratch.0,
+            trace: grants.trace,
         }),
         Err(err) => Err(error_code(&err)),
     })
+}
+
+impl Spawning {
+    fn warn(&self, warning: String) {
+        let mut warned = lock(&self.0.warned);
+        if !warned.contains(&warning) {
+            eprintln!("{warning}");
+            warned.insert(warning);
+        }
+    }
+}
+
+/// What the sandbox refused a child, once it failed, or whatever its end
+/// under `Trace::Files`, which asked. A refusal may not be why the child
+/// failed, so the warning states the two side by side.
+pub(super) fn refusals_warning(
+    program: &str,
+    status: &ExitStatus,
+    refusals: &BTreeSet<sandbox::Refusal>,
+    trace: Trace,
+) -> Option<String> {
+    let failed = !matches!(status, ExitStatus::Exited(0));
+    if refusals.is_empty() || (!failed && trace == Trace::Off) {
+        return None;
+    }
+    let ended = match status {
+        ExitStatus::Exited(code) => format!("exited with status {code}"),
+        ExitStatus::Signaled(signal) => format!("was killed by signal {signal}"),
+        ExitStatus::TimedOut => "timed out".to_owned(),
+    };
+    let refused: Vec<String> = refusals.iter().map(ToString::to_string).collect();
+    let mut warning = format!(
+        "warning: core:process: `{program}` {ended} after the sandbox refused it {}",
+        refused.join("; ")
+    );
+    for refusal in refusals {
+        if let Some(fix) = path_fix(refusal) {
+            warning.push_str("\nhelp: ");
+            warning.push_str(&fix);
+        }
+    }
+    Some(warning)
+}
+
+/// The grant that would let a child reach a path it was refused. Writing
+/// takes a directory the guest is granted too: nothing grants a child more
+/// than its guest but reading.
+fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
+    let sandbox::Refusal::Path { path, dir, access } = refusal else {
+        return None;
+    };
+    Some(match access {
+        Reach::ReadExecute => format!(
+            "let a child read {} with `--process-read {}`",
+            path.display(),
+            path.display()
+        ),
+        Reach::ReadWrite => format!(
+            "let the guest and its children write {} with `--dir {}`",
+            path.display(),
+            dir.display()
+        ),
+    })
+}
+
+/// The warning for a program at `path`, `real` once resolved, the sandbox
+/// will not execute: `refused` is `real` itself or the interpreter it needs.
+pub(super) fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> String {
+    let config = config_path().map_or_else(
+        || "the user config".to_owned(),
+        |config| config.display().to_string(),
+    );
+    let mut at = if path == real {
+        path.display().to_string()
+    } else {
+        format!("{}, a link to {}", path.display(), real.display())
+    };
+    if refused != real {
+        at = format!("{at}, run by {}", refused.display());
+    }
+    format!(
+        "warning: core:process: `{program}` is {at}, outside the guest's grants and the system baseline\n\
+         help: let a child run it with `--process-read {}`, or with `read` under `[process]` in {config}",
+        refused.display()
+    )
 }
 
 /// A child's private `HOME` and `TMPDIR`, removed once it exits.
@@ -334,11 +455,21 @@ fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<JoinHandle<(
         })
 }
 
-/// Wait for `child` on a thread of its own, enforcing `timeout`, and remove
+/// A running child, and what its host reports once it ends.
+struct Supervised {
+    child: Arc<Child>,
+    refusals: sandbox::Refusals,
+    /// As the guest named it.
+    program: String,
+    spawning: Spawning,
+    trace: Trace,
+}
+
+/// Wait for the child on a thread of its own, enforcing `timeout`, and remove
 /// its scratch directory once it exits. The exit is reported once `copies`
 /// have drained what the child wrote, so the guest never sees it first.
 fn supervise(
-    child: Arc<Child>,
+    supervised: Supervised,
     timeout: Option<Duration>,
     scratch: TempDir,
     copies: Vec<JoinHandle<()>>,
@@ -347,6 +478,13 @@ fn supervise(
     thread::Builder::new()
         .name("process-wait".to_owned())
         .spawn(move || {
+            let Supervised {
+                child,
+                refusals,
+                program,
+                spawning,
+                trace,
+            } = supervised;
             let (alive, deadline) = mpsc::channel::<()>();
             let timer = timeout.map(|timeout| {
                 let child = Arc::clone(&child);
@@ -354,18 +492,28 @@ fn supervise(
             });
             let waited = child.wait();
             drop(alive);
-            let timed_out =
-                timer.is_some_and(|timer| timer.join().unwrap_or_else(|p| resume_unwind(p)));
+            let timed_out = timer.is_some_and(join);
             drop(scratch);
-            for copy in copies {
-                copy.join().unwrap_or_else(|p| resume_unwind(p));
-            }
+            copies.into_iter().for_each(join);
             let status = match waited {
                 Err(_) => Err(ErrorCode::Io),
                 Ok(_) if timed_out => Ok(ExitStatus::TimedOut),
                 Ok(sandbox::ExitStatus::Exited(code)) => Ok(ExitStatus::Exited(code)),
                 Ok(sandbox::ExitStatus::Signaled(signal)) => Ok(ExitStatus::Signaled(signal)),
             };
+            if let Ok(status) = &status
+                && let Some(warning) =
+                    refusals_warning(&program, status, &refusals.collect(), trace)
+            {
+                spawning.warn(warning);
+            }
+            if trace == Trace::Files
+                && let Some(reason) = refusals.unseen()
+            {
+                spawning.warn(format!(
+                    "warning: core:process: `--process-trace` missed calls `{program}` made: {reason}"
+                ));
+            }
             // The guest may have dropped the future without waiting.
             let _ = report.send(status);
         })?;

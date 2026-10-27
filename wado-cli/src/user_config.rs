@@ -54,7 +54,7 @@ pub fn user_config() -> &'static UserConfig {
     })
 }
 
-fn config_path() -> Option<PathBuf> {
+pub fn config_path() -> Option<PathBuf> {
     xdg_base_dir("XDG_CONFIG_HOME", ".config").map(|dir| dir.join("wado").join("config.toml"))
 }
 

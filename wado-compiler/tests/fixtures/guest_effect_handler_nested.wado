@@ -1,0 +1,46 @@
+// The innermost `with` handler answers a dependency component's guest effect,
+// and a handler may call back into the dependency while it is still on the stack.
+use { println, Stdout } from "core:cli";
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {
+    prefix: String,
+}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${self.prefix}${lang}:${code}`
+    }
+}
+
+struct Reentrant {}
+
+impl Highlight for Reentrant {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        let mut inner = Tag { prefix: "in/" };
+        let mut text = "";
+        with Highlight => &mut inner do {
+            text = Hlc::wrap(code, lang).text;
+        }
+        resume text
+    }
+}
+
+export fn run() with Stdout {
+    let mut a = Tag { prefix: "a/" };
+    let mut b = Tag { prefix: "b/" };
+    with Highlight => &mut a do {
+        println(Hlc::wrap("x", "wado").text);
+        with Highlight => &mut b do {
+            println(Hlc::wrap("y", "rust").text);
+        }
+        println(Hlc::wrap("z", "go").text);
+    }
+    let mut r = Reentrant {};
+    with Highlight => &mut r do {
+        println(Hlc::wrap("w", "c").text);
+    }
+}
+
+__DATA__
+{"stdout": "[a/wado:x]\n[b/rust:y]\n[a/go:z]\n[[in/c:w]]\n"}

@@ -424,6 +424,8 @@ pub struct WasmAsset {
     pub function_exports: Vec<WasmExportSig>,
     /// Exported interfaces; non-empty marks this as a CM component to compose in.
     pub component_interfaces: Vec<ExportedInterface>,
+    /// The CM function path of every function a component asset imports.
+    pub imported_functions: Vec<String>,
 }
 
 impl WasmAsset {
@@ -1855,6 +1857,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 bytes: core_wasm_bytes,
                 function_exports,
                 component_interfaces: Vec::new(),
+                imported_functions: Vec::new(),
             },
         );
         Ok(())
@@ -1911,6 +1914,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 bytes,
                 function_exports: Vec::new(),
                 component_interfaces: bindings.interfaces,
+                imported_functions: bindings.imported_functions,
             },
         );
         Ok(())
