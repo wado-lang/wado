@@ -1312,6 +1312,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
 // ---------------------------------------------------------------------------
 
 /// Test function for O0 (no optimization)
+/// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O0`.
 fn fixture_test_o0(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O0);
     Ok(())
@@ -1325,7 +1327,7 @@ fn fixture_test_o2(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for O1 (development optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O1`.
 fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O1);
     Ok(())
@@ -1333,7 +1335,7 @@ fn fixture_test_o1(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for O3 (aggressive optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level O3`.
 fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::O3);
     Ok(())
@@ -1341,7 +1343,7 @@ fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Test function for Os (size optimization)
 /// `#[ignore]`d unless `CI` or `WADO_FULL_TEST` is set at build time (see the
-/// `harness!` entry below). Run locally with `cargo test -- --ignored`.
+/// `harness!` entry below). Run locally with `mise run test-e2e-level Os`.
 fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
@@ -1419,11 +1421,12 @@ datatest_mini::harness! {
     // Pattern matches .wado files directly in fixtures/ but not in subdirectories
     // (subdirectories contain helper modules that are imported, not run as tests).
     //
-    // O1/O3/Os are `#[ignore]`d unless CI or WADO_FULL_TEST is set at build time.
-    // The env is read at macro expansion, so toggling requires re-expanding the
-    // macro (touch this file or `cargo clean`); locally, run them on demand with
-    // `cargo test -- --ignored`.
-    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$" },
+    // Every level but O2 is `#[ignore]`d unless CI or WADO_FULL_TEST is set at
+    // build time. The env is read at macro expansion, so toggling requires
+    // re-expanding the macro (touch this file or `cargo clean`); locally, run
+    // one on demand with `mise run test-e2e-level <LEVEL>`.
+    { test = fixture_test_o0, root = "fixtures", pattern = r"^[^/]+\.wado$",
+      ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
     { test = fixture_test_o1, root = "fixtures", pattern = r"^[^/]+\.wado$",
       ignore_unless_env = ["CI", "WADO_FULL_TEST"] },
     { test = fixture_test_o2, root = "fixtures", pattern = r"^[^/]+\.wado$" },

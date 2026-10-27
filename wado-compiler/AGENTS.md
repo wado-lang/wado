@@ -40,8 +40,9 @@ The Wado compiler crate.
   measure what it buys, and delete it when that is nothing.
 - `cargo check --all-targets` while iterating, or a type the crate changes
   breaks the uncompiled unit tests where nothing looks. Run `mise run test-e2e`
-  for anything the language touches: it covers O0 and O2 and leaves the rest to
-  CI, whose `ignored` lines are that split and not a gap, so never set
+  for anything the language touches: it covers O2 and leaves the other levels
+  to CI, whose `ignored` lines are that split and not a gap. Run one of them
+  with `mise run test-e2e-level <LEVEL>` only when asked, and never set
   `WADO_FULL_TEST` unless asked by name. `mise run test` and
   `mise run test-wado` are the slowest runs there are: run them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
