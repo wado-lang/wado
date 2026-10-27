@@ -133,6 +133,7 @@ test "wait_timeout reports a child still running, and its end once it comes" {
     assert child.wait_timeout(10_000_000).unwrap() matches { None };
     child.kill();
     assert child.wait_timeout(10_000_000_000).unwrap() == Option::Some(ExitStatus::Signaled(9));
+    assert child.wait_timeout(0).unwrap() == Option::Some(ExitStatus::Signaled(9));
     assert child.wait().unwrap() == ExitStatus::Signaled(9);
 }
 
