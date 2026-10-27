@@ -373,9 +373,10 @@ A `module` line names a module the same way on any machine:
 - A `core:` module is its import path.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
-the function's source text, a CRLF read as LF, and its regions' kinds and positions relative to
-it. The lines after it give how often each of the function's regions ran, the
-regions numbered from zero within the function. A region not listed never ran.
+the function's source text, a CRLF read as LF, and its regions' kinds and
+positions relative to it. The lines after it give how often each of the
+function's regions ran, the regions numbered from zero within the function. A
+region not listed never ran.
 
 A count of zero and no profile are different things. Every function of a
 module the profile lists has a `fn` line, one the workloads never ran

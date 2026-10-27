@@ -172,10 +172,10 @@ use { CoverageHost } from "core:coverage/coverage_host.wado";
 /// How often each coverage region has run in this instance, by id.
 global mut COVERAGE_COUNTS: Array<i64> = builtin::array_new::<i64>(0);
 
-/// The probe `wado test --coverage` and `--pgo` put at the start of every region: counts
-/// a run of region `id`, and tells the host the first time it runs in this
-/// instance. The host hears a hit as it happens, since a test that traps
-/// cannot be entered again.
+/// The probe `wado test --coverage` and `--pgo` put at the start of every
+/// region: counts a run of region `id`, and tells the host the first time it
+/// runs in this instance. The host hears a hit as it happens, since a test
+/// that traps cannot be entered again.
 // Kept a call: inlined into every region, its fast path doubles what the
 // optimizer walks under `--coverage-include=stdlib`, to speed a test run that
 // spends a fraction of the compile.
@@ -203,8 +203,8 @@ internal fn coverage_probe(id: i32) {
 }
 
 /// Reports each region that ran more than once, with its runs; the first-hit
-/// report already counts one. A test under `wado test --coverage` or `--pgo` calls it once
-/// its body returns.
+/// report already counts one. A test under `wado test --coverage` or `--pgo`
+/// calls it once its body returns.
 // Reads the array with builtins alone: a measured prelude call made here would
 // run after its region's count was read.
 #[compiler_item("coverage_report")]

@@ -1485,9 +1485,9 @@ pub(super) enum ExportReturnStrategy {
     /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
     /// discriminant of the `result<>` it lifts through, so it shares that canon.
     VoidTaskReturn,
-    /// A test under `wado test --coverage` or `--pgo`: [`Self::VoidTaskReturn`], with
-    /// `core:rt::coverage_report` called between the call and the
-    /// `task-return`, so a test that traps reports no counts.
+    /// A test under `wado test --coverage` or `--pgo`:
+    /// [`Self::VoidTaskReturn`], with `core:rt::coverage_report` called between
+    /// the call and the `task-return`, so a test that traps reports no counts.
     CoveredTestTaskReturn,
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value

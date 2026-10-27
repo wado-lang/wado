@@ -2,21 +2,9 @@
 //! measured function ran, in a text file the package commits. See
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 //!
-//! The format is line-oriented, so a merge conflicts line by line:
-//!
-//! ```text
-//! wado-pgo 1
-//! module src/sieve.wado
-//! fn 3f2a9c0d1e2b4a59 12 sieve_count
-//! 0 1
-//! 1 200000
-//! fn 0011223344556677 30 unused
-//! ```
-//!
-//! A `module` line names a module as [`Coverage::files`] keys it. Each `fn`
-//! line under it gives a function's hash, its line and its name, and the lines
-//! after it the regions of that function that ran: the region's number within
-//! the function, and how often it ran. A region not listed never ran.
+//! The format is the specification's,
+//! [Profiles](../../docs/spec-testing.md#profiles). A `module` line names a
+//! module as [`Coverage::files`] keys it.
 
 use std::fmt::Write as _;
 
