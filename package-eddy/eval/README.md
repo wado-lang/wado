@@ -20,6 +20,9 @@ reverts, so the defects come from fix pull requests rather than reverts.
   by Claude reading the diffs and the repository history. Each answer is
   `yes`, `no`, `unsure` (left for a person), or `na`. An `unsure` pair carries
   the `ask` class that kept it open.
+- `baseline.json` holds a one-pass review of each of the 15 usable entries,
+  three runs each: the reviewer reads the culprit pull request's whole diff,
+  and a grader says whether a finding names the defect the fix corrected.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -40,9 +43,12 @@ CLAUDE_API_KEY=... wado run package-eddy/tools/judge.wado -- \
     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
 CLAUDE_API_KEY=... CLAUDE_MODEL=claude-sonnet-5-5 wado run package-eddy/tools/judge.wado -- \
     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged-sonnet.json
+CLAUDE_API_KEY=... wado run package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json package-eddy/eval/baseline.json
 ```
 
-Both run `git` through `core:process`, which needs no flag: `git` is under
+They run `git` through `core:process`, which needs no flag: `git` is under
 `/usr`, and the repository is the directory `wado run` grants.
 
 ## Findings So Far
@@ -95,6 +101,23 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   settle, so they stay as data whichever way a person decides them.
 - Sonnet 5.5 sometimes answers with malformed JSON, such as a field given
   twice. Such a pair gets an error, and a rerun judges it again.
+- A one-pass review by Opus 5.5 finds the defect in 23 of 45 runs, and in 10
+  of the 15 entries at least once. It reported 200 findings in all, about 4 a
+  run. The table counts runs that hit, out of 3:
+
+  | Hits | Entries                                 |
+  | ---: | --------------------------------------- |
+  |    3 | #686, #1142, #1190, #1204, #1529, #1915 |
+  |    2 | #1672                                   |
+  |    1 | #1223, #1585, #2310                     |
+  |    0 | #1088, #1112, #1313, #1680, #1697       |
+
+  A miss is not one kind. On #1112 and #1313 the defect needs knowledge outside
+  the diff: tagpr's config format, and the names the wasm-size runner writes.
+  On #2310 the reviewer fills its 10 slots with other formatter bugs. Only one
+  run in three hits for a third of the entries, so a single run says little
+  about a change to the reviewer. Whether the other findings are real is not
+  measured yet.
 
 ## To Do
 
@@ -103,3 +126,5 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
 - [ ] Have a person settle the open pairs in `checked.json`, then sample the
   ones Claude settled.
 - [ ] Split off the held-out part that learning never sees.
+- [ ] Measure the precision of the baseline's other findings, not only whether
+  it hits the known defect.

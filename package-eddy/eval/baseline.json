@@ -123,6 +123,1437 @@
             "reason": "No finding covers compile_one discarding the silent host's diagnostics or producing empty output without a reason; finding 0 is about --skip-empty swallowing errors, which is a different problem."
           },
           "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "scripts/update-golden-format-fixtures.sh",
+              "summary": "Passing `--skip-empty` to every `golden-dump` call makes compilation failures of format fixtures silently delete the golden file instead of failing the script.",
+              "detail": "In `run_pipeline`, the `Err(e)` branch removes the output file, logs \"Skipped\" and `continue`s when `skip_empty` is set. That error comes from `compile_one`, i.e. a real compile failure. The old script ran `run_dump`, which did `exit 1` on failure or empty output and only skipped `#![no_prelude]` files explicitly via grep. Now a regression that breaks compilation of a dirty fixture deletes its .tir/.lower/.optimize/.wir/.wat goldens and the script still ends with \"Golden format fixtures updated.\" The final count assertion also passes, because these failures are added to `skip_count`. The breakage is hidden instead of reported."
+            },
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "The parallelism cap that was added to avoid SIGSEGV and memory pressure was dropped; one 16 MB-stack compiler worker is now spawned per CPU.",
+              "detail": "The removed `run_bulk` capped concurrency at half the available CPUs (minimum 2). Its comments said this kept peak memory predictable and avoided SIGSEGV under memory pressure. `run_pipeline` sets `num_workers = available_parallelism()`. Each worker has a 16 MB stack, an 8 MB leaked alt stack and a full compiler heap. On machines with many cores, or right after heavy builds, this brings back the out-of-memory crashes the earlier code was written to prevent."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding covers compile_one throwing away the silent host's diagnostics (via `map_err(|_| \"compilation failed\")` and empty output when the dump returns None); finding 0 is about the script's `--skip-empty` flag hiding errors, and finding 1 is about worker parallelism."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "If enough compiler worker threads panic, the pipeline hangs forever instead of reporting an error.",
+              "detail": "The main thread keeps its own `Arc` holding `read_rx` for the whole run, so the read channel never disconnects. When every worker thread has died from a compiler panic, nothing drains the bounded `sync_channel`, and the reader thread blocks forever in `read_tx.send`. All `write_tx` senders are dropped, so the writer loop ends normally. Then `reader.join()` blocks indefinitely and the workers are never joined. This happens as soon as the number of panicking fixtures reaches `num_workers` while items remain. The old `run_bulk` turned a panicked compiler thread into an error message."
+            },
+            {
+              "file": "scripts/update-golden-format-fixtures.sh",
+              "summary": "Passing `--skip-empty` also hides real compilation failures: golden outputs are silently deleted and the script still succeeds.",
+              "detail": "In `run_pipeline`, `skip_empty` applies to the `Err(e)` branch as well as to empty output. If a format fixture stops compiling, its `.tir`/`.lower`/`.optimize`/`.wir`/`.wat` golden file is removed. The run only prints `Skipped ...`, counts it as skipped and exits 0, so the final count assertion still passes. The old script exited with an error when a dump failed. A compiler regression can now delete golden files without anyone noticing."
+            },
+            {
+              "file": "scripts/update-golden-format-fixtures.sh",
+              "summary": "Files marked `#![no_prelude]` are no longer excluded from phase-output generation.",
+              "detail": "The script used to skip compiler phase outputs for any fixture starting with `#![no_prelude]`. The new comment claims `--skip-empty` covers this, but the tir-lowered, WIR and WAT phases produce non-empty output, or a compile error, for such files. They will either gain new golden files that were never generated before, or be silently skipped because of a compile failure. The previous intent is not preserved."
+            },
+            {
+              "file": "wado-dev-tools/src/pipeline.rs",
+              "summary": "Workers build the output path differently from `Template`, so templates with more than one `{name}` give inconsistent paths.",
+              "detail": "Workers compute the output path from `out_template.split(\"{name}\").next()` and `.nth(1)`. This drops everything after a second `{name}`. The skip path and `Template` use `split_once`, which keeps the full suffix. When a template contains `{name}` more than once, compiled outputs are written to a truncated or wrong path, while skipped files remove a different path."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings says that `compile_one` throws away the silent host's buffered diagnostics, either through `map_err(|_| \"compilation failed\")` or by returning empty output when a dump field is None. Finding 2 concerns `--skip-empty` swallowing errors in the script, which is a different root cause."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1112,
+      "culprit": 935,
+      "defect": "The .tagpr config put keys outside a [tagpr] section, where tagpr silently ignores them, and used `command` (which runs before the version bump) instead of `postVersionCommand`, so Cargo.lock was never synced and `cargo --locked` CI broke.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": ".github/workflows/tagpr.yml",
+              "summary": "tagpr runs with the default GITHUB_TOKEN, so the release tag it pushes will never trigger release.yml's `on: push: tags` workflow.",
+              "detail": "GitHub does not start new workflow runs for events created with the repository's GITHUB_TOKEN, apart from workflow_dispatch and repository_dispatch. `Songmu/tagpr@v1` is invoked here without a PAT or GitHub App token, so it uses GITHUB_TOKEN. When the Release PR is merged, tagpr pushes `v<next>`, but release.yml (triggered on `push: tags: v*`) never runs. No binaries or GitHub Release are produced unless someone dispatches release.yml manually, which breaks step 4 of the pipeline described in `.tagpr`. For the same reason, the Release PRs tagpr opens or updates will not trigger CI. The fix is either to pass a PAT/App token to tagpr, or to call the release workflow from tagpr.yml when tagpr's `tag` output is set."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "The only finding concerns GITHUB_TOKEN not triggering downstream workflows, not the misplaced .tagpr keys or the use of `command` instead of `postVersionCommand` for syncing Cargo.lock."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": ".github/workflows/tagpr.yml",
+              "summary": "tagpr pushes the release tag with the default GITHUB_TOKEN, so the tag push never triggers release.yml and no release is published.",
+              "detail": "`Songmu/tagpr@v1` runs here without a PAT or GitHub App token, so it authenticates with the default `GITHUB_TOKEN`. GitHub does not start new workflow runs for events created by `GITHUB_TOKEN`, including tag pushes. When the Release PR is merged, tagpr pushes `v<next>`, but release.yml's `on: push: tags: 'v*'` trigger never fires. The flow described in `.tagpr` (step 4) therefore breaks, and every release would need a manual workflow_dispatch. To fix it, either give tagpr a PAT or App token, or call the release jobs from tagpr.yml when tagpr reports it created a tag."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "The only finding is about GITHUB_TOKEN failing to trigger release.yml, not about .tagpr keys sitting outside the [tagpr] section or `command` being used instead of `postVersionCommand`, which left Cargo.lock unsynced."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": ".github/workflows/tagpr.yml",
+              "summary": "The tagpr step does not set a `GITHUB_TOKEN` environment variable, so the action cannot authenticate.",
+              "detail": "Songmu/tagpr reads its credentials from the `GITHUB_TOKEN` environment variable and its documented usage sets `env: GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}`. As written, the job likely fails on every push to main. No release PR is opened and no tag is ever created."
+            },
+            {
+              "file": ".github/workflows/tagpr.yml",
+              "summary": "A tag pushed by tagpr with the default workflow token will not trigger `release.yml`, so tagpr releases never get built.",
+              "detail": "GitHub suppresses workflow triggers for events created with the repository `GITHUB_TOKEN`. `release.yml` only listens for `push: tags: v*`. A tag pushed by tagpr with the default token will not start it. Step 4 of the documented flow (\"release.yml runs on the tag push\") silently never happens. Binaries are only published if someone runs workflow_dispatch by hand. Fixing this needs a PAT or GitHub App token, or having tagpr call the release workflow directly."
+            },
+            {
+              "file": "wado-dev-tools/src/bump_version.rs",
+              "summary": "`replace_workspace_version` rebuilds the file with `str::lines()` and `\\n`, so CRLF line endings are rewritten to LF throughout Cargo.toml.",
+              "detail": "`lines()` strips the `\\r` from CRLF line endings and every line is re-emitted with a bare `\\n`. On a Windows checkout with autocrlf, running `mise run bump-version` therefore rewrites every line ending in Cargo.toml, not just the version line."
+            },
+            {
+              "file": ".github/workflows/release.yml",
+              "summary": "The workflow_dispatch input `tag` is interpolated directly into a bash script, which allows shell injection.",
+              "detail": "`tag=\"${{ inputs.tag || github.ref_name }}\"` is substituted into the script text before bash runs. A crafted input such as `v1\"; curl ... #` executes arbitrary commands in a job that has `contents: write` permission. Only users who can dispatch the workflow can trigger this, but the value should be passed through an env var instead."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings mention the .tagpr config placing keys outside the [tagpr] section or using `command` instead of `postVersionCommand`, which left Cargo.lock unsynced."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1142,
+      "culprit": 1136,
+      "defect": "The response body pump awaited `frame_tx.send` with no time bound, so a client that stopped draining but kept its connection open pinned the handler task's fiber stack forever.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "A stuck in-flight request now has no wall-clock bound, so it can pin a worker forever and permanently wedge it at recycle time.",
+              "detail": "The old per-request `tokio::time::timeout` around `run_concurrent` is gone. `HandlerTask` can block indefinitely in two ways:\n- on `frame_tx.send(..).await` when a client stops reading the body;\n- on a guest that never finishes its post-`task return` work.\n\nWhen the worker reaches `recycle_requests`, it stops pulling from `job_rx` and waits for `inflight` to drain, which never happens. Round-robin `Dispatch` keeps routing 1/N of all requests to that worker; they queue until the channel fills and then all get first-byte 504s. A single misbehaving client can therefore permanently disable a worker."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "The epoch deadline is refreshed only when the dispatch loop turns, so a long-lived but healthy request on an otherwise idle worker traps the whole store.",
+              "detail": "`set_epoch_deadline(epoch_ticks)` is re-armed only after `select(recv, drain)` yields. Suppose one request streams a body or waits on slow I/O for longer than `timeout_secs + 5` seconds and no other job arrives. The deadline then passes while the loop sits parked. The next time that request's guest code runs, the epoch check fires `Trap::Interrupt` even though the guest never ran away. The store dies, and every in-flight request on that worker is lost."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "In-flight concurrency per worker is unbounded, so the pooling allocator's stack pool can be exhausted and trap the store.",
+              "detail": "The comment says `chan_cap = max_concurrency / workers` keeps in-flight work within the stack pool sized by `total_stacks(max_concurrency)`. However, the worker dequeues every job immediately and pushes it into `inflight` with no limit, so the channel only bounds queued, not executing, work. Under load, the number of concurrently spawned guest tasks (each needing a fiber stack) can exceed the pool. Allocation then fails, `run_concurrent` errors, and the worker drops all its in-flight requests."
+            },
+            {
+              "file": "wado-compiler/lib/core/allocator.wado",
+              "summary": "The allocator hard-codes the bin table at [8,140) and the first block at byte 152, which assumes `heap_offset` starts at 8 and is only advanced by this function.",
+              "detail": "Coalescing reads the predecessor footer at `block - 8` whenever `block > 152`. Alignment also relies on the heap frontier being congruent to 8 (mod 16). If `heap_offset` starts above 152 (for example after reserved or static data), or is ever bumped elsewhere, three things go wrong:\n- the bin table at bytes 8..140 may overwrite live data;\n- the first block's 'predecessor' footer is garbage, leading to bogus unlinks and coalescing;\n- payloads lose 16-byte alignment."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 explicitly identifies `frame_tx.send(..).await` blocking indefinitely when a client stops reading the body, which pins the worker, matching the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "A single stuck in-flight request can stall a worker for good, and requests routed to it then hang with no timeout.",
+              "detail": "The old wall-clock `tokio::time::timeout` around `run_concurrent` was removed. A `HandlerTask` blocked on `frame_tx.send().await` (a client that keeps the connection open but stops reading), or one stuck on a host await, now never finishes. Once `handled` reaches `recycle_requests`, the worker enters drain mode and stops reading `job_rx` until `inflight` is empty, which never happens. `Dispatch::submit` keeps round-robining jobs to that worker until its channel fills. After that, `self.txs[idx].send(job).await` blocks indefinitely. The first-byte timeout only starts after `submit` returns, so those clients hang forever instead of getting a 504. A runaway guest pinning the worker thread causes the same queue-up, because the 35s epoch trap covers only pure-wasm execution."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "In-flight requests per worker are unbounded, so `--max-concurrency` does not cap fiber stacks and the stack pool can be exhausted.",
+              "detail": "The worker loop pulls every job off `job_rx` as soon as it arrives and `accessor.spawn`s it into `inflight`, with no limit on `inflight.len()`. The channel capacity (`max_concurrency / workers`) only bounds queued jobs, not running ones. Each running guest task needs an async fiber stack, but the pooling allocator is sized with `total_stacks(max_concurrency)`, and each store's own `run_concurrent` / instantiation also needs stacks. Under more than about `max_concurrency` concurrent requests (for example slow streaming responses), stack allocation fails. That turns into a store error that kills every in-flight request on the worker and forces a rebuild."
+            },
+            {
+              "file": "wado-compiler/lib/core/allocator.wado",
+              "summary": "A free with `oldsize == 0` and a non-null pointer used to be a no-op but now dereferences `ptr - 8` as a boundary tag.",
+              "detail": "The old allocator returned early when `oldsize == 0`. Callers that free zero-length buffers with a non-heap sentinel pointer (for example the canonical-ABI convention of using the alignment as the pointer for empty lists, or static data) relied on that. The new code ignores `oldsize` and reads a header at `oldptr - 8`. For a pointer that `realloc` never returned, this reads arbitrary memory: it may trap via `unreachable` when the low bit is clear, or link a fake block into the free lists and corrupt the heap."
+            },
+            {
+              "file": "wado-compiler/lib/core/allocator.wado",
+              "summary": "The bin-head table and the first-block/alignment invariants assume `heap_offset` is still exactly 8 when the allocator is first used.",
+              "detail": "The code only bumps `heap_offset` to 152 when it is below 152. If `heap_offset` already starts higher (static data, or other runtime code that bumped it), several things break. The bin-head table at [8,140) overwrites whatever lives there. The first block lands at an address not congruent to 8 mod 16, so payloads are no longer 16-byte aligned. The hard-coded `block > 152` predecessor check then holds for the very first block, so a free reads a 'footer' from non-heap memory and may coalesce into it, corrupting memory."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 explicitly identifies that removing the wall-clock timeout leaves a HandlerTask blocked forever on `frame_tx.send().await` when a client keeps the connection open but stops reading, which is the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "The epoch deadline is only refreshed when the dispatch loop turns, so a legitimate long-running request kills the whole worker store.",
+              "detail": "`set_epoch_deadline(epoch_ticks)` is re-armed only when a new job arrives or an in-flight task completes. Consider a request that streams or awaits host I/O for longer than `timeout_secs + 5` while no other traffic hits that worker. When the guest next runs wasm, the epoch is already past the deadline and it traps immediately. `run_concurrent` then errors and the worker drops the store, losing every in-flight request on it. The old code bounded each request separately with a fresh store."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "The wall-clock per-request bound was removed, so a stuck request can pin a worker forever and block its recycle and shutdown drain.",
+              "detail": "The previous `tokio::time::timeout(timeout, run_concurrent(..))` covered host awaits that epoch interruption cannot preempt. Examples are `frame_tx.send().await` against a client that keeps the connection open but stops reading, or a guest that awaits indefinitely after sending the head. The `HandlerTask` now stays in `inflight` indefinitely. When the recycle threshold is reached the worker sets `stopping` and waits for `inflight` to drain, so it never accepts new jobs again. It is effectively dead while still receiving round-robin traffic."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "`dispatch.submit(job).await` runs before the first-byte timeout starts, so a request routed to a stalled or full worker hangs with no 504.",
+              "detail": "`mpsc::Sender::send` waits for capacity on a bounded channel. If the selected worker is stuck (draining for recycle, or saturated), the hyper request blocks in `submit` with no timeout at all. The `tokio::time::sleep(timeout)` race is only set up after the send completes. Round-robin selection keeps sending a share of all requests to that worker, ignoring idle ones."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "In-flight requests per worker are unbounded, so concurrency can exceed the pooling allocator's `total_stacks(max_concurrency)` and exhaust the stack pool.",
+              "detail": "The comment claims the channel capacity (`max_concurrency / workers`) bounds in-flight work. However, the worker loop immediately moves every received job into `inflight` via `accessor.spawn`, freeing channel slots, and has no cap on `inflight.len()`. Under load with more than `max_concurrency` concurrent requests (e.g. slow bodies), more async tasks need fiber stacks than the pool holds. Stack allocation then fails, erroring or trapping the store and taking down all in-flight requests on that worker."
+            },
+            {
+              "file": "wado-cli/src/serve.rs",
+              "summary": "Any trap in one request now destroys the shared store, dropping every concurrent request on that worker.",
+              "detail": "Previously a trap or timeout affected only the request that caused it, because each request had its own store. Now all requests on a worker share one instance. A guest trap, such as a panic in one handler or the epoch trap, makes `run_concurrent` return `Err`. The worker then discards the store, and the `resp_tx`/`frame_tx` of every other in-flight request is dropped. Those requests get truncated bodies or a 500 instead of their own responses."
+            },
+            {
+              "file": "wado-compiler/lib/core/allocator.wado",
+              "summary": "The allocator hardcodes 152 as the first block address and uses `heap_offset` unchanged whenever it already exceeds 152, which breaks alignment and previous-block coalescing.",
+              "detail": "`heap_offset` is only bumped to 152 if it is below 152. If the shared global has already advanced, for example because another path used memory first, the first freelist block starts at an arbitrary address. That address is not guaranteed to be ≡ 8 (mod 16), so payloads lose 16-byte alignment. Worse, the `block > 152` predecessor check then reads `block - 8` as a footer even for the first block. It may interpret foreign memory as a free block and call `fl_unlink` on garbage, corrupting the heap."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 explicitly names `frame_tx.send().await` blocking forever against a client that keeps the connection open but stops reading, which pins the worker. That is the same root cause as the known defect."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1190,
+      "culprit": 1015,
+      "defect": "The dataflow walker treated labeled blocks as straight-line code. It recorded no state at a labeled `break`, so the post-block state ignored early-exit paths that skipped syncs emitted inside the block. Later code then missed a re-read or write-back, and the field update was lost (the indent_level drift).",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Labeled `break` never commits `ScalarOnly` candidates, and the post-loop write-back was removed, so a labeled break that leaves the HFS loop loses scalar writes.",
+              "detail": "`walk_stmt` calls `commit_scalar_for_escape` only for `label.is_none()`. `scalarize_loop` now returns an empty `post_stmts` on the assumption that every exit path has already committed. A `break outer_label` (or a break to a labeled block enclosing the loop) taken while a candidate is `ScalarOnly` exits without ever storing `__hfs_F` into `L.F`. The final field value is silently lost. The old code wrote back before every non-enclosing labeled break and also emitted post-loop write-backs."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Sync emitted while walking a sub-expression is placed before the whole statement, so a re-read needed after a call in the same expression runs before that call.",
+              "detail": "`walk_expr` pushes re-read and write-back stmts into the statement-level `out` vector, which is inserted before the entire stmt. Take `let x = advance(&mut p) + p.pos;` or `sum = sum + f(&mut b) + b.v;`. The call moves the state to `FieldOnly`, and the later read of `p.pos` makes the walker emit `__hfs_pos = p.pos` into `out`. That re-read executes before `advance` runs, so the read sees the pre-call value. A short-circuit `a(&mut b) && b.v > 0` has the same problem. The module docs claim call-site wrapping, but nothing is wrapped at expression position."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Labeled-block and inline-block breaks are not merged into the post-block state, and removing the `__inline_*` exclusion now exposes this on every inlined early-return.",
+              "detail": "A `LabeledBlock` (stmt or expr) is walked linearly, and the state after it is just the fall-through state. Consider `blk: { b.v = 1; if c { break blk; } call(&mut b); }` followed by a read of `b.v`. The walker believes the state is `FieldOnly` and re-reads from the field. On the break path the scalar holds 1 and the field is stale, so the write is lost. The opposite mismatch (break while `FieldOnly`, fall-through `ScalarOnly`) reads a stale scalar. Inlined `&mut self` methods use `break __inline_*` for returns, and the previous guard (`collect_locals_accessed_inside_inline_blocks`) that kept such locals from being scalarized was deleted."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Nested-loop exit state is a join with no convergence sync, so a break taken while `FieldOnly` can leave a stale scalar that later code trusts.",
+              "detail": "`walk_nested_loop` sets the outer state to `pick_join_target_for_candidate([entry, body_exit_pre_sync])` but inserts no sync on the break paths. Consider an inner body `bump(&mut s); if cond { break; } s.pos = s.pos + 1;`. The break is taken while `FieldOnly`, and `commit_scalar_for_escape` does nothing for `FieldOnly`. The body end is `ScalarOnly`, so the join yields `ScalarOnly`. After the loop the scalar is read without a re-read, giving the pre-bump value. The outer body-end write-back then overwrites the field with that stale value."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Match guard side effects are joined into `accumulated_pre` without convergence, so later arms can read a stale scalar.",
+              "detail": "When a guard contains a `&mut` call, `s` becomes `FieldOnly`. If the entry state was `ScalarOnly`, `pick_join_target_for_candidate([ScalarOnly, FieldOnly])` returns `ScalarOnly`, yet no re-read is emitted on the guard-failure path. Subsequent arms are walked from a `ScalarOnly` state and read `__hfs_F` directly. At runtime the field was mutated by the guard's call, so the scalar is stale and the mutation is lost (and later clobbered by the body-end write-back)."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "`TaskReturn` now hits `unreachable!` where it was previously tolerated, which can panic the compiler.",
+              "detail": "The old `replace_in_stmt` and `compute_sync_fields_in_stmt` both handled `TirStmtKind::TaskReturn` as a no-op, and the inline-block walker visited it. That suggests it can still exist when HFS runs. The new `walk_stmt` panics with `unreachable!` on it. Any hot loop containing a task return would crash the compiler instead of being compiled."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "A `Match` with zero arms makes `pick_join_targets` return an empty vector, which then replaces the candidate state.",
+              "detail": "`walk_expr_branches_match` assigns `*states = target`, where `target` comes from `pick_join_targets(&[])` and is `Vec::new()`. Any later indexing `states[i]` for a candidate, for example by the body-end `sync_to_target`, panics with an index out of bounds. This happens for an exhaustive match on an uninhabited type inside a hot loop."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 states that labeled blocks are walked linearly and their breaks are never joined into the post-block state, which leads to missed re-reads and lost writes on early-exit paths, including inlined early returns. This is exactly the defect that the fix addresses."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "A labeled `break` that leaves the HFS loop no longer writes the scalar back, and the post-loop write-back was removed, so the last scalar writes are lost.",
+              "detail": "`walk_stmt` calls `commit_scalar_for_escape` only for unlabeled breaks. `scalarize_loop` now returns an empty `post_stmts`. A labeled break whose target encloses the loop can be taken while the candidate is `ScalarOnly`; the common case is an inliner-generated `break __inline_*: v` from a `return` inside an inlined function that contains the loop. On that path nothing commits `__hfs_F` to `L.F`. The field keeps a stale value, the latest writes are dropped, and code after the loop reads wrong data. The old code wrote back before every non-enclosing labeled break and also after the loop."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Labeled blocks inside the loop are walked as straight-line code, so state at a mid-block `break label` is never joined into the post-block state.",
+              "detail": "`TirStmtKind::LabeledBlock` and `TirExprKind::LabeledBlock` call `walk_block` and keep only the fall-through exit state. Consider a block where one path does `x.f = 1; break lbl;` (`ScalarOnly`, uncommitted) and the fall-through path calls `g(&mut x)` (`FieldOnly`). The walker then believes `FieldOnly` after the block. The next read of `x.f` emits a re-read that overwrites the scalar with the stale field value. The reverse case reads a stale scalar without any re-read."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Sync emitted while walking an expression goes into `out` before the whole statement, so a re-read caused by a call in the same expression runs before that call.",
+              "detail": "`walk_expr` pushes re-reads and write-backs into the statement-level `out` vector, which is emitted ahead of the statement. Take `let y = f(&mut b) + b.v;` or `if f(&mut b) > b.v`. Walking the call sets the state to `FieldOnly`, then walking `b.v` pushes `__hfs_v = b.v` into `out`. That re-read executes before `f` runs, and the read uses the pre-call scalar. The same happens for any scalar write that precedes a call in one expression: the write-back is hoisted before the write happens. The result is wrong values whenever a call and a later field access share a statement."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "Match-guard cross-arm handling joins states without emitting any sync, so a `{ScalarOnly, FieldOnly}` join leaves the next arm reading a stale scalar.",
+              "detail": "`walk_expr_branches_match` sets `accumulated_pre[i] = pick_join_target_for_candidate(&[accumulated_pre[i], s[i]])` but emits no convergence code for the guard-failed path. Suppose the match is entered in `ScalarOnly` (for example right after `b.v = b.v + 0`) and a guard calls `probe(&mut b)`. The guard writes back and leaves `FieldOnly`. The join chooses `ScalarOnly`, so later arms read `__hfs_v` with no re-read. At runtime the guard has already changed `b.v`, and those arms see the stale scalar value."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "The post-loop state for nested loops is `JOIN(entry, body_exit)`, which can wrongly claim the scalar is canonical when the actual `break` happened in `FieldOnly`.",
+              "detail": "`walk_nested_loop` never records the state at the inner loop's break points. Consider an inner body `bump(&mut s); if c { break; } s.pos = 5;`. The body exit is `ScalarOnly` and the entry is `Both`, so the join is `ScalarOnly`. The break itself happens in `FieldOnly`; `commit_scalar_for_escape` only handles `ScalarOnly` and does nothing here. After the inner loop, outer reads of `s.pos` use the stale scalar and skip the mutation made by `bump`."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 identifies that labeled blocks are walked as straight-line code and break-states at labeled breaks are never joined into the post-block state, which is exactly the fixed defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "A field read after a `&mut` call in the same expression inserts its re-read before the whole statement, so the read sees the value from before the call.",
+              "detail": "`walk_expr` sends every sync stmt to the stmt-level `out` vector. For `sum = f(&mut b) + b.v;`, walking the call sets the state to `FieldOnly`. The later `b.v` read then emits `__hfs_v = b.v` into `out`, which is placed before the statement and so before `f` runs. The scalar is not refreshed after the call, and `b.v` evaluates to the value from before the call. The same happens for any call followed by a read of the same field in one expression, e.g. `x = f(&mut b) - b.v` or `if f(&mut b) < b.v`."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "A labeled `break` that leaves the HFS loop no longer writes the scalar back, and with post-loop write-backs removed, updates to the field are lost.",
+              "detail": "The old code wrote all candidates back before any `break` whose label was not lexically enclosing. The new `Break` handler commits only for unlabeled breaks, and `scalarize_loop` now produces no `post_stmts`. If the HFS loop sits inside a labeled block, e.g. an inlined function body where `return` becomes `break __inline_*`, then `b.v = x; break __inline_f;` exits with the state `ScalarOnly`. `b.v` never receives the scalar value."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "The state at labeled-block exits and nested-loop breaks is not modeled, so code after them can read a stale scalar.",
+              "detail": "`LabeledBlock` and `walk_nested_loop` take the state from the end of the linear walk, and convergence sync is appended after a branch's trailing `break`, where it is dead code. Take an inner loop `if c { bump(&mut s); break; } s.pos = 1;`. The walker computes a post-loop state of `JOIN(Both, ScalarOnly) = ScalarOnly`, but the break path exits with `FieldOnly` and a stale scalar. Later reads of `s.pos` in the outer HFS body get no re-read and return the old value. A `break label` out of a labeled block that holds a `&mut` call has the same problem."
+            },
+            {
+              "file": "wado-compiler/src/optimize/field_scalarize.rs",
+              "summary": "When a match guard has side effects, the state for later arms is joined without any sync, so later arms can read a stale scalar or field.",
+              "detail": "In `walk_expr_branches_match`, `accumulated_pre` is set to `JOIN(accumulated_pre, guard_exit)` but no convergence stmts are added on either path. If the entry state is `ScalarOnly` and the guard makes a `&mut` call (exit `FieldOnly`), the join picks `ScalarOnly`. At runtime, when the guard ran and failed, the field holds the new value and the scalar is stale. The next arm reads the scalar with no re-read and gets the wrong value."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 says the walker takes the labeled-block exit state from the end of a linear walk and ignores `break label` paths that skip syncs, so later code misses a re-read and reads a stale value; that is the known defect."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1204,
+      "culprit": 1199,
+      "defect": "can_move_past only checked whether the intervening statement clobbers the moved expression's reads, not the reverse; a call-containing field initializer could therefore be relocated past an intervening read of a global it mutates, a miscompile.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "A call inside the inner initializer is not treated as reading or writing anything, so two calls can be swapped, or an inner call can be moved past a side-effecting statement.",
+              "detail": "`Call` only sets `calls = true` and adds no reads. Its `local_reads`, `global_reads`, `heap.reads` and `memory.reads` stay empty, so `is_read_free()` returns true. In `can_move_past`, `int_mr.may_clobber(expr_mr)` therefore returns false even when the intervening statement is itself a call (`self.calls && !other.is_read_free()` fails). Calls never set `may_trap`, so the trap check passes too. As a result, `self_N = struct.new Box { value: f() }; g(); use(self_N.value)` is rewritten to run `g()` before `f()`. That reorders arbitrary user side effects such as printing or mutating globals and the heap. The same hole lets an inner call that reads a global or heap cell move past a `GlobalSet`, `StructSet` or store that it depends on."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "`can_move_past` only checks whether the intervening statement clobbers the inner expression, never the reverse, so writes inside the inner initializer get reordered.",
+              "detail": "The predicate evaluates only `int_mr.may_clobber(expr_mr)`. It never checks `expr_mr.may_clobber(int_mr)` and never checks write/write conflicts. Suppose the inner initializer writes a local through a `LocalTee` or a `LocalSet` inside an inlined `Block`, writes a global, the heap or memory, or calls a function. Moving it after an intervening statement that reads or writes the same location changes what that statement observes, or changes the final value. Example: inner `{ x = 2; ... }` with intervening `y = x` (or `x = 1`). After the rewrite, `y` sees the stale `x`, or `x` ends with the wrong value."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "The trap-ordering rule ignores intervening statements with observable effects that do not trap, so a trapping inner expression can be moved after output-producing calls or persistent writes.",
+              "detail": "`can_move_past` rejects reordering only when both sides have `may_trap`. Calls never set `may_trap`, and neither do `GlobalSet` or `MemoryGrow`. Take an inner `StructGet` on null, or a divide by zero, followed by an intervening `println(...)` call whose arguments do not read state the inner expression depends on. Before the rewrite the program traps first. Afterwards it prints and then traps, which changes visible stdout and the host-observable global or memory state. This contradicts the doc comment's claim that the result is the same when only one side traps."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 identifies that can_move_past checks only int_mr.may_clobber(expr_mr) and never expr_mr.may_clobber(int_mr), which is exactly the missing reverse check that the fix adds."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "`can_move_past` only checks whether the intervening statement clobbers the moved expression, never the reverse, so a side-effecting initializer can be moved past statements that read what it writes.",
+              "detail": "The pass explicitly drops the `is_pure_for_elision` requirement, so the inner initializer may contain calls, `StructSet`/`ArraySet`, `GlobalSet`, `LocalSet` in a block, or memory stores. `can_move_past` only evaluates `int_mr.may_clobber(expr_mr)` and never `expr_mr.may_clobber(int_mr)`. Example: `self = struct.new Box { value: block { tmp = 1; ... } }; x = tmp; use(self.value)`. Here `x` originally sees the new `tmp`, but after the rewrite it sees the old value. The same happens with `value: g()` where `g` mutates a heap field and the intervening statement is `x = obj.f`. The result is silent miscompilation."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "Two calls can be reordered because `may_clobber` ignores calls when the other side has an empty read set, and calls are not considered to trap.",
+              "detail": "`may_clobber` returns false for a call when the other expression is read-free. For an initializer like `f(1)` (calls=true, no reads) and an intervening `g(2)` statement, int.may_clobber(expr) is false. The both-trap check does not fire either, because `Call` never sets `may_trap`, so the move is allowed. `self = Box{value: f(1)}; g(2); use(self.value)` becomes `g(2); use(f(1))`. This reorders two arbitrary user calls and changes I/O order, state and which trap fires first."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "Calls (and `ArrayClone` with a copy helper) are not marked `may_trap`, which weakens the trap-ordering guard in `can_move_past`.",
+              "detail": "Callees can trap (unreachable, OOB, etc.), but `Call`/`CallIndirect`/`CallRef` never set `may_trap`. So an initializer containing a call can be moved past an intervening statement that traps, such as a div or `ref.as_non_null`, and vice versa. This changes which trap or side effect is observed first. Trap safety is the property the rule is meant to protect, and it is violated for every call-containing expression."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "The moved expression's own control-flow effect is not checked, so an initializer containing a `br`/`return`/`unreachable` can be moved past intervening statements.",
+              "detail": "`can_move_past` rejects only non-linear intervening statements. An inner initializer whose block may branch out, return or hit `unreachable` (control=NonLocal or Conditional with an escape) originally skipped the following siblings. After the substitution, the intervening statements execute first. Their writes then become visible on paths where they previously never ran."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies the same one-sided may_clobber check in can_move_past, where a side-effecting initializer such as a call gets moved past a statement that reads what it writes."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "`can_move_past` only checks whether the intervening statement clobbers the inner expression's reads; it never checks the inner expression's own side effects against the intervening statement, so effectful initializers are reordered unsoundly.",
+              "detail": "This pass deliberately does not require the field initializer to be pure, so it may contain calls, local/global sets, or heap/memory writes. The predicate evaluates only `int_mr.may_clobber(expr_mr)`. The reverse direction is never checked: `expr_mr.may_clobber(int_mr)` and write/write conflicts are ignored. Examples that are wrongly accepted:\n- The inner is a Block that does `t = ...` and the intervening statement reads `t`.\n- The inner calls a function that updates global G (or the heap) and the intervening statement reads G or the heap.\n- Both write the same local, so the final value flips.\nAfter the rewrite, the intervening statement sees stale state or the wrong value survives."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "Two calls can be swapped: an intervening call is allowed whenever the inner expression is read-free, for example `Box{ f() }; g(); use` becomes `g(); use(f())`.",
+              "detail": "In `may_clobber`, `calls` blocks the move only when `other` has reads. An inner initializer such as a `Call` with constant arguments has an empty read set. An intervening `Call` is `Control::Linear` and does not trap, so `can_move_past` returns true. The two user calls then execute in the opposite order, which can visibly change output (e.g. println order) or program state."
+            },
+            {
+              "file": "wado-compiler/src/wir_optimize/mod_ref.rs",
+              "summary": "If the inner initializer can trap and the intervening statement has observable side effects but cannot trap, the move makes those side effects happen before a trap that originally preceded them.",
+              "detail": "Condition 3 only rejects the case where both sides may trap. If the inner traps (null `StructGet`, division by zero) and the intervening statement does a global, heap or memory write, or a call to a host function that does not trap, the original program trapped before that effect. The rewritten program performs the effect first and then traps. Host-visible state such as linear memory, globals or printed output differs."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies that can_move_past checks only int_mr.may_clobber(expr_mr) and not the reverse, so an inner call that updates a global can be moved past an intervening read of that global, which is exactly the known defect."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1223,
+      "culprit": 281,
+      "defect": "inflate_get_gzip_header converted each FNAME/FCOMMENT byte to its own char (Latin-1 style), while gzip_compress_with_header wrote the names' UTF-8 bytes, so non-ASCII names and comments came back as mojibake.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Compressing with a preset dictionary produces a non-standard zlib stream: the dictionary bytes are encoded into the output, and the Adler-32 trailer covers dictionary plus data.",
+              "detail": "`DeflateStream::compress_zlib` with `has_dict` deflates `combined` (dict + input) and writes `adler32(combined)` as the trailer, while setting FDICT and the dict id. In real zlib the dictionary only seeds the LZ77 window, so the compressed stream encodes and checksums just the input. A standard inflater given the dictionary will either fail the checksum or emit the dictionary bytes as part of the data. The cross-test `wado_streaming_preset_dict_decompressed_by_zlib_rs` skips decompression with zlib-rs because of this."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "`InflateStream::decompress_zlib` never loads the preset dictionary into the inflate window, so it cannot decode genuine FDICT streams from zlib or other implementations.",
+              "detail": "With FDICT set, the code skips the dict id, inflates with an empty window, then drops the first `dict_len` bytes of the output. A real FDICT stream back-references into the dictionary, so inflating it panics with an invalid distance. If inflation happens to succeed, the code silently removes real data bytes. The dict id is also never compared with `adler32(self.dict)`, so a wrong dictionary is not diagnosed."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "RAW_FORMAT streams with a dictionary return the dictionary prepended to the decompressed data.",
+              "detail": "`compress_raw` with `has_dict` deflates dict + input, so the dictionary bytes become part of the payload. `InflateStream::decompress` for RAW_FORMAT calls `inflate_raw(input)` and ignores the dictionary entirely. A round trip therefore yields dict + data instead of data, and the output is wrong for any standard raw inflater that uses the dictionary."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Lazy matching inserts the current position into the hash chain twice, creating a self-loop `prev[pos] = pos`.",
+              "detail": "At the top of each iteration `pos` is inserted (`prev[pos%32768]=head[h]; head[h]=pos`). In the branch that emits the previous match, the loop `for i in 0..skip-1` starts at `i = 0` and inserts `pos` again, setting `prev[pos] = head[h] = pos`. Later chain walks that reach `pos` keep revisiting it until `max_chain` is exhausted (up to 4096 at level 9). This wastes time and cuts off the older chain entries, so compression gets worse and slower. The last position of each match (`pos+skip-1`) is also never inserted."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "`uncompress2` enforces `max_output` only after decompressing everything, so it does not protect against decompression bombs.",
+              "detail": "`uncompress2` calls `uncompress(input)` with no limit and checks `result.len() > max_output` afterwards. A small malicious input can still expand to gigabytes and exhaust memory before the check runs, which defeats the purpose of an output size limit."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding addresses the decoding of gzip FNAME/FCOMMENT as Latin-1 instead of UTF-8 in bytes_to_string."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Preset-dictionary support is not zlib-compatible: the compressor deflates the dictionary bytes into the stream, and the decompressor inflates without a dictionary window, then drops the first dict.len() bytes.",
+              "detail": "`DeflateStream::compress_zlib` compresses `dict ++ input` and sets FDICT. It also computes the Adler-32 trailer over the combined bytes. Any standard zlib inflater given the dictionary will therefore return the dictionary followed by the data. In the other direction, `InflateStream::decompress_zlib` inflates without preloading the dictionary into the window. Real FDICT streams from zlib/zlib-rs that back-reference the dictionary then fail with an invalid distance, or produce wrong output once dict_len bytes are stripped. The DICTID is also never checked against the supplied dictionary."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Lazy matching re-inserts the current position into the hash chain, creating a self-loop `prev[pos] = pos`, and never inserts the last skipped position.",
+              "detail": "When the deferred match wins, the loop `for i in 0..skip-1` starts at i=0 and inserts `pos` again, although `pos` was already inserted at the top of the iteration. This sets `prev[pos%32768] = head[h] = pos`. Later chain walks that reach `pos` spin on the same candidate until `max_chain` is exhausted, so older candidates are never examined. Position `pos+L-2` is also never hashed. The result is worse compression and far more wasted 258-byte compares at levels 4-9, including the default level."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Gzip file names and comments are corrupted for non-ASCII bytes because `bytes_to_string` turns each byte into its own char.",
+              "detail": "`gzip_compress_with_header` writes the UTF-8 bytes of the name/comment via `get_byte`. `inflate_get_gzip_header` rebuilds the string with `buf[i] as char`, which treats each byte as a Latin-1 code point and re-encodes it. For example, 'é' (2 bytes) becomes two 2-byte characters, so header round-trips and interop with real gzip files produce wrong names and comments."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "`uncompress2` only checks `max_output` after the entire stream has been decompressed, so the limit gives no protection against decompression bombs.",
+              "detail": "The function calls `uncompress(input)` first, which inflates everything into memory, and only then compares the result length with `max_output`. A small malicious input can exhaust memory or trap before the limit is ever checked, defeating the purpose of the size-limited API."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 correctly identifies that bytes_to_string casts each byte to its own char (Latin-1 style) while the compressor writes UTF-8 bytes, which corrupts non-ASCII gzip names and comments."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Preset-dictionary zlib streams are encoded and decoded in a non-standard way, so they do not interoperate with real zlib.",
+              "detail": "`DeflateStream::compress_zlib` with a dictionary deflates `dict ++ input`, so the dictionary bytes become part of the compressed stream. It still sets FDICT and writes a DICTID, and the Adler-32 trailer covers `dict ++ input` instead of only the data. A standard zlib `inflate` + `inflateSetDictionary` will output the dictionary followed by the data and then fail the Adler-32 check.\n\nThe reverse direction is also broken. `InflateStream::decompress_zlib` never seeds the inflate window with the dictionary. It skips the DICTID without checking it against `self.dict`, inflates the raw data, and then drops the first `dict.len()` bytes. A genuine zlib FDICT stream, whose back-references point into the dictionary, fails with an invalid-distance error. A wrong dictionary of a different length silently returns wrong data, because the checksum is computed over the combined bytes."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "In RAW_FORMAT, `DeflateStream` with a preset dictionary emits the dictionary bytes as part of the output.",
+              "detail": "`compress_raw` deflates `dict ++ input` when `has_dict` is true. Any raw inflater, including Wado's own `inflate_raw` and `InflateStream` in RAW_FORMAT, therefore decodes the dictionary followed by the payload. The result is a corrupted, longer output instead of the original data. A preset dictionary should only prime the LZ77 window, not appear in the stream."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "Lazy matching re-inserts the current position into the hash chain, creating a self-loop in `prev[]` that cuts off older match candidates.",
+              "detail": "On the path where the previous match is better, the code has already inserted `pos` this iteration (`prev[pos]=head[h]; head[h]=pos`). The skip loop then starts at `i = 0` and inserts `pos` again, so `prev[pos % 32768] = head[h] = pos`. Later chain walks that reach this node keep visiting `pos` until `chain_count` hits `max_chain`, so every older candidate is unreachable.\n\nThe loop also stops at `skip - 2`, so the last covered position is never inserted. The output still decodes correctly, but at levels 4-9 compression ratio drops and searches do wasted work."
+            },
+            {
+              "file": "wado-compiler/lib/core/zlib.wado",
+              "summary": "`uncompress2` only checks `max_output` after decompressing everything, so the limit protects nothing.",
+              "detail": "`uncompress2` calls `uncompress(input)`, which inflates the entire stream into memory, and only then compares the length against `max_output`. A small malicious input such as a decompression bomb still allocates the full decompressed size, possibly exhausting memory, before the panic. A caller who relies on the size limit to bound memory use is not protected."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings address the Latin-1 versus UTF-8 decoding of gzip FNAME/FCOMMENT in bytes_to_string; they cover dictionaries, lazy matching, and uncompress2 limits."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1313,
+      "culprit": 1307,
+      "defect": "The wasm-size combined page drops every benchmark name that lacks a ' (-Ox)' suffix, and wasm-size programs carry no such suffix, so no graphs are rendered.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": ".github/pages/runtime-index.html",
+              "summary": "The opaque y-axis overlay covers the left edge of the scrolled chart, so tooltips and points that render under it are hidden.",
+              "detail": "Once the chart is scrolled (it starts at the right edge), the overlay sits above the leftmost `area.left` pixels of the visible area. It has `pointer-events: none` and a white fill. Hovering a point under the overlay still triggers that point's tooltip, but the tooltip is drawn on the main canvas beneath the overlay. So it is partly or fully hidden. The overlay is refreshed from canvas x = 0, not from the scrolled position, so it never shows the tooltip. The same happens in `wasm-size-index.html`."
+            },
+            {
+              "file": ".github/pages/wasm-size-index.html",
+              "summary": "The 'Download data as JSON' button builds an unencoded `data:` URL, so the downloaded JSON is truncated or corrupted.",
+              "detail": "`'data:,' + JSON.stringify(data, null, 2)` is used without `encodeURIComponent`. The data includes commit messages, and a `#` in any of them (e.g. 'fix #123') starts a URL fragment. Everything after it is dropped, so the downloaded file is invalid JSON. Characters such as `%` can also be decoded incorrectly."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "Neither finding mentions that names without an optimization-level suffix are skipped during grouping, which is why no wasm-size graphs render; the findings cover overlay tooltips and data URL encoding."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": ".github/pages/runtime-index.html",
+              "summary": "The opaque y-axis overlay hides chart content behind it once the chart is scrolled, including data points, lines and tooltips near the left edge of the visible area.",
+              "detail": "The overlay is pinned to the left of the wrapper and filled with opaque white plus a copy of the canvas's leftmost `area.left` pixels. It never reflects the current scroll position. After the user scrolls right, the visible part of the canvas under that strip still holds plotted points and lines, and Chart.js draws tooltips there too. All of that is now covered by a static axis image. Because the overlay has `pointer-events: none`, hovering that strip still activates hidden points and opens tooltips that cannot be seen. Clicking it still opens commit URLs for points the user cannot see. The same code is duplicated in wasm-size-index.html."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "The only finding is about the y-axis overlay hiding chart content. It does not cover the grouping logic that drops wasm-size names lacking an optimization-level suffix."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": ".github/pages/wasm-size-index.html",
+              "summary": "The 'Download data as JSON' button builds a `data:` URL from raw `JSON.stringify` output without `encodeURIComponent`, so the download is truncated or corrupted.",
+              "detail": "Commit messages in the benchmark data routinely contain `#` (for example `(#1307)`). In a URL, `#` starts the fragment, so everything after the first `#` is dropped from the downloaded file. Characters like `%` can also make the URL malformed. The result is truncated, invalid JSON. Encoding the payload, e.g. `'data:application/json,' + encodeURIComponent(...)`, avoids this."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "The only finding is about unencoded data URLs in the JSON download button, not the grouping logic that drops benchmark names lacking an optimization-level suffix."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1529,
+      "culprit": 1528,
+      "defect": "The culprit, a dependency-update chore, changed the extension's package `name` from `wado` to `wado-vscode`, which changes the VS Code extension ID (`wado-lang.wado` → `wado-lang.wado-vscode`) and breaks identity for installs, publishing and references.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Bumping `@types/vscode` to `latest` (1.125.0) while `engines.vscode` stays at `^1.85.0` makes `vsce package`/`vsce publish` fail.",
+              "detail": "vsce checks that the `@types/vscode` version is not newer than `engines.vscode`. It aborts with an error like \"@types/vscode ^1.125.0 greater than engines.vscode ^1.85.0\". The previous pin `^1.85.0` matched the engine range, so packaging the extension now breaks. The typings also let the code use APIs that do not exist in the declared minimum VS Code 1.85, which can crash at runtime on older VS Code versions."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Renaming the package `name` from `wado` to `wado-vscode` changes the extension identifier from `wado-lang.wado` to `wado-lang.wado-vscode`.",
+              "detail": "The VS Code extension ID is `publisher.name`. Changing it means a published extension would ship as a new, different extension rather than an update, so existing users would not receive updates. Any code that looks up the extension by ID would also stop finding it and fail, for example tests calling `vscode.extensions.getExtension('wado-lang.wado')` or configuration and command contributions tied to the ID."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Switching `typescript` to the `rc` tag pulls in TypeScript 7 (the native port), which drops `tsserver` and the JS compiler API and removes or changes legacy compiler options.",
+              "detail": "TypeScript 7.0.1-rc ships only a native `tsc` binary; the lockfile shows `tsserver` gone from `bin`. TS 7 removes deprecated options and module-resolution modes that TS 6 still accepted. Any build or test script or tsconfig relying on them (e.g. `moduleResolution: node`/`node10`, `target: ES5`, or tooling importing `typescript` as a library) will fail to compile. That would break `npm run compile` and the test pipeline with a pre-release compiler."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 identifies the package name change from `wado` to `wado-vscode` and explains that it changes the extension ID to `wado-lang.wado-vscode`, which is exactly the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Renaming the package `name` from `wado` to `wado-vscode` changes the extension identifier from `wado-lang.wado` to `wado-lang.wado-vscode`.",
+              "detail": "In VS Code the extension ID is `publisher.name`, so this change has three effects:\n- Any code or test that calls `vscode.extensions.getExtension('wado-lang.wado')` now gets `undefined`.\n- References to the old ID in other configuration also break.\n- Publishing creates a separate Marketplace extension, so existing installs stop receiving updates and users can end up with two copies registering the same language and grammar.\n\nA dependency-update PR should not change this."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "`@types/vscode` changed from `^1.85.0` to `latest` (1.125) while `engines.vscode` stays `^1.85.0`, so code can compile against APIs that are missing in supported VS Code versions.",
+              "detail": "The typings now describe VS Code 1.125. Any new API used by the extension will typecheck but throw at runtime (undefined function or property) on VS Code 1.85–1.124, which the manifest still claims to support. `vsce` normally guards against `@types/vscode` exceeding `engines.vscode`, but a non-semver `latest` specifier does not give a usable range to compare. The lockfile pins 1.125.0, which confirms the mismatch."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Pinning `typescript` to the `rc` dist-tag (7.0.1-rc, the native Go port) drops `tsserver` and the JS compiler API, and makes builds track whatever is tagged `rc`.",
+              "detail": "TypeScript 7 no longer ships the `tsserver` binary or the `require('typescript')` programmatic API, and it removes deprecated compiler options. Build or test scripts that rely on any of these will fail. The `rc` tag also moves: after the next pre-release, a fresh install or lockfile regeneration will silently pull a different, possibly newer pre-release compiler. That makes builds non-reproducible and exposes them to pre-release regressions."
+            },
+            {
+              "file": "wado-vscode/package-lock.json",
+              "summary": "Downgrading `@vscode/test-cli` to 0.0.11 pulls in `c8` 9 / `test-exclude` 6 with the deprecated `glob` 7 and memory-leaking `inflight`.",
+              "detail": "Pinning `^0.0.11` replaces `c8` 10 / `test-exclude` 7 with older versions. These bring back `glob@7.2.3`, which is flagged as having publicized vulnerabilities, and `inflight@1.0.6`, which is deprecated because it leaks memory. The lockfile also flips `once` and `wrappy` from optional to required. This is a regression in the dev dependency tree compared to the previous lock."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies the package name change from `wado` to `wado-vscode`, which alters the extension ID to `wado-lang.wado-vscode` and breaks installs, publishing and references; that is exactly the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Pinning `@types/vscode` to `latest` (1.125.0) while `engines.vscode` stays `^1.85.0` makes `vsce package`/`publish` fail.",
+              "detail": "vsce checks that the `@types/vscode` version is not newer than `engines.vscode` and aborts with \"@types/vscode ^1.125.0 greater than engines.vscode ^1.85.0\". Packaging the extension breaks. If `engines.vscode` were raised instead, older VS Code versions would be dropped; meanwhile the typings let code use APIs that are missing on 1.85."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Renaming the package `name` from `wado` to `wado-vscode` changes the extension identifier from `wado-lang.wado` to `wado-lang.wado-vscode`.",
+              "detail": "The VS Code extension ID is `publisher.name`. After the rename, existing installs and marketplace listings are treated as a different extension, so users do not get updates. Any code or test that looks the extension up by its old ID (e.g. `vscode.extensions.getExtension('wado-lang.wado')`) will return undefined and fail."
+            },
+            {
+              "file": "wado-vscode/package.json",
+              "summary": "Switching `typescript` to the `rc` tag installs the native TypeScript 7 RC, which removes the `tsserver` binary and the JS compiler API and drops legacy compiler options.",
+              "detail": "The lockfile shows `typescript@7.0.1-rc` exposing only `tsc`, delivered through platform-specific native optional packages. Several things can break builds or CI on otherwise valid setups: tooling that relies on `tsserver` or `require('typescript')`, tsconfig options removed in 7.0, and platforms without a prebuilt binary. A floating `rc` tag also makes the toolchain non-reproducible."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 identifies the rename of `name` from `wado` to `wado-vscode` and explains that it changes the extension ID to `wado-lang.wado-vscode`, which is exactly the known defect."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1585,
+      "culprit": 1526,
+      "defect": "write_atomic named its temp file only by process id, so concurrent threads in one process writing the same cache path shared one temp file and could rename it out from under each other, causing failed writes.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/build_dep.rs",
+              "summary": "A locked generator version is used even when it no longer satisfies the `[build-dependencies]` requirement, so a stale `wado.lock` silently pins the old generator.",
+              "detail": "`resolve_build_dependencies` and `CliGeneratorProvider::resolve_version` take `locked_versions.get(package)` whenever it is present. They never check it against the manifest's `version` requirement or the lock's `deps-hash`. Example: bump `\"wado-lang:gale\" = { version = \"^0.0.9\" }` to `^0.1.0` without running `wado update`, and both compile and `wado fetch` keep pulling and running 0.0.9 with no diagnostic. The same applies to `[dependencies]` components via `registry_component_needs`/`locked_registry_versions` in wado-lsp: it trusts any lock entry by id, regardless of the requirement."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "The integrity digest recorded in `wado.lock` is never checked when a registry generator (or library component) is pulled or read from the cache.",
+              "detail": "`wado update` records `integrity` for each `[[build-dependency]]`. However, `resolve_spec`, `fetch_build_dependencies` and `dep_component::pull_component` pull the artifact by tag, never compare it with the locked digest, and write it into the shared `~/wado` cache. Later builds then trust that cached file unconditionally (`is_file()` / `try_read_spec_cache`). A re-tagged or compromised registry artifact, or a tampered cache file, is executed as a build-time generator or composed into the output without detection. This defeats the lock's integrity pinning."
+            },
+            {
+              "file": "wado-cli/src/cache.rs",
+              "summary": "`write_atomic` names its temp file only by process id, so concurrent writers inside one process (parallel async resolutions) share and clobber the same temp file.",
+              "detail": "The temp path is `component.tmp-<pid>`. Two tasks in the same `wado` process can write the same cache entry at once, for example the generator specs `lib:gale` and `wado-lang:gale`. They have different module keys but resolve to the same coordinate and version, hence the same cache path. Both tasks truncate and write the same temp file concurrently, and one renames it into place while the other is still writing. This can publish a truncated or partial `component.wasm`, which the `is_file()` cache check then trusts permanently. The error is also swallowed by `write_spec_cache`."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "An `@version` pin in `module:` overrides the declared `[build-dependencies]` requirement and the lock without any validation.",
+              "detail": "In `resolve_version` an explicit pin returns immediately. So `module: \"wado-lang:gale@0.0.1\"` runs 0.0.1 even when the manifest requires `^0.0.9` and the lock pins 0.0.9. There is no diagnostic for the mismatch. In inline mode a pin also silently wins over a conflicting `generator.version`."
+            },
+            {
+              "file": "wado-lsp/src/host.rs",
+              "summary": "`cache_root` only consults `WADO_ROOT` and `HOME`, so on platforms without `HOME` (Windows) every registry dependency and generator fails to resolve.",
+              "detail": "With neither variable set, `cache_root()` returns `None`. Every registry dependency then lands in `unresolved` with a 'set WADO_ROOT' reason, and `cache::root()` errors. On Windows `HOME` is normally unset (`USERPROFILE` is used), so compile, fetch and LSP resolution of registry deps break there unless the user sets `WADO_ROOT` manually."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 identifies the pid-only temp file name in write_atomic, which lets concurrent writers in the same process share and clobber one temp file; this is the same root cause the fix addresses."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "A `wado.lock` generator pin is used without checking it against the manifest's version requirement, so a stale lock silently selects a version the manifest no longer allows.",
+              "detail": "`resolve_version` returns `locked_versions.get(package)` before it looks at `req`. `locked_generator_versions` builds that map from the lock with no `deps-hash` staleness check and no `req.matches()` test. Suppose the user bumps `\"wado-lang:gale\" = { version = \"^0.1\" }` but keeps a lock pinned to 0.0.9: the compile, `check` and `wado fetch` keep pulling 0.0.9 with no diagnostic. The map is also keyed only by coordinate (registry ignored), so a pin recorded for a different registry is applied too."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "Registry generator components are pulled and cached by tag only; the lock's recorded `integrity` digest is never verified.",
+              "detail": "`wado update` records the manifest digest of the `core-kiln-generator` artifact as `integrity`. However, `resolve_spec`, `fetch_build_dependencies` and `try_read_spec_cache` fetch by mutable OCI tag and execute the bytes without comparing them to the locked digest. A re-pushed or tampered tag runs a different generator at build time, silently. This defeats the reproducibility and supply-chain guarantee the lock appears to provide."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "A `lib:` nickname spec with no `[build-dependencies]` entry is treated as a literal registry coordinate `lib:<nick>` and fetched from the registry.",
+              "detail": "In the inline/single-file branch, `package = parts.key`, which can be `lib:gale`. `lib:` is a reserved alias namespace, not a publishable coordinate. When a default registry exists, the provider lists tags and pulls from `<registry>/lib/<nick>/core-kiln-generator`. The user gets a confusing network or 'no published version' failure instead of an error that the nickname is undeclared. The inline path has no `package` field to supply the real coordinate, so the alias can never resolve correctly."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "A path build-dependency that declares no `core:kiln/generator` world now produces a wrong error claiming the source is git/workspace.",
+              "detail": "`rewrite_build_dep_modules` leaves the module as `Spec` when the path dependency has no generator world entry. `resolve_spec` then finds the entry and hits the `let ... Registry ... else` branch. It reports \"must resolve to a registry or path [build-dependencies] entry; git and workspace sources are not supported\", even though the entry is a path dependency. The previous specific 'declares no [world].\"core:kiln/generator\" entry' diagnostic is lost."
+            },
+            {
+              "file": "wado-cli/src/build_dep.rs",
+              "summary": "`fetch_build_dependencies` reports every resolved entry as fetched, so `wado fetch` over-counts.",
+              "detail": "The function skips already-cached generators but returns `resolved.len()`, while its doc says it returns the number pulled. `wado fetch` adds this to its component count and prints a 'Fetched ...' line for each generator, even when nothing was downloaded."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings mention write_atomic's temp file being named only by pid, or threads in one process clobbering each other's temp file."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_wit.rs",
+              "summary": "Options field, record and enum names recovered from the component WIT are kept in kebab-case, so multi-word generator options can never be matched by Wado use-site option keys.",
+              "detail": "WIT record fields and enum cases are kebab-case: a Wado `max_depth` field is lowered to `max-depth`. `record_descriptor` copies `field.name` verbatim into the `OptionsDescriptor`, and enum variants are copied the same way. Inline `options: { max_depth: 1 }` keys are Wado identifiers and cannot contain `-`. Any registry generator with a multi-word option therefore either rejects the supplied key as unknown or reports the required `max-depth` field as missing, because WIT carries no defaults. The canonical options sent to the generator would also use names that do not match the source-path descriptor."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "Registry generator components (code executed at build time) are pulled and cached by mutable version tag without verifying the integrity digest pinned in `wado.lock`.",
+              "detail": "`wado update` records `integrity` (the manifest digest) in `[[build-dependency]]`. `resolve_spec`, `fetch_build_dependencies` and `try_read_spec_cache` only use the version tag: they pull `<repo>/core-kiln-generator:<ver>` and trust whatever bytes come back, and later trust whatever file sits in `~/wado/`. A re-pushed or compromised tag, or a tampered shared cache, silently substitutes the generator that runs during compilation. The lock's integrity pin provides no protection."
+            },
+            {
+              "file": "wado-cli/src/build_dep.rs",
+              "summary": "The locked generator version is used unconditionally, even when the lock is stale and no longer satisfies the `[build-dependencies]` requirement.",
+              "detail": "`resolve_build_dependencies` and the provider's `resolve_version` take `locked_versions.get(package)` whenever an entry exists. They never check the version against the manifest `version` requirement or the lock's `deps-hash`. Suppose a user bumps `\"wado-lang:gale\" = { version = \"^0.1\" }` but does not run `wado update`. `wado fetch`, `check` and `compile` keep silently using the old 0.0.x generator, which violates the declared requirement and gives no staleness diagnostic."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "In single-file inline mode a `lib:` nickname specifier is used directly as the registry coordinate.",
+              "detail": "When the key is not in `[build-dependencies]`, `resolve_spec` sets `package = parts.key`. For `module: \"lib:gale\"` with an inline `registry`/`version`, this lists tags and pulls `lib/gale/core-kiln-generator` from the registry, which is a nonexistent repository. The inline generator form has no `package` field, so `lib:` cannot be resolved. The specifier should instead be rejected with a clear error."
+            },
+            {
+              "file": "wado-cli/src/kiln_provider.rs",
+              "summary": "An explicit `@version` pin in a generator specifier is accepted verbatim, without validation and without checking it against the build-dependency requirement or the lock.",
+              "detail": "`resolve_version` returns `pin` immediately. A range such as `wado-lang:gale@^0.1` becomes a literal OCI tag, causing a confusing fetch failure. An exact pin outside the declared `[build-dependencies]` requirement silently overrides both the requirement and the lock pin, so the build no longer reproduces `wado.lock`."
+            },
+            {
+              "file": "wado-lsp/src/host.rs",
+              "summary": "`cache_root` only consults `WADO_ROOT` and `HOME`, so registry dependencies never resolve on platforms without `HOME` such as Windows.",
+              "detail": "When neither variable is set, `cache_root()` returns None. Every registry need then errors with `set WADO_ROOT`, and `crate::cache::root()` fails `wado compile`/`fetch` with \"cannot locate the home directory\". On Windows, `USERPROFILE` is the usual home variable, so registry deps and generators break by default."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings mention write_atomic's temp file being named only by pid, nor the races between threads in the same process that this causes."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1672,
+      "culprit": 1667,
+      "defect": "When a provider's dependency was dead-code-eliminated and never added to dep_instances, compose_dependency_components bailed with 'no composed dependency imports provider interface' instead of skipping the unused provider, so compilation failed.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/codegen/component.rs",
+              "summary": "A provider whose dependency is imported but never called makes composition fail with \"no composed dependency imports provider interface\".",
+              "detail": "`resolve_inline_providers` builds a provider for every `use ... with { provider }` directive in every loaded module, whether or not the dependency is used. `dep_instances` holds only assets whose interfaces or world functions appear in the import plan. A dependency that is imported with a provider but never called is therefore never instantiated. The provider loop then finds no importer and runs `anyhow::bail!`. As a result an unused (or not-yet-used) import breaks the build in the composition step instead of compiling or giving a source diagnostic."
+            },
+            {
+              "file": "wado-compiler/src/wir_build/component_imports.rs",
+              "summary": "`imported_cm_interface_fqs` still lists guest-effect interfaces that a provider satisfies and composes away.",
+              "detail": "World-function entries are dropped here because `wasm-compose` removes them. A `Component` entry, however, still inserts every `host_leaf_imports_for(fq)`, and that includes the guest-effect FQ (e.g. `test:hlc/highlight`) that a provider now satisfies. The consumer's reported import surface (world checks / embedded WIT) therefore claims a non-WASI import the final composed artifact no longer has. That can wrongly reject the program for a fixed WASI world, or embed an incorrect contract."
+            },
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "`register_lib_guest_effect_imports` rejects or registers every non-`#[cm]` interface in the entry module, including effects fully handled inside the library.",
+              "detail": "The collision check and the registration loop run over all interfaces in the entry module without checking whether the effect actually escapes the library boundary. An effect that is handled internally, or any plain interface whose kebab name equals the package interface (e.g. `Hltest` in package `hltest`), makes `--lib` compilation fail with a spurious \"collides\" error. Every such interface also gets a minted CM import identity even though it never becomes an import."
+            },
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "Guest effects declared in non-entry modules of a `--lib` package are never registered as CM imports.",
+              "detail": "`register_lib_guest_effect_imports` is passed only the entry module (`entry`). A library whose unhandled effect interface lives in a submodule and escapes through a facade `export fn` gets no registration. It falls back to the unresolved-call ICE this change was meant to remove."
+            },
+            {
+              "file": "wado-compiler/src/wit_consume.rs",
+              "summary": "World-level function signatures that use component-defined named types are not rejected and will ICE in codegen.",
+              "detail": "`emit_world_function` maps each param and result type with an empty interface FQ (`map_type(resolve, p.ty, \"\")`), and no check rejects named types. `generate_cm_world_func_imports` documents that such signatures are rejected, yet calls `wado_type_to_cm_val_type` with empty type-index maps. Importing a component whose world function takes or returns a record, variant, etc. therefore panics or produces a wrong encoding instead of giving a diagnostic."
+            },
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "World-level function imports are keyed only by bare name, so same-named functions from different dependencies (or a local function) silently overwrite each other.",
+              "detail": "`register_world_import` writes `effect_to_func[func_name]` and `world_import_functions`. `register_component_decls` writes `world_import_sources[name]`. Two component dependencies that both export a world function `highlight` overwrite each other's signature and source. Calls from one dependency's binding then fail the source check or bind to the other's signature. Composition would also try to connect both dependencies to the single program import."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies the same root cause: a dependency that is never used is absent from dep_instances, so the provider loop finds no importer and bails with 'no composed dependency imports provider interface', which breaks the build."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-lsp/src/lib.rs",
+              "summary": "The LSP always passes an empty provided-import set to `check_semantics`, so code that relies on `with { provider: ... }` gets a false missing-effect error in the editor.",
+              "detail": "The batch compiler discharges a reconstructed guest effect (e.g. `Highlight` required by `Hlc::wrap`) when a provider is supplied. The LSP never runs `resolve_inline_providers` and calls `check_semantics(&sem, IndexSet::default())`. A file like `provider_surface.wado`, which compiles and runs, therefore shows `missing effect 'Highlight' required by 'Hlc::wrap'` in the editor. `check_effects_semantic` and `check_default_purity_semantic` also hard-code an empty set."
+            },
+            {
+              "file": "wado-compiler/src/synthesis/cm_binding.rs",
+              "summary": "World-level function imports have their effects cleared unconditionally, ignoring the dependency component's own host-leaf or guest imports.",
+              "detail": "For a world function the adapter's `effects` are cleared, and `imported_cm_interface_fqs` drops `ImportKind::WorldFunction` entirely. A dependency whose world-level export uses WASI (e.g. stdout) or imports a guest interface is still treated as pure. Effect checking then never requires the capability or a handler or provider. The composed component keeps the dependency's leftover imports, but they are missing from the computed import set and world contract. The result is a missed diagnostic, and an artifact whose declared imports do not match what it actually needs."
+            },
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "World-level function imports are keyed globally by bare snake-case name, so two dependencies exporting the same function name collide.",
+              "detail": "`world_import_functions`, `world_import_sources` and `effect_to_func` are all keyed by the bare function name. A second dependency exporting e.g. `highlight` overwrites the first one's source and `CmFunctionInfo`, so calls can route to the wrong dependency. In `compose_dependency_components`, both assets also match `world_func_cm_names` and both get connected to the same program import, which makes `graph.connect` fail with a composition error."
+            },
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "`register_lib_guest_effect_imports` mints CM imports for every non-`#[cm]` interface in the entry module and maps every declared method parameter, including any receiver.",
+              "detail": "Any user `interface` in a `--lib` entry module is registered as a CM import whose CM names come from kebab-cased Wado names. All `method.params` are mapped into CM params without excluding a `self` receiver. If an interface is used as a trait with `&self` methods rather than as an effect, its methods get bogus import signatures that include a self parameter. The lowering could then emit a malformed import or misroute trait calls."
+            },
+            {
+              "file": "wado-cli/src/compile.rs",
+              "summary": "The documented `--implement <fq>` flag is never parsed: `parse_args` hard-codes `lib_interface_export: false`.",
+              "detail": "`CompileOptions::lib_interface_export` is documented as the CLI's `--implement <fq>`, but `parse_args` always sets it to false and no option sets it. A user cannot build a provider component from the CLI; the build silently produces a plain library whose exports may not be grouped under the interface the consumer imports."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings flag the bail in compose_dependency_components when a provider has no dependency instance importing its interface because the dependency was dead-code-eliminated; finding 2 touches compose_dependency_components but about colliding world function names."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/component_model.rs",
+              "summary": "World-level function imports are keyed only by their bare name, so two component dependencies that export a world function with the same name overwrite each other.",
+              "detail": "`world_import_functions`, `world_import_sources` and `effect_to_func` are all keyed by `func.name` alone. If two dependencies both export e.g. `highlight`, the second registration replaces the first `CmFunctionInfo` and `ModuleSource`. Calls to the first dependency's function then fail the `world_import_source(name) == Some(&module_source)` check and are never retargeted to an adapter, leaving an unresolved call. At composition, both assets list `highlight` in `component_world_func_names`, so both try to `connect` to the same single program import, which fails."
+            },
+            {
+              "file": "wado-compiler/src/codegen/component.rs",
+              "summary": "A provider directive on a dependency the program never calls makes composition bail with \"no composed dependency imports provider interface\".",
+              "detail": "A dependency is only instantiated and pushed into `dep_instances` when its interfaces or world functions appear in the import plan. Providers from `with { provider: ... }` are always passed through, and the early return is skipped whenever `providers` is non-empty. If the consumer imports `hlc.wasm` with a provider but never calls into it (or the calls are removed), no dependency instance exists. The provider loop then hits `anyhow::bail!`, and an otherwise valid program fails to compile."
+            },
+            {
+              "file": "wado-compiler/src/lib.rs",
+              "summary": "Each `provider:` directive builds its own provider, so the same dependency imported with a provider from two modules or two use decls is wired twice and composition fails.",
+              "detail": "`resolve_inline_providers` creates one job per use decl, with no deduplication by dependency or interface FQ. Two use decls naming the same component with a provider produce two `ProviderComponent`s with the same `import_fq`. `compose_dependency_components` then connects both provider exports to the same dependency import. The second `graph.connect` fails because the import is already satisfied, so compilation fails, and the provider is also compiled twice."
+            },
+            {
+              "file": "wado-compiler/src/wir_build/component_imports.rs",
+              "summary": "World-level function imports drop the dependency's host-leaf (WASI) imports from both effect checking and the surviving import set.",
+              "detail": "`imported_cm_interface_fqs` maps `ImportKind::WorldFunction` to nothing, on the assumption that the dependency function is pure. `generate_import_adapters` also clears the adapter's effects for world imports. A component that exports a world-level function but itself imports e.g. `wasi:filesystem` keeps that import after composition. The consumer is never charged the reconstructed effect, which is a missed diagnostic, and the import is missing from the computed imported-interface set used for the world contract."
+            },
+            {
+              "file": "wado-compiler/src/codegen/component.rs",
+              "summary": "A world function whose signature uses a component-defined named type is not rejected as documented and instead hits an internal panic.",
+              "detail": "The doc comment says named types in a world function signature are rejected. Nothing produces such a diagnostic, though. `emit_world_function` maps types with an empty interface fq, and `generate_cm_world_func_imports` calls `wado_type_to_cm_val_type` with empty type-index maps. A record or variant in the signature therefore reaches an unresolved-type lookup or panic (ICE) instead of a user-facing error."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 1,
+            "reason": "Finding 1 describes the same root cause: the dependency is never added to dep_instances because it is unused or eliminated, so the provider loop bails with 'no composed dependency imports provider interface' instead of skipping the provider."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1680,
+      "culprit": 897,
+      "defect": "walk_and_delete propagated NotFound errors from read_dir, the directory entries, file_type and remove_file, so a file or directory removed concurrently during output reconcile aborted the whole pipeline with an I/O error.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "`host::read-file` passes any path the generator chooses straight to `load_source`, so a generator can read files outside the project (absolute paths, `..`).",
+              "detail": "`read_file` calls `self.host.load_source(&path)` without checking the path. A third-party generator (a registry build-dependency) can read `../../home/user/.ssh/id_rsa`, `/etc/passwd` and similar, and copy the contents into generated output. This defeats the sandbox the module docs claim. The read is also recorded as a cache input, which makes such paths look legitimate."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "`cache_matches` never compares the recorded generator identity, so changing the generator module version still hits the cache.",
+              "detail": "`run_pipeline` reuses a prior entry when `options_hash` matches and `cache_matches` returns true. `cache_matches` checks the primary file, inputs, reads and outputs, but never checks `entry.generator` against `generator_identity(&invocation.module)`. If `module` changes from `ns:proto@1.0.0` to `ns:proto@2.0.0`, the outputs from the old generator are silently kept as fresh."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Changing an invocation's `output-dir` still produces a cache hit, so nothing is generated in the new directory.",
+              "detail": "`cache_matches` only re-hashes the output paths recorded in the lockfile, which are under the old directory. It never checks that they lie inside the current `invocation.output_dir`. After `output-dir` is edited, the old files still exist and hash correctly, so the entry is reused. The new output directory stays empty and consumers that resolve against it break. The old files are kept because the reconcile pass scans the new directory, not the old one."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Output paths with `.` segments (such as `./lib.wado` or `a/./b.wado`) are recorded in a form that `reconcile_outputs` does not recognise, so the freshly generated file is deleted.",
+              "detail": "`validate_rel_output_path` accepts `CurDir` components. `InvocationPath::normalize` only strips a leading `./` from the whole string, so the recorded path stays `build/kiln/x/./lib.wado`. `walk_and_delete` builds `build/kiln/x/lib.wado` from `read_dir`, finds it missing from the kept set, and deletes the file just written. The next run then misses the cache because the file is gone, so the generator re-runs every time."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Reconciliation is done per output directory using only that invocation's kept list, so nested output directories delete each other's generated files.",
+              "detail": "`kept_by_dir` is keyed by the exact `output_dir` string. Take one invocation with `output-dir = \"build/kiln\"` and another using the default `build/kiln/<name>`. `reconcile_outputs` on `build/kiln` recurses into the other invocation's directory and deletes its `#![generated]` files, because they are not in the outer directory's kept list. The lockfile then records outputs that no longer exist."
+            },
+            {
+              "file": "wado-manifest/src/validate.rs",
+              "summary": "`validate_module_spec` matches only `namespace:name` against `[build-dependencies]` and ignores the version, so mismatched versions pass validation.",
+              "detail": "The doc comment says the `ns:name@ver` prefix must match a build-dependency. The check compares only `package == ns_name`, so `module = \"ns:proto@9.9.9\"` is accepted next to `proto = { version = \"^1.0.0\" }`. That spec string is then used verbatim as the generator identity, with no diagnostic for the incompatible version."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "A `read-file` call that fails with not-found is not recorded, so creating that file later does not invalidate the cache.",
+              "detail": "`KilnHostState::read_file` pushes a `GeneratorReadRecord` only on success. A generator that probes include paths (trying `a/x.proto`, then `b/x.proto`) depends on the earlier lookups failing. If a file later appears at an earlier probe path, `cache_matches` reports a hit and stale output is reused."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings address walk_and_delete propagating NotFound errors when a file or directory is removed concurrently; the findings about walk_and_delete deal with path normalization and nested output directories."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "The cache-hit decision ignores the generator identity, so changing `module` (e.g. bumping the generator version) reuses stale outputs from the old generator.",
+              "detail": "`run_pipeline` filters the prior lockfile entry only by `options_hash`. `cache_matches` then checks primary, inputs, reads and output hashes, but never compares `entry.generator` with `generator_identity(&invocation.module)`. If a user changes `module = \"ns:proto@1.0.0\"` to `@2.0.0` without touching the schema, the cache reports a hit. The old generator's output is kept and the new generator never runs."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Changing an invocation's `output-dir` still produces a cache hit, so nothing is generated in the new directory and the old directory is left behind.",
+              "detail": "`cache_matches` validates the recorded output paths, which still point at the old directory and still exist on disk. It does not check that they lie under `invocation.output_dir`. The prior entry is reused and `kept_by_dir` is keyed by the new directory while listing the old paths. As a result the new `output_dir` stays empty, consumers resolving from it break, and the old directory is never reconciled."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Reconciliation deletes another invocation's freshly generated outputs when one invocation's output directory is nested inside another's.",
+              "detail": "`reconcile_outputs` walks each output dir recursively, but each `kept` list only contains that invocation's own outputs. With `output-dir = \"gen\"` for one invocation and `\"gen/sub\"` for another, reconciling `gen` deletes every `#![generated]` file under `gen/sub`. That includes outputs written in this same run, and the lockfile still records them, so the next run is forced to miss the cache."
+            },
+            {
+              "file": "wado-cli/src/compiler_host.rs",
+              "summary": "Generator diagnostics, including errors, are relayed to the inner LSP host and are never printed to stderr by the CLI.",
+              "detail": "`run_generator` passes `self.inner.clone()`, an `Arc<wado_lsp::FilesystemCompilerHost>`, as the host. `kiln_runtime::relay_diagnostic` calls `emit_diagnostic` on that inner host. This bypasses the outer `FilesystemCompilerHost::emit_diagnostic`, which applies the log-level filter and prints to stderr. Errors and warnings emitted by a generator are therefore silently dropped for CLI users."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "Diagnostics a generator emitted are lost when the generate call traps, for example on fuel exhaustion or a panic.",
+              "detail": "In `run_generator`, `call_generate(...).await.map_err(...)?` returns early on a trap. The early return happens before the loop that drains `diagnostics` and relays them to the host. Any explanatory diagnostics the generator emitted before failing are discarded, leaving only an opaque 'generate call' host error."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "The `read-file` host import forwards arbitrary generator-supplied paths to `load_source` without confining them to the project.",
+              "detail": "`read_file` passes `path` straight to `host.load_source`, and the filesystem host resolves relative to its base path. A generator, which is third-party code from build-dependencies, can therefore request `../../..`-style or absolute paths and read files outside the project. This contradicts the claimed sandbox, which allows only the two host imports. The read is also recorded into the lockfile `reads`."
+            },
+            {
+              "file": "wado-manifest/src/validate.rs",
+              "summary": "Module spec validation ignores the version, so a `module` version incompatible with the `[build-dependencies]` requirement is accepted.",
+              "detail": "`validate_module_spec` only checks that some registry build-dependency has `package == ns:name`. It parses `version` but never checks it against the dependency's version requirement. `module = \"ns:proto@9.9.9\"` with `proto = { version = \"^1.0.0\" }` passes validation instead of producing a diagnostic."
+            },
+            {
+              "file": ".claude/hooks/mise-setup.sh",
+              "summary": "The GitHub fallback may never trigger when mise.run returns 403, because `curl | sh` reports sh's exit status.",
+              "detail": "Unless the script sets `pipefail`, a failing `curl -fsSL https://mise.run` pipes empty input to `sh`, which exits 0. The `if` then takes the success branch, `$LOCAL_BIN/mise --version` fails, and the fallback is skipped. The 403 case is exactly the scenario the fallback was added for."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings addresses walk_and_delete propagating NotFound errors when files are removed concurrently; finding 2 touches reconcile_outputs but concerns nested output directories deleting another invocation's files."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "The cache check never compares the recorded generator identity with the invocation's current module, so changing the generator version reuses stale outputs.",
+              "detail": "`cache_matches` checks primary, inputs, reads and output hashes, and `run_pipeline` also checks `options_hash`. Nothing compares `entry.generator` with `generator_identity(&invocation.module)`. If a user bumps `module = \"ns:proto@1.0.0\"` to `@2.0.0` without touching the schema or options, the cache hits. The old generator's outputs are kept and the new generator never runs. The cache-key design (`compose_cache_key`) includes generator identity, but the driver never uses it."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Changing an invocation's `output-dir` still produces a cache hit, so the new output directory is never populated.",
+              "detail": "`cache_matches` validates the outputs at their recorded paths, which are still under the old directory, and never checks that they lie under `invocation.output_dir`. After `output-dir` changes, the old files still exist and hash-match, so the entry is reused. `reconcile_outputs` then runs on the new (empty) directory, and consumers resolving the new directory find nothing."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Stale-output reconciliation deletes another invocation's generated files when output directories nest.",
+              "detail": "`reconcile_outputs` walks each output directory recursively, and the kept list contains only the outputs of invocations whose `output_dir` equals that directory string. Two layouts trigger this. One invocation can use `output-dir = \"gen\"` while another uses `gen/sub`. Or one can use `build/kiln` while another uses the default `build/kiln/<name>`. In either case, walking the parent deletes every `#![generated]` file belonging to the child invocation. An output-dir of `.` normalizes to the empty string, so the walk covers the entire project root."
+            },
+            {
+              "file": "wado-manifest/src/validate.rs",
+              "summary": "`validate_module_spec` ignores the version in `module = \"ns:name@ver\"`, so a spec whose version conflicts with the `[build-dependencies]` requirement is accepted.",
+              "detail": "The lookup matches only on `package == ns_name`; the parsed `version` is never checked against the dependency's version requirement. For example, `module = \"ns:proto@9.0.0\"` with `proto = { package = \"ns:proto\", version = \"^1.0.0\" }` passes validation, even though the doc says the `ns:name@ver` prefix must match a build-dependency entry. The mismatch goes undiagnosed, and the unresolved spec string then becomes the cache identity."
+            },
+            {
+              "file": "wado-cli/src/kiln_driver.rs",
+              "summary": "Generator reads of absolute paths are rewritten to relative paths in the lockfile, causing a permanent cache miss.",
+              "detail": "`build_cache_entry` and `cache_matches` pass read paths through `InvocationPath::normalize`, which drops empty segments, so `/abs/x.proto` becomes `abs/x.proto`. The runtime recorded the read using the raw path. On the next run, `matches_file` loads the relative path, which does not exist, and the invocation re-runs on every build."
+            },
+            {
+              "file": "wado-cli/src/kiln_runtime.rs",
+              "summary": "`read-file` forwards arbitrary generator-supplied paths to the filesystem host, so a generator can read files outside the project.",
+              "detail": "`KilnHostState::read_file` passes `path` straight to `load_source` with no check for `..`, absolute paths, or a project-root confinement. A third-party generator (a registry build-dependency) can read things like `~/.ssh/id_rsa` or `/etc/passwd` and embed the contents in its generated output. This undermines the sandbox the WIT world is meant to provide."
+            },
+            {
+              "file": ".claude/hooks/mise-setup.sh",
+              "summary": "The GitHub fallback is effectively unreachable because `curl ... | sh` reports the exit status of `sh`, not `curl`.",
+              "detail": "Unless `pipefail` is set, a 403 from mise.run makes `curl -f` fail, but `sh` reads empty stdin and exits 0. The `if` branch is therefore taken and `install_mise_from_github` never runs. The script then logs a version from a non-existent binary and continues without mise, which is exactly the 403 scenario the fallback was added for."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding addresses NotFound errors from concurrent removal in walk_and_delete; finding 2 concerns nested output dirs deleting other invocations' files, which is a different root cause."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1697,
+      "culprit": 1396,
+      "defect": "The op-only walker (gen_repeat_body) emitted every greedy/non-greedy Optional as a plain one-token first-set check, so it ignored the lowered strategy (lookahead, scan guard, shape lookahead, `??` ATN). Optionals inside LR-suffix bodies were therefore mis-decided.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "The 'no alternative matched' failure was removed for required overlapping SimpleCst and General groups, so invalid input is silently accepted.",
+              "detail": "Two `p.fail(...)?` checks were deleted: `gen_consume_group_store_op` used to emit `if let None = {opt_var} { p.fail(...)? }`, and `gen_general_group_store_op` used to emit `p.fail(\"group alternative\")`. The comment says the enclosing repeat guard already verified a match, but these helpers also handle required standalone groups that sit outside any repeat, e.g. `(a b | a c) EOF`. When the lookahead matches no alternative, the overlap dispatch now takes no arm, appends nothing and parsing continues. No diagnostic is raised at the group, so malformed input can parse cleanly or fail later at an unrelated token."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "Rule-node spans are no longer clamped, so a rule that matched no tokens gets a reversed span (end before start).",
+              "detail": "The old emitter used `gen_clamped_span_field`, i.e. `Span::new(start, i32::max(start, p.last_end()))`. The new wrapper calls `p.b.start_node(rk, p.peek_start())` and `p.b.finish_node(p.last_end())`, and `tree_build_node` copies the Close offset into `end` without clamping it. For a rule that consumes no tokens (e.g. `(sql_stmt)` or `(conflict_clause)` in SQLite), `last_end()` is the end of the previous token, which comes before `peek_start()`. The node therefore gets `Span(start, end)` with end < start, which breaks span-based consumers such as LSP ranges and highlighting."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "On an error, LR rule functions return through `?` while a builder node is still open, so every ancestor in the partial tree gets the wrong Close.",
+              "detail": "`gen_lr_fn` emits `p.b.start_node(rk, _start); _atom(p)?; p.b.finish_node(...)`. Each LR branch likewise emits `start_node_at(...)`, then `gen_ops` (which contains `?`), then `finish_node`. LR rules get no wrapper-level `finish_node`, so an Err leaves one Open event without a matching Close. Each enclosing wrapper's `finish_node` then closes the next-innermost node, shifting every Close up one level. The fail-soft partial tree returned in `ParseResult` ends up mis-nested with wrong spans, and the root is left unclosed."
+            },
+            {
+              "file": "package-gale/src/cst_gen.wado",
+              "summary": "`to_string_subtree` matches an `<error>` region node when the requested rule name is not found.",
+              "detail": "`_kind` starts at -1 and stays -1 when no entry in `GALE_RULE_NAMES` equals `rule`. The function then calls `find_child(-1 as NodeKind)`, and -1 is exactly `K_ERROR`. If the root has an error-region child, the function renders that error subtree instead of returning the documented empty string."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings addresses the op-only walker (gen_repeat_body) emitting Optionals as plain first-set checks and ignoring the lowered strategy. The findings cover removed group-failure checks, span clamping, LR builder nesting on error, and to_string_subtree kind lookup."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Required overlapping SimpleCst and General group stores no longer fail when no alternative matches, so invalid input is accepted without a diagnostic.",
+              "detail": "`gen_consume_group_store_op` and `gen_general_group_store_op` used to emit `if let None = opt { p.fail(...)? }` after the overlap loop. That check is now removed. The required-store overlap path delegates to `gen_simplecst_overlap_loop` / `gen_general_overlap_loop`, which take no arm when nothing matches. As a result a mandatory group consumes nothing and parsing continues. When the group is required but sits outside a scan-guarded repeat, input lacking any group alternative produces no error. The comment's justification (\"the repeat-guard already verified a match\") only holds inside repeats."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "The LR rule function opens builder nodes and then propagates errors with `?` before `finish_node`, so a failed parse leaves unclosed nodes and mis-nests the partial tree.",
+              "detail": "`gen_lr_fn` emits `p.b.start_node(rk, _start); _atom(p)?; p.b.finish_node(...)`. `emit_lr_branch_body` emits `start_node_at(...)` and then suffix ops that use `?`. LR rules get no wrapper node, so nothing closes these opens when an error propagates. The enclosing rule's `finish_node` then closes the LR node instead of its own. Every ancestor ends up shifted by one and the root stays open, so the 'partial tree' returned on error has the wrong structure. This contradicts the stated fail-soft design."
+            },
+            {
+              "file": "package-gale/src/cst_gen.wado",
+              "summary": "`to_string_subtree` uses -1 as the 'not found' kind, which equals `K_ERROR`, so an unknown rule name can return an error-region subtree.",
+              "detail": "`_kind` starts at -1 and is passed to `find_child(_kind as NodeKind)` even when no rule name matched. `K_ERROR` is also -1. If the root has a `<error>` region child, a lookup of a nonexistent or misspelled rule renders that error region instead of returning the empty string."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "Empty rule nodes get reversed spans because the end offset from `finish_node(p.last_end())` is no longer clamped to the start.",
+              "detail": "The typed emitter clamped spans with `Span::new(start, i32::max(start, p.last_end()))`. The new wrapper calls `finish_node(p.last_end())`, and `tree_build_node` copies that `Close` offset into `end` without clamping. For a rule that matches zero tokens (e.g. the empty `(sql_stmt)`), `last_end()` is the previous token's end, which is less than `start`. This yields `Span::new(start, end)` with `end < start`, which can break consumers or trip assertions in `Span::new`."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Every static LR continuation is now gated on a full suffix scan, so a malformed suffix breaks out of the loop and the error is reported at the wrong token.",
+              "detail": "`emit_lr_branch` emits `if scan_X_lr_N(&p.kinds, p.pos) < 0 { break; }` for every branch, not only for suffixes whose first token is shared with the atom. For input like `1 + )`, the `+` suffix scan fails, the loop exits without consuming `+`, and the caller reports an unexpected `+` (e.g. 'expected EOF'). The real problem is the missing operand at `)`, so diagnostic locality regresses."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "`start_node_at` inserts into the middle of the event list, making long left-associative chains quadratic.",
+              "detail": "Each LR loop iteration calls `events.insert(_cp, ...)`, which shifts every event recorded since the checkpoint. For a chain of k binary operators that is O(k²) element moves. Long expressions, such as the Performance descriptors with long `and`/`or` chains or generated SQL, degrade badly."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings say that the op-only walker emits Optional as a plain first-set check and ignores the lowered strategy (lookahead, scan guard, shape, or `??`) inside LR suffixes."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Required overlapping SimpleCst and General groups no longer emit a failure when no alternative matches, so invalid input parses with no diagnostic.",
+              "detail": "`gen_consume_group_store_op` and `gen_general_group_store_op` used to end their overlap paths with `if let None = opt { p.fail(...)? }`. That check is gone, and `gen_simplecst_overlap_loop` / `gen_general_overlap_loop` now just dispatch on `grp_kind`, as does the scan dispatch when every scan fails. If the current token starts none of the alternatives, no arm runs, nothing is consumed and no error is raised. A required group such as `x : 'k' (foo | bar) ;` with overlapping `foo`/`bar` then accepts `k` alone. The comment claims a repeat guard already checked the match, but these store paths also serve required groups that are not inside a Repeat."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "LR rules leave builder nodes open when an error propagates, so the fail-soft partial tree is mis-nested.",
+              "detail": "`gen_lr_fn` emits `p.b.start_node(rk,_start); _atom(p)?; p.b.finish_node(...)`, and `emit_lr_branch_body` emits `start_node_at(...)` before the suffix ops and `finish_node` after them. Any `?` inside the atom or suffix returns before the matching `finish_node`. The LR wrapper deliberately opens no node of its own, so nothing closes it. Every outer wrapper's `finish_node` then closes the wrong (inner) node, and the root ends unclosed. On any syntax error inside an LR rule the tree has wrong parent/child structure and spans, contrary to the promise that wrappers fold open nodes."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "Rule nodes that match zero tokens get reversed spans because the old end clamp was dropped.",
+              "detail": "The wrapper now emits `p.b.start_node(rk, p.peek_start())` and then `p.b.finish_node(p.last_end())`, and the LR paths do the same. When a rule or alternative consumes no tokens (an empty or nullable rule such as SQLite's `(conflict_clause)`), `last_end()` is the end of the previous token, which is before `start`. `tree_build_node` uses that value as the end, giving `Span(start, end)` with end < start. The removed `gen_clamped_span_field` existed specifically to clamp this with `i32::max(start, p.last_end())`."
+            },
+            {
+              "file": "package-gale/src/cst_gen.wado",
+              "summary": "`to_string_subtree` with an unknown rule name looks up kind -1, which equals `K_ERROR`, so it can render an error-region node instead of returning an empty string.",
+              "detail": "The generated helper starts with `_kind = -1` and leaves it at -1 when no name in `GALE_RULE_NAMES` matches. It then calls `result.root.find_child(-1)`. `K_ERROR` is defined as -1, so any `<error>` region child of the root matches and is rendered. The documented behaviour is to return \"\" when the rule is absent."
+            },
+            {
+              "file": "package-gale/src/runtime/tree.wado",
+              "summary": "`start_node_at` inserts into the middle of the event list, making left-associative LR chains quadratic.",
+              "detail": "Each LR continuation calls `events.insert(checkpoint, Open)` at the same checkpoint, which shifts every event recorded since then. For a chain of n binary operators (e.g. `1+2+...+n`, or the long `and`/`or` chains in the Performance descriptors) this costs O(n²) event moves. A parse that was linear in the typed design becomes very slow on long expressions."
+            },
+            {
+              "file": "package-gale/src/parser_gen.wado",
+              "summary": "The public `max_errors` parameter is accepted but ignored.",
+              "detail": "`gen_parse_rule_entry` emits `let _ = max_errors;` and never uses the value. Callers that pass a limit get no different behaviour, although the new `parse(input, max_errors)` signature advertises one."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "None of the findings address the op-only walker emitting Optionals as plain first-set checks while ignoring the lowered strategy (lookahead, scan guard, shape lookahead, or the non-greedy ATN path)."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 1915,
+      "culprit": 1202,
+      "defect": "For path-form method calls like `Scale::scaled(&p, 2, 3)`, the receiver is passed as `args[0]`, but self params were filtered from the parameter-name list, so every label shifted one argument left (`factor:` on `&p`, `bias:` on `2`).",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Static-method calls that pass the receiver explicitly get parameter-name hints shifted by one argument.",
+              "detail": "`hint_static_method_call_args` uses `filter_non_self_param_names`, which drops the `self` parameter, and then zips the remaining names with every argument. For a `Type::method(recv, x)` call to a method declared `fn method(&mut self, by: i32)`, the receiver argument gets labelled `by:`. Any further arguments are also mislabelled or their hints dropped. Static calls should only drop `self` when the callee actually has no self parameter."
+            },
+            {
+              "file": "wado-compiler/src/elaborator.rs",
+              "summary": "`local_types` is a last-write-wins map keyed by the binding's `AstId`, so a body elaborated more than once records the type from whichever elaboration ran last.",
+              "detail": "`record_local_symbol` does `local_types.insert(key, type_id)` on every elaboration of a binding. If a function body is elaborated per instantiation (generic functions, or default expressions re-elaborated at call sites), each pass overwrites the previous entry. The hint then shows one arbitrary instantiation's concrete type (e.g. `: String`) on a binding in generic code instead of the declared type. Hover has the same problem, but the type map makes it user-visible."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Type hints are emitted even when the recorded type is the `UNKNOWN` placeholder, showing a bogus `: unknown`-style label.",
+              "detail": "Several `record_local_symbol` call sites pass a fallback type, e.g. `inner_elems.get(i).copied().unwrap_or(TypeTable::UNKNOWN)` for destructured for-of elements, and code with errors leaves bindings unresolved. `push_type_hint` renders whatever `type_name` returns without filtering unknown or error types. Users therefore see meaningless inline type annotations on erroneous or partially inferred code."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 0,
+            "reason": "Finding 0 identifies that static/path-form method calls use filter_non_self_param_names, dropping self while the receiver is args[0], shifting labels by one — exactly the known defect."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/elaborator.rs",
+              "summary": "`local_types` is keyed only by the binding's `SymbolKey`, so a body elaborated more than once (e.g. generic instantiations) overwrites the recorded type, and the last pass wins.",
+              "detail": "`record_local_symbol` now inserts `type_id` into `local_types` under `(module, def_id)`. If a function body is elaborated more than once, for example once per generic instantiation, the same `let`/param `AstId` is recorded with different concrete `TypeId`s. Overwriting `local_symbols` was harmless because the name and mutability never change, but the type does. An inlay hint on `let y = x;` inside `fn id<T>(x: T)` would then show whatever concrete type the last instantiation used (e.g. `: i32`), which is wrong for the source text."
+            },
+            {
+              "file": "wado-compiler/src/semantics.rs",
+              "summary": "`local_type_name` renders any recorded `TypeId`, including `TypeTable::UNKNOWN` and error types, so editors display garbage `: unknown` hints.",
+              "detail": "The elaborator records `TypeTable::UNKNOWN` in several places, such as a destructured element out of range (`unwrap_or(TypeTable::UNKNOWN)`) or a closure param whose type could not be inferred. It also records error types after a type error. `local_type_name` and `push_type_hint` do no filtering, so these placeholder types are surfaced to the user as inlay hints. The intent was to emit no hint when no type is known."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Static-method calls on methods taking `self` misalign parameter labels because self params are filtered out while the receiver is passed as a positional argument.",
+              "detail": "`hint_static_method_call_args` uses `filter_non_self_param_names`, which drops `&self`/`&mut self`. For a fully-qualified call like `Point::sum(p)` or `Counter::bump(c, 5)`, the receiver is the first positional argument. The labels are then shifted by one: `c` is labelled `by:` and `5` gets no label. The self parameter should only be dropped for `receiver.method(...)` calls."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 points to the same root cause: `hint_static_method_call_args` filters out self params even though the receiver is passed positionally, which shifts every label one argument left."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "wado-compiler/src/elaborator.rs",
+              "summary": "`local_types` is keyed only by the binding's `AstId`, so a body elaborated more than once (e.g. per generic instantiation) overwrites earlier entries and the hint shows whichever concrete type was recorded last.",
+              "detail": "`record_local_symbol` inserts `type_id` into an `IndexMap<SymbolKey, TypeId>` keyed on the binding's AST id. Overwriting the `Symbol` was harmless, since name and mutability are the same every time, but the `TypeId` is not. If a generic function body is elaborated per instantiation, `let x = param;` inside `fn f<T>(param: T)` shows `: i32` or `: String` depending on the last call site. Neither is the declared `T`, and the hint changes as unrelated call sites are edited."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Bindings whose type the elaborator failed to infer still produce a type hint showing the placeholder unknown type.",
+              "detail": "Several `record_local_symbol` call sites pass `TypeTable::UNKNOWN`, for example destructured element types via `unwrap_or(TypeTable::UNKNOWN)`, as well as bindings whose initializer has a type error. `local_type_name` renders any recorded `TypeId` through `type_name`, and `push_type_hint` only skips missing entries. In code that is being edited, the editor therefore shows a misleading `: <unknown>`-style annotation instead of no hint. Neither `push_type_hint` nor `local_type_name` filters out `UNKNOWN`."
+            },
+            {
+              "file": "wado-lsp/src/inlay_hints.rs",
+              "summary": "Static-method calls always drop self params before zipping with arguments, so calling a method that takes self in path form (`Type::method(recv, a)`) mislabels every argument.",
+              "detail": "`hint_static_method_call_args` uses `method_param_names`, which calls `filter_non_self_param_names` unconditionally. For a `&self` method invoked as `Point::sum(p, 3)`, the explicit receiver `p` is labelled with the first non-self parameter name. Every later argument is shifted by one, so the hints are wrong. This only applies if the language allows calling a self-taking method in path form. The filter is only correct for the `receiver.method(...)` form."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 2,
+            "reason": "Finding 2 says path-form static-method calls filter out self params, which shifts every argument label one slot left. That is the same root cause the fix addressed."
+          },
+          "error": null
+        }
+      ]
+    },
+    {
+      "fix": 2310,
+      "culprit": 1545,
+      "defect": "The block parser let any list marker (e.g. a wrapped `2010) b` line), a link reference definition, or any HTML-tag-like line interrupt an open paragraph, and blockquotes had no lazy continuation, so the formatter rewrote paragraph text into lists, ref defs, or HTML blocks.",
+      "runs": [
+        {
+          "findings": [
+            {
+              "file": "package-marl/src/fmt_html.wado",
+              "summary": "`render` panics when a list item contains a link reference definition line.",
+              "detail": "`parse_blocks` turns a `[x]: /url` line into a `Node::LinkReferenceDef` at any nesting level, including inside list items. `render_blocks` skips these nodes, but `render_item_children`/`render_item_child` do not. The node therefore reaches `render_block`, whose catch-all arm panics with \"unexpected node in block position\". Input such as `- [a]: /url` makes `render` crash instead of producing HTML."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Angle-bracketed link destinations containing spaces are printed without their `<...>`, which corrupts the link on reformat.",
+              "detail": "`parse_dest_and_title` strips the `<` and `>`, so `[a](<x y> \"T\")` stores url `x y`. `print_dest_and_title` and `print_link_ref_def` then emit `(x y \"T\")`. On reparse the destination becomes `x`, and `y` is read as a non-quoted title that is dropped. The destination and title are silently lost; images and reference definitions have the same problem."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "A nested list that follows a blank line inside a list item is split off into a separate top-level list.",
+              "detail": "In `parse_list`, a blank line only continues the item when the next line is not a list marker (`parse_list_marker(...) matches { None }`), whatever its indentation. For `- a\\n\\n  - nested`, the indented `- nested` ends the item. The outer loop then rejects it because its indent differs, and `parse_blocks` parses it as a new list. The printer emits it at column 0, so the nesting is lost and the output reparses as a loose sibling item."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_inline.wado",
+              "summary": "The `keep_asterisk` rule only looks at the character after the closer, so intraword `*` emphasis that opens after an alphanumeric is rewritten to `_` and stops being emphasis.",
+              "detail": "`resolve_pair` sets `keep_asterisk` only from `closer.next_is_alnum`. For `foo*bar* baz`, the opener is preceded by `o`, but the closer is followed by a space, so the printer emits `foo_bar_ baz`. `_` cannot open intraword, so the formatted output renders literal underscores instead of emphasis."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Code spans whose content contains a double-backtick run are printed with a `` delimiter, which closes the span early.",
+              "detail": "`print_code_span` uses `` `` `` whenever the content contains any backtick, without checking the longest backtick run. Content such as ``a``b`` (from ``` ```a``b``` ```) is printed as ``` ``a``b`` ```. On reparse the span ends at the inner run, so the code span's content and structure change."
+            },
+            {
+              "file": "wado-compiler/src/elaborator/closure.rs",
+              "summary": "An explicit closure return type skips the missing-return check, so a block body that can fall off the end is accepted.",
+              "detail": "With `declared_return` set, `return_type` takes the declared type directly. This bypasses the `ast_find_return_type_in_block` / `ast_block_always_exits` validation used for block bodies. For example, `|x: i32| -> i32 { if x > 0 { return 1; } }` gets no diagnostic. That can lead to invalid Wasm or undefined behaviour instead of a compile error. The body's tail type is also never checked against the annotation."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Adjacent lists with different bullet characters are normalized to `-` and merge into one list on reparse.",
+              "detail": "`parse_list` correctly splits `- a\\n* b` into two lists because the delimiters differ. `print_list` emits `-` for both, separated by a blank line, which reparses as a single loose list. Formatting therefore changes the document structure and is not idempotent with the AST."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "Setext `---` headings are parsed as a paragraph followed by a thematic break, so formatting turns a heading into body text plus a rule.",
+              "detail": "`Title\\n---` is a level-2 heading in CommonMark/GFM. `parse_blocks` checks `is_thematic_break` and flushes the paragraph, and the printer then emits `Title\\n\\n---`. That renders as a paragraph and an `<hr>`, silently changing the document's meaning."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "Table body rows with more cells than the header lose their extra cells when formatted.",
+              "detail": "`cells_to_nodes` keeps only the first `ncol` cells of each row, and `print_table` writes back only those. Any extra cell text in the source is permanently deleted from the file by the formatter."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Link titles that contain a double quote are re-emitted inside double quotes, which breaks the title on reparse.",
+              "detail": "`read_title` accepts `'...'` and `(...)` titles, which may contain `\"`. `print_dest_and_title` and `print_link_ref_def` always wrap the title in `\"...\"` without escaping. For a title such as `'say \"hi\"'`, the reparsed title is truncated at the inner quote."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding covers paragraphs being wrongly interrupted by list markers, link reference definitions or type-7 HTML lines, or the missing lazy continuation for blockquotes; the block-parser findings are about nested lists after blank lines, setext headings and table cells."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-marl/src/fmt_html.wado",
+              "summary": "`render` panics when a list item contains a link reference definition.",
+              "detail": "`parse_blocks` turns a line like `[foo]: /url` inside a list item (e.g. `- [foo]: /url`) into a `Node::LinkReferenceDef` child of the item. `render_blocks` skips these nodes, but `render_item_child` sends every non-paragraph child straight to `render_block`. `render_block` has no arm for `LinkReferenceDef`, so it hits `panic(\"marl-html: unexpected node in block position\")`. Valid Markdown input therefore aborts the renderer."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "A nested list that follows a blank line inside a list item is split off as a separate top-level list.",
+              "detail": "In `parse_list`, a blank line only continues the item if the next line does not start with a list marker (`parse_list_marker(...) matches { None }`), whatever its indentation. So in `- a\\n\\n  - b` the item ends at the blank line. The outer loop then rejects `  - b` because its indent differs from the base indent, and `parse_blocks` parses it as an independent list. `render` produces the wrong structure, and `format` prints it as `- a\\n\\n- b`, which reparses as one loose two-item list: the nesting is lost."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Normalizing `*` emphasis to `_` breaks emphasis whose opener directly follows an alphanumeric character.",
+              "detail": "`keep_asterisk` only checks whether the character after the closing `*` is alphanumeric. For `foo*bar* baz`, the printer emits `foo_bar_ baz`. An intraword `_` cannot open emphasis, so the reformatted file renders literal underscores instead of emphasis. The formatter silently changes the document's meaning."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Adjacent lists that differ only by bullet or delimiter are merged into one loose list.",
+              "detail": "The parser starts a new list when the marker changes (`- a\\n* b`, or `1.` vs `1)`). The printer, however, normalizes all bullets to `-` and all ordered delimiters to `.`, and separates the two lists with a blank line. The output `- a\\n\\n- b` reparses as a single loose list, so both structure and rendering change."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "`print_code_span` produces a broken span when the code contains a run of two or more backticks.",
+              "detail": "The delimiter is always `` ` `` or ``` `` ``` and never longer than the longest internal backtick run. For content ``a``b`` the printer emits ```` ``a``b`` ````, which reparses as code `a` followed by literal text `b```. Any code span whose content has a double-backtick run is corrupted on format."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Link destinations and titles are printed without the quoting that kept them valid.",
+              "detail": "`parse_dest_and_title` strips `<...>` around destinations and records only the title text. `print_dest_and_title` and `print_link_ref_def` emit the URL bare and always wrap the title in `\"`. So `[a](<http://x/a b>)` becomes `[a](http://x/a b)`, which reparses with URL `http://x/a`, and a title `'say \"hi\"'` becomes a malformed `\"say \"hi\"\"`. Formatting breaks these links."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_inline.wado",
+              "summary": "Trailing double-space hard line breaks are silently dropped, so formatting changes rendered output.",
+              "detail": "The whitespace arm of `tokenize` discards any space run that is followed by `\\n` and emits a `SoftBreak`. A CommonMark/GitHub hard break written as `a  \\nb` therefore becomes a soft break. `format` rewrites the file without the two spaces, and the line break disappears from the rendered document."
+            },
+            {
+              "file": "wado-compiler/src/elaborator/closure.rs",
+              "summary": "An explicit closure return type bypasses the missing-return check.",
+              "detail": "When `declared_return` is set, `return_type` is taken from it directly. This skips the `ast_find_return_type_in_block` / `ast_block_always_exits` logic that diagnoses block bodies which can fall through without returning. A closure such as `|x: i32| -> i32 { if x > 0 { return 1; } }`, or one with an empty body, is accepted with no diagnostic, even though the non-returning path yields unit for a declared `i32`. This can lead to invalid code generation instead of a compile error."
+            }
+          ],
+          "grade": {
+            "hit": false,
+            "finding": -1,
+            "reason": "No finding identifies list markers, link reference definitions, or HTML-like lines wrongly interrupting a paragraph, or the missing lazy continuation in blockquotes. The closest is the nested-list-after-blank-line issue, which is a different root cause."
+          },
+          "error": null
+        },
+        {
+          "findings": [
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "Any paragraph line shaped like `[label]: word ...` is taken as a link reference definition, so the formatter silently deletes the rest of the line.",
+              "detail": "`try_ref_def_line` accepts any `[x]: ` line. `parse_dest_and_title` then keeps only the first word as the URL. `read_title` returns \"\" when the next character is not a quote, and nothing checks for trailing garbage. So `[Warning]: be careful` becomes a definition with url `be`, and `format` prints `[Warning]: be`, dropping ` careful`. `render` drops the whole line from the HTML output."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Link and image destinations lose their angle brackets, and titles are always re-quoted with `\"`, which breaks links on reformat.",
+              "detail": "`parse_dest_and_title` strips `<...>` from destinations and drops the original title delimiter. `print_dest_and_title` and `print_link_ref_def` then emit the bare URL and `\"title\"`. `[a](<x y>)` becomes `[a](x y)`, which is no longer a link. A `'say \"hi\"'` title becomes `\"say \"hi\"\"`, which mis-parses on the next run."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_inline.wado",
+              "summary": "Trailing-two-space hard breaks are silently turned into soft breaks by the formatter.",
+              "detail": "The space/tab branch of `tokenize` drops all whitespace before a `\\n` and never emits `HardBreak` for two or more trailing spaces. `a  \\nb`, which GFM renders with `<br>`, is reformatted to `a\\nb` and loses the line break."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Single emphasis is rewritten from `*` to `_` even when the opening delimiter is intraword, which destroys the emphasis.",
+              "detail": "`keep_asterisk` only looks at the character after the closer (`next_is_alnum`). `foo*bar*` is emphasis with `*`, but `print_emphasis` emits `foo_bar_`. An intraword `_` cannot open emphasis, so the reformatted text renders as literal underscores."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "`print_code_span` always uses a double-backtick delimiter when the content has any backtick, which corrupts spans whose content contains a run of two or more backticks.",
+              "detail": "For code content `a``b` the printer emits ``` ``a``b`` ```. On reparse the inner `` `` `` closes the span early, so the code text changes and the formatter is neither faithful nor idempotent. The delimiter must be longer than the longest internal backtick run."
+            },
+            {
+              "file": "package-marl/src/fmt_print.wado",
+              "summary": "Adjacent lists that differ only in bullet character or ordered delimiter are merged into one loose list by the formatter.",
+              "detail": "The parser splits `- a\\n* b` (or `1. a\\n1) b`) into two `List` nodes. `print_list` normalizes every bullet to `-` and every delimiter to `.`, and `print_block_sequence` separates the lists with a blank line. On reparse that is a single loose list, so structure and rendering change."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "Setext `---` underlines are treated as a thematic break, so the formatter turns a level-2 setext heading into a paragraph followed by a horizontal rule.",
+              "detail": "`parse_blocks` checks `is_thematic_break` on a line directly after paragraph text and flushes the paragraph. `Title\\n---` (a CommonMark h2) is printed as `Title\\n\\n---`, which changes the document's meaning."
+            },
+            {
+              "file": "package-marl/src/fmt_parse_block.wado",
+              "summary": "A line starting with an inline HTML tag interrupts an open paragraph, and the formatter then inserts a blank line that splits the paragraph.",
+              "detail": "`is_html_block_start` is checked before paragraph continuation and accepts any tag (CommonMark type 7, which cannot interrupt a paragraph). `text\\n<code>x</code> more` is split into a Paragraph plus an Html block. The printer separates them with `\\n\\n`, changing the rendered output."
+            },
+            {
+              "file": "package-marl/src/fmt_html.wado",
+              "summary": "`render` now treats a leading `---` ... `---` pair as front matter and drops all content between them.",
+              "detail": "Previously `render` produced `<hr />` for a leading `---`. Now `try_front_matter` runs unconditionally in `parse`, and `render_blocks` skips FrontMatter nodes. A document like `---\\n\\nIntro text\\n\\n---\\nmore` loses `Intro text` from the HTML entirely."
+            },
+            {
+              "file": "wado-compiler/src/elaborator/closure.rs",
+              "summary": "An explicit closure return type bypasses the missing-return check for block bodies.",
+              "detail": "With `declared_return` set, `return_type` takes it directly and skips the `ast_find_return_type_in_block` / `ast_block_always_exits` path that diagnosed blocks that don't always return. `|x: i32| -> i32 { if x > 0 { return 1; } }` is accepted without a diagnostic and can produce invalid Wasm, because the block falls through with a unit value against an i32 return."
+            }
+          ],
+          "grade": {
+            "hit": true,
+            "finding": 7,
+            "reason": "Finding 7 reports that a line beginning with an inline (type-7) HTML tag interrupts an open paragraph and splits it, which is one of the paragraph-interruption bugs the fix addresses."
+          },
+          "error": null
         }
       ]
     }
