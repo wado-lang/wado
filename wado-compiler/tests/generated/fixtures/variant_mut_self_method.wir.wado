@@ -340,11 +340,12 @@ fn "variant_mut_self_method.wado/run"() with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($vc_payload_1_22, out_130.repr, out_130.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($vc_payload_1_22 = $sroa_$pattern_temp_0_1_14_66; $sroa_$pattern_temp_0_1_14_66 = 0; $vc_payload_1_22);
     $vc_payload_1_22 = builtin::array_len(local.tee elements(array.new_fixed<ref "variant_mut_self_method.wado//P">(struct.new "variant_mut_self_method.wado//P::A" { discriminant: 0, payload_0: struct.new "variant_mut_self_method.wado//Cell" { v: black_box(1) } })));
-    if ref.test "variant_mut_self_method.wado//P::A"(local.tee $load_0(if @unlikely(0 >= $vc_payload_1_22) {
+    if @unlikely(0 >= $vc_payload_1_22) {
         cold_path;
         "variant_mut_self_method.wado/run$cold1$dae[$contract_arg_0]"($vc_payload_1_22);
         unreachable;
-    }; struct.new "core:prelude/types.wado//Box<variant_mut_self_method.wado/P>" { value: builtin::array_get_value<ref "variant_mut_self_method.wado//P">(elements, 0) }.value)) {
+    }
+    if ref.test "variant_mut_self_method.wado//P::A"(local.tee $load_0(builtin::array_get_value<ref "variant_mut_self_method.wado//P">(elements, 0))) {
         ref.cast "variant_mut_self_method.wado//P::A"($load_0).payload_0.v = 9;
     } else {
     }
@@ -1389,10 +1390,9 @@ fn "core:prelude/traits.wado/variant_mut_self_method.wado/G<i32>^core:prelude/tr
         start_24 = f.used;
         f.used = new_used_23;
         builtin::array_copy<u8>(f.repr, start_24, global:core:prelude/traits.wado::$const_obj_111, 0, 3);
-        if @unlikely(self.discriminant != 0) {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(if @unlikely(self.discriminant != 0) {
             unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(ref.cast "variant_mut_self_method.wado//G<i32>::One"(self).payload_0, f);
+        }; ref.cast "variant_mut_self_method.wado//G<i32>::One"(self).payload_0, f);
     }
     if self.discriminant == 1 {
         if @unlikely(local.tee start_24(f.used + 1) > builtin::array_len(f.repr)) {
@@ -1471,10 +1471,9 @@ fn "core:prelude/traits.wado/variant_mut_self_method.wado/P^core:prelude/traits.
         new_used_23 = f.used;
         f.used = start_24;
         builtin::array_copy<u8>(f.repr, new_used_23, global:core:prelude/traits.wado::$const_obj_114, 0, 1);
-        if @unlikely(self.discriminant != 1) {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(if @unlikely(self.discriminant != 1) {
             unreachable;
-        }
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]$spec0$sroa[f.buf]"(ref.cast "variant_mut_self_method.wado//P::B"(self).payload_0, f);
+        }; ref.cast "variant_mut_self_method.wado//P::B"(self).payload_0, f);
     }
 }
 
