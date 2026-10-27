@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793080008478,
+  "lastUpdate": 1793099892358,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71489,6 +71489,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295381,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "58a9c63124c3dee26a2a129d76549b1383003485",
+          "message": "Merge pull request #2475 from wado-lang/ccr-ec399f5e-rr4qpq\n\nfeat(jade): derive a JSON Schema from any Wado type",
+          "timestamp": "2026-10-27T19:54:52+09:00",
+          "tree_id": "73a07524d3cf6dcdbd4f939cdd803832fc79dec3",
+          "url": "https://github.com/wado-lang/wado/commit/58a9c63124c3dee26a2a129d76549b1383003485"
+        },
+        "date": 1793099891481,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295291,
             "unit": "bytes"
           }
         ]
