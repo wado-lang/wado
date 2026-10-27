@@ -241,6 +241,7 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
         tick: 0,
         last_write: hashmap::IndexMap::default(),
         aliased_writes: Vec::new(),
+        reached: hashmap::IndexMap::default(),
         last_call: 0,
         pending: hashmap::IndexMap::default(),
         stale: hashmap::IndexSet::default(),
@@ -276,6 +277,8 @@ struct BindWalk<'e, 'a> {
     tick: u64,
     last_write: hashmap::IndexMap<u32, u64>,
     aliased_writes: Vec<(u64, Stored)>,
+    /// Whether a type reaches an object kind, by both their keys.
+    reached: hashmap::IndexMap<(TypeKey, TypeKey), bool>,
     last_call: u64,
     pending: hashmap::IndexMap<u32, PendingBind>,
     stale: hashmap::IndexSet<u32>,
@@ -385,7 +388,7 @@ impl BindWalk<'_, '_> {
                     .any(|&(_, stored)| {
                         p.reads
                             .as_ref()
-                            .is_none_or(|kinds| stored.may_change(self.engine, kinds))
+                            .is_none_or(|kinds| stored.may_change(self.engine, kinds, &mut self.reached))
                     }))
             || (p.escaped && written_since(self.last_call));
         if stale {
@@ -1123,12 +1126,24 @@ enum Stored {
 
 impl Stored {
     /// Whether this store may change a read through objects of `kinds`, which
-    /// [`read_kinds`] named.
-    fn may_change(self, engine: &Engine, kinds: &[TypeKey]) -> bool {
+    /// [`read_kinds`] named. `reached` remembers each type walk, which every
+    /// read of a bind would otherwise repeat for each store since it.
+    fn may_change(
+        self,
+        engine: &Engine,
+        kinds: &[TypeKey],
+        reached: &mut hashmap::IndexMap<(TypeKey, TypeKey), bool>,
+    ) -> bool {
         let types = engine
             .value_graph_type_table()
             .expect("kinds are read off the type table");
-        let reaches = |ty: TypeId| kinds.iter().any(|&k| types.reaches_object(ty, k));
+        let mut reaches = |ty: TypeId| {
+            kinds.iter().any(|&k| {
+                *reached
+                    .entry((types.type_key(ty), k))
+                    .or_insert_with(|| types.reaches_object(ty, k))
+            })
+        };
         match self {
             Stored::Slot { container, value } => {
                 kinds.contains(&types.object_kind(container)) || reaches(value)

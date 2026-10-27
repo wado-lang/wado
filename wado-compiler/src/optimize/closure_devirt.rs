@@ -287,10 +287,10 @@ impl ClosureDevirtRule {
         engine: &mut Engine,
         call: ExprId,
     ) -> Option<(ExprId, &CallTarget)> {
-        let ExprKind::IndirectCall { callee, args } = &engine.body.exprs[call].kind else {
+        let ExprKind::IndirectCall { callee, .. } = &engine.body.exprs[call].kind else {
             return None;
         };
-        let (callee, args) = (*callee, args.clone());
+        let callee = *callee;
         // Naming the functor's local drops the callee operand, and with it
         // whatever the trace saw through — an inlined helper's writes, say.
         if !is_pure_nontrapping_operand_typed(engine.body, callee, engine.value_graph_type_table())
@@ -298,7 +298,10 @@ impl ClosureDevirtRule {
             return None;
         }
         let canonical = resolve_canonical(engine, callee, MAX_DEPTH)?;
-        let target = self.target(engine, canonical, &args)?;
+        let ExprKind::IndirectCall { args, .. } = &engine.body.exprs[call].kind else {
+            unreachable!("matched an IndirectCall above");
+        };
+        let target = self.target(engine, canonical, args)?;
         // A `$call` that takes no env names no functor, so nothing ties the
         // call to where the wrapper sits.
         (!target.takes_env() || runs_before(engine, canonical, call)).then_some((canonical, target))

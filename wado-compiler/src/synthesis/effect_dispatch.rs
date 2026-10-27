@@ -1282,10 +1282,12 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
             lower_dispatch_in_expr(left, env, ctx);
             lower_dispatch_in_expr(right, env, ctx);
         }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before dispatch")
+        }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
-        | TirExprKind::ListViewOf { value: expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
@@ -2040,10 +2042,12 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 self.visit_expr(left);
                 self.visit_expr(right);
             }
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion before dispatch")
+            }
             TirExprKind::Unary { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Move { expr: inner }
-            | TirExprKind::ListViewOf { value: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
             | TirExprKind::TupleSpread { expr: inner }
             | TirExprKind::TupleZip { expr: inner }
@@ -2872,10 +2876,12 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             rewrite_calls_in_expr(left, ctx);
             rewrite_calls_in_expr(right, ctx);
         }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before dispatch")
+        }
         TirExprKind::Unary { expr, .. }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
-        | TirExprKind::ListViewOf { value: expr }
         | TirExprKind::FieldAccess { expr, .. }
         | TirExprKind::TupleSpread { expr }
         | TirExprKind::TupleZip { expr }
