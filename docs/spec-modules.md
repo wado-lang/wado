@@ -239,7 +239,9 @@ A URL names a [Wasm asset](#wasm-module-and-component-imports) the same way,
 pinned by the same rules.
 
 A remote module reaches no local file. A `./` or `../` path inside it, whether
-in a `use` or an `#include_*`, names the URL beside the module.
+in a `use` or an `#include_*`, names the URL beside the module. No `use` names
+an included file, so only `wado.lock` pins it, and a file in no package cannot
+import a remote module that includes one.
 
 ## Symbol Notation
 
@@ -438,7 +440,7 @@ test "a .txt file under generator is a generator's input" {
 
 ## Wasm Module and Component Imports
 
-A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
+A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path, or a URL ([Remote Modules](#remote-modules)).
 
 | Imported file | Exposes as                                                   | Call style                                                                      |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |

@@ -300,6 +300,32 @@ fn a_file_in_no_package_must_pin_a_remote_module() {
         );
 }
 
+/// No `use` names a remote module's include, so the lock pins it as it does the
+/// module.
+#[test]
+fn the_lock_pins_a_remote_module_s_include() {
+    let server = Server::start();
+    server.serve(
+        "note.wado",
+        b"pub fn exclaim(s: String) -> String { return `${s}${#include_str(\"./mark.txt\")}`; }\n",
+    );
+    server.serve("mark.txt", b"?");
+    let project = tempfile::tempdir().unwrap();
+    let wado_root = tempfile::tempdir().unwrap();
+    write_package(project.path(), &main_using(&server.url("note.wado"), ""));
+
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("remote?\n");
+    let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
+    assert!(
+        lock.contains(&format!("url = \"{}\"", server.url("mark.txt"))),
+        "{lock}"
+    );
+}
+
 /// A pin written anywhere holds every `use` of the URL, whichever the loader
 /// reaches first, a Wasm asset's as a module's.
 #[test]

@@ -70,6 +70,9 @@ pub enum LoadError {
     IncludeNotFound { path: String },
     /// An `#include_*` path that is not `./` or `../` relative.
     InvalidIncludePath { path: String },
+    /// A remote include where no lock governs the module: no `use` names an
+    /// include, so nothing else can pin it.
+    UnpinnedInclude { url: String },
     /// A namespaced import (`ns:pkg`, `lib:nick`) that no dependency declares.
     /// Every namespace but the bundled `core` and `wasi` is one a dependency
     /// supplies. `manifest` is the `wado.toml` it would be declared in.
@@ -181,9 +184,14 @@ impl std::fmt::Display for LoadError {
             LoadError::InvalidIncludePath { path } => {
                 write!(
                     f,
-                    "invalid include path '{path}'; it starts with './' or '../'"
+                    "invalid include path '{path}'; an include path starts with './' or '../'"
                 )
             }
+            LoadError::UnpinnedInclude { url } => write!(
+                f,
+                "cannot pin '{url}': only a `wado.lock` pins a remote module's include, \
+                 and none governs this module"
+            ),
             LoadError::UndeclaredDependency {
                 name,
                 manifest: Some(manifest),
@@ -303,6 +311,7 @@ impl LoadError {
             SourceError::NotFound { .. } => LoadError::IncludeNotFound {
                 path: name.to_string(),
             },
+            SourceError::Unpinned { url, .. } => LoadError::UnpinnedInclude { url },
             err => Self::reading(err, name),
         }
     }
@@ -316,7 +325,9 @@ impl LoadError {
             LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
             LoadError::IoError { .. } | LoadError::IncludeNotFound { .. } => Code::FileReadError,
             LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
-            LoadError::RemoteIntegrity(_) => Code::RemoteIntegrity,
+            LoadError::RemoteIntegrity(_) | LoadError::UnpinnedInclude { .. } => {
+                Code::RemoteIntegrity
+            }
             LoadError::InvalidIntegrity { .. } => Code::ImportAttrInvalid,
             LoadError::ModuleNotFound { .. }
             | LoadError::UndeclaredDependency { .. }
@@ -2445,7 +2456,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                 .map_or(ms_str.as_str(), String::as_str);
             let resolved =
                 resolve_include_path_impl(entry_module_source.as_deref(), module_path, raw_path);
-            // No include writes a pin, so a remote one is held to the lock's.
             let bytes = self
                 .host
                 .load_file(&resolved, None, None)

@@ -164,9 +164,9 @@ This WEP does not design the browser playground integration. It requires only th
 ## Known Gaps
 
 - The server reads no [remote module](./spec-modules.md#remote-modules). Its
-  host has no `load_remote`, so every `use` of a URL reports the module missing,
-  or unpinned where `wado.lock` pins it. The server runs in a browser too, where
-  a fetch is a different capability than on the desktop.
+  host has no `load_remote`, so every `use` of a URL reports the module missing.
+  The server runs in a browser too, where a fetch is a different capability than
+  on the desktop.
 
 ## See Also
 
