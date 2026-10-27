@@ -12,7 +12,7 @@ use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
-use crate::remote::is_remote;
+use crate::remote::{is_remote, resolve_url};
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
@@ -1945,10 +1945,14 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
 }
 
 /// Resolve an import against the importing module's path: base `./sub/main.wado`
-/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and authority.
+/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and
+/// authority, and a remote one resolves as a URL reference does.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
     if has_special_prefix(relative) {
         return relative.to_string();
+    }
+    if is_remote(base) {
+        return resolve_url(base, relative);
     }
     let (origin, base_path) = split_uri_origin(base);
     let joined = match base_path.rfind('/') {

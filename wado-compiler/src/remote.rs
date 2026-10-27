@@ -32,6 +32,55 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
         .then_some("`http://` names only `localhost`, `127.0.0.1` or `[::1]`; use `https://`")
 }
 
+/// The URL `relative` names beside `base`, as RFC 3986 §5 resolves a
+/// reference. A URL's path is the server's, so its empty segments stay, and its
+/// query and fragment are not part of the directory.
+#[must_use]
+pub fn resolve_url(base: &str, relative: &str) -> String {
+    let authority = base.find("://").expect("a remote URL names its scheme") + 3;
+    let path_at = base[authority..]
+        .find(['/', '?', '#'])
+        .map_or(base.len(), |at| authority + at);
+    let (origin, rest) = base.split_at(path_at);
+    let base_path = &rest[..rest.find(['?', '#']).unwrap_or(rest.len())];
+    let (path, tail) = relative.split_at(relative.find(['?', '#']).unwrap_or(relative.len()));
+    let merged = if path.starts_with('/') {
+        path.to_string()
+    } else {
+        let dir = base_path.rfind('/').map_or("/", |at| &base_path[..=at]);
+        format!("{dir}{path}")
+    };
+    format!("{origin}{}{tail}", remove_dot_segments(&merged))
+}
+
+/// RFC 3986 §5.2.4 over an absolute `path`: each `.` goes, and each `..` takes
+/// the segment before it, an empty one included.
+fn remove_dot_segments(path: &str) -> String {
+    let mut kept: Vec<&str> = Vec::new();
+    let mut segments = path
+        .strip_prefix('/')
+        .expect("a merged URL path is absolute")
+        .split('/')
+        .peekable();
+    while let Some(segment) = segments.next() {
+        match segment {
+            "." => {}
+            ".." => {
+                kept.pop();
+            }
+            _ => {
+                kept.push(segment);
+                continue;
+            }
+        }
+        // A path ending in a dot segment names the directory it leaves.
+        if segments.peek().is_none() {
+            kept.push("");
+        }
+    }
+    format!("/{}", kept.join("/"))
+}
+
 /// The pin an `integrity` key's `value` writes, or why it writes none, worded
 /// to follow the key's name.
 ///
@@ -204,6 +253,17 @@ mod tests {
         assert!(Integrity::parse(&format!("sha512:{hex}")).is_none());
         assert!(Integrity::parse(&format!("sha256:{}", hex.to_uppercase())).is_none());
         assert!(Integrity::parse(&format!("sha256:{}", &hex[1..])).is_none());
+    }
+
+    #[test]
+    fn a_url_reference_keeps_empty_segments_and_leaves_the_query() {
+        let resolve = |relative| resolve_url("https://h.test/lib//a.wado?v=/x#top", relative);
+        assert_eq!(resolve("./b.wado"), "https://h.test/lib//b.wado");
+        assert_eq!(resolve("../b.wado"), "https://h.test/lib/b.wado");
+        assert_eq!(resolve("../../../b.wado"), "https://h.test/b.wado");
+        assert_eq!(resolve("./d/../"), "https://h.test/lib//");
+        assert_eq!(resolve("/b.wado?q"), "https://h.test/b.wado?q");
+        assert_eq!(resolve_url("https://h.test", "./b.wado"), "https://h.test/b.wado");
     }
 
     #[test]
