@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793110785034,
+  "lastUpdate": 1793120094546,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71621,6 +71621,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295291,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a142dc457d4ad2c617f64a4581df2aaf51433629",
+          "message": "Merge pull request #2477 from wado-lang/loam-cpu-perf\n\nfeat(linear): Loam keeps Gemma 3's weights outside the GC heap",
+          "timestamp": "2026-10-28T01:29:15+09:00",
+          "tree_id": "50b8b19ccf1a95210ce66d940d8ff082016611dc",
+          "url": "https://github.com/wado-lang/wado/commit/a142dc457d4ad2c617f64a4581df2aaf51433629"
+        },
+        "date": 1793120093555,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295756,
             "unit": "bytes"
           }
         ]
