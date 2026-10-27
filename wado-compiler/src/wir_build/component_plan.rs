@@ -8,7 +8,7 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, cm_primitive_of, wado_primitive_name_to_cm};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{INTERNAL_PREFIX, to_cm_name};
-use crate::package::test_selected;
+use crate::package::TestSelection;
 use crate::tir::TirTest;
 use crate::world_registry::{
     CALLBACK_INTERFACE, CallbackExport, GuestCallback, WorldExportInfo, WorldInfo, WorldRegistry,
@@ -192,7 +192,7 @@ pub fn build_component_plan(
     is_test_world: bool,
     target_world: &str,
     tests: &[TirTest],
-    test_name_filters: &[String],
+    test_selection: &TestSelection,
     export_binding_names: &IndexMap<String, String>,
     post_return_binding_names: &IndexMap<String, String>,
     world_registry: &WorldRegistry,
@@ -228,7 +228,7 @@ pub fn build_component_plan(
             // exports we plan match the adapters that survived early DCE.
             // Unselected tests have no adapter and were dropped; planning them
             // here would reference a function that no longer exists.
-            .filter(|test| test_selected(test.name.as_deref(), test_name_filters))
+            .filter(|test| test_selection.selects(test))
             .map(|test| {
                 let export_name = test_export_name(&test.function_name);
                 let core_func_name = export_binding_names

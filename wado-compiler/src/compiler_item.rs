@@ -725,6 +725,8 @@ pub enum CompilerItem {
     I64MulWideSSoft,
     /// `core:rt::coverage_probe`.
     CoverageProbe,
+    /// `core:rt::coverage_report`.
+    CoverageReport,
     /// `core:rt::handle_class`.
     HandleClass,
     /// `core:rt::inspect_handle`.
@@ -1029,6 +1031,7 @@ impl CompilerItem {
         Self::I64MulWideUSoft,
         Self::I64MulWideSSoft,
         Self::CoverageProbe,
+        Self::CoverageReport,
         Self::HandleClass,
         Self::InspectHandle,
         Self::MemoryToGcString,
@@ -1246,6 +1249,7 @@ impl CompilerItem {
             Self::I64MulWideUSoft => "i64_mul_wide_u_soft",
             Self::I64MulWideSSoft => "i64_mul_wide_s_soft",
             Self::CoverageProbe => "coverage_probe",
+            Self::CoverageReport => "coverage_report",
             Self::HandleClass => "handle_class",
             Self::InspectHandle => "inspect_handle",
             Self::MemoryToGcString => "memory_to_gc_string",
@@ -1360,6 +1364,7 @@ impl CompilerItem {
             | Self::I64MulWideUSoft
             | Self::I64MulWideSSoft
             | Self::CoverageProbe
+            | Self::CoverageReport
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString
@@ -1665,6 +1670,7 @@ impl CompilerItem {
             | Self::I64MulWideUSoft
             | Self::I64MulWideSSoft
             | Self::CoverageProbe
+            | Self::CoverageReport
             | Self::HandleClass
             | Self::InspectHandle
             | Self::MemoryToGcString

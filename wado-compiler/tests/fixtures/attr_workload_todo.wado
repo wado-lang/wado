@@ -1,0 +1,13 @@
+// A workload must return, so a `#[TODO]` test, which traps until the feature
+// lands, is none, whichever of the two is written first.
+
+#[workload]
+#[TODO]
+test "pending" {
+    panic("TODO");
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":5:1: analysis error: `workload` cannot mark a test that `TODO` marks: a workload must return, and such a test traps by design", "compile_error_codes": ["ATTR_MISUSE"]}

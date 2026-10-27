@@ -1,7 +1,7 @@
 //! `--test-name` compile-time filtering and the `org.wado-lang.test-names` section.
 //!
 //! `wado test --test-name <pattern>` is implemented by passing the substring
-//! filters into `CompilerOptions::test_name_filters`. Only `test "name"` blocks
+//! filters into `CompilerOptions::test_selection`. Only `test "name"` blocks
 //! whose name contains a filter are exported from the test-world component; the
 //! rest lose their `is_cm_export` adapter and are removed by early DCE, so they
 //! are never present in the output. The compiler also writes a
@@ -39,7 +39,10 @@ test "日本語 ok" {
 fn compiled_test_names(filters: &[&str]) -> Vec<(String, Option<String>)> {
     let options = wado_compiler::CompilerOptions {
         target_world: Some("test".to_string()),
-        test_name_filters: filters.iter().map(|s| (*s).to_string()).collect(),
+        test_selection: wado_compiler::TestSelection {
+            names: filters.iter().map(|s| (*s).to_string()).collect(),
+            workloads_only: false,
+        },
         ..Default::default()
     };
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/__test_name_filter__.wado");

@@ -36,10 +36,11 @@ use crate::module_source::ModuleSource;
 use crate::name::{
     cm_export_func_name, cm_name_key, cm_post_return_func_name, is_test_function, to_cm_name,
 };
-use crate::package::{Package, test_selected};
+use crate::package::Package;
 use crate::synthesis::SynthesisError;
 use crate::tir::{
-    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TypeId,
+    EffectRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirTest,
+    TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1242,7 +1243,9 @@ fn sync_wasi_export_strategy(
     }
     // The simple void adapter applies only with no params AND unit return.
     if export.params.is_empty() && matches!(tt.get(user_func.return_type), ResolvedType::Unit) {
-        return ExportReturnStrategy::VoidTaskReturn;
+        return ExportReturnStrategy::VoidTaskReturn {
+            report_coverage: false,
+        };
     }
     // Sync export returning a plain value (not a `Result`), e.g. a `--lib`
     // export like `fn count() -> u32`. It uses the synchronous canon lift —
@@ -1261,8 +1264,11 @@ fn generate_test_world_bindings(project: &mut Package) {
         return;
     }
     let entry_source = project.entry_module_source.clone();
-    let test_name_filters = project.test_name_filters.clone();
+    let test_selection = project.test_selection.clone();
     let entry_type_table = entry_type_table(project);
+    let strategy = ExportReturnStrategy::VoidTaskReturn {
+        report_coverage: project.coverage_section.is_some(),
+    };
 
     // Test functions have is_export=false (they're not world exports),
     // but they need adapters for task-return when called via `wado test`.
@@ -1275,13 +1281,13 @@ fn generate_test_world_bindings(project: &mut Package) {
             .get(&entry_source)
             .expect("entry module should exist");
 
-        // Map each test's mangled function name → its original (lossless)
-        // name so `--test-name` matches against what the user wrote, not
-        // the ASCII-folded export name.
-        let original_names: hashmap::IndexMap<&str, Option<&str>> = entry_module
+        // Map each test's mangled function name → its test, so `--test-name`
+        // matches against what the user wrote, not the ASCII-folded export
+        // name.
+        let tests: hashmap::IndexMap<&str, &TirTest> = entry_module
             .tests
             .iter()
-            .map(|t| (t.function_name.as_str(), t.name.as_deref()))
+            .map(|t| (t.function_name.as_str(), t))
             .collect();
 
         entry_module
@@ -1290,9 +1296,10 @@ fn generate_test_world_bindings(project: &mut Package) {
             .filter(|f| {
                 let name = f.borrow().name.clone();
                 is_test_function(&name)
-                    && test_selected(
-                        original_names.get(name.as_str()).copied().flatten(),
-                        &test_name_filters,
+                    && test_selection.selects(
+                        tests
+                            .get(name.as_str())
+                            .expect("reify emits each test function with its test"),
                     )
             })
             .map(|f| (f.borrow().name.clone(), f.clone()))
@@ -1311,13 +1318,8 @@ fn generate_test_world_bindings(project: &mut Package) {
         .into_iter()
         .map(|(test_name, user_func_rc)| {
             let binding_name = cm_export_func_name(&test_name);
-            let adapter = synthesize_export_binding(
-                &test_name,
-                &user_func_rc,
-                &entry_source,
-                &env,
-                ExportReturnStrategy::VoidTaskReturn,
-            );
+            let adapter =
+                synthesize_export_binding(&test_name, &user_func_rc, &entry_source, &env, strategy);
             (test_name, binding_name, adapter)
         })
         .collect();

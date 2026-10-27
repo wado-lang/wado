@@ -2,11 +2,12 @@
 
 use crate::attribute::{
     ALLOW, CM, CM_EXPORT, COVERAGE, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS,
-    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE,
+    TIMEOUT_MS, TODO, UNAVAILABLE, WASM_MODULE, WORKLOAD,
 };
 use std::borrow::Cow;
 use std::fmt;
 use std::ops::Deref;
+use std::sync::Arc;
 
 use crate::defs::DefId;
 use crate::escape::escape_string;
@@ -156,8 +157,23 @@ pub struct AstPtr {
     pub span: Span,
 }
 
+/// The text a module was parsed from. Its `Debug` leaves the text out, so the
+/// AST's says only what was parsed: two spellings of one program, such as a
+/// source and its formatted form, read the same.
+#[derive(Clone)]
+struct SourceText(Arc<str>);
+
+impl fmt::Debug for SourceText {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SourceText(..)")
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Module {
+    /// The text parsed, which every span's byte offsets index. Empty for a
+    /// module built from tokens or by hand.
+    source: SourceText,
     pub items: Vec<Item>,
     /// Inner attributes like `#![no_prelude]`
     pub inner_attributes: Vec<InnerAttribute>,
@@ -236,6 +252,7 @@ impl Module {
     /// Creates a new module with the given items and no data section.
     pub fn new(items: Vec<Item>) -> Self {
         Self {
+            source: SourceText(Arc::from("")),
             items,
             inner_attributes: Vec::new(),
             shebang: None,
@@ -250,6 +267,7 @@ impl Module {
 
     /// Creates a new module with the given items, shebang, and data section.
     pub fn with_metadata(
+        source: Arc<str>,
         items: Vec<Item>,
         inner_attributes: Vec<InnerAttribute>,
         shebang: Option<String>,
@@ -261,6 +279,7 @@ impl Module {
         contextual_keywords: Vec<Span>,
     ) -> Self {
         Self {
+            source: SourceText(source),
             items,
             inner_attributes,
             shebang,
@@ -271,6 +290,10 @@ impl Module {
             has_syntax_errors,
             contextual_keywords,
         }
+    }
+
+    pub fn source(&self) -> &str {
+        &self.source.0
     }
 
     /// Span of every token this module's parse read against its lexical class:
@@ -1629,16 +1652,19 @@ pub struct TestMetadata {
     pub is_todo: bool,
     pub timeout_ms: Option<u64>,
     pub is_synopsis: bool,
+    pub is_workload: bool,
 }
 
 impl TestDecl {
     /// Resolve this test's `#[expect_trap]` / `#[TODO]` / `#[timeout_ms(..)]` /
-    /// `#[synopsis]` attributes. `module_is_todo` folds in a module-level `#[TODO]`.
+    /// `#[synopsis]` / `#[workload]` attributes. `module_is_todo` folds in a
+    /// module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
         TestMetadata {
             expect_trap: self.attributes.iter().any(|a| a.name == EXPECT_TRAP),
             is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == TODO),
             is_synopsis: self.attributes.iter().any(|a| a.name == SYNOPSIS),
+            is_workload: self.attributes.iter().any(|a| a.name == WORKLOAD),
             timeout_ms: self.attributes.iter().find_map(|a| {
                 if a.name == TIMEOUT_MS {
                     a.args

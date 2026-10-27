@@ -1440,7 +1440,12 @@ fn build_export_adapter_params(
 pub(super) enum ExportReturnStrategy {
     /// Async `() -> ()` export: call, then `task-return(0)` — the Ok
     /// discriminant of the `result<>` it lifts through, so it shares that canon.
-    VoidTaskReturn,
+    VoidTaskReturn {
+        /// A test under `wado test --coverage` or `--pgo`: calls
+        /// `core:rt::coverage_report` between the call and the `task-return`,
+        /// so a test that traps reports only its hits.
+        report_coverage: bool,
+    },
     /// Sync `--lib` export: the synchronous canon lift returns the lowered
     /// value directly — a single-core-value result verbatim, a multi-value
     /// result (string, list, tuple, record, option, result) via an i32
@@ -1514,7 +1519,7 @@ pub(super) fn synthesize_export_binding(
     let mut next_local = param_count;
 
     let call_return_type = match strategy {
-        ExportReturnStrategy::VoidTaskReturn | ExportReturnStrategy::AsyncTaskReturn => {
+        ExportReturnStrategy::VoidTaskReturn { .. } | ExportReturnStrategy::AsyncTaskReturn => {
             TypeTable::UNIT
         }
         ExportReturnStrategy::SyncReturn | ExportReturnStrategy::ResultTaskReturn => {
@@ -1524,8 +1529,15 @@ pub(super) fn synthesize_export_binding(
     let call_user = build_call_user(user_func, callee_module, call_args, call_return_type);
 
     let adapter_return = match strategy {
-        ExportReturnStrategy::VoidTaskReturn => {
+        ExportReturnStrategy::VoidTaskReturn { report_coverage } => {
             body_stmts.push(expr_stmt(call_user));
+            if report_coverage {
+                body_stmts.push(expr_stmt(internal_call(
+                    CompilerItem::CoverageReport.attr_name(),
+                    Vec::new(),
+                    TypeTable::UNIT,
+                )));
+            }
             body_stmts.push(expr_stmt(cm_canonical_call(
                 CanonicalIntrinsic::TaskReturn(String::new()),
                 vec![i32_const(0)],
