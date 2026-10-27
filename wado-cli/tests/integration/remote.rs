@@ -709,6 +709,65 @@ fn a_use_pin_kept_for_a_shorter_extent_holds_a_longer_one() {
         ));
 }
 
+/// The bytes kept for the lock's pin of a whole file are that file, whatever
+/// the server holds now and whether or not its length was kept.
+#[test]
+fn a_whole_file_the_lock_pins_is_read_from_the_cache_as_it_was_pinned() {
+    let server = Server::start();
+    server.serve("model.bin", b"7");
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    std::fs::remove_dir_all(wado_root.path().join("remote/len")).unwrap();
+
+    server.serve("model.bin", b"77");
+    edit_generator(&project.path().join("src/gen.wado"), |g| g + "// changed\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// The longest kept part serves a probe even where its file's length was not
+/// kept: the probe learns the length from the server once, and needs no
+/// server after.
+#[test]
+fn the_longest_kept_part_serves_the_probe_though_its_length_was_not_kept() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    let generator = project.path().join("src/gen.wado");
+    for n in [2, 3] {
+        edit_generator(&generator, |_| reading(HEADER_GENERATOR, n));
+        wado(project.path(), wado_root.path())
+            .args(["run", "src/main.wado"])
+            .assert()
+            .success();
+    }
+    let url = Integrity::of(server.url("model.bin").as_bytes()).hex();
+    let three = Integrity::of(b"7\n\n").hex();
+    std::fs::remove_file(wado_root.path().join(format!("remote/len/{url}-{three}"))).unwrap();
+
+    edit_generator(&generator, |g| g + "// online\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    server.withdraw("model.bin");
+    edit_generator(&generator, |g| g + "// offline\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
 /// A kept part fetched before its file's length was kept gains the length the
 /// next time a probe reaches the server, and needs no server after.
 #[test]

@@ -57,17 +57,20 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     Ok(Some(ProjectManifest { manifest, root }))
 }
 
-/// Hold the `wado.lock` of the package at `root` against every other writer
-/// until the returned file drops. A writer replaces the lock whole, so the hold
-/// is on a file of its own, in the cache.
+/// A package's `wado.lock`, held against every other writer until this drops.
+/// A function that writes the lock takes one, so it cannot be called unheld.
+pub(crate) struct LockFileHeld(#[expect(dead_code, reason = "held for its drop")] fs::File);
+
+/// Hold the `wado.lock` of the package at `root`. A writer replaces the lock
+/// whole, so the hold is on a file of its own, in the cache.
 ///
 /// # Errors
 ///
 /// `root` cannot be resolved, or [`cache::hold`] fails.
-pub(crate) fn hold_lock_file(root: &Path) -> Result<fs::File, String> {
+pub(crate) fn hold_lock_file(root: &Path) -> Result<LockFileHeld, String> {
     let root = fs::canonicalize(root).map_err(|e| format!("{}: {e}", root.display()))?;
     let key = Integrity::of(root.as_os_str().as_encoded_bytes()).hex();
-    cache::hold(&format!("{key}.{LOCK_FILENAME}"))
+    cache::hold(&format!("{key}.{LOCK_FILENAME}")).map(LockFileHeld)
 }
 
 /// The nearest directory at or above `start_dir` holding a `wado.toml`, short
