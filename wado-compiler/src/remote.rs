@@ -23,7 +23,7 @@ pub fn is_remote(path: &str) -> bool {
 #[must_use]
 pub fn url_fault(url: &str) -> Option<&'static str> {
     let rest = url.strip_prefix("http://")?;
-    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let authority = &rest[..authority_len(rest)];
     let host = match authority.rsplit_once(':') {
         Some((host, port)) if !host.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => host,
         _ => authority,
@@ -38,12 +38,9 @@ pub fn url_fault(url: &str) -> Option<&'static str> {
 #[must_use]
 pub fn resolve_url(base: &str, relative: &str) -> String {
     let authority = base.find("://").expect("a remote URL names its scheme") + 3;
-    let path_at = base[authority..]
-        .find(['/', '?', '#'])
-        .map_or(base.len(), |at| authority + at);
-    let (origin, rest) = base.split_at(path_at);
-    let base_path = &rest[..rest.find(['?', '#']).unwrap_or(rest.len())];
-    let (path, tail) = relative.split_at(relative.find(['?', '#']).unwrap_or(relative.len()));
+    let (origin, rest) = base.split_at(authority + authority_len(&base[authority..]));
+    let (base_path, _) = split_query(rest);
+    let (path, tail) = split_query(relative);
     let merged = if path.starts_with('/') {
         path.to_string()
     } else {
@@ -51,6 +48,17 @@ pub fn resolve_url(base: &str, relative: &str) -> String {
         format!("{dir}{path}")
     };
     format!("{origin}{}{tail}", remove_dot_segments(&merged))
+}
+
+/// The length of the authority opening `rest`, a URL past its `scheme://`.
+fn authority_len(rest: &str) -> usize {
+    rest.find(['/', '?', '#']).unwrap_or(rest.len())
+}
+
+/// A URL reference split before its query or fragment.
+#[must_use]
+pub fn split_query(reference: &str) -> (&str, &str) {
+    reference.split_at(reference.find(['?', '#']).unwrap_or(reference.len()))
 }
 
 /// RFC 3986 §5.2.4 over an absolute `path`: each `.` goes, and each `..` takes
@@ -263,7 +271,10 @@ mod tests {
         assert_eq!(resolve("../../../b.wado"), "https://h.test/b.wado");
         assert_eq!(resolve("./d/../"), "https://h.test/lib//");
         assert_eq!(resolve("/b.wado?q"), "https://h.test/b.wado?q");
-        assert_eq!(resolve_url("https://h.test", "./b.wado"), "https://h.test/b.wado");
+        assert_eq!(
+            resolve_url("https://h.test", "./b.wado"),
+            "https://h.test/b.wado"
+        );
     }
 
     #[test]

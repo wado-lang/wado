@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::remote::is_remote;
+use crate::remote::{is_remote, split_query};
 
 /// Schema version of the `<primary>.kiln.json` file. Bump on any
 /// incompatible change; a file at a different version is treated as a
@@ -76,7 +76,7 @@ pub struct OutputEntry {
 #[must_use]
 pub fn metadata_filename(primary: &str) -> String {
     let path = if is_remote(primary) {
-        primary.split(['?', '#']).next().unwrap_or_default()
+        split_query(primary).0
     } else {
         primary
     };
