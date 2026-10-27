@@ -8,9 +8,9 @@ use crate::name::{callback_export_name, cm_callback_func_name};
 use crate::package::Package;
 use crate::synthesis::common::{
     block, cast, expr_stmt, handle_from_f64, internal_call, local_ref, locals_from_params,
-    synth_span,
+    synth_param, synth_span,
 };
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirParam, TypeId};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TypeId};
 use crate::type_table::{TypeKey, TypeTable};
 use crate::world_registry::CallbackExport;
 
@@ -37,12 +37,12 @@ pub(super) fn synthesize_callback_exports(project: &mut Package, callbacks: &Cal
             continue;
         }
         let core_func = cm_callback_func_name(&cm_name);
-        let mut tir_params = vec![param("key", 0, TypeTable::U32)];
+        let mut tir_params = vec![synth_param("key", 0, TypeTable::U32)];
         let mut args = Vec::new();
         for (i, (&wado, b)) in params.iter().zip(&boundary).enumerate() {
             let name = format!("a{i}");
             let slot = u32::try_from(i + 1).expect("a closure takes few parameters");
-            tir_params.push(param(&name, slot, b.type_id));
+            tir_params.push(synth_param(&name, slot, b.type_id));
             args.push(lift_arg(
                 &type_table,
                 local_ref(slot, &name, b.type_id),
@@ -169,15 +169,4 @@ fn lift_arg(type_table: &RefCell<TypeTable>, value: TirExpr, param: TypeId) -> T
     }
     drop(table);
     cast(value, param)
-}
-
-fn param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
-    TirParam {
-        name: name.to_string(),
-        type_id,
-        local_index,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }
 }

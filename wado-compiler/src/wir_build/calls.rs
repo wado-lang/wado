@@ -22,6 +22,7 @@ use crate::nir;
 use crate::nir::FuncId;
 use crate::nir_arena::{ArenaCallArg, Body, ExprKind, Operand};
 use crate::nir_package::AmbientStream;
+use crate::primitive::PrimitiveType;
 use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
 use crate::wir_build::translate::{local_get, ref_binding_needs_boxing};
@@ -33,6 +34,92 @@ fn operand_lane_const(body: &Body, op: Operand) -> u8 {
         panic!("SIMD lane index survived elaboration unfolded")
     };
     lane as u8
+}
+
+/// The load of a `prim` at its own width. WIR has no float load, so a float
+/// reinterprets the integer of its width, the bytes `fN.load` reads.
+fn memory_load(prim: PrimitiveType, addr: Box<WirInstr>) -> WirInstr {
+    use PrimitiveType as P;
+    match prim {
+        P::I8 => WirInstr::I32Load8S {
+            offset: 0,
+            align: 0,
+            addr,
+        },
+        P::U8 => WirInstr::I32Load8U {
+            offset: 0,
+            align: 0,
+            addr,
+        },
+        P::I16 => WirInstr::I32Load16S {
+            offset: 0,
+            align: 1,
+            addr,
+        },
+        P::U16 | P::F16 | P::Bf16 => WirInstr::I32Load16U {
+            offset: 0,
+            align: 1,
+            addr,
+        },
+        P::I32 | P::U32 => WirInstr::I32Load {
+            offset: 0,
+            align: 2,
+            addr,
+        },
+        P::F32 => WirInstr::F32ReinterpretI32(Box::new(memory_load(P::I32, addr))),
+        P::I64 | P::U64 => WirInstr::I64Load {
+            offset: 0,
+            align: 3,
+            addr,
+        },
+        P::F64 => WirInstr::F64ReinterpretI64(Box::new(memory_load(P::I64, addr))),
+        P::V128 => WirInstr::V128Load {
+            offset: 0,
+            align: 4,
+            addr,
+        },
+        P::Bool | P::Char => unreachable!("`{}` is not `AnyBits`", prim.as_str()),
+    }
+}
+
+/// The store [`memory_load`] reads back.
+fn memory_store(prim: PrimitiveType, addr: Box<WirInstr>, value: Box<WirInstr>) -> WirInstr {
+    use PrimitiveType as P;
+    match prim {
+        P::I8 | P::U8 => WirInstr::I32Store8 {
+            offset: 0,
+            align: 0,
+            addr,
+            value,
+        },
+        P::I16 | P::U16 | P::F16 | P::Bf16 => WirInstr::I32Store16 {
+            offset: 0,
+            align: 1,
+            addr,
+            value,
+        },
+        P::I32 | P::U32 => WirInstr::I32Store {
+            offset: 0,
+            align: 2,
+            addr,
+            value,
+        },
+        P::F32 => memory_store(P::I32, addr, Box::new(WirInstr::I32ReinterpretF32(value))),
+        P::I64 | P::U64 => WirInstr::I64Store {
+            offset: 0,
+            align: 3,
+            addr,
+            value,
+        },
+        P::F64 => memory_store(P::I64, addr, Box::new(WirInstr::I64ReinterpretF64(value))),
+        P::V128 => WirInstr::V128Store {
+            offset: 0,
+            align: 4,
+            addr,
+            value,
+        },
+        P::Bool | P::Char => unreachable!("`{}` is not `AnyBits`", prim.as_str()),
+    }
 }
 
 /// Mechanical builtin shapes — each evaluates its operand expressions
@@ -452,6 +539,17 @@ impl FunctionTranslator<'_, '_> {
         )
     }
 
+    /// The primitive a `T: AnyBits` builtin's one type argument lowers as. A
+    /// newtype is erased to its base by now, and a `flags` type to `u32`.
+    fn any_bits_primitive(&self, type_args: &[TypeId]) -> PrimitiveType {
+        let [ty] = type_args else {
+            panic!("an `AnyBits` builtin takes one type argument, got {type_args:?}");
+        };
+        self.type_table
+            .primitive_head(*ty)
+            .expect("the elaborator admits only a primitive as `AnyBits`")
+    }
+
     /// Translate a call to a builtin.
     ///
     /// Returns `Some(instr)` for instruction-builtins (Wasm instructions),
@@ -460,6 +558,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         builtin_name: &str,
         args: &[ArenaCallArg],
+        type_args: &[TypeId],
         result_type_id: TypeId,
     ) -> Option<WirInstr> {
         // Mechanical numeric / SIMD intrinsics map a builtin name onto a
@@ -471,155 +570,39 @@ impl FunctionTranslator<'_, '_> {
             return Some(instr);
         }
 
+        if builtin_name == "size_of" {
+            let width = self
+                .any_bits_primitive(type_args)
+                .any_bits_width()
+                .expect("the elaborator admits only an `AnyBits` type argument");
+            return Some(WirInstr::I32Const(
+                i32::try_from(width).expect("a primitive is a few bytes wide"),
+            ));
+        }
+        let access = match builtin_name {
+            "i32_load" | "i32_store" => Some(PrimitiveType::I32),
+            "i32_load8_u" | "i32_store8" => Some(PrimitiveType::U8),
+            "i32_load8_s" => Some(PrimitiveType::I8),
+            "i32_load16_u" | "i32_store16" => Some(PrimitiveType::U16),
+            "i32_load16_s" => Some(PrimitiveType::I16),
+            "i64_load" | "i64_store" => Some(PrimitiveType::I64),
+            "f32_load" | "f32_store" => Some(PrimitiveType::F32),
+            "f64_load" | "f64_store" => Some(PrimitiveType::F64),
+            "v128_load" | "v128_store" => Some(PrimitiveType::V128),
+            "load" | "store" => Some(self.any_bits_primitive(type_args)),
+            _ => None,
+        };
+        if let Some(prim) = access {
+            let addr = Box::new(self.translate_operand(args[0].expr));
+            return Some(if let Some(value) = args.get(1) {
+                let value = Box::new(self.translate_operand(value.expr));
+                memory_store(prim, addr, value)
+            } else {
+                memory_load(prim, addr)
+            });
+        }
+
         match builtin_name {
-            "i32_load" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I32Load {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(addr),
-                })
-            }
-            "i32_load8_u" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I32Load8U {
-                    offset: 0,
-                    align: 0,
-                    addr: Box::new(addr),
-                })
-            }
-            "i32_load8_s" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I32Load8S {
-                    offset: 0,
-                    align: 0,
-                    addr: Box::new(addr),
-                })
-            }
-            "i32_load16_u" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I32Load16U {
-                    offset: 0,
-                    align: 1,
-                    addr: Box::new(addr),
-                })
-            }
-            "i32_load16_s" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I32Load16S {
-                    offset: 0,
-                    align: 1,
-                    addr: Box::new(addr),
-                })
-            }
-
-            "i64_load" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::I64Load {
-                    offset: 0,
-                    align: 3,
-                    addr: Box::new(addr),
-                })
-            }
-
-            "i32_store" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I32Store {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(addr),
-                    value: Box::new(val),
-                })
-            }
-            "i32_store8" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I32Store8 {
-                    offset: 0,
-                    align: 0,
-                    addr: Box::new(addr),
-                    value: Box::new(val),
-                })
-            }
-            "i32_store16" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I32Store16 {
-                    offset: 0,
-                    align: 1,
-                    addr: Box::new(addr),
-                    value: Box::new(val),
-                })
-            }
-            "i64_store" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I64Store {
-                    offset: 0,
-                    align: 3,
-                    addr: Box::new(addr),
-                    value: Box::new(val),
-                })
-            }
-            // Floats have no dedicated WIR store/load; reinterpret to the
-            // same-width integer and reuse the integer memory ops (byte-identical
-            // to `fN.store` / `fN.load`).
-            "f32_store" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I32Store {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(addr),
-                    value: Box::new(WirInstr::I32ReinterpretF32(Box::new(val))),
-                })
-            }
-            "f64_store" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::I64Store {
-                    offset: 0,
-                    align: 3,
-                    addr: Box::new(addr),
-                    value: Box::new(WirInstr::I64ReinterpretF64(Box::new(val))),
-                })
-            }
-            "f32_load" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::F32ReinterpretI32(Box::new(WirInstr::I32Load {
-                    offset: 0,
-                    align: 2,
-                    addr: Box::new(addr),
-                })))
-            }
-            "f64_load" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::F64ReinterpretI64(Box::new(WirInstr::I64Load {
-                    offset: 0,
-                    align: 3,
-                    addr: Box::new(addr),
-                })))
-            }
-            "v128_load" => {
-                let addr = self.translate_operand(args[0].expr);
-                Some(WirInstr::V128Load {
-                    offset: 0,
-                    align: 4,
-                    addr: Box::new(addr),
-                })
-            }
-            "v128_store" => {
-                let addr = self.translate_operand(args[0].expr);
-                let val = self.translate_operand(args[1].expr);
-                Some(WirInstr::V128Store {
-                    offset: 0,
-                    align: 4,
-                    addr: Box::new(addr),
-                    value: Box::new(val),
-                })
-            }
-
             "array_new" => {
                 // array.new_default: creates a new array of the given element type
                 let len = self.translate_operand(args[0].expr);
@@ -834,6 +817,16 @@ impl FunctionTranslator<'_, '_> {
                 Some(WirInstr::MemoryFill {
                     dst: Box::new(dst),
                     value: Box::new(value),
+                    len: Box::new(len),
+                })
+            }
+            "memory_copy" => {
+                let dst = self.translate_operand(args[0].expr);
+                let src = self.translate_operand(args[1].expr);
+                let len = self.translate_operand(args[2].expr);
+                Some(WirInstr::MemoryCopy {
+                    dst: Box::new(dst),
+                    src: Box::new(src),
                     len: Box::new(len),
                 })
             }

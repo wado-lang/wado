@@ -46,9 +46,14 @@ pub fn match_to_switch_all(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals, params);
             engine.set_value_graph_type_table(&type_table);
             engine.set_pure_builtin_callees(&pure_builtin_callees);
             changed |= engine.run(&[&rule]);
@@ -102,6 +107,7 @@ fn run_globals(
             global.init.slot_expr_mut().body_mut(),
             buffers,
             &mut no_locals,
+            &[],
         );
         engine.set_value_graph_type_table(type_table);
         engine.set_pure_builtin_callees(pure_builtin_callees);

@@ -1,4 +1,5 @@
 use { f32x4 } from "core:simd";
+use { LinearArray } from "core:linear";
 
 /// A tensor of `E` over the axis list `Axes`, row-major.
 pub struct Tensor<E, Axes> {
@@ -8,10 +9,11 @@ pub struct Tensor<E, Axes> {
 
 /// The `Cpu` backend's right operand of a matrix product, `[K, N]`: its rows
 /// as vectors of 4 adjacent elements, each row padded with zeros to a whole
-/// vector, so a product reads 4 columns with one bounds check and multiplies
-/// them in one instruction.
-pub struct Packed<K, N> {
-    vectors: Array<f32x4>,
+/// vector, so a product reads 4 columns with one load and multiplies them in
+/// one instruction. The vectors are in linear memory, where a loop that keeps
+/// its index in range checks no bound, and no collection traces them.
+pub affine struct Packed<K, N> {
+    vectors: LinearArray<f32x4>,
     /// The vectors one row takes.
     per_row: i32,
     rows: i32,
@@ -21,7 +23,7 @@ pub struct Packed<K, N> {
 /// The `rows` by `cols` matrix whose element `[r, c]` is `at(r, c)`, packed.
 fn packed_matrix<K, N>(rows: i32, cols: i32, at: fn(i32, i32) -> f32) -> Packed<K, N> {
     let per_row = cols.div_ceil(4);
-    let mut vectors = Array::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
+    let mut vectors = LinearArray::<f32x4>::filled(rows * per_row, f32x4::splat(0.0));
     for let r of 0..<rows {
         for let v of 0..<per_row {
             let c = v * 4;
@@ -2183,7 +2185,7 @@ pub affine trait Backend with _ {
     type Operand<Axes>;
     /// A matrix product's right operand `[K, N]`, prepared for the product
     /// alone, which no other kernel reads.
-    type Rhs<K, N>;
+    affine type Rhs<K, N>;
 
     /// `t`, held on the host, as this backend holds it.
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;

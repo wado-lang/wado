@@ -1,6 +1,7 @@
 #![generated(by = "wado-from-idl", sources = ["vendor/wasi-webgpu/wit/imports.wit", "vendor/wasi-webgpu/wit/webgpu.wit"])]
 #![stdlib("wasi:webgpu/webgpu.wado")]
 
+use { ListView } from "core:linear";
 #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-query-set-error-kind")]
 pub variant CreateQuerySetErrorKind {
     #[cm("type-error")]
@@ -1736,7 +1737,7 @@ pub resource GpuBuffer {
     #[cm_params("self", "data", "offset", "size")]
     fn get_mapped_range_set_with_copy(
         &self,
-        data: ByteList,
+        data: &ListView<u8>,
         offset: Option<GpuSize64>,
         size: Option<GpuSize64>,
     ) -> Result<(), GetMappedRangeError>;
@@ -1939,7 +1940,7 @@ pub resource GpuComputePassEncoder {
     fn set_immediates(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: &ListView<u8>,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );
@@ -2127,7 +2128,7 @@ pub resource GpuQueue {
         &self,
         buffer: &GpuBuffer,
         buffer_offset: GpuSize64,
-        data: ByteList,
+        data: &ListView<u8>,
         data_offset: Option<GpuSize64>,
         size: Option<GpuSize64>,
     ) -> Result<(), WriteBufferError>;
@@ -2136,7 +2137,7 @@ pub resource GpuQueue {
     fn write_texture_with_copy(
         &self,
         destination: GpuTexelCopyTextureInfo,
-        data: ByteList,
+        data: &ListView<u8>,
         data_layout: GpuTexelCopyBufferLayout,
         size: GpuExtent3D,
     );
@@ -2199,7 +2200,7 @@ pub resource GpuRenderBundleEncoder {
     fn set_immediates(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: &ListView<u8>,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );
@@ -2316,7 +2317,7 @@ pub resource GpuRenderPassEncoder {
     fn set_immediates(
         &self,
         range_offset: GpuSize32,
-        data: ByteList,
+        data: &ListView<u8>,
         data_offset: Option<GpuSize64>,
         data_size: Option<GpuSize64>,
     );

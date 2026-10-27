@@ -31,8 +31,8 @@ use crate::synthesis::common::{
 };
 use crate::tir;
 use crate::tir::{
-    FunctionRef, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirFunction, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    FunctionRef, MonomorphInfo, ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock,
+    TirExpr, TirExprKind, TirFunction, TirLocal, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
     TirUnaryOp, TypeId,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
@@ -283,7 +283,7 @@ impl<'a> AffineTypes<'a> {
             }
             let named = self
                 .reg
-                .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+                .resource_cm_name_of(tt.defs().ast_id(def))
                 .is_some();
             return if named {
                 Layout::Resource
@@ -649,14 +649,7 @@ fn build_drop_glue(
     glue: &mut DropGlue,
 ) -> TirFunction {
     let entry = glue.entry.clone();
-    let params = vec![TirParam {
-        name: "value".to_string(),
-        type_id,
-        local_index: 0,
-        is_mut: false,
-        is_mut_ref: false,
-        span: synth_span(),
-    }];
+    let params = vec![common::synth_param("value", 0, type_id)];
     let mut locals = common::locals_from_params(&params);
     let mut local_count = locals.len() as u32;
     let mut cx = Cx {
@@ -787,6 +780,8 @@ fn drop_impl_of(func: &TirFunction, tt: &TypeTable) -> Option<DefId> {
 /// Whether lowering copies `func` to each caller, so it owns no parameter: a
 /// trait's clause holder, clauses alone, or a function's `contract` clauses and
 /// a call handing every parameter to its `unchecked` twin, which owns them.
+/// An instance and its twin's are named by their templates, since an instance's
+/// own name spells its type arguments after the twin's suffix.
 fn copied_to_callers(func: &TirFunction) -> bool {
     if is_contract_holder(&func.name) {
         return true;
@@ -798,8 +793,15 @@ fn copied_to_callers(func: &TirFunction) -> bool {
     else {
         return false;
     };
-    matches!(&call.kind, TirExprKind::Call { func: callee, .. }
-        if callee.name != func.name && checked_name(&callee.name) == func.name)
+    let TirExprKind::Call { func: callee, .. } = &call.kind else {
+        return false;
+    };
+    fn template<'n>(name: &'n str, mono: Option<&'n MonomorphInfo>) -> &'n str {
+        mono.map_or(name, |m| &m.generic_name)
+    }
+    let own = template(&func.name, func.monomorph_info.as_ref());
+    let called = template(&callee.name, callee.monomorph_info.as_ref());
+    called != own && checked_name(called) == own
 }
 
 /// Cheap pre-check: does the body produce or bind any affine
@@ -1588,8 +1590,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
     let mut moving = None;
     match &mut expr.kind {
         TirExprKind::Move { .. } => {
+            // A copyable value's move is a copy, which any position may read.
             assert!(
-                consuming,
+                consuming || !cx.carries_affine(type_id),
                 "a move sits where its value is consumed: {span:?}"
             );
             unwrap_move(expr);
@@ -1600,6 +1603,9 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
                 !consuming || !cx.carries_affine(type_id),
                 "a place an affine value moves out of is marked `Move`: {span:?}"
             );
+        }
+        TirExprKind::ListViewOf { .. } => {
+            unreachable!("synthesis::list_view expands every conversion before drops")
         }
 
         TirExprKind::Unary {

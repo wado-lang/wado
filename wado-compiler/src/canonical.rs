@@ -68,16 +68,6 @@ impl CmDecl {
     pub fn name_suffix(&self) -> String {
         format!("{}#{}", self.module.to_path_string(), self.name)
     }
-
-    /// The CM package the declaring interface sits in (`"http"`, `"cli"`, …),
-    /// for a consumer scoping a name resolution to it.
-    #[must_use]
-    pub fn cm_package(&self) -> Option<&str> {
-        match &self.module {
-            ModuleSource::Binding { interface, .. } => interface.split('/').next(),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

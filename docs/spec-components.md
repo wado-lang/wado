@@ -58,12 +58,29 @@ value such as a `List<T>` or a `String` instead.
 A signature that names one of them, anywhere within it, is a compile error at
 that parameter, or at the function's declaration for its result. This holds for
 every `export fn`, not only a world's entry point, because each one lands on the
-component's surface, and for every imported operation.
+component's surface, and for every imported operation, but for the
+`&ListView<T>` of a [list argument](#list-arguments).
 
 An anonymous struct never crosses either: no signature can name one yet
 ([Anonymous Structs](./spec-types.md#anonymous-structs)).
 
 Rationale: [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md).
+
+### List Arguments
+
+A synchronous import takes a `list<T>` parameter, for `T` a number type
+(`u8`…`u64`, `s8`…`s64`, `f32`, `f64`), as a `&ListView<T>` from `core:linear`:
+a component's world function and an operation of an interface or a resource
+alike. The reference crosses as the `list<T>` it views. An
+argument converts to it from any `ListArg<T>`
+([List View Arguments](./spec-functions.md#list-view-arguments)), so a
+`&LinearArray<T>` lends its own block, which the callee reads in place. A
+handler serving such an operation reads the view it is handed.
+
+An asynchronous import takes the `List<T>`, since the host reads its arguments
+after it returns.
+
+Rationale: [WEP: Linear Arrays](./wep-2026-10-26-linear-arrays.md).
 
 ### Published Types
 
@@ -339,6 +356,10 @@ started on another end, so every copy a program makes goes through it, a
 started one included. A copy dropped in flight is cancelled by `cancel_read` or
 `cancel_write` on the end the program holds. A handler that started the copy on
 another end answers that operation by cancelling there.
+
+`begin_read` also takes a `ReadInto`: where a host copy lands, in memory the
+copy allocates or in memory `core:*` lends it. A handler that settles the copy
+ignores it, and one that starts the copy on another end passes it on.
 
 A future write's `result` is a `FutureWriteResult`. It is `Pending` where the
 write returned before its reader read: the host then holds the value and hands

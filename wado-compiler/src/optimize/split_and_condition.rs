@@ -24,9 +24,14 @@ pub fn split_and_conditions(project: &mut NirPackage) -> bool {
     let mut changed = false;
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
-        let FuncParts { body, locals, .. } = func.parts();
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
         if let Some(body) = body {
-            let mut engine = Engine::new(body, &mut buffers, locals);
+            let mut engine = Engine::new(body, &mut buffers, locals, params);
             changed |= engine.run(&[&rule]);
         }
     }

@@ -188,6 +188,42 @@ test "arguments are evaluated left to right" {
 }
 ```
 
+### List View Arguments
+
+An argument meeting a `&ListView<T>` parameter converts to it from any type
+implementing `ListArg<T>`, both from `core:linear`. A `List<T>`, or a newtype
+over one such as `ByteList`, copies its elements into a block of the view's
+own. A `&LinearArray<T>` lends its own block. A list literal is a `List<T>`
+first. A `&ListView<T>` passes as it is.
+
+<!-- {"fixture":"list_view_arg.wado"} -->
+
+```wado
+fn sum(data: &ListView<u8>) -> i32 {
+    let mut total = 0;
+    for let i of 0..<data.len() {
+        total += data[i] as i32;
+    }
+    return total;
+}
+
+test "a List, a ByteList, a LinearArray and a list literal convert" {
+    let list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let mut linear = LinearArray::<u8>::filled(4, 2);
+    assert sum(list) == 6;
+    assert sum(bytes) == 3;
+    assert sum(&linear) == 8;
+    linear[0] = 10;
+    assert sum(&linear) == 16;
+    assert sum([4, 5]) == 9;
+}
+```
+
+The view a conversion makes is a temporary. It drops where the statement
+holding the call ends, freeing what it copied. A reference to it kept past then
+traps on its next read.
+
 ### Scope
 
 A module-level function is in scope in the whole module, before its declaration

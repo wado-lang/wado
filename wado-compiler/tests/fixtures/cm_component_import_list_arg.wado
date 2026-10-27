@@ -1,0 +1,67 @@
+// A synchronous import's `list<T>` parameter, for a number type `T`, is a
+// `&ListView<T>`: a `List<T>` or a newtype over one is copied for the call, and
+// a `&LinearArray<T>` lends its own block. That holds for a world function and
+// an interface operation alike, and a handler serving the operation reads the
+// view it is handed.
+use { sum_bytes, sum_floats, Lists } from "./sub/wasm_import_cm_list_sum.wat" with { type: "wat" };
+use { LinearArray, ListView } from "core:linear";
+
+test "a list<u8> parameter takes a List, a ByteList or a LinearArray" {
+    let list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let mut linear = LinearArray::<u8>::filled(4, 2);
+    assert sum_bytes(list) == 6;
+    assert sum_bytes(bytes) == 3;
+    assert sum_bytes(&linear) == 8;
+    linear[0] = 10;
+    assert sum_bytes(&linear) == 16;
+    assert sum_bytes([4, 5]) == 9;
+}
+
+test "a list<f32> parameter takes a List or a LinearArray" {
+    let list: List<f32> = [0.5, 1.5];
+    let linear = LinearArray::<f32>::filled(3, 0.25);
+    assert sum_floats(list) == 2.0;
+    assert sum_floats(&linear) == 0.75;
+}
+
+test "an interface operation takes a LinearArray" {
+    let linear = LinearArray::<u8>::filled(5, 3);
+    assert Lists::sum(&linear) == 15;
+    assert Lists::wide(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &linear) == 16;
+}
+
+struct Doubled {}
+
+impl Lists for Doubled {
+    fn sum(&mut self, data: &ListView<u8>) -> u32 {
+        let mut total: u32 = 0;
+        for let i of 0..<data.len() {
+            total += 2 * data[i] as u32;
+        }
+        resume total
+    }
+}
+
+test "a handler reads the view it is handed" {
+    let linear = LinearArray::<u8>::filled(2, 4);
+    let mut doubled = Doubled {};
+    with Lists => &mut doubled do {
+        assert Lists::sum(&linear) == 16;
+        assert Lists::sum([1, 2]) == 6;
+    }
+}
+
+test "a temporary array lives through the call" {
+    // The debug allocator poisons a freed block with 0xFF, so a block freed
+    // before the call reads as 765.
+    assert sum_bytes(&LinearArray::<u8>::filled(3, 1)) == 3;
+}
+
+test "an empty array" {
+    let linear = LinearArray::<u8>::filled(0, 0);
+    assert sum_bytes(&linear) == 0;
+}
+
+__DATA__
+{"test": {}}

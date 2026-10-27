@@ -1,0 +1,45 @@
+// A generic impl for a reference to a generic head, whose trait names none of
+// the impl's parameters, answers a call through a bound as it answers a direct
+// one.
+trait Size with () {
+    fn size(&self) -> i32;
+}
+
+struct Holder<T> {
+    items: List<T>,
+}
+
+impl<T> Size for &Holder<T> {
+    fn size(&self) -> i32 {
+        return self.items.len();
+    }
+}
+
+impl<T> Size for &Option<T> {
+    fn size(&self) -> i32 {
+        return if self matches { Some(_) } { 1 } else { 0 };
+    }
+}
+
+fn size_of<S: Size>(s: S) -> i32 {
+    return s.size();
+}
+
+test "a bound reaches the impl for a reference to a generic head" {
+    let bytes = Holder::<u8> { items: [1, 2] };
+    let words = Holder::<i64> { items: [1, 2, 3] };
+    assert (&bytes).size() == 2;
+    assert size_of(&bytes) == 2;
+    assert size_of(&words) == 3;
+}
+
+test "a head declared in another module" {
+    let some: Option<i64> = Some(3);
+    let none: Option<i64> = null;
+    assert (&some).size() == 1;
+    assert size_of(&some) == 1;
+    assert size_of(&none) == 0;
+}
+
+__DATA__
+{"test": {}}
