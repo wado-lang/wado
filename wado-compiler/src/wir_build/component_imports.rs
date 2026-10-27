@@ -243,12 +243,17 @@ fn collect_export_interface_fqs(ty: &CmExportType, out: &mut IndexSet<String>) {
 pub fn imported_cm_interface_fqs(project: &NirPackage, plan: &[ImportEntry]) -> Vec<String> {
     let registry = &project.cm_interface_registry;
     let answered = project.component_plan.answered_interfaces();
+    let nested_dependencies = project.nested_dependencies();
+    let nested = NirPackage::nested_imports(&nested_dependencies);
     let mut out: IndexSet<String> = IndexSet::default();
     for entry in plan {
         match entry.kind {
             ImportKind::Component => {
+                let is_nested = nested.contains(entry.fq.as_str());
                 for fq in registry.host_leaf_imports_for(&entry.fq) {
-                    if !answered.contains(fq.as_str()) {
+                    let defined = answered.contains(fq.as_str())
+                        || (is_nested && !registry.declares_functions(fq));
+                    if !defined {
                         out.insert(fq.clone());
                     }
                 }

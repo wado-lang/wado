@@ -15,21 +15,14 @@ use wasm_encoder::{
 };
 
 use super::{alias_interface_func, collect_component_asset, emits_function};
-use crate::ast::CmImport;
+use crate::ast::{AstId, CmImport, NamedType, Type};
 use crate::codegen::component_context::ComponentModelContext;
 use crate::component_model::{
     CmDefined, CmInterfaceInfo, CmTypeGen, CmTypeSink, cm_instance_key, emit_cm_defined,
 };
-use crate::hashmap::{IndexMap, IndexSet};
+use crate::hashmap::IndexMap;
 use crate::nir_package::{NestedDependency, NirPackage};
-
-/// The program's imports a nested dependency supplies instead.
-pub(super) fn nested_imports<'a>(nested: &[NestedDependency<'a>]) -> IndexSet<&'a str> {
-    nested
-        .iter()
-        .flat_map(|dep| dep.provides.iter().map(|(_, import)| *import))
-        .collect()
-}
+use crate::token::Span;
 
 /// The table every guest callback's lift calls through, and what fills it.
 pub(super) struct CallbackTable {
@@ -84,8 +77,8 @@ pub(super) fn nest_dependencies(
         builder.core_alias_export(Some(&alias), shim, &slot.to_string(), ExportKind::Func);
     }
 
-    // One instance per interface, holding its operations' lifts and the named
-    // types their signatures define.
+    // One instance per interface the program defines, holding its operations'
+    // lifts and the named types it declares.
     let registry = &project.cm_interface_registry;
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
     let mut instances: IndexMap<&str, Vec<(String, ComponentExportKind, u32)>> =
@@ -149,8 +142,42 @@ pub(super) fn nest_dependencies(
             lifted,
         ));
     }
+    // A types-only interface carries nothing to run, so the program defines its
+    // types rather than importing it on the dependency's behalf.
+    for interface in nested.iter().flat_map(|dependency| dependency.imports) {
+        let interface = interface.as_str();
+        if registry.declares_functions(interface) {
+            continue;
+        }
+        let type_gen = type_gens
+            .entry(interface)
+            .or_insert_with(|| CmTypeGen::with_interface_hint(interface));
+        let exports = instances.entry(interface).or_default();
+        for name in registry.declared_type_names(interface) {
+            let mut sink = InstanceExportSink {
+                builder,
+                ctx,
+                exports,
+            };
+            if let Some((cm_name, base)) = registry.newtype(interface, name) {
+                type_gen.define_alias(
+                    &mut sink,
+                    interface,
+                    name,
+                    cm_name,
+                    base,
+                    registry,
+                    &no_resources,
+                );
+            } else {
+                let named = NamedType::new(AstId::fresh(), name.to_string(), Span::default());
+                registry.set_source_interface(named.id, interface.to_string());
+                type_gen.ast_type_to_cm(&mut sink, &Type::Named(named), registry, &no_resources);
+            }
+        }
+    }
     for (interface, exports) in &instances {
-        let key = callback_instance_key(interface);
+        let key = defined_instance_key(interface);
         ctx.register_instance(&key);
         builder.instantiate_exports(
             Some(&key),
@@ -170,7 +197,7 @@ pub(super) fn nest_dependencies(
             .iter()
             .map(|fq| {
                 let instance = if instances.contains_key(fq.as_str()) {
-                    ctx.instance_idx(&callback_instance_key(fq))
+                    ctx.instance_idx(&defined_instance_key(fq))
                 } else {
                     let import = CmImport::parse(fq).expect("an imported interface FQ");
                     ctx.instance_idx(&cm_instance_key(&import.package, &import.interface))
@@ -238,8 +265,9 @@ fn slot_alias(core_name: &str) -> String {
     format!("guest-callback-slot:{core_name}")
 }
 
-fn callback_instance_key(interface: &str) -> String {
-    format!("guest-callback:{interface}")
+/// The instance the program defines for `interface`, rather than importing.
+fn defined_instance_key(interface: &str) -> String {
+    format!("defined:{interface}")
 }
 
 /// The registry's interface `fq`, which the program imports.

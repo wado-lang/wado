@@ -54,7 +54,7 @@ pub fn build_component(
     let mut ctx = ComponentModelContext::new();
 
     let nested = project.nested_dependencies();
-    let nested_imports = guest_callbacks::nested_imports(&nested);
+    let nested_imports = NirPackage::nested_imports(&nested);
 
     // Generate CM imports. Which interfaces are imported, and in what category,
     // is decided by the WIR-level plan (the single source of truth); codegen

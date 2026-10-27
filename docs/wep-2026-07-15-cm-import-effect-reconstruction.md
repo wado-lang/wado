@@ -123,7 +123,9 @@ the stack is reentrance, which the Component Model permits since
 WebAssembly/component-model#705 removed `may_enter`. The dependency's other
 imports (`wasi:*`, or a guest effect the consumer leaves open) are forwarded
 from the consumer's own imports, which carry every function the dependency
-needs.
+needs. A types-only interface (`wasi:clocks/types`) has nothing to run, so the
+consumer defines its types itself rather than importing it. Such an interface
+declares no operation, so it is no effect either.
 
 Where no handler is installed at run time, an operation falls back as any
 effect operation does: to the consumer's own import of the interface when the

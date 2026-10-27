@@ -549,6 +549,14 @@ impl NirPackage {
             .collect()
     }
 
+    /// The program's imports a nested dependency supplies instead.
+    pub fn nested_imports<'a>(nested: &[NestedDependency<'a>]) -> IndexSet<&'a str> {
+        nested
+            .iter()
+            .flat_map(|dependency| dependency.provides.iter().map(|(_, import)| *import))
+            .collect()
+    }
+
     /// Count every function a nested dependency imports, and no handler of the
     /// program answers, as one the program uses: the program forwards its own
     /// import to the dependency, which needs the instance to carry each of them.
