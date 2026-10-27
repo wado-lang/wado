@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793064071357,
+  "lastUpdate": 1793080008478,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71425,6 +71425,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/99bfbab2e461754f072e0575206b5f5204a5493f"
         },
         "date": 1793064070532,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 2996,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7428,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21830,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295381,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "57ecea5a31846e3ac0e5d130df035a2d742dce50",
+          "message": "Merge pull request #2473 from wado-lang/ccr-324478b6-p4w981\n\nfix: a `with` handler answers a component dependency's guest effect",
+          "timestamp": "2026-10-27T14:37:26+09:00",
+          "tree_id": "c36bdc52fc344b74ba7609c6db4cbdfdbb231fce",
+          "url": "https://github.com/wado-lang/wado/commit/57ecea5a31846e3ac0e5d130df035a2d742dce50"
+        },
+        "date": 1793080008148,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
