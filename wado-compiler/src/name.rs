@@ -2680,13 +2680,18 @@ pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
     format!("{module_source}//{name}")
 }
 
-/// The name a [`wir_type_key`] qualifies, or `key` itself where no module
-/// qualifies it. A URL module spells a `//` of its own, ahead of the separator,
-/// and a name may spell one in a type argument after it.
+/// The name a type's key names: past `module` where [`wir_type_key`] qualified
+/// it, past the [`wir_tuple_type_key`] prefix where none did. A URL module may
+/// spell `//` anywhere in its path and a name in its type arguments, so the
+/// boundary is found from the module rather than by searching for it.
 #[must_use]
-pub fn unqualified_name(key: &str) -> &str {
-    let (_, rest) = split_uri_origin(key);
-    rest.split_once("//").map_or(key, |(_, name)| name)
+pub fn unqualified_name<'a>(key: &'a str, module: Option<&ModuleSource>) -> &'a str {
+    let Some(module) = module else {
+        return key.strip_prefix(TUPLE_KEY_PREFIX).unwrap_or(key);
+    };
+    key.strip_prefix(module.to_string().as_str())
+        .and_then(|rest| rest.strip_prefix("//"))
+        .expect("a type with a module is keyed by wir_type_key")
 }
 
 /// Key of a plain `enum`, prefixed so a same-named variant keeps
@@ -2724,8 +2729,10 @@ pub fn wir_func_type_key(func_key: &str) -> String {
 /// - `wir_tuple_type_key(&["i32", "i32"])` → `"tuple//[i32, i32]"`
 #[must_use]
 pub fn wir_tuple_type_key(elems: &[String]) -> String {
-    format!("tuple//[{}]", elems.join(", "))
+    format!("{TUPLE_KEY_PREFIX}[{}]", elems.join(", "))
 }
+
+const TUPLE_KEY_PREFIX: &str = "tuple//";
 
 /// Build a local method name from struct name and method name.
 ///
@@ -2849,13 +2856,13 @@ mod tests {
 
     #[test]
     fn a_key_names_what_follows_its_module_whatever_either_spells() {
-        assert_eq!(unqualified_name("core:prelude//Option"), "Option");
-        assert_eq!(unqualified_name("tuple//[core:prelude//String]"), "[core:prelude//String]");
-        assert_eq!(
-            unqualified_name("https://example.com/a.wado//Hole<https://example.com/b.wado/$t>"),
-            "Hole<https://example.com/b.wado/$t>"
-        );
-        assert_eq!(unqualified_name("List<i32>"), "List<i32>");
+        let mut interner = ModuleSourceInterner::new();
+        let remote = interner.remote("https://example.com/lib//a.wado");
+        let name = "Hole<https://example.com/b.wado/$t>";
+        assert_eq!(unqualified_name(&wir_type_key(&remote, name), Some(&remote)), name);
+        let tuple = wir_tuple_type_key(&["core:prelude//String".to_string()]);
+        assert_eq!(unqualified_name(&tuple, None), "[core:prelude//String]");
+        assert_eq!(unqualified_name("Array<i32>", None), "Array<i32>");
     }
 
     #[test]

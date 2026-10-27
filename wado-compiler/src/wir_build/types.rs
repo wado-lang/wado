@@ -1360,7 +1360,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             }
 
             let module_source = s.meta.module_source.as_ref();
-            let struct_name_str = unqualified_name(&s.name.fq);
+            let struct_name_str = unqualified_name(&s.name.fq, module_source);
 
             let mut resolved = None;
 
@@ -1448,7 +1448,8 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
             continue;
         };
         let variant_module_source = vt.meta.module_source.clone();
-        let variant_display = unqualified_name(&vt.name.fq).to_string();
+        let variant_display =
+            unqualified_name(&vt.name.fq, variant_module_source.as_ref()).to_string();
         for (case_idx, case) in vt.cases.iter().enumerate() {
             for (payload_idx, payload_ty) in case.payload.iter().enumerate() {
                 if !is_abstract_ref(payload_ty) {
@@ -1580,7 +1581,7 @@ fn fixup_abstract_struct_fields(ctx: &mut WirContext<'_>) {
                 if case.payload.iter().any(is_abstract_ref) {
                     // Try to resolve payload types through TIR variant decls
                     let tt = ctx.package.type_table.borrow();
-                    let v_base = unqualified_name(&v.name.fq);
+                    let v_base = unqualified_name(&v.name.fq, v.meta.module_source.as_ref());
                     for tir_variant in &ctx.package.variants {
                         if tir_variant.name == v_base && case_idx < tir_variant.cases.len() {
                             let payload_type_id = tir_variant.cases[case_idx].payload;
