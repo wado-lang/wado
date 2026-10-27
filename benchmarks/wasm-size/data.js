@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793135133200,
+  "lastUpdate": 1793135857136,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71689,6 +71689,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/545408841dd5f3a7f2dda9d2eeb47a674db7f5b1"
         },
         "date": 1793135131960,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295756,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb8adfc499919ecd17485e8e5f88ae067d4ac9a7",
+          "message": "Merge pull request #2479 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfeat(test): record #[workload] runs into a committed profile with `wado test --pgo`",
+          "timestamp": "2026-10-28T05:51:45+09:00",
+          "tree_id": "cd524d0d69ddb5bd90107652f3a7de2db7841aec",
+          "url": "https://github.com/wado-lang/wado/commit/cb8adfc499919ecd17485e8e5f88ae067d4ac9a7"
+        },
+        "date": 1793135856453,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
