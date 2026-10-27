@@ -4182,7 +4182,6 @@ impl Default for CmTypeGen {
     }
 }
 
-/// The index of the resource `cm_name` among those the instance declares.
 fn declared_resource(resource_exports: &IndexMap<&str, u32>, cm_name: &str, source: &str) -> u32 {
     *resource_exports.get(cm_name).unwrap_or_else(|| {
         panic!(
