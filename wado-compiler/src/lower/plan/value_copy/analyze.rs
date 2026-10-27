@@ -175,6 +175,12 @@ pub(crate) fn is_owned_value(
     oracle: &OwnedCalls,
     type_table: &TypeTable,
 ) -> bool {
+    // A read the ownership walk found hands its storage over, nothing reading
+    // it afterward: an arm moving a field out of a dead aggregate leaves its
+    // `if` as owned as a call in the other arm does.
+    if expr.marks().moves {
+        return true;
+    }
     match &expr.kind {
         // A string / bytes literal lowers to a fresh `StructLiteral` over a
         // packed array (`translate::seq_literal`), so each evaluation

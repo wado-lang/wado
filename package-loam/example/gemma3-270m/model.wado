@@ -2,7 +2,7 @@
 //! that picks the next token greedily, keeping the attention cache between
 //! calls.
 
-use { Backend, LoadError, Tensor } from "lib:loam";
+use { Backend, CheckpointBytes, LoadError, Tensor } from "lib:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
 pub use { Tokenizer } from "./build/tokenizer.json"
     with {
@@ -46,7 +46,7 @@ type Stored = [gemma::BatchSize, gemma::PastKeyValues0Key1, gemma::PastSequenceL
 impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from a safetensors checkpoint laid out
     /// as `build/gemma3.safetensors`, whose header the build checked.
-    pub fn load(backend: Bk, checkpoint: &ByteList) -> Result<Model<Bk>, LoadError> with _ {
+    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, checkpoint: &Ck) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
         let weights = gemma::Prepared::load(&mut on, checkpoint)?;
         let mut model = Model { backend: on, weights, seen: [], caches: [] };

@@ -1,0 +1,14 @@
+// A converting argument does not say which element a generic `&ListView<T>`
+// parameter takes, so the call names it.
+use { LinearArray, ListView } from "core:linear";
+
+fn count<T: AnyBits>(data: &ListView<T>) -> i32 {
+    return data.len();
+}
+
+export fn run() {
+    let _ = count(&LinearArray::<u8>::filled(3, 0));
+}
+
+__DATA__
+{"compile_error": ":10:13: analysis error: cannot infer type parameter `T` of function `count`; add a turbofish (`count::<...>()`) or a type annotation"}

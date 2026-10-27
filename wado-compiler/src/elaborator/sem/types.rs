@@ -145,6 +145,11 @@ macro_rules! with_body_facts {
             /// supplied) leave no entry. See [`CoercionChoice`] /
             /// [`CoercionKind`] for the variants.
             ann_coercions => coercions: $crate::elaborator::sem::types::CoercionChoice,
+            /// The `&ListView<T>` parameter type a call argument converts to
+            /// through its `ListArg<T>` impl, keyed by the argument's
+            /// [`AstId`]. `expression_types` keeps the argument's own type,
+            /// which is what reify builds the value at.
+            ann_list_view_conversions => list_view_conversions: $crate::tir::TypeId,
             /// Desugar-kind tag for each TIR-direct rewrite site (assert,
             /// matches, comparison chain, for-of, while, compound assignment),
             /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].

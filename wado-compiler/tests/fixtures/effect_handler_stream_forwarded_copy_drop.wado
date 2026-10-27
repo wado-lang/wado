@@ -19,9 +19,9 @@ impl Proxy {
 }
 
 impl Stream<u8> for Proxy {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let _ = this;
-        resume self.inner().begin_read(max);
+        resume self.inner().begin_read(max, into);
     }
 
     fn cancel_read(&mut self, this: &Stream<u8>) -> u32 {

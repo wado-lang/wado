@@ -12,12 +12,12 @@ affine struct Proxy {
 }
 
 impl Stream<u8> for Proxy {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         let _ = this;
         let Some(inner) = &self.inner else {
             resume StartedRead::settled(StreamChunk { items: [], result: CopyResult::Dropped });
         };
-        resume inner.begin_read(max);
+        resume inner.begin_read(max, into);
     }
     ..forward
 }

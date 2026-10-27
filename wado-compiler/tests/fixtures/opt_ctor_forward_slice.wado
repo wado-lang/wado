@@ -4,12 +4,14 @@
 // folds `end` into the field, so `const_branch_prune` collapses the block and
 // `sroa` sees a direct literal and scalarizes it: the write lowers straight to
 // a byte copy into linear memory, with no intermediate slice `struct.new`.
+// `black_box` keeps the bytes off the constant-folding path, where the whole
+// slice would become one constant global and never reach `sroa`.
 use { Stderr } from "core:cli";
 
 export fn run() with Stderr {
     let [rx, tx] = Stream::<u8>::new();
     let subtask = Stderr::write_via_stream(rx);
-    let body: List<u8> = [72, 101, 108, 108, 111];
+    let body: List<u8> = [72, 101, 108, 108, builtin::black_box(111)];
     tx.write_raw_all(body.as_slice());
     tx.drop();
     subtask.read();

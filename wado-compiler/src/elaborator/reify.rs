@@ -2817,8 +2817,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return tir.clone();
         }
 
-        let tir = self.reify_unmoved(expr, ctx, expected_type);
-        if self.moves(expr) { tir.moved() } else { tir }
+        let view = self.ann_list_view_conversions(expr.id());
+        let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
+        let tir = if self.moves(expr) { tir.moved() } else { tir };
+        match view {
+            Some(view) => {
+                let span = tir.span;
+                TirExpr::new(
+                    TirExprKind::ListViewOf {
+                        value: Box::new(tir),
+                    },
+                    view,
+                    span,
+                )
+            }
+            None => tir,
+        }
     }
 
     fn reify_unmoved(

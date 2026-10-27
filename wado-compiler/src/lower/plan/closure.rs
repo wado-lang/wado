@@ -557,11 +557,10 @@ impl ClosureLowerer {
         // update its type from function type to struct type
         for (local_idx, closure_id) in &self.local_to_closure {
             if self.specializable.contains(closure_id)
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 && let Some(local) = func.locals.get_mut(*local_idx as usize)
             {
                 // Functors are reference types
-                local.type_id = functor.ref_type_id;
+                local.type_id = self.functor_infos[*closure_id as usize].ref_type_id;
             }
         }
     }
@@ -1053,6 +1052,7 @@ impl ClosureLowerer {
             func_by_name: &func_by_name,
             type_table,
             functor_infos: &self.functor_infos,
+            forwarded: IndexMap::default(),
             requests: &mut spec_requests,
         };
         for func_rc in func_refs {
@@ -1062,7 +1062,11 @@ impl ClosureLowerer {
             }
         }
 
-        for (key, callee_rc) in spec_requests {
+        // A request can add more: a clone passing a functor param on asks for
+        // its callee to be specialized in turn.
+        let mut next = 0;
+        while let Some((key, callee_rc)) = spec_requests.get(next).cloned() {
+            next += 1;
             if self.fn_param_specializations.contains_key(&key) {
                 continue;
             }
@@ -1086,6 +1090,21 @@ impl ClosureLowerer {
                 if check.found {
                     continue;
                 }
+            }
+            // The clone's body is the callee's, so what it passes on is read here.
+            if let Some(body) = &callee.body {
+                FnParamSpecCollector {
+                    func_by_name: &func_by_name,
+                    type_table,
+                    functor_infos: &self.functor_infos,
+                    forwarded: fn_param_indices
+                        .iter()
+                        .zip(&key.functor_types)
+                        .map(|(&local, &(_, functor_type))| (local, functor_type))
+                        .collect(),
+                    requests: &mut spec_requests,
+                }
+                .visit_block(body);
             }
             drop(callee);
 
@@ -1577,6 +1596,13 @@ struct ClosureCallSiteLowerer<'a> {
 }
 
 impl ClosureCallSiteLowerer<'_> {
+    /// The functor the specialized fn-param `index` holds, where it is one.
+    fn functor_param(&self, index: u32) -> Option<&ClosureFunctor> {
+        self.functor_param_locals
+            .contains(&index)
+            .then(|| &self.functor_infos[self.local_to_closure[&index] as usize])
+    }
+
     /// `arg_offset` is the count of leading `args` that are not value
     /// arguments — 1 for a trait-qualified `Call` carrying its receiver in
     /// `args[0]`, 0 for a free call and for
@@ -1595,13 +1621,10 @@ impl ClosureCallSiteLowerer<'_> {
         let mut functor_types = Vec::new();
         let mut raw_indices = Vec::new();
         for (i, arg) in args.iter().enumerate().skip(arg_offset) {
-            if let TirExprKind::Closure {
-                functor_id: Some(id),
-                ..
-            } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*id as usize)
-            {
-                functor_types.push(((i - arg_offset) as u32, functor.struct_type_id));
+            if let Some(functor_type) = functor_arg_type(arg, self.functor_infos, |index| {
+                self.functor_param(index).map(|f| f.struct_type_id)
+            }) {
+                functor_types.push(((i - arg_offset) as u32, functor_type));
                 raw_indices.push(i);
             }
         }
@@ -1618,22 +1641,31 @@ impl ClosureCallSiteLowerer<'_> {
             return;
         };
 
-        // Closure args → struct literals.
+        // Closure args → struct literals; a forwarded functor param passes as
+        // the functor it holds.
         for arg_idx in &raw_indices {
             let arg = &mut args[*arg_idx];
-            if let TirExprKind::Closure {
-                captures,
-                functor_id: Some(closure_id),
-                ..
-            } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
-            {
-                arg.expr.kind = TirExprKind::StructLiteral {
-                    struct_type: functor.struct_type_id,
-                    struct_name: functor.struct_name.clone(),
-                    fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
-                };
-                arg.expr.type_id = functor.ref_type_id;
+            match &arg.expr.kind {
+                TirExprKind::Closure {
+                    captures,
+                    functor_id: Some(closure_id),
+                    ..
+                } => {
+                    let functor = &self.functor_infos[*closure_id as usize];
+                    arg.expr.kind = TirExprKind::StructLiteral {
+                        struct_type: functor.struct_type_id,
+                        struct_name: functor.struct_name.clone(),
+                        fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
+                    };
+                    arg.expr.type_id = functor.ref_type_id;
+                }
+                TirExprKind::Local { index, .. } => {
+                    arg.expr.type_id = self
+                        .functor_param(*index)
+                        .expect("only a functor param is forwarded")
+                        .ref_type_id;
+                }
+                _ => unreachable!("only a closure or a functor param names a functor type"),
             }
         }
 
@@ -1678,9 +1710,7 @@ impl ClosureCallSiteLowerer<'_> {
         {
             return;
         }
-        let Some(functor) = self.functor_infos.get(closure_id as usize) else {
-            return;
-        };
+        let functor = &self.functor_infos[closure_id as usize];
 
         let local_name = match &receiver.kind {
             TirExprKind::Unary {
@@ -1787,9 +1817,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
             // ClosureToCanonical.
             if let Some(id) = closure_id
                 && self.specializable.contains(&id)
-                && let Some(functor) = self.functor_infos.get(id as usize)
             {
-                *type_id = functor.ref_type_id;
+                *type_id = self.functor_infos[id as usize].ref_type_id;
             }
             return;
         }
@@ -1818,8 +1847,8 @@ impl TirMutVisitor for ClosureCallSiteLowerer<'_> {
                 if let TirExprKind::Local { index, .. } = &callee.kind
                     && let Some(closure_id) = self.local_to_closure.get(index)
                     && self.specializable.contains(closure_id)
-                    && let Some(functor) = self.functor_infos.get(*closure_id as usize)
                 {
+                    let functor = &self.functor_infos[*closure_id as usize];
                     let mut callee_owned = std::mem::replace(
                         callee.as_mut(),
                         TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, expr.span),
@@ -1898,6 +1927,10 @@ struct FnParamSpecCollector<'a> {
     func_by_name: &'a IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>>,
     type_table: &'a TypeTable,
     functor_infos: &'a [ClosureFunctor],
+    /// The walked body's own specialized fn-params, by local, to the functor
+    /// type each holds: a call passing one on is specialized as a call passing
+    /// that closure literal would be. Empty in a body that is no clone.
+    forwarded: IndexMap<u32, TypeId>,
     requests: &'a mut Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)>,
 }
 
@@ -1911,13 +1944,11 @@ impl FnParamSpecCollector<'_> {
         let mut functor_types = Vec::new();
         for (i, (param, arg)) in params.iter().zip(args.iter()).enumerate() {
             if let ResolvedType::Function { .. } = self.type_table.get(param.type_id)
-                && let TirExprKind::Closure {
-                    functor_id: Some(closure_id),
-                    ..
-                } = &arg.expr.kind
-                && let Some(functor) = self.functor_infos.get(*closure_id as usize)
+                && let Some(functor_type) = functor_arg_type(arg, self.functor_infos, |index| {
+                    self.forwarded.get(&index).copied()
+                })
             {
-                functor_types.push((i as u32, functor.struct_type_id));
+                functor_types.push((i as u32, functor_type));
             }
         }
         if functor_types.is_empty() {
@@ -1962,8 +1993,31 @@ impl TirRefVisitor for FnParamSpecCollector<'_> {
                     self.visit_expr(&arg.expr);
                 }
             }
+            // A closure body numbers its locals apart from the body around it.
+            TirExprKind::Closure { .. } => {
+                let forwarded = std::mem::take(&mut self.forwarded);
+                self.walk_expr(expr);
+                self.forwarded = forwarded;
+            }
             _ => self.walk_expr(expr),
         }
+    }
+}
+
+/// The functor type a call argument hands a fn-param: a closure literal's, or
+/// the one a specialized fn-param local holds, as `forwarded` answers by local.
+fn functor_arg_type(
+    arg: &CallArg,
+    functor_infos: &[ClosureFunctor],
+    forwarded: impl Fn(u32) -> Option<TypeId>,
+) -> Option<TypeId> {
+    match &arg.expr.kind {
+        TirExprKind::Closure {
+            functor_id: Some(id),
+            ..
+        } => Some(functor_infos[*id as usize].struct_type_id),
+        TirExprKind::Local { index, .. } => forwarded(*index),
+        _ => None,
     }
 }
 

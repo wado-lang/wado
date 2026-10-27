@@ -1,0 +1,29 @@
+// Loop-versioned BCE over a strided check whose `i32` product wraps back into
+// range: from `k = 2`, `k * 2147483647 + 3` is 1, and at `k = 3` it is
+// `i32::MIN`. Compared in `i32`, the residual would admit the fast arm, which
+// would read index 1 and then fault with no message. Compared in `i64` it
+// refuses, so the checked loop panics at `k = 3` with the standard message.
+
+use { Stdout } from "core:cli";
+
+fn walk(m: &List<i32>, from: i32, to: i32, stride: i32) -> i32 {
+    let mut sum = 0;
+    for let mut k = from; k < to; k += 1 {
+        sum += m[k * stride + 3];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let m: List<i32> = [10, 11, 12, 13, 14, 15, 16, 17];
+    walk(&m, builtin::black_box(2), builtin::black_box(4), builtin::black_box(2147483647));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Contract of List::index_value failed at",
+        "index: -2147483648"
+    ],
+    "trapped": true
+}

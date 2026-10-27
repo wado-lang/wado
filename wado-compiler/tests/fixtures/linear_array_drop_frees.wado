@@ -1,0 +1,23 @@
+// A `LinearArray` gives its block back where it drops, so the free-list
+// allocator hands the same block out again and memory stops growing after the
+// first round. A block left behind grows it by 256 KiB a round.
+use { println, Stdout } from "core:cli";
+use { LinearArray } from "core:linear";
+
+fn round_trip(round: i32) -> u64 {
+    let array = LinearArray::<u64>::filled(32 * 1024, round as u64);
+    return array[round];
+}
+
+export fn run() with Stdout {
+    let mut total = round_trip(0);
+    let pages = builtin::memory_size();
+    for let round of 1..<50 {
+        total += round_trip(round);
+    }
+    assert builtin::memory_size() == pages;
+    println(`${total}`);
+}
+
+__DATA__
+{"allocator": "freelist", "stdout": "1225\n"}

@@ -11,8 +11,7 @@
 // boxed receivers those diagnostics format. `$const_obj_N` is numbered in
 // hoist order, so anything that changes *how many* aggregates the pass takes
 // shifts the index of the one this fixture cares about, so no pattern names a
-// number. SROA reads the array into a local ahead of each loop, which is why
-// the read sites name that local rather than the global.
+// number.
 
 use { println, Stdout } from "core:cli";
 
@@ -48,8 +47,7 @@ __DATA__
     "wir_expect:O2": [
         "global global:const_global_dedup.wado::$const_obj_",
         "array.new_fixed<i32>(10, 20, 30, 40)",
-        "$sroa_xs_repr_{} = global:const_global_dedup.wado::$const_obj_{};",
-        "$sroa_ys_repr_{} = global:const_global_dedup.wado::$const_obj_{};"
+        "builtin::array_get_value<i32>(global:const_global_dedup.wado::$const_obj_{}, "
     ],
     "wir_not_expect:O2": [
         "global mut global:const_global_dedup.wado::$const_obj_"

@@ -1657,6 +1657,11 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
+    MemoryCopy {
+        dst: Box<WirInstr>,
+        src: Box<WirInstr>,
+        len: Box<WirInstr>,
+    },
     I32Load {
         offset: u64,
         align: u32,
@@ -2548,9 +2553,14 @@ impl WirInstr {
                 f(addr);
                 f(value);
             }
-            Self::MemoryFill { dst, value, len } => {
+            Self::MemoryFill {
+                dst,
+                value: src,
+                len,
+            }
+            | Self::MemoryCopy { dst, src, len } => {
                 f(dst);
-                f(value);
+                f(src);
                 f(len);
             }
             // Vec<WirInstr> children
@@ -3154,9 +3164,14 @@ impl WirInstr {
                 f(addr);
                 f(value);
             }
-            Self::MemoryFill { dst, value, len } => {
+            Self::MemoryFill {
+                dst,
+                value: src,
+                len,
+            }
+            | Self::MemoryCopy { dst, src, len } => {
                 f(dst);
-                f(value);
+                f(src);
                 f(len);
             }
             // Vec<WirInstr> children

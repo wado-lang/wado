@@ -17,13 +17,13 @@ use crate::type_table::TypeTable;
 use crate::synthesis::common::{
     alloc_local, assign, binary, block, break_stmt, builtin_call, case_chain, cast, expr_stmt,
     generic_method_call, generic_static_call, handle_from_f64, i32_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, struct_literal,
-    synth_span,
+    let_mut_stmt, let_stmt, linear_free, local_ref, loop_stmt, option_none, option_some,
+    struct_literal, synth_span,
 };
 
 use super::types::{
-    CmStdlibNames, LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
-    cm_flags_byte_size, cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
+    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
+    cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -73,9 +73,12 @@ pub(super) fn synthesize_lift_into(
     if let Some(base) = base {
         return synthesize_lift_into(ty, addr, base, next_local, stmts, locals, ctx);
     }
-    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
-    match ctx.cm_interface_registry.value_type(ty) {
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => synthesize_lift_list(
+    let value_type = ctx.cm_interface_registry.value_type(ty);
+    match (
+        ctx.cm_interface_registry.type_decls().item_of(&value_type),
+        value_type,
+    ) {
+        (Some(CompilerItem::List), Type::Generic(g)) => synthesize_lift_list(
             &g.args[0],
             addr,
             Some(target),
@@ -84,7 +87,7 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        Type::Generic(g) if names.is_tree_map(&g) => synthesize_lift_map(
+        (Some(CompilerItem::TreeMap), Type::Generic(g)) => synthesize_lift_map(
             &g.args[0],
             &g.args[1],
             addr,
@@ -127,11 +130,7 @@ pub(super) fn lift_string_and_free(
     // The lowering side allocates nothing for an empty string.
     stmts.push(if_stmt(
         binary(TirBinaryOp::Gt, len.clone(), i32_const(0), TypeTable::BOOL),
-        block(vec![expr_stmt(builtin_call(
-            "realloc",
-            vec![ptr, len, i32_const(1), i32_const(0)],
-            TypeTable::I32,
-        ))]),
+        block(vec![linear_free(ptr, len, i32_const(1))]),
         None,
     ));
     local_ref(string_local, "$lifted_string", string_type_id)
@@ -188,26 +187,11 @@ fn synthesize_lift_inner(
     // shapes pass through `resolve_type` unchanged.
     let resolved = ctx.cm_interface_registry.value_type(ty);
     let ty = &resolved;
-    // Resolve stdlib struct names through the compiler-item registry so
-    // a rename of `String` / `List` / `Option` / `Result` flows through
-    // CM lifting without code changes here.
-    let (string_name, list_name, tree_map_name, option_name, result_name) = {
-        let tt = ctx.type_table.borrow();
-        let items = tt.compiler_items();
-        (
-            items.struct_name(CompilerItem::String).to_string(),
-            items.struct_name(CompilerItem::List).to_string(),
-            items
-                .struct_name_opt(CompilerItem::TreeMap)
-                .map(str::to_string),
-            items.variant_name(CompilerItem::Option).to_string(),
-            items.variant_name(CompilerItem::Result).to_string(),
-        )
-    };
+    let item = ctx.cm_interface_registry.type_decls().item_of(ty);
     match ty {
         Type::Named(named) => {
             let named_name = named.name.as_str();
-            if named_name == string_name {
+            if item == Some(CompilerItem::String) {
                 let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
                 stmts.push(let_stmt(
                     "$str_ptr",
@@ -260,7 +244,7 @@ fn synthesize_lift_inner(
                 UNIT_TYPE_NAME => TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span()),
                 _ => {
                     // A non-CM reference falls through to the i32-handle default.
-                    if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {
+                    if let Some(source) = ctx.cm_interface_registry.source_interface(named) {
                         let source = source.as_str();
                         if let Some(lifted) = try_lift_wasi_variant_or_enum(
                             named,
@@ -325,26 +309,22 @@ fn synthesize_lift_inner(
                 }
             }
         }
-        Type::Generic(g) => {
-            let gname = g.name.as_str();
-            if gname == list_name && g.args.len() == 1 {
+        Type::Generic(g) => match item {
+            Some(CompilerItem::List) => {
                 synthesize_lift_list(&g.args[0], addr, None, next_local, stmts, locals, ctx)
-            } else if gname == option_name && g.args.len() == 1 {
-                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
-            } else if gname == result_name && g.args.len() == 2 {
-                synthesize_lift_result_inner(
-                    &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
-                )
-            } else if tree_map_name.as_deref() == Some(gname) && g.args.len() == 2 {
-                synthesize_lift_map(
-                    &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
-                )
-            } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
-                lift_handle(ty, addr, ctx)
-            } else {
-                panic!("unsupported generic type for CM lift: {gname}")
             }
-        }
+            Some(CompilerItem::Option) => {
+                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
+            }
+            Some(CompilerItem::Result) => synthesize_lift_result_inner(
+                &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
+            ),
+            Some(CompilerItem::TreeMap) => synthesize_lift_map(
+                &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
+            ),
+            Some(CompilerItem::Stream | CompilerItem::Future) => lift_handle(ty, addr, ctx),
+            _ => panic!("unsupported generic type for CM lift: {}", g.name),
+        },
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
         Type::Reference(_) | Type::MutReference(_) => lift_handle(ty, addr, ctx),
@@ -360,7 +340,6 @@ fn lift_handle(ty: &Type, addr: TirExpr, ctx: &LiftContext<'_>) -> TirExpr {
         ty,
         &mut ctx.type_table.borrow_mut(),
         ctx.cm_interface_registry,
-        ctx.cm_package,
     );
     cast(builtin_call(load, vec![addr], loaded), resource)
 }
@@ -385,7 +364,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let cases = cases.to_vec();
         let variant_type = {
-            let def = ctx.cm_decl(source, &named.name);
+            let def = ctx.cm_decl(named);
             ctx.type_table.borrow_mut().make_variant(def)
         };
         return Some(synthesize_lift_wasi_variant(
@@ -404,7 +383,7 @@ pub(super) fn try_lift_wasi_variant_or_enum(
     {
         let case_names = case_names.to_vec();
         let enum_type = {
-            let def = ctx.cm_decl(source, &named.name);
+            let def = ctx.cm_decl(named);
             ctx.type_table.borrow_mut().make_enum(def)
         };
         return Some(synthesize_lift_wasi_enum(
@@ -453,7 +432,7 @@ fn try_lift_wasi_struct(
     // `List<InputFile>`) hit the same `StructName` that
     // `wir_build::types::register_struct` registered.
     let struct_type_id = {
-        let def = ctx.cm_decl(source, &named.name);
+        let def = ctx.cm_decl(named);
         ctx.type_table
             .borrow_mut()
             .make_struct(StructDef::Decl(def))
@@ -752,21 +731,16 @@ impl CmBuffer {
                 i32_const(0),
                 TypeTable::BOOL,
             ),
-            block(vec![expr_stmt(builtin_call(
-                "realloc",
-                vec![
-                    local_ref(self.base, "$base", TypeTable::I32),
-                    binary(
-                        TirBinaryOp::Mul,
-                        self.count_ref(),
-                        i32_const(self.elem_size as i32),
-                        TypeTable::I32,
-                    ),
-                    i32_const(self.elem_align as i32),
-                    i32_const(0),
-                ],
-                TypeTable::I32,
-            ))]),
+            block(vec![linear_free(
+                local_ref(self.base, "$base", TypeTable::I32),
+                binary(
+                    TirBinaryOp::Mul,
+                    self.count_ref(),
+                    i32_const(self.elem_size as i32),
+                    TypeTable::I32,
+                ),
+                i32_const(self.elem_align as i32),
+            )]),
             None,
         ));
     }
@@ -1023,8 +997,7 @@ fn synthesize_lift_option_inner(
     // use the correct GC reference type.
     let option_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let inner_type_id =
-            cm_held_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        let inner_type_id = cm_held_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry);
         tt.make_option(inner_type_id)
     };
 
@@ -1115,10 +1088,8 @@ fn synthesize_lift_result_inner(
 
     let result_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let ok_type_id =
-            cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
-        let err_type_id =
-            cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+        let ok_type_id = cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry);
+        let err_type_id = cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry);
         tt.make_result(ok_type_id, err_type_id)
     };
 

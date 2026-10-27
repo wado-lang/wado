@@ -1,0 +1,56 @@
+// A `let` taking an `if` whose one arm moves a field out of an aggregate no
+// read reaches afterward, and whose other arm calls for a fresh list, binds
+// what either hands over: neither is copied. The aggregate's drop glue tests
+// only its drop flag, so it reads the moved field no later. `core:prelude`'s
+// `StartedRead::settle` is this shape, run per chunk of every stream read.
+use { println, Stdout } from "core:cli";
+
+affine struct Buffer {
+    count: i32,
+}
+
+impl Drop for Buffer {
+    fn drop(self) {
+        builtin::black_box(self.count);
+    }
+}
+
+affine struct Started {
+    buffer: Buffer,
+    items: List<i32>,
+}
+
+struct Chunk {
+    items: List<i32>,
+    count: i32,
+}
+
+fn lift(n: i32) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of 0..<n {
+        out.push(i);
+    }
+    return out;
+}
+
+fn settle(s: Started) -> Chunk {
+    let mut started = s;
+    started.buffer.count = builtin::black_box(started.buffer.count);
+    let count = started.buffer.count;
+    let items = if count == 0 { started.items } else { lift(count) };
+    return Chunk { items, count };
+}
+
+export fn run() with Stdout {
+    let a = settle(Started { buffer: Buffer { count: 0 }, items: [7, 8] });
+    let b = settle(Started { buffer: Buffer { count: builtin::black_box(3) }, items: [] });
+    println(`${a.items} ${b.items} ${b.count}`);
+}
+
+__DATA__
+{
+    "stdout": "[7, 8] [0, 1, 2] 3\n",
+    "wir_not_expect:O2": [
+        "array_clone_dst"
+    ]
+}

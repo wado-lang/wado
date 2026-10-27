@@ -17,6 +17,7 @@ pub mod builtin_registry;
 pub mod call_args;
 pub mod canonical;
 pub mod cm_abi;
+pub mod cm_type_decls;
 pub mod codegen;
 pub mod codegen_flags;
 pub mod comment;
@@ -1251,7 +1252,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
         Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            if let Some(source) = registry.resolve_cm_source_for(named)
+            if let Some(source) = registry.source_interface(named)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
             {
                 return Some(cm);
@@ -1971,7 +1972,7 @@ fn compile_after_load<H: CompilerHost>(
         registry.register_lib_local_items(
             lib_surface.published_type_decls(),
             fq,
-            tysys.resolutions.defs(),
+            &tysys.resolutions,
         );
         // Guest effect interfaces left unhandled at the boundary become CM
         // imports the consumer satisfies — from the entry module and every

@@ -1,12 +1,63 @@
 //! Tests for `core:rt`.
 
-use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
+use {
+    i64_add128_soft,
+    i64_sub128_soft,
+    i64_mul_wide_u_soft,
+    i64_mul_wide_s_soft,
+    log_stdout,
+    memory_to_gc_array,
+    memory_into_gc_array,
+    gc_array_to_memory,
+} from "core:rt";
 use { MonotonicClock } from "wasi:clocks";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
     let [rx, tx] = Stream::<u8>::new();
     rx.start_read(builtin::black_box(-1));
+}
+
+test "a lift copies every byte of linear memory, whatever the length" {
+    let ptr = builtin::realloc(0, 0, 1, 19);
+    for let i of 0..<19 {
+        builtin::i32_store8(ptr + i, (0xA0 + i) as u8);
+    }
+    for let len of 0..=18 {
+        let arr = memory_to_gc_array(ptr + 1, len);
+        assert arr.len() == len;
+        for let i of 0..<len {
+            assert builtin::array_get_value_u8(&arr, i) == (0xA1 + i) as u8;
+        }
+        let mut within: Array<u8> = builtin::array_new(len + 2);
+        memory_into_gc_array(&mut within, 1, ptr + 1, len);
+        assert builtin::array_get_value_u8(&within, 0) == 0;
+        for let i of 0..<len {
+            assert builtin::array_get_value_u8(&within, 1 + i) == (0xA1 + i) as u8;
+        }
+        assert builtin::array_get_value_u8(&within, len + 1) == 0;
+    }
+    let _ = builtin::realloc(ptr, 19, 1, 0);
+}
+
+test "a lower copies every byte of the array, whatever the length" {
+    let mut arr: Array<u8> = builtin::array_new(19);
+    for let i of 0..<19 {
+        builtin::array_set_u8(&mut arr, i, (0xA0 + i) as u8);
+    }
+    let ptr = builtin::realloc(0, 0, 1, 20);
+    for let len of 0..=18 {
+        for let i of 0..<20 {
+            builtin::i32_store8(ptr + i, 0 as u8);
+        }
+        gc_array_to_memory(&arr, 1, ptr + 1, len);
+        assert builtin::i32_load8_u(ptr) == 0;
+        for let i of 0..<len {
+            assert builtin::i32_load8_u(ptr + 1 + i) == (0xA1 + i) as u8;
+        }
+        assert builtin::i32_load8_u(ptr + 1 + len) == 0;
+    }
+    let _ = builtin::realloc(ptr, 20, 1, 0);
 }
 
 test "a write to a stream whose reader is gone reports the drop" {

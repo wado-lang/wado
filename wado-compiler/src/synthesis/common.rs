@@ -32,6 +32,24 @@ pub fn synth_span() -> Span {
     Span::new(0, 0, 1, 1)
 }
 
+/// `realloc(0, 0, align, size)`: the address of a fresh block of linear memory.
+pub fn linear_alloc(align: TirExpr, size: TirExpr) -> TirExpr {
+    builtin_call(
+        "realloc",
+        vec![i32_const(0), i32_const(0), align, size],
+        TypeTable::I32,
+    )
+}
+
+/// `realloc(ptr, size, align, 0)`, freeing the block `linear_alloc` gave.
+pub fn linear_free(ptr: TirExpr, size: TirExpr, align: TirExpr) -> TirStmt {
+    expr_stmt(builtin_call(
+        "realloc",
+        vec![ptr, size, align, i32_const(0)],
+        TypeTable::I32,
+    ))
+}
+
 /// Create a call to a builtin function (e.g., `builtin::i32_load`).
 pub fn builtin_call(name: &str, args: Vec<TirExpr>, return_type: TypeId) -> TirExpr {
     TirExpr::new(
@@ -547,9 +565,20 @@ pub fn locals_from_params(params: &[TirParam]) -> Vec<TirLocal> {
         .collect()
 }
 
-/// Build a single `TirLocal` for a synthesised parameter slot. Convenience
-/// wrapper around the literal struct construction so synthesis sites can
-/// seed their `locals` table with `vec![param_local(...), ...]`.
+/// An immutable parameter of a synthesized function.
+pub fn synth_param(name: &str, local_index: u32, type_id: TypeId) -> TirParam {
+    TirParam {
+        name: name.to_string(),
+        type_id,
+        local_index,
+        is_mut: false,
+        is_mut_ref: false,
+        span: synth_span(),
+    }
+}
+
+/// The `TirLocal` a synthesized parameter's slot holds, for a function seeding
+/// its `locals` with `vec![param_local(...), ...]`.
 pub fn param_local(name: &str, type_id: TypeId, is_mut: bool) -> TirLocal {
     TirLocal {
         name: name.to_string(),

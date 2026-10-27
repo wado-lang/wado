@@ -22,7 +22,7 @@ use crate::synthesis::common::{cast, internal_call, option_none, synth_span};
 
 use super::callback_export::{Callbacks, erased_callback_type};
 use super::import_adapter::is_gc_passthrough_param;
-use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
+use super::types::{cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
 
 /// Give the return value the caller's type, in place of the `TypeTable::I32`
 /// the binding was built with.
@@ -107,8 +107,9 @@ fn fixup_types_in_stmts(
     }
 }
 
-/// Retype a Let holding an adapter intermediate: a method-call result, or the
-/// `ref.null` or `None` a lifted result starts from.
+/// Retype a Let holding an adapter intermediate: a method-call result, the
+/// `ref.null` or `None` a lifted result starts from, or the raw call's own
+/// value, bound so the argument frees can follow it.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -120,7 +121,9 @@ fn fixup_adapter_let(
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
     let holds_intermediate = match &expr.kind {
         TirExprKind::Call { func, .. } => func.method_info.is_some(),
-        TirExprKind::Null | TirExprKind::VariantConstruct { .. } => true,
+        TirExprKind::Null
+        | TirExprKind::VariantConstruct { .. }
+        | TirExprKind::CmRawCall { .. } => true,
         _ => false,
     };
     if !(should_fix && holds_intermediate) {
@@ -171,7 +174,6 @@ pub(super) fn rewrite_calls_in_block(
     applied_returns: &mut IndexMap<usize, TypeId>,
     callbacks: &mut Callbacks,
 ) {
-    let names = CmStdlibNames::from_type_table(&type_table.borrow());
     CallRewriteWalker {
         adapters,
         entry_source,
@@ -179,7 +181,6 @@ pub(super) fn rewrite_calls_in_block(
         type_table,
         applied_returns,
         callbacks,
-        names: &names,
     }
     .visit_block(block);
 }
@@ -194,7 +195,6 @@ struct CallRewriteWalker<'a> {
     applied_returns: &'a mut IndexMap<usize, TypeId>,
     /// The type of every closure an import takes, which the host calls back.
     callbacks: &'a mut Callbacks,
-    names: &'a CmStdlibNames,
 }
 
 impl TirMutVisitor for CallRewriteWalker<'_> {
@@ -290,7 +290,6 @@ fn adapter_params_of<'f, A>(
     args: impl ExactSizeIterator<Item = A>,
     param_offset: usize,
     registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
 ) -> Vec<(usize, &'f Type, A)> {
     let wasi_params = &func_info.params[param_offset..];
     assert_eq!(
@@ -303,12 +302,12 @@ fn adapter_params_of<'f, A>(
         .iter()
         .zip(args)
         .filter_map(|((_, _, param_type), arg)| {
-            let slots = flatten_param_type(param_type, registry, names).len();
+            let slots = flatten_param_type(param_type, registry).len();
             if slots == 0 {
                 return None;
             }
             assert!(
-                slots == 1 || is_gc_passthrough_param(param_type, registry, names),
+                slots == 1 || is_gc_passthrough_param(param_type, registry),
                 "a direct CM import param takes one flat slot, got {param_type:?}"
             );
             next_param += 1;
@@ -403,35 +402,33 @@ impl CallRewriteWalker<'_> {
         param_offset: usize,
     ) -> Vec<CallArg> {
         let registry = self.call_sites.registry;
-        adapter_params_of(
-            func_info,
-            args.into_iter(),
-            param_offset,
-            registry,
-            self.names,
-        )
-        .into_iter()
-        .map(|(param_idx, param_type, CallArg { expr: arg, .. })| {
-            let is_gc_passthrough = is_gc_passthrough_param(param_type, registry, self.names);
-            let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
-                // The source null's inner type may be unknown; the registry's is not.
-                let mut tt = self.type_table.borrow_mut();
-                let option_type_id =
-                    cm_type_to_type_id(param_type, &mut tt, registry, &func_info.package);
-                option_none(option_type_id, tt.compiler_items())
-            } else {
-                arg
-            };
-            fixup_adapter_param_from_call_site(adapter, param_idx, arg.type_id, is_gc_passthrough);
-            let param_type = adapter.params[param_idx].type_id;
-            let arg = if arg.type_id == param_type {
-                arg
-            } else {
-                cast(arg, param_type)
-            };
-            CallArg::new(arg, false)
-        })
-        .collect()
+        adapter_params_of(func_info, args.into_iter(), param_offset, registry)
+            .into_iter()
+            .map(|(param_idx, param_type, CallArg { expr: arg, .. })| {
+                let is_gc_passthrough = is_gc_passthrough_param(param_type, registry);
+                let arg = if is_gc_passthrough && matches!(arg.kind, TirExprKind::Null) {
+                    // The source null's inner type may be unknown; the registry's is not.
+                    let mut tt = self.type_table.borrow_mut();
+                    let option_type_id = cm_type_to_type_id(param_type, &mut tt, registry);
+                    option_none(option_type_id, tt.compiler_items())
+                } else {
+                    arg
+                };
+                fixup_adapter_param_from_call_site(
+                    adapter,
+                    param_idx,
+                    arg.type_id,
+                    is_gc_passthrough,
+                );
+                let param_type = adapter.params[param_idx].type_id;
+                let arg = if arg.type_id == param_type {
+                    arg
+                } else {
+                    cast(arg, param_type)
+                };
+                CallArg::new(arg, false)
+            })
+            .collect()
     }
 
     /// Replace `expr` with a call of `adapter` on `args`, then rewrite inside them.

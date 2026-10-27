@@ -7,12 +7,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use crate::ast::{AstId, NamedType, Type};
+use crate::ast::{AstId, Type};
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
+use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{
     LocalMethodName, cm_future_read_func_name, cm_future_write_func_name, cm_stream_lift_func_name,
     cm_stream_lift_value_func_name, cm_stream_read_func_name, cm_stream_read_value_func_name,
@@ -27,17 +27,18 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
-use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
+use crate::canonical::{CanonicalIntrinsic, CmDecl, CmStreamPayload};
 use crate::synthesis::common::{
-    alloc_named_local, assign, binary, block, break_stmt, builtin_call, cast, cm_canonical_call,
-    entry_call, expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call,
-    let_mut_stmt, let_stmt, local_ref, loop_stmt, option_none, option_some, return_stmt,
-    struct_literal, synth_span,
+    alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call, entry_call,
+    expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
+    linear_alloc, linear_free, local_ref, loop_stmt, option_none, option_some, return_stmt,
+    struct_literal, synth_param, synth_span,
 };
 
 use super::synthesize_lift;
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_layout_i32, type_id_to_ast_type,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_item_of_type, cm_layout_i32,
+    type_id_to_ast_type,
 };
 use crate::ast::{GenericType, Visibility};
 use crate::component_model::{
@@ -251,32 +252,19 @@ fn synthesize_record_stream_reads(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<Ti
 fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Vec<TirFunction> {
     let registry = ctx.cm_interface_registry;
     let elem_name = ctx.type_table.borrow().base_type_name(elem_type_id);
+    let ast_type = type_id_to_ast_type(elem_type_id, &ctx.type_table.borrow(), registry);
+    let Type::Named(named) = &ast_type else {
+        unreachable!("a stream-read record element is a named type");
+    };
     let source = registry
-        .find_binding_source(CmTypeKind::Struct, &elem_name)
-        .unwrap_or_else(|| {
-            panic!(
-                "record `{elem_name}` used as a stream-read element has no defining \
-                 bundled interface in the CM interface registry; cannot synthesize \
-                 its stream-read binding"
-            )
-        })
-        .to_string();
-    if registry
-        .get_struct_fields_by_source(&source, &elem_name)
-        .is_none()
-    {
-        panic!(
-            "fields of record `{elem_name}` (interface `{source}`) are not registered \
-             in the CM interface registry; cannot lift its stream-read elements"
-        );
-    }
-    let ast_type = Type::Named(NamedType {
-        id: AstId::fresh(),
-        name: elem_name.clone(),
-        span: synth_span(),
-    });
-    let (_, elem_pkg) = CmNamespace::split_package(&source)
-        .expect("`find_binding_source` yields only bundled-namespace sources");
+        .source_interface(named)
+        .expect("a stream-read record element is a registered binding record");
+    assert!(
+        registry
+            .get_struct_fields_by_source(&source, &named.name)
+            .is_some(),
+        "a stream-read element is a record"
+    );
     let (elem_size, elem_align) = cm_layout_i32(&ast_type, registry);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id);
     synthesize_stream_read_funcs(
@@ -289,7 +277,6 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> V
         elem_size,
         elem_align,
         &ast_type,
-        elem_pkg,
         ctx,
     )
 }
@@ -376,8 +363,6 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 /// own, so its base's, at every level.
 fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegistry) -> ast::Type {
     let id = peel_newtypes(tt, payload);
-    // Peeled off the TypeId, not the produced AST: a lib-local alias's
-    // synthesized `NamedType` carries no source interface to look it up by.
     if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
         let name = tt.def_name(*def).to_string();
         let args: Vec<ast::Type> = type_args
@@ -386,6 +371,8 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
             .collect();
         return if tt.is_tuple_def(*def) {
             ast::Type::Tuple(args)
+        } else if let Some(item) = cm_item_of_type(tt, id) {
+            registry.type_decls().item_type(item, args, synth_span())
         } else {
             ast::Type::Generic(GenericType {
                 id: AstId::fresh(),
@@ -539,7 +526,6 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
     let lower_ctx = LowerContext {
         cm_interface_registry,
         type_table,
-        wasi_package: "cli",
         names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     let (lower_stmts, ptr_local, count_local) = synthesize_lower_list_to_buffer(
@@ -610,47 +596,23 @@ fn settled(copy: TirExpr, handle_idx: u32) -> TirExpr {
     )
 }
 
-fn free_cm_buffer(
-    ptr_idx: u32,
-    size: i32,
-    align: i32,
-    next_local: &mut u32,
-    locals: &mut Vec<TirLocal>,
-) -> TirStmt {
-    let freed_idx = alloc_named_local(
-        next_local,
-        locals,
-        Some("$freed".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    let_stmt(
-        "$freed",
-        freed_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                local_ref(ptr_idx, "ptr", TypeTable::I32),
-                i32_const(size),
-                i32_const(align),
-                i32_const(0),
-            ],
-            TypeTable::I32,
-        ),
+fn free_cm_buffer(ptr_idx: u32, size: i32, align: i32) -> TirStmt {
+    linear_free(
+        local_ref(ptr_idx, "ptr", TypeTable::I32),
+        i32_const(size),
+        i32_const(align),
     )
 }
 
 fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, write_name, drop_name, cm_package, payload_ast, size, align, awaits_reader) = {
+    let (func_name, write_name, drop_name, payload_ast, size, align, awaits_reader) = {
         let tt = type_table.borrow();
         let func_name = future_write_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
         let drop_name = CanonicalIntrinsic::FutureDropWritable(payload.clone());
-        let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
         let awaits_reader = payload.write_awaits_reader();
@@ -658,7 +620,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
             func_name,
             write_name,
             drop_name,
-            cm_package,
             payload_ast,
             size,
             align,
@@ -686,7 +647,6 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -698,23 +658,13 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(align), i32_const(size)),
     ));
 
     // Lower `value` into the buffer using the shared registry-backed lowerer.
     let lower_ctx = LowerContext {
         cm_interface_registry,
         type_table,
-        wasi_package: &cm_package,
         names: CmStdlibNames::from_type_table(&type_table.borrow()),
     };
     stmts.extend(synthesize_lower_wasi_type_to_memory(
@@ -760,13 +710,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         TypeTable::UNIT,
     ));
     if awaits_reader {
-        stmts.push(free_cm_buffer(
-            ptr_idx,
-            size,
-            align,
-            &mut next_local,
-            &mut locals,
-        ));
+        stmts.push(free_cm_buffer(ptr_idx, size, align));
         stmts.push(drop_end);
     } else {
         // An end whose copy is pending cannot be dropped, and waiting for the
@@ -774,7 +718,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         // host, which delivers the value from the buffer and reports the write
         // `Pending` (WEP: Affine Types, known gaps). A write that finished
         // frees the buffer.
-        let free = free_cm_buffer(ptr_idx, size, align, &mut next_local, &mut locals);
+        let free = free_cm_buffer(ptr_idx, size, align);
         stmts.push(if_stmt(
             is_blocked(written()),
             block(vec![]),
@@ -850,22 +794,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         monomorph_info: None,
         method_info: None,
         params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "value".to_string(),
-                local_index: value_idx,
-                type_id: payload_type_id,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
+            synth_param("handle", handle_idx, TypeTable::I32),
+            synth_param("value", value_idx, payload_type_id),
         ],
         return_type: write_type_id,
         task_return_type: None,
@@ -912,18 +842,6 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     cm_future_read_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
-/// The CM package a future payload's named types resolve in, or `""` where the
-/// payload names none and resolution must not be steered into one.
-fn future_payload_package(payload: &CmFuturePayload) -> String {
-    match payload {
-        // Read off the declaration, never guessed: naming a package the payload
-        // does not belong to resolves its types to that package's same-named ones.
-        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
-        CmFuturePayload::Trailers => "http".to_string(),
-        CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
-    }
-}
-
 fn synthesize_future_read_func(
     payload_type_id: TypeId,
     option_type_id: TypeId,
@@ -931,24 +849,15 @@ fn synthesize_future_read_func(
 ) -> TirFunction {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (func_name, read_name, drop_name, cm_package, payload_ast, size, align) = {
+    let (func_name, read_name, drop_name, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let func_name = future_read_func_name(&tt, payload_type_id);
         let payload = classify_future_payload(&tt, payload_type_id);
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
-        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload.clone());
-        let cm_package = future_payload_package(&payload);
+        let drop_name = CanonicalIntrinsic::FutureDropReadable(payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
-        (
-            func_name,
-            read_name,
-            drop_name,
-            cm_package,
-            payload_ast,
-            size,
-            align,
-        )
+        (func_name, read_name, drop_name, payload_ast, size, align)
     };
 
     let mut next_local: u32 = 0;
@@ -964,7 +873,6 @@ fn synthesize_future_read_func(
         false,
     );
 
-    // let ptr = realloc(0, 0, align, size)
     let ptr_idx = alloc_named_local(
         &mut next_local,
         &mut locals,
@@ -976,16 +884,7 @@ fn synthesize_future_read_func(
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(align), i32_const(size)),
     ));
 
     let status_idx = alloc_named_local(
@@ -1034,7 +933,6 @@ fn synthesize_future_read_func(
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package: &cm_package,
         interner: ctx.interner,
     };
     let lifted = synthesize_lift(
@@ -1060,13 +958,7 @@ fn synthesize_future_read_func(
     ));
 
     // Free the CM buffer (after the lift has read from it).
-    stmts.push(free_cm_buffer(
-        ptr_idx,
-        size,
-        align,
-        &mut next_local,
-        &mut locals,
-    ));
+    stmts.push(free_cm_buffer(ptr_idx, size, align));
 
     // The read consumes the end (WEP: Affine Types); it is done, so it drops.
     stmts.push(expr_stmt(cm_canonical_call(
@@ -1093,14 +985,7 @@ fn synthesize_future_read_func(
         impl_origin: None,
         monomorph_info: None,
         method_info: None,
-        params: vec![TirParam {
-            name: "handle".to_string(),
-            local_index: handle_idx,
-            type_id: TypeTable::I32,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }],
+        params: vec![synth_param("handle", handle_idx, TypeTable::I32)],
         return_type: option_type_id,
         task_return_type: None,
         effects: vec![],
@@ -1166,14 +1051,14 @@ fn stream_read_element(tt: &TypeTable, expr: &TirExpr) -> Option<TypeId> {
 
 /// The names of the two functions a stream read binds to.
 struct StreamReadNames {
-    /// Starts the copy: `(handle, max) -> StartedRead<T>`.
+    /// Starts the copy: `(handle, max, into) -> StartedRead<T>`.
     begin: String,
     /// Lifts what it copied: `(handle, ptr, count) -> List<T>`.
     lift: String,
 }
 
-/// Shared stream-read generator. `names` / `stream_read_name` / `payload_ast` /
-/// `cm_package` are precomputed by the caller so this body serves both the
+/// Shared stream-read generator. `names` / `stream_read_name` / `payload_ast`
+/// are precomputed by the caller so this body serves both the
 /// WASI-record path ([`synthesize_record_stream_reads`]) and the value-payload
 /// path ([`synthesize_stream_reads`]). The begin function issues the copy into a
 /// buffer and returns it unsettled, with the lift function `StartedRead::settle`
@@ -1185,7 +1070,6 @@ fn synthesize_stream_read_funcs(
     elem_size: i32,
     elem_align: i32,
     payload_ast: &Type,
-    cm_package: &str,
     ctx: &SynthCtx,
 ) -> Vec<TirFunction> {
     let type_table = ctx.type_table;
@@ -1206,6 +1090,16 @@ fn synthesize_stream_read_funcs(
         &mut locals,
         Some("max".to_string()),
         TypeTable::I32,
+        false,
+    );
+    // Only `core:linear` lends a destination, and only to a byte stream: a
+    // read of any other element lands in memory of its own.
+    let read_into_type = type_table.borrow_mut().make_read_into();
+    let into_idx = alloc_named_local(
+        &mut next_local,
+        &mut locals,
+        Some("into".to_string()),
+        read_into_type,
         false,
     );
     let count_idx = alloc_named_local(
@@ -1247,16 +1141,7 @@ fn synthesize_stream_read_funcs(
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(elem_align),
-                byte_count(),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(elem_align), byte_count()),
     ));
     let ptr = || local_ref(ptr_idx, "ptr", TypeTable::I32);
     let handle = || local_ref(handle_idx, "handle", TypeTable::I32);
@@ -1290,20 +1175,13 @@ fn synthesize_stream_read_funcs(
     stmts.push(return_stmt(Some(started)));
     let begin = binding_function(
         names.begin,
-        &[handle_idx, max_idx],
+        &[handle_idx, max_idx, into_idx],
         started_type_id,
         stmts,
         next_local,
         locals,
     );
-    let lift = synthesize_stream_lift_func(
-        names.lift,
-        elem_type_id,
-        elem_size,
-        payload_ast,
-        cm_package,
-        ctx,
-    );
+    let lift = synthesize_stream_lift_func(names.lift, elem_type_id, elem_size, payload_ast, ctx);
     vec![begin, lift]
 }
 
@@ -1314,7 +1192,6 @@ fn synthesize_stream_lift_func(
     elem_type_id: TypeId,
     elem_size: i32,
     payload_ast: &Type,
-    cm_package: &str,
     ctx: &SynthCtx,
 ) -> TirFunction {
     let type_table = ctx.type_table;
@@ -1410,7 +1287,6 @@ fn synthesize_stream_lift_func(
     let lift_ctx = LiftContext {
         cm_interface_registry: ctx.cm_interface_registry,
         type_table,
-        cm_package,
         interner: ctx.interner,
     };
     let lifted_elem = synthesize_lift(
@@ -1648,7 +1524,6 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ve
         elem_size,
         elem_align,
         &payload_ast,
-        "cli",
         ctx,
     )
 }
@@ -1992,7 +1867,7 @@ fn resource_decl(
         .expect("a resource is declared");
     assert!(
         cm_interface_registry
-            .get_resource_cm_name_by_module(&tt.def_module(def).to_string(), tt.def_name(def))
+            .resource_cm_name_of(tt.defs().ast_id(def))
             .is_some(),
         "a dropped resource has a Component Model name"
     );

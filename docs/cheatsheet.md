@@ -1291,7 +1291,7 @@ affine trait Default with () { fn default() -> Self; }
 // `unchecked xs[i]` on one skips the range check as a marked call does.
 affine trait IndexRef<I> with () { affine type Output: Ref; fn index_ref(&self, index: I) -> &Self::Output; }
 affine trait IndexRefMut<I> with () { affine type Output: RefMut; fn index_ref_mut(&mut self, index: I) -> &mut Self::Output; }
-trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
+affine trait IndexValue<I> with () { type Output; fn index_value(&self, index: I) -> Self::Output; }
 affine trait IndexAssign<I> with () { affine type Output; fn index_assign(&mut self, index: I, value: Self::Output); }
 // `[c[i], c[j]] = [c[j], c[i]]` calls it: the elements move, affine ones too
 affine trait IndexSwap<I> with () { fn index_swap(&mut self, a: I, b: I); }
@@ -1861,6 +1861,7 @@ use { Preopens } from "core:fs";                 // the effect, re-exported: no 
 
 let text = fs::read_to_string("docs/spec-overview.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
+let weights = fs::read_linear("w.bin")?.cast::<f32>();  // LinearArray, outside the GC heap
 fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
                                                  // (a non-regular file is refused)
 fs::write_in_place("big.bin", &bytes)?;          // truncates instead of replacing
@@ -2021,6 +2022,10 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:jwt`](./stdlib-core-jwt.md) — JSON Web Tokens over JWS Compact (`HS256`)
 - [`core:zlib`](./stdlib-core-zlib.md) — zlib/gzip compression
 - [`core:simd`](./stdlib-core-simd.md) — Wasm 128-bit SIMD, incl. Relaxed SIMD
+- [`core:linear`](./stdlib-core-linear.md) — `LinearArray<T: AnyBits>`, plain
+  data in linear memory outside the GC heap, freed where it drops; a
+  synchronous import's `list<T>` of numbers is a `&ListView<T>`, which a
+  `List<T>` converts to by copying and a `&LinearArray<T>` by lending its block
 - [`core:url`](./stdlib-core-url.md) — WHATWG URL parsing
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`

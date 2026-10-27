@@ -132,10 +132,14 @@ fn settle_forwards(candidates: &mut IndexMap<ParamKey, Candidate>, type_table: &
         let mut reads = c.reads.clone();
         let agrees = c.forwards.iter().all(|f| {
             candidates.get(f).is_some_and(|g| {
-                // The argument is the local itself, or a reference to it.
-                assert_eq!(
-                    type_table.type_key(g.aggregate),
-                    type_table.type_key(c.aggregate)
+                // The argument is the local itself, or a reference to it, so
+                // the callee holds the same fields. Not the same aggregate: one
+                // instance serves `Pair<Meters>` and `Pair<f32>` alike.
+                assert!(
+                    g.field_names == c.field_names
+                        && type_table.type_keys(&g.field_types)
+                            == type_table.type_keys(&c.field_types),
+                    "a forwarded aggregate arrives in the fields it was sent in"
                 );
                 reads.extend(g.taken().1);
                 g.through_ref == c.through_ref

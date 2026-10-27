@@ -603,6 +603,7 @@ impl Lowering<'_> {
                         ty,
                         wit_name: "value".to_string(),
                         default: None,
+                        lends_view: false,
                     };
                     out.push(Ok((
                         function(
@@ -712,6 +713,7 @@ impl Lowering<'_> {
                 ty,
                 wit_name: to_kebab_case(&arg.name),
                 default,
+                lends_view: false,
             });
         }
         // Wado takes defaults only on trailing parameters.
@@ -906,6 +908,7 @@ fn self_param(iface: &str) -> WadoParam {
         ty: WadoType::Borrow(Box::new(WadoType::Named(to_upper_camel_case(iface)))),
         wit_name: "self".to_string(),
         default: None,
+        lends_view: false,
     }
 }
 
