@@ -372,32 +372,41 @@ internal global STREAM_CHUNK_ELEMENTS: i32 = 4096;
 /// Where a host copy started by `Stream::begin_read` lands: memory the copy
 /// allocates for itself, or memory `core:*` lends it, which the host writes
 /// into directly. Only `core:*` lends, so no raw address is ever handed out.
+///
+/// A handler holds the value it is handed, and may forward it to another
+/// read. So lent memory says how much of it there is, and whether the lender
+/// still lends it: a read asking for more is held to the room, and one after
+/// the lend ended traps rather than writing what someone else now owns.
 #[compiler_item("read_into")]
 pub struct ReadInto {
     ptr: i32,
+    room: i32,
+    lending: &mut bool,
 }
 
 impl ReadInto {
     /// Memory the copy allocates for itself, and frees once it has settled.
     pub fn fresh() -> ReadInto {
-        return ReadInto { ptr: 0 };
+        let mut lending = false;
+        return ReadInto { ptr: 0, room: 0, lending: &mut lending };
     }
 
-    /// The `max` bytes at `ptr`, which the caller owns and keeps alive until
-    /// the copy settles. Only a byte stream's read takes it.
-    internal fn lent(ptr: i32) -> ReadInto
+    /// The `room` bytes at `ptr`, lent while `*lending` holds. Only a byte
+    /// stream's read takes it.
+    internal fn lent(ptr: i32, room: i32, lending: &mut bool) -> ReadInto
         contract ptr != 0
     {
-        return ReadInto { ptr };
+        return ReadInto { ptr, room, lending };
     }
 
-    /// Where the host copies `room` bytes to, and the bytes the copy owns
-    /// there: none of lent memory.
-    internal fn landing(&self, room: i32) -> [i32, i32] {
+    /// Where the host copies `room` bytes to, how many of them it may, and
+    /// the bytes the copy owns there: none of lent memory.
+    internal fn landing(&self, room: i32) -> [i32, i32, i32] {
         if self.ptr != 0 {
-            return [self.ptr, 0];
+            assert *self.lending, "a lent destination is written only while it is lent";
+            return [self.ptr, i32::min(room, self.room), 0];
         }
-        return [builtin::realloc(0, 0, 1, room), room];
+        return [builtin::realloc(0, 0, 1, room), room, room];
     }
 }
 

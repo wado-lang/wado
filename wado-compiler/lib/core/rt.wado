@@ -393,9 +393,8 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
 /// CM adapter for stream.read(max, into) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_read_u8")]
 internal fn cm_stream_read_u8(handle: i32, max: i32, into: ReadInto) -> StartedRead<u8> {
-    let room = cm_buffer_bytes(cm_copy_count(max), 1);
-    let [ptr, size] = into.landing(room);
-    let packed = builtin::stream_read(handle, ptr, room);
+    let [ptr, count, size] = into.landing(cm_buffer_bytes(cm_copy_count(max), 1));
+    let packed = builtin::stream_read(handle, ptr, count);
     return StartedRead {
         buffer: CopyBuffer { handle, packed, ptr, size, align: 1 },
         items: [],
