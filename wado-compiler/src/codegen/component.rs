@@ -2531,16 +2531,12 @@ fn generate_cm_imports(
                         )
                     }
                 };
-                let kebab_params: Vec<(String, ComponentValType)> = func
+                let params: Vec<(&str, ComponentValType)> = func
                     .params
                     .iter()
-                    .map(|(_, cm_name, ty)| (cm_name.clone(), signature_type(ty)))
+                    .map(|(_, cm_name, ty)| (cm_name.as_str(), signature_type(ty)))
                     .collect();
                 let result_type = func.return_type.as_ref().map(&mut signature_type);
-                let params: Vec<(&str, ComponentValType)> = kebab_params
-                    .iter()
-                    .map(|(name, val_type)| (name.as_str(), *val_type))
-                    .collect();
 
                 let mut func_encoder = instance_type.ty().function();
                 if func.is_async {
