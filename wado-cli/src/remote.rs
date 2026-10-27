@@ -620,8 +620,8 @@ fn store_len(url: &str, integrity: Integrity, len: u64) {
 }
 
 /// A remote file whose leading bytes are read from `kept`, the file the cache
-/// keeps them in. A read past them opens the file on the server, from the
-/// block holding the first byte not kept.
+/// keeps them in. A read past them opens the file on the server from the
+/// first byte not kept.
 struct KeptPrefix {
     url: String,
     kept: FileReader,
@@ -635,9 +635,9 @@ impl KeptPrefix {
         if let Some(reader) = &*rest {
             return Ok(Arc::clone(reader));
         }
-        let first = self.kept.byte_len() / BLOCK;
         let reader = Arc::new(futures::executor::block_on(RemoteReader::open_at(
-            &self.url, first,
+            &self.url,
+            self.kept.byte_len(),
         ))?);
         *rest = Some(Arc::clone(&reader));
         Ok(reader)
@@ -659,15 +659,17 @@ impl SourceReader for KeptPrefix {
     }
 }
 
-/// A remote file read a range at a time, as a Kiln probe reads one.
+/// A remote file read a range at a time from `from` on, as a Kiln probe reads
+/// one.
 struct RemoteReader {
     url: String,
     len: u64,
+    from: u64,
     blocks: Mutex<Blocks>,
 }
 
 enum Blocks {
-    /// Each [`BLOCK`] a read touches, fetched once.
+    /// Each [`BLOCK`] past `from` a read touches, fetched once.
     Ranged(IndexMap<u64, Arc<Vec<u8>>>),
     /// What a server ignoring `Range` sent of the file from its start, its
     /// body read on only as far as a read reaches.
@@ -678,10 +680,10 @@ enum Blocks {
 }
 
 impl RemoteReader {
-    /// Open `url`, learning its length from the block numbered `first`.
-    async fn open_at(url: &str, first: u64) -> Result<Self, SourceError> {
-        let range = first * BLOCK..(first + 1) * BLOCK;
-        let fetched = get(url.to_string(), Some(range)).await?;
+    /// Open `url` to be read from `from` on, learning its length from the
+    /// first block.
+    async fn open_at(url: &str, from: u64) -> Result<Self, SourceError> {
+        let fetched = get(url.to_string(), Some(from..from + BLOCK)).await?;
         let len = fetched.total.ok_or_else(|| SourceError::NetworkError {
             url: url.to_string(),
             message: "the server does not say how long the file is".to_string(),
@@ -692,11 +694,12 @@ impl RemoteReader {
                 rest: fetched.rest,
             }
         } else {
-            Blocks::Ranged(IndexMap::from_iter([(first, Arc::new(fetched.bytes))]))
+            Blocks::Ranged(IndexMap::from_iter([(0, Arc::new(fetched.bytes))]))
         };
         Ok(Self {
             url: url.to_string(),
             len,
+            from,
             blocks: Mutex::new(blocks),
         })
     }
@@ -705,7 +708,7 @@ impl RemoteReader {
         if let Some(block) = self.ranged(|blocks| blocks.get(&index).cloned()) {
             return Ok(block);
         }
-        let range = index * BLOCK..(index + 1) * BLOCK;
+        let range = self.from + index * BLOCK..self.from + (index + 1) * BLOCK;
         let fetched = futures::executor::block_on(get(self.url.clone(), Some(range.clone())))?;
         let block = Arc::new(fetched.into_range(range));
         self.ranged(|blocks| blocks.insert(index, Arc::clone(&block)));
@@ -757,9 +760,10 @@ impl SourceReader for RemoteReader {
             buf[..part.len()].copy_from_slice(part);
             return Ok(part.len());
         }
+        assert!(start >= self.from, "a read starts where the reader does");
         let mut read = 0;
         while read < buf.len() {
-            let at = start + read as u64;
+            let at = start + read as u64 - self.from;
             let block = self.block(at / BLOCK)?;
             let offset = usize::try_from(at % BLOCK).expect("a block offset fits");
             if offset >= block.len() {
