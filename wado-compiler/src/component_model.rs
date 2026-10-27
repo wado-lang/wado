@@ -3031,32 +3031,6 @@ impl CmInterfaceRegistry {
         &self.newtypes
     }
 
-<<<<<<< HEAD
-    /// The CM interface a named type belongs to: its recorded source, else the
-    /// emitting interface when that one declares the name, else the bundled
-    /// binding that declares it, else a component dependency's re-export. The
-    /// one chain codegen resolves a reference by.
-    pub fn cm_source_of_named_type(
-        &self,
-        named: &NamedType,
-        interface_hint: Option<&str>,
-    ) -> Option<String> {
-        let name = &named.name;
-        let declared_at_hint = interface_hint
-            .filter(|hint| self.declares_wado_name(hint, name))
-            .map(str::to_string);
-        self.source_interface(named)
-            .filter(|source| self.is_cm_source(source))
-            .or(declared_at_hint)
-            .or_else(|| {
-                self.find_unique_source_across_kinds(name, &|src| {
-                    CmNamespace::split_specifier(src).is_some()
-                })
-                .map(str::to_string)
-            })
-            .or_else(|| self.find_component_type_source(name).map(str::to_string))
-    }
-
     /// The interfaces declaring an `ErrorCode`, in either shape.
     pub fn error_code_declarers(&self) -> impl Iterator<Item = &str> {
         self.enums
@@ -3066,34 +3040,6 @@ impl CmInterfaceRegistry {
             .map(|(source, _)| source.as_str())
     }
 
-||||||| 57ecea5a3
-    /// The CM interface a named type belongs to: its recorded source, else the
-    /// emitting interface when that one declares the name, else the bundled
-    /// binding that declares it, else a component dependency's re-export. The
-    /// one chain codegen resolves a reference by.
-    pub fn cm_source_of_named_type(
-        &self,
-        named: &NamedType,
-        interface_hint: Option<&str>,
-    ) -> Option<String> {
-        let name = &named.name;
-        let declared_at_hint = interface_hint
-            .filter(|hint| self.declares_wado_name(hint, name))
-            .map(str::to_string);
-        self.source_interface(named)
-            .filter(|source| self.is_cm_source(source))
-            .or(declared_at_hint)
-            .or_else(|| {
-                self.find_unique_source_across_kinds(name, &|src| {
-                    CmNamespace::split_specifier(src).is_some()
-                })
-                .map(str::to_string)
-            })
-            .or_else(|| self.find_component_type_source(name).map(str::to_string))
-    }
-
-=======
->>>>>>> origin/main
     /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
     /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
@@ -4042,18 +3988,8 @@ pub fn cm_primitive_of(named: &NamedType, decls: &CmTypeDecls) -> Option<Primiti
 /// Given a Wado [`Type`] and the [`CmInterfaceRegistry`], it walks the type,
 /// resolves named types to their CM metadata, and emits the corresponding CM
 /// defined types through a [`CmTypeSink`] — an [`InstanceSink`] for interface
-<<<<<<< HEAD
 /// instance types, or the codegen top-level sink for bare world exports.
 /// Type-index allocation lives in the sink, so one engine serves both targets.
-||||||| 57ecea5a3
-/// instance types, or the codegen top-level sink for bare world exports. It
-/// owns only the dedup cache and the disambiguation hint; type-index allocation
-/// lives in the sink, so one engine serves both targets.
-=======
-/// instance types, or the codegen top-level sink for bare world exports. It
-/// owns only the dedup cache and the interface it emits into; type-index
-/// allocation lives in the sink, so one engine serves both targets.
->>>>>>> origin/main
 pub struct CmTypeGen {
     cache: IndexMap<String, u32>,
     /// The interface whose instance type the sink builds, so a caller can tell
@@ -4099,20 +4035,11 @@ impl CmTypeGen {
 
     pub fn emitting_into(interface: &str) -> Self {
         Self {
-<<<<<<< HEAD
-            interface_hint: Some(interface_hint.to_string()),
-||||||| 57ecea5a3
-            cache: IndexMap::default(),
-            interface_hint: Some(interface_hint.to_string()),
-            named_exports: IndexSet::default(),
-=======
             emitting: Some(interface.to_string()),
->>>>>>> origin/main
             ..Self::new()
         }
     }
 
-<<<<<<< HEAD
     /// Let the walk reach the enum or variant `name` that `owner` declares
     /// through `outer_idx`, a type of the enclosing component. Aliasing keeps
     /// the one type its declaring interface exports, where a structural copy
@@ -4149,15 +4076,8 @@ impl CmTypeGen {
         Some(idx)
     }
 
-    pub fn interface_hint(&self) -> Option<&str> {
-        self.interface_hint.as_deref()
-||||||| 57ecea5a3
-    pub fn interface_hint(&self) -> Option<&str> {
-        self.interface_hint.as_deref()
-=======
     pub fn emitting(&self) -> Option<&str> {
         self.emitting.as_deref()
->>>>>>> origin/main
     }
 
     /// Whether this engine exported `cm_name` into its sink's namespace. An
@@ -4580,21 +4500,7 @@ impl CmTypeGen {
             }
             Type::Reference(inner) | Type::MutReference(inner) => {
                 if let Type::Named(n) = inner.as_ref()
-                    && let Some(source) = cm_interface_registry
-<<<<<<< HEAD
-                        .cm_source_of_named_type(n, self.interface_hint.as_deref())
-||||||| 57ecea5a3
-                        .source_interface(n)
-                        .filter(|s| s.starts_with("wasi:"))
-                        .or_else(|| {
-                            cm_interface_registry
-                                .find_binding_source(CmTypeKind::Resource, &n.name)
-                                .map(str::to_string)
-                        })
-=======
-                        .source_interface(n)
-                        .filter(|s| s.starts_with("wasi:"))
->>>>>>> origin/main
+                    && let Some(source) = cm_interface_registry.source_interface(n)
                     && let Some(cm_name) =
                         cm_interface_registry.get_resource_cm_name_by_source(&source, &n.name)
                 {
