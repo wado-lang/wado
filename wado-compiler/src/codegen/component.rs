@@ -2235,8 +2235,9 @@ fn generate_cm_imports(
         }
 
         // Component imports emit their full value-type surface via
-        // `ast_type_to_cm`; WASI host interfaces use the legacy emitter whose
-        // `result` always resolves to the shared `error-code`.
+        // `ast_type_to_cm`. Host interfaces go through `emit_cm_val_type`,
+        // which aliases an `error-code` another interface declares rather than
+        // spelling it again.
         let is_component_import = import_plan
             .iter()
             .any(|e| e.fq == interface_info.path && e.kind == ImportKind::Component);
@@ -2351,7 +2352,6 @@ fn generate_cm_imports(
                 .cloned()
                 .collect();
 
-            let mut enum_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut enum_export_indices: IndexMap<String, u32> = IndexMap::default();
 
             for enum_name in &needed_enums {
@@ -2365,7 +2365,6 @@ fn generate_cm_imports(
                         .enum_type(variants.iter().map(String::as_str));
                     let type_idx = local_type_idx;
                     local_type_idx += 1;
-                    enum_type_indices.insert(enum_name.clone(), type_idx);
 
                     if let Some(cm_name) = project
                         .cm_interface_registry

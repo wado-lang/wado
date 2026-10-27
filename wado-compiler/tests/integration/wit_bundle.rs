@@ -175,7 +175,11 @@ export fn run() with (Stdout, Tag) {
     );
     let payload = encode_component_type(&sem, &world_surface(&host, source, CLI_WORLD))
         .expect("encode_component_type");
-    assert!(matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))));
+    match decode(&payload) {
+        Ok(DecodedWasm::WitPackage(..)) => {}
+        Ok(DecodedWasm::Component(..)) => panic!("payload decoded as a component"),
+        Err(err) => panic!("payload does not decode: {err:#}"),
+    }
 }
 
 /// A minimal-import command embeds and round-trips just like the hello shape.

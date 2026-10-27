@@ -1289,7 +1289,7 @@ fn primitive_by_name(name: &str) -> Option<Type> {
 
 /// Collect the source-interface FQs of every CM-defined named type referenced
 /// by `ty` (recursing through generics, tuples, references, and function
-/// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
+/// types). A user module's own source is not a CM interface and is left out.
 fn collect_named_type_sources(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,

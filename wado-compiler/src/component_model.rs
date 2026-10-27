@@ -4182,6 +4182,21 @@ impl Default for CmTypeGen {
     }
 }
 
+/// The index of the resource `cm_name` among those the instance declares.
+fn declared_resource(resource_exports: &IndexMap<&str, u32>, cm_name: &str, source: &str) -> u32 {
+    *resource_exports.get(cm_name).unwrap_or_else(|| {
+        panic!(
+            "resource `{cm_name}` from `{source}` is not among the resources this instance \
+             declares ({}), so a handle to it has no type here",
+            resource_exports
+                .keys()
+                .copied()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })
+}
+
 impl CmTypeGen {
     pub fn new() -> Self {
         Self {
@@ -4548,17 +4563,7 @@ impl CmTypeGen {
                     if let Some(&idx) = self.cache.get(&cache_key) {
                         return ComponentValType::Type(idx);
                     }
-                    let export_idx = *resource_exports.get(cm_name).unwrap_or_else(|| {
-                        panic!(
-                            "resource `{cm_name}` from `{source}` is not among the resources \
-                                 this instance declares ({}), so a handle to it has no type here",
-                            resource_exports
-                                .keys()
-                                .copied()
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
-                    });
+                    let export_idx = declared_resource(resource_exports, cm_name, source);
                     let idx = sink.define(CmDefined::Own(export_idx));
                     self.cache.insert(cache_key, idx);
                     ComponentValType::Type(idx)
@@ -4669,7 +4674,7 @@ impl CmTypeGen {
                     && let Some(cm_name) =
                         cm_interface_registry.get_resource_cm_name_by_source(&source, &n.name)
                 {
-                    let export_idx = resource_exports[cm_name];
+                    let export_idx = declared_resource(resource_exports, cm_name, &source);
                     let idx = self.define_borrow(sink, export_idx, cm_name);
                     return ComponentValType::Type(idx);
                 }
