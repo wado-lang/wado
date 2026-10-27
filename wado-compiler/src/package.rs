@@ -13,18 +13,10 @@ use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
-<<<<<<< HEAD
 use crate::tir::{TirModule, TirTest};
-use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
-||||||| 651e70405
-use crate::tir::TirModule;
-use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
-=======
-use crate::tir::TirModule;
 use crate::world_registry::{
     self, CallbackExport, ExportMappings, GuestCallback, WorldInfo, WorldRegistry,
 };
->>>>>>> origin/main
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
