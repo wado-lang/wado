@@ -313,7 +313,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$afdf3efc
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(100)
 
-type "functype//ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<ref_equality_struct_with_ref.wado/Inner,i32>]";  // TypeId(101)
+type "functype//ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>";  // TypeId(101)
 
 type "functype//ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/$tmpl$d00b338343ad177b^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "ref_equality_struct_with_ref.wado//$tmpl$d00b338343ad177b") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(102)
 
@@ -1262,16 +1262,17 @@ fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b1
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<ref_equality_struct_with_ref.wado/Inner,[i32]>$sroa[v.value]"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_36) {
-        global:core:prelude/traits.wado::$const_obj_36 = "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>";
+        multivalue_bind [$mv_0_1] = "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_36 = struct.new "tuple//[core:prelude/traits.wado/StructField<ref_equality_struct_with_ref.wado/Inner,i32>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_36.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_36.0;
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<ref_equality_struct_with_ref.wado/Inner>$sroa[f.buf]"(f.buf);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_10 = field_6.field_name;
+    self_10 = $mv_0_1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(local.tee $load_2(f.buf), self_10);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_35);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(v, f);
@@ -1524,7 +1525,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
 }
 
 fn "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<ref_equality_struct_with_ref.wado/Inner,i32>]" { 0: struct.new "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/$tmpl$d00b338343ad177b^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -2100,7 +2101,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 
 fn "core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<ref_equality_struct_with_ref.wado/Inner,[i32]>$sroa[v.value]"(self, f);
@@ -2108,11 +2108,13 @@ fn "core:prelude/traits.wado/ref_equality_struct_with_ref.wado/Inner^core:prelud
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<ref_equality_struct_with_ref.wado/Inner>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_40) {
-        global:core:prelude/traits.wado::$const_obj_40 = "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<ref_equality_struct_with_ref.wado/Inner,i32>";
+        multivalue_bind [$mv_0_1] = "ref_equality_struct_with_ref.wado/ref_equality_struct_with_ref.wado/Inner^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_40 = struct.new "tuple//[core:prelude/traits.wado/StructField<ref_equality_struct_with_ref.wado/Inner,i32>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_40.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_40.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_39);
-    self_22 = field_6.field_name;
+    self_22 = $mv_0_1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, self_22);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_35);
     "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f);

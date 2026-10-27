@@ -2014,7 +2014,7 @@ type "functype//core:value/core:value/ValueSeqAccess^core:serde/DeserializeSeq::
 
 type "functype//serde_internal_tag.wado/serde_internal_tag.wado/ByteLevel^core:prelude/traits.wado/ReflectStruct::members" = fn() -> [ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/ByteLevel,bool>", ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/ByteLevel,bool>"];  // TypeId(572)
 
-type "functype//serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>]";  // TypeId(573)
+type "functype//serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>";  // TypeId(573)
 
 type "functype//serde_internal_tag.wado/serde_internal_tag.wado/PreTokenizer^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<serde_internal_tag.wado/PreTokenizer,serde_internal_tag.wado/ByteLevel>", ref "core:prelude/traits.wado//VariantCase<serde_internal_tag.wado/PreTokenizer,()>", ref "core:prelude/traits.wado//VariantCase<serde_internal_tag.wado/PreTokenizer,serde_internal_tag.wado/Split>"];  // TypeId(574)
 
@@ -8815,16 +8815,17 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<se
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<serde_internal_tag.wado/Split,[core:prelude/string.wado/String]>$sroa[v.pattern]"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_294) {
-        global:core:prelude/traits.wado::$const_obj_294 = "serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_294 = struct.new "tuple//[core:prelude/traits.wado/StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_294.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_294.0;
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<serde_internal_tag.wado/Split>$sroa[f.buf]"(f.buf);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_10 = field_6.field_name;
+    self_10 = $mv_0_1.field_name;
     $load_2 = f.buf;
     "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_10, $load_2);
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_44, $load_2);
@@ -12668,7 +12669,7 @@ fn "serde_internal_tag.wado/serde_internal_tag.wado/ByteLevel^core:prelude/trait
 }
 
 fn "serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>]" { 0: struct.new "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pattern"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("pattern"), used: 7 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "serde_internal_tag.wado/serde_internal_tag.wado/PreTokenizer^core:prelude/traits.wado/ReflectVariant::members"() {
@@ -21069,18 +21070,19 @@ fn "core:serde/core:prelude/list.wado/List<serde_internal_tag.wado/PreTokenizer>
 
 fn "core:prelude/traits.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/Inspect::inspect$sroa[self.pattern]"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<serde_internal_tag.wado/Split,[core:prelude/string.wado/String]>$sroa[v.pattern]"(self, f);
         return;
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<serde_internal_tag.wado/Split>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_298) {
-        global:core:prelude/traits.wado::$const_obj_298 = "serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "serde_internal_tag.wado/serde_internal_tag.wado/Split^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_298 = struct.new "tuple//[core:prelude/traits.wado/StructField<serde_internal_tag.wado/Split,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_298.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_298.0;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_51, $load_1);
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(field_6.field_name, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_0_1.field_name, $load_1);
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_44, $load_1);
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, self);
     self = f.buf;

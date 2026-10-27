@@ -487,7 +487,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]$spec0" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref Array<u8>, i32);  // TypeId(170)
 
-type "functype//spec_functions_generics.wado/spec_functions_generics.wado/Stack<i32>::map<core:prelude/string.wado/String>$$Closure_0$dae[f]$spec0$dae[self]" = fn() -> ref "spec_functions_generics.wado//Stack<core:prelude/string.wado/String>";  // TypeId(171)
+type "functype//spec_functions_generics.wado/spec_functions_generics.wado/Stack<i32>::map<core:prelude/string.wado/String>$$Closure_0$dae[f]$spec0$dae[self]" = fn() -> ref "core:prelude//List<core:prelude/string.wado/String>";  // TypeId(171)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(172)
 
@@ -611,7 +611,6 @@ largest([\"b\", \"c\", \"a\"]): "), used: 139 }, s1: struct.new "core:prelude/st
 }
 
 fn "spec_functions_generics.wado/$test_3_a_generic_method"() {
-    let $v0_1: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $sroa_other_repr_23: ref "Array<core:prelude/string.wado/String>";
     let a_end_29: i32;
     let i_34: i32;
@@ -622,14 +621,14 @@ fn "spec_functions_generics.wado/$test_3_a_generic_method"() {
     let b_40: ref Array<u8>;
     let i_44: i32;
     let $licm_repr_45: ref "Array<core:prelude/string.wado/String>";
-    $v0_1 = "spec_functions_generics.wado/spec_functions_generics.wado/Stack<i32>::map<core:prelude/string.wado/String>$$Closure_0$dae[f]$spec0$dae[self]"().items;
+    $mv_items_1 = let $mv_items_1: ref "core:prelude//List<core:prelude/string.wado/String>"; multivalue_bind [$mv_items_1] = "spec_functions_generics.wado/spec_functions_generics.wado/Stack<i32>::map<core:prelude/string.wado/String>$$Closure_0$dae[f]$spec0$dae[self]"(); struct.new "spec_functions_generics.wado//Stack<core:prelude/string.wado/String>" { items: $mv_items_1 }.items;
     $sroa_other_repr_23 = global:spec_functions_generics.wado::$const_obj_4;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0: block -> bool {
-        if local.tee a_end_29($v0_1.used) != 2 {
+        if local.tee a_end_29($mv_items_1.used) != 2 {
             break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0: 0;
         }
         i_34 = 0;
-        $licm_repr_45 = $v0_1.repr;
+        $licm_repr_45 = $mv_items_1.repr;
         b11: block {
             l12: loop {
                 break_if b11 i_34 >= a_end_29;
@@ -662,7 +661,7 @@ fn "spec_functions_generics.wado/$test_3_a_generic_method"() {
         break $inline_core_prelude_array_wado_seq_eq_core_prelude_string_wado_String__0: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee other_36("core:prelude/string.wado/core:prelude/string.wado/String::format<spec_functions_generics.wado/$tmpl$2e4b604754e48185,[core:prelude/list.wado/List<core:prelude/string.wado/String>]>"(struct.new "spec_functions_generics.wado//$tmpl$2e4b604754e48185" { h0: $v0_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_generic_method at spec_functions_generics.wado:71
+        "core:rt/panic"(local.tee other_36("core:prelude/string.wado/core:prelude/string.wado/String::format<spec_functions_generics.wado/$tmpl$2e4b604754e48185,[core:prelude/list.wado/List<core:prelude/string.wado/String>]>"(struct.new "spec_functions_generics.wado//$tmpl$2e4b604754e48185" { h0: $mv_items_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_generic_method at spec_functions_generics.wado:71
 condition: s.map(|x| `${x}`).items == [\"1\", \"2\"]
 s.map(|x| `${x}`).items: "), used: 154 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_a_generic_method at spec_functions_generics.wado:71
 condition: s.map(|x| `${x}`).items == [\"1\", \"2\"]
@@ -3158,7 +3157,7 @@ fn "spec_functions_generics.wado/spec_functions_generics.wado/Stack<i32>::map<co
             continue l396;
         };
     };
-    return struct.new "spec_functions_generics.wado//Stack<core:prelude/string.wado/String>" { items: out };
+    return out;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(self, other) {

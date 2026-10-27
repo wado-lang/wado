@@ -34,7 +34,7 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(10)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(11)
 
-type "functype//opt_sroa_variant_return_hfs_call.wado/fail_at" = fn(i32) -> ref "opt_sroa_variant_return_hfs_call.wado//Fail";  // TypeId(12)
+type "functype//opt_sroa_variant_return_hfs_call.wado/fail_at" = fn(i32) -> i32;  // TypeId(12)
 
 type "functype//opt_sroa_variant_return_hfs_call.wado/run" = fn();  // TypeId(13)
 
@@ -95,7 +95,7 @@ global global:opt_sroa_variant_return_hfs_call.wado::$const_obj_0: ref "core:pre
 global global:opt_sroa_variant_return_hfs_call.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98, 59, 99, 100), used: 5 };
 
 fn "opt_sroa_variant_return_hfs_call.wado/fail_at"(pos) {
-    return struct.new "opt_sroa_variant_return_hfs_call.wado//Fail" { at: pos };
+    return pos;
 }
 
 fn "opt_sroa_variant_return_hfs_call.wado/run"() {
@@ -282,7 +282,9 @@ fn "opt_sroa_variant_return_hfs_call.wado/opt_sroa_variant_return_hfs_call.wado/
     block {
         l16: loop {
             if $hfs_pos_14 >= $licm_used_12 {
-                $hfs_call_15 = ref.as_non_null("opt_sroa_variant_return_hfs_call.wado/fail_at"($hfs_pos_14));
+                let $mv_at_1: i32;
+                multivalue_bind [$mv_at_1] = "opt_sroa_variant_return_hfs_call.wado/fail_at"($hfs_pos_14);
+                $hfs_call_15 = struct.new "opt_sroa_variant_return_hfs_call.wado//Fail" { at: $mv_at_1 };
                 self.pos = $hfs_pos_14;
                 return 1, 0, $hfs_call_15;
             }

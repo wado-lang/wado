@@ -368,7 +368,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars" = fn(ref Array<u8>, i32, i32) -> [ref Array<u8>, i32, i32];  // TypeId(126)
 
-type "functype//self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<self_comparison_lint.wado/Tally,core:prelude/types.wado/Box<i32>>]";  // TypeId(127)
+type "functype//self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>";  // TypeId(127)
 
 type "functype//self_comparison_lint.wado/self_comparison_lint.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "self_comparison_lint.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(128)
 
@@ -1647,15 +1647,16 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<self_c
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<self_comparison_lint.wado/Tally,[&mut i32]>"(v, f) {
     let $load_0: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_58) {
-        global:core:prelude/traits.wado::$const_obj_58 = "self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>";
+        multivalue_bind [$mv_0_1] = "self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_58 = struct.new "tuple//[core:prelude/traits.wado/StructField<self_comparison_lint.wado/Tally,core:prelude/types.wado/Box<i32>>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_58.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_58.0;
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<self_comparison_lint.wado/Tally>$sroa[f.buf]"(local.tee $load_0(f.buf));
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(f, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(123), used: 1 });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, field_6.field_name);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_0, $mv_0_1.field_name);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_0, global:core:prelude/traits.wado::$const_obj_45);
     "core:prelude/format.wado/&mut i32^core:prelude/traits.wado/Inspect::inspect"(v.n, f);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_0, global:core:prelude/traits.wado::$const_obj_56);
@@ -2115,7 +2116,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"($mv$self$
 }
 
 fn "self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<self_comparison_lint.wado/Tally,core:prelude/types.wado/Box<i32>>]" { 0: struct.new "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "self_comparison_lint.wado/self_comparison_lint.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -2536,18 +2537,19 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparis
 
 fn "core:prelude/traits.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<self_comparison_lint.wado/Tally,[&mut i32]>"(self, f);
         return;
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<self_comparison_lint.wado/Tally>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_47) {
-        global:core:prelude/traits.wado::$const_obj_47 = "self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<self_comparison_lint.wado/Tally,&mut i32>";
+        multivalue_bind [$mv_0_1] = "self_comparison_lint.wado/self_comparison_lint.wado/Tally^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_47 = struct.new "tuple//[core:prelude/traits.wado/StructField<self_comparison_lint.wado/Tally,core:prelude/types.wado/Box<i32>>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_47.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_47.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_46);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, field_6.field_name);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, $mv_0_1.field_name);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_45);
     "core:prelude/format.wado/&mut i32^core:prelude/traits.wado/Inspect::inspect"(self.n, f);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_44);

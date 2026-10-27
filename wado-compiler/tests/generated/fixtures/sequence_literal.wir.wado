@@ -358,11 +358,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c
 
 type "functype//sequence_literal.wado/sequence_literal.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "sequence_literal.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(119)
 
-type "functype//sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "sequence_literal.wado//FrozenVec<i32>";  // TypeId(120)
+type "functype//sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "core:prelude//List<i32>";  // TypeId(120)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<sequence_literal.wado/$tmpl$ebaa20f4a908b504,[i32]>" = fn(ref "sequence_literal.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//String";  // TypeId(121)
 
-type "functype//sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "sequence_literal.wado//SeqVec<i32>";  // TypeId(122)
+type "functype//sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from" = fn(ref Array<i32>) -> ref "core:prelude//List<i32>";  // TypeId(122)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//String";  // TypeId(123)
 
@@ -450,7 +450,9 @@ global global:core:prelude/primitive.wado::$const_obj_18: ref "core:prelude/stri
 fn "sequence_literal.wado/$test_0_an_annotation_or_a_cast_supplies_the_target_type"() {
     let $v0_1: i32;
     if ref.is_null(global:sequence_literal.wado::$const_obj_13) {
-        global:sequence_literal.wado::$const_obj_13 = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20, 30));
+        let $mv_items_1: ref "core:prelude//List<i32>";
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20, 30));
+        global:sequence_literal.wado::$const_obj_13 = struct.new "sequence_literal.wado//SeqVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely(local.tee $v0_1(global:sequence_literal.wado::$const_obj_13.items.used) != 3) {
         cold_path;
@@ -491,7 +493,8 @@ fn "sequence_literal.wado/$test_0_an_annotation_or_a_cast_supplies_the_target_ty
         unreachable;
     }
     if ref.is_null(global:sequence_literal.wado::$const_obj_12) {
-        global:sequence_literal.wado::$const_obj_12 = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3));
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3));
+        global:sequence_literal.wado::$const_obj_12 = struct.new "sequence_literal.wado//SeqVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely(local.tee $v0_1(global:sequence_literal.wado::$const_obj_12.items.used) != 3) {
         cold_path;
@@ -503,7 +506,9 @@ fn "sequence_literal.wado/$test_0_an_annotation_or_a_cast_supplies_the_target_ty
 fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_empty_literal_coerces"() {
     let $v0_0: i32;
     if ref.is_null(global:sequence_literal.wado::$const_obj_15) {
-        global:sequence_literal.wado::$const_obj_15 = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3, 4, 5));
+        let $mv_items_1: ref "core:prelude//List<i32>";
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3, 4, 5));
+        global:sequence_literal.wado::$const_obj_15 = struct.new "sequence_literal.wado//SeqVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely(local.tee $v0_0(global:sequence_literal.wado::$const_obj_15.items.used) != 5) {
         cold_path;
@@ -511,7 +516,8 @@ fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_e
         unreachable;
     }
     if ref.is_null(global:sequence_literal.wado::$const_obj_14) {
-        global:sequence_literal.wado::$const_obj_14 = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>());
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>());
+        global:sequence_literal.wado::$const_obj_14 = struct.new "sequence_literal.wado//SeqVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely((local.tee $v0_0(global:sequence_literal.wado::$const_obj_14.items.used) == 0) == 0) {
         cold_path;
@@ -523,7 +529,9 @@ fn "sequence_literal.wado/$test_1_a_parameter_supplies_the_target_type__and_an_e
 fn "sequence_literal.wado/$test_2_an_immutable_target_needs_only_the_from_impl"() {
     let $v0_1: i32;
     if ref.is_null(global:sequence_literal.wado::$const_obj_17) {
-        global:sequence_literal.wado::$const_obj_17 = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3, 4, 5));
+        let $mv_items_1: ref "core:prelude//List<i32>";
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(1, 2, 3, 4, 5));
+        global:sequence_literal.wado::$const_obj_17 = struct.new "sequence_literal.wado//FrozenVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely(local.tee $v0_1(global:sequence_literal.wado::$const_obj_17.items.used) != 5) {
         cold_path;
@@ -564,7 +572,8 @@ fn "sequence_literal.wado/$test_2_an_immutable_target_needs_only_the_from_impl"(
         unreachable;
     }
     if ref.is_null(global:sequence_literal.wado::$const_obj_16) {
-        global:sequence_literal.wado::$const_obj_16 = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20));
+        multivalue_bind [$mv_items_1] = "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/traits.wado/From<Array<T>>::from"(array.new_fixed<i32>(10, 20));
+        global:sequence_literal.wado::$const_obj_16 = struct.new "sequence_literal.wado//FrozenVec<i32>" { items: $mv_items_1 };
     }
     if @unlikely(local.tee $v0_1(global:sequence_literal.wado::$const_obj_16.items.used) != 2) {
         cold_path;
@@ -1824,7 +1833,7 @@ fn "sequence_literal.wado/sequence_literal.wado/FrozenVec<i32>^core:prelude/trai
             continue l210;
         };
     };
-    return struct.new "sequence_literal.wado//FrozenVec<i32>" { items: items };
+    return items;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<sequence_literal.wado/$tmpl$ebaa20f4a908b504,[i32]>"(t) {
@@ -1873,7 +1882,7 @@ fn "sequence_literal.wado/sequence_literal.wado/SeqVec<i32>^core:prelude/traits.
             continue l214;
         };
     };
-    return struct.new "sequence_literal.wado//SeqVec<i32>" { items: $sroa_out_items_21 };
+    return $sroa_out_items_21;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(t) {
