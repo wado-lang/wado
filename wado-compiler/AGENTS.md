@@ -117,6 +117,10 @@ why. A path in `__DATA__` is relative to the fixture's own directory.
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and
   an incremental `cargo test` will not re-expand on its own.
+- A fixture's `-O2` run rewrites its WIR golden in `tests/generated/fixtures/`,
+  and `prune_orphan_wir_goldens` removes the goldens no fixture writes.
+  `mise run update-golden-fixtures` regenerates them all without running the
+  tests; CI's `tidy` job runs it.
 - `wado dump -Ox file.wado` is how you find `wir_expect:Ox` patterns.
 - `wado dump --assert-plan file.wado` shows which operands an `assert` captures
   and which of them a short-circuit can skip.
