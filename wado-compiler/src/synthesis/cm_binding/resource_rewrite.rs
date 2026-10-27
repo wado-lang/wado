@@ -37,7 +37,8 @@ use crate::synthesis::common::{
 
 use super::synthesize_lift;
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_layout_i32, type_id_to_ast_type,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_item_of_type, cm_layout_i32,
+    type_id_to_ast_type,
 };
 use crate::ast::{GenericType, Visibility};
 use crate::component_model::{
@@ -386,6 +387,8 @@ fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegis
             .collect();
         return if tt.is_tuple_def(*def) {
             ast::Type::Tuple(args)
+        } else if let Some(item) = cm_item_of_type(tt, id) {
+            registry.type_decls().item_type(item, args, synth_span())
         } else {
             ast::Type::Generic(GenericType {
                 id: AstId::fresh(),

@@ -17,6 +17,7 @@ pub mod builtin_registry;
 pub mod call_args;
 pub mod canonical;
 pub mod cm_abi;
+pub mod cm_type_decls;
 pub mod codegen;
 pub mod codegen_flags;
 pub mod comment;

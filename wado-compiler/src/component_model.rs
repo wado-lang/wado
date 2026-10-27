@@ -6,7 +6,6 @@
 
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::sync::LazyLock;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -15,7 +14,7 @@ use wasm_encoder::ValType;
 use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    Module as AstModule, NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
+    NamedType, NamespacedGenericType, Type, UseItem, cm_function_path,
     cm_import_of, declares_unrestricted, world_import_of,
 };
 use crate::attribute::CM_PARAMS;
@@ -23,20 +22,20 @@ use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmS
 use crate::cm_abi::{
     CmValType, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
     layout_fields_with_registry, layout_option_with_registry, layout_result_with_registry,
-    layout_tuple_with_registry, layout_variant_with_registry, plain_size_align,
+    layout_tuple_with_registry, layout_variant_with_registry, primitive_size_align,
 };
+use crate::cm_type_decls::CmTypeDecls;
 use crate::defs::{DefId, DefTable};
-use crate::lexer::lex;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     DeclName, DeclPath, RefKind, UNIT_TYPE_NAME, cm_binding_func_name, cm_import_alias,
     cm_lift_func_name, cm_release_args_func_name, cm_world_import_label, cm_wrap_async_func_name,
     ref_type_name, to_cm_name,
 };
-use crate::parser::Parser;
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
 use crate::stdlib;
+use crate::stdlib_snapshot::stdlib_bindings;
 use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{ResolvedType, TypeId};
 use crate::token::Span;
@@ -364,8 +363,9 @@ pub fn cm_payload_type_from_ast(
     registry: &CmInterfaceRegistry,
 ) -> Option<CmPayloadType> {
     let resolved = registry.resolve_type(ty);
+    let decls = registry.type_decls();
     match &resolved {
-        Type::Named(n) if n.name == "String" => Some(CmPayloadType::String),
+        Type::Named(n) if decls.is(n.id, CompilerItem::String) => Some(CmPayloadType::String),
         Type::Named(n) => {
             if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
                 return Some(CmPayloadType::Scalar(scalar));
@@ -402,14 +402,14 @@ pub fn cm_payload_type_from_ast(
             .map(|e| cm_payload_type_from_ast(type_table, e, registry))
             .collect::<Option<Vec<_>>>()
             .map(CmPayloadType::Tuple),
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => Some(CmPayloadType::Option(Box::new(
+        Type::Generic(g) => match decls.item_at(g.id)? {
+            CompilerItem::Option => Some(CmPayloadType::Option(Box::new(
                 cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
             ))),
-            "List" if g.args.len() == 1 => Some(CmPayloadType::List(Box::new(
+            CompilerItem::List => Some(CmPayloadType::List(Box::new(
                 cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
             ))),
-            "Result" if g.args.len() == 2 => {
+            CompilerItem::Result => {
                 let arm = |t: &Type| -> Option<Option<Box<CmPayloadType>>> {
                     if t.is_unit() {
                         Some(None)
@@ -466,8 +466,7 @@ pub fn classify_future_payload_from_ast(
         return CmFuturePayload::Scalar(scalar);
     }
     if let Type::Generic(g) = &resolved
-        && g.name == "Result"
-        && g.args.len() == 2
+        && registry.type_decls().is(g.id, CompilerItem::Result)
         && g.args[0].is_unit()
         && let Some(decl) = wasi_error_code_decl_from_ast(type_table, &g.args[1], registry)
     {
@@ -509,16 +508,17 @@ fn wasi_error_code_decl_from_ast(
 
 /// `result<option<resource>, _>`.
 fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegistry) -> bool {
+    let decls = registry.type_decls();
     let Type::Generic(g) = resolved else {
         return false;
     };
-    if g.name != "Result" || g.args.len() != 2 {
+    if !decls.is(g.id, CompilerItem::Result) {
         return false;
     }
     let Type::Generic(ok) = &registry.resolve_type(&g.args[0]) else {
         return false;
     };
-    if ok.name != "Option" || ok.args.len() != 1 {
+    if !decls.is(ok.id, CompilerItem::Option) {
         return false;
     }
     let Type::Named(inner) = &registry.resolve_type(&ok.args[0]) else {
@@ -595,12 +595,16 @@ pub struct CmVariantCase {
 /// `async func foo(…) -> T` with result `T`, but the Wado-facing declaration
 /// exposes `AsyncCall<T>` so user code can defer `wait()`-ing — and the binding
 /// synthesiser needs the raw `T` for outptr layout. Otherwise a no-op.
-pub fn unwrap_async_call_if_async(is_async: bool, declared: &Option<Type>) -> Option<Type> {
+pub fn unwrap_async_call_if_async(
+    is_async: bool,
+    declared: &Option<Type>,
+    decls: &CmTypeDecls,
+) -> Option<Type> {
     if !is_async {
         return declared.clone();
     }
     match declared {
-        Some(Type::Generic(generic)) if generic.name == "AsyncCall" && generic.args.len() == 1 => {
+        Some(Type::Generic(generic)) if decls.is(generic.id, CompilerItem::AsyncCall) => {
             let inner = &generic.args[0];
             if inner.is_unit() {
                 return None;
@@ -631,38 +635,6 @@ fn cm_attr_cm_name(attrs: &[Attribute], wado_name: &str) -> String {
         })
         .unwrap_or_else(|| panic!("missing #[cm] attribute for CM name: {wado_name}"))
 }
-
-/// `core:linear`'s view a sync import's `list<T>` parameter of numbers is
-/// declared as, `&ListView<T>`.
-const LIST_VIEW: &str = "ListView";
-
-/// The `E` of `ty` when it is a `&ListView<E>`.
-fn list_view_elem(ty: &Type) -> Option<&Type> {
-    let Type::Reference(inner) = ty else {
-        return None;
-    };
-    match inner.as_ref() {
-        Type::Generic(g) if g.name == LIST_VIEW && g.args.len() == 1 => Some(&g.args[0]),
-        _ => None,
-    }
-}
-
-/// The prelude's `type ByteList = List<u8>`, which a binding names for a WIT
-/// `list<u8>`. No CM interface declares it, so the registry carries its base.
-const BYTE_LIST: &str = "ByteList";
-
-static BYTE_LIST_BASE: LazyLock<Type> = LazyLock::new(|| {
-    Type::Generic(GenericType {
-        id: AstId::fresh(),
-        name: "List".to_string(),
-        args: vec![Type::Named(NamedType::new(
-            AstId::fresh(),
-            "u8".to_string(),
-            Span::default(),
-        ))],
-        span: Span::default(),
-    })
-});
 
 /// The CM type an unrestricted resource crosses the boundary as. No CM value
 /// type is a reference, so a copyable handle is a number: an `f64`, which jco
@@ -818,31 +790,23 @@ impl CmFunctionInfo {
         (self.is_async, params, ret)
     }
 
-    /// Whether `canon lower` requires the Memory canonical option.
-    ///
-    /// True when any parameter or return type involves linear memory
-    /// (strings, lists, streams, options, results, tuples), or when async.
-    fn needs_memory(&self) -> bool {
-        if self.is_async {
-            return true;
-        }
-        if self
-            .params
-            .iter()
-            .any(|(_, _, ty)| Self::type_requires_memory(ty))
-        {
-            return true;
-        }
-        self.return_type
-            .as_ref()
-            .is_some_and(Self::return_type_requires_memory)
-    }
-
-    /// Whether `canon lower` requires the Memory canonical option, counting the
-    /// CM records and variants the registry knows. Realloc is required under
-    /// exactly the same conditions.
+    /// Whether `canon lower` requires the Memory canonical option: an async
+    /// function, a parameter or result involving linear memory (strings,
+    /// lists, streams, options, results, tuples), or a CM record or variant
+    /// the registry knows. Realloc is required under exactly the same
+    /// conditions.
     pub fn needs_memory_with_registry(&self, registry: &CmInterfaceRegistry) -> bool {
-        if self.needs_memory() {
+        let decls = registry.type_decls();
+        if self.is_async
+            || self
+                .params
+                .iter()
+                .any(|(_, _, ty)| ty.any(&mut |ty| type_itself_requires_memory(ty, decls)))
+            || self
+                .return_type
+                .as_ref()
+                .is_some_and(|ty| return_type_requires_memory(ty, decls))
+        {
             return true;
         }
         let mut seen = IndexSet::default();
@@ -865,7 +829,7 @@ impl CmFunctionInfo {
         seen: &mut IndexSet<String>,
     ) -> bool {
         ty.any(&mut |ty| {
-            Self::type_itself_requires_memory(ty)
+            type_itself_requires_memory(ty, registry.type_decls())
                 || matches!(ty, Type::Named(named)
                     if Self::cm_named_requires_memory(named, registry, seen))
         })
@@ -908,57 +872,32 @@ impl CmFunctionInfo {
         })
     }
 
-    /// Whether a parameter type requires Memory + Realloc in canon lower: a
-    /// string, a list or a stream anywhere in it, `option<string>` included.
-    fn type_requires_memory(ty: &Type) -> bool {
-        ty.any(&mut Self::type_itself_requires_memory)
-    }
+}
 
-    /// Whether `ty` is a string, a list or a stream, not looking inside it.
-    fn type_itself_requires_memory(ty: &Type) -> bool {
-        match ty {
-            Type::Generic(g) => matches!(g.name.as_str(), "Stream" | "List" | "TreeMap"),
-            Type::Named(named) => named.name == "String",
-            Type::NamespacedGeneric(_)
-            | Type::Tuple(_)
-            | Type::Reference(_)
-            | Type::MutReference(_)
-            | Type::Function(_)
-            | Type::TypePackSpread(..)
-            | Type::Infer(_)
-            | Type::Error(_) => false,
-        }
-    }
+/// Whether `ty` is a string, a list or a stream, not looking inside it.
+fn type_itself_requires_memory(ty: &Type, decls: &CmTypeDecls) -> bool {
+    matches!(
+        decls.item_of(ty),
+        Some(CompilerItem::String | CompilerItem::List | CompilerItem::TreeMap | CompilerItem::Stream)
+    )
+}
 
-    /// Whether this async function has a `Stream<T>` or `Future<T>` parameter.
-    ///
-    /// Streaming async functions cannot be waited on inside the adapter because
-    /// the caller must write to the stream before the subtask completes.
-    /// The adapter returns the raw subtask handle (i32) for these functions.
-    pub fn has_streaming_param(&self) -> bool {
-        self.params.iter().any(|(_, _, ty)| {
-            matches!(ty, Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future"))
-        })
-    }
-
-    /// Whether this function's return type carries a `Future<T>` anywhere.
-    pub fn return_type_has_future(&self) -> bool {
-        self.return_type.as_ref().is_some_and(|ty| {
-            ty.any(&mut |ty| matches!(ty, Type::Generic(g) if g.name == "Future"))
-        })
-    }
-
-    /// Check if a return type requires Memory + Realloc in canon lower.
-    fn return_type_requires_memory(ty: &Type) -> bool {
-        match ty {
-            Type::Named(named) => named.name == "String",
-            Type::Generic(generic) => matches!(
-                generic.name.as_str(),
-                "List" | "TreeMap" | "Option" | "Result" | "Stream" | "Future"
-            ),
-            Type::Tuple(elems) => !elems.is_empty(),
-            _ => false,
-        }
+/// Whether a return type requires Memory + Realloc in canon lower.
+fn return_type_requires_memory(ty: &Type, decls: &CmTypeDecls) -> bool {
+    match ty {
+        Type::Tuple(elems) => !elems.is_empty(),
+        _ => matches!(
+            decls.item_of(ty),
+            Some(
+                CompilerItem::String
+                    | CompilerItem::List
+                    | CompilerItem::TreeMap
+                    | CompilerItem::Option
+                    | CompilerItem::Result
+                    | CompilerItem::Stream
+                    | CompilerItem::Future
+            )
+        ),
     }
 }
 
@@ -1016,6 +955,9 @@ pub struct CmInterfaceRegistry {
     /// `AstId`, free to disagree with it. Keyed here, one pass writes it and
     /// every consumer reads the same entry (WEP 2026-08-12).
     source_interfaces: SourceInterfaces,
+
+    /// The declaration each type name the registry holds resolves to.
+    type_decls: CmTypeDecls,
 
     /// Every bound CM function, by [`CmFunctionInfo::cm_identifier`].
     functions: IndexMap<String, CmFunctionInfo>,
@@ -1499,6 +1441,7 @@ impl InterfaceDeclTable {
         name: &str,
         newtypes: &IndexMap<(String, String), Type>,
         sources: &SourceInterfaces,
+        decls: &CmTypeDecls,
     ) -> Option<InterfaceExportLookup> {
         let entry = self.by_name.get(name)?;
         let methods = entry
@@ -1515,7 +1458,7 @@ impl InterfaceDeclTable {
                 return_type: m
                     .return_type
                     .as_ref()
-                    .map(|ty| unwrap_async_call_if_async(m.is_async, &Some(ty.clone())))
+                    .map(|ty| unwrap_async_call_if_async(m.is_async, &Some(ty.clone()), decls))
                     .unwrap_or(None)
                     .or_else(|| m.return_type.clone()),
             })
@@ -1959,6 +1902,27 @@ impl CmInterfaceRegistry {
         Self::default()
     }
 
+    /// Answer what each type the program's own modules and component imports
+    /// sign names, through this compile's resolution; the bundled bindings were
+    /// answered once for every compile.
+    pub fn bind_program_types(
+        &mut self,
+        modules: &IndexMap<ModuleSource, ast::Module>,
+        resolutions: &Resolutions,
+    ) {
+        let signing = modules
+            .iter()
+            .filter(|(source, _)| !source.is_core() && !source.is_binding())
+            .map(|(_, module)| module);
+        self.type_decls.bind(modules.values(), signing, resolutions);
+    }
+
+    /// What each type name the registry holds names.
+    #[must_use]
+    pub fn type_decls(&self) -> &CmTypeDecls {
+        &self.type_decls
+    }
+
     /// Whether the resource `name` declared in `source` is unrestricted, and so
     /// crosses the boundary as the universal handle rather than a CM handle.
     #[must_use]
@@ -2113,32 +2077,20 @@ impl CmInterfaceRegistry {
     }
 
     fn build_from_stdlib_inner() -> (Self, WorldRegistry) {
-        fn parse_module(source: &str) -> AstModule {
-            let r = lex(source);
-            assert!(r.errors.is_empty(), "lexer error in stdlib: {:?}", r.errors);
-            let mut parser = Parser::new(r.tokens);
-            parser.parse_strict().expect("parser error in stdlib")
-        }
-
         // Two-pass bootstrap so every stdlib `Type::Named` carries an exact
         // source interface. Pass 1 records each module's declared type names and
         // `#[cm(…)]` paths, so pass 2 can resolve a cross-module `use` whose
         // target parses after the importer; pass 2 then builds each module's
         // local name → source_interface map and walks its `Type` nodes.
-        let mut modules: Vec<(&'static str, ast::Module)> = Vec::new();
-        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
-            IndexMap::default();
-        for (path, source) in stdlib::all_binding_modules()
+        let bindings = stdlib_bindings();
+        let modules = bindings.modules.clone();
+        let defs_by_module: IndexMap<&'static str, IndexMap<String, String>> = modules
             .iter()
-            .copied()
-            .chain(stdlib::wit_core_submodules())
-        {
-            let module = parse_module(source);
-            defs_by_module.insert(path, collect_cm_definitions(&module));
-            modules.push((path, module));
-        }
+            .map(|(path, module)| (*path, collect_cm_definitions(module)))
+            .collect();
 
         let mut registry = Self::new();
+        registry.type_decls = bindings.type_decls.clone();
         let mut world_registry = WorldRegistry::new();
 
         // Pass 1: resolve named-type sources and register types/interfaces/
@@ -2376,8 +2328,11 @@ impl CmInterfaceRegistry {
                         // Resource methods declared as `async fn -> AsyncCall<T>`
                         // are unwrapped at registration so downstream code
                         // works with the CM-ABI `T`. See the effect branch.
-                        let return_type =
-                            unwrap_async_call_if_async(method.is_async, &method.return_type);
+                        let return_type = unwrap_async_call_if_async(
+                            method.is_async,
+                            &method.return_type,
+                            &self.type_decls,
+                        );
 
                         self.register(
                             &resource.name,
@@ -2524,7 +2479,11 @@ impl CmInterfaceRegistry {
                 // Store the CM-ABI return type: an async import's `AsyncCall<T>`
                 // wrapper is stripped here, and both the elaborator and the
                 // binding synthesiser re-wrap it so user code still sees it.
-                let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
+                let return_type = unwrap_async_call_if_async(
+                    method.is_async,
+                    &method.return_type,
+                    &self.type_decls,
+                );
                 self.register(
                     &effect.name,
                     &method.name,
@@ -2670,7 +2629,11 @@ impl CmInterfaceRegistry {
                         )
                     })
                     .collect();
-                let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
+                let return_type = unwrap_async_call_if_async(
+                    method.is_async,
+                    &method.return_type,
+                    &self.type_decls,
+                );
                 self.register(
                     &effect.name,
                     &method.name,
@@ -2807,7 +2770,12 @@ impl CmInterfaceRegistry {
                 world_registry.register(
                     world,
                     |name| {
-                        interface_decls.export_lookup(name, &self.newtypes, &self.source_interfaces)
+                        interface_decls.export_lookup(
+                            name,
+                            &self.newtypes,
+                            &self.source_interfaces,
+                            &self.type_decls,
+                        )
                     },
                     |name| interface_decls.import_cm_fq(name),
                 );
@@ -3230,13 +3198,9 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// The base of the prelude newtype `named` refers to. A reference with a
-    /// declaring interface names that interface's type, whatever its name.
-    pub fn prelude_newtype_base(&self, named: &NamedType) -> Option<&'static Type> {
-        if self.source_interface(named).is_some() {
-            return None;
-        }
-        (named.name == BYTE_LIST).then(|| &*BYTE_LIST_BASE)
+    /// The base of the prelude newtype `named` refers to.
+    pub fn prelude_newtype_base(&self, named: &NamedType) -> Option<&Type> {
+        self.type_decls.newtype_base(named)
     }
 
     /// The registration source and base type of a newtype the compiled package
@@ -3453,8 +3417,7 @@ impl CmInterfaceRegistry {
 
         // Check for Option<ResourceName> pattern
         if let Type::Generic(g) = ty
-            && g.name == "Option"
-            && g.args.len() == 1
+            && self.type_decls.is(g.id, CompilerItem::Option)
             && let Type::Named(inner) = &g.args[0]
             && let Some(source) = self.source_interface(inner)
             && let Some(cm_name) = self.get_resource_cm_name_by_source(&source, &inner.name)
@@ -3472,33 +3435,28 @@ impl CmInterfaceRegistry {
     pub fn is_function_supported(&self, func: &CmFunctionInfo) -> bool {
         // Build sets of known enum, variant, flags, and resource names
         // (bare name is enough here — the sets are only used as a membership check).
-        let enums: IndexSet<&str> = self
-            .enums
-            .keys()
-            .chain(self.variants.keys())
-            .chain(self.flags.keys())
-            .map(|(_, n)| n.as_str())
-            .collect();
-        let resources: IndexSet<&str> = self.resources.keys().map(|(_, n)| n.as_str()).collect();
-        let structs: IndexSet<&str> = self.structs.keys().map(|(_, n)| n.as_str()).collect();
-
-        // Check all parameter types, at the boundary's view: an extern handle is an `f64`.
-        for (_, _, ty) in &func.params {
-            let resolved = self.resolve_type(ty);
-            if !is_param_type_supported_with_types(&resolved, &enums, &resources, &structs) {
-                return false;
-            }
-        }
-        // Check return type if present - resolve newtypes first
-        // Return types may contain newtypes like Mark, Duration, Instant
-        // that need to be resolved to their underlying types for the support check
-        if let Some(ret_ty) = &func.return_type {
-            let resolved_ret = self.resolve_type(ret_ty);
-            if !is_return_type_supported_with_types(&resolved_ret, &enums, &resources, &structs) {
-                return false;
-            }
-        }
-        true
+        let known = KnownTypes {
+            decls: &self.type_decls,
+            enums: self
+                .enums
+                .keys()
+                .chain(self.variants.keys())
+                .chain(self.flags.keys())
+                .map(|(_, n)| n.as_str())
+                .collect(),
+            resources: self.resources.keys().map(|(_, n)| n.as_str()).collect(),
+            structs: self.structs.keys().map(|(_, n)| n.as_str()).collect(),
+        };
+        // Parameter types at the boundary's view (an extern handle is an `f64`),
+        // and the return type with its newtypes (`Mark`, `Duration`, `Instant`)
+        // resolved to their bases.
+        func.params
+            .iter()
+            .all(|(_, _, ty)| known.param_supported(&self.resolve_type(ty)))
+            && func
+                .return_type
+                .as_ref()
+                .is_none_or(|ty| known.return_supported(&self.resolve_type(ty)))
     }
 
     /// Register a WASI function from an interface method
@@ -3559,14 +3517,13 @@ impl CmInterfaceRegistry {
             .into_iter()
             .enumerate()
             .map(|(i, (name, cm_name, ty))| {
-                if let Some(elem) = list_view_elem(&ty) {
+                if let Type::Reference(view) = &ty
+                    && let Type::Generic(g) = view.as_ref()
+                    && self.type_decls.is(g.id, CompilerItem::ListView)
+                {
                     list_args.push(i);
-                    let list = Type::Generic(GenericType {
-                        id: AstId::fresh(),
-                        name: "List".to_string(),
-                        args: vec![elem.clone()],
-                        span: ty.span(),
-                    });
+                    let list =
+                        self.type_decls.item_type(CompilerItem::List, g.args.clone(), ty.span());
                     return (name, cm_name, self.value_type(&list));
                 }
                 if !matches!(ty, Type::Function(_)) {
@@ -3656,7 +3613,11 @@ impl CmInterfaceRegistry {
                 callbacks,
                 // As for an interface method, the CM-ABI return type drops the
                 // `AsyncCall<T>` wrapper user code keeps seeing.
-                return_type: unwrap_async_call_if_async(func.is_async, &func.return_type),
+                return_type: unwrap_async_call_if_async(
+                    func.is_async,
+                    &func.return_type,
+                    &self.type_decls,
+                ),
                 world: Some(WorldFunctionSite {
                     component: component.clone(),
                     label: cm_world_import_label(&namespace, cm_func_name),
@@ -3784,6 +3745,10 @@ impl CmInterfaceRegistry {
     fn cm_flatten_into(&self, ty: &Type, out: &mut Vec<CmValType>) {
         let resolved = self.resolve_type(ty);
         match &resolved {
+            Type::Named(named) if self.type_decls.is(named.id, CompilerItem::String) => {
+                out.push(CmValType::I32);
+                out.push(CmValType::I32);
+            }
             Type::Named(named) => match named.name.as_str() {
                 "bool" | "u8" | "i8" | "u16" | "i16" | "i32" | "u32" | "char" => {
                     out.push(CmValType::I32);
@@ -3791,10 +3756,6 @@ impl CmInterfaceRegistry {
                 "i64" | "u64" => out.push(CmValType::I64),
                 "f32" => out.push(CmValType::F32),
                 "f64" => out.push(CmValType::F64),
-                "String" => {
-                    out.push(CmValType::I32);
-                    out.push(CmValType::I32);
-                }
                 UNIT_TYPE_NAME => {}
                 name => {
                     if let Some(source) = self.resolve_cm_source_for(named) {
@@ -3819,26 +3780,26 @@ impl CmInterfaceRegistry {
                     out.push(CmValType::I32);
                 }
             },
-            Type::Generic(g) => match g.name.as_str() {
+            Type::Generic(g) => match self.type_decls.item_at(g.id) {
                 // `map<K, V>` despecializes to `list<tuple<K, V>>`, so it
                 // carries that type's `(ptr, count)` pair.
-                "List" | "TreeMap" => {
+                Some(CompilerItem::List | CompilerItem::TreeMap) => {
                     out.push(CmValType::I32);
                     out.push(CmValType::I32);
                 }
-                "Stream" | "Future" | "Own" | "Borrow" => out.push(CmValType::I32),
-                "Option" if g.args.len() == 1 => {
+                Some(CompilerItem::Stream | CompilerItem::Future) => out.push(CmValType::I32),
+                Some(CompilerItem::Option) => {
                     out.push(CmValType::I32);
                     self.cm_flatten_into(&g.args[0], out);
                 }
-                "Result" if g.args.len() == 2 => {
+                Some(CompilerItem::Result) => {
                     out.push(CmValType::I32);
                     self.push_joined_payloads(
                         [Some(g.args[0].clone()), Some(g.args[1].clone())].into_iter(),
                         out,
                     );
                 }
-                other => panic!("unsupported generic type for CM flattening: {other}"),
+                _ => panic!("unsupported generic type for CM flattening: {}", g.name),
             },
             Type::Reference(_) | Type::MutReference(_) => out.push(CmValType::I32),
             Type::Tuple(elems) => {
@@ -4167,10 +4128,18 @@ pub fn wado_primitive_name_to_cm(name: &str) -> Option<PrimitiveValType> {
         "f64" => PrimitiveValType::F64,
         "bool" => PrimitiveValType::Bool,
         "char" => PrimitiveValType::Char,
-        "String" => PrimitiveValType::String,
         _ => return None,
     };
     Some(prim)
+}
+
+/// The CM primitive `named` is: a Wado primitive by its name, which no
+/// declaration can take, or the `String` declaration.
+pub fn cm_primitive_of(named: &NamedType, decls: &CmTypeDecls) -> Option<PrimitiveValType> {
+    if decls.is(named.id, CompilerItem::String) {
+        return Some(PrimitiveValType::String);
+    }
+    wado_primitive_name_to_cm(&named.name)
 }
 
 /// Registry-driven recursive builder for Component Model types.
@@ -4485,9 +4454,10 @@ impl CmTypeGen {
         cm_interface_registry: &CmInterfaceRegistry,
         resource_exports: &IndexMap<&str, u32>,
     ) -> ComponentValType {
+        let decls = cm_interface_registry.type_decls();
         match ty {
             Type::Named(named) => {
-                if let Some(prim) = wado_primitive_name_to_cm(&named.name) {
+                if let Some(prim) = cm_primitive_of(named, decls) {
                     return ComponentValType::Primitive(prim);
                 }
                 let name = named.name.as_str();
@@ -4677,8 +4647,8 @@ impl CmTypeGen {
                 }
                 panic!("unsupported reference type for CM instance: {ty:?}")
             }
-            Type::Generic(generic) => match generic.name.as_str() {
-                "List" => {
+            Type::Generic(generic) => match decls.item_at(generic.id) {
+                Some(CompilerItem::List) => {
                     let elem_cm = self.ast_type_to_cm(
                         sink,
                         &generic.args[0],
@@ -4689,7 +4659,7 @@ impl CmTypeGen {
                     let idx = self.define_list(sink, elem_cm, &key);
                     ComponentValType::Type(idx)
                 }
-                "TreeMap" => {
+                Some(CompilerItem::TreeMap) => {
                     let key_cm = self.ast_type_to_cm(
                         sink,
                         &generic.args[0],
@@ -4710,7 +4680,7 @@ impl CmTypeGen {
                     let idx = self.define_map(sink, key_cm, value_cm, &key);
                     ComponentValType::Type(idx)
                 }
-                "Result" => {
+                Some(CompilerItem::Result) => {
                     let is_ok_unit = generic.args[0].is_unit();
                     let is_err_unit = generic.args[1].is_unit();
                     let ok_type = if is_ok_unit {
@@ -4741,7 +4711,7 @@ impl CmTypeGen {
                     let idx = self.define_result(sink, ok_type, err_type, &key);
                     ComponentValType::Type(idx)
                 }
-                "Option" => {
+                Some(CompilerItem::Option) => {
                     let inner_cm = self.ast_type_to_cm(
                         sink,
                         &generic.args[0],
@@ -4752,7 +4722,7 @@ impl CmTypeGen {
                     let idx = self.define_option(sink, inner_cm, &key);
                     ComponentValType::Type(idx)
                 }
-                "Stream" => {
+                Some(CompilerItem::Stream) => {
                     let (elem, key) = if generic.args.is_empty() {
                         (None, "unit".to_string())
                     } else {
@@ -4767,7 +4737,7 @@ impl CmTypeGen {
                     let idx = self.define_stream(sink, elem, &key);
                     ComponentValType::Type(idx)
                 }
-                "Future" => {
+                Some(CompilerItem::Future) => {
                     let (inner, key) = if generic.args.is_empty() {
                         (None, "unit".to_string())
                     } else {
@@ -4782,7 +4752,7 @@ impl CmTypeGen {
                     let idx = self.define_future(sink, inner, &key);
                     ComponentValType::Type(idx)
                 }
-                "AsyncCall" if generic.args.len() == 1 => {
+                Some(CompilerItem::AsyncCall) => {
                     // `AsyncCall<T>` is a Wado-level wrapper for CM async
                     // imports; the CM ABI-level type is the inner `T`.
                     // Transparently unwrap here so downstream code sees the
@@ -4830,24 +4800,12 @@ pub fn cm_type_to_valtype(ty: &Type) -> ValType {
             // are passed as i32 handles/pointers
             _ => ValType::I32,
         },
-        Type::Generic(generic) => match generic.name.as_str() {
-            // Stream<T> is represented as i32 handle
-            "Stream" => ValType::I32,
-            // Result<T, E> is represented as i32 discriminant
-            "Result" => ValType::I32,
-            // Future<T> is represented as i32 handle
-            "Future" => ValType::I32,
-            // List<T> / TreeMap<K, V> are GC references (i32 in a WASI context)
-            "List" | "TreeMap" => ValType::I32,
-            // Option<T> is represented as i32 discriminant
-            "Option" => ValType::I32,
-            other => panic!("unknown generic type in cm_type_to_valtype: {other}"),
-        },
-        Type::Reference(_) | Type::MutReference(_) => {
-            // borrow<resource> or own<resource> - just an i32 handle
+        // A stream or future is a handle, a result or option a discriminant, a
+        // list or map a GC reference, a reference a `borrow` or `own` handle:
+        // each is an i32 in a WASI context.
+        Type::Generic(_) | Type::Reference(_) | Type::MutReference(_) | Type::Tuple(_) => {
             ValType::I32
         }
-        Type::Tuple(_) => ValType::I32,
         other => panic!("unsupported type variant in cm_type_to_valtype: {other:?}"),
     }
 }
@@ -4896,99 +4854,95 @@ pub fn type_id_to_valtype(type_id: TypeId) -> ValType {
     }
 }
 
-/// Whether a parameter type, its aliases already resolved, has a CM lowering.
-/// A parameter always carries a type, so `()` has none.
-fn is_param_type_supported_with_types(
-    ty: &Type,
-    enums: &IndexSet<&str>,
-    resources: &IndexSet<&str>,
-    structs: &IndexSet<&str>,
-) -> bool {
-    match ty {
-        Type::Named(named) => is_supported_type_name(&named.name, enums, resources, structs),
-        Type::Generic(generic) => {
-            matches!(
-                generic.name.as_str(),
-                "Stream" | "Result" | "Future" | "Option" | "List" | "TreeMap"
-            ) && !generic.args.iter().any(mentions_empty_tuple)
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            // borrow<resource> - passed as i32 handle at CM boundary
-            if let Type::Named(named) = inner.as_ref() {
-                resources.contains(named.name.as_str())
-            } else {
-                false
-            }
-        }
-        Type::Tuple(elems) if !elems.is_empty() => elems
-            .iter()
-            .all(|e| is_param_type_supported_with_types(e, enums, resources, structs)),
-        _ => false,
-    }
+/// The types a support check accepts by name: the compiler items, and the
+/// enums, resources and records the registry knows.
+struct KnownTypes<'a> {
+    decls: &'a CmTypeDecls,
+    enums: IndexSet<&'a str>,
+    resources: IndexSet<&'a str>,
+    structs: IndexSet<&'a str>,
 }
 
-/// Whether `name` is a CM primitive or one of the known enums, resources and
-/// records.
-fn is_supported_type_name(
-    name: &str,
-    enums: &IndexSet<&str>,
-    resources: &IndexSet<&str>,
-    structs: &IndexSet<&str>,
-) -> bool {
-    wado_primitive_name_to_cm(name).is_some()
-        || enums.contains(name)
-        || resources.contains(name)
-        || structs.contains(name)
+impl KnownTypes<'_> {
+    /// Whether a parameter type, its aliases already resolved, has a CM
+    /// lowering. A parameter always carries a type, so `()` has none.
+    fn param_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => self.named_supported(named),
+            Type::Generic(generic) => {
+                matches!(
+                    self.decls.item_at(generic.id),
+                    Some(
+                        CompilerItem::Stream
+                            | CompilerItem::Result
+                            | CompilerItem::Future
+                            | CompilerItem::Option
+                            | CompilerItem::List
+                            | CompilerItem::TreeMap
+                    )
+                ) && !generic.args.iter().any(mentions_empty_tuple)
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                // borrow<resource> - passed as i32 handle at CM boundary
+                if let Type::Named(named) = inner.as_ref() {
+                    self.resources.contains(named.name.as_str())
+                } else {
+                    false
+                }
+            }
+            Type::Tuple(elems) if !elems.is_empty() => {
+                elems.iter().all(|e| self.param_supported(e))
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `named` is a string, a CM primitive or one of the known enums,
+    /// resources and records.
+    fn named_supported(&self, named: &NamedType) -> bool {
+        let name = named.name.as_str();
+        self.decls.is(named.id, CompilerItem::String)
+            || wado_primitive_name_to_cm(name).is_some()
+            || self.enums.contains(name)
+            || self.resources.contains(name)
+            || self.structs.contains(name)
+    }
+
+    /// Whether a result type, its aliases already resolved, has a CM lifting.
+    fn return_supported(&self, ty: &Type) -> bool {
+        match ty {
+            Type::Named(named) => ty.is_unit() || self.named_supported(named),
+            Type::Generic(generic) => match self.decls.item_at(generic.id) {
+                Some(CompilerItem::Stream | CompilerItem::Future) => {
+                    !generic.args.iter().any(mentions_empty_tuple)
+                }
+                // `AsyncCall<T>` is the Wado-level wrapper for async CM imports;
+                // the CM ABI return is the inner `T`. Support depends on `T`.
+                Some(CompilerItem::AsyncCall) => self.return_supported(&generic.args[0]),
+                // A `map` key's `keytype` restriction needs resolved types, so
+                // the boundary representability check enforces it, not this
+                // pass. A list/option element is any supported value type (e.g.
+                // `list<list<u8>>`, `list<[field-name, field-value]>`).
+                Some(
+                    CompilerItem::Result
+                    | CompilerItem::List
+                    | CompilerItem::Option
+                    | CompilerItem::TreeMap,
+                ) => generic.args.iter().all(|arg| self.return_supported(arg)),
+                _ => false,
+            },
+            Type::Tuple(elements) if !elements.is_empty() => {
+                elements.iter().all(|el| self.return_supported(el))
+            }
+            _ => false,
+        }
+    }
 }
 
 /// Whether `ty` names the empty tuple anywhere. The shape predicates accept a
 /// generic without judging its arguments, so `[]` would otherwise ride past.
 fn mentions_empty_tuple(ty: &Type) -> bool {
     ty.any(&mut |ty| matches!(ty, Type::Tuple(elems) if elems.is_empty()))
-}
-
-/// Whether a result type, its aliases already resolved, has a CM lifting.
-fn is_return_type_supported_with_types(
-    ty: &Type,
-    enums: &IndexSet<&str>,
-    resources: &IndexSet<&str>,
-    structs: &IndexSet<&str>,
-) -> bool {
-    match ty {
-        Type::Named(named) => {
-            ty.is_unit() || is_supported_type_name(&named.name, enums, resources, structs)
-        }
-        Type::Generic(generic) => {
-            match generic.name.as_str() {
-                "Stream" | "Future" => !generic.args.iter().any(mentions_empty_tuple),
-                "AsyncCall" if generic.args.len() == 1 => {
-                    // `AsyncCall<T>` is the Wado-level wrapper for async CM imports;
-                    // the CM ABI return is the inner `T`. Support depends on `T`.
-                    is_return_type_supported_with_types(&generic.args[0], enums, resources, structs)
-                }
-                "Result" => {
-                    // Result<T, E> - both T and E must be supported
-                    generic.args.iter().all(|arg| {
-                        is_return_type_supported_with_types(arg, enums, resources, structs)
-                    })
-                }
-                // A `map` key's `keytype` restriction needs resolved types, so
-                // the boundary representability check enforces it, not this pass.
-                "List" | "Option" | "TreeMap" => {
-                    // A list/option element is any supported value type (e.g.
-                    // `list<list<u8>>`, `list<[field-name, field-value]>`).
-                    generic.args.iter().all(|arg| {
-                        is_return_type_supported_with_types(arg, enums, resources, structs)
-                    })
-                }
-                _ => false,
-            }
-        }
-        Type::Tuple(elements) if !elements.is_empty() => elements
-            .iter()
-            .all(|el| is_return_type_supported_with_types(el, enums, resources, structs)),
-        _ => false,
-    }
 }
 
 /// Canonical ABI maximum flat results before a return must use an outptr.
@@ -5052,16 +5006,24 @@ fn cm_variant_size_align(named: &NamedType, registry: &CmInterfaceRegistry) -> O
     Some(layout_variant_with_registry(cases.len(), payloads, registry).size_align())
 }
 
-/// Registry-aware CM canonical ABI size and alignment. A named declaration
-/// resolves through the registry rather than defaulting to the 4-byte handle.
+/// CM canonical ABI size and alignment. A named declaration resolves through
+/// the registry; one it does not know is a 4-byte handle (an enum or resource).
 pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u32, u32) {
-    let unregistered = || plain_size_align(ty);
+    const HANDLE: (u32, u32) = (4, 4);
+    // `string` and `list<T>` are a `(ptr: i32, len: i32)`, and `map<K, V>`
+    // despecializes to `list<tuple<K, V>>`.
+    const PTR_LEN: (u32, u32) = (8, 4);
+    let decls = registry.type_decls();
     match ty {
+        Type::Named(named) if decls.is(named.id, CompilerItem::String) => PTR_LEN,
         Type::Named(named) => {
+            if let Some(primitive) = primitive_size_align(&named.name) {
+                return primitive;
+            }
             let Some(source) = registry.resolve_cm_source_for(named) else {
                 return registry
                     .prelude_newtype_base(named)
-                    .map_or_else(unregistered, |base| cm_layout_with_registry(base, registry));
+                    .map_or(HANDLE, |base| cm_layout_with_registry(base, registry));
             };
             if let Some(resolved) =
                 registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
@@ -5088,21 +5050,23 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
                     cm_flags_byte_align(members.len()),
                 );
             }
-            unregistered()
+            HANDLE
         }
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
+        Type::Generic(g) => match decls.item_at(g.id) {
+            Some(CompilerItem::List | CompilerItem::TreeMap) => PTR_LEN,
+            Some(CompilerItem::Option) => {
                 layout_option_with_registry(&g.args[0], registry).size_align()
             }
-            "Result" if g.args.len() == 2 => {
+            Some(CompilerItem::Result) => {
                 layout_result_with_registry(&g.args[0], &g.args[1], registry).size_align()
             }
-            _ => unregistered(),
+            // A stream or a future is a handle.
+            _ => HANDLE,
         },
-        Type::Tuple(elems) if !elems.is_empty() => {
-            layout_tuple_with_registry(elems, registry).size_align()
-        }
-        _ => unregistered(),
+        Type::Tuple(elems) if elems.is_empty() => (0, 1),
+        Type::Tuple(elems) => layout_tuple_with_registry(elems, registry).size_align(),
+        Type::Reference(_) | Type::MutReference(_) => HANDLE,
+        _ => (0, 1),
     }
 }
 
@@ -5519,65 +5483,24 @@ mod tests {
 
     #[test]
     fn test_array_and_option_type_support() {
-        let none = IndexSet::default();
-        let is_return_type_supported =
-            |ty: &Type| is_return_type_supported_with_types(ty, &none, &none, &none);
-
-        // List<String> should be supported
-        let array_string = Type::Generic(GenericType {
-            id: AstId::fresh(),
-            name: "List".to_string(),
-            args: vec![Type::Named(NamedType {
-                id: AstId::fresh(),
-                name: "String".to_string(),
-                span: make_span(),
-            })],
-            span: make_span(),
-        });
-        assert!(
-            is_return_type_supported(&array_string),
-            "List<String> should be supported"
+        let decls = stdlib_bindings().type_decls.clone();
+        let item = |item, args| decls.item_type(item, args, make_span());
+        let string = || item(CompilerItem::String, vec![]);
+        let array_string = item(CompilerItem::List, vec![string()]);
+        let array_tuple = item(
+            CompilerItem::List,
+            vec![Type::Tuple(vec![string(), string()])],
         );
-
-        // List<[String, String]> should be supported
-        let tuple_ss = Type::Tuple(vec![
-            Type::Named(NamedType {
-                id: AstId::fresh(),
-                name: "String".to_string(),
-                span: make_span(),
-            }),
-            Type::Named(NamedType {
-                id: AstId::fresh(),
-                name: "String".to_string(),
-                span: make_span(),
-            }),
-        ]);
-        let array_tuple = Type::Generic(GenericType {
-            id: AstId::fresh(),
-            name: "List".to_string(),
-            args: vec![tuple_ss],
-            span: make_span(),
-        });
-        assert!(
-            is_return_type_supported(&array_tuple),
-            "List<[String, String]> should be supported"
-        );
-
-        // Option<String> should be supported
-        let option_string = Type::Generic(GenericType {
-            id: AstId::fresh(),
-            name: "Option".to_string(),
-            args: vec![Type::Named(NamedType {
-                id: AstId::fresh(),
-                name: "String".to_string(),
-                span: make_span(),
-            })],
-            span: make_span(),
-        });
-        assert!(
-            is_return_type_supported(&option_string),
-            "Option<String> should be supported"
-        );
+        let option_string = item(CompilerItem::Option, vec![string()]);
+        let known = KnownTypes {
+            decls: &decls,
+            enums: IndexSet::default(),
+            resources: IndexSet::default(),
+            structs: IndexSet::default(),
+        };
+        for ty in [array_string, array_tuple, option_string] {
+            assert!(known.return_supported(&ty), "{} should be supported", render_ast_type(&ty));
+        }
     }
 
     #[test]
@@ -5938,7 +5861,10 @@ mod tests {
 
     #[test]
     fn single_flat_value_record_returns_flat_not_outptr() {
-        let mut registry = CmInterfaceRegistry::new();
+        let mut registry = (*CmInterfaceRegistry::build_from_stdlib().0).clone();
+        let string = registry
+            .type_decls()
+            .item_type(CompilerItem::String, vec![], make_span());
         let iface = "pkg:app/app@1";
         registry.structs.insert(
             (iface.into(), "Single".into()),
@@ -5954,7 +5880,7 @@ mod tests {
         );
         registry.structs.insert(
             (iface.into(), "Wrap".into()),
-            ("wrap".into(), vec![("s".into(), named("String"))], vec![]),
+            ("wrap".into(), vec![("s".into(), string)], vec![]),
         );
 
         assert!(

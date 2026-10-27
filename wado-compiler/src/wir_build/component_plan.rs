@@ -4,7 +4,8 @@
 //! structure. Built by `wir_build::plan_project`, consumed by `codegen`.
 
 use crate::ast::Type;
-use crate::component_model::{CmInterfaceRegistry, wado_primitive_name_to_cm};
+use crate::compiler_item::CompilerItem;
+use crate::component_model::{CmInterfaceRegistry, cm_primitive_of, wado_primitive_name_to_cm};
 use crate::hashmap::IndexMap;
 use crate::name::{INTERNAL_PREFIX, to_cm_name};
 use crate::package::test_selected;
@@ -12,6 +13,7 @@ use crate::tir::TirTest;
 use crate::world_registry::{
     CALLBACK_INTERFACE, CallbackExport, WorldExportInfo, WorldInfo, WorldRegistry,
 };
+use wasm_encoder::PrimitiveValType;
 
 /// Plan for the Component Model structure.
 ///
@@ -97,11 +99,9 @@ pub struct WorldExportPlan {
 /// [`Self::HandlerResult`].
 #[derive(Debug, Clone)]
 pub enum CmExportType {
-    /// A primitive value type at the boundary, carrying the Wado type name
-    /// (`"bool"`, `"u32"`, `"i64"`, `"f64"`, `"char"`, `"String"`, ...).
-    /// Codegen maps it to the matching `PrimitiveValType`. Used by `--lib`
-    /// world exports whose signatures are primitives-only.
-    Primitive(String),
+    /// A primitive value type at the boundary: `bool`, a number, `char` or
+    /// `string`.
+    Primitive(PrimitiveValType),
     /// `result<>` — no value at the boundary.
     ///
     /// Produced when the export has no return type or its return type is
@@ -242,7 +242,11 @@ fn callback_export_plan(export: &CallbackExport) -> WorldExportPlan {
         cm_params: export
             .params
             .iter()
-            .map(|(name, ty)| (name.clone(), CmExportType::Primitive((*ty).to_string())))
+            .map(|(name, ty)| {
+                let primitive =
+                    wado_primitive_name_to_cm(ty).expect("a callback takes primitives only");
+                (name.clone(), CmExportType::Primitive(primitive))
+            })
             .collect(),
         cm_result: None,
         param_types: Vec::new(),
@@ -362,12 +366,6 @@ fn build_world_export_plans(
         .collect()
 }
 
-/// Whether `name` is a Wado primitive that maps directly to a Component Model
-/// primitive value type at the export boundary.
-fn is_cm_primitive_name(name: &str) -> bool {
-    wado_primitive_name_to_cm(name).is_some()
-}
-
 /// Resolve a Wado [`Type`] reachable from a world export signature into its
 /// CM-level boundary representation: unit shapes to [`CmExportType::Unit`], a
 /// `Result` with a non-unit arm to [`CmExportType::HandlerResult`], any other
@@ -381,9 +379,9 @@ fn resolve_cm_export_type(
     if ty.is_unit() {
         return CmExportType::Unit;
     }
+    let decls = cm_interface_registry.type_decls();
     if let Type::Generic(generic) = ty
-        && generic.name == "Result"
-        && generic.args.len() == 2
+        && decls.is(generic.id, CompilerItem::Result)
     {
         if generic.args[0].is_unit() && generic.args[1].is_unit() {
             return CmExportType::Unit;
@@ -402,9 +400,9 @@ fn resolve_cm_export_type(
         };
     }
     if let Type::Named(named) = ty
-        && is_cm_primitive_name(&named.name)
+        && let Some(primitive) = cm_primitive_of(named, decls)
     {
-        return CmExportType::Primitive(named.name.clone());
+        return CmExportType::Primitive(primitive);
     }
     if let Type::Named(named) = ty {
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
@@ -510,11 +508,15 @@ mod tests {
     /// Helpers for the resolver tests below.
     mod resolver_helpers {
         use super::super::*;
-        use crate::ast::{AstId, GenericType, NamedType};
+        use crate::ast::{AstId, NamedType};
         use crate::token::Span;
 
         pub fn span() -> Span {
             Span::new(0, 0, 1, 1)
+        }
+
+        pub fn registry() -> CmInterfaceRegistry {
+            (*CmInterfaceRegistry::build_from_stdlib().0).clone()
         }
 
         pub fn unit_named() -> Type {
@@ -525,20 +527,17 @@ mod tests {
             Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span()))
         }
 
-        pub fn result_of(ok: Type, err: Type) -> Type {
-            Type::Generic(GenericType {
-                id: AstId::fresh(),
-                name: "Result".to_string(),
-                args: vec![ok, err],
-                span: span(),
-            })
+        pub fn result_of(registry: &CmInterfaceRegistry, ok: Type, err: Type) -> Type {
+            registry
+                .type_decls()
+                .item_type(CompilerItem::Result, vec![ok, err], span())
         }
     }
 
     #[test]
     fn test_resolve_unit_shapes() {
         use resolver_helpers::*;
-        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let registry = registry();
 
         // `()` is the type that carries nothing. The empty tuple `[]` is a type
         // of its own with no CM representation, rejected at the boundary before
@@ -549,8 +548,9 @@ mod tests {
         );
 
         // Result<(), ()> — both arms unit → still Unit (CLI Command::run shape)
+        let unit_result = result_of(&registry, unit_named(), unit_named());
         assert_matches!(
-            resolve_cm_export_type(&result_of(unit_named(), unit_named()), &registry, None),
+            resolve_cm_export_type(&unit_result, &registry, None),
             CmExportType::Unit
         );
     }
@@ -558,11 +558,11 @@ mod tests {
     #[test]
     fn test_resolve_handler_result() {
         use resolver_helpers::*;
-        let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
+        let registry = registry();
 
         // wasi:http handler shape: Result<Response, ErrorCode>, resolved in the
         // http world scope. The arms resolve to wasi:http/types.
-        let http = result_of(named("Response"), named("ErrorCode"));
+        let http = result_of(&registry, named("Response"), named("ErrorCode"));
         match resolve_cm_export_type(&http, &registry, Some("wasi:http/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert_matches!(
@@ -580,7 +580,7 @@ mod tests {
         // core:kiln generator shape: Result<Response, Error>. `Response` also
         // exists in wasi:http; the kiln world scope must resolve it to
         // core:kiln/types rather than the http resource.
-        let kiln = result_of(named("Response"), named("Error"));
+        let kiln = result_of(&registry, named("Response"), named("Error"));
         match resolve_cm_export_type(&kiln, &registry, Some("core:kiln/")) {
             CmExportType::HandlerResult { ok, err } => {
                 assert_matches!(

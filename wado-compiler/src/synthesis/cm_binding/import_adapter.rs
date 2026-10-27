@@ -613,10 +613,9 @@ struct ParamPlan<'a> {
 pub(super) fn is_gc_passthrough_param(
     ty: &Type,
     registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
 ) -> bool {
-    !flatten_param_type(ty, registry, names).is_empty()
-        && !matches!(classify_param(ty, registry, names), ParamLowering::Direct)
+    !flatten_param_type(ty, registry).is_empty()
+        && !matches!(classify_param(ty, registry), ParamLowering::Direct)
 }
 
 /// The `E` of the `List<E>` the registry records a list argument at.
@@ -630,22 +629,21 @@ fn list_elem(param_type: &Type) -> &Type {
 fn classify_param<'t>(
     param_type: &'t Type,
     registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
 ) -> ParamLowering<'t> {
+    let item = registry.type_decls().item_of(param_type);
     match param_type {
-        Type::Named(n) if n.name == names.string => ParamLowering::PackedPtrLen {
+        Type::Named(_) if item == Some(CompilerItem::String) => ParamLowering::PackedPtrLen {
             helper: CompilerItem::CmLowerString,
         },
         Type::Generic(g)
-            if g.name == names.array
-                && g.args.len() == 1
+            if item == Some(CompilerItem::List)
                 && matches!(&g.args[0], Type::Named(n) if n.name == "u8") =>
         {
             ParamLowering::PackedPtrLen {
                 helper: CompilerItem::CmLowerArrayU8,
             }
         }
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+        Type::Generic(g) if item == Some(CompilerItem::List) => {
             ParamLowering::ListBuffer { elem: &g.args[0] }
         }
         Type::Named(n)
@@ -656,21 +654,20 @@ fn classify_param<'t>(
         {
             ParamLowering::Aggregate
         }
-        Type::Generic(g)
-            if (g.name == names.option && g.args.len() == 1)
-                || (g.name == names.result && g.args.len() == 2)
-                || names.is_tree_map(g) =>
+        Type::Generic(_)
+            if let Some(CompilerItem::Option | CompilerItem::Result | CompilerItem::TreeMap) =
+                item =>
         {
             ParamLowering::Aggregate
         }
         Type::Tuple(elems) if !elems.is_empty() => ParamLowering::Aggregate,
         // Scalars, plain enums/flags, and resource handles are a single flat
         // param forwarded unchanged; likewise `&self`/`&mut self` receivers
-        // and the async/handle generics, all i32 handles. A `Named` here has
+        // and the stream and future handles, all i32. A `Named` here has
         // no registered struct/variant source (the arms above caught those),
         // so it is a scalar/enum/flags/resource — all Direct.
         Type::Named(_) | Type::Reference(_) | Type::MutReference(_) => ParamLowering::Direct,
-        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+        Type::Generic(_) if let Some(CompilerItem::Stream | CompilerItem::Future) = item => {
             ParamLowering::Direct
         }
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
@@ -691,7 +688,6 @@ struct OutptrBuffer {
 fn shape_ctx<'c>(lower_ctx: &'c LowerContext<'_>) -> CmShapeContext<'c> {
     CmShapeContext {
         cm_interface_registry: lower_ctx.cm_interface_registry,
-        names: &lower_ctx.names,
     }
 }
 
@@ -829,11 +825,7 @@ impl<'a> AdapterBuilder<'a> {
         let func_info = self.func_info;
         let mut plans = Vec::with_capacity(func_info.params.len());
         for (index, (param_name, _, param_type)) in func_info.params.iter().enumerate() {
-            let flat_tys = flatten_param_type(
-                param_type,
-                self.lower_ctx.cm_interface_registry,
-                &self.lower_ctx.names,
-            );
+            let flat_tys = flatten_param_type(param_type, self.lower_ctx.cm_interface_registry);
             let lowering = if flat_tys.is_empty() {
                 ParamLowering::Unit
             } else if func_info.list_args.contains(&index) {
@@ -841,11 +833,7 @@ impl<'a> AdapterBuilder<'a> {
                     elem: list_elem(param_type),
                 }
             } else {
-                classify_param(
-                    param_type,
-                    self.lower_ctx.cm_interface_registry,
-                    &self.lower_ctx.names,
-                )
+                classify_param(param_type, self.lower_ctx.cm_interface_registry)
             };
             let first_param = self.params.len();
             match lowering {
@@ -1403,7 +1391,7 @@ impl<'a> AdapterBuilder<'a> {
                 | ParamLowering::ListBuffer { .. }
                 | ParamLowering::ListView { .. }
                 | ParamLowering::Direct => {
-                    let stores = cm_param_store_plan(plan.ty, registry, &self.lower_ctx.names);
+                    let stores = cm_param_store_plan(plan.ty, registry);
                     for (sub_offset, store_name) in &stores {
                         let addr = params_buf_addr(params_buf_local, base_offset + sub_offset);
                         let value = affine_handle(
@@ -1667,7 +1655,7 @@ impl<'a> AdapterBuilder<'a> {
             self.body_stmts.push(return_stmt(Some(lifted)));
             return lifted_type_id;
         }
-        if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
+        if needs_flat_result_lifting(&resolved, self.lower_ctx.cm_interface_registry) {
             let disc_local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
             self.body_stmts
                 .push(let_stmt("$disc", disc_local, TypeTable::I32, raw_call));

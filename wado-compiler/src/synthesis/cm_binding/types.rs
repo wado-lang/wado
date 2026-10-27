@@ -29,17 +29,12 @@ use crate::synthesis::common::{
 };
 use crate::tir::StructDef;
 
-/// Snapshot of the stdlib type / variant names CM binding matches against,
-/// resolved once through the `CompilerItem` registry so a stdlib rename flows
-/// through every lift / lower / adapter site rather than through literals
-/// scattered across `synthesis::cm_binding`.
+/// Snapshot of the stdlib cases and declarations CM binding builds with,
+/// resolved once through the `CompilerItem` registry. Which type a signature
+/// names is the registry's [`CmTypeDecls`](crate::cm_type_decls::CmTypeDecls)
+/// to answer.
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub struct CmStdlibNames {
-    pub string: String,
-    pub array: String,
-    pub option: String,
-    pub result: String,
     /// `Option::Some` case name + zero-based index.
     pub some_name: String,
     pub some_index: u32,
@@ -62,16 +57,9 @@ pub struct CmStdlibNames {
     pub list_len: TemplateId,
     /// `List`'s `index_value`, likewise for the element read.
     pub list_index_value: TemplateId,
-    /// `TreeMap`'s name, or `None` where `core:collections` was never loaded.
-    pub tree_map: Option<String>,
 }
 
 impl CmStdlibNames {
-    /// Whether `generic` is a `TreeMap<K, V>`, the Wado spelling of CM `map<K, V>`.
-    pub fn is_tree_map(&self, generic: &GenericType) -> bool {
-        self.tree_map.as_deref() == Some(generic.name.as_str()) && generic.args.len() == 2
-    }
-
     /// Look up every name through the [`CompilerItems`] registry.
     /// Cheap (a handful of registry hits + clones). Each synthesis entry
     /// point builds the snapshot once per binding — the lower side threads
@@ -85,10 +73,6 @@ impl CmStdlibNames {
         let (_, _, ok_name, ok_index) = items.require_variant_case(CompilerItem::ResultOk);
         let (_, _, err_name, err_index) = items.require_variant_case(CompilerItem::ResultErr);
         Self {
-            string: items.struct_name(CompilerItem::String).to_string(),
-            array: items.struct_name(CompilerItem::List).to_string(),
-            option: items.variant_name(CompilerItem::Option).to_string(),
-            result: items.variant_name(CompilerItem::Result).to_string(),
             some_name: some_name.to_string(),
             some_index,
             none_name: none_name.to_string(),
@@ -101,9 +85,6 @@ impl CmStdlibNames {
             array_fq: type_table.compiler_struct_fq_name(CompilerItem::List),
             list_len: items.require_template(CompilerItem::ListLen),
             list_index_value: items.require_template(CompilerItem::ListIndexValue),
-            tree_map: items
-                .struct_name_opt(CompilerItem::TreeMap)
-                .map(str::to_string),
         }
     }
 }
@@ -271,16 +252,12 @@ pub fn cm_type_to_type_id(
     registry: &CmInterfaceRegistry,
     wasi_package: &str,
 ) -> TypeId {
-    let string_struct_name = type_table
-        .compiler_struct_name(CompilerItem::String)
-        .to_string();
+    let item = registry.type_decls().item_of(ty);
     match ty {
-        Type::Named(named) if named.name.as_str() == string_struct_name => {
+        Type::Named(_) if item == Some(CompilerItem::String) => {
             type_table.make_compiler_struct(CompilerItem::String)
         }
-        Type::Named(named) if registry.prelude_newtype_base(named).is_some() => {
-            type_table.make_byte_list()
-        }
+        Type::Named(_) if item == Some(CompilerItem::ByteList) => type_table.make_byte_list(),
         Type::Named(named) => match named.name.as_str() {
             "i8" => TypeTable::I8,
             "i16" => TypeTable::I16,
@@ -358,59 +335,44 @@ pub fn cm_type_to_type_id(
                 }),
         },
         Type::Generic(g) => {
-            let list_name = type_table
-                .compiler_struct_name(CompilerItem::List)
-                .to_string();
-            if g.name.as_str() == list_name && g.args.len() == 1 {
-                let elem_type =
-                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                return type_table.make_list(elem_type);
-            }
-            // `core:collections` is not auto-imported, so a program that never
-            // names `TreeMap` has no registration to compare against.
-            let tree_map_name = type_table
-                .compiler_items()
-                .struct_name_opt(CompilerItem::TreeMap)
-                .map(str::to_string);
-            if tree_map_name.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 {
-                let key = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                let value = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
-                return type_table.make_tree_map(key, value);
-            }
-            let option_name = type_table
-                .compiler_variant_name(CompilerItem::Option)
-                .to_string();
-            let result_name = type_table
-                .compiler_variant_name(CompilerItem::Result)
-                .to_string();
-            if g.name.as_str() == option_name && g.args.len() == 1 {
-                let inner_type =
-                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                return type_table.make_option(inner_type);
-            }
-            if g.name.as_str() == result_name && g.args.len() == 2 {
-                let ok_type =
-                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                let err_type =
-                    cm_held_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
-                return type_table.make_result(ok_type, err_type);
-            }
-            match g.name.as_str() {
-                "Stream" if g.args.len() == 1 => {
-                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+            let held = |i: usize, type_table: &mut TypeTable| {
+                cm_held_type_to_type_id(&g.args[i], type_table, registry, wasi_package)
+            };
+            let bare = |i: usize, type_table: &mut TypeTable| {
+                cm_type_to_type_id(&g.args[i], type_table, registry, wasi_package)
+            };
+            match item {
+                Some(CompilerItem::List) => {
+                    let elem = held(0, type_table);
+                    type_table.make_list(elem)
+                }
+                Some(CompilerItem::TreeMap) => {
+                    let key = bare(0, type_table);
+                    let value = bare(1, type_table);
+                    type_table.make_tree_map(key, value)
+                }
+                Some(CompilerItem::Option) => {
+                    let inner = held(0, type_table);
+                    type_table.make_option(inner)
+                }
+                Some(CompilerItem::Result) => {
+                    let ok = held(0, type_table);
+                    let err = held(1, type_table);
+                    type_table.make_result(ok, err)
+                }
+                Some(CompilerItem::Stream) => {
+                    let inner = bare(0, type_table);
                     type_table.make_stream(inner)
                 }
-                "Future" if g.args.len() == 1 => {
-                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                Some(CompilerItem::Future) => {
+                    let inner = bare(0, type_table);
                     type_table.make_future(inner)
                 }
-                "AsyncCall" if g.args.len() == 1 => {
-                    let inner = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                Some(CompilerItem::AsyncCall) => {
+                    let inner = bare(0, type_table);
                     type_table.make_async_call(inner)
                 }
-                // Own/Borrow are handle types represented as i32
-                "Own" | "Borrow" => TypeTable::I32,
-                other => panic!("unsupported generic type at CM boundary: {other}"),
+                _ => panic!("unsupported generic type at CM boundary: {}", g.name),
             }
         }
         Type::Tuple(types) if types.is_empty() => TypeTable::UNIT,
@@ -897,17 +859,9 @@ pub(super) fn coerce_flat_lower(
 
 /// Compute the flat ABI parameter types for a CM function parameter.
 ///
-/// Adapter mapping [`CmInterfaceRegistry::cm_flatten`] to `TypeId`s; the
-/// `names.string` guard handles a non-`"String"` prelude String name first.
-pub fn flatten_param_type(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
-) -> Vec<TypeId> {
+/// Adapter mapping [`CmInterfaceRegistry::cm_flatten`] to `TypeId`s.
+pub fn flatten_param_type(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> Vec<TypeId> {
     let resolved = cm_interface_registry.resolve_type(ty);
-    if matches!(&resolved, Type::Named(n) if n.name == names.string) {
-        return vec![TypeTable::I32, TypeTable::I32];
-    }
     cm_interface_registry
         .cm_flatten(&resolved)
         .into_iter()
@@ -943,16 +897,18 @@ pub(super) fn disc_store_op(byte_size: u32) -> &'static str {
 pub(super) fn cm_param_store_plan(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
 ) -> Vec<(u32, &'static str)> {
+    let item = cm_interface_registry.type_decls().item_of(ty);
     match ty {
-        Type::Named(named) if named.name == names.string => {
+        Type::Named(_) if item == Some(CompilerItem::String) => {
             vec![(0, "i32_store"), (4, "i32_store")]
         }
         Type::Named(named) if named.name == "f32" => vec![(0, "f32_store")],
         Type::Named(named) if named.name == "f64" => vec![(0, "f64_store")],
-        Type::Named(_) => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
-        Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
+        Type::Named(_) => vec![(0, scalar_store_op(ty, cm_interface_registry))],
+        Type::Generic(_) if item == Some(CompilerItem::List) => {
+            vec![(0, "i32_store"), (4, "i32_store")]
+        }
         _ => vec![(0, "i32_store")],
     }
 }
@@ -966,15 +922,11 @@ pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, 
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
 /// gives it. An unrestricted handle stores its `f64` bits as the `u64` it is.
-pub(super) fn scalar_store_op(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
-) -> &'static str {
+pub(super) fn scalar_store_op(ty: &Type, cm_interface_registry: &CmInterfaceRegistry) -> &'static str {
     if cm_interface_registry.extern_handle(ty).is_some() {
         return "i64_store";
     }
-    match flatten_param_type(ty, cm_interface_registry, names)[..] {
+    match flatten_param_type(ty, cm_interface_registry)[..] {
         [TypeTable::F64] => "f64_store",
         [TypeTable::F32] => "f32_store",
         [TypeTable::I64] => "i64_store",
@@ -1026,8 +978,8 @@ pub(super) fn flat_store_op(vt: cm_abi::CmValType) -> &'static str {
 /// Check whether a return type needs lifting from a flat i32 discriminant to a GC struct.
 /// This is true for Result types where all payloads are empty (unit), so the raw call
 /// returns just a discriminant on the stack without an outptr.
-pub(super) fn needs_flat_result_lifting(ty: &Type, names: &CmStdlibNames) -> bool {
-    matches!(ty, Type::Generic(g) if g.name == names.result && g.args.len() == 2)
+pub(super) fn needs_flat_result_lifting(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
+    registry.type_decls().names(ty, CompilerItem::Result)
 }
 
 /// Flatten a variant type: discriminant + union of all case payloads.
@@ -1334,11 +1286,35 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
+/// The compiler items a CM signature names, which the registry tells apart by
+/// declaration.
+const CM_ITEMS: [CompilerItem; 10] = [
+    CompilerItem::String,
+    CompilerItem::ByteList,
+    CompilerItem::List,
+    CompilerItem::ListView,
+    CompilerItem::TreeMap,
+    CompilerItem::Option,
+    CompilerItem::Result,
+    CompilerItem::Stream,
+    CompilerItem::Future,
+    CompilerItem::AsyncCall,
+];
+
+/// The compiler item among [`CM_ITEMS`] that declares `type_id`.
+pub(super) fn cm_item_of_type(type_table: &TypeTable, type_id: TypeId) -> Option<CompilerItem> {
+    let def = type_table.nominal_def(type_id)?;
+    CM_ITEMS
+        .into_iter()
+        .find(|&item| type_table.is_compiler_item(def, item))
+}
+
 /// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
 /// to re-enter the AST-shaped match arms. Only the top-level name and immediate
-/// type args are filled in; deeper structure is looked up lazily. A named type
-/// gets its `source_interface` where the registry knows it, since the lift /
-/// lower helpers key by `(source_interface, name)`.
+/// type args are filled in; deeper structure is looked up lazily. A compiler
+/// item names its declaration, and another named type gets its
+/// `source_interface` where the registry knows it, since the lift / lower
+/// helpers key by `(source_interface, name)`.
 pub(super) fn type_id_to_ast_type(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -1346,6 +1322,19 @@ pub(super) fn type_id_to_ast_type(
 ) -> Type {
     let span = synth_span();
     let resolved = type_table.get(type_id);
+    let to_ast = |tid: &TypeId| type_id_to_ast_type(*tid, type_table, cm_interface_registry);
+    if let Some(item) = cm_item_of_type(type_table, type_id) {
+        let args = match resolved {
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                type_args.iter().map(to_ast).collect()
+            }
+            _ => Vec::new(),
+        };
+        return cm_interface_registry
+            .type_decls()
+            .item_type(item, args, span);
+    }
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
     // The declaring module answers first, so no by-name search can offer
@@ -1389,11 +1378,7 @@ pub(super) fn type_id_to_ast_type(
         }
         ResolvedType::GenericInstance { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
-
-            let args: Vec<Type> = type_args
-                .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
-                .collect();
+            let args: Vec<Type> = type_args.iter().map(to_ast).collect();
             // The tuple family is a `GenericInstance`, but its CM surface is a
             // structural tuple — emit `Type::Tuple` so lift/lower dispatch on
             // the tuple arm rather than the generic catch-all.
@@ -1410,10 +1395,7 @@ pub(super) fn type_id_to_ast_type(
         }
         ResolvedType::GenericResource { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
-            let args: Vec<Type> = type_args
-                .iter()
-                .map(|&tid| type_id_to_ast_type(tid, type_table, cm_interface_registry))
-                .collect();
+            let args: Vec<Type> = type_args.iter().map(to_ast).collect();
             Type::Generic(GenericType {
                 id: AstId::fresh(),
                 name: name.clone(),
@@ -1427,16 +1409,8 @@ pub(super) fn type_id_to_ast_type(
                 .expect("a newtype names a declaration");
             cm_named(&name, &module_source)
         }
-        ResolvedType::Ref(inner) => Type::Reference(Box::new(type_id_to_ast_type(
-            *inner,
-            type_table,
-            cm_interface_registry,
-        ))),
-        ResolvedType::MutRef(inner) => Type::MutReference(Box::new(type_id_to_ast_type(
-            *inner,
-            type_table,
-            cm_interface_registry,
-        ))),
+        ResolvedType::Ref(inner) => Type::Reference(Box::new(to_ast(inner))),
+        ResolvedType::MutRef(inner) => Type::MutReference(Box::new(to_ast(inner))),
         ResolvedType::Never
         | ResolvedType::Function { .. }
         | ResolvedType::BuiltinArray(_)

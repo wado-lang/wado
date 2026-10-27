@@ -22,7 +22,7 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    CmStdlibNames, LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
     cm_flags_byte_size, cm_held_type_to_type_id, disc_load_op, handle_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
@@ -73,9 +73,9 @@ pub(super) fn synthesize_lift_into(
     if let Some(base) = base {
         return synthesize_lift_into(ty, addr, base, next_local, stmts, locals, ctx);
     }
-    let names = CmStdlibNames::from_type_table(&ctx.type_table.borrow());
-    match ctx.cm_interface_registry.value_type(ty) {
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => synthesize_lift_list(
+    let value_type = ctx.cm_interface_registry.value_type(ty);
+    match (ctx.cm_interface_registry.type_decls().item_of(&value_type), value_type) {
+        (Some(CompilerItem::List), Type::Generic(g)) => synthesize_lift_list(
             &g.args[0],
             addr,
             Some(target),
@@ -84,7 +84,7 @@ pub(super) fn synthesize_lift_into(
             locals,
             ctx,
         ),
-        Type::Generic(g) if names.is_tree_map(&g) => synthesize_lift_map(
+        (Some(CompilerItem::TreeMap), Type::Generic(g)) => synthesize_lift_map(
             &g.args[0],
             &g.args[1],
             addr,
@@ -184,26 +184,11 @@ fn synthesize_lift_inner(
     // shapes pass through `resolve_type` unchanged.
     let resolved = ctx.cm_interface_registry.value_type(ty);
     let ty = &resolved;
-    // Resolve stdlib struct names through the compiler-item registry so
-    // a rename of `String` / `List` / `Option` / `Result` flows through
-    // CM lifting without code changes here.
-    let (string_name, list_name, tree_map_name, option_name, result_name) = {
-        let tt = ctx.type_table.borrow();
-        let items = tt.compiler_items();
-        (
-            items.struct_name(CompilerItem::String).to_string(),
-            items.struct_name(CompilerItem::List).to_string(),
-            items
-                .struct_name_opt(CompilerItem::TreeMap)
-                .map(str::to_string),
-            items.variant_name(CompilerItem::Option).to_string(),
-            items.variant_name(CompilerItem::Result).to_string(),
-        )
-    };
+    let item = ctx.cm_interface_registry.type_decls().item_of(ty);
     match ty {
         Type::Named(named) => {
             let named_name = named.name.as_str();
-            if named_name == string_name {
+            if item == Some(CompilerItem::String) {
                 let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
                 stmts.push(let_stmt(
                     "$str_ptr",
@@ -321,26 +306,22 @@ fn synthesize_lift_inner(
                 }
             }
         }
-        Type::Generic(g) => {
-            let gname = g.name.as_str();
-            if gname == list_name && g.args.len() == 1 {
+        Type::Generic(g) => match item {
+            Some(CompilerItem::List) => {
                 synthesize_lift_list(&g.args[0], addr, None, next_local, stmts, locals, ctx)
-            } else if gname == option_name && g.args.len() == 1 {
-                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
-            } else if gname == result_name && g.args.len() == 2 {
-                synthesize_lift_result_inner(
-                    &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
-                )
-            } else if tree_map_name.as_deref() == Some(gname) && g.args.len() == 2 {
-                synthesize_lift_map(
-                    &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
-                )
-            } else if matches!(gname, "Stream" | "Future" | "Own" | "Borrow") {
-                lift_handle(ty, addr, ctx)
-            } else {
-                panic!("unsupported generic type for CM lift: {gname}")
             }
-        }
+            Some(CompilerItem::Option) => {
+                synthesize_lift_option_inner(&g.args[0], addr, next_local, stmts, locals, ctx)
+            }
+            Some(CompilerItem::Result) => synthesize_lift_result_inner(
+                &g.args[0], &g.args[1], addr, next_local, stmts, locals, ctx,
+            ),
+            Some(CompilerItem::TreeMap) => synthesize_lift_map(
+                &g.args[0], &g.args[1], addr, None, next_local, stmts, locals, ctx,
+            ),
+            Some(CompilerItem::Stream | CompilerItem::Future) => lift_handle(ty, addr, ctx),
+            _ => panic!("unsupported generic type for CM lift: {}", g.name),
+        },
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => synthesize_lift_tuple(elems, addr, next_local, stmts, locals, ctx),
         Type::Reference(_) | Type::MutReference(_) => lift_handle(ty, addr, ctx),

@@ -712,9 +712,9 @@ pub(super) fn synthesize_lift_from_flat_params(
     lift_ctx: LiftContext<'_>,
 ) -> (TirExpr, usize) {
     let type_table_cell = lift_ctx.type_table;
-    let names = CmStdlibNames::from_type_table(&type_table_cell.borrow());
+    let item = lift_ctx.cm_interface_registry.type_decls().item_of(ty);
     match ty {
-        Type::Named(named) if named.name == names.string => {
+        Type::Named(_) if item == Some(CompilerItem::String) => {
             // String flat ABI: (ptr: i32, len: i32) pointing to linear memory.
             let lifted = lift_string_and_free(
                 local_ref(flat_param_locals[0], "$p", TypeTable::I32),
@@ -846,8 +846,8 @@ pub(super) fn synthesize_lift_from_flat_params(
                 }
             }
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            n if n == names.array || names.is_tree_map(generic) => {
+        Type::Generic(generic) => match item {
+            Some(CompilerItem::List | CompilerItem::TreeMap) => {
                 // list<T> / map<K, V> flat ABI: (ptr: i32, len: i32), the
                 // elements in linear memory. Spilled to a temp block so the
                 // memory lift reads them.
@@ -865,7 +865,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                 free_ptr_len_temp(tmp_ptr_local, stmts);
                 (lifted, 2)
             }
-            n if n == names.option && generic.args.len() == 1 => {
+            Some(CompilerItem::Option) => {
                 // option<T> flat ABI: (disc: i32, ...T_flat)
                 let (inner_flat, inner_type_id) = {
                     let tt = type_table_cell.borrow();
@@ -939,7 +939,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     total_flat,
                 )
             }
-            n if n == names.result && generic.args.len() == 2 => {
+            Some(CompilerItem::Result) => {
                 // `Result<T, E>` is a 2-case variant (Ok=0, Err=1) — lift it
                 // through the shared variant path with a synthetic decl carrying
                 // the concrete arm TypeIds.
@@ -956,7 +956,7 @@ pub(super) fn synthesize_lift_from_flat_params(
                     lift_ctx,
                 )
             }
-            // Stream<T>, Future<T>, Own<T>, Borrow<T> — i32 handles
+            // A stream, a future or a generic resource: an i32 handle.
             _ => (
                 cast(
                     local_ref(flat_param_locals[0], "$p", TypeTable::I32),
@@ -1490,10 +1490,9 @@ impl<'a> ExportBindingEnv<'a> {
         }
     }
 
-    fn shape_ctx<'n: 'a>(&self, names: &'n CmStdlibNames) -> CmShapeContext<'a> {
+    fn shape_ctx(&self) -> CmShapeContext<'a> {
         CmShapeContext {
             cm_interface_registry: self.cm_interface_registry,
-            names,
         }
     }
 }
@@ -1744,9 +1743,7 @@ pub(super) fn synthesize_post_return(
         return None;
     }
 
-    let names = CmStdlibNames::from_type_table(&env.type_table.borrow());
-    let shape_ctx = env.shape_ctx(&names);
-    let shape = cm_shape(ty, &shape_ctx);
+    let shape = cm_shape(ty, &env.shape_ctx());
 
     let ptr = param_local("$ret_ptr", TypeTable::I32, false);
     let mut locals = vec![ptr];
@@ -1921,7 +1918,7 @@ fn push_result_task_return_epilogue(
     body_stmts.extend(synthesize_free_cm_flat(
         return_ast,
         &FlatSlot::joined(&flat_locals, &flat_return_types),
-        &env.shape_ctx(&names),
+        &env.shape_ctx(),
         next_local,
         locals,
     ));

@@ -8,20 +8,25 @@ use std::cell::{Cell, OnceCell, RefCell};
 use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll, Waker};
 
+use crate::analyze::Analyzer;
 use crate::ast;
+use crate::cm_type_decls::CmTypeDecls;
 use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, SourceError,
 };
-use crate::defs::{DefId, DefKind};
+use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::liveness::LivenessScope;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::loader::ModuleLoader;
+use crate::loader::{ModuleLoader, cached_stdlib_module};
 use crate::logger::Logger;
 use crate::module_source::ModuleSource;
+use crate::resolve::Resolutions;
 use crate::semantics::{Semantics, semantics_with_logger};
+use crate::stdlib;
 use crate::tir::{TirFunction, TirModule};
 use crate::type_table::TypeTable;
 
@@ -252,6 +257,65 @@ fn clone_fn_rc(
     fresh
 }
 
+/// The bundled CM bindings as the loader serves them, and what each type they
+/// sign resolves to. The registry reads every binding whatever a compile loads,
+/// so the resolver answers them once over all of them.
+pub(crate) struct StdlibBindings {
+    pub modules: Vec<(&'static str, ast::Module)>,
+    pub type_decls: CmTypeDecls,
+}
+
+pub(crate) fn stdlib_bindings() -> &'static StdlibBindings {
+    static BINDINGS: OnceLock<StdlibBindings> = OnceLock::new();
+    BINDINGS.get_or_init(resolve_stdlib_bindings)
+}
+
+fn resolve_stdlib_bindings() -> StdlibBindings {
+    let paths: Vec<&'static str> = stdlib::all_binding_modules()
+        .iter()
+        .map(|(path, _)| *path)
+        .chain(stdlib::wit_core_submodules().map(|(path, _)| path))
+        .collect();
+    let entry: String = paths
+        .iter()
+        .enumerate()
+        .map(|(i, path)| format!("use binding{i} from \"{path}\";\n"))
+        .collect();
+    let host = SnapshotHost;
+    let logger = Logger::new(&host, LogLevel::Error);
+    let load = poll_to_completion(async {
+        ModuleLoader::new(&host, LogLevel::Off)
+            .load_all(&entry, Some("<stdlib-bindings>"))
+            .await
+    })
+    .expect("every bundled binding loads");
+    let mut analyzer =
+        Analyzer::new(&logger).with_interner(Rc::new(RefCell::new(load.interner)));
+    analyzer
+        .analyze_loaded_modules(&load.modules, &load.entry_module_source, load.implicit_modules)
+        .expect("every bundled binding analyzes");
+    let symbols = analyzer.into_symbols();
+    let defs = Arc::new(DefTable::build(&load.modules, &symbols));
+    let resolutions = Resolutions::build(&load.modules, &symbols, defs);
+    let modules: Vec<(&'static str, ast::Module)> = paths
+        .into_iter()
+        .map(|path| {
+            let module = cached_stdlib_module(path).expect("a bundled binding is cached");
+            (path, module.clone())
+        })
+        .collect();
+    let mut type_decls = CmTypeDecls::default();
+    type_decls.bind(
+        load.modules.values(),
+        modules.iter().map(|(_, module)| module),
+        &resolutions,
+    );
+    StdlibBindings {
+        modules,
+        type_decls,
+    }
+}
+
 /// In-memory [`CompilerHost`] used solely for building the stdlib
 /// snapshot.  The entry source is empty and every transitively-loaded
 /// module is a stdlib module served from `cached_stdlib_module()`, so
@@ -309,6 +373,7 @@ impl CompilerHost for SnapshotHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component_model::try_for_each_signed_type;
     use crate::module_source::ModuleSource;
 
     #[test]
@@ -381,6 +446,32 @@ mod tests {
             None,
             "a cached module is being re-parsed per compile"
         );
+    }
+
+    /// Every type a binding signs names a declaration, but a resource method's
+    /// `Self`, which the registry reads as the resource.
+    #[test]
+    fn every_binding_type_resolves() {
+        let bindings = stdlib_bindings();
+        let mut unbound = Vec::new();
+        for (path, module) in &bindings.modules {
+            let mut module = module.clone();
+            for item in &mut module.items {
+                let _ = try_for_each_signed_type::<()>(item, &mut |_, ty| {
+                    ty.for_each(&mut |t| match t {
+                        ast::Type::Named(n) if n.name != "Self" && !bindings.type_decls.binds(n.id) => {
+                            unbound.push(format!("{path}: {}", n.name));
+                        }
+                        ast::Type::Generic(g) if !bindings.type_decls.binds(g.id) => {
+                            unbound.push(format!("{path}: {}", g.name));
+                        }
+                        _ => {}
+                    });
+                    Ok(())
+                });
+            }
+        }
+        assert!(unbound.is_empty(), "{unbound:?}");
     }
 
     #[test]

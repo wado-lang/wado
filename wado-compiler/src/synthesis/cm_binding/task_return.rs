@@ -39,7 +39,7 @@ use crate::synthesis::common::{
 use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
-    CmStdlibNames, LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id,
+    LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id,
     variant_decl_of,
 };
 
@@ -438,10 +438,8 @@ fn generate_inline_task_return(
         cm_package,
         interner,
     };
-    let names = CmStdlibNames::from_type_table(&type_table.borrow());
     let shape_ctx = CmShapeContext {
         cm_interface_registry,
-        names: &names,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;

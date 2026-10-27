@@ -11,14 +11,16 @@ use crate::canonical::{
     CmStreamPayload,
 };
 use crate::codegen::emit::emit_core_module;
+use crate::cm_type_decls::CmTypeDecls;
 use crate::codegen_flags::CodegenFlags;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeKind,
     CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME, FIELDS_WADO_NAME, InstanceSink,
     RESPONSE_WADO_NAME, ResKind, WorldFunctionSite, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
-    cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
-    wado_primitive_name_to_cm,
+    cm_primitive_of, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name,
+    parse_resource_func,
 };
 use crate::coverage;
 use crate::defs::DefId;
@@ -496,22 +498,23 @@ fn emit_cm_val_type(
             ctx,
         )
     };
+    let item = project.cm_interface_registry.type_decls().item_of(ty);
     match ty {
-        Type::Generic(g) if g.name == "Stream" => {
+        Type::Generic(g) if item == Some(CompilerItem::Stream) => {
             let element = g
                 .args
                 .first()
                 .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().stream(element);
         }
-        Type::Generic(g) if g.name == "Future" => {
+        Type::Generic(g) if item == Some(CompilerItem::Future) => {
             let payload = g
                 .args
                 .first()
                 .map(|inner| emit(inner, instance_type, local_type_idx, type_gen, ctx));
             instance_type.ty().defined_type().future(payload);
         }
-        Type::Generic(g) if g.name == "Result" => {
+        Type::Generic(g) if item == Some(CompilerItem::Result) => {
             let [ok, err] = g.args.as_slice() else {
                 panic!("`Result` takes two type arguments, not {}", g.args.len())
             };
@@ -551,11 +554,11 @@ fn emit_cm_val_type(
             };
             instance_type.ty().defined_type().result(ok_type, err_type);
         }
-        Type::Generic(g) if g.name == "List" && !g.args.is_empty() => {
+        Type::Generic(g) if item == Some(CompilerItem::List) => {
             let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
             instance_type.ty().defined_type().list(element);
         }
-        Type::Generic(g) if g.name == "Option" && !g.args.is_empty() => {
+        Type::Generic(g) if item == Some(CompilerItem::Option) => {
             let element = emit(&g.args[0], instance_type, local_type_idx, type_gen, ctx);
             instance_type.ty().defined_type().option(element);
         }
@@ -725,6 +728,7 @@ fn wado_type_to_cm_val_type(
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
     resource_handles: &IndexMap<String, ResourceTypeIndices>,
+    decls: &CmTypeDecls,
 ) -> ComponentValType {
     match ty {
         Type::Named(named) => {
@@ -734,7 +738,7 @@ fn wado_type_to_cm_val_type(
             if let Some(&flags_idx) = flags_type_indices.get(&named.name) {
                 return ComponentValType::Type(flags_idx);
             }
-            let prim = wado_primitive_name_to_cm(&named.name)
+            let prim = cm_primitive_of(named, decls)
                 .unwrap_or_else(|| panic!("unsupported Wado param type for CM: {}", named.name));
             ComponentValType::Primitive(prim)
         }
@@ -747,10 +751,9 @@ fn wado_type_to_cm_val_type(
             }
             panic!("unsupported reference param type for CM: {ty:?}")
         }
-        Type::Generic(generic) => match generic.name.as_str() {
-            "Stream" => ComponentValType::Type(stream_type_idx.expect("stream type not defined")),
-            _ => panic!("unsupported generic param type for CM: {}", generic.name),
-        },
+        Type::Generic(generic) if decls.is(generic.id, CompilerItem::Stream) => {
+            ComponentValType::Type(stream_type_idx.expect("stream type not defined"))
+        }
         _ => panic!("unsupported Wado param type for CM: {ty:?}"),
     }
 }
@@ -1768,7 +1771,8 @@ fn lib_task_return_valtype(
         return None;
     }
     let result_type = export.result_type.as_ref()?;
-    if matches!(result_type, ast::Type::Generic(g) if g.name == "Future" || g.name == "Stream") {
+    let decls = project.cm_interface_registry.type_decls();
+    if let Some(CompilerItem::Future | CompilerItem::Stream) = decls.item_of(result_type) {
         return None;
     }
     let type_gen = lib_type_gen.as_mut()?;
@@ -1801,7 +1805,8 @@ fn resolve_task_return_valtype(
         && let Some(ast::Type::Generic(g)) = &export.result_type
         && g.args.len() == 1
     {
-        if g.name == "Future" {
+        let item = project.cm_interface_registry.type_decls().item_at(g.id);
+        if item == Some(CompilerItem::Future) {
             let payload = classify_future_payload_from_ast(
                 &project.type_table.borrow(),
                 &g.args[0],
@@ -1816,7 +1821,7 @@ fn resolve_task_return_valtype(
             );
             return ComponentValType::Type(idx);
         }
-        if g.name == "Stream" {
+        if item == Some(CompilerItem::Stream) {
             let payload = classify_stream_payload_from_ast(
                 &project.type_table.borrow(),
                 &g.args[0],
@@ -1877,8 +1882,8 @@ fn cm_export_type_to_idx(
 ) -> u32 {
     match ty {
         CmExportType::Unit => result_unit_type,
-        CmExportType::Primitive(name) => panic!(
-            "primitive CM export type `{name}` has no defined-type index; \
+        CmExportType::Primitive(primitive) => panic!(
+            "primitive CM export type `{primitive:?}` has no defined-type index; \
              use cm_export_type_to_valtype for primitive boundary types"
         ),
         CmExportType::Named {
@@ -1930,18 +1935,10 @@ fn cm_export_type_to_valtype(
     result_unit_type: u32,
 ) -> ComponentValType {
     match ty {
-        CmExportType::Primitive(name) => cm_primitive_name_to_valtype(name),
+        CmExportType::Primitive(primitive) => ComponentValType::Primitive(*primitive),
         other => {
             ComponentValType::Type(cm_export_type_to_idx(ctx, project, other, result_unit_type))
         }
-    }
-}
-
-/// Map a Wado primitive type name to its Component Model `PrimitiveValType`.
-fn cm_primitive_name_to_valtype(name: &str) -> ComponentValType {
-    match wado_primitive_name_to_cm(name) {
-        Some(prim) => ComponentValType::Primitive(prim),
-        None => panic!("unsupported CM primitive type name: {name}"),
     }
 }
 
@@ -2533,11 +2530,12 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
             );
 
+            let decls = project.cm_interface_registry.type_decls();
             for func in &cm_functions {
                 let needs_stream_u8 = func
                     .params
                     .iter()
-                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
+                    .any(|(_, _, ty)| decls.names(ty, CompilerItem::Stream));
                 let stream_type_idx = if needs_stream_u8 {
                     instance_type
                         .ty()
@@ -2564,7 +2562,7 @@ fn generate_cm_imports(
                         // payloads; `wado_type_to_cm_val_type` spells only the
                         // flat shapes and the pre-defined `Stream`.
                         let is_composite = match &resolved_ty {
-                            Type::Generic(g) => g.name != "Stream",
+                            Type::Generic(g) => !decls.is(g.id, CompilerItem::Stream),
                             Type::Tuple(_) => true,
                             Type::Named(_)
                             | Type::NamespacedGeneric(_)
@@ -2593,6 +2591,7 @@ fn generate_cm_imports(
                                 &enum_export_indices,
                                 &flags_export_indices,
                                 &resource_handles,
+                                decls,
                             )
                         };
                         (cm_name.clone(), val_type)
@@ -3102,11 +3101,12 @@ fn component_type_idx_for_signature_type(
     ty: &Type,
 ) -> u32 {
     let registry = &project.cm_interface_registry;
+    let item = registry.type_decls().item_of(ty);
     match ty {
-        Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
+        Type::Generic(g) if item == Some(CompilerItem::AsyncCall) => {
             component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0])
         }
-        Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
+        Type::Generic(g) if item == Some(CompilerItem::Result) => {
             let ok =
                 component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0]);
             let err =

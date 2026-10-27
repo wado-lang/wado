@@ -6,13 +6,9 @@
 //!
 //! Reference: <https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md>
 
-#[cfg(test)]
-use crate::ast::{AstId, NamedType};
-use crate::ast::{GenericType, Type};
+use crate::ast::Type;
 use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
 use crate::name::UNIT_TYPE_NAME;
-#[cfg(test)]
-use crate::token::Span;
 
 /// Round `offset` up to the next multiple of `align`.
 pub fn align_to(offset: u32, align: u32) -> u32 {
@@ -20,37 +16,16 @@ pub fn align_to(offset: u32, align: u32) -> u32 {
     (offset + align - 1) & !(align - 1)
 }
 
-/// Canonical ABI size in bytes for a given type.
-pub fn cm_size(ty: &Type) -> u32 {
-    match ty {
-        Type::Named(named) => cm_size_named(&named.name),
-        Type::Generic(generic) => cm_size_generic(generic),
-        Type::Tuple(elems) => {
-            if elems.is_empty() {
-                return 0; // unit type
-            }
-            let layout = layout_tuple(elems);
-            layout.size
-        }
-        Type::Reference(_) | Type::MutReference(_) => 4, // resource handle
-        _ => 0,
-    }
-}
-
-/// Canonical ABI alignment in bytes for a given type.
-pub fn cm_align(ty: &Type) -> u32 {
-    match ty {
-        Type::Named(named) => cm_align_named(&named.name),
-        Type::Generic(generic) => cm_align_generic(generic),
-        Type::Tuple(elems) => {
-            if elems.is_empty() {
-                return 1; // unit type
-            }
-            elems.iter().map(cm_align).max().unwrap_or(1)
-        }
-        Type::Reference(_) | Type::MutReference(_) => 4, // resource handle
-        _ => 1,
-    }
+/// Canonical ABI size and alignment of the primitive `name`, `()` included.
+pub fn primitive_size_align(name: &str) -> Option<(u32, u32)> {
+    Some(match name {
+        "bool" | "u8" | "i8" => (1, 1),
+        "u16" | "i16" => (2, 2),
+        "i32" | "u32" | "f32" | "char" => (4, 4),
+        "i64" | "u64" | "f64" => (8, 8),
+        UNIT_TYPE_NAME => (0, 1),
+        _ => return None,
+    })
 }
 
 /// Layout information for a composite type (record, tuple).
@@ -80,18 +55,6 @@ impl CmLayout {
 /// takes its width where every other variant's does.
 pub const OPTION_OR_RESULT_CASES: usize = 2;
 
-/// Layout for a tuple. A record lays out the same way, as a tuple of its field
-/// types.
-fn layout_tuple(elements: &[Type]) -> CmLayout {
-    layout_fields_by(elements.iter(), plain_size_align)
-}
-
-/// The size and alignment of a type read without a registry, so a named
-/// declaration falls back to the 4-byte handle.
-pub fn plain_size_align(ty: &Type) -> (u32, u32) {
-    (cm_size(ty), cm_align(ty))
-}
-
 /// Lay fields out in order, each at its own alignment, the whole padded to the
 /// widest. `size_align` is what reads a field's own size and alignment.
 fn layout_fields_by<'a>(
@@ -113,71 +76,6 @@ fn layout_fields_by<'a>(
         align: max_align,
         offsets,
     }
-}
-
-/// Canonical ABI size for named (primitive) types.
-fn cm_size_named(name: &str) -> u32 {
-    match name {
-        "bool" | "u8" | "i8" => 1,
-        "u16" | "i16" => 2,
-        "i32" | "u32" | "f32" | "char" => 4,
-        "i64" | "u64" | "f64" => 8,
-        "String" => 8, // (ptr: i32, len: i32)
-        UNIT_TYPE_NAME => 0,
-        // Unknown named types (enums, resources) are i32 handles
-        _ => 4,
-    }
-}
-
-/// Canonical ABI alignment for named (primitive) types.
-fn cm_align_named(name: &str) -> u32 {
-    match name {
-        "bool" | "u8" | "i8" => 1,
-        "u16" | "i16" => 2,
-        "i32" | "u32" | "f32" | "char" => 4,
-        "i64" | "u64" | "f64" => 8,
-        "String" => 4, // (ptr: i32, len: i32) — aligned to i32
-        UNIT_TYPE_NAME => 1,
-        // Unknown named types (enums, resources) are i32 handles
-        _ => 4,
-    }
-}
-
-/// Canonical ABI size for generic types.
-fn cm_size_generic(generic: &GenericType) -> u32 {
-    match generic.name.as_str() {
-        // list<T> is (ptr: i32, len: i32); map<K, V> despecializes to
-        // list<tuple<K, V>> and so carries the same pair.
-        "List" | "TreeMap" => 8,
-        "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).size,
-        "Result" if generic.args.len() == 2 => {
-            layout_result(&generic.args[0], &generic.args[1]).size
-        }
-        // Stream<T>, Future<T> are i32 handles
-        "Stream" | "Future" => 4,
-        // Own<T>, Borrow<T> are i32 handles
-        "Own" | "Borrow" => 4,
-        _ => 4,
-    }
-}
-
-/// Canonical ABI alignment for generic types.
-fn cm_align_generic(generic: &GenericType) -> u32 {
-    match generic.name.as_str() {
-        "List" | "TreeMap" => 4, // (ptr: i32, len: i32) — aligned to i32
-        "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).align,
-        "Result" if generic.args.len() == 2 => {
-            layout_result(&generic.args[0], &generic.args[1]).align
-        }
-        "Stream" | "Future" | "Own" | "Borrow" => 4,
-        _ => 4,
-    }
-}
-
-/// Layout for a variant: the discriminant `case_count` calls for, then the
-/// payload-bearing cases at one shared offset. `offsets` is `[disc, payload]`.
-fn layout_variant<'a>(case_count: usize, payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
-    layout_variant_by(case_count, payloads, plain_size_align)
 }
 
 /// Lay a variant out: the discriminant at offset 0, then every payload at one
@@ -204,18 +102,9 @@ fn layout_variant_by<'a>(
     }
 }
 
-/// Layout for `option<T>`.
-fn layout_option(inner: &Type) -> CmLayout {
-    layout_variant(OPTION_OR_RESULT_CASES, std::iter::once(inner))
-}
-
-/// Layout for `result<T, E>`.
-fn layout_result(ok: &Type, err: &Type) -> CmLayout {
-    layout_variant(OPTION_OR_RESULT_CASES, [ok, err].into_iter())
-}
-
-/// Registry-aware [`layout_variant`]. A variant whose cases carry no payload
-/// lays out as its bare discriminant.
+/// Layout for a variant: the discriminant `case_count` calls for, then the
+/// payload-bearing cases at one shared offset. `offsets` is `[disc, payload]`.
+/// A variant whose cases carry no payload lays out as its bare discriminant.
 pub fn layout_variant_with_registry<'a>(
     case_count: usize,
     payloads: impl Iterator<Item = &'a Type>,
@@ -249,8 +138,9 @@ pub fn variant_payload_offset_with_registry<'a>(
     layout_variant_with_registry(case_count, payloads, registry).payload_offset()
 }
 
-/// Registry-aware [`layout_tuple`], resolving each element through the
-/// registry so a named record, variant or newtype lands at its true offset.
+/// Layout for a tuple, each element resolved through the registry so a named
+/// record, variant or newtype lands at its true offset. A record lays out the
+/// same way, as a tuple of its field types.
 pub fn layout_tuple_with_registry(elements: &[Type], registry: &CmInterfaceRegistry) -> CmLayout {
     layout_fields_with_registry(elements.iter(), registry)
 }
@@ -345,35 +235,58 @@ pub fn join_flat_unions(a: &[CmValType], b: &[CmValType]) -> Vec<CmValType> {
         .collect()
 }
 
-/// Helper: create a `Type::Named` with a dummy span. Useful for tests.
-#[cfg(test)]
-pub(crate) fn named_type(name: &str) -> Type {
-    Type::Named(NamedType {
-        id: AstId::fresh(),
-        name: name.to_string(),
-        span: Span::new(0, 0, 1, 1),
-    })
-}
-
-#[cfg(test)]
-pub(crate) fn unit_type() -> Type {
-    Type::unit(AstId::fresh(), Span::new(0, 0, 1, 1))
-}
-
-/// Helper: create a `Type::Generic` with a dummy span. Useful for tests.
-#[cfg(test)]
-pub(crate) fn generic_type(name: &str, args: Vec<Type>) -> Type {
-    Type::Generic(GenericType {
-        id: AstId::fresh(),
-        name: name.to_string(),
-        args,
-        span: Span::new(0, 0, 1, 1),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::{AstId, NamedType};
+    use crate::compiler_item::CompilerItem;
+    use crate::token::Span;
+
+    fn span() -> Span {
+        Span::new(0, 0, 1, 1)
+    }
+
+    fn named_type(name: &str) -> Type {
+        Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span()))
+    }
+
+    fn unit_type() -> Type {
+        Type::unit(AstId::fresh(), span())
+    }
+
+    /// The bundled bindings' registry, which builds a `String`, `List`,
+    /// `Option` or `Result` as a site naming its declaration.
+    struct Abi(CmInterfaceRegistry);
+
+    impl Abi {
+        fn new() -> Self {
+            Self((*CmInterfaceRegistry::build_from_stdlib().0).clone())
+        }
+
+        fn item(&self, item: CompilerItem, args: Vec<Type>) -> Type {
+            self.0.type_decls().item_type(item, args, span())
+        }
+
+        fn string(&self) -> Type {
+            self.item(CompilerItem::String, vec![])
+        }
+
+        fn list(&self, elem: Type) -> Type {
+            self.item(CompilerItem::List, vec![elem])
+        }
+
+        fn option(&self, inner: Type) -> Type {
+            self.item(CompilerItem::Option, vec![inner])
+        }
+
+        fn result(&self, ok: Type, err: Type) -> Type {
+            self.item(CompilerItem::Result, vec![ok, err])
+        }
+
+        fn size_align(&self, ty: &Type) -> (u32, u32) {
+            cm_layout_with_registry(ty, &self.0)
+        }
+    }
 
     #[test]
     fn test_canonical_join() {
@@ -393,55 +306,44 @@ mod tests {
     }
 
     #[test]
-    fn test_primitive_sizes() {
-        assert_eq!(cm_size(&named_type("bool")), 1);
-        assert_eq!(cm_size(&named_type("u8")), 1);
-        assert_eq!(cm_size(&named_type("i8")), 1);
-        assert_eq!(cm_size(&named_type("u16")), 2);
-        assert_eq!(cm_size(&named_type("i16")), 2);
-        assert_eq!(cm_size(&named_type("i32")), 4);
-        assert_eq!(cm_size(&named_type("u32")), 4);
-        assert_eq!(cm_size(&named_type("f32")), 4);
-        assert_eq!(cm_size(&named_type("char")), 4);
-        assert_eq!(cm_size(&named_type("i64")), 8);
-        assert_eq!(cm_size(&named_type("u64")), 8);
-        assert_eq!(cm_size(&named_type("f64")), 8);
+    fn test_primitive_layouts() {
+        let abi = Abi::new();
+        for (name, expected) in [
+            ("bool", (1, 1)),
+            ("u8", (1, 1)),
+            ("i8", (1, 1)),
+            ("u16", (2, 2)),
+            ("i16", (2, 2)),
+            ("i32", (4, 4)),
+            ("u32", (4, 4)),
+            ("f32", (4, 4)),
+            ("char", (4, 4)),
+            ("i64", (8, 8)),
+            ("u64", (8, 8)),
+            ("f64", (8, 8)),
+        ] {
+            assert_eq!(abi.size_align(&named_type(name)), expected, "{name}");
+        }
     }
 
     #[test]
-    fn test_string_size() {
-        // String = list<u8> = (ptr: i32, len: i32)
-        assert_eq!(cm_size(&named_type("String")), 8);
-        assert_eq!(cm_align(&named_type("String")), 4);
-    }
-
-    #[test]
-    fn test_list_size() {
-        // list<T> = (ptr: i32, len: i32) regardless of T
-        let list_i32 = generic_type("List", vec![named_type("i32")]);
-        assert_eq!(cm_size(&list_i32), 8);
-        assert_eq!(cm_align(&list_i32), 4);
-
-        let list_string = generic_type("List", vec![named_type("String")]);
-        assert_eq!(cm_size(&list_string), 8);
-        assert_eq!(cm_align(&list_string), 4);
+    fn test_string_and_list_are_ptr_len() {
+        // string = list<u8> = (ptr: i32, len: i32), whatever the element
+        let abi = Abi::new();
+        let string = abi.string();
+        assert_eq!(abi.size_align(&string), (8, 4));
+        let list_i32 = abi.list(named_type("i32"));
+        assert_eq!(abi.size_align(&list_i32), (8, 4));
+        let option_string = abi.option(string);
+        let list_option_string = abi.list(option_string);
+        assert_eq!(abi.size_align(&list_option_string), (8, 4));
     }
 
     #[test]
     fn test_unit_size() {
-        assert_eq!(cm_size(&unit_type()), 0);
-        assert_eq!(cm_size(&Type::Tuple(vec![])), 0);
-    }
-
-    #[test]
-    fn test_primitive_alignments() {
-        assert_eq!(cm_align(&named_type("bool")), 1);
-        assert_eq!(cm_align(&named_type("u8")), 1);
-        assert_eq!(cm_align(&named_type("i16")), 2);
-        assert_eq!(cm_align(&named_type("i32")), 4);
-        assert_eq!(cm_align(&named_type("f32")), 4);
-        assert_eq!(cm_align(&named_type("i64")), 8);
-        assert_eq!(cm_align(&named_type("f64")), 8);
+        let abi = Abi::new();
+        assert_eq!(abi.size_align(&unit_type()), (0, 1));
+        assert_eq!(abi.size_align(&Type::Tuple(vec![])), (0, 1));
     }
 
     #[test]
@@ -472,275 +374,78 @@ mod tests {
     /// pushes its payload to the offset that width calls for.
     #[test]
     fn a_wide_discriminant_moves_the_payload() {
+        let abi = Abi::new();
         let payload = named_type("i32");
-        let layout = layout_variant(257, std::iter::once(&payload));
+        let layout = layout_variant_with_registry(257, std::iter::once(&payload), &abi.0);
         assert_eq!(layout.align, 4);
         assert_eq!(layout.offsets, vec![0, 4]);
         assert_eq!(layout.size, 8);
     }
 
     #[test]
-    fn test_option_i32() {
-        // option<i32>: disc(1 byte) + 3 padding + i32(4 bytes) = 8 bytes, align 4
-        let opt = generic_type("Option", vec![named_type("i32")]);
-        assert_eq!(cm_size(&opt), 8);
-        assert_eq!(cm_align(&opt), 4);
-
-        let layout = layout_option(&named_type("i32"));
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]); // disc at 0, payload at 4
+    fn test_option_layouts() {
+        let abi = Abi::new();
+        let string = abi.string();
+        let list_u8 = abi.list(named_type("u8"));
+        // The payload sits at its own alignment past the one-byte discriminant.
+        for (inner, expected, payload_offset) in [
+            (named_type("i32"), (8, 4), 4),
+            (named_type("bool"), (2, 1), 1),
+            (named_type("i64"), (16, 8), 8),
+            (string, (12, 4), 4),
+            (list_u8, (12, 4), 4),
+        ] {
+            let layout = layout_option_with_registry(&inner, &abi.0);
+            assert_eq!(layout.size_align(), expected, "{inner:?}");
+            assert_eq!(layout.offsets, vec![0, payload_offset], "{inner:?}");
+            let option = abi.option(inner);
+            assert_eq!(abi.size_align(&option), expected);
+        }
     }
 
     #[test]
-    fn test_option_bool() {
-        // option<bool>: disc(1 byte) + bool(1 byte) = 2 bytes, align 1
-        let opt = generic_type("Option", vec![named_type("bool")]);
-        assert_eq!(cm_size(&opt), 2);
-        assert_eq!(cm_align(&opt), 1);
-
-        let layout = layout_option(&named_type("bool"));
-        assert_eq!(layout.size, 2);
-        assert_eq!(layout.align, 1);
-        assert_eq!(layout.offsets, vec![0, 1]);
+    fn test_result_layouts() {
+        let abi = Abi::new();
+        let string = abi.string();
+        let option_string = abi.option(string.clone());
+        for (ok, err, expected) in [
+            (unit_type(), unit_type(), (1, 1)),
+            (named_type("i32"), named_type("i32"), (8, 4)),
+            (string, named_type("i32"), (12, 4)),
+            (option_string, named_type("i32"), (16, 4)),
+        ] {
+            let layout = layout_result_with_registry(&ok, &err, &abi.0);
+            assert_eq!(layout.size_align(), expected, "{ok:?}, {err:?}");
+            let result = abi.result(ok, err);
+            assert_eq!(abi.size_align(&result), expected);
+        }
+        let unit = layout_result_with_registry(&unit_type(), &unit_type(), &abi.0);
+        assert_eq!(unit.offsets, vec![0, 1]);
     }
 
     #[test]
-    fn test_option_string() {
-        // option<string>: disc(1 byte) + 3 padding + string(8 bytes) = 12 bytes, align 4
-        let opt = generic_type("Option", vec![named_type("String")]);
-        assert_eq!(cm_size(&opt), 12);
-        assert_eq!(cm_align(&opt), 4);
-
-        let layout = layout_option(&named_type("String"));
-        assert_eq!(layout.size, 12);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]); // disc at 0, payload at 4
-    }
-
-    #[test]
-    fn test_option_i64() {
-        // option<i64>: disc(1 byte) + 7 padding + i64(8 bytes) = 16 bytes, align 8
-        let opt = generic_type("Option", vec![named_type("i64")]);
-        assert_eq!(cm_size(&opt), 16);
-        assert_eq!(cm_align(&opt), 8);
-
-        let layout = layout_option(&named_type("i64"));
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
-        assert_eq!(layout.offsets, vec![0, 8]);
-    }
-
-    #[test]
-    fn test_option_resource() {
-        // option<own<resource>>: disc(1 byte) + 3 padding + handle(4 bytes) = 8 bytes, align 4
-        let own_resource = generic_type("Own", vec![named_type("Fields")]);
-        let opt = generic_type("Option", vec![own_resource]);
-        assert_eq!(cm_size(&opt), 8);
-        assert_eq!(cm_align(&opt), 4);
-    }
-
-    #[test]
-    fn test_result_unit_unit() {
-        // result<(), ()>: disc(u8, 1 byte) + max(0, 0) = 1 byte, align 1
-        let result = generic_type("Result", vec![unit_type(), unit_type()]);
-        assert_eq!(cm_size(&result), 1);
-        assert_eq!(cm_align(&result), 1);
-
-        let layout = layout_result(&unit_type(), &unit_type());
-        assert_eq!(layout.size, 1);
-        assert_eq!(layout.align, 1);
-        assert_eq!(layout.offsets, vec![0, 1]); // disc at 0, payload at 1
-    }
-
-    #[test]
-    fn test_result_i32_i32() {
-        // result<i32, i32>: disc(u8, 1 byte) + 3 pad + max(4, 4) = 8 bytes, align 4
-        let result = generic_type("Result", vec![named_type("i32"), named_type("i32")]);
-        assert_eq!(cm_size(&result), 8);
-        assert_eq!(cm_align(&result), 4);
-
-        let layout = layout_result(&named_type("i32"), &named_type("i32"));
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]);
-    }
-
-    #[test]
-    fn test_result_resource_enum() {
-        // result<Resource, ErrorCode>: disc(u8) + 3 pad + max(4, 4) = 8 bytes, align 4
-        // Resource and ErrorCode are both i32 handles/discriminants
-        let result = generic_type(
-            "Result",
-            vec![named_type("IncomingBody"), named_type("ErrorCode")],
-        );
-        assert_eq!(cm_size(&result), 8);
-        assert_eq!(cm_align(&result), 4);
-    }
-
-    #[test]
-    fn test_result_string_i32() {
-        // result<string, i32>: disc(u8) + 3 pad + max(string=8, i32=4) = 12 bytes, align 4
-        let result = generic_type("Result", vec![named_type("String"), named_type("i32")]);
-        assert_eq!(cm_size(&result), 12);
-        assert_eq!(cm_align(&result), 4);
-    }
-
-    #[test]
-    fn test_tuple_i32_i32() {
-        // tuple<i32, i32>: 4 + 4 = 8 bytes, align 4
-        let tuple = Type::Tuple(vec![named_type("i32"), named_type("i32")]);
-        assert_eq!(cm_size(&tuple), 8);
-        assert_eq!(cm_align(&tuple), 4);
-
-        let layout = layout_tuple(&[named_type("i32"), named_type("i32")]);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]);
-    }
-
-    #[test]
-    fn test_tuple_string_string() {
-        // tuple<string, string>: string(8) + string(8) = 16 bytes, align 4
-        let layout = layout_tuple(&[named_type("String"), named_type("String")]);
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 8]);
-    }
-
-    #[test]
-    fn test_tuple_bool_i32() {
-        // tuple<bool, i32>: bool(1) + 3 padding + i32(4) = 8 bytes, align 4
-        let layout = layout_tuple(&[named_type("bool"), named_type("i32")]);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]);
-    }
-
-    #[test]
-    fn test_tuple_i32_bool() {
-        // tuple<i32, bool>: i32(4) + bool(1) = 5, padded to 8 bytes, align 4
-        let layout = layout_tuple(&[named_type("i32"), named_type("bool")]);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]);
-    }
-
-    #[test]
-    fn test_tuple_u8_u16_u32() {
-        // tuple<u8, u16, u32>: u8(1) + 1 padding + u16(2) + u32(4) = 8 bytes, align 4
-        let layout = layout_tuple(&[named_type("u8"), named_type("u16"), named_type("u32")]);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 2, 4]);
-    }
-
-    #[test]
-    fn test_list_option_string() {
-        // list<option<string>> is still just (ptr, len) = 8 bytes
-        let inner = generic_type("Option", vec![named_type("String")]);
-        let list = generic_type("List", vec![inner]);
-        assert_eq!(cm_size(&list), 8);
-        assert_eq!(cm_align(&list), 4);
-    }
-
-    #[test]
-    fn test_option_list_u8() {
-        // option<list<u8>>: disc(1) + 3 padding + list(8) = 12 bytes, align 4
-        let inner = generic_type("List", vec![named_type("u8")]);
-        let opt = generic_type("Option", vec![inner]);
-        assert_eq!(cm_size(&opt), 12);
-        assert_eq!(cm_align(&opt), 4);
-    }
-
-    #[test]
-    fn test_result_option_string_i32() {
-        // result<option<string>, i32>:
-        //   option<string> size = 12, align = 4
-        //   i32 size = 4, align = 4
-        //   disc(4) + max(12, 4) = 16 bytes, align 4
-        let opt_string = generic_type("Option", vec![named_type("String")]);
-        let result = generic_type("Result", vec![opt_string, named_type("i32")]);
-        assert_eq!(cm_size(&result), 16);
-        assert_eq!(cm_align(&result), 4);
-    }
-
-    #[test]
-    fn test_record_simple() {
-        // record { x: i32, y: i32 }
-        let layout = layout_tuple(&[named_type("i32"), named_type("i32")]);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 4]);
-    }
-
-    #[test]
-    fn test_record_mixed_alignment() {
-        // record { flag: bool, value: i64 }
-        // flag(1) + 7 padding + i64(8) = 16 bytes, align 8
-        let layout = layout_tuple(&[named_type("bool"), named_type("i64")]);
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
-        assert_eq!(layout.offsets, vec![0, 8]);
-    }
-
-    #[test]
-    fn test_record_with_string() {
-        // record { name: string, age: i32 }
-        // string(8) + i32(4) = 12 bytes, align 4
-        let layout = layout_tuple(&[named_type("String"), named_type("i32")]);
-        assert_eq!(layout.size, 12);
-        assert_eq!(layout.align, 4);
-        assert_eq!(layout.offsets, vec![0, 8]);
-    }
-
-    #[test]
-    fn test_consistency_string_return() {
-        // CmCallConvention uses outptr_alloc: Some((8, 4)) for String return
-        assert_eq!(cm_size(&named_type("String")), 8);
-        assert_eq!(cm_align(&named_type("String")), 4);
-    }
-
-    #[test]
-    fn test_consistency_option_string_return() {
-        // CmCallConvention uses outptr_alloc: Some((12, 4)) for option<string>
-        let layout = layout_option(&named_type("String"));
-        assert_eq!(layout.size, 12);
-        assert_eq!(layout.align, 4);
-    }
-
-    #[test]
-    fn test_consistency_option_own_resource() {
-        // CmCallConvention uses outptr_alloc: Some((8, 4)) for option<own<resource>>
-        let own_resource = generic_type("Own", vec![named_type("Fields")]);
-        let layout = layout_option(&own_resource);
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-    }
-
-    #[test]
-    fn test_consistency_result_resource_enum() {
-        // CmCallConvention uses outptr_alloc: Some((8, 4)) for result<resource, enum>
-        let layout = layout_result(&named_type("IncomingBody"), &named_type("ErrorCode"));
-        assert_eq!(layout.size, 8);
-        assert_eq!(layout.align, 4);
-    }
-
-    #[test]
-    fn test_consistency_list_return() {
-        // CmCallConvention uses outptr_alloc: Some((8, 4)) for list<T>
-        let list = generic_type("List", vec![named_type("String")]);
-        assert_eq!(cm_size(&list), 8);
-        assert_eq!(cm_align(&list), 4);
-    }
-
-    #[test]
-    fn test_consistency_tuple_return() {
-        // CmCallConvention::for_tuple_return computes size/align for tuple<i32, u64>
-        // i32(4) + 4 padding + u64(8) = 16 bytes, align 8
-        let layout = layout_tuple(&[named_type("i32"), named_type("u64")]);
-        assert_eq!(layout.size, 16);
-        assert_eq!(layout.align, 8);
-        assert_eq!(layout.offsets, vec![0, 8]);
+    fn test_tuple_layouts() {
+        let abi = Abi::new();
+        let string = abi.string();
+        // A record lays out as the tuple of its field types.
+        for (elems, expected, offsets) in [
+            (vec![named_type("i32"), named_type("i32")], (8, 4), vec![0, 4]),
+            (vec![string.clone(), string.clone()], (16, 4), vec![0, 8]),
+            (vec![named_type("bool"), named_type("i32")], (8, 4), vec![0, 4]),
+            (vec![named_type("i32"), named_type("bool")], (8, 4), vec![0, 4]),
+            (
+                vec![named_type("u8"), named_type("u16"), named_type("u32")],
+                (8, 4),
+                vec![0, 2, 4],
+            ),
+            (vec![named_type("bool"), named_type("i64")], (16, 8), vec![0, 8]),
+            (vec![string, named_type("i32")], (12, 4), vec![0, 8]),
+            (vec![named_type("i32"), named_type("u64")], (16, 8), vec![0, 8]),
+        ] {
+            let layout = layout_tuple_with_registry(&elems, &abi.0);
+            assert_eq!(layout.size_align(), expected, "{elems:?}");
+            assert_eq!(layout.offsets, offsets, "{elems:?}");
+            assert_eq!(abi.size_align(&Type::Tuple(elems)), expected);
+        }
     }
 }

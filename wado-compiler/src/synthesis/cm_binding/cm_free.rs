@@ -6,6 +6,7 @@
 
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
+use crate::compiler_item::CompilerItem;
 use crate::component_model::{
     CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_layout_with_registry,
 };
@@ -19,7 +20,7 @@ use crate::synthesis::common::{
 
 use super::export_adapter::FlatLocal;
 use super::types::{
-    CmStdlibNames, binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift,
+    binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift,
     disc_load_op,
 };
 
@@ -27,7 +28,6 @@ use super::types::{
 /// flat slots rather than out of a GC object, so it never lowers an expression.
 pub(super) struct CmShapeContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
-    pub names: &'a CmStdlibNames,
 }
 
 /// A part of a CM value: a record field, a variant payload, or a list element.
@@ -86,28 +86,28 @@ impl CmShape {
 /// dispatch of `lower::synthesize_lower_wasi_type_to_memory`.
 pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
     let resolved = ctx.cm_interface_registry.resolve_type(ty);
-    let names = ctx.names;
+    let item = ctx.cm_interface_registry.type_decls().item_of(&resolved);
     match &resolved {
-        Type::Named(named) if named.name == names.string => CmShape::Str,
+        Type::Named(_) if item == Some(CompilerItem::String) => CmShape::Str,
         Type::Named(named) => named_shape(named, ctx),
         Type::Tuple(elems) if elems.is_empty() => unreachable!("{EMPTY_TUPLE_AT_BOUNDARY}"),
         Type::Tuple(elems) => CmShape::Record(field_list(elems, ctx)),
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => {
+        Type::Generic(g) if item == Some(CompilerItem::List) => {
             CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
         }
-        Type::Generic(g) if names.is_tree_map(g) => {
+        Type::Generic(g) if item == Some(CompilerItem::TreeMap) => {
             // A `map<K, V>` owns what the `list<tuple<K, V>>` it despecializes
             // to owns: the pair buffer, and what each key and value own.
             let pair = Type::Tuple(vec![g.args[0].clone(), g.args[1].clone()]);
             CmShape::List(Box::new(field_of(&pair, 0, ctx)))
         }
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
+        Type::Generic(g) if item == Some(CompilerItem::Option) => {
             let payload_offset =
                 cm_abi::layout_option_with_registry(&g.args[0], ctx.cm_interface_registry)
                     .payload_offset();
             CmShape::Variant(vec![None, payload_case(&g.args[0], payload_offset, ctx)])
         }
-        Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
+        Type::Generic(g) if item == Some(CompilerItem::Result) => {
             let payload_offset = cm_abi::layout_result_with_registry(
                 &g.args[0],
                 &g.args[1],
@@ -119,7 +119,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
                 payload_case(&g.args[1], payload_offset, ctx),
             ])
         }
-        Type::Generic(g) if matches!(g.name.as_str(), "Stream" | "Future" | "Own" | "Borrow") => {
+        Type::Generic(_) if let Some(CompilerItem::Stream | CompilerItem::Future) = item => {
             CmShape::Scalar
         }
         Type::Reference(_) | Type::MutReference(_) => CmShape::Scalar,
