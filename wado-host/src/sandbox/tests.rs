@@ -442,6 +442,17 @@ fn sh_traced(policy: &Policy, script: &str) -> (ExitStatus, BTreeSet<Refusal>) {
     )
 }
 
+/// [`sh_traced`]'s refused paths. A tool the shell runs is a grandchild,
+/// refused its own `/proc` entry wherever it reads one (uutils `cat` does,
+/// GNU's does not), so that refusal is left out.
+fn sh_traced_paths(policy: &Policy, script: &str) -> BTreeSet<Refusal> {
+    sh_traced(policy, script)
+        .1
+        .into_iter()
+        .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
+        .collect()
+}
+
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
     run(
         policy,
@@ -880,7 +891,7 @@ fn a_traced_child_reports_each_path_outside_its_grants() {
     );
     let path = |name: &str, access| refused_path(&outside.join(name), access);
     assert_eq!(
-        sh_traced(&policy, &script).1,
+        sh_traced_paths(&policy, &script),
         BTreeSet::from([
             path("out.txt", Access::ReadExecute),
             path("new.txt", Access::ReadWrite),
@@ -921,12 +932,7 @@ fn a_traced_child_reports_only_what_landlock_judges() {
         o = outside.display(),
         g = granted.display(),
     );
-    // `mkdir` and `rm` run as grandchildren, refused their own `/proc` entry.
-    let refused: BTreeSet<Refusal> = sh_traced(&policy, &script)
-        .1
-        .into_iter()
-        .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
-        .collect();
+    let refused = sh_traced_paths(&policy, &script);
     // Removing the grant itself takes a right on the directory above it.
     let removed = |path: PathBuf| Refusal::Path {
         dir: path.parent().unwrap().to_owned(),
