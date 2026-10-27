@@ -2046,6 +2046,11 @@ fn compile_after_load<H: CompilerHost>(
     package.test_selection = options.test_selection;
     package.wasm_assets = wasm_assets;
     package.codegen_flags = codegen_flags;
+    package.provided_import_fqs = options
+        .providers
+        .iter()
+        .map(|p| p.import_fq.clone())
+        .collect();
 
     select_allocator(&mut package, options.allocator, logger)?;
 

@@ -247,6 +247,17 @@ pub struct NirPackage {
     pub trait_env: std::sync::Arc<TraitEnv>,
 }
 
+/// A dependency the program's component nests, rather than composition placing
+/// it beside the program.
+pub struct NestedDependency<'a> {
+    pub asset: &'a WasmAsset,
+    /// `(the dependency's export, the program's import of it)` per interface
+    /// the program uses.
+    pub provides: Vec<(&'a str, &'a str)>,
+    /// The interfaces the dependency imports.
+    pub imports: &'a [String],
+}
+
 /// How a function's signature stands against that of its root: the function
 /// it derives from that no optimizer pass minted or reshaped.
 #[derive(Debug, Clone)]
@@ -500,6 +511,70 @@ impl NirPackage {
                 "[DCE] the imports grew to reserve {pages} pages past the {fixed} already fixed"
             ),
         }
+    }
+
+    /// The dependencies the program's component nests: those the program calls
+    /// that import an interface a handler of the program answers.
+    pub fn nested_dependencies(&self) -> Vec<NestedDependency<'_>> {
+        let answered = self.component_plan.answered_interfaces();
+        let registry = &self.cm_interface_registry;
+        let used_interfaces: IndexSet<String> = registry
+            .interfaces()
+            .filter(|interface| {
+                interface
+                    .functions
+                    .iter()
+                    .any(|func| self.used_wasi_functions.contains(&func.cm_identifier()))
+            })
+            .map(|interface| interface.path)
+            .collect();
+        self.wasm_assets
+            .values()
+            .filter_map(|asset| {
+                let provides: Vec<(&str, &str)> = asset
+                    .component_interfaces
+                    .iter()
+                    .filter(|exported| used_interfaces.contains(&exported.import))
+                    .map(|exported| (exported.export.as_str(), exported.import.as_str()))
+                    .collect();
+                let imports = registry.host_leaf_imports_for(provides.first()?.1);
+                imports
+                    .iter()
+                    .any(|fq| answered.contains(fq.as_str()))
+                    .then_some(NestedDependency {
+                        asset,
+                        provides,
+                        imports,
+                    })
+            })
+            .collect()
+    }
+
+    /// The program's imports a nested dependency supplies instead.
+    pub fn nested_imports<'a>(nested: &[NestedDependency<'a>]) -> IndexSet<&'a str> {
+        nested
+            .iter()
+            .flat_map(|dependency| dependency.provides.iter().map(|(_, import)| *import))
+            .collect()
+    }
+
+    /// Count every function a nested dependency imports, and no handler of the
+    /// program answers, as one the program uses: the program forwards its own
+    /// import to the dependency, which needs the instance to carry each of them.
+    pub fn use_nested_dependency_imports(&mut self) {
+        let answered = self.component_plan.answered_interfaces();
+        let forwarded: Vec<String> = self
+            .nested_dependencies()
+            .iter()
+            .flat_map(|dependency| &dependency.asset.imported_functions)
+            .filter(|path| {
+                self.cm_interface_registry
+                    .get_function(path)
+                    .is_some_and(|func| !answered.contains(func.interface_path.as_str()))
+            })
+            .cloned()
+            .collect();
+        self.used_wasi_functions.extend(forwarded);
     }
 
     /// The address the allocator's heap starts at, past the pages the embedded

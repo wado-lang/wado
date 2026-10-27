@@ -12,7 +12,7 @@ use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
     NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
-    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_import_of,
+    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path, cm_import_of,
 };
 use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -40,6 +40,8 @@ pub struct ComponentBindings {
     /// capabilities (WASI, etc.). Effect reconstruction maps these onto the
     /// consumer's effects; a purely-computational component imports none.
     pub host_leaf_imports: Vec<String>,
+    /// The CM function path of every function in `host_leaf_imports`.
+    pub imported_functions: Vec<String>,
     /// The CM interface each named-type reference in `module` resolves to,
     /// keyed by the reference's own site. Merged into the CM registry by the
     /// loader; the syntax nodes carry no interface of their own.
@@ -173,14 +175,24 @@ pub fn build_bindings(
     // imported interface FQ so effect reconstruction can map them onto the
     // consumer's effects; imported world-level functions/types are not a v1
     // effect surface and are ignored.
-    let host_leaf_imports: Vec<String> = resolve.worlds[world]
+    let imported: Vec<(wit_parser::InterfaceId, String)> = resolve.worlds[world]
         .imports
-        .iter()
-        .filter_map(|(_, item)| match item {
-            WorldItem::Interface { id, .. } => Some(interface_fq(resolve, *id)),
+        .values()
+        .filter_map(|item| match item {
+            WorldItem::Interface { id, .. } => Some((*id, interface_fq(resolve, *id))),
             WorldItem::Function(_) | WorldItem::Type { .. } => None,
         })
         .collect();
+    let imported_functions: Vec<String> = imported
+        .iter()
+        .flat_map(|(id, fq)| {
+            resolve.interfaces[*id]
+                .functions
+                .keys()
+                .map(|name| cm_function_path(fq, name))
+        })
+        .collect();
+    let host_leaf_imports: Vec<String> = imported.into_iter().map(|(_, fq)| fq).collect();
 
     // A guest effect becomes an impl-able `#[cm]` interface, so effect
     // reconstruction resolves the requirement and a `with h do` handler can
@@ -240,6 +252,7 @@ pub fn build_bindings(
         module,
         interfaces,
         host_leaf_imports,
+        imported_functions,
         source_interfaces,
     })
 }

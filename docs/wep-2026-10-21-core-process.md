@@ -213,15 +213,16 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                        | Linux                                                    | macOS                                 |
-| ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| System configuration           | `/etc`, name resolution and TLS certificates among it    | `/private/etc`, the keychain          |
-| Name resolution (network only) | nothing beyond `/etc`                                    | mDNSResponder                         |
-| Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
-| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
-| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
+| Purpose                        | Linux                                                                                         | macOS                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Loader and shared libraries    | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache   |
+| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`   |
+| System configuration           | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the keychain            |
+| Name resolution (network only) | nothing beyond `/etc`                                                                         | mDNSResponder                           |
+| Locale and time zones          | `/usr/share/zoneinfo`, locale data                                                            | the same                                |
+| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same                                |
+| System and own process state   | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl` |
+| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                |
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
@@ -278,6 +279,70 @@ child may read more than the guest. It is defined, not open-ended:
 - Files inside a granted directory may be executed, so a binary the project just
   built can run. This adds no authority, since the child cannot leave the grants
   either way.
+
+### Diagnostics
+
+The guest learns a failure as an `error-code` or an exit status. The host knows
+more, and says it on its own stderr, with the fix where one exists:
+
+- A trap from a host that offers no spawning names the reason and, for
+  `--deny-process` or a grant at another host path, the flag that changes it.
+- A program outside the grants and the baseline warns at its spawn with the
+  resolved path, and names the `--process-read` grant of the file refused and
+  the user config entry that would let it run. So does a program whose `#!`
+  interpreter or ELF loader
+  lies outside them, which `exec` opens too. A program that does not exist stays silent: a guest
+  that probes for an optional tool expects `not-found`.
+- A child that fails, with a nonzero status, a signal or its timeout, after the
+  filter refused it a call warns with the calls refused. The refusal may not be
+  why it failed, so the warning puts the two side by side and claims no cause.
+  Linux alone reports this: the filter refers each such call to the host
+  through a seccomp listener, and a host thread records it and answers `EPERM`,
+  so the child sees what a plain `SECCOMP_RET_ERRNO` would give it. The child
+  waits to `exec` until the host holds its listener, so a host out of
+  descriptors fails the spawn rather than leave a call unanswered. The kernel
+  allows one listener per chain of filters, so under an enclosing sandbox that
+  holds one, the filter answers `EPERM` itself and nothing is reported. The
+  host takes the listener on every spawn, `--process-trace` or not, so a child
+  that installs its own (a container runtime's seccomp notify) fails with
+  `EBUSY`. That was chosen over taking it only under the trace: a refusal
+  leaves the child no clue that the sandbox caused its failure, so the report
+  must come without a flag that only someone who already suspects the sandbox
+  would pass.
+- `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
+  refused a child, with the grant that would allow it: `--process-read` for a
+  read, `--dir` for a write, which the guest gains too. It reports whatever the
+  child's end, since a child can carry on past a refusal and still go wrong.
+  It needs the listener, so Linux alone offers it, and only on request, because
+  each call that names a path then waits on the host. Where it cannot see, the
+  first spawn under it warns why.
+
+Each warning prints once per run however often the guest repeats the spawn.
+
+Landlock answers a refused path with `EACCES` and leaves no record the host
+can read; its audit log needs `CAP_AUDIT_READ`. So the trace watches the calls
+rather than the refusals. The filter refers each call Landlock mediates (`open`,
+`execve`, `mkdir`, `unlink`, `rename`, `link`, `truncate` and their `at`
+forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
+the path from the child's memory and resolves it as the kernel does for the
+child: against its working directory or the descriptor the call names, one
+component at a time, with `/proc/self` naming the child. A link in a
+process's `/proc` entry (`cwd`, `fd/N`) leads to an object rather than its
+text, so its text counts only where it still names that object. The thread
+leaves out a call that fails before Landlock's hook, as its flags and the
+spelling of its path decide. A trailing `/` or `.` asks a lookup for a
+directory and has it follow a link, and each call that removes or moves an
+entry treats the `/` its own way. The thread checks the rest against the policy
+where Landlock does: a call that makes, removes or moves an entry on the
+directory holding it, an open on the file, an `exec` on the program and on each
+interpreter it needs. The host reads an interpreter only where it is a regular
+file, the one kind `exec` runs, so a FIFO the child names cannot hold the
+host's thread. A call whose path the host may not read, under Yama's
+`ptrace_scope` or from a non-dumpable process, is not reported as refused: a
+warning says the trace missed calls, and why.
+The kernel then runs the call, and Landlock judges it as it would have. Moving
+enforcement itself to seccomp was rejected: the path a call names can change
+after the host reads it, and no filter can emulate `execve`.
 
 ### WIT
 
@@ -514,6 +579,26 @@ cannot be taken back.
 - On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.
+- A confined child cannot confine a child of its own. Its `setpgid` is refused,
+  so a `wado` that `core:process` started fails every spawn. The same refusal
+  meets any descendant that calls `setsid` or `setpgid` itself: a shell with job
+  control, or a program that detaches into the background. A plain `fork` and
+  `exec`, which is how `git` runs its hooks and helpers, is not refused.
+- A child cannot take a seccomp listener of its own: the kernel allows one per
+  chain of filters, and the host holds it. A container runtime using seccomp
+  notify, run as a child, fails with `EBUSY`.
+- Without `--process-trace`, a file or directory the sandbox refused a child
+  is not reported, so the child's own message is all there is. Under it, the
+  host predicts the refusal from the policy rather than observing Landlock's.
+  It resolves the path as the child does, and leaves out a call that
+  `fs/namei.c` fails before Landlock's hook. It does not model the file
+  permissions, which may refuse the call first, `openat2`'s `RESOLVE_*` flags,
+  or a rename between two mounts of one filesystem, which fails with `EXDEV`,
+  so such a call may be reported though Landlock never judged it.
+- Of the per-process entries of `/proc`, a child reads only its own. A process
+  it starts in turn cannot read its own `/proc/self`: Landlock rules name a
+  path when the rule is made, and that process's pid does not exist yet.
+  Another process's entry stays unreadable by design.
 
 ## Related WEPs
 

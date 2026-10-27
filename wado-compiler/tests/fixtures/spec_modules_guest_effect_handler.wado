@@ -1,0 +1,19 @@
+// A `with` handler answers the calls an imported component makes to its guest
+// effect, while the component is still running.
+
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`
+    }
+}
+
+test {
+    let mut tag = Tag {};
+    with Highlight => &mut tag do {
+        assert Hlc::wrap("x", "wado").text == "[wado:x]";
+    }
+}

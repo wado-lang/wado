@@ -34,6 +34,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::{TypeKey, TypeTable};
+use crate::world_registry::GuestCallback;
 use crate::{Span, hashmap, tir, token};
 
 /// An effect or resource **declaration**. `EffectMeta` carries its *template*
@@ -527,12 +528,37 @@ fn synthesize_dispatch_wrappers(
         .filter(|(_, is_open_import)| **is_open_import)
         .map(|(op, _)| op.def)
         .collect();
+    // A dependency's guest effect no provider satisfies: the dependency's import
+    // is wired to this wrapper, so the handler answers calls from inside it.
+    let guest_callbacks: Vec<Option<GuestCallback>> = plan
+        .operations
+        .iter()
+        .map(|op| {
+            let key = registry.operation_key(declared_at, op.cm_name.as_deref(), &op.name)?;
+            let interface = &registry.get_function(&key)?.interface_path;
+            (registry.is_dependency_guest_import(interface)
+                && !project.provided_import_fqs.contains(interface))
+            .then(|| GuestCallback {
+                interface_fq: interface.clone(),
+                function_key: key,
+                wrapper: plan.wrapper_names[&op.name].clone(),
+            })
+        })
+        .collect();
+    project
+        .guest_callbacks
+        .extend(guest_callbacks.iter().flatten().cloned());
     let entry_module = project
         .tir_modules
         .get_mut(entry_source)
         .expect("entry module must exist");
     let type_table = entry_module.type_table.clone();
-    for (op, &is_open_import) in plan.operations.iter().zip(&open_and_registered) {
+    for ((op, &is_open_import), guest_callback) in plan
+        .operations
+        .iter()
+        .zip(&open_and_registered)
+        .zip(&guest_callbacks)
+    {
         let wrapper = build_dispatch_wrapper_function(
             entry_source,
             effect,
@@ -541,6 +567,7 @@ fn synthesize_dispatch_wrappers(
             plan,
             is_resource,
             is_open_import,
+            guest_callback.is_some(),
             &type_table,
         );
         entry_module.add_function(wrapper);
@@ -555,6 +582,7 @@ fn build_dispatch_wrapper_function(
     plan: &DispatchPlan,
     is_resource: bool,
     is_open_boundary_effect: bool,
+    answers_guest_import: bool,
     type_table: &std::rc::Rc<std::cell::RefCell<TypeTable>>,
 ) -> TirFunction {
     let effect_module = effect.module();
@@ -827,10 +855,12 @@ fn build_dispatch_wrapper_function(
             },
             span,
         ));
-    } else if op.cm_name.is_some() || is_open_boundary_effect {
+    } else if (op.cm_name.is_some() && !answers_guest_import) || is_open_boundary_effect {
         // A cm-tagged (WASI) op or an open guest effect: emit the effect Call
         // form so cm_binding lowers it to the CM import. The no-handler case of
         // an open effect is "call the consumer's implementation", not a trap.
+        // A dependency's guest effect the program leaves closed has no import
+        // to fall back to: the dependency's own import is wired here.
         let effect_call = TirExpr::new(
             TirExprKind::Call {
                 func: Box::new(FunctionRef {
@@ -859,9 +889,10 @@ fn build_dispatch_wrapper_function(
             span,
         ));
     } else {
-        // User-defined effect: well-typed programs never reach the wrapper
-        // without a handler installed, since effect-check requires every
-        // call-site to have a `with E => h do { ... }` in scope. If we get
+        // User-defined effect, or a dependency's guest effect no export leaves
+        // open: well-typed programs never reach the wrapper without a handler
+        // installed, since effect-check requires every call-site to have a
+        // `with E => h do { ... }` in scope. If we get
         // here anyway, panic with a diagnostic identifying the operation
         // — useful when a future refactor introduces a path that bypasses
         // effect-check.
