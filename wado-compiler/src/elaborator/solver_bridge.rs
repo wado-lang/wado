@@ -1709,7 +1709,6 @@ impl SolverBridge {
         };
         let mut state = |head: TypeDeclId,
                          kind: OnBoundTrait,
-                         visible_from: Option<Vec<ModuleId>>,
                          members: Option<SolverType>| {
             for &(trait_, stated) in &kinds {
                 if stated == OnBoundTrait::Reflect {
@@ -1724,7 +1723,6 @@ impl SolverBridge {
                     .and_then(|name| lowering.known_assoc(trait_, name));
                 program.member_channels.extend(member_assoc);
                 let fact = Fact {
-                    visible_from: visible_from.clone(),
                     assoc: member_assoc.zip(members.clone()).into_iter().collect(),
                 };
                 program.facts.insert((head, trait_), fact);
@@ -1734,18 +1732,9 @@ impl SolverBridge {
             if !eligible(def) {
                 continue;
             }
-            let visible_from = (!info.fields.is_empty()).then(|| {
-                lowering
-                    .modules
-                    .iter()
-                    .filter(|(module, _)| info.fields_visible_from(module))
-                    .map(|(_, &id)| ModuleId(id))
-                    .collect()
-            });
             state(
                 lowering.declared_type(def),
                 OnBoundTrait::ReflectStruct,
-                visible_from,
                 channel(&mut info.fields.iter().map(|(_, ty, _)| *ty)),
             );
         }
@@ -1754,7 +1743,6 @@ impl SolverBridge {
             state(
                 head,
                 kind,
-                None,
                 Some(SolverType::Tuple(vec![SolverType::Pack(0)])),
             );
         }
@@ -1763,7 +1751,6 @@ impl SolverBridge {
                 state(
                     lowering.declared_type(def),
                     OnBoundTrait::ReflectVariant,
-                    None,
                     channel(&mut info.cases.iter().map(|case| case.payload)),
                 );
             }
@@ -1782,7 +1769,7 @@ impl SolverBridge {
             );
         for (def, kind) in memberless {
             if eligible(def) {
-                state(lowering.declared_type(def), kind, None, None);
+                state(lowering.declared_type(def), kind, None);
             }
         }
     }
@@ -2323,7 +2310,7 @@ impl SolverBridge {
         let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
             return Vec::new();
         };
-        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
+        let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, &q.args);
         pick(rank(&found))
             .into_iter()
             .map(|i| self.impl_def_of(found[i].impl_))

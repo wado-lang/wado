@@ -2,7 +2,7 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    Asker, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
     Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
@@ -74,7 +74,6 @@ pub fn holds_with_args(
     Query {
         program,
         env,
-        asker: Asker::Module(scope),
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
@@ -171,7 +170,6 @@ struct Open {
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
-    asker: Asker,
     asking: Vec<Open>,
     /// Whether the next question asks about a member of the type a pin
     /// bound it from, rather than about a bound's subject.
@@ -290,13 +288,6 @@ impl Query<'_> {
         }
         if let Some(head) = fact_head(program, ty)
             && let Some(fact) = program.facts.get(&(head, trait_))
-            && fact
-                .visible_from
-                .as_ref()
-                .is_none_or(|modules| match self.asker {
-                    Asker::Module(module) => modules.contains(&module),
-                    Asker::Instance => true,
-                })
         {
             let matched = || -> Vec<Option<SolverType>> {
                 let SolverType::Decl(_, args) = ty else {
@@ -754,7 +745,6 @@ struct Answer {
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,
-    asker: Asker,
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
@@ -763,7 +753,6 @@ pub(super) fn impl_applies(
         Query {
             program,
             env,
-            asker,
             asking: Vec::new(),
             member_next: false,
             at_itself: Some(ty.clone()),
@@ -1334,27 +1323,6 @@ mod tests {
                 }],
                 ..Holds::default()
             })
-        );
-    }
-
-    /// A `Reflect*` bound holds only where the receiver's members are visible,
-    /// so the fact names the modules it holds in and the asking module decides.
-    #[test]
-    fn a_fact_restricted_to_a_module_answers_only_there() {
-        let p = Builder::default()
-            .fact(
-                POINT,
-                ALPHA,
-                Fact {
-                    visible_from: Some(vec![HERE]),
-                    ..Fact::default()
-                },
-            )
-            .build();
-        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), ALPHA, ELSEWHERE),
-            None
         );
     }
 
