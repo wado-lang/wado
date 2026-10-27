@@ -350,6 +350,12 @@ behind `wado run`'s, a loop allocating per element (`map` and `collect`) runs
 twenty times slower than under `wado run`. The backend writes its own loops for
 that reason.
 
+Gemma 3 (270M) generates about 2% slower on `WebGpuBackend` than at
+`73611c2bfc0`, where the `loam-cpu-perf` branch began, while it loads in half
+the time. That is `mise run gemma3-270m` in `benchmark/`, best of three, with
+both trees on one host; the three runs of each do not overlap. The cause is
+not known.
+
 No Loam model has run on a phone, and no host runs a Wado guest with
 `wasi:webgpu` on one.
 

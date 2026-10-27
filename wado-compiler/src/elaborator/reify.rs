@@ -553,7 +553,7 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `pending_local_structs` and reify-owned for the same reason.
     pub(crate) pending_template_structs: Vec<TirStruct>,
     /// The coverage plan whose probes reify puts in, under
-    /// `wado test --coverage`. See `probe.rs`.
+    /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
@@ -1870,6 +1870,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_todo,
             timeout_ms,
             is_synopsis,
+            is_workload,
         } = meta;
         let function_name = test_function_name(&meta, test_index, test_decl.name.as_deref());
 
@@ -1924,6 +1925,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_todo,
             timeout_ms,
             is_synopsis,
+            is_workload,
         };
 
         Some((tir_func, tir_test))
@@ -2815,8 +2817,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return tir.clone();
         }
 
-        let tir = self.reify_unmoved(expr, ctx, expected_type);
-        if self.moves(expr) { tir.moved() } else { tir }
+        let view = self.ann_list_view_conversions(expr.id());
+        let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
+        let tir = if self.moves(expr) { tir.moved() } else { tir };
+        match view {
+            Some(view) => {
+                let span = tir.span;
+                TirExpr::new(
+                    TirExprKind::ListViewOf {
+                        value: Box::new(tir),
+                    },
+                    view,
+                    span,
+                )
+            }
+            None => tir,
+        }
     }
 
     fn reify_unmoved(

@@ -248,27 +248,8 @@ impl TypeSystem {
     /// it or at what it holds at any depth, through a newtype either way. A
     /// type parameter on either side may be bound to anything.
     fn may_point_into(&self, pointee: TypeId, place: TypeId) -> bool {
-        let open = |resolved: &ResolvedType| {
-            matches!(
-                resolved,
-                ResolvedType::TypeParam { .. }
-                    | ResolvedType::AssocParam { .. }
-                    | ResolvedType::TypePack { .. }
-                    | ResolvedType::PackElement { .. }
-                    | ResolvedType::AssocTypeProjection { .. }
-            )
-        };
-        let head_key = |ty: TypeId| {
-            let tt = self.type_table.borrow();
-            tt.type_key(tt.representation_head(ty))
-        };
-        let pointee = self.type_table.borrow().representation_head(pointee);
-        if open(self.type_table.borrow().get(pointee)) {
-            return true;
-        }
-        let target = head_key(pointee);
         self.reaches(place, &|ty, resolved| {
-            open(resolved) || head_key(ty) == target
+            is_open(resolved) || may_name_one_type(&self.type_table.borrow(), ty, pointee)
         })
     }
 
@@ -873,6 +854,68 @@ fn type_params_in(table: &TypeTable, ty: TypeId, params: &mut Vec<u32>) {
     }
     for part in constituents(table, ty).1 {
         type_params_in(table, part, params);
+    }
+}
+
+/// Whether a type parameter or projection stands where a type is, so a caller
+/// may bind it to anything.
+fn is_open(resolved: &ResolvedType) -> bool {
+    matches!(
+        resolved,
+        ResolvedType::TypeParam { .. }
+            | ResolvedType::AssocParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::PackElement { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+    )
+}
+
+/// Whether `a` and `b` may name one type once the parameters either is written
+/// with are bound, through a newtype either way. A field is written with its
+/// declaration's parameters, so its `&Owned<T>` names an `Owned<i32>`.
+fn may_name_one_type(table: &TypeTable, a: TypeId, b: TypeId) -> bool {
+    let (a, b) = (table.representation_head(a), table.representation_head(b));
+    let (ra, rb) = (table.get(a), table.get(b));
+    if table.type_key(a) == table.type_key(b) || is_open(ra) || is_open(rb) {
+        return true;
+    }
+    let both = |x: Vec<TypeId>, y: Vec<TypeId>| {
+        x.len() == y.len()
+            && x.into_iter()
+                .zip(y)
+                .all(|(x, y)| may_name_one_type(table, x, y))
+    };
+    if let (
+        ResolvedType::Struct {
+            def: StructDef::Anon(x),
+            ..
+        },
+        ResolvedType::Struct {
+            def: StructDef::Anon(y),
+            ..
+        },
+    ) = (ra, rb)
+    {
+        let (x, y) = (table.anon_struct_fields(*x), table.anon_struct_fields(*y));
+        return !x.is_empty()
+            && x.iter()
+                .map(|(name, _)| name)
+                .eq(y.iter().map(|(name, _)| name))
+            && both(
+                x.iter().map(|(_, ty)| *ty).collect(),
+                y.iter().map(|(_, ty)| *ty).collect(),
+            );
+    }
+    let ((x_head, x), (y_head, y)) = (constituents(table, a), constituents(table, b));
+    match x_head {
+        // A declaration written as such names every instance of itself.
+        Some(_) => x_head == y_head && (x.is_empty() || y.is_empty() || both(x, y)),
+        None => {
+            y_head.is_none()
+                && std::mem::discriminant(ra) == std::mem::discriminant(rb)
+                && !x.is_empty()
+                && both(x, y)
+        }
     }
 }
 

@@ -1,0 +1,16 @@
+// `Node`'s fields are private here, and visible here, so `Node: Describe`
+// holds through the library's struct blanket, `Option<Node>: Describe` with
+// it. The library's own module cannot see them, yet the instances it builds
+// for `Option<Node>` and the `Node` inside it keep the impls this use site
+// chose: its `Option<T>` impl, not its variant blanket, which once took
+// `Option<Node>` and collided with the struct blanket's instance.
+use { Describe } from "./sub/reflect_derivation_nested_private_fields_lib.wado";
+
+struct Node {
+    value: i32,
+    next: Option<Node>,
+}
+
+test "a derivation recurses through a field the library cannot see" {
+    assert Node::describe(0) == "i32Option<i32Option<i32Option<i32...>>>";
+}

@@ -1,0 +1,15 @@
+// A URL's path may hold an empty segment, so its module spells a `//` beyond
+// the one after its scheme. A type it declares is still found by its name.
+
+use { pair, sum } from "https://example.com/lib//node.wado"
+    with { integrity: "sha256:416e1372e279f2b1c56a3bdd3f1697c95561537cae9c5c9948d0b4b1bcff3788" };
+
+test "a type declared at a URL holding an empty segment resolves" {
+    assert sum(&pair(2, 3)) == 5;
+}
+
+__DATA__
+{
+  "test": {},
+  "remote": { "https://example.com/lib//node.wado": "sub/remote_import_node.wado" }
+}

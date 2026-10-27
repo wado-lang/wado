@@ -40,8 +40,9 @@ The Wado compiler crate.
   measure what it buys, and delete it when that is nothing.
 - `cargo check --all-targets` while iterating, or a type the crate changes
   breaks the uncompiled unit tests where nothing looks. Run `mise run test-e2e`
-  for anything the language touches: it covers O0 and O2 and leaves the rest to
-  CI, whose `ignored` lines are that split and not a gap, so never set
+  for anything the language touches: it covers O2 and leaves the other levels
+  to CI, whose `ignored` lines are that split and not a gap. Run one of them
+  with `mise run test-e2e-level <LEVEL>` only when asked, and never set
   `WADO_FULL_TEST` unless asked by name. `mise run test` and
   `mise run test-wado` are the slowest runs there are: run them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
@@ -117,6 +118,10 @@ why. A path in `__DATA__` is relative to the fixture's own directory.
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and
   an incremental `cargo test` will not re-expand on its own.
+- A fixture's `-O2` run rewrites its WIR golden in `tests/generated/fixtures/`,
+  and `prune_orphan_wir_goldens` removes the goldens no fixture writes.
+  `mise run update-golden-fixtures` regenerates them all without running the
+  tests; CI's `tidy` job runs it.
 - `wado dump -Ox file.wado` is how you find `wir_expect:Ox` patterns.
 - `wado dump --assert-plan file.wado` shows which operands an `assert` captures
   and which of them a short-circuit can skip.

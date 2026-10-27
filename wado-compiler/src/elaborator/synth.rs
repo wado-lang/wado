@@ -31,8 +31,9 @@ use crate::token::Span;
 /// its parameter type is in that set at every position.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum ArgClass {
-    /// Exactly this type. A `&mut T` argument also answers a `&T` parameter —
-    /// argument passing's one coercion.
+    /// Exactly this type. A `&mut T` argument also answers a `&T` parameter, and
+    /// a `ListArg<T>` one a `&ListView<T>` parameter — argument passing's two
+    /// conversions.
     Exact(TypeId),
     /// A type whose head declaration is known but whose arguments are not:
     /// `0..<n` is a `RangeExclusive` of *something*. Admits any parameter with
@@ -228,7 +229,7 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 }
 
 /// Whether an argument of type `arg` answers a parameter of type `param`,
-/// argument passing's one coercion included: a `&mut T` argument answers a `&T`
+/// the reference conversion included: a `&mut T` argument answers a `&T`
 /// parameter, as [`unify`] binds it.
 pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
     param == arg
@@ -284,11 +285,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if param_takes(&tt, param, *t) {
                     return true;
                 }
-                if !tt.contains_type_param(param) {
-                    return false;
-                }
+                let has_slots = tt.contains_type_param(param);
                 drop(tt);
-                self.tysys.slots_fill_param_to(param, *t)
+                if self.converts_to_list_view(param, *t) {
+                    return true;
+                }
+                has_slots && self.tysys.slots_fill_param_to(param, *t)
             }
             // A newtype over the head is admitted too; admitting more is the
             // safe side.

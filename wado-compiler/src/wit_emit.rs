@@ -821,7 +821,7 @@ impl<'a> Emitter<'a> {
                 }
                 if let Some(base) = self
                     .cm_interface_registry
-                    .and_then(|registry| registry.prelude_newtype_base(named))
+                    .and_then(|registry| registry.type_decls().newtype_base(named))
                 {
                     return self.map_ast_type(base, current_fq, uses);
                 }

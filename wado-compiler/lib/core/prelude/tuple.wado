@@ -14,7 +14,7 @@ impl<..T> Copyable for [..T] {
 
 /// The alternate (`#`) rendering the tuple `Inspect` hands off to: one element
 /// per indented line.
-fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
+fn inspect_tuple_alternate<affine ..T: Inspect>(t: &[..T], f: &mut Formatter) {
     // An empty tuple has no element to indent, so it writes the two characters
     // rather than a brace it immediately closes. `len()` is a compile-time
     // constant, so the arm not taken folds away.
@@ -23,7 +23,7 @@ fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
         return;
     }
     f.open_brace("[");
-    for let v of *t {
+    for let v of t {
         f.write_newline_indent();
         v.inspect(f);
         f.write_str(",");
@@ -33,7 +33,7 @@ fn inspect_tuple_alternate<..T: Inspect>(t: &[..T], f: &mut Formatter) {
 
 /// Inspect for tuples: `[1, "hello", true]`, or one indented element per line
 /// under the alternate (`#`) form.
-impl<..T: Inspect> Inspect for [..T] {
+impl<affine ..T: Inspect> Inspect for [..T] {
     fn inspect(&self, f: &mut Formatter) {
         if f.alternate {
             inspect_tuple_alternate(self, f);
@@ -41,7 +41,7 @@ impl<..T: Inspect> Inspect for [..T] {
         }
         f.write_str("[");
         let mut first = true;
-        for let v of *self {
+        for let v of self {
             if !first {
                 f.write_str(", ");
             }

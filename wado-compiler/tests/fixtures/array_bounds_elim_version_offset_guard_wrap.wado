@@ -1,0 +1,28 @@
+// Loop-versioned BCE under an offset guard whose own addition wraps: from
+// `v = i32::MAX`, `v + 1` is `i32::MIN`, under any `n`, so the body runs with
+// `v` past every list. The residual must refuse the fast arm, so the checked
+// loop panics on that index with the standard message.
+
+use { Stdout } from "core:cli";
+
+fn walk(xs: &List<i32>, from: i32, n: i32) -> i32 {
+    let mut sum = 0;
+    for let mut v = from; v + 1 < n; v += 1 {
+        sum += xs[v];
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let xs: List<i32> = [1, 2, 3, 4];
+    walk(&xs, builtin::black_box(2147483647), builtin::black_box(4));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Contract of List::index_value failed at",
+        "index: 2147483647"
+    ],
+    "trapped": true
+}

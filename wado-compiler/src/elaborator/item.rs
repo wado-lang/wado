@@ -2672,7 +2672,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // A reference or a view has no CM representation. Rejecting it here keeps the
             // static "an `export` appears in WIT" guarantee: reaching
             // `wit_emit` instead drops the component-type section wholesale.
-            if crosses_cm_boundary && let Some(reference) = scope.cm_ref_within(type_id) {
+            // A synchronous import's `&ListView<T>` is the exception: it crosses
+            // as the `list<T>` it views, read before the call returns.
+            let lends_list = func.is_cm_import()
+                && !func.is_async
+                && scope
+                    .tysys
+                    .type_table
+                    .borrow()
+                    .list_view_ref_element(type_id)
+                    .is_some();
+            if crosses_cm_boundary
+                && !lends_list
+                && let Some(reference) = scope.cm_ref_within(type_id)
+            {
                 let _ = scope.emit(TypeError::RefAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),

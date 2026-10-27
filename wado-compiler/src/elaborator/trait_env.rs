@@ -1477,17 +1477,32 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<&[name::FqTypeName]> {
-        self.entries_by_receiver(receiver).find_map(|entry| {
-            let header = &self.impl_headers[&entry];
-            let args = header.trait_arg_ids();
-            (header.trait_def() == Some(trait_) && self.block_answers(entry, trait_, wanted))
-                // The count the impl's own name spells, not every argument
-                // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
-                .then(|| {
-                    &args[..non_default_named_arg_count(args, &|i| {
-                        self.default_arg_at(trait_, i, &header.target_id)
-                    })]
-                })
+        let block = self.answering_impl(receiver, trait_, wanted)?;
+        Some(self.spelled_trait_args(block, trait_))
+    }
+
+    /// The trait arguments `block`, an impl of `trait_`, names itself by: the
+    /// count its own name spells, not every argument written, so
+    /// `impl Add<Cm> for Cm` mangles as a bare `Add`.
+    pub(crate) fn spelled_trait_args(&self, block: DefId, trait_: DefId) -> &[name::FqTypeName] {
+        let header = &self.impl_headers[&block];
+        let args = header.trait_arg_ids();
+        &args[..non_default_named_arg_count(args, &|i| {
+            self.default_arg_at(trait_, i, &header.target_id)
+        })]
+    }
+
+    /// The impl on `receiver` answering `trait_` at the caller's `wanted`
+    /// arguments.
+    pub(crate) fn answering_impl(
+        &self,
+        receiver: &name::Receiver,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+    ) -> Option<DefId> {
+        self.entries_by_receiver(receiver).find(|&entry| {
+            self.impl_headers[&entry].trait_def() == Some(trait_)
+                && self.block_answers(entry, trait_, wanted)
         })
     }
 
@@ -1714,53 +1729,6 @@ impl TraitEnv {
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         let header = &self.impl_headers[&entry];
         !header.methods.is_empty() && header.trait_def() == Some(trait_)
-    }
-
-    /// The value blanket for `trait_name` whose receiver-param bounds `satisfies`
-    /// accepts. A trait may carry several disjoint value blankets — the four
-    /// reflection kinds each derive `Inspect` over their own `Reflect*` bound —
-    /// so a receiver-blind first-wins selection would hand every receiver the
-    /// first-registered kind and then reject it on the bound check.
-    pub(crate) fn value_blanket_for_receiver(
-        &self,
-        trait_: DefId,
-        type_module: Option<&ModuleSource>,
-        satisfies: &dyn Fn(&[BlanketBound]) -> bool,
-    ) -> Option<&BlanketImpl> {
-        let impls = self.blanket_impls.get(&trait_)?;
-        let mut values = impls
-            .iter()
-            .filter(|b| b.receiver == BlanketReceiver::Value)
-            .filter(|b| satisfies(&b.bounds));
-        if let Some(hint) = type_module
-            && let Some(b) = values.clone().find(|b| &b.module == hint)
-        {
-            return Some(b);
-        }
-        values.next()
-    }
-
-    /// The universal ref blanket (`impl<T> Trait for &T`) answering
-    /// `trait_<wanted>`, the one writing the fewest open arguments first. `Eq`
-    /// has two: `Eq for &T` and `Eq<String> for &T`.
-    pub(crate) fn universal_ref_blanket(
-        &self,
-        trait_: DefId,
-        ref_kind: name::RefKind,
-        wanted: &[name::FqTypeName],
-    ) -> Option<&BlanketImpl> {
-        let is_mut = ref_kind == name::RefKind::Mut;
-        self.blanket_impls
-            .get(&trait_)?
-            .iter()
-            .filter(|b| {
-                b.receiver == BlanketReceiver::Ref { is_mut }
-                    && self.block_answers(b.def, trait_, wanted)
-            })
-            .min_by_key(|b| {
-                let written = self.impl_headers[&b.def].trait_arg_ids();
-                written.iter().filter(|arg| arg.mentions_binder()).count()
-            })
     }
 
     /// The blanket impl block `def` declares, if it is one.

@@ -1,0 +1,62 @@
+// A generic body's call through a bound picks the newtype's impl at the
+// bound's own arguments. Asked with none, two impls of one trait at different
+// arguments tie, and the call fell through to the base type, which has no such
+// impl.
+type Meters = f64;
+
+struct Feet {
+    v: f64,
+}
+
+impl From<i64> for Meters {
+    fn from(value: i64) -> Meters {
+        return (value as f64 * 1000.0) as Meters;
+    }
+}
+
+impl From<Feet> for Meters {
+    fn from(value: Feet) -> Meters {
+        return (value.v * 0.5) as Meters;
+    }
+}
+
+impl Add<i64> for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &i64) -> Meters {
+        return (*self as f64 + *rhs as f64 * 1000.0) as Meters;
+    }
+}
+
+impl Add<Feet> for Meters {
+    type Output = Meters;
+    fn add(&self, rhs: &Feet) -> Meters {
+        return (*self as f64 + rhs.v * 0.5) as Meters;
+    }
+}
+
+fn convert<T: From<i64>>(x: i64) -> T {
+    return T::from(x);
+}
+
+fn convert_feet<T: From<Feet>>(x: Feet) -> T {
+    return T::from(x);
+}
+
+fn plus<T: Add<i64, Output = T>>(a: T, b: i64) -> T {
+    return a + b;
+}
+
+test "From picks the impl at the bound's argument" {
+    let m: Meters = convert(2);
+    assert m as f64 == 2000.0;
+    let f: Meters = convert_feet(Feet { v: 10.0 });
+    assert f as f64 == 5.0;
+}
+
+test "an operator picks the impl at the bound's argument" {
+    let m: Meters = 1.0;
+    assert plus(m, 2) as f64 == 2001.0;
+}
+
+__DATA__
+{"test": {}}

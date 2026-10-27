@@ -1,0 +1,78 @@
+// A small loop reading GC arrays runs several iterations per test of its
+// condition, then finishes in the original loop: every length leaves the same
+// remainder it had, the sums keep their order, and a `break` past the loop
+// still leaves both copies. A body that writes what the test reads, or breaks
+// out of the loop itself, stays as it is.
+use { println, Stdout } from "core:cli";
+
+fn dot(x: &Array<f32>, w: &Array<f32>, n: i32) -> f32 {
+    let mut sum: f32 = 0.0;
+    for let mut i = 0; i < n; i += 1 {
+        sum = sum + x[i] * w[i];
+    }
+    return sum;
+}
+
+fn first_at_least(x: &Array<f32>, n: i32, floor: f32) -> i32 {
+    return found: {
+        for let mut i = 0; i < n; i += 1 {
+            if x[i] >= floor {
+                break found: i;
+            }
+        }
+        -1
+    };
+}
+
+fn sum_through_negative(x: &Array<f32>, n: i32) -> f32 {
+    let mut sum: f32 = 0.0;
+    let mut limit = n;
+    for let mut i = 0; i < limit; i += 1 {
+        sum = sum + x[i];
+        if x[i] < 0.0 {
+            limit = i + 1;
+        }
+    }
+    return sum;
+}
+
+fn visits_through_negative(x: &Array<f32>, n: i32) -> i32 {
+    let mut visits = 0;
+    for let mut i = 0; i < n; i += 1 {
+        visits += 1;
+        if x[i] < 0.0 {
+            break;
+        }
+    }
+    return visits;
+}
+
+export fn run() with Stdout {
+    let len = builtin::black_box(10);
+    let mut x = Array::<f32>::filled(len, 0.0);
+    let mut w = Array::<f32>::filled(len, 0.0);
+    for let i of 0..<len {
+        x[i] = 1.0e8 - (i * i) as f32 * 0.5;
+        w[i] = if i % 3 == 0 { 1.0e-8 } else { 1.0 };
+        if i == 5 {
+            x[i] = -4.5;
+        }
+    }
+    let mut sums: List<f32> = [];
+    let mut firsts: List<i32> = [];
+    for let n of 0..=len {
+        sums.push(dot(&x, &w, n));
+        firsts.push(first_at_least(&w, n, 1.0));
+    }
+    println(`${sums:?}`);
+    println(`${firsts:?}`);
+    println(`${sum_through_negative(&x, len)} ${visits_through_negative(&x, len)}`);
+}
+
+__DATA__
+{
+    "stdout": "[0.0, 1.0, 100000000.0, 200000000.0, 200000000.0, 300000000.0, 300000000.0, 300000000.0, 399999970.0, 499999940.0, 499999940.0]\n[-1, -1, 1, 1, 1, 1, 1, 1, 1, 1, 1]\n500000000 6\n",
+    "wir_expect:O2": [
+        " + 1) + 1) + 1) >= n"
+    ]
+}

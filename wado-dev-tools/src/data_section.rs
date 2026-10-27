@@ -1,27 +1,5 @@
 use wado_host::fixture::{CompileInputs, data_section};
 
-pub fn should_skip_file(source: &str) -> bool {
-    // Skip if __DATA__ contains "compile_error"
-    if data_section(source).is_some_and(|data| data.contains("\"compile_error\"")) {
-        return true;
-    }
-    // Skip if module has #![TODO] attribute (may fail to compile)
-    for line in source.lines() {
-        let t = line.trim();
-        if t.is_empty() || t.starts_with("//") {
-            continue;
-        }
-        if t.starts_with("#![") {
-            if t.contains("TODO") {
-                return true;
-            }
-            continue;
-        }
-        break;
-    }
-    false
-}
-
 /// How a fixture's `__DATA__` says to compile it. Golden generation compiles a
 /// fixture the way the e2e harness does, so it reads the same [`CompileInputs`].
 #[derive(Debug)]

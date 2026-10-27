@@ -1796,6 +1796,15 @@ impl<'a> WirUnparser<'a> {
                 self.unparse_instr_inline(len);
                 self.write(")");
             }
+            WirInstr::MemoryCopy { dst, src, len } => {
+                self.write("builtin::memory_copy(");
+                self.unparse_instr_inline(dst);
+                self.write(", ");
+                self.unparse_instr_inline(src);
+                self.write(", ");
+                self.unparse_instr_inline(len);
+                self.write(")");
+            }
             WirInstr::I32Load { offset, addr, .. } => {
                 self.write_mem_load("builtin::load_i32", *offset, addr);
             }

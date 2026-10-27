@@ -448,9 +448,11 @@ mod tests {
             invoked_as: "ns:p@1.0.0".to_string(),
             use_type: None,
             from: InvocationPath::normalize("schema.proto"),
+            integrity: None,
             inputs: vec![InvocationInput {
                 path: InvocationPath::normalize("dep.proto"),
                 use_type: None,
+                integrity: None,
             }],
             output_dir: InvocationPath::normalize("build/kiln/proto"),
             options: CanonicalOptions::default(),

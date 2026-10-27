@@ -7,7 +7,7 @@
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmDeclKind, CmFuturePayload};
 use crate::component_model::{
-    CANONICAL_ERROR_CODE_INTERFACE, CmInterfaceRegistry, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
+    CANONICAL_ERROR_CODE_INTERFACE, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
 };
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
@@ -123,7 +123,7 @@ pub fn resolve_import_plan(
         if used.is_empty() {
             continue;
         }
-        let here = registry.resources_in_signatures(&used, Some(&interface_info.path));
+        let here = registry.resources_in_signatures(&used);
         let uses_external_resources = here
             .iter()
             .any(|(source, _)| source != &interface_info.path);
@@ -163,7 +163,7 @@ pub fn resolve_import_plan(
         push(&mut entries, source.clone(), ImportKind::ResourceSource);
         for info in registry.interfaces().filter(|i| i.path == source) {
             let funcs: Vec<_> = info.functions.iter().collect();
-            let more = registry.resources_in_signatures(&funcs, Some(&source));
+            let more = registry.resources_in_signatures(&funcs);
             worklist.extend(more.into_iter().map(|(next, _)| next));
         }
     }
@@ -173,7 +173,7 @@ pub fn resolve_import_plan(
     // the HTTP phase) and, for a resource defined elsewhere, its defining
     // interface.
     for interface_info in registry.interfaces() {
-        let Some((resource_wado_name, _)) = &interface_info.resource_type else {
+        let Some(resource) = &interface_info.resource_type else {
             continue;
         };
         // This interface's own used operations, not merely some operation of a
@@ -194,11 +194,12 @@ pub fn resolve_import_plan(
             interface_info.path.clone(),
             ImportKind::ResourceGetter,
         );
-        if let Some(source) =
-            registry.resource_source_in(Some(&interface_info.path), resource_wado_name)
-            && source != interface_info.path
-        {
-            push(&mut entries, source.to_string(), ImportKind::ResourceSource);
+        if resource.source != interface_info.path {
+            push(
+                &mut entries,
+                resource.source.clone(),
+                ImportKind::ResourceSource,
+            );
         }
     }
 
@@ -277,15 +278,29 @@ fn needs_canonical_cli_error_code(
     project: &NirPackage,
     needed_canonicals: &IndexSet<CanonicalIntrinsic>,
 ) -> bool {
+    let registry = &project.cm_interface_registry;
+    let type_table = project.type_table.borrow();
+    let Some(canonical_error_code) = cm_decl_in_interface(
+        &type_table,
+        registry,
+        CANONICAL_ERROR_CODE_INTERFACE,
+        ERROR_CODE_WADO_NAME,
+    ) else {
+        return false;
+    };
+    let references = |ty: &Type| {
+        ty.any(&mut |ty| {
+            matches!(ty, Type::Named(named)
+                if registry.declared_def(named, type_table.defs()) == Some(canonical_error_code))
+        })
+    };
+
     // Import side: a used interface's signature references the cli error-code.
-    let import_side = project.cm_interface_registry.interfaces().any(|interface| {
+    let import_side = registry.interfaces().any(|interface| {
         interface.functions.iter().any(|func| {
             project.used_wasi_functions.contains(&func.cm_identifier())
-                && (func.return_type.as_ref().is_some_and(|ty| {
-                    references_cli_error_code(ty, &project.cm_interface_registry)
-                }) || func.params.iter().any(|(_, _, ty)| {
-                    references_cli_error_code(ty, &project.cm_interface_registry)
-                }))
+                && (func.return_type.as_ref().is_some_and(references)
+                    || func.params.iter().any(|(_, _, ty)| references(ty)))
         })
     });
     if import_side {
@@ -295,38 +310,10 @@ fn needs_canonical_cli_error_code(
     // Transmission side: an async-export transmission future carrying the
     // canonical error-code itself, e.g. a kiln generator's
     // `task return result<_, error-code>`.
-    let Some(canonical_error_code) = cm_decl_in_interface(
-        &project.type_table.borrow(),
-        &project.cm_interface_registry,
-        CANONICAL_ERROR_CODE_INTERFACE,
-        ERROR_CODE_WADO_NAME,
-    ) else {
-        return false;
-    };
     needed_canonicals.iter().any(|canonical| {
         matches!(
             canonical.future_payload(),
             Some(CmFuturePayload::Transmission(decl)) if decl.def() == canonical_error_code
         )
     })
-}
-
-/// Whether `ty` references the canonical `wasi:cli/types` `ErrorCode`.
-fn references_cli_error_code(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-    let any = |tys: &[Type]| tys.iter().any(|ty| references_cli_error_code(ty, registry));
-    match ty {
-        Type::Named(named) => {
-            named.name == ERROR_CODE_WADO_NAME
-                && registry
-                    .source_interface(named)
-                    .is_some_and(|s| s.starts_with("wasi:cli/types"))
-        }
-        Type::Generic(generic) => any(&generic.args),
-        Type::NamespacedGeneric(generic) => any(&generic.args),
-        Type::Tuple(elems) => any(elems),
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            references_cli_error_code(inner, registry)
-        }
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
-    }
 }

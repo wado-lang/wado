@@ -21,6 +21,8 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
 use crate::name::{
     interface_basename, mangle_local_method, namespace_member_alias, validate_module_path,
 };
+use crate::path::is_cwd_relative;
+use crate::remote::is_remote;
 use crate::symbol::{
     EffectSymbol, EnumSymbol, FlagsSymbol, FunctionSymbol, GlobalSymbol, NewtypeSymbol,
     ResourceSymbol, StructSymbol, Symbol, SymbolKind, SymbolTable, TraitSymbol, VariantSymbol,
@@ -1048,7 +1050,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 | AttributeFault::Key { .. }
                 | AttributeFault::Repeated { .. }
                 | AttributeFault::NamePolicy { .. }
-                | AttributeFault::StdlibOnly => Code::AttrMisuse,
+                | AttributeFault::StdlibOnly
+                | AttributeFault::TrapsByDesign { .. } => Code::AttrMisuse,
             };
             let _ = self.logger.error_in(
                 module_source,
@@ -1069,6 +1072,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         for item in &module.items {
             let Item::Use(UseDecl {
                 attributes: Some(attrs),
+                source,
                 ..
             }) = item
             else {
@@ -1095,6 +1099,13 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     "import attribute `type` is `\"wasm\"` or `\"wat\"` without a `generator`; \
                      another type is a generator's to read"
                         .to_string()
+                } else if key == ImportAttributes::INTEGRITY
+                    && !is_remote(source)
+                    && !(module_source.is_remote() && is_cwd_relative(source))
+                {
+                    format!(
+                        "import attribute `integrity` pins a remote file, and `{source}` is not one"
+                    )
                 } else {
                     continue;
                 };

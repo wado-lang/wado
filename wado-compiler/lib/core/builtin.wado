@@ -83,6 +83,12 @@ pub fn variant_tag<affine T>(v: &T) -> i32;
 #[side_effect(trap)]
 pub fn variant_case_extract<affine T, P>(v: &T, index: i32) -> P;
 
+/// Reads the payload of variant case `index` of `v` by reference, so an affine
+/// payload is not copied. Rewritten by lowering like `variant_case_extract`.
+#[storage(part_of_args)]
+#[side_effect(trap)]
+pub fn variant_case_ref<affine T, affine P>(v: &T, index: i32) -> &P;
+
 /// Builds variant case `index` of `T` around `payload`.
 /// Rewritten by lowering like `variant_case_extract`.
 #[storage(holds_args)]
@@ -367,6 +373,28 @@ pub fn heap_base() -> i32;
 #[storage(none)]
 #[side_effect(write, trap)]
 pub fn memory_fill(dst: i32, value: u8, len: i32);
+
+/// Copies `len` bytes of linear memory from `src` to `dst`, as if through a
+/// buffer, so the two ranges may overlap. Maps to Wasm memory.copy.
+#[storage(none)]
+#[side_effect(read, write, trap)]
+pub fn memory_copy(dst: i32, src: i32, len: i32);
+
+/// Loads a `T` from linear memory at its own width: an `i8` through
+/// `i32.load8_s`, an `f16` through `i32.load16_u`, a newtype as its base.
+#[storage(fresh)]
+#[side_effect(read, trap)]
+pub fn load<T: AnyBits>(addr: i32) -> T;
+
+/// Stores a `T` to linear memory at its own width, as `load` reads it.
+#[storage(none)]
+#[side_effect(write, trap)]
+pub fn store<T: AnyBits>(addr: i32, value: T);
+
+/// The bytes a `T` takes in linear memory. Lowers to an `i32.const`.
+#[storage(none)]
+#[side_effect(none)]
+pub fn size_of<T: AnyBits>() -> i32;
 /// Performs 128-bit addition: (a_lo, a_hi) + (b_lo, b_hi) = (result_lo, result_hi).
 /// Maps to Wasm i64.add128 instruction.
 #[storage(fresh)]

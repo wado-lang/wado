@@ -656,8 +656,12 @@ What changes shape:
       subtask: Option<Subtask>,       // None where the call completed synchronously
       buffer: Option<ResultBuffer>,   // the linear memory the result is lifted from
       lift: fn(i32) -> T,
+      args: Option<ArgBuffer>,        // the linear memory the arguments were lowered into
   }
   ```
+
+  `args` is a field, so it drops after `Drop` resolves the subtask: the callee
+  has read every argument by then, and only then may the caller free them.
 
   `wait(self)` and `cancel(self)` take the subtask and the buffer and consume
   them, so a second call is a compile error and the shared `__cm_ended` flag
@@ -877,6 +881,10 @@ declares the destructor's effects is withdrawn: a drop's effects are benign.
 - [x] `AsyncCall` holds an `Option<Subtask>` and an `Option<ResultBuffer>`,
   with `wait(self)`, `cancel(self)` and its `Drop`. The fixture drops a call
   nobody awaited.
+- [x] `AsyncCall` holds an `Option<ArgBuffer>`, which frees the lowered
+  arguments and the params buffer once the subtask resolves.
+  `cm_async_import_args_freed.wado` pins memory flat across repeated calls,
+  through flat arguments and the params buffer alike.
 - [x] `WaitableSet<W>` owns its members: `Waitable`, `insert`, `wait` and `poll`
   returning `Ready<W>`, and its `Drop` dropping the members first.
   `Waitable = i32`, `WaitEvent.handle` and the `join` methods go. Fixtures: a

@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Condvar, LazyLock, Mutex, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
+use wado_compiler::coverage::TestReport;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{
     AsContext, Collector, Config, Engine, GuestProfiler, InstanceAllocationStrategy, OptLevel,
@@ -21,7 +22,7 @@ use wasmtime_wasi_tls::{
 };
 
 use crate::args::CliExit;
-use crate::coverage_host::{CoverageHits, add_to_linker as add_coverage_to_linker};
+use crate::coverage_host::add_to_linker as add_coverage_to_linker;
 use crate::eval_host::{EvalSession, add_to_linker as add_eval_to_linker};
 use crate::fuel_host::{FuelRegion, add_to_linker as add_fuel_to_linker};
 use crate::http_hooks::WadoHttpHooks;
@@ -105,8 +106,8 @@ pub struct WasiState {
     process: ProcessCtx,
     /// `wado test` only: the store's handle on `core:eval`.
     eval: Option<EvalSession>,
-    /// `wado test` only: the coverage regions this store reported.
-    coverage: CoverageHits,
+    /// `wado test` only: what this store reported through `core:coverage`.
+    coverage: TestReport,
     /// The fuel [`new_store`] filled the store with, where its engine meters.
     fuel_start: Option<u64>,
     /// `wado test` only: the regions this store measured through `core:fuel`.
@@ -277,14 +278,13 @@ impl WasiState {
             tls: build_wasi_tls_ctx(),
             process: ProcessCtx::new(preopens.spawning.clone(), guest_stdio),
             eval,
-            coverage: CoverageHits::default(),
+            coverage: TestReport::default(),
             fuel_start: None,
             fuel_regions: Vec::new(),
         }
     }
 
-    /// The coverage regions this store reported.
-    pub fn coverage_hits(&mut self) -> &mut CoverageHits {
+    pub fn coverage_report(&mut self) -> &mut TestReport {
         &mut self.coverage
     }
 
@@ -672,7 +672,7 @@ pub fn create_linker(component: &Component) -> Result<Linker<WasiState>> {
 pub fn create_test_linker(component: &Component) -> Result<Linker<WasiState>> {
     let mut linker = host_linker(component)?;
     add_eval_to_linker(&mut linker, WasiState::eval_session)?;
-    add_coverage_to_linker(&mut linker, WasiState::coverage_hits)?;
+    add_coverage_to_linker(&mut linker, WasiState::coverage_report)?;
     add_fuel_to_linker(&mut linker)?;
     linker.define_unknown_imports_as_traps(component)?;
     Ok(linker)

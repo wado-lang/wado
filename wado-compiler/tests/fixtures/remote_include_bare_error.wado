@@ -1,0 +1,13 @@
+// A remote module's include is held to the same rule as a local one's, so it
+// reaches no file on this machine.
+
+use { note } from "https://example.com/lib/include_bare.wado"
+    with { integrity: "sha256:f608321df01600ef6b0b5cc722a87fd29731eccd88506aee3bbdc85e8988e8e4" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "invalid include path 'note.txt'",
+  "remote": { "https://example.com/lib/include_bare.wado": "sub/remote_include_bare.wado" }
+}

@@ -1,0 +1,27 @@
+// An array literal handed by value to a function that reads it through a
+// reference (`core:simd`'s `lane(&lanes, k)`) scalarizes once the call is
+// inlined: the parameter's binding is a copy of a local nothing writes.
+use { println, Stdout } from "core:cli";
+use { f32x4 } from "core:simd";
+
+fn pack(n: i32, at: fn(i32) -> f32) -> f32 {
+    let mut acc = f32x4::splat(0.0);
+    for let i of 0..<n {
+        let lanes: Array<f32> = [at(i), at(i + 1), at(i + 2), at(i + 3)];
+        acc = acc + f32x4::from(lanes);
+    }
+    return acc.extract_lane(0) + acc.extract_lane(3);
+}
+
+export fn run() with Stdout {
+    let k = builtin::black_box(2.0 as f32);
+    println(`${pack(builtin::black_box(4), |i| i as f32 * k)}`);
+}
+
+__DATA__
+{
+    "stdout": "48\n",
+    "wir_not_expect:O2": [
+        "array.new_fixed<f32>"
+    ]
+}

@@ -1,0 +1,19 @@
+// The harvest reads a remote module with the pin any import of it wrote, as the
+// loader does, though the import read first writes none.
+
+use { value } from "./sub/remote_kiln_unpinned_import.wado";
+use { pinned_value } from "./sub/remote_kiln_pinned_import.wado";
+
+test {
+    assert value() == 7 && pinned_value() == 7;
+}
+
+__DATA__
+{
+  "test": {},
+  "build_dependencies": { "lib:header": "./sub/kiln/header_probe_generator.wado" },
+  "remote": {
+    "https://example.com/lib/user.wado": "sub/remote_kiln_user.wado",
+    "https://example.com/lib/header_and_payload.schema": "sub/kiln/header_and_payload.schema"
+  }
+}

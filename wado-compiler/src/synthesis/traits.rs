@@ -34,9 +34,9 @@ use super::common::{
 use crate::ast::{HandleClasses, NamePolicy, Visibility};
 use crate::defs::DefId;
 use crate::name::{
-    FqTraitName, case_construct_helper_name, case_extract_helper_name, eq_payload_local,
-    field_get_helper_name, field_ref_helper_name, hole_get_helper_name, hole_ref_helper_name,
-    template_segment_helper_name,
+    FqTraitName, case_construct_helper_name, case_extract_helper_name, case_ref_helper_name,
+    eq_payload_local, field_get_helper_name, field_ref_helper_name, hole_get_helper_name,
+    hole_ref_helper_name, template_segment_helper_name,
 };
 use crate::synthesis::common;
 use crate::synthesis::common::{
@@ -2234,10 +2234,11 @@ fn generate_variant_cases_fn(
     )
 }
 
-/// Synthesize the `$case_extract$V$P` / `$case_construct$V$P` helpers for
-/// every distinct payload type of `target`. `Case::<V, P>::extract` and
-/// `::construct` bodies carry `builtin::variant_case_*` markers; lowering
-/// rewrites each monomorphized marker to its helper (WEP 2026-06-13 §3e).
+/// Synthesize the `$case_extract$V$P` / `$case_ref$V$P` / `$case_construct$V$P`
+/// helpers for every distinct payload type of `target`. `Case::<V, P>::extract`,
+/// `::extract_ref` and `::construct` bodies carry `builtin::variant_case_*`
+/// markers; lowering rewrites each monomorphized marker to its helper
+/// (WEP 2026-06-13 §3e).
 pub(super) fn generate_case_bridge_helpers(
     type_table: &RefCell<TypeTable>,
     cases: &[(String, u32, TypeId, Option<String>)],
@@ -2263,14 +2264,24 @@ pub(super) fn generate_case_bridge_helpers(
 
     let mut helpers = Vec::new();
     for (mangled_payload, (payload_type, cases)) in &by_payload {
-        helpers.push(generate_case_extract_helper(
-            case_extract_helper_name(&mangled_variant, mangled_payload),
-            variant_type,
-            ref_variant_type,
-            *payload_type,
-            cases,
-            span,
-        ));
+        for (helper_name, read) in [
+            (
+                case_extract_helper_name as fn(&str, &str) -> String,
+                Read::Value,
+            ),
+            (case_ref_helper_name, Read::Ref),
+        ] {
+            helpers.push(generate_case_extract_helper(
+                type_table,
+                helper_name(&mangled_variant, mangled_payload),
+                variant_type,
+                ref_variant_type,
+                *payload_type,
+                read,
+                cases,
+                span,
+            ));
+        }
         helpers.push(generate_case_construct_helper(
             case_construct_helper_name(&mangled_variant, mangled_payload),
             variant_type,
@@ -2333,16 +2344,24 @@ pub(super) fn case_index_dispatch(
     )
 }
 
-/// Build `$case_extract$V$P(v: &V, index: i32) -> P`:
-/// trap unless `v`'s tag is `index`, then read the case's payload.
+/// Build `$case_extract$V$P(v: &V, index: i32) -> P`, or under [`Read::Ref`]
+/// `$case_ref$V$P` answering `&P`: trap unless `v`'s tag is `index`, then read
+/// the case's payload.
+#[expect(clippy::too_many_arguments)]
 fn generate_case_extract_helper(
+    type_table: &RefCell<TypeTable>,
     helper_name: String,
     variant_type: TypeId,
     ref_variant_type: TypeId,
     payload_type: TypeId,
+    read: Read,
     cases: &[(String, u32)],
     span: Span,
 ) -> TirFunction {
+    let answer_type = match read {
+        Read::Value => payload_type,
+        Read::Ref => type_table.borrow_mut().make_ref(payload_type),
+    };
     let deref_v = || deref_local(0, "v", ref_variant_type, variant_type, span);
     let index_local = || local_expr(1, "index", TypeTable::I32, span);
 
@@ -2384,7 +2403,7 @@ fn generate_case_extract_helper(
         index_local(),
         cases,
         |_, index| {
-            TirExpr::new(
+            let payload = TirExpr::new(
                 TirExprKind::VariantPayload {
                     expr: Box::new(deref_v()),
                     case_index: index,
@@ -2392,9 +2411,13 @@ fn generate_case_extract_helper(
                 },
                 payload_type,
                 span,
-            )
+            );
+            match read {
+                Read::Value => payload,
+                Read::Ref => ref_expr(payload, answer_type, span),
+            }
         },
-        payload_type,
+        answer_type,
         span,
     );
 
@@ -2420,7 +2443,7 @@ fn generate_case_extract_helper(
                 span,
             },
         ],
-        payload_type,
+        answer_type,
         body,
         vec![
             param_local("v", ref_variant_type, false),
@@ -3698,14 +3721,8 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
         if !gives_eq || !ctx.is_requested_anywhere(&cmp.receiver, &eq_key) {
             continue;
         }
-        let mut func = generate_eq_from_cmp_fn(
-            &cmp,
-            ctx.trait_env,
-            &module_source,
-            &eq_trait_name,
-            &mut tt,
-            ctx.names,
-        );
+        let mut func =
+            generate_eq_from_cmp_fn(&cmp, ctx.trait_env, &eq_trait_name, &mut tt, ctx.names);
         func.def_id = Some(eq_decl);
         func.impl_origin = Some(cmp.block);
         generated.push(Rc::new(RefCell::new(func)));
@@ -3878,7 +3895,6 @@ fn eq_target(
 fn generate_eq_from_cmp_fn(
     cmp: &WrittenCmp,
     trait_env: &TraitEnv,
-    module_source: &ModuleSource,
     eq_trait_name: &FqTraitName,
     tt: &mut TypeTable,
     names: &TraitsStdlibNames,
@@ -3896,14 +3912,25 @@ fn generate_eq_from_cmp_fn(
     let qualified_name = method_info.to_mangled_name();
     let ref_type = tt.make_ref(ty);
     let ordering_type = tt.make_compiler_enum(CompilerItem::Ordering);
-    let order = cmp_call_expr(
-        deref_local(0, "self", ref_type, ty, span),
-        deref_local(1, "other", ref_type, ty, span),
-        ty,
+    // The `cmp` this `eq` pairs with, which the block's open parameters leave
+    // nothing to select.
+    let template = trait_env
+        .method_template(cmp.block, "cmp")
+        .expect("a written `cmp` is its block's method");
+    let order = TirExpr::new(
+        TirExprKind::method_call(
+            Box::new(local_expr(0, "self", ref_type, span)),
+            FunctionRef {
+                module_source: template.home(&trait_env.defs),
+                name: cmp.method_info.to_mangled_name(),
+                template: Some(template),
+                monomorph_info: None,
+                method_info: Some(cmp.method_info.clone()),
+            },
+            vec![],
+            vec![CallArg::new(local_expr(1, "other", ref_type, span), false)],
+        ),
         ordering_type,
-        trait_env,
-        module_source,
-        tt,
         span,
     );
     let equal = TirExpr::new(
@@ -5033,7 +5060,7 @@ fn scalar_order_stmts(
 ///
 /// Handles type decomposition, method name mangling, impl module resolution,
 /// and Ref/MutRef monomorphization. The value is automatically wrapped in a reference.
-fn trait_call_on_type(
+pub(super) fn trait_call_on_type(
     value: TirExpr,
     value_type: TypeId,
     trait_name: &FqTraitName,

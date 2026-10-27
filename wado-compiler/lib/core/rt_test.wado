@@ -1,12 +1,63 @@
 //! Tests for `core:rt`.
 
-use { i64_add128_soft, i64_sub128_soft, i64_mul_wide_u_soft, i64_mul_wide_s_soft, log_stdout } from "core:rt";
+use {
+    i64_add128_soft,
+    i64_sub128_soft,
+    i64_mul_wide_u_soft,
+    i64_mul_wide_s_soft,
+    log_stdout,
+    memory_to_gc_array,
+    memory_into_gc_array,
+    gc_array_to_memory,
+} from "core:rt";
 use { MonotonicClock } from "wasi:clocks";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
     let [rx, tx] = Stream::<u8>::new();
     rx.start_read(builtin::black_box(-1));
+}
+
+test "a lift copies every byte of linear memory, whatever the length" {
+    let ptr = builtin::realloc(0, 0, 1, 19);
+    for let i of 0..<19 {
+        builtin::i32_store8(ptr + i, (0xA0 + i) as u8);
+    }
+    for let len of 0..=18 {
+        let arr = memory_to_gc_array(ptr + 1, len);
+        assert arr.len() == len;
+        for let i of 0..<len {
+            assert builtin::array_get_value_u8(&arr, i) == (0xA1 + i) as u8;
+        }
+        let mut within: Array<u8> = builtin::array_new(len + 2);
+        memory_into_gc_array(&mut within, 1, ptr + 1, len);
+        assert builtin::array_get_value_u8(&within, 0) == 0;
+        for let i of 0..<len {
+            assert builtin::array_get_value_u8(&within, 1 + i) == (0xA1 + i) as u8;
+        }
+        assert builtin::array_get_value_u8(&within, len + 1) == 0;
+    }
+    let _ = builtin::realloc(ptr, 19, 1, 0);
+}
+
+test "a lower copies every byte of the array, whatever the length" {
+    let mut arr: Array<u8> = builtin::array_new(19);
+    for let i of 0..<19 {
+        builtin::array_set_u8(&mut arr, i, (0xA0 + i) as u8);
+    }
+    let ptr = builtin::realloc(0, 0, 1, 20);
+    for let len of 0..=18 {
+        for let i of 0..<20 {
+            builtin::i32_store8(ptr + i, 0 as u8);
+        }
+        gc_array_to_memory(&arr, 1, ptr + 1, len);
+        assert builtin::i32_load8_u(ptr) == 0;
+        for let i of 0..<len {
+            assert builtin::i32_load8_u(ptr + 1 + i) == (0xA1 + i) as u8;
+        }
+        assert builtin::i32_load8_u(ptr + 1 + len) == 0;
+    }
+    let _ = builtin::realloc(ptr, 20, 1, 0);
 }
 
 test "a write to a stream whose reader is gone reports the drop" {
@@ -35,6 +86,59 @@ test "a future write the reader has not read yet is pending" {
     assert rx.read() == Option::Some(1);
 }
 
+affine variant Raced {
+    Value(FutureReadCopy<i32>),
+    Timer(AsyncCall<()>),
+}
+
+impl Waitable for Raced;
+
+test "a started future read waits in a set beside a timer" {
+    let [rx, tx] = Future::<i32>::new();
+    let mut set = WaitableSet::<Raced>::new();
+    set.insert(Raced::Value(rx.start_read()));
+    set.insert(Raced::Timer(MonotonicClock::wait_for(1_000_000)));
+    let Timer(timer) = set.wait().member else {
+        unreachable();
+    };
+    timer.wait();
+    assert tx.write(7).result == FutureWriteResult::Completed;
+    let Value(read) = set.wait().member else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(7);
+}
+
+test "a started future read finishes without a set" {
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(3).result == FutureWriteResult::Pending;
+    assert rx.start_read().finish() == Option::Some(3);
+}
+
+test "a started future read dropped in flight cancels it" {
+    let [rx, tx] = Future::<i32>::new();
+    builtin::drop(rx.start_read());
+    assert tx.write(1).result == FutureWriteResult::Dropped;
+}
+
+test "a started future read dropped once it read drops the value" {
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(2).result == FutureWriteResult::Pending;
+    builtin::drop(rx.start_read());
+}
+
+test "poll reports a host member once the host resolved it" {
+    let [rx, tx] = Future::<i32>::new();
+    let mut set = WaitableSet::<Raced>::new();
+    set.insert(Raced::Value(rx.start_read()));
+    assert set.poll() matches { None };
+    assert tx.write(4).result == FutureWriteResult::Completed;
+    let Value(read) = set.poll().unwrap().member else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(4);
+}
+
 test "an empty waitable set has nothing to poll" {
     let mut ws = WaitableSet::<Subtask>::new();
     assert ws.poll() matches { None };
@@ -58,6 +162,42 @@ test "a member ready without the host comes back in insertion order" {
     assert first.member matches { First } && first.event matches { Unreported };
     assert ws.wait().member matches { Second };
     assert ws.is_empty();
+}
+
+test "a drained set hands back every member, the ready ones first" {
+    let mut ws = WaitableSet::<Raced>::new();
+    ws.insert(Raced::Timer(MonotonicClock::wait_for(60_000_000_000)));
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(1).result == FutureWriteResult::Pending;
+    ws.insert(Raced::Value(rx.start_read()));
+    let mut drained = ws.drain();
+    assert ws.is_empty();
+    let Some(Timer(_)) = drained.pop() else {
+        unreachable();
+    };
+    let Some(Value(read)) = drained.pop() else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(1);
+}
+
+test "a drained set hands back a member the host resolved before one it did not" {
+    let [pending, pending_tx] = Future::<i32>::new();
+    let [resolved, resolved_tx] = Future::<i32>::new();
+    let mut ws = WaitableSet::<Raced>::new();
+    ws.insert(Raced::Value(pending.start_read()));
+    ws.insert(Raced::Value(resolved.start_read()));
+    assert resolved_tx.write(5).result == FutureWriteResult::Completed;
+    let mut drained = ws.drain();
+    let Some(Value(still_pending)) = drained.pop() else {
+        unreachable();
+    };
+    builtin::drop(still_pending);
+    assert pending_tx.write(6).result == FutureWriteResult::Dropped;
+    let Some(Value(read)) = drained.pop() else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(5);
 }
 
 /// A call the host resolves after it starts, handed back by the set that

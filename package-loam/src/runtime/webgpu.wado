@@ -34,6 +34,7 @@ use {
     slices_within,
 } from "./tensor.wado";
 use { HashMap, HashSet, TreeMap } from "core:collections";
+use { LinearArray } from "core:linear";
 use {
     Webgpu,
     Gpu,
@@ -520,18 +521,15 @@ impl WebGpuBackend {
         let per_write = WRITE_BYTES / 4;
         for let mut at = from; at < to; at += per_write {
             let end = i32::min(at + per_write, to);
-            let mut bytes = ByteList::with_capacity((end - at) * 4);
+            let mut words = LinearArray::<u32>::filled(end - at, 0);
             for let i of at..<end {
-                let bits = word(i);
-                bytes.push(bits as u8);
-                bytes.push((bits >> 8) as u8);
-                bytes.push((bits >> 16) as u8);
-                bytes.push((bits >> 24) as u8);
+                words[i - at] = word(i);
             }
+            let bytes = words.cast::<u8>();
             let Ok(_) = self.queue.write_buffer_with_copy(
                 self.buffer(slot),
                 (at * 4) as u64 as GpuSize64,
-                bytes,
+                &bytes,
                 null,
                 null,
             ) else {

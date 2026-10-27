@@ -1,0 +1,12 @@
+// An `integrity` names its digest's algorithm, and SHA-256 is the one taken.
+
+use { exclaim } from "https://example.com/lib/util.wado" with { integrity: "md5:abc" };
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": ":3:76: analysis error: import attribute `integrity` is `sha256:` and 64 lowercase hex digits, got `md5:abc`",
+  "compile_error_codes": ["IMPORT_ATTR_INVALID"],
+  "remote": { "https://example.com/lib/util.wado": "sub/remote_import_util.wado" }
+}

@@ -154,5 +154,6 @@ interface storage {
 
     assert!(output.contains("pub resource File {"));
     assert!(output.contains("fn read(&self, len: u32) -> ByteList;"));
-    assert!(output.contains("fn write(&self, data: ByteList);"));
+    assert!(output.contains("use { ListView } from \"core:linear\";"));
+    assert!(output.contains("fn write(&self, data: &ListView<u8>);"));
 }
