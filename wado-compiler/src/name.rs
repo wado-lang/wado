@@ -2681,9 +2681,9 @@ pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
 }
 
 /// The name a type's key names: past `module` where [`wir_type_key`] qualified
-/// it, past the [`wir_tuple_type_key`] prefix where none did. A URL module may
-/// spell `//` anywhere in its path and a name in its type arguments, so the
-/// boundary is found from the module rather than by searching for it.
+/// it, past the [`wir_tuple_type_key`] prefix of a tuple, and the whole key of
+/// a builtin. A URL module may spell `//` anywhere in its path, and a name in
+/// its type arguments, so the boundary is found from the module.
 #[must_use]
 pub fn unqualified_name<'a>(key: &'a str, module: Option<&ModuleSource>) -> &'a str {
     let Some(module) = module else {
@@ -2859,7 +2859,10 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let remote = interner.remote("https://example.com/lib//a.wado");
         let name = "Hole<https://example.com/b.wado/$t>";
-        assert_eq!(unqualified_name(&wir_type_key(&remote, name), Some(&remote)), name);
+        assert_eq!(
+            unqualified_name(&wir_type_key(&remote, name), Some(&remote)),
+            name
+        );
         let tuple = wir_tuple_type_key(&["core:prelude//String".to_string()]);
         assert_eq!(unqualified_name(&tuple, None), "[core:prelude//String]");
         assert_eq!(unqualified_name("Array<i32>", None), "Array<i32>");

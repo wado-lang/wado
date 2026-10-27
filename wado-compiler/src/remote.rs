@@ -142,22 +142,8 @@ pub struct PinMismatch {
     pub pinned_by: PinnedBy,
 }
 
-/// Check that `bytes`, fetched from `url`, hash to `pin`: what every host does
-/// once it knows what pins the file.
-///
-/// # Errors
-///
-/// [`SourceError::IntegrityMismatch`] where they hash to anything else.
-pub fn check_pin(
-    url: &str,
-    bytes: &[u8],
-    pin: Integrity,
-    pinned_by: PinnedBy,
-) -> Result<(), SourceError> {
-    check_digest(url, Integrity::of(bytes), pin, pinned_by)
-}
-
-/// [`check_pin`] for a host that already hashed what it fetched.
+/// Check that `actual`, the digest of what was fetched from `url`, is `pin`:
+/// what every host does once it knows what pins the file.
 ///
 /// # Errors
 ///
@@ -191,13 +177,14 @@ pub fn held_to_use(
     bytes: Vec<u8>,
     integrity: Option<Integrity>,
 ) -> Result<Vec<u8>, SourceError> {
+    let actual = Integrity::of(&bytes);
     let Some(pin) = integrity else {
         return Err(SourceError::Unpinned {
             url: url.to_string(),
-            actual: Integrity::of(&bytes),
+            actual,
         });
     };
-    check_pin(url, &bytes, pin, PinnedBy::Use)?;
+    check_digest(url, actual, pin, PinnedBy::Use)?;
     Ok(bytes)
 }
 

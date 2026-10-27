@@ -1120,9 +1120,8 @@ impl ModuleSource {
 
     /// Create a module-qualified name using `//` as separator.
     ///
-    /// A URL module may spell `//` itself, so the name is read back by
-    /// stripping the module ([`crate::name::unqualified_name`]), never by
-    /// searching for the separator.
+    /// A URL module may spell `//` itself, so only
+    /// [`crate::name::unqualified_name`] reads the name back.
     ///
     /// Examples:
     /// - `ModuleSource::prelude().qualify_name("Option")` → `"core:prelude//Option"`
