@@ -33,7 +33,7 @@ use crate::synthesis::common::{
     alloc_named_local, assign, binary, block, break_stmt, cast, cm_canonical_call, entry_call,
     expr_stmt, handle_scalar, i32_const, i64_const, if_stmt, internal_call, let_mut_stmt, let_stmt,
     linear_alloc, linear_free, local_ref, loop_stmt, option_none, option_some, return_stmt,
-    struct_literal, synth_param, synth_span,
+    struct_literal, synth_span,
 };
 
 use super::synthesize_lift;
@@ -656,32 +656,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         TypeTable::I32,
         false,
     );
-<<<<<<< HEAD
     stmts.push(alloc_payload_buffer(ptr_idx, size, align));
-||||||| 0fe5443fa
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
-    ));
-=======
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        linear_alloc(i32_const(align), i32_const(size)),
-    ));
->>>>>>> origin/main
 
     // Lower `value` into the buffer using the shared registry-backed lowerer.
     let lower_ctx = LowerContext {
@@ -803,84 +778,12 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         ],
     ))));
 
-<<<<<<< HEAD
     binding_function(
         func_name,
         &[handle_idx, value_idx],
         write_type_id,
         stmts,
         next_local,
-||||||| 0fe5443fa
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![
-            TirParam {
-                name: "handle".to_string(),
-                local_index: handle_idx,
-                type_id: TypeTable::I32,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-            TirParam {
-                name: "value".to_string(),
-                local_index: value_idx,
-                type_id: payload_type_id,
-                is_mut: false,
-                is_mut_ref: false,
-                span: synth_span(),
-            },
-        ],
-        return_type: write_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
-=======
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![
-            synth_param("handle", handle_idx, TypeTable::I32),
-            synth_param("value", value_idx, payload_type_id),
-        ],
-        return_type: write_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
->>>>>>> origin/main
         locals,
     )
 }
@@ -903,19 +806,6 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     cm_future_read_func_name(&tt.mangle_type_arg_for_generic(payload_type_id))
 }
 
-<<<<<<< HEAD
-/// The CM package a future payload's named types resolve in, or `""` where the
-/// payload names none and resolution must not be steered into one.
-fn future_payload_package(payload: &CmFuturePayload) -> String {
-    match payload {
-        // Read off the declaration, never guessed: naming a package the payload
-        // does not belong to resolves its types to that package's same-named ones.
-        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
-        CmFuturePayload::Trailers => "http".to_string(),
-        CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
-    }
-}
-
 /// The `handle` a copy binding takes, then the `ptr` of its buffer, both `i32`.
 fn handle_and_ptr_locals(next_local: &mut u32, locals: &mut Vec<TirLocal>) -> (u32, u32) {
     let mut local = |name: &str| {
@@ -930,41 +820,16 @@ fn handle_and_ptr_locals(next_local: &mut u32, locals: &mut Vec<TirLocal>) -> (u
     (local("handle"), local("ptr"))
 }
 
-/// `let ptr = realloc(0, 0, align, size)`: the buffer one future payload is
-/// read into.
+/// `let ptr`, the buffer one future payload is copied through.
 fn alloc_payload_buffer(ptr_idx: u32, size: i32, align: i32) -> TirStmt {
     let_stmt(
         "ptr",
         ptr_idx,
         TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
+        linear_alloc(i32_const(align), i32_const(size)),
     )
 }
 
-||||||| 0fe5443fa
-/// The CM package a future payload's named types resolve in, or `""` where the
-/// payload names none and resolution must not be steered into one.
-fn future_payload_package(payload: &CmFuturePayload) -> String {
-    match payload {
-        // Read off the declaration, never guessed: naming a package the payload
-        // does not belong to resolves its types to that package's same-named ones.
-        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
-        CmFuturePayload::Trailers => "http".to_string(),
-        CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
-    }
-}
-
-=======
->>>>>>> origin/main
 fn synthesize_future_read_func(
     payload_type_id: TypeId,
     option_type_id: TypeId,
@@ -987,66 +852,8 @@ fn synthesize_future_read_func(
     let mut locals: Vec<TirLocal> = Vec::new();
     let mut stmts: Vec<TirStmt> = Vec::new();
 
-<<<<<<< HEAD
     let (handle_idx, ptr_idx) = handle_and_ptr_locals(&mut next_local, &mut locals);
     stmts.push(alloc_payload_buffer(ptr_idx, size, align));
-||||||| 0fe5443fa
-    // Param: handle (i32).
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-
-    // let ptr = realloc(0, 0, align, size)
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        builtin_call(
-            "realloc",
-            vec![
-                i32_const(0),
-                i32_const(0),
-                i32_const(align),
-                i32_const(size),
-            ],
-            TypeTable::I32,
-        ),
-    ));
-=======
-    // Param: handle (i32).
-    let handle_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("handle".to_string()),
-        TypeTable::I32,
-        false,
-    );
-
-    let ptr_idx = alloc_named_local(
-        &mut next_local,
-        &mut locals,
-        Some("ptr".to_string()),
-        TypeTable::I32,
-        false,
-    );
-    stmts.push(let_stmt(
-        "ptr",
-        ptr_idx,
-        TypeTable::I32,
-        linear_alloc(i32_const(align), i32_const(size)),
-    ));
->>>>>>> origin/main
 
     let status_idx = alloc_named_local(
         &mut next_local,
@@ -1134,71 +941,12 @@ fn synthesize_future_read_func(
         option_type_id,
     ))));
 
-<<<<<<< HEAD
     binding_function(
         func_name,
         &[handle_idx],
         option_type_id,
         stmts,
         next_local,
-||||||| 0fe5443fa
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![TirParam {
-            name: "handle".to_string(),
-            local_index: handle_idx,
-            type_id: TypeTable::I32,
-            is_mut: false,
-            is_mut_ref: false,
-            span: synth_span(),
-        }],
-        return_type: option_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
-=======
-    TirFunction {
-        module_source: ModuleSource::default(),
-        name: func_name,
-        def_id: None,
-        visibility: Visibility::Private,
-        is_export: false,
-        is_async: false,
-        type_params: vec![],
-        impl_type_params: vec![],
-        impl_origin: None,
-        monomorph_info: None,
-        method_info: None,
-        params: vec![synth_param("handle", handle_idx, TypeTable::I32)],
-        return_type: option_type_id,
-        task_return_type: None,
-        effects: vec![],
-        immediates: vec![],
-        declared: None,
-        body: Some(TirBlock {
-            stmts,
-            span: synth_span(),
-        }),
-        span: synth_span(),
-        local_count: next_local,
->>>>>>> origin/main
         locals,
     )
 }
@@ -1236,15 +984,14 @@ fn synthesize_future_started_read_funcs(
 ) -> Vec<TirFunction> {
     let cm_interface_registry = ctx.cm_interface_registry;
     let type_table = ctx.type_table;
-    let (mangled, read_name, cm_package, payload_ast, size, align) = {
+    let (mangled, read_name, payload_ast, size, align) = {
         let tt = type_table.borrow();
         let payload = classify_future_payload(&tt, payload_type_id);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
         let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
         (
             tt.mangle_type_arg_for_generic(payload_type_id),
-            CanonicalIntrinsic::FutureRead(payload.clone()),
-            future_payload_package(&payload),
+            CanonicalIntrinsic::FutureRead(payload),
             payload_ast,
             size,
             align,
@@ -1275,7 +1022,6 @@ fn synthesize_future_started_read_funcs(
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package: &cm_package,
         interner: ctx.interner,
     };
     let lifted = synthesize_lift(
