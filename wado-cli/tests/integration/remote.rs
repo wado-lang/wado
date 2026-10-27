@@ -590,6 +590,97 @@ fn a_shorter_extent_is_held_to_the_bytes_kept_for_the_longer_one() {
     );
 }
 
+/// A probe run again, as a changed generator needs, reads the pinned part of
+/// its input from the cache, so it needs no server once fetched.
+#[test]
+fn a_kiln_input_is_probed_from_the_cache_once_fetched() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    server.withdraw("model.bin");
+    let generator = project.path().join("src/gen.wado");
+    let changed = std::fs::read_to_string(&generator).unwrap() + "// changed\n";
+    std::fs::write(&generator, changed).unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// A probe reading past the bytes kept for a pin reads on from the server.
+#[test]
+fn a_probe_reads_past_the_kept_bytes_from_the_server() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    let generator = project.path().join("src/gen.wado");
+    let three_bytes = std::fs::read_to_string(&generator)
+        .unwrap()
+        .replace("chunk.items[0] == b'\\n'", "n == 3");
+    std::fs::write(&generator, three_bytes).unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
+    assert!(lock.contains("extent = 3"), "{lock}");
+}
+
+/// The pin a `use` writes serves the probe from the cache as the lock's does,
+/// for a file in no package.
+#[test]
+fn a_kiln_input_pinned_by_its_use_is_probed_from_the_cache() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let dir = tempfile::tempdir().unwrap();
+    let wado_root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("main.wado"),
+        format!(
+            "use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"{}\"\n    with {{ generator: {{ module: \"./gen.wado\" }}, integrity: \"{}\" }};\n\n\
+             export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n",
+            server.url("model.bin"),
+            Integrity::of(b"7\n"),
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("gen.wado"), HEADER_GENERATOR).unwrap();
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    server.withdraw("model.bin");
+    std::fs::write(
+        dir.path().join("gen.wado"),
+        format!("{HEADER_GENERATOR}// changed\n"),
+    )
+    .unwrap();
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
 /// A lock that cannot be read is reported, never replaced by one holding only
 /// the new pin.
 #[test]

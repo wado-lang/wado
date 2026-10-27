@@ -12,6 +12,7 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use wado_compiler::remote::Integrity;
 use wado_compiler::{
     CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
     SourceReader,
@@ -219,7 +220,12 @@ impl CompilerHost for FilesystemCompilerHost {
         self.load_source_prefix(path, None).await
     }
 
-    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+    /// No pin applies: only a remote file carries one.
+    async fn open_source(
+        &self,
+        path: &str,
+        _: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
         Ok(Arc::new(FileReader::open(self.base_path.join(path))?))
     }
 

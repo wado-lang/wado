@@ -714,7 +714,7 @@ pub async fn probe_for<H: CompilerHost + ?Sized>(
     }
     let mut files = Vec::with_capacity(request.files.len());
     for file in &request.files {
-        files.push(host.open_source(&file.path).await.map_err(|source| {
+        files.push(host.open_source(&file.path, file.integrity).await.map_err(|source| {
             GeneratorRunnerError::LoadInput {
                 path: file.path.clone(),
                 source,
