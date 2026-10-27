@@ -451,16 +451,15 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 }
 
 /// The event of `code` whose handle and payload the host wrote at `out_ptr`,
-/// which this frees. A set holds subtasks and stream ends only, so no future
-/// event arrives, and `waitable-set.wait` is lowered with `cancellable = 0`, so
-/// no `TASK_CANCELLED` does.
+/// which this frees. `waitable-set.wait` is lowered with `cancellable = 0`, so
+/// no `TASK_CANCELLED` arrives.
 fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
     let event = match code {
         1 => ReadyEvent::Call(call_state(payload as u32)),
-        2 | 3 => ReadyEvent::Copied(copy_result(payload)),
+        2 | 3 | 4 | 5 => ReadyEvent::Copied(copy_result(payload)),
         _ => unreachable(),
     };
     return WaitEvent { handle, event, payload };

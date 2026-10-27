@@ -217,13 +217,78 @@ pub resource Future<T> {
     #[cm("future-read")]
     fn read(self) -> Option<T>;
 
-    /// Cancel an in-progress read. Blocks until cancellation completes.
+    /// Cancel the read in flight, blocking until it settles, and return the
+    /// `CopyResult` it ended on, numbered as the Component Model numbers it. A
+    /// `FutureReadCopy` dropped in flight calls it. It traps on an end with no
+    /// read in flight.
     #[cm("future-cancel-read")]
-    fn cancel_read(&self);
+    fn cancel_read(&self) -> u32;
 
     /// Drop the readable end of the future.
     #[cm("future-drop-readable")]
     fn drop(self);
+}
+
+impl<affine T> Future<T> {
+    /// The Component Model read, started into a buffer the payload fits and
+    /// not waited for.
+    #[cm("future-begin-read")]
+    internal fn begin_read(&self) -> CopyBuffer;
+
+    /// The value a completed read on this end copied to `ptr`, lifted.
+    #[cm("future-lift")]
+    internal fn lift_read(&self, ptr: i32) -> T;
+
+    /// Start the read without waiting for it, so a `WaitableSet` can wait on
+    /// it beside other work. The end moves into the read.
+    pub fn start_read(self) -> FutureReadCopy<T> {
+        let buffer = self.begin_read();
+        return FutureReadCopy { read: Option::Some([self, buffer]) };
+    }
+}
+
+/// A read started on a future end, holding the end until it is finished.
+/// Dropping one in flight cancels it, and drops a value it had read.
+pub affine struct FutureReadCopy<affine T> {
+    read: Option<[Future<T>, CopyBuffer]>,
+}
+
+impl<affine T> FutureReadCopy<T> {
+    /// The value, or None where the writer dropped without writing. Waits for a
+    /// read that has not settled, so a read never inserted into a set finishes
+    /// as well. The end drops, as a read consumes it.
+    pub fn finish(self) -> Option<T> {
+        let mut copy = self;
+        let [end, mut buffer] = copy.read.take().unwrap();
+        if copy_result(buffer.settle()) != CopyResult::Completed {
+            return null;
+        }
+        return Option::Some(end.lift_read(buffer.ptr));
+    }
+}
+
+impl<affine T> Drop for FutureReadCopy<T> {
+    fn drop(self) {
+        let Some([end, mut buffer]) = self.read else {
+            return;
+        };
+        if buffer.ready_cancel() {
+            buffer.packed = end.cancel_read() as i32;
+        }
+        // A read that completed before the cancel owns what it lifts to.
+        if copy_result(buffer.settle()) == CopyResult::Completed {
+            let _ = end.lift_read(buffer.ptr);
+        }
+    }
+}
+
+impl<affine T> Waitable for FutureReadCopy<T> {
+    fn wait_on(&self) -> WaitOn {
+        let Some([_, buffer]) = &self.read else {
+            unreachable();
+        };
+        return buffer.wait_on();
+    }
 }
 
 /// Writable end of an async value (WASI Component Model future).
@@ -720,8 +785,8 @@ internal fn cm_await_copy(handle: i32) -> i32 {
 /// handle. It is sealed, so a set holds only what it can account for: the
 /// standard library implements it on the calls, and a variant whose cases each
 /// hold one derives it with `impl Waitable for V;`. A bare stream or future end
-/// is none, since no copy on it is in flight: a copy started on a stream end,
-/// `ReadCopy` or `WriteCopy`, is one.
+/// is none, since no copy on it is in flight: a copy started on one,
+/// `ReadCopy`, `WriteCopy` or `FutureReadCopy`, is one.
 #[compiler_item("waitable")]
 pub affine trait Waitable with () {
     fn wait_on(&self) -> WaitOn;
@@ -770,7 +835,7 @@ pub variant ReadyEvent {
     /// own, so it is ready without one.
     Unreported,
     Call(CallState),
-    /// A started stream copy settled, ending as this says.
+    /// A started stream or future copy settled, ending as this says.
     Copied(CopyResult),
 }
 

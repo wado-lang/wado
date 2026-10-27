@@ -35,6 +35,47 @@ test "a future write the reader has not read yet is pending" {
     assert rx.read() == Option::Some(1);
 }
 
+affine variant Raced {
+    Value(FutureReadCopy<i32>),
+    Timer(AsyncCall<()>),
+}
+
+impl Waitable for Raced;
+
+test "a started future read waits in a set beside a timer" {
+    let [rx, tx] = Future::<i32>::new();
+    let mut set = WaitableSet::<Raced>::new();
+    set.insert(Raced::Value(rx.start_read()));
+    set.insert(Raced::Timer(MonotonicClock::wait_for(1_000_000)));
+    let Timer(timer) = set.wait().member else {
+        unreachable();
+    };
+    timer.wait();
+    assert tx.write(7).result == FutureWriteResult::Completed;
+    let Value(read) = set.wait().member else {
+        unreachable();
+    };
+    assert read.finish() == Option::Some(7);
+}
+
+test "a started future read finishes without a set" {
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(3).result == FutureWriteResult::Pending;
+    assert rx.start_read().finish() == Option::Some(3);
+}
+
+test "a started future read dropped in flight cancels it" {
+    let [rx, tx] = Future::<i32>::new();
+    builtin::drop(rx.start_read());
+    assert tx.write(1).result == FutureWriteResult::Dropped;
+}
+
+test "a started future read dropped once it read drops the value" {
+    let [rx, tx] = Future::<i32>::new();
+    assert tx.write(2).result == FutureWriteResult::Pending;
+    builtin::drop(rx.start_read());
+}
+
 test "an empty waitable set has nothing to poll" {
     let mut ws = WaitableSet::<Subtask>::new();
     assert ws.poll() matches { None };
