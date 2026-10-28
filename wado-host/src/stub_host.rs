@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
-use wado_compiler::remote::is_remote;
+use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
@@ -102,8 +102,14 @@ impl CompilerHost for StubHost {
         self.filesystem.source_exists(path).await
     }
 
-    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-        self.filesystem.open_source(self.local(path)?).await
+    async fn open_source(
+        &self,
+        path: &str,
+        integrity: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
+        self.filesystem
+            .open_source(self.local(path)?, integrity)
+            .await
     }
 
     async fn load_source_prefix(

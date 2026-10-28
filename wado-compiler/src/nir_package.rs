@@ -13,7 +13,9 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
+};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -935,6 +937,52 @@ impl NirPackage {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+
+    /// Whether an import of `func`'s interface declares it: a function the
+    /// program uses and the registry can lower. Declaring a supported but unused
+    /// one would drag in resource types the world never imports.
+    pub fn emits_cm_function(&self, func: &CmFunctionInfo) -> bool {
+        self.cm_interface_registry.is_function_supported(func)
+            && self.used_wasi_functions.contains(&func.cm_identifier())
+    }
+
+    /// The functions the import of the resource-defining `interface` declares,
+    /// in its instance type's order: every constructor and static of its
+    /// resources first, since their signatures spell the types the methods then
+    /// reference, then its own used functions, then its used methods.
+    pub fn resource_defining_functions<'a>(
+        &self,
+        interface: &'a CmInterfaceInfo,
+    ) -> Vec<&'a CmFunctionInfo> {
+        let prefix = interface.path.split('@').next().unwrap_or(&interface.path);
+        let resources: IndexSet<&str> = self
+            .cm_interface_registry
+            .resources_for_interface(prefix)
+            .map(|(wado_name, _)| wado_name)
+            .collect();
+        let of_resource = |func: &CmFunctionInfo| resources.contains(func.interface_name.as_str());
+        let kind = |func: &CmFunctionInfo| {
+            parse_resource_func(&func.wasi_func_name).map(|(kind, ..)| kind)
+        };
+        let is_constructor_or_static = |func: &CmFunctionInfo| {
+            of_resource(func) && matches!(kind(func), Some(ResKind::Constructor | ResKind::Static))
+        };
+        let functions = &interface.functions;
+        let constructors = functions
+            .iter()
+            .filter(|func| is_constructor_or_static(func));
+        let own = functions
+            .iter()
+            .filter(|func| !of_resource(func) && self.emits_cm_function(func));
+        // An unused method would reference a resource type the instance never
+        // emits, such as `RequestOptions`.
+        let methods = functions.iter().filter(|func| {
+            of_resource(func)
+                && matches!(kind(func), Some(ResKind::Method))
+                && self.used_wasi_functions.contains(&func.cm_identifier())
+        });
+        constructors.chain(own).chain(methods).collect()
     }
 }
 

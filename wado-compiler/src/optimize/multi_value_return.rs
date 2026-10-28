@@ -1,5 +1,7 @@
 //! Which aggregate-returning functions return one Wasm result per field instead
-//! of a heap struct: those building a 2..=[`MAX_RESULTS`]-field fresh literal.
+//! of a heap struct: those building a 1..=[`MAX_RESULTS`]-field fresh literal.
+//! One field counts: no other pass takes a one-field struct or 1-tuple apart
+//! across a call, and one result is a plain Wasm return.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi, aggregate_field_info};
@@ -229,7 +231,7 @@ fn candidate_info(
 
     let (result_types, field_names, is_struct_shape) =
         aggregate_field_info(return_type, type_table, structs)?;
-    if !(2..=MAX_RESULTS).contains(&result_types.len()) {
+    if !(1..=MAX_RESULTS).contains(&result_types.len()) {
         return None;
     }
     for &t in &result_types {

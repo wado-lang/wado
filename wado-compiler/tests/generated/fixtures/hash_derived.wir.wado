@@ -1299,7 +1299,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/Option<i32>^core
 
 type "functype//core:prelude/traits.wado/hash_derived.wado/Tagged^core:prelude/traits.wado/Inspect::inspect" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(352)
 
-type "functype//core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members" = fn() -> ref "tuple//[core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,u32>]";  // TypeId(353)
+type "functype//core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members" = fn() -> ref "core:prelude/traits.wado//TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>";  // TypeId(353)
 
 type "functype//core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:collections/entries.wado//$tmpl$9eadd9afcbf58153") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(354)
 
@@ -6786,7 +6786,7 @@ fn "core:prelude/traits.wado/hash_derived.wado/Tagged^core:prelude/traits.wado/I
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,u32>]" { 0: struct.new "core:prelude/traits.wado//TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>" { index: 0, spec: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(63), used: 1 } } };
+    return struct.new "core:prelude/traits.wado//TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>" { index: 0, spec: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(63), used: 1 } };
 }
 
 fn "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -7157,17 +7157,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:collec
     let $load_5: ref "core:prelude/string.wado//String";
     let capacity_1: i32;
     let out_3: ref "core:prelude/string.wado//String";
-    let h_6: ref "core:prelude/traits.wado//TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>";
     let self_9: ref "core:prelude/string.wado//StrSlice";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_core_collections_entries_wado__tmpl_9eadd9afcbf58153_hash_derived_wado_Perm___fmt_5_0: ref "core:prelude/format.wado//Formatter";
     capacity_1 = local.tee self_9("core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     if ref.is_null(global:core:prelude/string.wado::$const_obj_155) {
-        global:core:prelude/string.wado::$const_obj_155 = "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>";
+        multivalue_bind [$mv_0_1] = "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members"();
+        global:core:prelude/string.wado::$const_obj_155 = struct.new "tuple//[core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,u32>]" { 0: $mv_0_1 };
     }
-    h_6 = global:core:prelude/string.wado::$const_obj_155.0;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>::lit"(h_6, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    $mv_0_1 = global:core:prelude/string.wado::$const_obj_155.0;
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>::lit"($mv_0_1, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
     if ref.is_null(global:core:prelude/string.wado::$const_obj_154) {
-        global:core:prelude/string.wado::$const_obj_154 = "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members"();
+        multivalue_bind [$mv_0_1] = "core:collections/entries.wado/core:collections/entries.wado/$tmpl$9eadd9afcbf58153^core:prelude/traits.wado/ReflectTemplate::members"();
+        global:core:prelude/string.wado::$const_obj_154 = struct.new "tuple//[core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,u32>]" { 0: $mv_0_1 };
     }
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$9eadd9afcbf58153,hash_derived.wado/Perm>::lit"(global:core:prelude/string.wado::$const_obj_154.0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);

@@ -14,7 +14,7 @@ use wasm_encoder::{
     Module, ModuleArg, RefType, TableSection, TableType, TypeSection, ValType,
 };
 
-use super::{alias_interface_func, collect_component_asset, emits_function};
+use super::{alias_interface_func, collect_component_asset};
 use crate::ast::CmImport;
 use crate::codegen::component_context::ComponentModelContext;
 use crate::component_model::{
@@ -142,10 +142,13 @@ pub(super) fn nest_dependencies(
         ));
     }
     // A types-only interface carries nothing to run, so the program defines its
-    // types rather than importing it on the dependency's behalf.
+    // types rather than importing it on the dependency's behalf, unless the
+    // program imports it for its own readers anyway.
     for interface in nested.iter().flat_map(|dependency| dependency.imports) {
         let interface = interface.as_str();
-        if registry.declares_functions(interface) {
+        if registry.declares_functions(interface)
+            || ctx.has_instance(&imported_instance_key(interface))
+        {
             continue;
         }
         let type_gen = type_gens
@@ -196,8 +199,7 @@ pub(super) fn nest_dependencies(
                 let instance = if instances.contains_key(fq.as_str()) {
                     ctx.instance_idx(&defined_instance_key(fq))
                 } else {
-                    let import = CmImport::parse(fq).expect("an imported interface FQ");
-                    ctx.instance_idx(&cm_instance_key(&import.package, &import.interface))
+                    ctx.instance_idx(&imported_instance_key(fq))
                 };
                 (fq.as_str(), ComponentExportKind::Instance, instance)
             })
@@ -214,7 +216,7 @@ pub(super) fn nest_dependencies(
             for func in interface
                 .functions
                 .iter()
-                .filter(|func| emits_function(project, func))
+                .filter(|func| project.emits_cm_function(func))
             {
                 alias_interface_func(builder, ctx, &interface, func);
             }
@@ -265,6 +267,12 @@ fn slot_alias(core_name: &str) -> String {
 /// The instance the program defines for `interface`, rather than importing.
 fn defined_instance_key(interface: &str) -> String {
     format!("defined:{interface}")
+}
+
+/// The instance the program imports `interface` as.
+fn imported_instance_key(interface: &str) -> String {
+    let import = CmImport::parse(interface).expect("an imported interface FQ");
+    cm_instance_key(&import.package, &import.interface)
 }
 
 /// The registry's interface `fq`, which the program imports.
@@ -431,5 +439,9 @@ impl CmTypeSink for InstanceExportSink<'_> {
         self.exports
             .push((cm_name.to_string(), ComponentExportKind::Type, idx));
         idx
+    }
+
+    fn alias_outer(&mut self, outer_idx: u32) -> u32 {
+        outer_idx
     }
 }

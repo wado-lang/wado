@@ -155,7 +155,8 @@ host.
 Cost: the dependency is nested rather than composed as a sibling, so its other
 imports are forwarded from the consumer's own. The consumer imports, on the
 dependency's behalf, every function the dependency imports from an interface
-the consumer also reaches, and defines the types of a types-only one.
+the consumer also reaches, and defines the types of a types-only one, unless it
+imports that one for its own imports' sake.
 
 ### Effect channels — stream-encoded callbacks (the concurrent direction)
 
