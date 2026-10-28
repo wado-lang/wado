@@ -14,6 +14,8 @@ use crate::wir_optimize::local_layout::WasmClass;
 use crate::wir_optimize::local_nullability::relax_unset_nonnull_locals_in;
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 
+use super::util::Bits;
+
 /// Rename each local to the slot it shares, dropping the declarations and the
 /// self-copies the renaming leaves.
 pub(super) fn coalesce_locals(module: &mut WirPackage) {
@@ -380,30 +382,6 @@ fn meet(a: Option<Bits>, b: Option<Bits>) -> Option<Bits> {
         }
         (a, None) => a,
         (None, b) => b,
-    }
-}
-
-/// A set of local indices, one bit each.
-#[derive(Clone)]
-struct Bits(Vec<u64>);
-
-impl Bits {
-    fn new(len: usize) -> Self {
-        Self(vec![0; len.div_ceil(64)])
-    }
-
-    fn insert(&mut self, i: usize) {
-        self.0[i / 64] |= 1 << (i % 64);
-    }
-
-    fn contains(&self, i: usize) -> bool {
-        self.0[i / 64] & (1 << (i % 64)) != 0
-    }
-
-    fn intersect(&mut self, other: &Self) {
-        for (word, other) in self.0.iter_mut().zip(&other.0) {
-            *word &= other;
-        }
     }
 }
 

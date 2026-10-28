@@ -485,29 +485,6 @@ pub(super) fn mentions_local_except(
     found
 }
 
-/// Every local named under `node` outside the `skip` subtrees, into `out`.
-pub(super) fn mentioned_locals_except(
-    body: &Body,
-    node: NodeRef,
-    skip: &[NodeRef],
-    out: &mut IndexSet<u32>,
-) {
-    if skip.contains(&node) {
-        return;
-    }
-    if let NodeRef::Expr(id) = node
-        && let ExprKind::Local { index, .. } = &body.exprs[id].kind
-    {
-        out.insert(*index);
-    }
-    body.for_each_operand(node, |op| {
-        if let Some(v) = op.as_value() {
-            body.values.collect_opaque_locals(v, out);
-        }
-    });
-    body.for_each_child(node, |c| mentioned_locals_except(body, c, skip, out));
-}
-
 /// Whether any `Loop` statement is nested anywhere under `block`. Exhaustive
 /// via `for_each_child`, so it sees loops in `if`/`match`/`switch` arms, break
 /// values, and every other position — not just direct `Block`/`LabeledBlock`

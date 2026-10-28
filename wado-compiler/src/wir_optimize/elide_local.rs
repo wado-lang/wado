@@ -9,6 +9,7 @@ use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
+use super::liveness::dead_stores;
 use super::nullability::Nullability;
 use super::util::{count_local_gets, is_side_effect_free, may_trap_in};
 
@@ -25,6 +26,17 @@ pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
 }
 
 fn elide_write_only_locals_in_body(body: &mut [WirInstr], null: &Nullability) -> bool {
+    let dead = dead_stores(body);
+    if !dead.is_empty() {
+        let mut stores = ElideDeadStores {
+            dead: &dead,
+            null,
+            preorder: 0,
+        };
+        for instr in body.iter_mut() {
+            stores.visit_instr(instr);
+        }
+    }
     let mut read_counts: IndexMap<String, u32> = IndexMap::default();
     for instr in body.iter() {
         count_local_gets(instr, &mut read_counts);
@@ -38,7 +50,43 @@ fn elide_write_only_locals_in_body(body: &mut [WirInstr], null: &Nullability) ->
     for instr in body.iter_mut() {
         visitor.visit_instr(instr);
     }
-    visitor.changed
+    !dead.is_empty() || visitor.changed
+}
+
+/// Removes the stores [`dead_stores`] found, numbering nodes as it does.
+struct ElideDeadStores<'a> {
+    dead: &'a IndexMap<u32, String>,
+    null: &'a Nullability<'a>,
+    preorder: u32,
+}
+
+impl WirMutVisitor for ElideDeadStores<'_> {
+    fn visit_instr(&mut self, instr: &mut WirInstr) {
+        let id = self.preorder;
+        self.preorder += 1;
+        self.walk_instr(instr);
+        let Some(local) = self.dead.get(&id) else {
+            return;
+        };
+        *instr = match instr {
+            WirInstr::LocalSet { name, value } if name == local => discard(value, self.null),
+            WirInstr::LocalTee { name, value } if name == local => {
+                std::mem::replace(value.as_mut(), WirInstr::Nop)
+            }
+            other => unreachable!("dead store #{id} of `{local}` numbered {other:?}"),
+        };
+    }
+}
+
+/// What is left of a store of `value` nobody reads: nothing, or `value`'s
+/// effects and traps, which Wado's semantics keep even for an unused binding.
+fn discard(value: &mut WirInstr, null: &Nullability) -> WirInstr {
+    let value = std::mem::replace(value, WirInstr::Nop);
+    if is_side_effect_free(&value) && !may_trap_in(&value, null) {
+        WirInstr::Nop
+    } else {
+        WirInstr::Drop(Box::new(value))
+    }
 }
 
 struct ElideWriteOnly<'a> {
@@ -71,18 +119,7 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
         if let WirInstr::LocalSet { name, value } = instr
             && !self.is_read_elsewhere(name, value)
         {
-            let value_expr = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            // Preserve `may_trap` sub-trees (OOB array/memory reads,
-            // null receiver, div-by-zero, …) — Wado language semantics
-            // requires those traps to fire even when the binding
-            // target is unused. Drops them through a `Drop` so the
-            // peephole-level `Drop(may_trap)` guard in path 2 below
-            // keeps them out of harm's way.
-            if is_side_effect_free(&value_expr) && !may_trap_in(&value_expr, self.null) {
-                *instr = WirInstr::Nop;
-            } else {
-                *instr = WirInstr::Drop(Box::new(value_expr));
-            }
+            *instr = discard(value, self.null);
             self.changed = true;
             return;
         }
@@ -201,18 +238,20 @@ mod tests {
     /// A read outside the store's own RHS keeps it.
     #[test]
     fn externally_read_store_is_kept() {
-        let mut body = vec![increment("x"), lset("sink", lget("x"))];
-        assert!(elide_write_only_locals_in_body(
-            &mut body,
-            &Nullability::new(&WirLocals::default())
-        ));
-        assert_matches!(
-            &body[0],
-            WirInstr::LocalSet { name, .. } if name == "x",
-            "x is read by the sink copy and must survive"
+        let mut body = vec![increment("x"), ret("x")];
+        elide(&mut body);
+        assert!(
+            is_store_of(&body[0], "x"),
+            "x is read by the return and must survive"
         );
-        // The sink itself is write-only and goes.
-        assert_matches!(body[1], WirInstr::Nop);
+    }
+
+    /// Removing a dead store frees the locals only it read.
+    #[test]
+    fn a_dead_store_frees_what_it_read() {
+        let mut body = vec![increment("x"), lset("sink", lget("x"))];
+        elide(&mut body);
+        assert_matches!(body.as_slice(), [WirInstr::Nop, WirInstr::Nop]);
     }
 
     /// A dropped allocation keeps only its operands' effects.
@@ -296,6 +335,169 @@ mod tests {
             panic!("expected the comparison to survive");
         };
         assert_matches!(lhs.as_ref(), WirInstr::LocalTee { .. });
+    }
+
+    fn elide(body: &mut [WirInstr]) {
+        while elide_write_only_locals_in_body(body, &Nullability::new(&WirLocals::default())) {}
+    }
+    fn ret(name: &str) -> WirInstr {
+        WirInstr::Return {
+            value: Some(Box::new(lget(name))),
+        }
+    }
+    fn call() -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args: vec![],
+        }
+    }
+    fn is_store_of(instr: &WirInstr, local: &str) -> bool {
+        matches!(instr, WirInstr::LocalSet { name, .. } if name == local)
+    }
+
+    /// A store overwritten before any read is dead, though the local is read.
+    #[test]
+    fn overwritten_store_elides() {
+        let mut body = vec![
+            lset("x", WirInstr::I32Const(1)),
+            lset("x", WirInstr::I32Const(2)),
+            ret("x"),
+        ];
+        elide(&mut body);
+        assert_matches!(body[0], WirInstr::Nop);
+        assert!(is_store_of(&body[1], "x"));
+    }
+
+    /// A store a loop overwrites at its top, before any read, is dead.
+    #[test]
+    fn store_overwritten_at_loop_top_elides() {
+        let mut body = vec![
+            lset("x", WirInstr::I32Const(0)),
+            WirInstr::Loop {
+                label: None,
+                body: vec![
+                    lset("x", call()),
+                    WirInstr::BrIf {
+                        depth: 0,
+                        condition: Box::new(lget("x")),
+                    },
+                ],
+            },
+            ret("x"),
+        ];
+        elide(&mut body);
+        assert_matches!(body[0], WirInstr::Nop);
+        let WirInstr::Loop { body: inner, .. } = &body[1] else {
+            panic!("expected the loop to survive");
+        };
+        assert!(is_store_of(&inner[0], "x"));
+    }
+
+    /// A store read on the next iteration, through the back edge, is live.
+    #[test]
+    fn store_read_across_the_back_edge_is_kept() {
+        let mut body = vec![
+            lset("x", WirInstr::I32Const(0)),
+            WirInstr::Loop {
+                label: None,
+                body: vec![
+                    lset("y", lget("x")),
+                    lset("x", call()),
+                    WirInstr::BrIf {
+                        depth: 0,
+                        condition: Box::new(lget("y")),
+                    },
+                ],
+            },
+            ret("y"),
+        ];
+        elide(&mut body);
+        assert!(is_store_of(&body[0], "x"));
+        let WirInstr::Loop { body: inner, .. } = &body[1] else {
+            panic!("expected the loop to survive");
+        };
+        assert!(is_store_of(&inner[1], "x"));
+    }
+
+    /// A store a branch carries to a read is live; one whose branch skips
+    /// every read is dead.
+    #[test]
+    fn a_branch_carries_liveness_to_its_target() {
+        let mut body = vec![
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![
+                    lset("x", WirInstr::I32Const(1)),
+                    WirInstr::BrIf {
+                        depth: 0,
+                        condition: Box::new(lget("c")),
+                    },
+                    lset("x", WirInstr::I32Const(2)),
+                ],
+            },
+            WirInstr::Block {
+                label: None,
+                result: None,
+                body: vec![lset("y", WirInstr::I32Const(3)), WirInstr::Br { depth: 0 }],
+            },
+            lset("y", lget("x")),
+            ret("y"),
+        ];
+        elide(&mut body);
+        let WirInstr::Block { body: first, .. } = &body[0] else {
+            panic!("expected the first block to survive");
+        };
+        assert!(
+            is_store_of(&first[0], "x"),
+            "the br_if carries x = 1 to the read"
+        );
+        let WirInstr::Block { body: second, .. } = &body[1] else {
+            panic!("expected the second block to survive");
+        };
+        assert_matches!(
+            second[0],
+            WirInstr::Nop,
+            "y = 3 is overwritten after the br"
+        );
+    }
+
+    /// A store one arm overwrites is dead on that arm only.
+    #[test]
+    fn an_if_arm_without_the_store_keeps_it_live() {
+        let arm = |value| WirInstr::If {
+            condition: Box::new(lget("c")),
+            result: None,
+            then_body: vec![lset("x", WirInstr::I32Const(value))],
+            else_body: None,
+        };
+        let mut body = vec![lset("x", WirInstr::I32Const(1)), arm(2), ret("x")];
+        elide(&mut body);
+        assert!(is_store_of(&body[0], "x"), "the false path reads x = 1");
+        let mut body = vec![
+            lset("x", WirInstr::I32Const(1)),
+            WirInstr::If {
+                condition: Box::new(lget("c")),
+                result: None,
+                then_body: vec![lset("x", WirInstr::I32Const(2))],
+                else_body: Some(vec![lset("x", WirInstr::I32Const(3))]),
+            },
+            ret("x"),
+        ];
+        elide(&mut body);
+        assert_matches!(body[0], WirInstr::Nop, "both arms overwrite x");
+    }
+
+    /// A dead store whose value has an effect keeps the effect.
+    #[test]
+    fn a_dead_store_keeps_its_value_effect() {
+        let mut body = vec![
+            lset("x", call()),
+            lset("x", WirInstr::I32Const(2)),
+            ret("x"),
+        ];
+        elide(&mut body);
+        assert_matches!(&body[0], WirInstr::Drop(value) if matches!(**value, WirInstr::Call { .. }));
     }
 
     /// A write-only local buried in a value-position statement list (an

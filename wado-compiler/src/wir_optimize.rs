@@ -14,6 +14,7 @@ mod dedupe_const_globals;
 mod elide_local;
 mod elide_struct;
 mod empty_work;
+mod liveness;
 mod local_coalesce;
 mod local_layout;
 mod local_nullability;

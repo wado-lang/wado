@@ -25,7 +25,6 @@ use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
 use crate::compiler_item::SeqField;
-use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncParts, FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -57,7 +56,7 @@ use crate::nir::FuncId;
 use crate::nir_arena;
 use crate::optimize::arena_query::{
     binary_parts, expr_node_may_trap_typed, is_pure_operand, local_written_by,
-    mentioned_locals_except, mentions_local_except, operand_local,
+    mentions_local_except, operand_local,
 };
 use crate::optimize::mod_ref::{CallFacts, summarize};
 
@@ -927,7 +926,6 @@ fn alloc_binary(
 /// What the fast loop's own guard bound is minted under, where the bound is
 /// reloaded.
 const LIMIT: &str = "bce_limit";
-const UNREAD: &str = "bce_unread";
 
 /// Apply one versioning plan: clone the loop, delete the implied checks in
 /// the clone, and replace the loop with
@@ -999,8 +997,7 @@ fn apply_version(
     }
     // `fast_body` is a structural clone of `plan.loop_body`, so the guard/check
     // layout `analyze_loop` recorded on `plan` holds verbatim — no re-parse.
-    let dead_arms = eliminate_checks_in_fast(engine, binds, plan, fast_body);
-    unshare_unread_lets(engine, plan, fast_body, &dead_arms);
+    eliminate_checks_in_fast(engine, binds, plan, fast_body);
 
     let fast_stmt = engine.alloc_stmt(StmtKind::Loop { body: fast_body }, span);
     let slow_stmt = engine.alloc_stmt(
@@ -1289,13 +1286,7 @@ fn and_floor_terms(
 /// single-purpose `let $cond = <cmp>` temp feeding each check — in the fast
 /// arm the comparison is provably constant, so this is exact for any reader.
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
-/// Answers the dead panic arms.
-fn eliminate_checks_in_fast(
-    engine: &mut Engine,
-    binds: &Binds,
-    plan: &Plan,
-    fast_body: BlockId,
-) -> Vec<NodeRef> {
+fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fast_body: BlockId) {
     let (var, h) = (plan.var, plan.bound);
     let mut checks: Vec<Check> = Vec::new();
     let stmts = engine.body.blocks[fast_body].stmts.clone();
@@ -1305,7 +1296,6 @@ fn eliminate_checks_in_fast(
         }
         collect_checks_in_node(engine, binds, fast_body, NodeRef::Stmt(s), var, &mut checks);
     }
-    let mut dead_arms = Vec::new();
     for check in checks {
         // As in `condition_implication`: the elimination drops the condition
         // expression, so a condition that writes must stay.
@@ -1314,89 +1304,6 @@ fn eliminate_checks_in_fast(
         }
         constify_check_temp(engine, binds, check.cond, plan.var, check.limit, fast_body);
         eliminate_condition(engine, check.holder, check.cond);
-        let then_arm = match check.holder {
-            NodeRef::Stmt(s) => match &engine.body.stmts[s].kind {
-                StmtKind::If { then_block, .. } => *then_block,
-                _ => unreachable!("a check is held by an `if`"),
-            },
-            NodeRef::Expr(e) => match &engine.body.exprs[e].kind {
-                ExprKind::If { then_branch, .. } => *then_branch,
-                _ => unreachable!("a check is held by an `if`"),
-            },
-            NodeRef::Block(_) | NodeRef::Pat(_) => unreachable!("a check is held by an `if`"),
-        };
-        dead_arms.push(NodeRef::Block(then_arm));
-    }
-    dead_arms
-}
-
-/// Rebind to a fresh local each pure `let` the detached fast arm binds and no
-/// longer reads, often a deleted check's bound, so the sweep drops it. The arm
-/// shares its locals with the original loop, whose reads keep the slot live.
-/// Where the original rebinds the slot in a top-level `let` before naming it,
-/// and nothing else names it, the fast arm's value is never observed. The
-/// `dead_arms` of the deleted checks still name the bound they report.
-fn unshare_unread_lets(
-    engine: &mut Engine,
-    plan: &Plan,
-    fast_body: BlockId,
-    dead_arms: &[NodeRef],
-) {
-    let body = &*engine.body;
-    let mut named_in_fast = IndexSet::default();
-    mentioned_locals_except(
-        body,
-        NodeRef::Block(fast_body),
-        dead_arms,
-        &mut named_in_fast,
-    );
-    let mut named_outside = IndexSet::default();
-    let root = NodeRef::Block(body.root());
-    mentioned_locals_except(
-        body,
-        root,
-        &[NodeRef::Stmt(plan.loop_stmt)],
-        &mut named_outside,
-    );
-    let mut named_in_slow = IndexSet::default();
-    let mut rebound_first = IndexSet::default();
-    for &s in &body.blocks[plan.loop_body].stmts {
-        mentioned_locals_except(body, NodeRef::Stmt(s), &[], &mut named_in_slow);
-        if let StmtKind::Let { local_index, .. } = body.stmts[s].kind
-            && !named_in_slow.contains(&local_index)
-        {
-            rebound_first.insert(local_index);
-        }
-    }
-    let mut lets: Vec<(StmtId, u32)> = Vec::new();
-    body.for_each_node_under(NodeRef::Block(fast_body), |n| {
-        if let NodeRef::Stmt(s) = n
-            && let StmtKind::Let {
-                local_index, value, ..
-            } = body.stmts[s].kind
-            && is_pure_operand(body, value)
-            && !named_in_fast.contains(&local_index)
-            && rebound_first.contains(&local_index)
-            && !named_outside.contains(&local_index)
-        {
-            lets.push((s, local_index));
-        }
-    });
-    let mut fresh: IndexMap<u32, u32> = IndexMap::default();
-    for (s, l) in lets {
-        let ty = engine.locals()[l as usize].type_id;
-        let to = *fresh
-            .entry(l)
-            .or_insert_with(|| engine.alloc_minted_local(UNREAD, ty, false));
-        let to_name = engine.local_name(to);
-        let StmtKind::Let {
-            local_index, name, ..
-        } = &mut engine.body.stmts[s].kind
-        else {
-            unreachable!("collected as a `let`");
-        };
-        *local_index = to;
-        *name = to_name;
     }
 }
 
