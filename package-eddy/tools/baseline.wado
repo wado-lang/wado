@@ -201,12 +201,10 @@ fn review_once(
     known: &String,
     ws: &Option<Workspace>,
 ) -> Run with (Client, Preopens, Process) {
-    let mut reviewed = match review(api_key, review_prompt, ws) {
-        Ok(r) => r,
-        Err(e) => {
-            return Run { error: Some(e) };
-        },
-    };
+    let mut reviewed = review(api_key, review_prompt, ws);
+    if reviewed.error matches { Some(_) } {
+        return reviewed;
+    }
     let grade_prompt = `${*known}
 
 <findings>
@@ -219,23 +217,26 @@ ${to_string(&reviewed.findings).unwrap()}
     return reviewed;
 }
 
-/// The findings of one review, in one call, or by an agent reading `ws`.
-fn review(
-    api_key: &String,
-    review_prompt: &String,
-    ws: &Option<Workspace>,
-) -> Result<Run, String> with (Client, Preopens, Process) {
+/// The findings of one review, in one call, or by an agent reading `ws`. A
+/// failed agent run keeps what it spent.
+fn review(api_key: &String, review_prompt: &String, ws: &Option<Workspace>) -> Run with (Client, Preopens, Process) {
     // Thinking spends from the same budget as the answer.
     let Some(w) = ws else {
-        return Ok(Run { findings: ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000)?.findings });
+        return match ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000) {
+            Ok(r) => Run { findings: r.findings },
+            Err(e) => Run { error: Some(e) },
+        };
     };
-    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${READING}`, *review_prompt, w, MAX_TURNS, 32_000)?;
-    return Ok(Run {
-        findings: json_object::<Review>(&agent.answer)?.findings,
-        turns: agent.turns,
-        calls: agent.calls,
-        usage: Some(agent.usage),
-    });
+    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${READING}`, *review_prompt, w, MAX_TURNS, 32_000);
+    let mut reviewed = Run { turns: agent.turns, calls: agent.calls, usage: Some(agent.usage) };
+    match agent.answer {
+        Ok(answer) => match json_object::<Review>(&answer) {
+            Ok(r) => reviewed.findings = r.findings,
+            Err(e) => reviewed.error = Some(e),
+        },
+        Err(e) => reviewed.error = Some(e),
+    }
+    return reviewed;
 }
 
 /// The graded runs an earlier run of this reviewer, grader and tool use left at `path`,

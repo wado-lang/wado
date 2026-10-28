@@ -31,7 +31,8 @@ the code at length and then dropped the defect a single pass had named.
 - [ ] Log, blame and pickaxe (`git log -S`), up to the merge and no further.
   They tell whether the change wrote a line or only moved it, and why a line
   was written as it was. The history check of the evaluation set rested on
-  them.
+  them. The evaluation's worktree cannot serve them as it is: it shares the
+  repository's objects, the later commits included.
 
 ## Language Services
 

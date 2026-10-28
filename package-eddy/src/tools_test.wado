@@ -29,3 +29,22 @@ test "Grep and Glob answer with paths from the root" {
 fn tool_input(json: String) -> Value {
     return from_string::<Value, String>(json).unwrap();
 }
+
+test "an input out of range is an error the model can retry" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "offset": -5}`)).is_err();
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "head_limit": -1}`)).is_err();
+    assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
+}
+
+test "Read takes a limit past the end as the rest of the file" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
+    assert out.starts_with("     2\t");
+}
+
+test "a reply names paths from the root, never the host's" {
+    let ws = Workspace { root: "src" };
+    let e = ws.call(&"Read", &tool_input(`{"file_path": "missing.wado"}`)).unwrap_err();
+    assert e.contains("missing.wado") && !e.contains("src/");
+}

@@ -137,8 +137,9 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
     return marked;
 }
 
-/// A checkout of `sha` for a reviewer to read, and its directory. It holds
-/// the tree alone: no history, so nothing after `sha` is in reach.
+/// A checkout of `sha` for a reviewer to read, and its directory. It is a
+/// worktree, so it shares the repository's objects, later commits included:
+/// only the tools' refusal to leave the tree keeps them out of reach.
 pub fn snapshot(sha: &String) -> String with Process {
     let root = `scratchpad/eddy-trees/${*sha}`;
     if try_git(["-C", root, "rev-parse", "HEAD"]) != Some(`${*sha}\n`) {

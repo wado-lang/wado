@@ -7,8 +7,9 @@ use { Value } from "core:value";
 use { converse, message, Message, Usage } from "./anthropic.wado";
 use { tools, Workspace } from "./tools.wado";
 
+/// What an agent did. A run that failed keeps what it spent before the error.
 pub struct AgentRun {
-    pub answer: String,
+    pub answer: Result<String, String>,
     pub turns: i32,
     pub calls: List<Call>,
     pub usage: Usage,
@@ -55,22 +56,29 @@ pub fn run_agent(
     ws: &Workspace,
     max_turns: i32,
     max_tokens: i32,
-) -> Result<AgentRun, String> with (Client, Preopens, Process) {
+) -> AgentRun with (Client, Preopens, Process) {
     assert max_turns >= 1;
     let declared = tools();
     let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
-    let mut run = AgentRun { answer: "", turns: 0, calls: [], usage: Usage {} };
+    let mut run = AgentRun { answer: Err("no turn yet"), turns: 0, calls: [], usage: Usage {} };
     loop {
         run.turns += 1;
         let last = run.turns == max_turns;
-        let turn = converse(*api_key, model, system, &declared, !last, &messages, max_tokens)?;
+        let turn = match converse(*api_key, model, system, &declared, !last, &messages, max_tokens) {
+            Ok(turn) => turn,
+            Err(e) => {
+                run.answer = Err(e);
+                return run;
+            },
+        };
         run.usage.add(&turn.usage);
         if turn.stop_reason != "tool_use" {
-            if turn.stop_reason != "end_turn" {
-                return Err(`stopped on ${turn.stop_reason}`);
-            }
-            run.answer = turn.text();
-            return Ok(run);
+            run.answer = if turn.stop_reason == "end_turn" {
+                Ok(turn.text());
+            } else {
+                Err(`stopped on ${turn.stop_reason}`);
+            };
+            return run;
         }
         let mut results: List<Value> = [];
         for let b of turn.blocks() {

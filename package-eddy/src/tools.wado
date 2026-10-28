@@ -13,7 +13,7 @@ use { Tool } from "./anthropic.wado";
 /// and is told to narrow the request.
 global OUTPUT_LIMIT: i32 = 100_000;
 
-/// A line of Read longer than this is cut, as Claude Code cuts one.
+/// A line of Read longer than this, in bytes, is cut.
 global LINE_LIMIT: i32 = 2000;
 
 global GLOB_LIMIT: i32 = 100;
@@ -66,14 +66,14 @@ pub fn tools() -> List<Tool> {
             "Read",
             `Reads a file of the repository. ${PATHS}
 - Reads up to 2000 lines from the start by default; offset and limit read another range.
-- Results are returned in cat -n format, with line numbers starting at 1. A line longer than ${LINE_LIMIT} characters is cut.
+- Results are returned in cat -n format, with line numbers starting at 1. A line longer than ${LINE_LIMIT} bytes is cut.
 - Reading a directory is an error; use Glob to list one.`,
             `{
   "type": "object",
   "properties": {
     "file_path": {"type": "string", "description": "The path of the file to read"},
-    "offset": {"type": "integer", "minimum": 1, "description": "The line number to start reading from. Only provide if the file is too large to read at once"},
-    "limit": {"type": "integer", "exclusiveMinimum": 0, "description": "The number of lines to read. Only provide if the file is too large to read at once."}
+    "offset": {"type": "integer", "minimum": 0, "description": "The line number to start reading from. Only provide if the file is too large to read at once"},
+    "limit": {"type": "integer", "minimum": 1, "description": "The number of lines to read. Only provide if the file is too large to read at once."}
   },
   "required": ["file_path"],
   "additionalProperties": false
@@ -93,14 +93,14 @@ pub fn tools() -> List<Tool> {
     "path": {"type": "string", "description": "File or directory to search in. Defaults to the repository root."},
     "glob": {"type": "string", "description": "Glob pattern to filter files (e.g. \\"*.js\\", \\"*.{ts,tsx}\\") - maps to rg --glob"},
     "output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"], "description": "Output mode: \\"content\\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \\"files_with_matches\\" shows file paths (supports head_limit), \\"count\\" shows match counts (supports head_limit). Defaults to \\"files_with_matches\\"."},
-    "-A": {"type": "number", "description": "Number of lines to show after each match (rg -A). Requires output_mode: \\"content\\", ignored otherwise."},
-    "-B": {"type": "number", "description": "Number of lines to show before each match (rg -B). Requires output_mode: \\"content\\", ignored otherwise."},
-    "-C": {"type": "number", "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-A": {"type": "integer", "minimum": 0, "description": "Number of lines to show after each match (rg -A). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-B": {"type": "integer", "minimum": 0, "description": "Number of lines to show before each match (rg -B). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-C": {"type": "integer", "minimum": 0, "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \\"content\\", ignored otherwise."},
     "-i": {"type": "boolean", "description": "Case insensitive search (rg -i)"},
     "-n": {"type": "boolean", "description": "Show line numbers in output (rg -n). Requires output_mode: \\"content\\", ignored otherwise. Defaults to true."},
     "type": {"type": "string", "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types."},
-    "head_limit": {"type": "number", "description": "Limit output to first N lines/entries, equivalent to \\"| head -N\\". Works across all output modes. Defaults to 250 when unspecified. Pass 0 for unlimited."},
-    "offset": {"type": "number", "description": "Skip first N lines/entries before applying head_limit, equivalent to \\"| tail -n +N | head -N\\". Works across all output modes. Defaults to 0."},
+    "head_limit": {"type": "integer", "minimum": 0, "description": "Limit output to first N lines/entries, equivalent to \\"| head -N\\". Works across all output modes. Defaults to 250 when unspecified. Pass 0 for unlimited."},
+    "offset": {"type": "integer", "minimum": 0, "description": "Skip first N lines/entries before applying head_limit, equivalent to \\"| tail -n +N | head -N\\". Works across all output modes. Defaults to 0."},
     "multiline": {"type": "boolean", "description": "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."}
   },
   "required": ["pattern"],
@@ -129,15 +129,24 @@ impl Workspace {
     /// What tool `name` returns for `input`, or the error to report to the
     /// model, which may then try again.
     pub fn call(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {
-        let out = match name.as_str_slice() {
+        // A reply names paths as the model does: from the root, not the host's
+        // directory the tree is checked out in.
+        let host = `${self.root}/`;
+        return match self.dispatch(name, input) {
+            Ok(out) => Ok(clip(out.replace(&host, ""))),
+            Err(e) => Err(e.replace(&host, "")),
+        };
+    }
+
+    fn dispatch(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {
+        return Ok(match name.as_str_slice() {
             "Read" => self.read(&input_of::<ReadInput>(input)?)?,
             "Grep" => self.grep(&input_of::<GrepInput>(input)?)?,
             "Glob" => self.glob(&input_of::<GlobInput>(input)?)?,
             _ => {
                 return Err(`no tool named ${*name}`);
             },
-        };
-        return Ok(clip(out));
+        });
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
@@ -150,6 +159,9 @@ impl Workspace {
         if text.is_empty() {
             return Ok(`${input.file_path} is empty.`);
         }
+        if input.offset < 0 || input.limit < 1 {
+            return Err("offset must be at least 0 and limit at least 1");
+        }
         let first = i32::max(input.offset, 1);
         let mut out = "";
         let mut n = 0;
@@ -158,7 +170,7 @@ impl Workspace {
             if n < first {
                 continue;
             }
-            if n >= first + input.limit {
+            if n - first >= input.limit {
                 break;
             }
             let cut = line.slice(0, line.floor_char_boundary(LINE_LIMIT));
@@ -211,7 +223,7 @@ impl Workspace {
         if found.is_empty() {
             return Ok("No matches found");
         }
-        return Ok(page(&found, input.offset, input.head_limit));
+        return page(&found, input.offset, input.head_limit);
     }
 
     fn glob(&self, input: &GlobInput) -> Result<String, String> with Process {
@@ -224,36 +236,43 @@ impl Workspace {
         if found.is_empty() {
             return Ok("No files found");
         }
-        let mut out = page(&found, 0, GLOB_LIMIT);
+        let mut out = page(&found, 0, GLOB_LIMIT)?;
         if found.len() > GLOB_LIMIT {
             out.push_str(`(${found.len() - GLOB_LIMIT} more; use a more specific path or pattern)\n`);
         }
         return Ok(out);
     }
 
-    /// ripgrep's output lines, paths relative to the root. Exit 1 is no match.
-    /// Sorting by path keeps a rerun's output the same.
+    /// ripgrep's output lines. Exit 1 is no match; exit 2 with output is the
+    /// matches found besides an error, which is reported after them. Sorting by
+    /// path keeps a rerun's output the same.
     fn rg(&self, args: List<String>) -> Result<List<String>, String> with Process {
         let mut full = ["--hidden", "--glob", "!.git", "--sort", "path"] as List<String>;
         full.extend(&args);
-        let out = Command::new("rg").args(full).capture_limit(i32::MAX).output().map_err(|e| `${e}`)?;
-        let mut lines: List<String> = [];
-        match out.status {
-            Exited(0) => {
+        let out = match Command::new("rg").args(full).output() {
+            Ok(out) => out,
+            Err(e) => {
+                return Err(if e.kind matches { OutputTooLarge } {
+                    "the output is too large; narrow the request";
+                } else {
+                    `${e}`;
+                });
             },
-            Exited(1) => {
-                return Ok(lines);
+        };
+        let mut lines: List<String> = [];
+        for let line of String::from_utf8_lossy(out.stdout).lines() {
+            lines.push(line.to_string());
+        }
+        let stderr = String::from_utf8_lossy(out.stderr).trim().to_string();
+        match out.status {
+            Exited(0) | Exited(1) => {
             },
             _ => {
-                return Err(String::from_utf8_lossy(out.stderr).trim().to_string());
+                if lines.is_empty() {
+                    return Err(stderr);
+                }
+                lines.push(`(ripgrep also reported: ${stderr})`);
             },
-        }
-        let prefix = `${self.root}/`;
-        for let line of String::from_utf8_lossy(out.stdout).lines() {
-            lines.push(match line.strip_prefix(&prefix) {
-                Some(rest) => rest.to_string(),
-                None => line.to_string(),
-            });
         }
         return Ok(lines);
     }
@@ -293,14 +312,17 @@ fn input_of<T: Deserialize>(input: &Value) -> Result<T, String> {
     return from_value::<T>(input).map_err(|e| `invalid input: ${e}`);
 }
 
-fn page(lines: &List<String>, offset: i32, limit: i32) -> String {
+fn page(lines: &List<String>, offset: i32, limit: i32) -> Result<String, String> {
+    if offset < 0 || limit < 0 {
+        return Err("offset and head_limit must be at least 0");
+    }
     let mut out = "";
     let end = if limit == 0 { lines.len() } else { i32::min(lines.len(), offset + limit) };
     for let i of offset..<end {
         out.push_str(&lines[i]);
         out.push_str("\n");
     }
-    return out;
+    return Ok(out);
 }
 
 fn clip(out: String) -> String {
