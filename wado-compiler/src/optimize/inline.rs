@@ -1144,15 +1144,15 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
     folds_to_constant(body, op, const_locals, None)
 }
 
-/// [`is_constant_arg`], also seeing through a call to a `foldable` callee given
-/// such arguments, which the compile-time engine runs to its value.
+/// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
+/// given such arguments, which the compile-time engine runs to its value.
 fn folds_to_constant(
     body: &Body,
     op: Operand,
     const_locals: &IndexSet<u32>,
-    foldable: Option<&[bool]>,
+    ctfe_eligible: Option<&[bool]>,
 ) -> bool {
-    let recurse = |op| folds_to_constant(body, op, const_locals, foldable);
+    let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
         // `promote_pure_values_early` freezes it.
@@ -1170,7 +1170,7 @@ fn folds_to_constant(
             ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
             ExprKind::Local { index, .. } => const_locals.contains(index),
             ExprKind::Call { func_id, args, .. } => {
-                foldable.is_some_and(|foldable| foldable[func_id.index()])
+                ctfe_eligible.is_some_and(|eligible| eligible[func_id.index()])
                     && args.iter().all(|a| recurse(a.expr))
             }
             ExprKind::Dead
@@ -2051,9 +2051,13 @@ struct Candidates<'a> {
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
-    /// Per function, whether a call to it given constant arguments folds away
-    /// ([`ConstView`]'s table, so the deferral and the price agree).
-    foldable: &'a [bool],
+    /// Per function, whether the compile-time engine may replace a call to it
+    /// given constant arguments by its value ([`is_ctfe_eligible`]). Wider than
+    /// [`ConstView`]'s `foldable`, which prices only a fold `mod_ref` proves
+    /// pure: the engine runs a body and refuses on what it meets, so it folds
+    /// callees that summary does not clear (`ctfe_bit_count.wado`'s integer
+    /// formatting), and a wait on one that does not fold costs only the wait.
+    ctfe_eligible: &'a [bool],
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
@@ -2191,11 +2195,15 @@ pub fn inline_functions(
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
-    let foldable: Vec<bool> = project
+    let ctfe_eligible: Vec<bool> = project
         .functions
         .iter()
+        .map(|f| is_ctfe_eligible(&f.borrow()))
+        .collect();
+    let foldable: Vec<bool> = ctfe_eligible
+        .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
+        .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
 
@@ -2451,7 +2459,7 @@ pub fn inline_functions(
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
-            foldable: &foldable,
+            ctfe_eligible: &ctfe_eligible,
             fold_pending,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
@@ -3176,7 +3184,7 @@ fn try_inline_call_expr(
                     caller,
                     Operand::Expr(call_id),
                     &IndexSet::default(),
-                    Some(candidates.foldable),
+                    Some(candidates.ctfe_eligible),
                 )
             {
                 frame.deferred = true;
