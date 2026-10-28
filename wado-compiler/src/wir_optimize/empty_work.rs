@@ -10,7 +10,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirExportDesc, WirFunction, WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
-use super::cleanup::clean_body;
+use super::cleanup::{clean_body, nonnull_result_functions};
 use super::nullability::Nullability;
 use super::util::{is_side_effect_free, may_trap_in};
 
@@ -32,6 +32,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
     if empty.is_empty() {
         return false;
     }
+    let nonnull_calls = nonnull_result_functions(module);
     let mut changed = false;
     for func in &mut module.functions {
         let Some(body) = &func.body else {
@@ -51,7 +52,7 @@ fn elide_calls_to_empty_functions(module: &mut WirPackage) -> bool {
             !body.iter().any(|instr| holds_call_into(instr, &empty)),
             "a call returning nothing stands only as a statement of a body, which the elider reaches",
         );
-        clean_body(body);
+        clean_body(body, &nonnull_calls);
         changed = true;
     }
     changed

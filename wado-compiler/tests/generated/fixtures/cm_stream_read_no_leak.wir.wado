@@ -3831,7 +3831,7 @@ fn "core:fs/core/fs/replace_file<core:prelude/string.wado/String>"(temp, path) w
                 struct.new "core:fs//FsErrorKind::NotUtf8" { discriminant: 2, payload_0: struct.new "core:prelude/string.wado//Utf8Error" { valid_up_to: $vc_payload_2.valid_up_to, error_len: $vc_payload_2.error_len } };
             } else {
                 code_7 = ref.cast "core:fs//FsErrorKind::Io"(kind_8).payload_0;
-                struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: ref.as_non_null("cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(code_7)) };
+                struct.new "core:fs//FsErrorKind::Io" { discriminant: 3, payload_0: "cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(code_7) };
             }) };
         }
     }
@@ -3998,7 +3998,7 @@ fn "core:fs/core/fs/remove_file<&core:prelude/string.wado/String>"(path) with Pr
     })), path)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         v_10;
     } else {
-        ref.as_non_null("cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_10)));
+        "cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_10));
     }))) -> ref null "core:fs//FsError" {
         ref.null none;
     } else {
@@ -4156,7 +4156,7 @@ fn "core:fs/core/fs/rename<&core:prelude/string.wado/String,core:prelude/string.
     })), from, $moved_6, to)))) -> ref null "wasi:filesystem/types.wado//ErrorCode" {
         v_9;
     } else {
-        ref.as_non_null("cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_9)));
+        "cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"(ref.as_non_null(v_9));
     }))) -> ref null "core:fs//FsError" {
         ref.null none;
     } else {
@@ -4258,7 +4258,7 @@ fn "core:fs/core/fs/metadata<core:prelude/string.wado/String>"(path) with Preope
         }) } };
     } else {
         $vc_payload_1_12 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err"(v_10).payload_0;
-        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: ref.as_non_null("cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"($vc_payload_1_12)) };
+        struct.new "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: "cm_stream_read_no_leak.wado/$value_copy$wasi:filesystem/types.wado/ErrorCode"($vc_payload_1_12) };
     }))) -> ref "core:prelude/types.wado//Result<core:fs/Metadata,core:fs/FsError>" {
         $vc_payload_0 = ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/DescriptorStat,wasi:filesystem/types.wado/ErrorCode>::Ok"(v_10).payload_0;
         struct.new "core:prelude/types.wado//Result<core:fs/Metadata,core:fs/FsError>::Ok" { discriminant: 0, payload_0: struct.new "core:fs//Metadata" { type: (if local.tee $av_49($vc_payload_0.type.discriminant) == 5 -> ref "core:fs//FileType" {
