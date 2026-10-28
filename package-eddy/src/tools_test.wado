@@ -1,0 +1,54 @@
+use { from_string } from "core:json";
+use { Value } from "core:value";
+use { Workspace } from "./tools.wado";
+
+test "Read numbers the lines of the range it reads" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "/tools.wado", "offset": 2, "limit": 2}`)).unwrap();
+    assert out == "     2\t//! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.\n     3\t\n";
+    assert ws.call(&"Read", &tool_input(`{"file_path": "."}`)).unwrap_err().contains("is a directory");
+}
+
+test "a path that leaves the root is refused" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Read", &tool_input(`{"file_path": "../wado.toml"}`)).unwrap_err().contains(
+        "outside the repository",
+    );
+}
+
+test "Grep and Glob answer with paths from the root" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent", "glob": "*.wado"}`)).unwrap() == "agent.wado\n";
+    let hit = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent\\\\(", "output_mode": "content"}`)).unwrap();
+    assert hit.starts_with("agent.wado:") && hit.contains(":pub fn run_agent(");
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "no such[ ]text", "path": "/"}`)).unwrap() == "No matches found";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "/a*.wado"}`)).unwrap() == "agent.wado\nanthropic.wado\n";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "**/agent.wado"}`)).unwrap() == "agent.wado\n";
+}
+
+fn tool_input(json: String) -> Value {
+    return from_string::<Value, String>(json).unwrap();
+}
+
+test "an input out of range is an error the model can retry" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "offset": -5}`)).is_err();
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "Workspace", "head_limit": -1}`)).is_err();
+    assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
+}
+
+test "a limit past the end reads the rest" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
+    assert out.starts_with("     2\t");
+    let rest = ws.call(&"Grep", &tool_input(
+        `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
+    )).unwrap();
+    assert !rest.is_empty();
+}
+
+test "a reply names paths from the root, never the host's" {
+    let ws = Workspace { root: "src" };
+    let e = ws.call(&"Read", &tool_input(`{"file_path": "missing.wado"}`)).unwrap_err();
+    assert e.contains("missing.wado") && !e.contains("src/");
+}

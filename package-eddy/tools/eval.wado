@@ -2,6 +2,10 @@
 //! into `main`, and the census they exchange as JSON.
 
 use { Command, Process, ProcessError } from "core:process";
+use { Deserialize } from "core:serde";
+use { from_string } from "core:json";
+use { Client } from "wasi:http";
+use { ask } from "../src/anthropic.wado";
 
 /// One pull request, as the merge commit that landed it on `main` records it.
 pub struct Merge {
@@ -38,6 +42,58 @@ pub struct FixResult {
 pub struct Census {
     pub prs: i32,
     pub results: List<FixResult>,
+}
+
+/// A judge's answer on one pair.
+pub struct Verdict {
+    pub is_defect_fix: bool,
+    pub introduced_by_culprit: bool,
+    pub visible_in_diff: bool,
+    pub defect: String,
+    pub reason: String,
+}
+
+pub struct Pair {
+    pub fix: i32,
+    pub culprit: i32,
+    pub share: f64,
+    pub lines: i32,
+    #[wire(name = "addsTest")]
+    pub adds_test: bool,
+    pub title: String,
+    pub verdict: Option<Verdict> = null,
+    pub error: Option<String> = null,
+}
+
+/// What a judge run writes.
+pub struct Judged {
+    pub model: String,
+    pub min_share: f64,
+    pub pairs: List<Pair>,
+}
+
+/// One answer in `checked.json`: `yes`, `no`, `unsure` or `na`.
+pub struct CheckedPair {
+    pub fix: i32,
+    pub culprit: i32,
+    pub defect: String,
+    pub introduced: String,
+    pub visible: String,
+    pub ask: Option<String> = null,
+    pub reason: String,
+}
+
+pub struct Checked {
+    pub checker: String,
+    pub scope: String,
+    pub pairs: List<CheckedPair>,
+}
+
+impl CheckedPair {
+    /// An entry of the evaluation set: every answer is `yes`.
+    pub fn usable(&self) -> bool {
+        return self.defect == "yes" && self.introduced == "yes" && self.visible == "yes";
+    }
 }
 
 /// `git`'s stdout, or `null` when it exits other than 0.
@@ -79,6 +135,85 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
         }
     }
     return marked;
+}
+
+/// A checkout of `sha` for a reviewer to read, and its directory. It is a
+/// worktree, so it shares the repository's objects, later commits included:
+/// only the tools' refusal to leave the tree keeps them out of reach. A
+/// symbolic link is checked out as a file holding its target, so no path
+/// resolves out of the tree through one. A tree an interrupted run left is
+/// checked out again rather than trusted.
+pub fn snapshot(sha: &String) -> String with Process {
+    let root = `scratchpad/eddy-trees/${*sha}`;
+    try_git(["worktree", "remove", "--force", root]);
+    git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
+    return root;
+}
+
+pub fn drop_snapshot(root: &String) with Process {
+    git(["worktree", "remove", "--force", *root]);
+}
+
+/// The paths merge `sha` changed, both sides of a rename: a diff given only
+/// the new path shows the renamed file as wholly added.
+pub fn changed_paths(sha: &String) -> List<String> with Process {
+    let mut paths: List<String> = [];
+    for let f of git(["diff", "--name-only", "--no-renames", `${*sha}^1`, *sha]).lines() {
+        paths.push(f.to_string());
+    }
+    return paths;
+}
+
+/// What merge `sha` changed in `paths`, generated, vendored and Markdown files
+/// left out. A diff past `limit` bytes is an error rather than clipped: the
+/// part left out may be the one that matters.
+pub fn source_diff(sha: &String, paths: &List<String>, what: String, limit: i32) -> Result<String, String> with Process {
+    let base = `${*sha}^1`;
+    let gen = generated(&base, paths);
+    let mut diff_args = ["diff", base, *sha, "--"] as List<String>;
+    let mut any = false;
+    for let p of paths {
+        if !gen.contains_str(p) && !p.ends_with(".md") {
+            diff_args.push(*p);
+            any = true;
+        }
+    }
+    // With no path, `git diff` would show the whole merge.
+    let diff = if any { git(diff_args) } else { "" };
+    if diff.is_empty() {
+        return Err(`the ${what} diff is empty`);
+    }
+    if diff.len() > limit {
+        return Err(`the ${what} diff is ${diff.len()} bytes, over ${limit}`);
+    }
+    return Ok(diff);
+}
+
+/// `model`'s reply to `user`, read as the one JSON object it holds.
+pub fn ask_json<T: Deserialize>(
+    api_key: &String,
+    model: String,
+    system: String,
+    user: String,
+    max_tokens: i32,
+) -> Result<T, String> with Client {
+    let text = ask(*api_key, model, system, user, max_tokens)?;
+    return json_object::<T>(&text);
+}
+
+/// The one JSON object in a model's reply, from its first `{` to its last `}`.
+pub fn json_object<T: Deserialize>(text: &String) -> Result<T, String> {
+    if let [Some(start), Some(end)] = [
+        text.find("{"),
+        text.rfind("}"),
+    ]
+        && start < end {
+        return match from_string::<T, String>(text.substr_bytes(start, end + 1)) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(`unparsed: ${e:?}: ${*text}`),
+        };
+    }
+    return Err(`unparsed: ${*text}`);
 }
 
 /// The pull requests merged into `origin/main`, oldest first. A merge's

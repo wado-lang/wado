@@ -16,6 +16,16 @@ reverts, so the defects come from fix pull requests rather than reverts.
   half of the blamed lines. Each verdict says whether the fix corrects a
   defect, whether the blamed pull request introduced it, and whether a reviewer
   reading only that pull request's diff could have pointed at it.
+- `checked.json` holds a second check of the 26 pairs both judges call usable,
+  by Claude reading the diffs and the repository history. Each answer is
+  `yes`, `no`, `unsure` (left for a person), or `na`. An `unsure` pair carries
+  the `ask` class that kept it open.
+- `baseline.json` holds a one-pass review of each of the 15 usable entries,
+  three runs each: the reviewer reads the culprit pull request's whole diff,
+  and a grader says whether a finding names the defect the fix corrected.
+- `agentic.json` holds the same review by an agent that also reads the
+  repository as it stood once the culprit merged, through Eddy's Read, Grep and
+  Glob tools. Each run records the tool calls and the token usage.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -36,10 +46,20 @@ CLAUDE_API_KEY=... wado run package-eddy/tools/judge.wado -- \
     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged.json
 CLAUDE_API_KEY=... CLAUDE_MODEL=claude-sonnet-5-5 wado run package-eddy/tools/judge.wado -- \
     package-eddy/eval/szz.json 0.5 package-eddy/eval/judged-sonnet.json
+CLAUDE_API_KEY=... wado run package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json package-eddy/eval/baseline.json
+CLAUDE_API_KEY=... wado run -D tools=true package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json package-eddy/eval/agentic.json
 ```
 
-Both run `git` through `core:process`, which needs no flag: `git` is under
-`/usr`, and the repository is the directory `wado run` grants.
+They run `git` and `rg` through `core:process`, which needs no flag: the
+repository is the directory `wado run` grants. Both must be installed system
+wide, such as under `/usr/bin`: a child may run only programs in the system
+baseline, not one under `$HOME`. The
+agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
+is done.
 
 ## Findings So Far
 
@@ -74,13 +94,79 @@ Both run `git` through `core:process`, which needs no flag: `git` is under
   model alone keeps its answer on 86 (Opus) and 84 (Sonnet) of the 96 across
   two runs, one of them on diffs that ignored whitespace. The 26 both call
   usable are the strongest candidates for the human sample.
+- The history check finds what the judges cannot. They read two diffs, so
+  they take a culprit's lines as its own work. Of the 26, the check keeps 15,
+  rejects 4 and leaves 7 open:
+
+  | Pairs                                                                                         | Count |
+  | --------------------------------------------------------------------------------------------- | ----: |
+  | Usable                                                                                        |    15 |
+  | Not a defect fix (a feature)                                                                  |     1 |
+  | Defect from another pull request (a later redesign, refactor, or code the culprit only moved) |     3 |
+  | Open: the culprit's new check left a gap that predates it                                     |     3 |
+  | Open: a dev-environment cache miss, not wrong behaviour                                       |     2 |
+  | Open: a conformance sweep fixing several defects at once                                      |     2 |
+
+  The open pairs are not noise. They mark the cases a single-diff verdict cannot
+  settle, so they stay as data whichever way a person decides them.
 - Sonnet 5.5 sometimes answers with malformed JSON, such as a field given
   twice. Such a pair gets an error, and a rerun judges it again.
+- A one-pass review by Opus 5.5 finds the defect in 23 of 45 runs, and in 10
+  of the 15 entries at least once. It reported 200 findings in all, about 4 a
+  run. The table counts runs that hit, out of 3:
+
+  | Hits | Entries                                 |
+  | ---: | --------------------------------------- |
+  |    3 | #686, #1142, #1190, #1204, #1529, #1915 |
+  |    2 | #1672                                   |
+  |    1 | #1223, #1585, #2310                     |
+  |    0 | #1088, #1112, #1313, #1680, #1697       |
+
+  A miss is not one kind. On #1112 and #1313 the defect needs knowledge outside
+  the diff: tagpr's config format, and the names the wasm-size runner writes.
+  On #2310 the reviewer fills its 10 slots with other formatter bugs. Only one
+  run in three hits for a third of the entries, so a single run says little
+  about a change to the reviewer. Whether the other findings are real is not
+  measured yet.
+- An agent that reads the tree with tools finds the defect in 29 of 45 runs,
+  and in 12 of the 15 entries at least once, against 23 and 10 for one pass.
+  Both reviews ran Opus 5.5 at its default effort, once each over the set. The
+  table counts runs that hit, out of 3:
+
+  | Entry | One pass | Agent |
+  | ----- | -------: | ----: |
+  | #686  |        3 |     3 |
+  | #1088 |        0 |     1 |
+  | #1112 |        0 |     1 |
+  | #1142 |        3 |     3 |
+  | #1190 |        3 |     3 |
+  | #1204 |        3 |     3 |
+  | #1223 |        1 |     3 |
+  | #1313 |        0 |     3 |
+  | #1529 |        3 |     3 |
+  | #1585 |        1 |     2 |
+  | #1672 |        2 |     2 |
+  | #1680 |        0 |     0 |
+  | #1697 |        0 |     0 |
+  | #1915 |        3 |     0 |
+  | #2310 |        1 |     2 |
+
+  The agent made 384 tool calls over 373 turns, most of them Grep, and the
+  45 runs read 37 million cached input tokens. #1313 turns from never to always:
+  the names the wasm-size runner writes are in the tree, not the diff. #1915
+  turns the other way. Its runs spend over 20 calls each tracing how a call
+  passes its receiver, and then report only one or two findings, none of them
+  the shifted labels. Reading can talk the reviewer out of a finding that was
+  right.
 
 ## To Do
 
 - [ ] Mine `fix:` commits inside other pull requests, not only pull requests
   titled `fix`.
-- [ ] Have a person check a sample of the judge's verdicts, and fix the share
-  of entries that gets checked.
+- [ ] Have a person settle the open pairs in `checked.json`, then sample the
+  ones Claude settled.
 - [ ] Split off the held-out part that learning never sees.
+- [ ] Measure the precision of the baseline's other findings, not only whether
+  it hits the known defect.
+- [ ] Give the agent a tool over the language service (`wado query`) built at
+  the culprit's revision, and measure it against `agentic.json`.

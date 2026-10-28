@@ -1,0 +1,32 @@
+{
+  "checker": "Claude Opus 5.5, reading both diffs and the repository history",
+  "scope": "the 26 pairs both judges called usable",
+  "pairs": [
+    { "fix": 686, "culprit": 684, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit replaced a scan whose plain-struct fallback compared module_source with an index keyed by name alone; the dropped comparison is in the diff." },
+    { "fix": 689, "culprit": 670, "defect": "no", "introduced": "na", "visible": "na", "reason": "Backtracking and left-recursion handling for the SQLite grammar is a feature; the culprit's LL(k) dispatch was a limitation, not a regression." },
+    { "fix": 1088, "culprit": 627, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit moved the dump code out of wado-cli but switched it to a silent() host while keeping the map_err that drops the error." },
+    { "fix": 1112, "culprit": 935, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit wrote .tagpr with no [tagpr] section, and with `command` where `postVersionCommand` was meant." },
+    { "fix": 1142, "culprit": 1136, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit removed the wall-clock timeout whose deleted comment said it guarded a frame_tx.send blocked on a stalled client." },
+    { "fix": 1190, "culprit": 1015, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit left labeled breaks uncommitted, and its comment names the gap and the fix the fix PR made." },
+    { "fix": 1204, "culprit": 1199, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit's can_move_past checks that the intervening statement does not clobber the moved expression, not the reverse." },
+    { "fix": 1223, "culprit": 281, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit decodes FNAME/FCOMMENT a byte per char while its compressor writes the string's UTF-8 bytes." },
+    { "fix": 1313, "culprit": 1307, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit copied a grouping that skips names without a ' (-Ox)' suffix into a page whose names carry none." },
+    { "fix": 1484, "culprit": 1326, "defect": "yes", "introduced": "no", "visible": "na", "reason": "When the culprit merged, `pub` meant package-internal visibility and its WEP said `is_pub` is never a root; a later visibility redesign made the bug." },
+    { "fix": 1529, "culprit": 1528, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit, a lockfile chore, renamed the package, which changes the extension ID." },
+    { "fix": 1585, "culprit": 1526, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit names the temp file by pid alone, so threads in one process share it; its comment covers processes only." },
+    { "fix": 1638, "culprit": 1635, "defect": "yes", "introduced": "yes", "visible": "no", "ask": "infra", "reason": "A cache miss from env differences; seeing it takes knowing sccache hashes every CARGO_* variable." },
+    { "fix": 1672, "culprit": 1667, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit instantiates a dependency only when used, yet wires every provider and bails when none is wired." },
+    { "fix": 1680, "culprit": 897, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit's walk_and_delete propagates NotFound from a directory others may change." },
+    { "fix": 1697, "culprit": 1396, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit's op-only walker emits `?` as a plain first-set `if`, while the surface walker beside it dispatches on the Optional strategy." },
+    { "fix": 1813, "culprit": 1812, "defect": "yes", "introduced": "yes", "visible": "unsure", "ask": "infra", "reason": "The culprit assumes an existing target/ is a build this session started, which is false in a resumed container; the effect is a cold build." },
+    { "fix": 1848, "culprit": 1838, "defect": "yes", "introduced": "unsure", "visible": "yes", "ask": "partial", "reason": "The culprit added the unrelated-aggregate cast check with holes; before it there was no check at all." },
+    { "fix": 1888, "culprit": 1268, "defect": "yes", "introduced": "no", "visible": "na", "reason": "The rule-argument `[...]` regression came from 62da5e4b, which replaced the culprit's depth tracking." },
+    { "fix": 1915, "culprit": 1202, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit drops self params from the names while a path-form call passes the receiver as args[0]." },
+    { "fix": 2273, "culprit": 1903, "defect": "yes", "introduced": "yes", "visible": "unsure", "ask": "sweep", "reason": "A spec-conformance sweep with several defects, some of them design choices that differ from TC39." },
+    { "fix": 2293, "culprit": 2175, "defect": "yes", "introduced": "unsure", "visible": "yes", "ask": "sweep", "reason": "A spec-conformance sweep with several defects; the culprit moved part of the runtime from core:protobuf, so the i32 sizes predate it." },
+    { "fix": 2310, "culprit": 1545, "defect": "yes", "introduced": "yes", "visible": "yes", "reason": "The culprit's block parser lets list markers, ref defs and HTML-like lines interrupt a paragraph, against CommonMark." },
+    { "fix": 2351, "culprit": 1563, "defect": "yes", "introduced": "no", "visible": "na", "reason": "The culprit carried the confinement rule over from the value_copy_elide pass it deleted." },
+    { "fix": 2358, "culprit": 1707, "defect": "yes", "introduced": "unsure", "visible": "yes", "ask": "partial", "reason": "The culprit added call-inferred edges but let them yield when they close a cycle; before it, cycles through calls were not seen at all." },
+    { "fix": 2424, "culprit": 2423, "defect": "yes", "introduced": "unsure", "visible": "yes", "ask": "partial", "reason": "The culprit added the T::method argument check but skipped the receiver and type-param parameters; before it nothing was checked." }
+  ]
+}
