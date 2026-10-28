@@ -357,7 +357,8 @@ write the name itself or a field or element of the value it holds (`p.x = 1`,
 
 A write through a reference reads the reference, since it lands in what the
 reference points to. So does an index assignment on a value holding a `&mut`,
-which may write through it.
+which may write through it, and any write to an affine value, whose drop reads
+what was written.
 
 <!-- {"fixture":"spec_diagnostics_unused_variables.wado"} -->
 

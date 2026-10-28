@@ -235,17 +235,16 @@ emitted file.
 
 ### Source files
 
-| File                                              | Description                                                                                                                                                                                      |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).            |
-| `wado-compiler/src/lib.rs` (`unused_diagnostics`) | This WEP's contribution: walks the `Liveness` output and emits `DeadFunction` / `DeadGlobal` / `TestOnly*`, then the reference-pass emitters below. `Lints::reports_in` is the stdlib exclusion. |
-| `wado-compiler/src/unused_import.rs`              | The import emitter: `UnusedImport`.                                                                                                                                                              |
-| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                       |
-| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                     |
-| `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                                      |
-| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                                 |
-| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                                    |
-| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.                    |
+| File                                              | Description                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).                                                                                                |
+| `wado-compiler/src/lib.rs` (`unused_diagnostics`) | Adds `CompilerOptions::unused_diagnostics`. Once the elaborator has produced `Semantics` and its `Liveness`, walks the `Liveness` output and emits `DeadFunction` / `DeadGlobal` / `TestOnly*`, then the reference-pass emitters below. `Lints::reports_in` is the stdlib exclusion. |
+| `wado-compiler/src/unused_import.rs`              | The import emitter: `UnusedImport`.                                                                                                                                                                                                                                                  |
+| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                                                                                                           |
+| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                                                                                                         |
+| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                                                                                                                     |
+| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                                                                                                                        |
+| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.                                                                                                        |
 
 ### Algorithms
 
@@ -301,9 +300,11 @@ place on the left of `=`, of a destructuring assignment, or of a compound
 assignment. A place writes a name directly, or through the fields and indexes
 of a value the name holds (`Semantics::written_place`, the rule the `contract`
 clause check applies too). A projection stops at a reference, since the write
-lands in what the reference points to. Through a projection, a name whose type
-reaches a `&mut` counts as read, since an index assignment on it may write
-through that `&mut`.
+lands in what the reference points to. A write counts as a read where something
+besides the name reads it: an index step whose indexed value reaches a `&mut`,
+since the index assignment may write through it, or an affine name
+(`Semantics::is_affine`), whose drop may run a `Drop` impl or a resource's
+destructor on what was written. A field step only stores into the value.
 
 The elaborator records a use→def edge for every name that reaches a local
 (`Semantics::iter_references`). Only edges reaching a candidate binder are

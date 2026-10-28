@@ -12,6 +12,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::semantics::Semantics;
 use crate::symbol::SymbolKind;
+use crate::tir::TypeId;
 use crate::token::Span;
 
 /// Source-level `UnusedVariable` and `UnusedParameter` warnings, in the
@@ -25,6 +26,7 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
             module: src,
             waived: inner_attrs_allow(&module.inner_attributes, lint::UNUSED_VARIABLES),
             signatures_imposed: false,
+            affine_params: &[],
             found: Vec::new(),
             shorthand: IndexSet::default(),
             writes: IndexSet::default(),
@@ -124,6 +126,8 @@ struct Binders<'a> {
     /// the parameters of every implementation, so one leaving a parameter
     /// unread is no defect.
     signatures_imposed: bool,
+    /// The `affine` type parameters the body being walked sees.
+    affine_params: &'a [TypeId],
     found: Vec<Binder<'a>>,
     /// The pattern ids a struct pattern binds by its field's own name.
     shorthand: IndexSet<AstId>,
@@ -138,16 +142,37 @@ impl<'a> Binders<'a> {
         self.visit_attributed(attrs, |s| s.bind(BinderKind::Parameter, id, name, span));
     }
 
-    /// Records the name a write to `place` lands in. Through a projection, that
-    /// name must hold nothing that writes elsewhere: an index assignment on a
-    /// value holding a `&mut` may write through it.
+    /// Records the name a write to `place` lands in, unless something besides
+    /// the name reads what it writes: the drop of an affine value, which may
+    /// run a `Drop` impl or a resource's destructor, or an index assignment on
+    /// a value reaching a `&mut`, which may write through it.
     fn write(&mut self, place: &Expr) {
         let written = self.sem.written_place(place);
-        if let Expr::Ident(ident) = written
-            && (matches!(place, Expr::Ident(_)) || !self.sem.expr_reaches_mut_ref(written))
-        {
+        let Expr::Ident(ident) = written else {
+            return;
+        };
+        let dropped_with_it = self
+            .sem
+            .expr_types(written)
+            .into_iter()
+            .any(|ty| self.sem.is_affine(ty, self.affine_params));
+        if !dropped_with_it && !self.indexes_through_mut_ref(place, written) {
             self.writes.insert(ident.id);
         }
+    }
+
+    /// Whether an index step between `place` and the name it writes indexes a
+    /// value reaching a `&mut`. A field step only stores into the value.
+    fn indexes_through_mut_ref(&self, mut place: &Expr, written: &Expr) -> bool {
+        while !std::ptr::eq(place, written) {
+            place = match place {
+                Expr::FieldAccess(access) => &access.expr,
+                Expr::Index(index) if self.sem.expr_reaches_mut_ref(&index.expr) => return true,
+                Expr::Index(index) => &index.expr,
+                _ => unreachable!("a written place descends fields and indexes alone"),
+            };
+        }
+        false
     }
 
     fn bind(&mut self, kind: BinderKind, id: AstId, name: &'a str, span: Span) {
@@ -199,14 +224,22 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
 
     /// A parameter of a function without a body has nothing to read it.
     fn visit_function(&mut self, func: &'a Function) {
-        if func.body.is_some() && !self.signatures_imposed {
-            for param in &func.params {
-                if param.self_kind == SelfKind::None {
-                    self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
+        let saved = self.affine_params;
+        if func.body.is_some() {
+            self.affine_params = self
+                .sem
+                .affine_params(func.id)
+                .expect("complete semantics walk every body");
+            if !self.signatures_imposed {
+                for param in &func.params {
+                    if param.self_kind == SelfKind::None {
+                        self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
+                    }
                 }
             }
         }
         walk_function(self, func);
+        self.affine_params = saved;
     }
 
     fn visit_expr(&mut self, expr: &'a Expr) {
@@ -250,7 +283,13 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
                 self.found.extend(merged.into_values());
                 return;
             }
-            _ => {}
+            Pattern::Literal(_)
+            | Pattern::Wildcard
+            | Pattern::Tuple(..)
+            | Pattern::Variant { .. }
+            | Pattern::Range { .. }
+            | Pattern::Typed { .. }
+            | Pattern::Error(_) => {}
         }
         walk_pattern(self, pat);
     }
