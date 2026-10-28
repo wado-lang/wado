@@ -109,6 +109,9 @@ struct Baseline {
     reviewer: String,
     grader: String,
     tools: bool = false,
+    // The defaults are what the files written before these were recorded ran.
+    max_turns: i32 = 40,
+    diff_limit: i32 = 2_000_000,
     entries: List<Entry>,
 }
 
@@ -122,20 +125,29 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let checked = from_string::<Checked, String>(fs::read_to_string(&arguments[1]).unwrap()).unwrap();
     let judged = from_string::<Judged, String>(fs::read_to_string(&arguments[2]).unwrap()).unwrap();
     let out_path = arguments[3];
-    let earlier = earlier_runs(&out_path);
+    let earlier = earlier_entries(&out_path);
 
     // Every entry is in `out` before any run, so the file written after each
     // run keeps the earlier runs of entries not reached yet.
-    let mut out = Baseline { reviewer: CLAUDE_MODEL, grader: GRADER, tools: TOOLS, entries: [] };
+    let mut out = Baseline {
+        reviewer: CLAUDE_MODEL,
+        grader: GRADER,
+        tools: TOOLS,
+        max_turns: MAX_TURNS,
+        diff_limit: LIMIT,
+        entries: [],
+    };
     for let c of &checked.pairs {
         if !c.usable() {
             continue;
         }
         assert fix_result(&census, c.fix).blamed[0].pr == c.culprit, "the census must still blame the checked culprit";
         let mut entry = Entry { fix: c.fix, culprit: c.culprit, defect: judged_defect(&judged, c.fix), runs: [] };
-        for let graded of earlier.get(c.fix).unwrap_or([]) {
-            if graded.grade matches { Some(_) } && entry.runs.len() < RUNS {
-                entry.runs.push(graded);
+        if let Some(e) = earlier.get(c.fix) && e.culprit == entry.culprit && e.defect == entry.defect {
+            for let graded of e.runs {
+                if graded.grade matches { Some(_) } && entry.runs.len() < RUNS {
+                    entry.runs.push(graded);
+                }
             }
         }
         out.entries.push(entry);
@@ -242,19 +254,23 @@ fn review(api_key: &String, review_prompt: &String, ws: &Option<Workspace>) -> R
     return reviewed;
 }
 
-/// The graded runs an earlier run of this reviewer, grader and tool use left at `path`,
-/// by fix. A rerun only tops each entry up to `RUNS`.
-fn earlier_runs(path: &String) -> TreeMap<i32, List<Run>> with Preopens {
-    let mut by_fix = TreeMap::<i32, List<Run>>::new();
+/// The entries an earlier run with these settings left at `path`, by fix. A
+/// rerun only tops each entry up to `RUNS`.
+fn earlier_entries(path: &String) -> TreeMap<i32, Entry> with Preopens {
+    let mut by_fix = TreeMap::<i32, Entry>::new();
     let Ok(text) = fs::read_to_string(path) else {
         return by_fix;
     };
     let earlier = from_string::<Baseline, String>(text).unwrap();
-    if earlier.reviewer != CLAUDE_MODEL || earlier.grader != GRADER || earlier.tools != TOOLS {
+    if earlier.reviewer != CLAUDE_MODEL
+        || earlier.grader != GRADER
+        || earlier.tools != TOOLS
+        || earlier.diff_limit != LIMIT
+        || TOOLS && earlier.max_turns != MAX_TURNS {
         return by_fix;
     }
     for let e of earlier.entries {
-        by_fix[e.fix] = e.runs;
+        by_fix[e.fix] = e;
     }
     return by_fix;
 }
