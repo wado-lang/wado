@@ -23,6 +23,9 @@ reverts, so the defects come from fix pull requests rather than reverts.
 - `baseline.json` holds a one-pass review of each of the 15 usable entries,
   three runs each: the reviewer reads the culprit pull request's whole diff,
   and a grader says whether a finding names the defect the fix corrected.
+- `agentic.json` holds the same review by an agent that also reads the
+  repository as it stood once the culprit merged, through Eddy's Read, Grep and
+  Glob tools. Each run records the tool calls and the token usage.
 
 The model reads both diffs whole, generated, vendored and Markdown files left
 out. A pair with a diff past `diff_limit` (2,000,000 bytes) gets an error
@@ -46,10 +49,15 @@ CLAUDE_API_KEY=... CLAUDE_MODEL=claude-sonnet-5-5 wado run package-eddy/tools/ju
 CLAUDE_API_KEY=... wado run package-eddy/tools/baseline.wado -- \
     package-eddy/eval/szz.json package-eddy/eval/checked.json \
     package-eddy/eval/judged.json package-eddy/eval/baseline.json
+CLAUDE_API_KEY=... wado run -D tools=true package-eddy/tools/baseline.wado -- \
+    package-eddy/eval/szz.json package-eddy/eval/checked.json \
+    package-eddy/eval/judged.json package-eddy/eval/agentic.json
 ```
 
-They run `git` through `core:process`, which needs no flag: `git` is under
-`/usr`, and the repository is the directory `wado run` grants.
+They run `git` and `rg` through `core:process`, which needs no flag: both are
+under `/usr`, and the repository is the directory `wado run` grants. The
+agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
+is done.
 
 ## Findings So Far
 
@@ -118,6 +126,35 @@ They run `git` through `core:process`, which needs no flag: `git` is under
   run in three hits for a third of the entries, so a single run says little
   about a change to the reviewer. Whether the other findings are real is not
   measured yet.
+- Reading the tree with tools lifts the hits from 23 to 29 of 45 runs, and the
+  entries hit at least once from 10 to 12 of 15. Both reviews ran Opus 5.5 at
+  its default effort. The table counts runs that hit, out of 3:
+
+  | Entry | One pass | Agent |
+  | ----- | -------: | ----: |
+  | #686  |        3 |     3 |
+  | #1088 |        0 |     1 |
+  | #1112 |        0 |     1 |
+  | #1142 |        3 |     3 |
+  | #1190 |        3 |     3 |
+  | #1204 |        3 |     3 |
+  | #1223 |        1 |     3 |
+  | #1313 |        0 |     3 |
+  | #1529 |        3 |     3 |
+  | #1585 |        1 |     2 |
+  | #1672 |        2 |     2 |
+  | #1680 |        0 |     0 |
+  | #1697 |        0 |     0 |
+  | #1915 |        3 |     0 |
+  | #2310 |        1 |     2 |
+
+  The agent made 384 tool calls over 373 turns, most of them Grep, and the
+  45 runs read 37 million cached input tokens. #1313 turns from never to always:
+  the names the wasm-size runner writes are in the tree, not the diff. #1915
+  turns the other way. Its runs spend over 20 calls each tracing how a call
+  passes its receiver, and then report only one or two findings, none of them
+  the shifted labels. Reading can talk the reviewer out of a finding that was
+  right.
 
 ## To Do
 
@@ -128,3 +165,5 @@ They run `git` through `core:process`, which needs no flag: `git` is under
 - [ ] Split off the held-out part that learning never sees.
 - [ ] Measure the precision of the baseline's other findings, not only whether
   it hits the known defect.
+- [ ] Give the agent a tool over the language service (`wado query`) built at
+  the culprit's revision, and measure it against `agentic.json`.
