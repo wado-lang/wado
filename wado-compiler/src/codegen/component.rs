@@ -2553,7 +2553,7 @@ fn import_resource_defining_interface(
             provides,
         );
         let exported = project.resource_defining_functions(interface);
-        for func in one_per_cm_name(exported.into_iter()) {
+        for func in one_per_cm_name(exported) {
             export_func_in_instance_type(
                 &mut instance_type,
                 &mut type_idx,
