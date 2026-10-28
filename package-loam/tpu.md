@@ -1,9 +1,9 @@
 # Loam on TPU
 
 This is the design of a PJRT backend, which runs `forward` on TPUs and on native
-GPUs. The roadmap item "The PJRT backend" in [TODO.md](./TODO.md) builds it
-on XLA's CPU plugin first. Only a backend that really runs through PJRT shows the architecture
-right, and a TPU run waits until it does.
+GPUs. The roadmap item "The PJRT backend" in [TODO.md](./TODO.md) builds it on
+XLA's CPU plugin first. Only a backend that really runs through PJRT shows the
+architecture right, and a TPU run waits until it does.
 
 ## Context
 
