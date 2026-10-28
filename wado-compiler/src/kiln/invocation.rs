@@ -380,7 +380,10 @@ mod tests {
             InvocationPath::normalize("/home/u/pkg/src/generator.wado").as_str(),
             "/home/u/pkg/src/generator.wado"
         );
-        assert_eq!(InvocationPath::normalize("C:\\pkg\\g.wado").as_str(), "C:/pkg/g.wado");
+        assert_eq!(
+            InvocationPath::normalize("C:\\pkg\\g.wado").as_str(),
+            "C:/pkg/g.wado"
+        );
     }
 
     #[test]
