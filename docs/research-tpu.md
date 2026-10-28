@@ -89,14 +89,15 @@ The Rust crate `pjrt` (and `pjrt-sys`) wraps this API. Its last release is
 | `libtpu.so` | PyPI `libtpu` 0.0.51, `libtpu-0.0.51-cp312-cp312-manylinux_2_31_x86_64.whl` | 205 MB   | 575 MB  | yes          | 0.116 |
 | CPU         | GitHub `zml/pjrt-artifacts` release v18.0.0, `pjrt-cpu_linux-amd64.tar.gz`  | 67 MB    | 275 MB  | yes          | 0.114 |
 
-PyPI also carries NVIDIA GPU plugins, `jax-cuda12-pjrt` and `jax-cuda13-pjrt`, which the probe did not run. The `libtpu` wheel holds no Python
-dependency; the library is the whole of it. The ZML archive holds one file,
-`libpjrt_cpu.so`. ZML builds it from openxla/xla's
-`//xla/pjrt/c:pjrt_c_api_cpu_plugin` target at a pinned commit, with a few
-patches of its own, and also publishes CUDA, ROCm, oneAPI and macOS builds.
+The `libtpu` wheel holds no Python dependency; the library is the whole of it.
+The ZML archive holds one file, `libpjrt_cpu.so`. ZML builds it from
+openxla/xla's `//xla/pjrt/c:pjrt_c_api_cpu_plugin` target at a pinned commit,
+with a few patches of its own, and also publishes CUDA, ROCm, oneAPI and macOS
+builds.
 
-No CPU plugin is published on PyPI. `jaxlib` 0.12.0.1 links XLA's CPU client
-into `libjax_common.so`, which exports no `GetPjrtApi`.
+PyPI carries NVIDIA GPU plugins, `jax-cuda12-pjrt` and `jax-cuda13-pjrt`,
+which the probe did not run, and no CPU plugin. `jaxlib` 0.12.0.1 links XLA's
+CPU client into `libjax_common.so`, which exports no `GetPjrtApi`.
 
 ## 4. The Program Is StableHLO
 
@@ -186,7 +187,8 @@ estimate is the compiler's model, not a measurement on a device.
 
 - wasi-nn: its `graph-encoding` enum is `openvino`, `onnx`, `tensorflow`,
   `pytorch`, `tensorflowlite`, `ggml` and `autodetect`. StableHLO is not among
-  them, and wasmtime's implementation ships OpenVINO and WinML backends.
+  them. wasmtime's implementation (`crates/wasi-nn/src/backend/` in
+  `vendor/wasmtime`) has OpenVINO, ONNX Runtime, PyTorch and WinML backends.
 - Pallas TPU interpret mode: JAX runs a Pallas TPU kernel on the CPU,
   simulating the TPU's memories, DMAs and semaphores in Python. It serves
   kernels written in Pallas, from Python, and runs no XLA program.
@@ -202,7 +204,8 @@ estimate is the compiler's model, not a measurement on a device.
 - TPU Research Cloud gives accepted researchers Cloud TPUs at no charge.
 - Cloud TPU rents a TPU VM by the hour.
 
-The probe in the appendix runs unchanged on any of them, given `libtpu.so`.
+Execution on a TPU was not measured. The probe's `run` mode is what measures
+it, and needs one of these.
 
 ## 10. Sources
 
