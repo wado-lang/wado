@@ -1,17 +1,18 @@
-# WEP: Loam on PJRT — TPUs and Native GPUs Behind the Backend Trait
+# Loam on TPU
 
-Status: proposed.
+This is the proposed design of a PJRT backend, which runs `forward` on TPUs and
+on native GPUs. It is not adopted yet.
 
 ## Context
 
-[WEP: Loam](./wep-2026-09-20-loam.md) runs a model's `forward` on any
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) runs a model's `forward` on any
 implementation of one `Backend` trait. Two exist: `Cpu`, and `WebGpuBackend`
-over `wasi:webgpu` ([Loam on WebGPU](../package-loam/webgpu.md)). Neither reaches
-a TPU, and neither reaches a GPU's matrix units: WebGPU's subgroup matrix is
-still in standardization
-([research §10](./research-ml-inference-webgpu.md#10-webgpu-feature-status)).
+over `wasi:webgpu` ([Loam on WebGPU](./webgpu.md)). Neither reaches a TPU, and
+neither reaches a GPU's matrix units: WebGPU's subgroup matrix is still in
+standardization
+([research §10](../docs/research-ml-inference-webgpu.md#10-webgpu-feature-status)).
 
-[Research: Google TPU Through PJRT](./research-tpu.md) records how a program
+[Research: Google TPU Through PJRT](../docs/research-tpu.md) records how a program
 reaches a TPU. The only public entry is a PJRT plugin, `libtpu.so`, given a
 StableHLO program for XLA to compile. The same C API drives XLA's CPU and CUDA
 plugins. On a machine with no TPU, `libtpu.so` still compiles for a named TPU
@@ -81,7 +82,7 @@ and what outlives it.
 ### The seam carries what a compiled program cannot learn at run time
 
 XLA refuses a dimension of unknown extent, and `libtpu.so` aborts the process
-on one (research §6). So every extent that varies between calls reaches the
+on one ([research §6](../docs/research-tpu.md#6-shapes-must-be-static)). So every extent that varies between calls reaches the
 trait as a capacity fixed per program, with what is valid within it as a value:
 
 - An attention cache has a capacity and a valid length. The length is a scalar
@@ -107,13 +108,7 @@ them:
 - The attention cache donated from a pass's input to its output, so it is
   updated in place.
 
-### `pjrt_c_api.h` may be read
-
-`package-loam/AGENTS.md` bars reading the code of ML frameworks and runtimes.
-`xla/pjrt/c/pjrt_c_api.h` is an exception: it is the plugin's interface, read as
-an API specification. The rest of XLA stays barred.
-
-## Roadmap
+## Plan
 
 1. [ ] A host that serves PJRT to a Wado program. Finished when a Wado program
    compiles a StableHLO module and runs it on the CPU plugin under that host,

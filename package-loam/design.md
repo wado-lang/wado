@@ -8,6 +8,9 @@ that is in three documents:
 - [Loam on WebGPU](./webgpu.md), the design of its WebGPU backend.
 - [Loam Tokenizer](./tokenizer.md), the design of its tokenizer.
 
+[Loam on TPU](./tpu.md) proposes a PJRT backend, for TPUs and native GPUs. It
+is not adopted yet.
+
 A roadmap item in [TODO.md](./TODO.md) writes its design here when it is
 finished. Where it changes a decision the WEP made, it names the WEP's section.
 
