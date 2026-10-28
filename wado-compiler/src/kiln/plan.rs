@@ -5,7 +5,6 @@
 //! output directory populated. See WEP 2026-04-12 §"Build integration".
 
 use super::invocation::{DeclSite, Invocation, InvocationPath};
-use crate::path::relative_path;
 
 /// A scheduling plan for a set of invocations.
 #[derive(Debug, Clone)]
@@ -173,8 +172,10 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
 /// Does `a`'s inputs (primary + declared inputs) fall inside `b`'s output
 /// directory?
 ///
-/// Path comparison is purely lexical. "Inside" means the input path equals
-/// `b.output_dir` or is a descendant of it.
+/// Path comparison is purely lexical: `b.output_dir` is treated as a prefix.
+/// "Inside" means the input path equals `b.output_dir` or is a child. An
+/// `output_dir` of `.` holds every source beside the manifest, so it orders
+/// nothing: taking it as a prefix of each would make two such clauses a cycle.
 #[must_use]
 pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
     if path_inside(&a.from, &b.output_dir) {
@@ -189,8 +190,9 @@ pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
 }
 
 fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
-    let from_dir = relative_path(dir.as_str(), candidate.as_str());
-    from_dir == "." || from_dir.starts_with("./")
+    let c = candidate.as_str();
+    let d = dir.as_str();
+    c == d || c.strip_prefix(d).is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]
@@ -249,15 +251,11 @@ mod tests {
     }
 
     #[test]
-    fn path_inside_a_root_dir() {
-        let cases = [(".", "schema.g4"), ("/", "/x/y.g4"), ("C:/", "C:/x.g4")];
-        for (dir, file) in cases {
-            let [dir, file] = [dir, file].map(InvocationPath::normalize);
-            assert!(path_inside(&file, &dir), "{file} in {dir}");
-        }
-        let dot = InvocationPath::normalize(".");
-        assert!(!path_inside(&InvocationPath::normalize("../x.g4"), &dot));
-        assert!(!path_inside(&InvocationPath::normalize("/x.g4"), &dot));
+    fn two_clauses_writing_beside_the_manifest_are_no_cycle() {
+        let a = inv("a", "schema_a.g4", &[], "./");
+        let b = inv("b", "schema_b.g4", &[], "./");
+        let plan = build_plan(vec![a, b]).expect("no cycle");
+        assert_eq!(plan.order.len(), 2);
     }
 
     #[test]

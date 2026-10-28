@@ -1168,7 +1168,7 @@ fn build_dep_generator_local_path(
         return Ok(None);
     };
     let entry = normalize_path(&package_dir.join(entry));
-    let rebased = relative_to(&absolute(manifest_root), &entry).expect("both paths are absolute");
+    let rebased = relative_to(&absolute(manifest_root), &entry);
     Ok(Some(wado_compiler::kiln::InvocationPath::normalize(
         &rebased,
     )))
@@ -1226,10 +1226,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
     let entry_identity = entry_identity
         .map(str::to_string)
         .unwrap_or_else(|| entry_file.to_string_lossy().to_string());
-    // The root either comes from the manifest above the entry or is the entry's
-    // own directory, so it always contains the entry.
-    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
-        .expect("the entry lies under the root it was resolved from");
+    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file));
     // An unreadable entry harvests nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
         return Harvested::default();

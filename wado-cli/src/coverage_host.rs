@@ -420,14 +420,14 @@ impl Profile {
                 ..
             })) = manifest_in(&root)
         {
-            let rel = relative_to(&root, &file).expect("a module lies under its package's root");
+            let rel = relative_to(&root, &file);
             let version = &package.version;
             return match package.namespace {
                 Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
                 None => format!("{}@{version}/{rel}", package.name),
             };
         }
-        relative_to(&self.root, &file).expect("both paths are absolute")
+        relative_to(&self.root, &file)
     }
 }
 
