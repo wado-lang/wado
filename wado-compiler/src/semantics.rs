@@ -230,7 +230,7 @@ impl Semantics {
         Some(render_plan(&planned.plan))
     }
 
-    /// Each region the profile marked cold, as `path:line:column kind`.
+    /// Each region the profile marked cold, as `module:line:column kind`.
     #[must_use]
     pub fn cold_regions(&self) -> &[String] {
         self.cold.as_ref().map_or(&[], ColdMap::regions)

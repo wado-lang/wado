@@ -366,7 +366,8 @@ fn 3f2a9c0d1e2b4a59 12 pick
 1 4
 ```
 
-A `module` line names a module the same way on any machine and from any entry:
+A `module` line names a module the same way on any machine and from any entry
+of one package:
 
 - A file of a package whose `wado.toml` has a `[package]`, the recording
   package's own or a dependency's, is the package's `namespace:name@version`,

@@ -252,7 +252,7 @@ pub struct CompileResult {
     /// descriptor.
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
     /// Each region [`CompilerOptions::profile`] marked cold, as
-    /// `path:line:column kind`.
+    /// `module:line:column kind`.
     pub cold_regions: Vec<String>,
 }
 
@@ -522,7 +522,7 @@ pub struct CompilerOptions {
     /// their plan in the `org.wado-lang.coverage` section. Test world only.
     pub coverage: Option<coverage::CoverageScope>,
     /// When `Some`, mark cold each region the profile recorded no run of. A
-    /// module is looked up under the path a coverage plan names it by.
+    /// module is looked up under its name ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
     /// How many threads the optimizer visits functions on. The output does not
     /// depend on it. A host compiling several files at once passes 1.

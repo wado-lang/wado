@@ -1250,7 +1250,7 @@ impl ModuleSource {
     }
 
     /// Where the host reads the module — the counterpart to its name
-    /// ([`Display`]). Read where a real path must resolve a sibling file
+    /// ([`fmt::Display`]). Read where a real path must resolve a sibling file
     /// (`#include_str`) and as the filename in diagnostics. Empty for an entry
     /// point with no real filename, such as `<stdin>`.
     #[must_use]
