@@ -998,21 +998,7 @@ fn "newtype_inherent_method_in_generic_body.wado/newtype_inherent_method_in_gene
     $licm_repr_29 = self.repr;
     b109: block {
         l110: loop {
-            break_if b109 (i >= $load_0) | ((i + 1) >= $load_0);
-            b = builtin::array_get_value<u8>($licm_repr_29, i);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $inline_hex_digit_5: block -> char {
-                if local.tee nibble_18((b >>u 4) & 15) <u 10 {
-                    break $inline_hex_digit_5: 48 + nibble_18;
-                }
-                break $inline_hex_digit_5: (97 + nibble_18) - 10;
-            });
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $inline_hex_digit_8: block -> char {
-                if local.tee nibble_23(b & 15) <u 10 {
-                    break $inline_hex_digit_8: 48 + nibble_23;
-                }
-                break $inline_hex_digit_8: (97 + nibble_23) - 10;
-            });
-            i = i + 1;
+            break_if b109 i >= $load_0;
             b = builtin::array_get_value<u8>($licm_repr_29, i);
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $inline_hex_digit_5: block -> char {
                 if local.tee nibble_18((b >>u 4) & 15) <u 10 {
@@ -1028,26 +1014,6 @@ fn "newtype_inherent_method_in_generic_body.wado/newtype_inherent_method_in_gene
             });
             i = i + 1;
             continue l110;
-        };
-    };
-    b115: block {
-        l116: loop {
-            break_if b115 i >= $load_0;
-            b = builtin::array_get_value<u8>($licm_repr_29, i);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $inline_hex_digit_5: block -> char {
-                if local.tee nibble_18((b >>u 4) & 15) <u 10 {
-                    break $inline_hex_digit_5: 48 + nibble_18;
-                }
-                break $inline_hex_digit_5: (97 + nibble_18) - 10;
-            });
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(s, $inline_hex_digit_8: block -> char {
-                if local.tee nibble_23(b & 15) <u 10 {
-                    break $inline_hex_digit_8: 48 + nibble_23;
-                }
-                break $inline_hex_digit_8: (97 + nibble_23) - 10;
-            });
-            i = i + 1;
-            continue l116;
         };
     };
     return s;
@@ -1201,12 +1167,12 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.w
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b132: block {
-        l133: loop {
-            break_if b132 i >= n;
+    b126: block {
+        l127: loop {
+            break_if b126 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l133;
+            continue l127;
         };
     };
 }

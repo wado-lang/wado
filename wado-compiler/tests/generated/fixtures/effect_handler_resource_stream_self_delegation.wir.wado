@@ -1121,31 +1121,7 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
     let used: i32;
     return self_2 = self.$capture_0.buf, repr = data.repr, index_11 = data.start, end = data.end, b93: block {
         l94: loop {
-            break_if b93 (((index_11 >= end) | ((index_11 + 1) >= end)) | (((index_11 + 1) + 1) >= end)) | ((((index_11 + 1) + 1) + 1) >= end);
-            item = builtin::array_get_value<u8>(repr, index_11);
-            index_11 = index_11 + 1;
-            if @unlikely(local.tee used(self_2.used) >= builtin::array_len(self_2.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self_2);
-            }
-            builtin::array_set_u8(self_2.repr, used, item);
-            self_2.used = used + 1;
-            item = builtin::array_get_value<u8>(repr, index_11);
-            index_11 = index_11 + 1;
-            if @unlikely(local.tee used(self_2.used) >= builtin::array_len(self_2.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self_2);
-            }
-            builtin::array_set_u8(self_2.repr, used, item);
-            self_2.used = used + 1;
-            item = builtin::array_get_value<u8>(repr, index_11);
-            index_11 = index_11 + 1;
-            if @unlikely(local.tee used(self_2.used) >= builtin::array_len(self_2.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self_2);
-            }
-            builtin::array_set_u8(self_2.repr, used, item);
-            self_2.used = used + 1;
+            break_if b93 index_11 >= end;
             item = builtin::array_get_value<u8>(repr, index_11);
             index_11 = index_11 + 1;
             if @unlikely(local.tee used(self_2.used) >= builtin::array_len(self_2.repr)) {
@@ -1155,19 +1131,6 @@ fn "effect_handler_resource_stream_self_delegation.wado/effect_handler_resource_
             builtin::array_set_u8(self_2.repr, used, item);
             self_2.used = used + 1;
             continue l94;
-        };
-    }, b99: block {
-        l100: loop {
-            break_if b99 index_11 >= end;
-            item = builtin::array_get_value<u8>(repr, index_11);
-            index_11 = index_11 + 1;
-            if @unlikely(local.tee used(self_2.used) >= builtin::array_len(self_2.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self_2);
-            }
-            builtin::array_set_u8(self_2.repr, used, item);
-            self_2.used = used + 1;
-            continue l100;
         };
     }, 0;
 }
@@ -1314,16 +1277,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
     arr = f.buf.repr;
     self = is_negative + self;
-    b127: block {
-        l128: loop {
-            break_if b127 (self - is_negative) < 2;
+    b121: block {
+        l122: loop {
+            break_if b121 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
-            continue l128;
+            continue l122;
         };
     };
     if self > is_negative {
@@ -1411,9 +1374,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         $load_2 = 0;
-        b143: block {
-            l144: loop {
-                break_if b143 $load_2 >= sign_len;
+        b137: block {
+            l138: loop {
+                break_if b137 $load_2 >= sign_len;
                 if @unlikely(local.tee start_27(self_21.used + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
@@ -1422,7 +1385,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = start_27;
                 builtin::array_set_u8(self_21.repr, new_used_26, 48);
                 $load_2 = $load_2 + 1;
-                continue l144;
+                continue l138;
             };
         };
         if @unlikely(local.tee $load_2(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -1465,12 +1428,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_2 = self.fill;
         i_221 = 0;
-        b154: block {
-            l155: loop {
-                break_if b154 i_221 >= sign_len;
+        b148: block {
+            l149: loop {
+                break_if b148 i_221 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
                 i_221 = i_221 + 1;
-                continue l155;
+                continue l149;
             };
         };
         return start_27;
@@ -1480,12 +1443,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         i_221 = self.fill;
         $load_2 = 0;
-        b157: block {
-            l158: loop {
-                break_if b157 $load_2 >= new_used_26;
+        b151: block {
+            l152: loop {
+                break_if b151 $load_2 >= new_used_26;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
                 $load_2 = $load_2 + 1;
-                continue l158;
+                continue l152;
             };
         };
         if is_negative {
@@ -1519,12 +1482,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         i_221 = self.fill;
         $load_2 = 0;
-        b165: block {
-            l166: loop {
-                break_if b165 $load_2 >= start_27;
+        b159: block {
+            l160: loop {
+                break_if b159 $load_2 >= start_27;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
                 $load_2 = $load_2 + 1;
-                continue l166;
+                continue l160;
             };
         };
         return new_used_26;
@@ -1532,12 +1495,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         i_221 = 0;
-        b167: block {
-            l168: loop {
-                break_if b167 i_221 >= sign_len;
+        b161: block {
+            l162: loop {
+                break_if b161 i_221 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 i_221 = i_221 + 1;
-                continue l168;
+                continue l162;
             };
         };
         if is_negative {

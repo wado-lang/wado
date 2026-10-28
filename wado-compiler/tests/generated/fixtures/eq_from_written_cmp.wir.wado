@@ -10193,25 +10193,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right"(se
     gap = start_pos + gap;
     b1809: block {
         l1810: loop {
-            break_if b1809 (((content_bytes < 0) | ((content_bytes - 1) < 0)) | (((content_bytes - 1) - 1) < 0)) | ((((content_bytes - 1) - 1) - 1) < 0);
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
+            break_if b1809 content_bytes < 0;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
@@ -10219,18 +10201,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right"(se
             }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
             content_bytes = content_bytes - 1;
             continue l1810;
-        };
-    };
-    b1815: block {
-        l1816: loop {
-            break_if b1815 content_bytes < 0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"($load_0, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = $load_0.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>($load_0.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            continue l1816;
         };
     };
 }
@@ -10253,12 +10223,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(s
     i = 0;
     $licm_indent_8 = self.indent;
     $licm_buf_9 = self.buf;
-    b1820: block {
-        l1821: loop {
-            break_if b1820 i >= $licm_indent_8;
+    b1814: block {
+        l1815: loop {
+            break_if b1814 i >= $licm_indent_8;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($licm_buf_9, global:core:prelude/format.wado::$const_obj_0);
             i = i + 1;
-            continue l1821;
+            continue l1815;
         };
     };
 }
@@ -10327,17 +10297,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self) {
     let n: i32;
     n = 0;
-    b1828: block {
-        l1829: loop {
+    b1822: block {
+        l1823: loop {
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: char;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self);
             if $mv$$match_2$0 == 1 {
                 n = n + 1;
             } else {
-                break b1828;
+                break b1822;
             }
-            continue l1829;
+            continue l1823;
         };
     };
     return n;
@@ -11183,77 +11153,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     self_37 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"(local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5^core:prelude/traits.wado/ReflectTemplate::members"()).0, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b1924: block {
-        b1925: block {
-            b1926: block {
-                b1927: block {
-                    b1928: block {
-                        b1929: block {
-                            b1930: block {
-                                b1931: block {
-                                    b1932: block {
-                                        b1933: block {
-                                            b1934: block {
-                                                b1935: block {
-                                                    b1936: block {
-                                                        b1937: block {
-                                                            b1938: block {
-                                                                b1939: block {
-                                                                    b1940: block {
+    b1918: block {
+        b1919: block {
+            b1920: block {
+                b1921: block {
+                    b1922: block {
+                        b1923: block {
+                            b1924: block {
+                                b1925: block {
+                                    b1926: block {
+                                        b1927: block {
+                                            b1928: block {
+                                                b1929: block {
+                                                    b1930: block {
+                                                        b1931: block {
+                                                            b1932: block {
+                                                                b1933: block {
+                                                                    b1934: block {
                                                                         br_table 0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b1924;
+                                                                break b1918;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b1924;
+                                                            break b1918;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b1924;
+                                                        break b1918;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b1924;
+                                                    break b1918;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b1924;
+                                                break b1918;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b1924;
+                                            break b1918;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b1924;
+                                        break b1918;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b1924;
+                                    break b1918;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b1924;
+                                break b1918;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b1924;
+                            break b1918;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b1924;
+                        break b1918;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b1924;
+                    break b1918;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b1924;
+                break b1918;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b1924;
+            break b1918;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11261,77 +11231,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     self_37 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"($tuple_0.1, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b1941: block {
-        b1942: block {
-            b1943: block {
-                b1944: block {
-                    b1945: block {
-                        b1946: block {
-                            b1947: block {
-                                b1948: block {
-                                    b1949: block {
-                                        b1950: block {
-                                            b1951: block {
-                                                b1952: block {
-                                                    b1953: block {
-                                                        b1954: block {
-                                                            b1955: block {
-                                                                b1956: block {
-                                                                    b1957: block {
+    b1935: block {
+        b1936: block {
+            b1937: block {
+                b1938: block {
+                    b1939: block {
+                        b1940: block {
+                            b1941: block {
+                                b1942: block {
+                                    b1943: block {
+                                        b1944: block {
+                                            b1945: block {
+                                                b1946: block {
+                                                    b1947: block {
+                                                        b1948: block {
+                                                            b1949: block {
+                                                                b1950: block {
+                                                                    b1951: block {
                                                                         br_table 1 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b1941;
+                                                                break b1935;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b1941;
+                                                            break b1935;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b1941;
+                                                        break b1935;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b1941;
+                                                    break b1935;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b1941;
+                                                break b1935;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b1941;
+                                            break b1935;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b1941;
+                                        break b1935;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b1941;
+                                    break b1935;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b1941;
+                                break b1935;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b1941;
+                            break b1935;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b1941;
+                        break b1935;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b1941;
+                    break b1935;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b1941;
+                break b1935;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b1941;
+            break b1935;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11341,77 +11311,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b1959: block {
-        b1960: block {
-            b1961: block {
-                b1962: block {
-                    b1963: block {
-                        b1964: block {
-                            b1965: block {
-                                b1966: block {
-                                    b1967: block {
-                                        b1968: block {
-                                            b1969: block {
-                                                b1970: block {
-                                                    b1971: block {
-                                                        b1972: block {
-                                                            b1973: block {
-                                                                b1974: block {
-                                                                    b1975: block {
+    b1953: block {
+        b1954: block {
+            b1955: block {
+                b1956: block {
+                    b1957: block {
+                        b1958: block {
+                            b1959: block {
+                                b1960: block {
+                                    b1961: block {
+                                        b1962: block {
+                                            b1963: block {
+                                                b1964: block {
+                                                    b1965: block {
+                                                        b1966: block {
+                                                            b1967: block {
+                                                                b1968: block {
+                                                                    b1969: block {
                                                                         br_table 2 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b1959;
+                                                                break b1953;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b1959;
+                                                            break b1953;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b1959;
+                                                        break b1953;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b1959;
+                                                    break b1953;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b1959;
+                                                break b1953;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b1959;
+                                            break b1953;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b1959;
+                                        break b1953;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b1959;
+                                    break b1953;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b1959;
+                                break b1953;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b1959;
+                            break b1953;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b1959;
+                        break b1953;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b1959;
+                    break b1953;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b1959;
+                break b1953;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b1959;
+            break b1953;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11421,77 +11391,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b1977: block {
-        b1978: block {
-            b1979: block {
-                b1980: block {
-                    b1981: block {
-                        b1982: block {
-                            b1983: block {
-                                b1984: block {
-                                    b1985: block {
-                                        b1986: block {
-                                            b1987: block {
-                                                b1988: block {
-                                                    b1989: block {
-                                                        b1990: block {
-                                                            b1991: block {
-                                                                b1992: block {
-                                                                    b1993: block {
+    b1971: block {
+        b1972: block {
+            b1973: block {
+                b1974: block {
+                    b1975: block {
+                        b1976: block {
+                            b1977: block {
+                                b1978: block {
+                                    b1979: block {
+                                        b1980: block {
+                                            b1981: block {
+                                                b1982: block {
+                                                    b1983: block {
+                                                        b1984: block {
+                                                            b1985: block {
+                                                                b1986: block {
+                                                                    b1987: block {
                                                                         br_table 3 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b1977;
+                                                                break b1971;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b1977;
+                                                            break b1971;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b1977;
+                                                        break b1971;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b1977;
+                                                    break b1971;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b1977;
+                                                break b1971;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b1977;
+                                            break b1971;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b1977;
+                                        break b1971;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b1977;
+                                    break b1971;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b1977;
+                                break b1971;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b1977;
+                            break b1971;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b1977;
+                        break b1971;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b1977;
+                    break b1971;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b1977;
+                break b1971;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b1977;
+            break b1971;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11501,77 +11471,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b1995: block {
-        b1996: block {
-            b1997: block {
-                b1998: block {
-                    b1999: block {
-                        b2000: block {
-                            b2001: block {
-                                b2002: block {
-                                    b2003: block {
-                                        b2004: block {
-                                            b2005: block {
-                                                b2006: block {
-                                                    b2007: block {
-                                                        b2008: block {
-                                                            b2009: block {
-                                                                b2010: block {
-                                                                    b2011: block {
+    b1989: block {
+        b1990: block {
+            b1991: block {
+                b1992: block {
+                    b1993: block {
+                        b1994: block {
+                            b1995: block {
+                                b1996: block {
+                                    b1997: block {
+                                        b1998: block {
+                                            b1999: block {
+                                                b2000: block {
+                                                    b2001: block {
+                                                        b2002: block {
+                                                            b2003: block {
+                                                                b2004: block {
+                                                                    b2005: block {
                                                                         br_table 4 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b1995;
+                                                                break b1989;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b1995;
+                                                            break b1989;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b1995;
+                                                        break b1989;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b1995;
+                                                    break b1989;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b1995;
+                                                break b1989;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b1995;
+                                            break b1989;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b1995;
+                                        break b1989;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b1995;
+                                    break b1989;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b1995;
+                                break b1989;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b1995;
+                            break b1989;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b1995;
+                        break b1989;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b1995;
+                    break b1989;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b1995;
+                break b1989;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b1995;
+            break b1989;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11581,77 +11551,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2013: block {
-        b2014: block {
-            b2015: block {
-                b2016: block {
-                    b2017: block {
-                        b2018: block {
-                            b2019: block {
-                                b2020: block {
-                                    b2021: block {
-                                        b2022: block {
-                                            b2023: block {
-                                                b2024: block {
-                                                    b2025: block {
-                                                        b2026: block {
-                                                            b2027: block {
-                                                                b2028: block {
-                                                                    b2029: block {
+    b2007: block {
+        b2008: block {
+            b2009: block {
+                b2010: block {
+                    b2011: block {
+                        b2012: block {
+                            b2013: block {
+                                b2014: block {
+                                    b2015: block {
+                                        b2016: block {
+                                            b2017: block {
+                                                b2018: block {
+                                                    b2019: block {
+                                                        b2020: block {
+                                                            b2021: block {
+                                                                b2022: block {
+                                                                    b2023: block {
                                                                         br_table 5 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2013;
+                                                                break b2007;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2013;
+                                                            break b2007;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2013;
+                                                        break b2007;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2013;
+                                                    break b2007;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2013;
+                                                break b2007;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2013;
+                                            break b2007;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2013;
+                                        break b2007;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2013;
+                                    break b2007;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2013;
+                                break b2007;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2013;
+                            break b2007;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2013;
+                        break b2007;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2013;
+                    break b2007;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2013;
+                break b2007;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2013;
+            break b2007;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11661,77 +11631,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2031: block {
-        b2032: block {
-            b2033: block {
-                b2034: block {
-                    b2035: block {
-                        b2036: block {
-                            b2037: block {
-                                b2038: block {
-                                    b2039: block {
-                                        b2040: block {
-                                            b2041: block {
-                                                b2042: block {
-                                                    b2043: block {
-                                                        b2044: block {
-                                                            b2045: block {
-                                                                b2046: block {
-                                                                    b2047: block {
+    b2025: block {
+        b2026: block {
+            b2027: block {
+                b2028: block {
+                    b2029: block {
+                        b2030: block {
+                            b2031: block {
+                                b2032: block {
+                                    b2033: block {
+                                        b2034: block {
+                                            b2035: block {
+                                                b2036: block {
+                                                    b2037: block {
+                                                        b2038: block {
+                                                            b2039: block {
+                                                                b2040: block {
+                                                                    b2041: block {
                                                                         br_table 6 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2031;
+                                                                break b2025;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2031;
+                                                            break b2025;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2031;
+                                                        break b2025;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2031;
+                                                    break b2025;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2031;
+                                                break b2025;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2031;
+                                            break b2025;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2031;
+                                        break b2025;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2031;
+                                    break b2025;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2031;
+                                break b2025;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2031;
+                            break b2025;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2031;
+                        break b2025;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2031;
+                    break b2025;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2031;
+                break b2025;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2031;
+            break b2025;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11741,77 +11711,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2049: block {
-        b2050: block {
-            b2051: block {
-                b2052: block {
-                    b2053: block {
-                        b2054: block {
-                            b2055: block {
-                                b2056: block {
-                                    b2057: block {
-                                        b2058: block {
-                                            b2059: block {
-                                                b2060: block {
-                                                    b2061: block {
-                                                        b2062: block {
-                                                            b2063: block {
-                                                                b2064: block {
-                                                                    b2065: block {
+    b2043: block {
+        b2044: block {
+            b2045: block {
+                b2046: block {
+                    b2047: block {
+                        b2048: block {
+                            b2049: block {
+                                b2050: block {
+                                    b2051: block {
+                                        b2052: block {
+                                            b2053: block {
+                                                b2054: block {
+                                                    b2055: block {
+                                                        b2056: block {
+                                                            b2057: block {
+                                                                b2058: block {
+                                                                    b2059: block {
                                                                         br_table 7 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2049;
+                                                                break b2043;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2049;
+                                                            break b2043;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2049;
+                                                        break b2043;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2049;
+                                                    break b2043;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2049;
+                                                break b2043;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2049;
+                                            break b2043;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2049;
+                                        break b2043;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2049;
+                                    break b2043;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2049;
+                                break b2043;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2049;
+                            break b2043;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2049;
+                        break b2043;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2049;
+                    break b2043;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2049;
+                break b2043;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2049;
+            break b2043;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11821,77 +11791,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2067: block {
-        b2068: block {
-            b2069: block {
-                b2070: block {
-                    b2071: block {
-                        b2072: block {
-                            b2073: block {
-                                b2074: block {
-                                    b2075: block {
-                                        b2076: block {
-                                            b2077: block {
-                                                b2078: block {
-                                                    b2079: block {
-                                                        b2080: block {
-                                                            b2081: block {
-                                                                b2082: block {
-                                                                    b2083: block {
+    b2061: block {
+        b2062: block {
+            b2063: block {
+                b2064: block {
+                    b2065: block {
+                        b2066: block {
+                            b2067: block {
+                                b2068: block {
+                                    b2069: block {
+                                        b2070: block {
+                                            b2071: block {
+                                                b2072: block {
+                                                    b2073: block {
+                                                        b2074: block {
+                                                            b2075: block {
+                                                                b2076: block {
+                                                                    b2077: block {
                                                                         br_table 8 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2067;
+                                                                break b2061;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2067;
+                                                            break b2061;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2067;
+                                                        break b2061;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2067;
+                                                    break b2061;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2067;
+                                                break b2061;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2067;
+                                            break b2061;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2067;
+                                        break b2061;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2067;
+                                    break b2061;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2067;
+                                break b2061;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2067;
+                            break b2061;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2067;
+                        break b2061;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2067;
+                    break b2061;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2067;
+                break b2061;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2067;
+            break b2061;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11901,77 +11871,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2085: block {
-        b2086: block {
-            b2087: block {
-                b2088: block {
-                    b2089: block {
-                        b2090: block {
-                            b2091: block {
-                                b2092: block {
-                                    b2093: block {
-                                        b2094: block {
-                                            b2095: block {
-                                                b2096: block {
-                                                    b2097: block {
-                                                        b2098: block {
-                                                            b2099: block {
-                                                                b2100: block {
-                                                                    b2101: block {
+    b2079: block {
+        b2080: block {
+            b2081: block {
+                b2082: block {
+                    b2083: block {
+                        b2084: block {
+                            b2085: block {
+                                b2086: block {
+                                    b2087: block {
+                                        b2088: block {
+                                            b2089: block {
+                                                b2090: block {
+                                                    b2091: block {
+                                                        b2092: block {
+                                                            b2093: block {
+                                                                b2094: block {
+                                                                    b2095: block {
                                                                         br_table 9 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2085;
+                                                                break b2079;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2085;
+                                                            break b2079;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2085;
+                                                        break b2079;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2085;
+                                                    break b2079;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2085;
+                                                break b2079;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2085;
+                                            break b2079;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2085;
+                                        break b2079;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2085;
+                                    break b2079;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2085;
+                                break b2079;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2085;
+                            break b2079;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2085;
+                        break b2079;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2085;
+                    break b2079;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2085;
+                break b2079;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2085;
+            break b2079;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -11981,77 +11951,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2103: block {
-        b2104: block {
-            b2105: block {
-                b2106: block {
-                    b2107: block {
-                        b2108: block {
-                            b2109: block {
-                                b2110: block {
-                                    b2111: block {
-                                        b2112: block {
-                                            b2113: block {
-                                                b2114: block {
-                                                    b2115: block {
-                                                        b2116: block {
-                                                            b2117: block {
-                                                                b2118: block {
-                                                                    b2119: block {
+    b2097: block {
+        b2098: block {
+            b2099: block {
+                b2100: block {
+                    b2101: block {
+                        b2102: block {
+                            b2103: block {
+                                b2104: block {
+                                    b2105: block {
+                                        b2106: block {
+                                            b2107: block {
+                                                b2108: block {
+                                                    b2109: block {
+                                                        b2110: block {
+                                                            b2111: block {
+                                                                b2112: block {
+                                                                    b2113: block {
                                                                         br_table 10 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2103;
+                                                                break b2097;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2103;
+                                                            break b2097;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2103;
+                                                        break b2097;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2103;
+                                                    break b2097;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2103;
+                                                break b2097;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2103;
+                                            break b2097;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2103;
+                                        break b2097;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2103;
+                                    break b2097;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2103;
+                                break b2097;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2103;
+                            break b2097;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2103;
+                        break b2097;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2103;
+                    break b2097;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2103;
+                break b2097;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2103;
+            break b2097;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -12061,77 +12031,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2121: block {
-        b2122: block {
-            b2123: block {
-                b2124: block {
-                    b2125: block {
-                        b2126: block {
-                            b2127: block {
-                                b2128: block {
-                                    b2129: block {
-                                        b2130: block {
-                                            b2131: block {
-                                                b2132: block {
-                                                    b2133: block {
-                                                        b2134: block {
-                                                            b2135: block {
-                                                                b2136: block {
-                                                                    b2137: block {
+    b2115: block {
+        b2116: block {
+            b2117: block {
+                b2118: block {
+                    b2119: block {
+                        b2120: block {
+                            b2121: block {
+                                b2122: block {
+                                    b2123: block {
+                                        b2124: block {
+                                            b2125: block {
+                                                b2126: block {
+                                                    b2127: block {
+                                                        b2128: block {
+                                                            b2129: block {
+                                                                b2130: block {
+                                                                    b2131: block {
                                                                         br_table 11 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2121;
+                                                                break b2115;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2121;
+                                                            break b2115;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2121;
+                                                        break b2115;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2121;
+                                                    break b2115;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2121;
+                                                break b2115;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2121;
+                                            break b2115;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2121;
+                                        break b2115;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2121;
+                                    break b2115;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2121;
+                                break b2115;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2121;
+                            break b2115;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2121;
+                        break b2115;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2121;
+                    break b2115;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2121;
+                break b2115;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2121;
+            break b2115;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -12141,77 +12111,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2139: block {
-        b2140: block {
-            b2141: block {
-                b2142: block {
-                    b2143: block {
-                        b2144: block {
-                            b2145: block {
-                                b2146: block {
-                                    b2147: block {
-                                        b2148: block {
-                                            b2149: block {
-                                                b2150: block {
-                                                    b2151: block {
-                                                        b2152: block {
-                                                            b2153: block {
-                                                                b2154: block {
-                                                                    b2155: block {
+    b2133: block {
+        b2134: block {
+            b2135: block {
+                b2136: block {
+                    b2137: block {
+                        b2138: block {
+                            b2139: block {
+                                b2140: block {
+                                    b2141: block {
+                                        b2142: block {
+                                            b2143: block {
+                                                b2144: block {
+                                                    b2145: block {
+                                                        b2146: block {
+                                                            b2147: block {
+                                                                b2148: block {
+                                                                    b2149: block {
                                                                         br_table 12 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2139;
+                                                                break b2133;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2139;
+                                                            break b2133;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2139;
+                                                        break b2133;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2139;
+                                                    break b2133;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2139;
+                                                break b2133;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2139;
+                                            break b2133;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2139;
+                                        break b2133;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2139;
+                                    break b2133;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2139;
+                                break b2133;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2139;
+                            break b2133;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2139;
+                        break b2133;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2139;
+                    break b2133;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2139;
+                break b2133;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2139;
+            break b2133;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -12221,77 +12191,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2157: block {
-        b2158: block {
-            b2159: block {
-                b2160: block {
-                    b2161: block {
-                        b2162: block {
-                            b2163: block {
-                                b2164: block {
-                                    b2165: block {
-                                        b2166: block {
-                                            b2167: block {
-                                                b2168: block {
-                                                    b2169: block {
-                                                        b2170: block {
-                                                            b2171: block {
-                                                                b2172: block {
-                                                                    b2173: block {
+    b2151: block {
+        b2152: block {
+            b2153: block {
+                b2154: block {
+                    b2155: block {
+                        b2156: block {
+                            b2157: block {
+                                b2158: block {
+                                    b2159: block {
+                                        b2160: block {
+                                            b2161: block {
+                                                b2162: block {
+                                                    b2163: block {
+                                                        b2164: block {
+                                                            b2165: block {
+                                                                b2166: block {
+                                                                    b2167: block {
                                                                         br_table 13 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2157;
+                                                                break b2151;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2157;
+                                                            break b2151;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2157;
+                                                        break b2151;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2157;
+                                                    break b2151;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2157;
+                                                break b2151;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2157;
+                                            break b2151;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2157;
+                                        break b2151;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2157;
+                                    break b2151;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2157;
+                                break b2151;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2157;
+                            break b2151;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2157;
+                        break b2151;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2157;
+                    break b2151;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2157;
+                break b2151;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2157;
+            break b2151;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -12301,77 +12271,77 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    b2175: block {
-        b2176: block {
-            b2177: block {
-                b2178: block {
-                    b2179: block {
-                        b2180: block {
-                            b2181: block {
-                                b2182: block {
-                                    b2183: block {
-                                        b2184: block {
-                                            b2185: block {
-                                                b2186: block {
-                                                    b2187: block {
-                                                        b2188: block {
-                                                            b2189: block {
-                                                                b2190: block {
-                                                                    b2191: block {
+    b2169: block {
+        b2170: block {
+            b2171: block {
+                b2172: block {
+                    b2173: block {
+                        b2174: block {
+                            b2175: block {
+                                b2176: block {
+                                    b2177: block {
+                                        b2178: block {
+                                            b2179: block {
+                                                b2180: block {
+                                                    b2181: block {
+                                                        b2182: block {
+                                                            b2183: block {
+                                                                b2184: block {
+                                                                    b2185: block {
                                                                         br_table 14 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] default=0;
                                                                     };
                                                                     unreachable;
                                                                 };
                                                                 "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                                break b2175;
+                                                                break b2169;
                                                             };
                                                             "core:prelude/traits.wado/eq_from_written_cmp.wado/ByHits^core:prelude/traits.wado/Inspect::inspect"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                            break b2175;
+                                                            break b2169;
                                                         };
                                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h2, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                                        break b2175;
+                                                        break b2169;
                                                     };
                                                     self_67 = t.h3;
                                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                    break b2175;
+                                                    break b2169;
                                                 };
                                                 self_67 = t.h4;
                                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                                break b2175;
+                                                break b2169;
                                             };
                                             self_67 = t.h5;
                                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                            break b2175;
+                                            break b2169;
                                         };
                                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h6, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                                        break b2175;
+                                        break b2169;
                                     };
                                     self_67 = t.h7;
                                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                    break b2175;
+                                    break b2169;
                                 };
                                 self_67 = t.h8;
                                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                                break b2175;
+                                break b2169;
                             };
                             self_67 = t.h9;
                             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                            break b2175;
+                            break b2169;
                         };
                         "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h10, $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0);
-                        break b2175;
+                        break b2169;
                     };
                     self_67 = t.h11;
                     "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                    break b2175;
+                    break b2169;
                 };
                 self_67 = t.h12;
                 "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-                break b2175;
+                break b2169;
             };
             self_67 = t.h13;
             "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
-            break b2175;
+            break b2169;
         };
         self_67 = t.h14;
         "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0, self_67);
@@ -13670,12 +13640,12 @@ fn "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$Closure_4^core:prelude/tr
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b2341: block {
-        l2342: loop {
-            break_if b2341 i >= n;
+    b2335: block {
+        l2336: loop {
+            break_if b2335 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l2342;
+            continue l2336;
         };
     };
 }
@@ -13695,9 +13665,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
     $load_0 = self.used;
     count = 0;
     $licm_repr_21 = self.repr;
-    b2344: block {
-        l2345: loop {
-            break_if b2344 (((start_pos >= $load_0) | ((start_pos + 1) >= $load_0)) | (((start_pos + 1) + 1) >= $load_0)) | ((((start_pos + 1) + 1) + 1) >= $load_0);
+    b2338: block {
+        l2339: loop {
+            break_if b2338 start_pos >= $load_0;
             if @unlikely(0 > start_pos) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
@@ -13706,45 +13676,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::count_chars_fro
             b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
             count = count + ((b & 192) != 128);
             start_pos = start_pos + 1;
-            if @unlikely(0 > start_pos) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
-                unreachable;
-            }
-            b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
-            count = count + ((b & 192) != 128);
-            start_pos = start_pos + 1;
-            if @unlikely(0 > start_pos) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
-                unreachable;
-            }
-            b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
-            count = count + ((b & 192) != 128);
-            start_pos = start_pos + 1;
-            if @unlikely(0 > start_pos) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
-                unreachable;
-            }
-            b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
-            count = count + ((b & 192) != 128);
-            start_pos = start_pos + 1;
-            continue l2345;
-        };
-    };
-    b2350: block {
-        l2351: loop {
-            break_if b2350 start_pos >= $load_0;
-            if @unlikely(0 > start_pos) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(start_pos, $load_0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:245"), used: 28 });
-                unreachable;
-            }
-            b = builtin::array_get_value<u8>($licm_repr_21, start_pos);
-            count = count + ((b & 192) != 128);
-            start_pos = start_pos + 1;
-            continue l2351;
+            continue l2339;
         };
     };
     return count;
@@ -13756,46 +13688,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::shift_right$sro
     "core:prelude/string.wado/core:prelude/string.wado/String::append_byte_filled"(self, 0, gap);
     content_bytes = content_bytes - 1;
     gap = start_pos + gap;
-    b2353: block {
-        l2354: loop {
-            break_if b2353 (((content_bytes < 0) | ((content_bytes - 1) < 0)) | (((content_bytes - 1) - 1) < 0)) | ((((content_bytes - 1) - 1) - 1) < 0);
+    b2341: block {
+        l2342: loop {
+            break_if b2341 content_bytes < 0;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
                 unreachable;
             }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
             content_bytes = content_bytes - 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            continue l2354;
-        };
-    };
-    b2359: block {
-        l2360: loop {
-            break_if b2359 content_bytes < 0;
-            "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, gap + content_bytes, $contract_arg_0 = start_pos + content_bytes; self_16 = self.used; if @unlikely($contract_arg_0 >=u self_16) {
-                cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"($contract_arg_0, self_16, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:259"), used: 28 });
-                unreachable;
-            }; builtin::array_get_value<u8>(self.repr, $contract_arg_0));
-            content_bytes = content_bytes - 1;
-            continue l2360;
+            continue l2342;
         };
     };
 }
@@ -13810,12 +13712,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     if local.tee fill_len("core:prelude/primitive.wado/char::len_utf8$sroa[self.value]"(c)) == 1 {
         fill_byte = c & 255;
         j_6 = 0;
-        b2363: block {
-            l2364: loop {
-                break_if b2363 j_6 >= n;
+        b2345: block {
+            l2346: loop {
+                break_if b2345 j_6 >= n;
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, at + j_6, fill_byte);
                 j_6 = j_6 + 1;
-                continue l2364;
+                continue l2346;
             };
         };
         return;
@@ -13824,80 +13726,36 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     c = 0;
     j_6 = encoded.used;
     $licm_repr_25 = encoded.repr;
-    b2365: block {
-        l2366: loop {
-            break_if b2365 c >= n;
+    b2347: block {
+        l2348: loop {
+            break_if b2347 c >= n;
             fill_byte = 0;
             $licm_arith_26 = at + (c * fill_len);
             if fill_len <= j_6 {
-                b2368: block {
-                    l2369: loop {
-                        break_if b2368 (((fill_byte >= fill_len) | ((fill_byte + 1) >= fill_len)) | (((fill_byte + 1) + 1) >= fill_len)) | ((((fill_byte + 1) + 1) + 1) >= fill_len);
+                b2350: block {
+                    l2351: loop {
+                        break_if b2350 fill_byte >= fill_len;
                         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, builtin::array_get_value<u8>($licm_repr_25, fill_byte));
                         fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        continue l2369;
-                    };
-                };
-                b2370: block {
-                    l2371: loop {
-                        break_if b2370 fill_byte >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        continue l2371;
+                        continue l2351;
                     };
                 };
             } else {
-                b2372: block {
-                    l2373: loop {
-                        break_if b2372 (((fill_byte >= fill_len) | ((fill_byte + 1) >= fill_len)) | (((fill_byte + 1) + 1) >= fill_len)) | ((((fill_byte + 1) + 1) + 1) >= fill_len);
+                b2352: block {
+                    l2353: loop {
+                        break_if b2352 fill_byte >= fill_len;
                         "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, if @unlikely(fill_byte >= j_6) {
                             cold_path;
                             "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(fill_byte, j_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
                             unreachable;
                         }; builtin::array_get_value<u8>($licm_repr_25, fill_byte));
                         fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, if @unlikely(fill_byte >= j_6) {
-                            cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(fill_byte, j_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
-                            unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, if @unlikely(fill_byte >= j_6) {
-                            cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(fill_byte, j_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
-                            unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, if @unlikely(fill_byte >= j_6) {
-                            cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(fill_byte, j_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
-                            unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        continue l2373;
-                    };
-                };
-                b2378: block {
-                    l2379: loop {
-                        break_if b2378 fill_byte >= fill_len;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::internal_set_byte_unchecked"(self, $licm_arith_26 + fill_byte, if @unlikely(fill_byte >= j_6) {
-                            cold_path;
-                            "core:prelude/string.wado/core:prelude/string.wado/String::byte_at$contract_report0"(fill_byte, j_6, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/format.wado:278"), used: 28 });
-                            unreachable;
-                        }; builtin::array_get_value<u8>($licm_repr_25, fill_byte));
-                        fill_byte = fill_byte + 1;
-                        continue l2379;
+                        continue l2353;
                     };
                 };
             }
             c = c + 1;
-            continue l2366;
+            continue l2348;
         };
     };
 }

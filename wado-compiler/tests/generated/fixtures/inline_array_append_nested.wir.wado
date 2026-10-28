@@ -374,34 +374,7 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
     $licm_repr_46 = self.repr;
     b47: block {
         l48: loop {
-            break_if b47 (((i >= $licm_used_45) | ((i + 1) >= $licm_used_45)) | (((i + 1) + 1) >= $licm_used_45)) | ((((i + 1) + 1) + 1) >= $licm_used_45);
-            if (local.tee val(builtin::array_get_value<i32>($licm_repr_46, i)) % 2) == 0 {
-                if @unlikely(local.tee used_25(temp.used) >= builtin::array_len(temp.repr)) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(temp);
-                }
-                builtin::array_set<i32>(temp.repr, used_25, val);
-                temp.used = used_25 + 1;
-            }
-            i = i + 1;
-            if (local.tee val(builtin::array_get_value<i32>($licm_repr_46, i)) % 2) == 0 {
-                if @unlikely(local.tee used_25(temp.used) >= builtin::array_len(temp.repr)) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(temp);
-                }
-                builtin::array_set<i32>(temp.repr, used_25, val);
-                temp.used = used_25 + 1;
-            }
-            i = i + 1;
-            if (local.tee val(builtin::array_get_value<i32>($licm_repr_46, i)) % 2) == 0 {
-                if @unlikely(local.tee used_25(temp.used) >= builtin::array_len(temp.repr)) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(temp);
-                }
-                builtin::array_set<i32>(temp.repr, used_25, val);
-                temp.used = used_25 + 1;
-            }
-            i = i + 1;
+            break_if b47 i >= $licm_used_45;
             if (local.tee val(builtin::array_get_value<i32>($licm_repr_46, i)) % 2) == 0 {
                 if @unlikely(local.tee used_25(temp.used) >= builtin::array_len(temp.repr)) {
                     cold_path;
@@ -414,74 +387,21 @@ fn "inline_array_append_nested.wado/inline_array_append_nested.wado/Container::p
             continue l48;
         };
     };
-    b57: block {
-        l58: loop {
-            break_if b57 i >= $licm_used_45;
-            if (local.tee val(builtin::array_get_value<i32>($licm_repr_46, i)) % 2) == 0 {
-                if @unlikely(local.tee used_25(temp.used) >= builtin::array_len(temp.repr)) {
-                    cold_path;
-                    "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(temp);
-                }
-                builtin::array_set<i32>(temp.repr, used_25, val);
-                temp.used = used_25 + 1;
-            }
-            i = i + 1;
-            continue l58;
-        };
-    };
     used_25 = 0;
-    val = temp.used;
+    $licm_used_45 = temp.used;
     $licm_repr_46 = temp.repr;
-    b61: block {
-        l62: loop {
-            break_if b61 (((used_25 >= val) | ((used_25 + 1) >= val)) | (((used_25 + 1) + 1) >= val)) | ((((used_25 + 1) + 1) + 1) >= val);
-            $licm_used_45 = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
-            if @unlikely(local.tee i(self.used) >= builtin::array_len(self.repr)) {
+    b51: block {
+        l52: loop {
+            break_if b51 used_25 >= $licm_used_45;
+            i = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
+            if @unlikely(local.tee val(self.used) >= builtin::array_len(self.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
             }
-            builtin::array_set<i32>(self.repr, i, $licm_used_45);
-            self.used = i + 1;
+            builtin::array_set<i32>(self.repr, val, i);
+            self.used = val + 1;
             used_25 = used_25 + 1;
-            $licm_used_45 = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
-            if @unlikely(local.tee i(self.used) >= builtin::array_len(self.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
-            }
-            builtin::array_set<i32>(self.repr, i, $licm_used_45);
-            self.used = i + 1;
-            used_25 = used_25 + 1;
-            $licm_used_45 = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
-            if @unlikely(local.tee i(self.used) >= builtin::array_len(self.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
-            }
-            builtin::array_set<i32>(self.repr, i, $licm_used_45);
-            self.used = i + 1;
-            used_25 = used_25 + 1;
-            $licm_used_45 = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
-            if @unlikely(local.tee i(self.used) >= builtin::array_len(self.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
-            }
-            builtin::array_set<i32>(self.repr, i, $licm_used_45);
-            self.used = i + 1;
-            used_25 = used_25 + 1;
-            continue l62;
-        };
-    };
-    b67: block {
-        l68: loop {
-            break_if b67 used_25 >= val;
-            $licm_used_45 = builtin::array_get_value<i32>($licm_repr_46, used_25) + 100;
-            if @unlikely(local.tee i(self.used) >= builtin::array_len(self.repr)) {
-                cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self);
-            }
-            builtin::array_set<i32>(self.repr, i, $licm_used_45);
-            self.used = i + 1;
-            used_25 = used_25 + 1;
-            continue l68;
+            continue l52;
         };
     };
 }
