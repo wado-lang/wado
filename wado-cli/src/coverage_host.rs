@@ -228,7 +228,7 @@ impl CoverageRun {
             Ok(reports) => reports
                 .entry(report.clone())
                 .or_default()
-                .register(plans, |path| names[path].clone())
+                .register(plans, |plan| names[plan.path.as_str()].clone())
                 .unwrap_or_else(|mismatch| {
                     *guard = Err(mismatch);
                     Vec::new()

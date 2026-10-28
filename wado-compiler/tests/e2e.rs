@@ -1179,7 +1179,7 @@ fn assert_coverage(
         .unwrap_or_else(|| panic!("[{test_id}] the component carries no coverage section"));
     let mut coverage = Coverage::default();
     let registered = coverage
-        .register(&plans, str::to_string)
+        .register(&plans, |plan| plan.name.clone())
         .unwrap_or_else(|mismatch| panic!("[{test_id}] plans disagree on {}", mismatch.path));
     for counts in per_test {
         coverage.record(&registered, counts, None);

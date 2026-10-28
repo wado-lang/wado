@@ -1216,18 +1216,18 @@ pub struct Registered {
 }
 
 impl Coverage {
-    /// Add one compile's plans under `rename(path)`, each counting every
+    /// Add one compile's plans, each under `key(plan)` and counting every
     /// region whether any test runs it.
     pub fn register(
         &mut self,
         plans: &DecodedPlans,
-        mut rename: impl FnMut(&str) -> String,
+        mut key: impl FnMut(&ModulePlan) -> String,
     ) -> Result<Vec<Registered>, PlanMismatch> {
         plans
             .iter()
             .map(|(plan, base)| {
                 let plan = ModulePlan {
-                    path: rename(&plan.path),
+                    path: key(plan),
                     ..plan.clone()
                 };
                 let ids = *base..base + plan.regions.len() as u32;
