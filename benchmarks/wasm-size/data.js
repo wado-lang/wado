@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793164323683,
+  "lastUpdate": 1793180002883,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71885,6 +71885,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295752,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8bbc55b88470f298c607d0fee0994b74d5ef66e1",
+          "message": "Merge pull request #2484 from wado-lang/claude/determined-keller-oxytgd\n\nperf: compile hello world 28% faster at -O2, and version loops over a reloaded bound",
+          "timestamp": "2026-10-28T18:14:54+09:00",
+          "tree_id": "1d6e17f2d2079047c1b9ec39fa26df50f346e92b",
+          "url": "https://github.com/wado-lang/wado/commit/8bbc55b88470f298c607d0fee0994b74d5ef66e1"
+        },
+        "date": 1793180001837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295574,
             "unit": "bytes"
           }
         ]
