@@ -48,9 +48,9 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32, i32) -> i32;  // TypeId(20)
+type "functype//wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32, i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
 
 type "functype//opt_ctor_forward_slice.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
@@ -65,8 +65,8 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
 
@@ -102,7 +102,7 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
     let status_14: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
     status_14 = $inline_cm_await_blocked_0: block -> i32 {
-        if local.tee packed("wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode"(handle, ptr)) != -1 {
+        if local.tee packed("wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode"(handle, ptr)) != -1 {
             break $inline_cm_await_blocked_0: packed;
         }
         packed = "wasi/waitable-set-new"();
@@ -131,7 +131,7 @@ fn "opt_ctor_forward_slice.wado/$cm_future_read_core:prelude/types.wado/Result<(
         });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle);
     return result;
 }
 

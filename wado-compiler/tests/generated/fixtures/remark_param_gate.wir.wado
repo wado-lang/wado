@@ -35,7 +35,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
@@ -51,7 +51,7 @@ import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdo
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:remark_param_gate.wado::LOG_LEVEL: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 102, 111), used: 4 };
@@ -127,7 +127,7 @@ fn "remark_param_gate.wado/$cm_export__run"() {
         builtin::array_set_u8($array_clone_src_1, 7, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(i, $array_clone_src_1);
         "wasi/stream-drop-writable"($load_1 = i; i = 0; $load_1);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_1 = $moved_4; $moved_4 = 0; $load_1);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($load_1 = $moved_4; $moved_4 = 0; $load_1);
     }
     "wasi/task-return"(0);
 }

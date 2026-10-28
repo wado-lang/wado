@@ -14,6 +14,7 @@ use std::sync::Arc;
 use crate::ast::AstIdSpace;
 use crate::hashmap;
 use crate::kiln::options_check::CanonicalOptions;
+use crate::name::module_parent_dir;
 use crate::remote::{Integrity, PinMismatch, PinnedBy, held_to_use, is_remote};
 use crate::token::Span;
 
@@ -686,19 +687,16 @@ pub trait CompilerHost: Send + Sync {
         false
     }
 
-    /// The root of the package the module at `path` lies in: the directory of
-    /// the nearest `wado.toml` above it, short of a `wado-workspace.toml`, in
-    /// whatever form the host names directories. Two modules share a package
-    /// exactly when they answer the same root, and the answer depends on the
-    /// module's directory alone, so the loader asks once per directory. `None`
-    /// where the module is in no package, as every module is on a host
-    /// without a filesystem.
+    /// Where the directory of the module at `path` lies: the package it is in,
+    /// if any, and its path from this host's base. The answer depends on the
+    /// directory alone, so the loader asks once per directory, and a module's
+    /// name is made of it.
     ///
     /// Required, as is [`Self::package_index`]: a host wrapping another that
     /// left either to a default would place every module outside its package.
-    fn package_root(&self, path: &str) -> Option<String>;
+    fn module_dir(&self, path: &str) -> ModuleDir;
 
-    /// The index of the package rooted at `root`, as [`Self::package_root`]
+    /// The index of the package rooted at `root`, as [`PackageDir::root`]
     /// names it, built as [`Self::dependency_index`] builds the entry's. Asked
     /// for a package a module lies in that no manifest declares, once per
     /// package.
@@ -721,6 +719,42 @@ pub trait CompilerHost: Send + Sync {
     /// depends on hears of it here. Required, so a wrapping host cannot drop
     /// it by leaving it out.
     fn stdlib_module_read(&self, import_path: &str);
+}
+
+/// Where a module's directory lies, as [`CompilerHost::module_dir`] answers it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModuleDir {
+    /// The package the directory lies in, `None` in no package.
+    pub package: Option<PackageDir>,
+    /// The directory, relative to the host's base.
+    pub path: String,
+}
+
+impl ModuleDir {
+    /// The directory of `path` on a host that puts no module in a package:
+    /// its lexical parent.
+    #[must_use]
+    pub fn unpackaged(path: &str) -> Self {
+        Self {
+            package: None,
+            path: module_parent_dir(path).to_string(),
+        }
+    }
+}
+
+/// A directory inside a package.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageDir {
+    /// The package root: the directory of the nearest `wado.toml` above, short
+    /// of a `wado-workspace.toml`, in whatever form the host names directories.
+    /// Two modules share a package exactly when they answer the same root.
+    pub root: String,
+    /// The package as its manifest's `[package]` names it,
+    /// `namespace:name@version` or `name@version`; `None` where it has no
+    /// `[package]`.
+    pub coordinate: Option<String>,
+    /// The directory, relative to the root; empty at the root itself.
+    pub dir: String,
 }
 
 /// The project's `[dependencies]`, resolved for bare-name imports.
@@ -1016,8 +1050,8 @@ impl CompilerHost for InMemoryCompilerHost {
     fn stdlib_module_read(&self, _import_path: &str) {}
 
     /// No manifest is served from memory, so no module lies in a package.
-    fn package_root(&self, _path: &str) -> Option<String> {
-        None
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        ModuleDir::unpackaged(path)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {

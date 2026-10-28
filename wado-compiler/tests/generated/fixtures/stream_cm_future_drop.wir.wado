@@ -39,15 +39,15 @@ type "functype//wasi/$wasi:http/types@0.3.0#[static]response.new" = fn(i32, i32,
 
 type "functype//stream_cm_future_drop.wado/$cm_export__handle" = fn(i32);  // TypeId(9)
 
-type "functype//wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn() -> i64;  // TypeId(10)
+type "functype//wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>" = fn() -> i64;  // TypeId(10)
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(11)
 
-type "functype//wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>" = fn(i32);  // TypeId(12)
+type "functype//wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode" = fn(i32);  // TypeId(13)
+type "functype//wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#Request" = fn(i32);  // TypeId(14)
+type "functype//wasi/resource-drop:wasi:http/types.wado#Request" = fn(i32);  // TypeId(14)
 
 type "functype//stream_cm_future_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields" = fn() -> i32;  // TypeId(15)
 
@@ -59,11 +59,11 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/$wasi:http/types@0.3.0#[constructor]fields from "wasi/$wasi:http/types@0.3.0#[constructor]fields";
 import fn wasi/$wasi:http/types@0.3.0#[static]response.new from "wasi/$wasi:http/types@0.3.0#[static]response.new";
 import memory (1) from "mem/memory";
-import fn wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
+import fn wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode> from "wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
-import fn wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode> from "wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>";
-import fn wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode";
-import fn wasi/resource-drop:wasi/http/types.wado#Request from "wasi/resource-drop:wasi/http/types.wado#Request";
+import fn wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode> from "wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>";
+import fn wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode";
+import fn wasi/resource-drop:wasi:http/types.wado#Request from "wasi/resource-drop:wasi:http/types.wado#Request";
 
 global global:stream_cm_future_drop.wado::$const_obj_0: ref "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" = struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 0 };
 
@@ -110,7 +110,7 @@ fn "stream_cm_future_drop.wado/$cm_task_entry__handle"(request) {
     let $sroa_$pattern_temp_0_0_183: i32;
     let $sroa_$pattern_temp_0_1_184: i32;
     let $sroa_$task_ret_1_186: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
-    $sroa_$pattern_temp_0_0_183 = builtin::i32_wrap_i64(local.tee $cm_pair_180("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
+    $sroa_$pattern_temp_0_0_183 = builtin::i32_wrap_i64(local.tee $cm_pair_180("wasi/future-new:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_184 = builtin::i32_wrap_i64($cm_pair_180 >> 32_i64);
     response = local.tee $pattern_temp_1("stream_cm_future_drop.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(local.tee $moved_6("stream_cm_future_drop.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:stream_cm_future_drop.wado::$const_obj_0, $moved_6 = $sroa_$pattern_temp_0_0_183; $sroa_$pattern_temp_0_0_183 = 0; $moved_6)).0;
     _tx_future = $pattern_temp_1.1;
@@ -118,14 +118,14 @@ fn "stream_cm_future_drop.wado/$cm_task_entry__handle"(request) {
     $moved_6 = 0;
     $moved_6 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_186).payload_0.value;
     "wasi/task-return:handle"(0, $moved_6, 0, 0_i64, 0, 0, 0, 0);
-    "wasi/future-drop-writable:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"($moved_6 = $sroa_$pattern_temp_0_1_184; $sroa_$pattern_temp_0_1_184 = 0; $moved_6);
+    "wasi/future-drop-writable:val-result<option<own<wasi:http/types.wado#Fields>>,wasi:http/types.wado#ErrorCode>"($moved_6 = $sroa_$pattern_temp_0_1_184; $sroa_$pattern_temp_0_1_184 = 0; $moved_6);
     if ref.is_null(_tx_future) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode"(_tx_future.value);
+        "wasi/future-drop-readable:transmission-wasi:http/types.wado#ErrorCode"(_tx_future.value);
     }
     if (request == 0) == 0 {
         $moved_6 = request;
         request = 0;
-        "wasi/resource-drop:wasi/http/types.wado#Request"($moved_6);
+        "wasi/resource-drop:wasi:http/types.wado#Request"($moved_6);
     }
 }
 

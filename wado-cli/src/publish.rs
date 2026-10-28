@@ -162,9 +162,9 @@ fn classify(manifest: &Manifest, root: &Path) -> Verdict {
     if !pkg.publish {
         return Verdict::Skipped("publish = false".to_string());
     }
-    let Some(namespace) = pkg.namespace.as_deref() else {
+    if pkg.namespace.is_none() {
         return Verdict::Skipped("no namespace".to_string());
-    };
+    }
     let mut problems = validate_for_publish(manifest);
     problems.extend(
         pkg.exports
@@ -175,7 +175,7 @@ fn classify(manifest: &Manifest, root: &Path) -> Verdict {
             }),
     );
     if problems.is_empty() {
-        Verdict::Ready(format!("{namespace}:{}@{}", pkg.name, pkg.version))
+        Verdict::Ready(pkg.coordinate())
     } else {
         Verdict::Failed(problems)
     }

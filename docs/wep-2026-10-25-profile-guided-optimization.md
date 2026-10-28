@@ -147,19 +147,15 @@ wants it.
 
 ### A profile names what it measured without machine paths
 
-Every name in a profile resolves the same on any machine and from any entry:
-
-- A module of the package is a file relative to the package root, or for a
-  program without a manifest, relative to the program's directory.
-- A dependency's module is the dependency's package name and version and the
-  file relative to its root, never the cache path it was fetched to. Two
-  versions of one package can be two packages in one build, so the version
-  keeps their names apart. After an upgrade the profile holds no counts for the
-  dependency until the workloads are recorded again.
-- A `core:` module is its import path.
-
-Coverage names a module relative to the entry module's directory instead, which
-two entries in different directories would name apart.
+A profile names a module by the module's name, the one the compiler gives it
+everywhere (see
+[WEP: Module Loader Design](./wep-2026-01-24-module-loader.md#a-module-has-one-name)),
+so every name resolves the same on any machine and from any entry of one
+package. A packaged
+module's name holds its package's name and version, never the cache path it was
+fetched to. Two versions of one package can be two packages in one build, so the
+version keeps their names apart. After an upgrade the profile holds no counts
+for the dependency until the workloads are recorded again.
 
 Under each module the profile lists each function that holds a measured region,
 with:
@@ -248,7 +244,8 @@ Reify and lowering write the compiler's marker as `builtin::$known_cold_path()`,
 so the conflict remark can tell it from the author's until NIR, which has one
 marker: a global's once-guard runs once, and its marker states no guess to
 audit. The marker on a `?` propagating a failure is a guess and is written as
-the author's.
+the author's. The profile's marker states a measurement, so it is written as
+the compiler's.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
@@ -273,11 +270,12 @@ level.
    `#[expect_trap]` or `#[TODO]`, and e2e fixtures state both.
 3. [x] `wado test --pgo`. It records the workloads into `pgo/`, with the
    per-function hash.
-4. [ ] Applying the profile. Reify marks the regions that never ran, a function
+4. [x] Applying the profile. Reify marks the regions that never ran, a function
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo` and `-f no-pgo`.
+5. [ ] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
+   and the compile looks each module up by its name.
 6. [ ] The random-profile differential test.
 7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
@@ -287,8 +285,12 @@ level.
 
 ## Known gaps
 
+- [ ] The conflict remark reads the author's markers and the `?`s from the
+  source, where the plan finds its regions, so nothing reads the difference
+  `$known_cold_path` keeps through TIR.
 - [ ] A region that starts in an expression, the right operand of `&&` or
-  `||`, has no statement position for a marker.
+  `||`, has no statement position for a marker, so the regions inside one that
+  never ran are marked in its place.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.

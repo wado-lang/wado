@@ -4,23 +4,23 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx {  // TypeId(1)
+    mut seen: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct ./sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx {  // TypeId(3)
-    mut seen: i32,
-}
-
 struct effect_handler_xmod_shadowed_effect.wado//$Closure_0 {  // TypeId(4)
-    mut $capture_0: ref "./sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx",
+    mut $capture_0: ref "sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx",
 }
 
-struct effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote {  // TypeId(5)
-    mut outer: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote",
+struct effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote {  // TypeId(5)
+    mut outer: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote",
     mut op_emit: ref struct,
 }
 
@@ -73,7 +73,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(29)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
@@ -93,35 +93,35 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote" = ref.null none;
+global mut global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote" = ref.null none;
 global global:effect_handler_xmod_shadowed_effect.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 82, 101, 109, 111, 116, 101, 58, 58, 101, 109, 105, 116, 96), used: 39 };
 global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(115, 101, 101, 110, 61);
 global global:core:prelude/string.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(110, 61);
 
 fn "effect_handler_xmod_shadowed_effect.wado/run"() with Stdout {
-    let h: ref "./sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx";
-    let $save_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
-    let $local_0: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
-    let $local_1: ref "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
+    let h: ref "sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx";
+    let $save_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
+    let $local_0: ref null "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
+    let $local_1: ref "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote";
     let $local_2: i32;
     let $moved_4_12: i32;
     let $cm_pair_7_15: i64;
     let $sroa_$pattern_temp_0_1_14_22: i32;
-    h = struct.new "./sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx" { seen: 0 };
-    global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = struct.new "effect_handler_xmod_shadowed_effect.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote" { outer: local.tee $save_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote(global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_xmod_shadowed_effect.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_handler_xmod_shadowed_effect.wado/$closure_wrapper_0" } };
-    $mv_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_xmod_shadowed_effect.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($inline__effect_dispatch____sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote)) == 0) {
-            global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    h = struct.new "sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx" { seen: 0 };
+    global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = struct.new "effect_handler_xmod_shadowed_effect.wado//$Dispatch_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote" { outer: local.tee $save_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote(global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_xmod_shadowed_effect.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_handler_xmod_shadowed_effect.wado/$closure_wrapper_0" } };
+    $mv_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_xmod_shadowed_effect.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($inline__effect_dispatch__sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote)) == 0) {
+            global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1.op_emit)).env);
             };
-            global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $local_0;
-            break $inline__effect_dispatch____sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: $local_2;
+            global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $local_0;
+            break $inline__effect_dispatch__sub_effect_handler_xmod_shadowed_effect_handler_wado_Remote__emit_1: $local_2;
         } else {
             let $mv_arg_1: ref "core:prelude/string.wado//String";
             "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_xmod_shadowed_effect.wado::$const_obj_0).repr, $mv_arg_1.used);
@@ -135,8 +135,8 @@ fn "effect_handler_xmod_shadowed_effect.wado/run"() with Stdout {
     $local_2 = $sroa_$pattern_temp_0_1_14_22;
     $sroa_$pattern_temp_0_1_14_22 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2 = $moved_4_12; $moved_4_12 = 0; $local_2);
-    global:effect_handler_xmod_shadowed_effect.wado::$effect_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $save_./sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote;
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2 = $moved_4_12; $moved_4_12 = 0; $local_2);
+    global:effect_handler_xmod_shadowed_effect.wado::$effect_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote = $save_sub/effect_handler_xmod_shadowed_effect_handler.wado/Remote;
     $mv_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_xmod_shadowed_effect.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(h.seen);
     $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"()));
     $moved_4_12 = builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64);
@@ -144,7 +144,7 @@ fn "effect_handler_xmod_shadowed_effect.wado/run"() with Stdout {
     $local_2 = $moved_4_12;
     $moved_4_12 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2 = $sroa_$pattern_temp_0_1_14_22; $sroa_$pattern_temp_0_1_14_22 = 0; $local_2);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2 = $sroa_$pattern_temp_0_1_14_22; $sroa_$pattern_temp_0_1_14_22 = 0; $local_2);
 }
 
 fn "effect_handler_xmod_shadowed_effect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -178,7 +178,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -304,7 +304,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "effect_handler_xmod_shadowed_effect.wado/effect_handler_xmod_shadowed_effect.wado/$Closure_0::$call"(self) {
-    let self_1: ref "./sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx";
+    let self_1: ref "sub/effect_handler_xmod_shadowed_effect_handler.wado//Ctx";
     local.tee self_1(self.$capture_0).seen = self_1.seen + 1;
     return self_1.seen;
 }

@@ -66,7 +66,7 @@ impl CmDecl {
     /// The injective spelling a canonical import name embeds.
     #[must_use]
     pub fn name_suffix(&self) -> String {
-        format!("{}#{}", self.module.to_path_string(), self.name)
+        format!("{}#{}", self.module, self.name)
     }
 }
 

@@ -617,7 +617,7 @@ pub fn path_to_kiln_uri(path: &str) -> String {
 /// [`path_to_kiln_uri`]). Used by [`ModuleLoader::get_source`] for
 /// `ModuleSource::Redirected`. Returns `None` for non-`kiln:` URIs, which
 /// callers pass through unchanged (in-memory hosts key on the URI directly).
-fn strip_kiln_scheme(uri: &str) -> Option<String> {
+pub(crate) fn strip_kiln_scheme(uri: &str) -> Option<String> {
     let parsed = fluent_uri::UriRef::parse(uri).ok()?;
     if parsed.scheme()?.as_str() != "kiln" {
         return None;
@@ -1547,8 +1547,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_source: &str,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        let resolved_filename = entry_filename.unwrap_or("<stdin>");
-        let tentative_entry_source = self.interner.entry_point(resolved_filename);
+        let tentative_entry_source = self.entry_point(entry_filename);
         let entry_ast = {
             let _span = self.logger.span(&format!("parse {tentative_entry_source}"));
             self.parse_source(entry_source, &tentative_entry_source)?
@@ -1569,9 +1568,17 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         entry_ast: Module,
         entry_filename: Option<&str>,
     ) -> Result<LoadResult, LoadError> {
-        let resolved_filename = entry_filename.unwrap_or("<stdin>");
-        let tentative_entry_source = self.interner.entry_point(resolved_filename);
+        let tentative_entry_source = self.entry_point(entry_filename);
         self.load_all_inner(entry_ast, tentative_entry_source).await
+    }
+
+    /// The entry point read from `entry_filename`, `<stdin>` where it has
+    /// none, named once the packages around it are bounded.
+    fn entry_point(&mut self, entry_filename: Option<&str>) -> ModuleSource {
+        let filename = entry_filename.unwrap_or("<stdin>");
+        self.interner
+            .bound_packages(&canonicalize_entry_point(filename), self.host);
+        self.interner.entry_point(filename)
     }
 
     /// Shared post-parse loading: `tentative_entry_source` is the
@@ -1588,10 +1595,6 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &tentative_entry_source.source_path(),
         )?
         .unwrap_or(tentative_entry_source);
-        if let ModuleSource::EntryPoint { filename, .. } = &entry_module_source {
-            let entry = canonicalize_entry_point(filename);
-            self.interner.bound_packages(&entry, self.host);
-        }
         self.entry_module_source = Some(entry_module_source.clone());
 
         let entry_name = entry_module_source.to_string();
@@ -1796,7 +1799,9 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     if is_remote(&path) {
                         self.note_remote(&path, use_decl, from_module_source, &site)?;
                     }
-                    wasm_imports_out.push((self.interner.wasm(&path, kind), kind, site));
+                    let asset = self.interner.wasm(&path, kind);
+                    let asset = self.interner.locate(asset, self.host);
+                    wasm_imports_out.push((asset, kind, site));
                     continue;
                 }
                 let resolved = self
@@ -2163,9 +2168,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         });
     }
 
-    /// Resolve an import source relative to the importing module, or say why
-    /// a bare one names nothing.
+    /// Resolve an import source relative to the importing module, named where
+    /// the host says its file lies, or say why a bare one names nothing.
     fn resolve_import(
+        &mut self,
+        from_module_source: &ModuleSource,
+        import_source: &str,
+    ) -> Result<ModuleSource, LoadError> {
+        let resolved = self.resolve_import_unnamed(from_module_source, import_source)?;
+        Ok(self.interner.locate(resolved, self.host))
+    }
+
+    fn resolve_import_unnamed(
         &mut self,
         from_module_source: &ModuleSource,
         import_source: &str,
@@ -2585,10 +2599,8 @@ mod resolve_include_path_tests {
     #[test]
     fn cross_package_dependency_include_resolves_in_the_dependency_dir() {
         // A `#include_str` in a dependency module must resolve next to that
-        // module, not under the consumer's `base_path`. `source_path` now hands
-        // the dependency its real base-relative path (`../dep/…`, not
-        // `dep:../dep/…`), so the dir prefix is kept and `base_path.join`
-        // lands in the dependency's directory.
+        // module, not under the consumer's `base_path`: `source_path` is the
+        // dependency's base-relative path, not its name.
         let entry = "./src/main.wado";
         let dep_module = "../dep/src/highlight/facade.wado";
         let resolved = resolve(Some(entry), dep_module, "./themes/gale-light.css");

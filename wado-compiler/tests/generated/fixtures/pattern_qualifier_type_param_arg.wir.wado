@@ -185,13 +185,13 @@ type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // Ty
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(50)
 
-type "functype//core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(51)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(51)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(53)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(55)
 
@@ -285,7 +285,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(99)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(100)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(101)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(101)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(102)
 
@@ -300,7 +300,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
 global global:pattern_qualifier_type_param_arg.wado::$const_obj_4: ref Array<u8> = array.new_fixed<u8>(97);
@@ -738,7 +738,7 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -794,7 +794,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, text) {
+fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, text) {
     let $load_1: ref "core:prelude/string.wado//String";
     let $load_5: ref Array<u8>;
     let $load_6: ref Array<u8>;
@@ -874,18 +874,18 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     }
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(payload, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"(payload, f) {
     let $load_2: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_29);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-        "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, payload);
+        "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, payload);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f.buf, global:core:prelude/traits.wado::$const_obj_31);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_28);
         return;
     }
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(local.tee $load_2(f.buf), global:core:prelude/traits.wado::$const_obj_29);
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, payload);
+    "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, payload);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"($load_2, global:core:prelude/traits.wado::$const_obj_28);
 }
 
@@ -894,7 +894,7 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"(payload, f) {
     let $load_2: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_29);
@@ -1074,7 +1074,7 @@ fn "core:prelude/traits.wado/pattern_qualifier_type_param_arg.wado/Maybe<core:pr
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_5);
         s_10 = $mv_0_1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"("pattern_qualifier_type_param_arg.wado/$case_ref$pattern_qualifier_type_param_arg.wado/Maybe<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]"($load_0), f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<core:prelude/string.wado/String>"("pattern_qualifier_type_param_arg.wado/$case_ref$pattern_qualifier_type_param_arg.wado/Maybe<core:prelude/string.wado/String>$core:prelude/string.wado/String$sroa[v.value]$spec0$dae[index]"($load_0), f);
     }
     $mv_1_2 = global:core:prelude/traits.wado::$const_obj_7.1;
     if ref.is_null($load_0) {
@@ -1105,7 +1105,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_qua
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_pattern_qualifier_type_param_arg_wado__tmpl_0369114a0bbf6acc_pattern_qualifier_type_param_arg_wado_Maybe_core_prelude_string_wado_String____fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
     $load_7 = t.h1;
-    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_pattern_qualifier_type_param_arg_wado__tmpl_0369114a0bbf6acc_pattern_qualifier_type_param_arg_wado_Maybe_core_prelude_string_wado_String____fmt_6_0, $load_7);
+    "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_pattern_qualifier_type_param_arg_wado__tmpl_0369114a0bbf6acc_pattern_qualifier_type_param_arg_wado_Maybe_core_prelude_string_wado_String____fmt_6_0, $load_7);
     self_11 = "pattern_qualifier_type_param_arg.wado/pattern_qualifier_type_param_arg.wado/$tmpl$0369114a0bbf6acc^core:prelude/traits.wado/ReflectTemplate::tail"(t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
     return out_3;
@@ -1308,7 +1308,7 @@ fn "core:prelude/traits.wado/pattern_qualifier_type_param_arg.wado/Maybe<i32>^co
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_5);
         s_10 = $mv_0_1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, s_10);
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("pattern_qualifier_type_param_arg.wado/$case_ref$pattern_qualifier_type_param_arg.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i32>$sroa[payload.value]"("pattern_qualifier_type_param_arg.wado/$case_ref$pattern_qualifier_type_param_arg.wado/Maybe<i32>$i32$sroa[v.value]$spec0$dae[index]"(self).value, f);
     }
     $mv_1_2 = global:core:prelude/traits.wado::$const_obj_43.1;
     if $load_0 == 1 {

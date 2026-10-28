@@ -818,8 +818,8 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.serves_core()
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root(path)
+    fn module_dir(&self, path: &str) -> wado_compiler::ModuleDir {
+        self.inner.module_dir(path)
     }
 
     fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {

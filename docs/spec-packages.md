@@ -559,7 +559,9 @@ A `use` resolves against the manifest of the package its module belongs to. A
 `[dependencies]`, never the consumer's. A consumer cannot import a dependency's
 dependency without declaring it in its own manifest. The same holds for a file
 reached by a path: it belongs to the package whose tree holds it, declared as a
-dependency or not, and a file in no package declares nothing.
+dependency or not, and a file in no package declares nothing. A dependency's
+entry module reached by a path, a single-file dependency's included, is that
+dependency's module: one file is one module however a `use` reaches it.
 
 ### The Library World as a Component
 

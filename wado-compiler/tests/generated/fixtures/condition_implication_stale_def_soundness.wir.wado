@@ -36,7 +36,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -53,7 +53,7 @@ import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#now from "wasi/$wasi:clocks/mo
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:condition_implication_stale_def_soundness.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(57, 57);
@@ -74,7 +74,7 @@ fn "condition_implication_stale_def_soundness.wado/run"() with Stdout, Monotonic
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
 }
 
 fn "condition_implication_stale_def_soundness.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() with MonotonicClock {

@@ -1,0 +1,19 @@
+// A single-file dependency reached by its name and by a path is one module:
+// both reach one global, and one type.
+
+use { println, Stdout } from "core:cli";
+use { Count, tally } from "lib:counter";
+use { tally as tally_by_path } from "./sub/module_name_counter.wado";
+
+export fn run() with Stdout {
+    let a: Count = tally();
+    let b: Count = tally_by_path();
+    let c: Count = tally();
+    println(`${a.n} ${b.n} ${c.n}`);
+}
+
+__DATA__
+{
+  "stdout": "1 2 3\n",
+  "dependencies": { "lib:counter": "sub/module_name_counter.wado" }
+}

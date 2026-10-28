@@ -132,8 +132,8 @@ pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
     GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
     GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ProbeInput, ProbeRequest, Severity,
-    SourceError, SourceReader,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
+    ProbeRequest, Severity, SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{
@@ -251,6 +251,9 @@ pub struct CompileResult {
     /// provider to skip a second compile when the driver asks for the
     /// descriptor.
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
+    /// Each region [`CompilerOptions::profile`] marked cold, as
+    /// `module:line:column kind`.
+    pub cold_regions: Vec<String>,
 }
 
 /// Report a compilation error the pipeline has no span for — it names the
@@ -518,6 +521,9 @@ pub struct CompilerOptions {
     /// When `Some`, instrument the modules this scope measures and carry
     /// their plan in the `org.wado-lang.coverage` section. Test world only.
     pub coverage: Option<coverage::CoverageScope>,
+    /// When `Some`, mark cold each region the profile recorded no run of. A
+    /// module is looked up under its name ([`coverage::ModulePlan::name`]).
+    pub profile: Option<Arc<pgo::Profile>>,
     /// How many threads the optimizer visits functions on. The output does not
     /// depend on it. A host compiling several files at once passes 1.
     pub parallelism: usize,
@@ -545,6 +551,7 @@ impl Default for CompilerOptions {
             params: param_resolution::ParamInputs::default(),
             embed_wit_contract: None,
             coverage: None,
+            profile: None,
             parallelism: 1,
         }
     }
@@ -759,7 +766,7 @@ pub async fn package_unused_diagnostics<H: CompilerHost>(
         production,
         walked,
     }));
-    let sem = semantics::semantics_with_logger(load, &logger, false, None, &scope);
+    let sem = semantics::semantics_with_logger(load, &logger, false, None, None, &scope);
     sem.is_complete()
         .then(|| unused_diagnostics(&sem, lints, false))
 }
@@ -1372,21 +1379,8 @@ pub async fn compile_with_options<H: CompilerHost>(
         }
     }
 
-    // Wrap all subsequent Bail errors with is_todo_module
-    let result = compile_after_load(load_result, options, &logger, filename);
-    match result {
-        Ok((wasm, module, wir_package, wit_emit_snapshot, kiln_options_descriptor)) => {
-            Ok(CompileResult {
-                wasm,
-                module,
-                wir_package,
-                is_todo_module,
-                wit_emit_snapshot,
-                kiln_options_descriptor,
-            })
-        }
-        Err(Bail) => Err(CompileFailure { is_todo_module }),
-    }
+    compile_after_load(load_result, options, &logger, filename, is_todo_module)
+        .map_err(|Bail| CompileFailure { is_todo_module })
 }
 
 /// Compile each `with { provider: "./p.wado" }` directive into a provider
@@ -1530,16 +1524,8 @@ fn compile_after_load<H: CompilerHost>(
     options: CompilerOptions,
     logger: &Logger<'_, H>,
     filename: Option<String>,
-) -> Result<
-    (
-        Vec<u8>,
-        ast::Module,
-        Option<wir::WirPackage>,
-        Option<wit_emit::WitEmitSnapshot>,
-        Option<kiln::OptionsDescriptor>,
-    ),
-    Bail,
-> {
+    is_todo_module: bool,
+) -> Result<CompileResult, Bail> {
     let module_name = filename.unwrap_or_else(|| "module".to_string());
     // Kept for attributing optimizer remarks to the entry file; `module_name`
     // itself is moved into the `Package` before remarks are emitted.
@@ -1596,11 +1582,13 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         true,
         options.coverage,
+        options.profile.as_deref(),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
         return Err(Bail);
     }
+    let cold_regions = sem.cold_regions().to_vec();
 
     // Clone the WIT subset before `sem` is destructured into codegen (issue
     // #1654), so it survives the move. Captured pre-`--lib`-registration to
@@ -2351,18 +2339,15 @@ fn compile_after_load<H: CompilerHost>(
         }
     };
 
-    // Return the entry AST for tooling
-    Ok((
+    Ok(CompileResult {
         wasm,
-        entry_ast,
-        if options.retain_wir {
-            Some(wir_package)
-        } else {
-            None
-        },
+        module: entry_ast,
+        wir_package: options.retain_wir.then_some(wir_package),
+        is_todo_module,
         wit_emit_snapshot,
         kiln_options_descriptor,
-    ))
+        cold_regions,
+    })
 }
 
 /// Deep-clone TIR modules into a fully independent, frozen view.
@@ -2527,6 +2512,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         load_result,
         &logger,
         true,
+        None,
         None,
         &LivenessScope::Compilation,
     );

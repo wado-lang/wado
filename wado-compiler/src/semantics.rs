@@ -31,6 +31,7 @@ use crate::logger::Logger;
 use crate::marker::write_out_markers;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::resolve_import_with_entry;
+use crate::pgo::{ColdMap, Profile};
 use crate::resolve::Resolutions;
 use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
 use crate::symbol::{Symbol, SymbolTable};
@@ -114,6 +115,8 @@ pub struct Semantics {
     /// The coverage plan reify instrumented this compile with, under
     /// `wado test --coverage` or `--pgo`.
     pub(crate) coverage: Option<CoverageMap>,
+    /// Where the profile this compile applied marked code cold.
+    pub(crate) cold: Option<ColdMap>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -219,12 +222,18 @@ impl Semantics {
     pub fn coverage_plan_text(&self) -> Option<String> {
         let state = self.state.as_ref()?;
         let module = self.modules.get(&self.entry_module_source)?;
-        let (plan, ..) = plan_module(
+        let planned = plan_module(
             &self.entry_module_source,
             module,
             &rt_unreachable_calls(state, &self.symbols),
         );
-        Some(render_plan(&plan))
+        Some(render_plan(&planned.plan))
+    }
+
+    /// Each region the profile marked cold, as `module:line:column kind`.
+    #[must_use]
+    pub fn cold_regions(&self) -> &[String] {
+        self.cold.as_ref().map_or(&[], ColdMap::regions)
     }
 
     /// True when every analysis phase ran to completion without bailing.
@@ -346,6 +355,7 @@ impl Semantics {
             export_mappings: ExportMappings::default(),
             published_names: IndexMap::default(),
             coverage: None,
+            cold: None,
         }
     }
 
@@ -1506,18 +1516,21 @@ pub fn semantics_of<H: CompilerHost>(
         &logger,
         build_tir,
         None,
+        None,
         &LivenessScope::Compilation,
     )
 }
 
 /// Logger-sharing variant. Internal: lets callers that already maintain a
 /// `Logger` for the full compile pipeline nest analyze/resolve trace
-/// spans under the same root.
+/// spans under the same root. Reify instruments for `coverage` and marks
+/// cold what `profile` never ran.
 pub(crate) fn semantics_with_logger<H: CompilerHost>(
     mut load_result: loader::LoadResult,
     logger: &Logger<'_, H>,
     build_tir: bool,
     coverage: Option<CoverageScope>,
+    profile: Option<&Profile>,
     liveness_scope: &LivenessScope,
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
@@ -1545,7 +1558,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // guard); a fresh full pipeline runs in that case.
     let snapshot = {
         let _span = logger.span("stdlib_snapshot");
-        get_or_init_snapshot(coverage)
+        get_or_init_snapshot(coverage, profile)
             .filter(|snap| reparsed_snapshot_module(snap, &load_result.modules).is_none())
     };
 
@@ -1631,6 +1644,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
             snapshot.as_deref(),
             build_tir,
             coverage,
+            profile,
             liveness_scope,
         ) {
             Ok(m) => (m, true),
@@ -1664,6 +1678,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
     // it onto `Semantics` for the diagnostic emitter and LSP.
     let liveness = std::mem::take(&mut state.liveness);
     let coverage = state.coverage.take();
+    let cold = state.cold.take();
 
     let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
 
@@ -1705,6 +1720,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         export_mappings,
         published_names,
         coverage,
+        cold,
     }
 }
 
@@ -1818,6 +1834,7 @@ mod tests {
     use super::*;
     use crate::compiler_host::InMemoryCompilerHost;
     use crate::hashmap;
+    use crate::pgo;
     use crate::tir::{TirExpr, TirExprKind};
     use crate::tir_visitor::TirRefVisitor;
 
@@ -1867,7 +1884,7 @@ mod tests {
     /// place rather than a copy made per compile.
     #[test]
     fn a_compile_shares_the_snapshot_facts() {
-        let snap = get_or_init_snapshot(None).expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(None, None).expect("not re-entering the builder");
         let snap_state = snap
             .state
             .as_ref()
@@ -1889,6 +1906,16 @@ mod tests {
 
     /// What `wado test --coverage --coverage-include=stdlib` analyzes `source` to.
     fn measuring_stdlib(source: &str) -> Semantics {
+        analyzed(source, Some(STDLIB), None)
+    }
+
+    /// `source` analyzed as `entry.wado`, measuring `coverage` and applying
+    /// `profile`.
+    fn analyzed(
+        source: &str,
+        coverage: Option<CoverageScope>,
+        profile: Option<&Profile>,
+    ) -> Semantics {
         let host = InMemoryCompilerHost::new();
         let loaded = block_on(load(
             parse(source),
@@ -1902,7 +1929,8 @@ mod tests {
             loaded,
             &Logger::new(&host, LogLevel::default()),
             true,
-            Some(STDLIB),
+            coverage,
+            profile,
             &LivenessScope::Compilation,
         )
     }
@@ -1917,7 +1945,7 @@ mod tests {
     /// whatever else it loads.
     #[test]
     fn a_stdlib_measuring_compile_seeds_from_the_probed_snapshot() {
-        let snap = get_or_init_snapshot(Some(STDLIB)).expect("not re-entering the builder");
+        let snap = get_or_init_snapshot(Some(STDLIB), None).expect("not re-entering the builder");
         let seed = snap
             .coverage
             .as_ref()
@@ -1936,11 +1964,11 @@ mod tests {
             &snap.state.as_ref().expect("complete").module_semantics[prelude],
         ));
 
-        let base_of = |map: &CoverageMap, path: &str| {
+        let base_of = |map: &CoverageMap, name: &str| {
             map.modules
                 .iter()
                 .zip(&map.bases)
-                .find_map(|(plan, &base)| (plan.path == path).then_some(base))
+                .find_map(|(plan, &base)| (plan.name == name).then_some(base))
         };
         let map = sem.coverage.as_ref().expect("the compile measures");
         assert_eq!(base_of(map, "core:prelude"), base_of(seed, "core:prelude"));
@@ -1965,7 +1993,7 @@ mod tests {
                 self.walk_expr(expr);
             }
         }
-        let seed_end = get_or_init_snapshot(Some(STDLIB))
+        let seed_end = get_or_init_snapshot(Some(STDLIB), None)
             .expect("not re-entering the builder")
             .coverage
             .as_ref()
@@ -1992,22 +2020,126 @@ mod tests {
         assert!(probes.0.iter().any(|&id| id < u64::from(seed_end)));
     }
 
+    /// The cold markers in `block`, by who placed them.
+    struct Markers(Vec<String>);
+
+    impl TirRefVisitor for Markers {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Call { func, .. } = &expr.kind
+                && let Some(name @ ("cold_path" | "$known_cold_path")) = func.intrinsic()
+            {
+                self.0.push(name.to_string());
+            }
+            self.walk_expr(expr);
+        }
+    }
+
+    /// The cold markers in each function of `modules`, by function name.
+    fn markers<'m>(
+        modules: impl IntoIterator<Item = &'m TirModule>,
+    ) -> IndexMap<String, Vec<String>> {
+        let mut out = IndexMap::default();
+        for module in modules {
+            for func in &module.functions {
+                let func = func.borrow();
+                let mut markers = Markers(Vec::new());
+                if let Some(body) = func.body.as_ref() {
+                    markers.visit_block(body);
+                }
+                out.insert(func.name.clone(), markers.0);
+            }
+        }
+        out
+    }
+
+    /// A profile marks in reify each outermost region it recorded no run of,
+    /// with the compiler's marker: a function that never ran once, at its
+    /// start.
+    #[test]
+    fn a_profile_marks_what_never_ran_cold() {
+        let source = "fn ran(x: i32) -> i32 { if x > 0 { return 1; } return 0; }
+             fn never(x: i32) -> i32 { if x > 0 { return 1; } return 0; }
+             export fn run() { ran(1); never(1); }";
+        let plain = analyzed(source, Some(CoverageScope::default()), None);
+        let plan = &plain
+            .coverage
+            .as_ref()
+            .expect("the compile measures")
+            .modules[0];
+        let hash = |name: &str| {
+            plan.functions
+                .iter()
+                .find(|f| f.name == name)
+                .expect("planned")
+                .hash
+        };
+        // `ran`'s body and its `then` ran, its omitted `else` and the rest
+        // never did.
+        let profile = pgo::parse(&format!(
+            "wado-pgo 1\nmodule entry.wado\nfn {:016x} 1 ran\n0 1\n1 1\nfn {:016x} 2 never\n",
+            hash("ran"),
+            hash("never")
+        ))
+        .expect("it parses");
+        let sem = analyzed(source, None, Some(&profile));
+        assert_eq!(
+            sem.cold_regions(),
+            [
+                "entry.wado:1:47 else",
+                "entry.wado:1:48 rest",
+                "entry.wado:2:38 fn"
+            ]
+        );
+        let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
+        assert_eq!(markers["ran"], ["$known_cold_path", "$known_cold_path"]);
+        assert_eq!(markers["never"], ["$known_cold_path"]);
+        assert_eq!(markers["run"], [] as [String; 0]);
+    }
+
+    /// The snapshot a compile applying a profile to the stdlib seeds from has
+    /// the stdlib's markers in place, and the compile reports them as its own.
+    #[test]
+    fn a_profiled_compile_seeds_from_a_marked_snapshot() {
+        let probed = get_or_init_snapshot(Some(STDLIB), None).expect("not building");
+        let plan = probed
+            .coverage
+            .as_ref()
+            .expect("the snapshot measures the stdlib")
+            .modules
+            .iter()
+            .find(|plan| plan.path == "core:prelude/array.wado")
+            .expect("the prelude holds `Array`");
+        let function = &plan.functions[0];
+        let profile = pgo::parse(&format!(
+            "wado-pgo 1\nmodule {}\nfn {:016x} {} {}\n",
+            plan.path, function.hash, function.line, function.name
+        ))
+        .expect("it parses");
+
+        let plain = get_or_init_snapshot(None, None).expect("not building");
+        let marked = get_or_init_snapshot(None, Some(&profile)).expect("not building");
+        let count = |snap: &Semantics| {
+            markers(snap.tir_modules.values())
+                .values()
+                .flatten()
+                .filter(|marker| *marker == "$known_cold_path")
+                .count()
+        };
+        assert_eq!(count(&marked), count(&plain) + 1);
+        let again = get_or_init_snapshot(None, Some(&profile)).expect("not building");
+        assert!(std::rc::Rc::ptr_eq(&marked, &again));
+
+        let sem = analyzed("export fn run() {}", None, Some(&profile));
+        let region = &marked.cold_regions()[0];
+        assert!(region.starts_with("core:prelude/array.wado:"), "{region}");
+        assert_eq!(sem.cold_regions(), marked.cold_regions());
+    }
+
     /// A cold marker says after reify who placed it: the author's and `?`'s
     /// guesses are `cold_path`, and the compiler's, where the program itself
     /// makes a path rare, are `$known_cold_path`.
     #[test]
     fn a_cold_marker_records_who_placed_it() {
-        struct Markers(Vec<String>);
-        impl TirRefVisitor for Markers {
-            fn visit_expr(&mut self, expr: &TirExpr) {
-                if let TirExprKind::Call { func, .. } = &expr.kind
-                    && let Some(name @ ("cold_path" | "$known_cold_path")) = func.intrinsic()
-                {
-                    self.0.push(name.to_string());
-                }
-                self.walk_expr(expr);
-            }
-        }
         let host = InMemoryCompilerHost::new();
         let sem = block_on(semantics(
             "fn authored(x: i32) -> i32 { if x > 0 { builtin::cold_path(); return 1; } return 0; }
@@ -2018,22 +2150,11 @@ mod tests {
             &host,
             Some("entry.wado"),
         ));
-        let entry = &sem.tir_modules[&sem.entry_module_source];
-        let markers = |name: &str| {
-            let func = entry
-                .functions
-                .iter()
-                .find(|f| f.borrow().name == name)
-                .expect("`run` keeps it live")
-                .borrow();
-            let mut markers = Markers(Vec::new());
-            markers.visit_block(func.body.as_ref().expect("it has a body"));
-            markers.0
-        };
-        assert_eq!(markers("authored"), ["cold_path"]);
-        assert_eq!(markers("guessed"), ["cold_path"]);
-        assert_eq!(markers("asserted"), ["$known_cold_path"]);
-        assert_eq!(markers("panicked"), ["$known_cold_path"]);
+        let markers = markers([&sem.tir_modules[&sem.entry_module_source]]);
+        assert_eq!(markers["authored"], ["cold_path"]);
+        assert_eq!(markers["guessed"], ["cold_path"]);
+        assert_eq!(markers["asserted"], ["$known_cold_path"]);
+        assert_eq!(markers["panicked"], ["$known_cold_path"]);
     }
 
     /// What an `iter_*` yields is what a point lookup answers, so the entry a

@@ -41,7 +41,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -60,11 +60,11 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:./sub/global_dce_helper.wado::USED_COUNTER: i32 = 0;
+global mut global:sub/global_dce_helper.wado::USED_COUNTER: i32 = 0;
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(99, 111, 117, 110, 116, 101, 114, 61);
 
 fn "global_dce_cross_module.wado/run"() with Stdout {
@@ -73,16 +73,16 @@ fn "global_dce_cross_module.wado/run"() with Stdout {
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
-    global:./sub/global_dce_helper.wado::USED_COUNTER = global:./sub/global_dce_helper.wado::USED_COUNTER + 1;
-    global:./sub/global_dce_helper.wado::USED_COUNTER = global:./sub/global_dce_helper.wado::USED_COUNTER + 1;
-    message_0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<global_dce_cross_module.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(global:./sub/global_dce_helper.wado::USED_COUNTER);
+    global:sub/global_dce_helper.wado::USED_COUNTER = global:sub/global_dce_helper.wado::USED_COUNTER + 1;
+    global:sub/global_dce_helper.wado::USED_COUNTER = global:sub/global_dce_helper.wado::USED_COUNTER + 1;
+    message_0 = "core:prelude/string.wado/core:prelude/string.wado/String::format<global_dce_cross_module.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(global:sub/global_dce_helper.wado::USED_COUNTER);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $moved_4 = "global_dce_cross_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
     $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
     $sroa_$pattern_temp_0_1_14 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13, message_0.repr, message_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_13);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_13);
 }
 
 fn "global_dce_cross_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

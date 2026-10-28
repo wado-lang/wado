@@ -28,7 +28,9 @@ use std::alloc::{Layout, alloc, dealloc};
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
 
-use wado_compiler::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
+use wado_compiler::compiler_host::{
+    CompilerHost, Diagnostic, InMemoryCompilerHost, ModuleDir, SourceError,
+};
 use wado_compiler::{
     Code, CompilerOptions, DependencyIndex, LogLevel, OptLevel, Severity, compile_with_options,
 };
@@ -99,8 +101,8 @@ impl<F: Fn(&str) + Send + Sync> CompilerHost for ProgressHost<F> {
         self.inner.stdlib_module_read(import_path);
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root(path)
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        self.inner.module_dir(path)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {

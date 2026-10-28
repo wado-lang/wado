@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use indexmap::IndexMap;
 use wado_compiler::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorOutputFile, GeneratorRequest,
-    GeneratorResponse, GeneratorRunnerError, SourceError,
+    GeneratorResponse, GeneratorRunnerError, ModuleDir, SourceError,
 };
 use wado_compiler::kiln::{DeclSite, GeneratorModule, Invocation, InvocationPath};
 use wado_host::kiln::driver::{
@@ -93,8 +93,8 @@ impl CompilerHost for StubHost {
 
     fn stdlib_module_read(&self, _import_path: &str) {}
 
-    fn package_root(&self, _path: &str) -> Option<String> {
-        None
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        ModuleDir::unpackaged(path)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
