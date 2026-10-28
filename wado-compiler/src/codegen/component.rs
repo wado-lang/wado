@@ -22,7 +22,7 @@ use crate::component_model::{
     cm_instance_key, cm_return_needs_outptr, emit_cm_defined, one_per_cm_name, parse_resource_func,
 };
 use crate::coverage;
-use crate::defs::{DefId, DefKind};
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
@@ -2115,14 +2115,9 @@ fn generate_cm_imports(
                 );
                 import_interface_with_resource(builder, ctx, project, interface(&entry.fq));
             }
-            ImportKind::ResourceUsingInterface => import_resource_using_interface(
-                builder,
-                ctx,
-                project,
-                import_plan,
-                interface(&entry.fq),
-                provides,
-            ),
+            ImportKind::ResourceUsingInterface => {
+                import_function_interface(builder, ctx, project, interface(&entry.fq), provides);
+            }
             ImportKind::WorldFunction => {}
         }
     }
@@ -2644,203 +2639,12 @@ fn import_resource_defining_interface(
 
     // Intern the `result<own<response>, error-code>` handler composite when this
     // interface provides both arms (the handler/world-export shape). The export
-    // lift and any client interface resolve it by structure.
+    // lift resolves it by structure.
     if let Some(error_code) = error_code_def(project, types_fq)
         && let Some(response) = cm_decl_def(project, types_fq, RESPONSE_WADO_NAME)
         && let Some(key) = handler_result_key(ctx, response, error_code)
     {
         intern_cm_type(builder, ctx, &key, None);
-    }
-}
-
-/// Resolve a function signature type to a component-level type index, reusing
-/// what a resource-defining interface already emitted: the own-handles and
-/// error-code its declarations key, and the interned `result<...>`.
-///
-/// For a composite interface such as the HTTP client, whose signatures reference
-/// another interface's resources and error composite.
-fn component_type_idx_for_signature_type(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    project: &NirPackage,
-    ty: &Type,
-) -> u32 {
-    let registry = &project.cm_interface_registry;
-    let item = registry.type_decls().item_of(ty);
-    match ty {
-        Type::Generic(g) if item == Some(CompilerItem::AsyncCall) => {
-            component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
-        }
-        Type::Generic(g) if item == Some(CompilerItem::Result) => {
-            let ok = component_type_idx_for_signature_type(builder, ctx, project, &g.args[0]);
-            let err = component_type_idx_for_signature_type(builder, ctx, project, &g.args[1]);
-            intern_cm_type(
-                builder,
-                ctx,
-                &CmTypeKey::Result {
-                    ok: Some(Box::new(CmTypeKey::Leaf(ok))),
-                    err: Some(Box::new(CmTypeKey::Leaf(err))),
-                },
-                None,
-            )
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            component_type_idx_for_signature_type(builder, ctx, project, inner)
-        }
-        Type::Named(named) => {
-            let (def, kind) = {
-                let type_table = project.type_table.borrow();
-                let def = registry
-                    .declared_def(named, type_table.defs())
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "composite signature type `{}` names no declaration",
-                            named.name
-                        )
-                    });
-                (def, type_table.defs().kind(def))
-            };
-            if kind == DefKind::Resource {
-                return own_handle_idx(ctx, def).unwrap_or_else(|| {
-                    unaliased(&format!("the `own<>` handle of `{}`", named.name))
-                });
-            }
-            // A non-resource named type (e.g. the error composite's `error-code`
-            // variant) resolves to the component type the resource-defining pass
-            // aliased to the outer scope, which fails loudly if it was not
-            // exposed there.
-            ctx.decl_type_idx(def)
-                .unwrap_or_else(|| unaliased(&format!("`{}`", named.name)))
-        }
-        other => panic!("unsupported composite signature type: {other:?}"),
-    }
-}
-
-/// Import a function-bearing interface whose signatures reference the resources
-/// and error composite of a resource-defining interface (e.g. `wasi:http/client`,
-/// whose `send` is `own<request> -> result<own<response>, error-code>`). Each
-/// param/result type is resolved to a component-level type the resource-defining
-/// pass already emitted, then outer-aliased into this interface's instance.
-fn import_resource_using_composite_interface(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    project: &NirPackage,
-    iface: &CmInterfaceInfo,
-) {
-    let iface_fq = iface.path.as_str();
-    let funcs: Vec<&CmFunctionInfo> = iface
-        .functions
-        .iter()
-        .filter(|f| project.emits_cm_function(f))
-        .collect();
-    if funcs.is_empty() {
-        return;
-    }
-
-    struct ResolvedSig {
-        wasi_name: String,
-        is_async: bool,
-        params: Vec<(String, u32)>,
-        result: Option<u32>,
-    }
-    let sigs: Vec<ResolvedSig> = funcs
-        .iter()
-        .map(|f| {
-            let params = f
-                .params
-                .iter()
-                .map(|(_, cm_name, ty)| {
-                    let resolved = project.cm_interface_registry.resolve_type(ty);
-                    (
-                        cm_name.clone(),
-                        component_type_idx_for_signature_type(builder, ctx, project, &resolved),
-                    )
-                })
-                .collect();
-            let result = f.return_type.as_ref().map(|ty| {
-                let resolved = project.cm_interface_registry.resolve_type(ty);
-                component_type_idx_for_signature_type(builder, ctx, project, &resolved)
-            });
-            ResolvedSig {
-                wasi_name: f.wasi_func_name.clone(),
-                is_async: f.is_async,
-                params,
-                result,
-            }
-        })
-        .collect();
-
-    let instance_type_name = format!("{}-{}-instance-type", iface.package, iface.interface);
-    let instance_type_idx = ctx.register_type(&instance_type_name);
-    {
-        let (_, enc) = builder.ty(Some(&instance_type_name));
-        let mut instance_type = InstanceType::new();
-        let mut alias_local: IndexMap<u32, u32> = IndexMap::default();
-        let mut next_local = 0u32;
-        let mut alias = |it: &mut InstanceType, comp_idx: u32| -> u32 {
-            if let Some(&l) = alias_local.get(&comp_idx) {
-                return l;
-            }
-            it.alias(Alias::Outer {
-                kind: ComponentOuterAliasKind::Type,
-                count: 1,
-                index: comp_idx,
-            });
-            let l = next_local;
-            next_local += 1;
-            alias_local.insert(comp_idx, l);
-            l
-        };
-        for sig in &sigs {
-            for (_, comp_idx) in &sig.params {
-                alias(&mut instance_type, *comp_idx);
-            }
-            if let Some(comp_idx) = sig.result {
-                alias(&mut instance_type, comp_idx);
-            }
-        }
-
-        let mut deferred: Vec<(String, u32)> = Vec::new();
-        for sig in &sigs {
-            let params: Vec<(&str, ComponentValType)> = sig
-                .params
-                .iter()
-                .map(|(n, ci)| (n.as_str(), ComponentValType::Type(alias_local[ci])))
-                .collect();
-            let result = sig
-                .result
-                .map(|ci| ComponentValType::Type(alias_local[&ci]));
-            let mut fe = instance_type.ty().function();
-            if sig.is_async {
-                fe.async_(true).params(params).result(result);
-            } else {
-                fe.params(params).result(result);
-            }
-            let func_type_local = next_local;
-            next_local += 1;
-            deferred.push((sig.wasi_name.clone(), func_type_local));
-        }
-        for (name, idx) in &deferred {
-            instance_type.export(name, wasm_encoder::ComponentTypeRef::Func(*idx));
-        }
-        enc.instance(&instance_type);
-    }
-
-    let instance_key = iface.instance_key();
-    ctx.register_instance(&instance_key);
-    builder.import(
-        iface_fq,
-        wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
-    );
-
-    for f in &funcs {
-        let local_name = f.local_alias_name();
-        ctx.register_comp_func(&local_name);
-        builder.alias_export(
-            ctx.instance_idx(&instance_key),
-            &f.wasi_func_name,
-            ComponentExportKind::Func,
-        );
     }
 }
 
@@ -3037,57 +2841,6 @@ fn import_type_source(
         &instance_name,
         provides,
     );
-}
-
-/// Whether a resource-using interface's used signatures reference resources
-/// defined by a `ResourceDefiningInterface` (rather than a plain resource
-/// source). Such interfaces consume that interface's `{pkg}-*` own-handles and
-/// error composite, so they go through `import_resource_using_composite_interface`.
-fn resource_using_references_defining_interface(
-    project: &NirPackage,
-    import_plan: &[ImportEntry],
-    iface: &CmInterfaceInfo,
-) -> bool {
-    let registry = &project.cm_interface_registry;
-    let emitted: Vec<&CmFunctionInfo> = iface
-        .functions
-        .iter()
-        .filter(|func| project.emits_cm_function(func))
-        .collect();
-    registry
-        .resources_in_signatures(&emitted)
-        .iter()
-        .any(|(source, _)| {
-            import_plan
-                .iter()
-                .any(|e| &e.fq == source && e.kind == ImportKind::ResourceDefiningInterface)
-        })
-}
-
-/// Import an interface whose signatures reference resources another interface
-/// defines, which the plan imports first.
-fn import_resource_using_interface(
-    builder: &mut ComponentBuilder,
-    ctx: &mut ComponentModelContext,
-    project: &NirPackage,
-    import_plan: &[ImportEntry],
-    interface_info: &CmInterfaceInfo,
-    provides: &IndexSet<String>,
-) {
-    // A resource-using interface whose signatures reference a
-    // resource-defining interface's resources/error composite (e.g. the HTTP
-    // client) consumes that interface's `{pkg}-*` types by outer alias rather
-    // than building them instance-locally; resolve those through the interner.
-    if resource_using_references_defining_interface(project, import_plan, interface_info) {
-        assert!(
-            provides.is_empty(),
-            "`{}` builds its instance from outer aliases alone, so it provides no type",
-            interface_info.path
-        );
-        import_resource_using_composite_interface(builder, ctx, project, interface_info);
-    } else {
-        import_function_interface(builder, ctx, project, interface_info, provides);
-    }
 }
 
 /// Collect a component asset down to the lifted functions the program imports.
