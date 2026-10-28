@@ -203,6 +203,10 @@ pub enum Code {
     TestOnlyGlobal,
     /// A `use` brings in a name its module never refers to.
     UnusedImport,
+    /// A local variable is never read.
+    UnusedVariable,
+    /// A function or closure parameter is never read.
+    UnusedParameter,
     /// A binder takes a name that already reaches a declaration or an enclosing
     /// binding.
     ShadowedName,
@@ -295,6 +299,8 @@ impl Code {
                 | Code::TestOnlyFunction
                 | Code::TestOnlyGlobal
                 | Code::UnusedImport
+                | Code::UnusedVariable
+                | Code::UnusedParameter
         )
     }
 }
@@ -354,6 +360,8 @@ impl std::fmt::Display for Code {
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::UnusedImport => "UNUSED_IMPORT",
+            Code::UnusedVariable => "UNUSED_VARIABLE",
+            Code::UnusedParameter => "UNUSED_PARAMETER",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::SelfComparison => "SELF_COMPARISON",
@@ -1110,6 +1118,8 @@ mod tests {
             Code::TestOnlyFunction,
             Code::TestOnlyGlobal,
             Code::UnusedImport,
+            Code::UnusedVariable,
+            Code::UnusedParameter,
         ] {
             assert!(code.is_unused_lint(), "{code} should be an unused lint");
         }

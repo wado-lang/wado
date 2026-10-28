@@ -2236,11 +2236,7 @@ fn lower_scan_repeat(
                     && has_nested_optional_in_alt(&g.alternatives[0])
                     && !alt_has_variable_repeat(&g.alternatives[0])
                     && !shape_optional_count_exceeds_cap(&g.alternatives[0].elements) {
-                    return lower_scan_optional_lookahead_group(
-                        &g.alternatives[0],
-                        ctx,
-                        outer_follow,
-                    );
+                    return lower_scan_optional_lookahead_group(&g.alternatives[0], ctx);
                 }
             }
         }
@@ -2480,11 +2476,7 @@ fn surface_contains_variable_repeat(elem: &Element) -> bool {
 /// scan body separately (the optional sub-elements that are "on"
 /// in this shape, unwrapped from their Optional Repeat wrappers,
 /// plus the corresponding inner Group flattening when applicable).
-fn lower_scan_optional_lookahead_group(
-    alt: &Alternative,
-    ctx: &mut LowerContext,
-    outer_follow: &List<i32>,
-) -> ScanElement {
+fn lower_scan_optional_lookahead_group(alt: &Alternative, ctx: &mut LowerContext) -> ScanElement {
     let shapes = compute_shapes_for_alt(&alt.elements);
     let mut sigs: List<List<List<i32>>> = [];
     let mut bodies: List<ScanBody> = [];

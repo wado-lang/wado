@@ -83,7 +83,7 @@ fn find_cycle(
 test "the generator's modules import one another without a cycle" {
     let graph = import_graph("src");
     assert graph.len() > 50;
-    for let [module, targets] of graph.entries() {
+    for let [_, targets] of graph.entries() {
         for let target of targets {
             assert graph.contains_key(*target);
         }

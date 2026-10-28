@@ -1900,6 +1900,8 @@ pub mod lint {
     pub const DEAD_CODE: &str = "dead_code";
     /// A `use` bringing in a name its module never refers to.
     pub const UNUSED_IMPORTS: &str = "unused_imports";
+    /// A variable or parameter nothing reads.
+    pub const UNUSED_VARIABLES: &str = "unused_variables";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.
@@ -3355,6 +3357,16 @@ impl Expr {
             Expr::FieldAccess(fa) => fa.expr.place_root_ident(),
             Expr::Index(idx) => idx.expr.place_root_ident(),
             _ => None,
+        }
+    }
+
+    /// The places this expression writes by `=`, destructuring or a compound
+    /// assignment, in the order it writes them; none for any other expression.
+    pub fn assigned_places(&self) -> &[Expr] {
+        match self {
+            Expr::Assign(assign) => assign.places(),
+            Expr::CompoundAssign(compound) => std::slice::from_ref(&compound.target),
+            _ => &[],
         }
     }
 
