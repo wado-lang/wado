@@ -127,8 +127,9 @@ fn a_package_check_reports_a_shared_module_kiln_warning_once() {
 }
 
 /// Compiling a generator to run it lints nothing: the generator's own package
-/// check is where its lints belong, and reports them once. The world names
-/// `generate`'s parameter, so leaving it unread is no defect.
+/// check is where its lints belong, and reports them once. `generate` is an
+/// `export`, so the component boundary names its parameter and leaving it
+/// unread is no defect.
 #[test]
 fn compiling_a_generator_lints_none_of_it() {
     let tmp = tempfile::tempdir().unwrap();

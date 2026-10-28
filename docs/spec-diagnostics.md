@@ -340,17 +340,21 @@ Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 
 The `unused_variables` lint warns about a variable or parameter that nothing
 reads. Every binder of a value counts: a `let`, a function or closure
-parameter, and a pattern binding. A parameter of a function without a body,
-such as a trait method's requirement, is not reported, since nothing could read
-it.
+parameter, and a pattern binding.
 
-A trait or an interface names the parameters of every implementation, so a
-method it declares is not reported for a parameter either. That covers its
-default body, a method of an `impl` of it, and an effect handler's operation.
-An `export` function's parameters are not reported either: its signature is the
-component boundary's, often a world's, such as `handle` in `wasi:http/service`.
-Their locals and closures are reported as anywhere else, and so is a method of
-an inherent `impl`, whose signature is its own.
+Some parameters are not reported, because their names are not the function's
+own to choose, or nothing could read them:
+
+- A parameter of a method that a trait or an interface declares. The
+  declaration names the parameters of every implementation. That covers the
+  trait's default body, a method of an `impl` of it, and an effect handler's
+  operation.
+- A parameter of an `export` function. The component boundary names it, often
+  through a world, such as `handle` in `wasi:http/service`.
+- A parameter of a function without a body.
+
+The locals and closures of these functions are reported as anywhere else, and
+so is a method of an inherent `impl`, whose signature is its own.
 
 A name used only as the target of an assignment is not read. That covers `=`, a
 destructuring assignment, and a compound assignment such as `+=`, whether they
