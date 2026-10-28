@@ -562,16 +562,16 @@ fn i2a_second(n: i32) -> char {
     return unchecked char::from_u32('0' as u32 + (n % 10) as u32);
 }
 
+global DIGIT_PAIRS: String = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
+
 /// Write `digit_count` decimal digits of `val` into `arr` at `offset`, padded
 /// with leading zeros — a decimal chunk below the leading one carries them.
 /// Two digits per divide: each divide waits on the one before, so the chain
 /// is the cost, and dividing by 100 halves it. Each pair is one constant-length
-/// `array.copy` from a table of `00` through `99`, which wasmtime inlines,
-/// where two `array.set`s would each check the bounds again. The table is a
-/// literal rather than a global, which would cost every program a module
-/// initializer.
+/// `array.copy` from `DIGIT_PAIRS`, which wasmtime inlines, where two
+/// `array.set`s would each check the bounds again.
 internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
-    let pairs = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899".internal_raw_bytes();
+    let pairs = DIGIT_PAIRS.internal_raw_bytes();
     let mut v = val;
     let mut pos = offset + digit_count;
     while pos - offset >= 2 {
