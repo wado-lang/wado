@@ -449,7 +449,7 @@ pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
     out
 }
 
-pub(super) fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
+fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     mentions_local_except(body, node, &[], idx)
 }
 
@@ -483,6 +483,29 @@ pub(super) fn mentions_local_except(
         }
     });
     found
+}
+
+/// Every local named under `node` outside the `skip` subtrees, into `out`.
+pub(super) fn mentioned_locals_except(
+    body: &Body,
+    node: NodeRef,
+    skip: &[NodeRef],
+    out: &mut IndexSet<u32>,
+) {
+    if skip.contains(&node) {
+        return;
+    }
+    if let NodeRef::Expr(id) = node
+        && let ExprKind::Local { index, .. } = &body.exprs[id].kind
+    {
+        out.insert(*index);
+    }
+    body.for_each_operand(node, |op| {
+        if let Some(v) = op.as_value() {
+            body.values.collect_opaque_locals(v, out);
+        }
+    });
+    body.for_each_child(node, |c| mentioned_locals_except(body, c, skip, out));
 }
 
 /// Whether any `Loop` statement is nested anywhere under `block`. Exhaustive
