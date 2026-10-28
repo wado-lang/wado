@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793212375833,
+  "lastUpdate": 1793222607511,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72129,6 +72129,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/907bee49649071d49e99d73512a3982b551a7f24"
         },
         "date": 1793212374765,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295573,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "12b1c54a2757d224007b420ae5bb69b253f87527",
+          "message": "Merge pull request #2489 from wado-lang/claude/peaceful-volta-u08hot\n\nfeat(eddy): review with Read, Grep and Glob, measured on the evaluation set",
+          "timestamp": "2026-10-29T06:09:20+09:00",
+          "tree_id": "3ef830fb49cf230a4bff8f62bcf7c6f6d7ec14ae",
+          "url": "https://github.com/wado-lang/wado/commit/12b1c54a2757d224007b420ae5bb69b253f87527"
+        },
+        "date": 1793222606537,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
