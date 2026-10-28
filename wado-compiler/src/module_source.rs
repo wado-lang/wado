@@ -294,7 +294,8 @@ impl ModuleSourceInterner {
     /// declares, once per package.
     pub fn place(&mut self, path: &str, host: &impl PackageHost) -> ModuleSource {
         let interned = self.intern(path);
-        if !self.local_packages.contains_key(&interned) && !self.libs_by_path.contains_key(&interned)
+        if !self.local_packages.contains_key(&interned)
+            && !self.libs_by_path.contains_key(&interned)
         {
             let file = self.host_file(path, host);
             match self.lib_files.get(&file).cloned() {
