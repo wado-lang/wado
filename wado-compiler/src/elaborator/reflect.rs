@@ -11,7 +11,7 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::trait_query::OnBoundTrait;
-use super::types::{FunctionContext, StructFieldInfo, TypeError};
+use super::types::{FunctionContext, StructClosure, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::StaticMethodDispatch;
 use crate::module_source::ModuleSource;
@@ -301,9 +301,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
 
         if method == StructMethods::resolve(&self.tysys.type_table.borrow()).from_fields
-            && let Some(closure) = self
-                .struct_fields_of_type(structure_ty)
-                .and_then(StructFieldInfo::closure)
+            && let Some(closure) = self.reflect_struct_closure(self_ty)
         {
             let _ = self.emit(TypeError::ClosedStructFromFields {
                 why_closed: closure.explain(&self_name),
@@ -689,6 +687,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             module_source,
             type_args,
         })
+    }
+
+    /// Why the struct `ReflectStruct::<T>` targets is closed, if it is. A
+    /// newtype inherits its base's closure with its structure.
+    fn reflect_struct_closure(&self, self_ty: TypeId) -> Option<StructClosure> {
+        let head = self
+            .tysys
+            .type_table
+            .borrow()
+            .reflect_structure_head(self_ty);
+        self.struct_fields_of_type(head)?.closure()
     }
 
     /// The variant `ReflectVariant::<T>` targets: its declared name, the
@@ -1562,17 +1571,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     REFLECT_FIELD_TYPES_ASSOC => {
                         Some(self.tysys.type_table.borrow_mut().make_tuple(members))
                     }
-                    REFLECT_FIELD_INPUTS_ASSOC => Some(
-                        if self
-                            .struct_fields_of_type(subject)
-                            .and_then(StructFieldInfo::closure)
-                            .is_some()
-                        {
-                            TypeTable::NEVER
-                        } else {
-                            self.tysys.type_table.borrow_mut().make_tuple(members)
-                        },
-                    ),
+                    REFLECT_FIELD_INPUTS_ASSOC => Some(match self.reflect_struct_closure(subject) {
+                        Some(_) => TypeTable::NEVER,
+                        None => self.tysys.type_table.borrow_mut().make_tuple(members),
+                    }),
                     REFLECT_FIELD_SLOTS_ASSOC => {
                         let mut tt = self.tysys.type_table.borrow_mut();
                         let slots: Vec<TypeId> =
