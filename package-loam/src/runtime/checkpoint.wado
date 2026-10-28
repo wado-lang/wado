@@ -215,7 +215,9 @@ pub fn payload_at<U: FromLeBytes + AnyBits, affine B: CheckpointBytes>(
     tensor: String,
     start: i32,
     end: i32,
-) -> Result<List<U>, LoadError> {
+) -> Result<List<U>, LoadError>
+    contract 0 <= start <= end
+{
     if end > bytes.byte_len() {
         return Result::Err(
             LoadError { reason: `${tensor}: the payload ends at byte ${end}, past the ${bytes.byte_len()} given` },

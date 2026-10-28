@@ -12,7 +12,7 @@ use { Model } from "../../example/gpt2-124m/model.wado";
 use { timed } from "./generate.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock) {
-    let Ok(checkpoint) = fs::read("model.onnx") else {
+    let Ok(checkpoint) = fs::read_linear("model.onnx") else {
         eprintln("model.onnx is missing; run package-loam/example/gpt2-124m/fetch.sh");
         return;
     };

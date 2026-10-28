@@ -400,6 +400,13 @@ test "the committed external tiny GPT-2 is what externalizing its model writes" 
     assert data == #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
 }
 
+test "a model whose weights are external already is not externalized again" {
+    let external = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx");
+    let e = externalize(&external, "model.onnx_data").unwrap_err();
+
+    assert e.reason.ends_with(": external data already");
+}
+
 fn read_unread(weights: List<onnx::TensorProto>) -> Result<Graph, ReadError> {
     return read(grog::encode(&onnx::ModelProto {
         graph: Option::Some(onnx::GraphProto { initializer: weights }),

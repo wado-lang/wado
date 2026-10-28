@@ -404,12 +404,16 @@ pub fn external_locations<S: AsByteSlice>(bytes: S) -> Result<List<String>, Read
 /// The serialized `ModelProto` `bytes` with every weight's `raw_data` moved to
 /// an external data file at `location`, as an exporter writes a model too large
 /// for one protobuf: the model, then that file. A constant keeps its data,
-/// since the build reads it.
+/// since the build reads it. A weight already external is refused, since the
+/// data file written would not hold it.
 pub fn externalize<S: AsByteSlice>(bytes: S, location: String) -> Result<[ByteList, ByteList], ReadError> {
     let mut model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| ReadError { reason: `${e}` })?;
     let mut data: ByteList = [];
     if let Some(graph) = &mut model.graph {
         for let t of &mut graph.initializer {
+            if is_external(t) {
+                return Result::Err(ReadError { reason: `${name_of(t)}: external data already` });
+            }
             let Some(raw) = t.raw_data else {
                 continue;
             };

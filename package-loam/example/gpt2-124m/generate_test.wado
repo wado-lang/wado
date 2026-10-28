@@ -20,7 +20,7 @@ struct Oracle {
 
 #[timeout_ms(600000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
-    let checkpoint = fs::read("gpt2-124m/model.onnx").unwrap();
+    let checkpoint = fs::read_linear("gpt2-124m/model.onnx").unwrap();
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
     for let case of from_string::<Oracle>(#include_str("./generate.json")).unwrap().generate {
         let mut ids = case.ids;
