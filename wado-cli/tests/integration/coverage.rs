@@ -99,9 +99,11 @@ fn a_module_tested_as_an_entry_and_imported_is_one_file() {
         .args(["test", "--coverage=lcov", "../pkg"])
         .assert()
         .success();
-    let lcov =
-        fs::read_to_string(tmp.path().join("elsewhere/build/coverage/lcov.info")).unwrap();
-    let files: Vec<&str> = lcov.lines().filter(|line| line.starts_with("SF:")).collect();
+    let lcov = fs::read_to_string(tmp.path().join("elsewhere/build/coverage/lcov.info")).unwrap();
+    let files: Vec<&str> = lcov
+        .lines()
+        .filter(|line| line.starts_with("SF:"))
+        .collect();
     assert_eq!(files.len(), 2, "{lcov}");
 }
 

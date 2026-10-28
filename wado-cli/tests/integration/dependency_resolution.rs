@@ -650,7 +650,11 @@ fn an_exported_file_of_a_package_reached_by_a_path_is_named_by_its_package() {
         "pub fn make() -> i32 { return 1; }\n",
     );
     fs::create_dir(b.join("src/sub")).unwrap();
-    fs::write(b.join("src/sub/x.wado"), "pub fn x() -> i32 { return 2; }\n").unwrap();
+    fs::write(
+        b.join("src/sub/x.wado"),
+        "pub fn x() -> i32 { return 2; }\n",
+    )
+    .unwrap();
     library(
         &root.join("a"),
         "\"lib:b\" = { path = \"../b\" }\n",

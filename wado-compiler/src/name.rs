@@ -2952,7 +2952,10 @@ mod tests {
         assert_eq!(
             named(
                 &f1,
-                &format!("id<{}/P>", packaged_module_name("dep@1.0.0+b.5", "lib.wado"))
+                &format!(
+                    "id<{}/P>",
+                    packaged_module_name("dep@1.0.0+b.5", "lib.wado")
+                )
             ),
             "id<P>"
         );
