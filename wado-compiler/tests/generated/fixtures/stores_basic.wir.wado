@@ -161,15 +161,15 @@ fn "stores_basic.wado/$template_segment$stores_basic.wado/$tmpl$ebaa20f4a908b504
 }
 
 fn "stores_basic.wado/$cm_export__run"() {
-    let d: i32;
-    if @unlikely(local.tee d(black_box(42)) != 42) {
+    let $sroa_d_value_9: i32;
+    if @unlikely(local.tee $sroa_d_value_9(black_box(42)) != 42) {
         cold_path;
-        "stores_basic.wado/run$cold1"(d);
+        "stores_basic.wado/run$cold1"($sroa_d_value_9);
         unreachable;
     }
-    if @unlikely(d != 42) {
+    if @unlikely($sroa_d_value_9 != 42) {
         cold_path;
-        "stores_basic.wado/run$cold0"(d);
+        "stores_basic.wado/run$cold0"($sroa_d_value_9);
         unreachable;
     }
     "wasi/task-return"(0);

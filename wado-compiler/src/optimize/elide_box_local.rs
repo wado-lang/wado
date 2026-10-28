@@ -24,18 +24,14 @@ pub(super) struct ElideBoxLocalRule {
 }
 
 /// Build an [`ElideBoxLocalRule`] for one function from its pristine body and
-/// the function's escape-analysis sets.
+/// the locals it takes the address of.
 pub(super) fn build_elide_box_local(
     body: &Body,
     address_taken: &IndexSet<u32>,
-    stores_aliased: &IndexSet<u32>,
 ) -> ElideBoxLocalRule {
-    let mut blacklist: IndexSet<u32> = IndexSet::default();
-    blacklist.extend(address_taken.iter().copied());
-    blacklist.extend(stores_aliased.iter().copied());
     ElideBoxLocalRule {
         stats: collect_local_stats(body),
-        blacklist,
+        blacklist: address_taken.clone(),
     }
 }
 

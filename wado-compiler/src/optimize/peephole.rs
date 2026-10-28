@@ -102,10 +102,7 @@ pub(super) fn run_peephole(
     let exec = Arc::clone(gate.exec());
     let changed = gate.run_gated_par(gated_pass, len, |buffers, fid| {
         let mut func = functions[fid.index()].borrow_mut();
-        // `stores_aliased_locals` is per-function, so the ref-elimination rule is
-        // rebuilt for each body.
-        let stores_aliased = func.stores_aliased_locals.clone();
-        let elide_rule = ElideRule::new(&stores_aliased, summaries.of_body(fid.index()));
+        let elide_rule = ElideRule::new(summaries.of_body(fid.index()));
         // Per function, as its CTFE budget and remembered misses are: what one
         // body spends must not decide whether the next one folds.
         let const_fold_rule = ConstFoldRule::new(type_table, &callees, &ctfe_builtins);
@@ -120,16 +117,15 @@ pub(super) fn run_peephole(
         });
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
-        // the pristine post-inline body; the escape sets (`address_taken` here,
-        // `stores_aliased` above) are read off the function before its body is
-        // borrowed — `build_elide_box_local` copies them, so they pass by
-        // reference (no per-function clone, and none at all in the pre-inline
-        // phase where this rule is absent).
+        // the pristine post-inline body; the escape set (`address_taken`) is read
+        // off the function before its body is borrowed — `build_elide_box_local`
+        // copies it, so it passes by reference (no per-function clone, and none
+        // at all in the pre-inline phase where this rule is absent).
         let elide_box_rule = (!pre_inline)
             .then(|| {
                 func.body
                     .as_ref()
-                    .map(|b| build_elide_box_local(b, &func.address_taken_locals, &stores_aliased))
+                    .map(|b| build_elide_box_local(b, &func.address_taken_locals))
             })
             .flatten();
         // Labeled-block fusion runs post-inline only: the `let temp = LB { ...;

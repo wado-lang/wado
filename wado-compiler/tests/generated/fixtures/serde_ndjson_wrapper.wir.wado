@@ -254,42 +254,37 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
 }
 
 fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>$sroa[value.ok,return]$spec0$dae[value]"(trailing_char) {
-    let $load_6: ref Array<u8>;
+    let $load_4: ref Array<u8>;
     let buf_1: ref "core:prelude/string.wado//String";
-    let new_used_36: i32;
-    let start_37: i32;
+    let new_used_92: i32;
+    let start_93: i32;
     buf_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     $thread_$inline_serde_ndjson_wrapper_wado_Message_core_serde_Serialize__serialize_core_json_JsonSerializer__sroa_self_ok__1: block {
-        if @unlikely(local.tee new_used_36(0 + 1) > builtin::array_len(buf_1.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, new_used_36);
-        }
-        start_37 = buf_1.used;
-        buf_1.used = new_used_36;
-        builtin::array_copy<u8>(buf_1.repr, start_37, global:core:json::$const_obj_44, 0, 1);
+        buf_1.used = 1;
+        builtin::array_copy<u8>(buf_1.repr, 0, global:core:json::$const_obj_44, 0, 1);
         "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf_1, global:core:json::$const_obj_43, 0);
-        if @unlikely(local.tee start_37(buf_1.used + 4) > builtin::array_len(buf_1.repr)) {
+        if @unlikely(local.tee new_used_92(buf_1.used + 4) > builtin::array_len(buf_1.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, start_37);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, new_used_92);
         }
-        new_used_36 = buf_1.used;
-        buf_1.used = start_37;
-        builtin::array_copy<u8>(local.tee $load_6(buf_1.repr), new_used_36, global:core:json::$const_obj_42, 0, 4);
-        if @unlikely(local.tee new_used_36(buf_1.used + 1) > builtin::array_len($load_6)) {
+        start_93 = buf_1.used;
+        buf_1.used = new_used_92;
+        builtin::array_copy<u8>(local.tee $load_4(buf_1.repr), start_93, global:core:json::$const_obj_42, 0, 4);
+        if @unlikely(local.tee start_93(buf_1.used + 1) > builtin::array_len($load_4)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, new_used_36);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_1, start_93);
         }
-        start_37 = buf_1.used;
-        buf_1.used = new_used_36;
-        builtin::array_copy<u8>(buf_1.repr, start_37, global:core:json::$const_obj_41, 0, 1);
+        new_used_92 = buf_1.used;
+        buf_1.used = start_93;
+        builtin::array_copy<u8>(buf_1.repr, new_used_92, global:core:json::$const_obj_41, 0, 1);
         break $thread_$inline_serde_ndjson_wrapper_wado_Message_core_serde_Serialize__serialize_core_json_JsonSerializer__sroa_self_ok__1;
     };
     if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
-        start_37 = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf_1, start_37);
+        new_used_92 = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf_1, new_used_92);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: $load_6 = buf_1.repr; start_37 = buf_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(start_37)), 0, $load_6, 0, start_37); $array_clone_dst_2, used: start_37 }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: $load_4 = buf_1.repr; new_used_92 = buf_1.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(new_used_92)), 0, $load_4, 0, new_used_92); $array_clone_dst_2, used: new_used_92 }, ref.null none;
 }
 
 fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(buf, name, count) {

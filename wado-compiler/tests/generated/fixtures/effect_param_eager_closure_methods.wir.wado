@@ -669,24 +669,19 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::sort_by"(self, cmp)
 }
 
 fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_0::$call$dae[self]"(x) {
-    let $load_2: ref Array<u8>;
+    let $load_0: ref Array<u8>;
     let out_4: ref "core:prelude/string.wado//String";
     let repr_33: ref Array<u8>;
-    let new_used_49: i32;
-    let start_50: i32;
+    let is_negative_66: bool;
     let x_70: i64;
     let q: u64;
     let tens: i32;
+    let start_180: i32;
     out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     repr_33 = global:effect_param_eager_closure_methods.wado::$const_obj_36;
-    if @unlikely(local.tee new_used_49(0 + 5) > builtin::array_len(out_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, new_used_49);
-    }
-    start_50 = out_4.used;
-    out_4.used = new_used_49;
-    builtin::array_copy<u8>(local.tee $load_2(out_4.repr), start_50, repr_33, 0, 5);
-    start_50 = x < 0;
+    out_4.used = 5;
+    builtin::array_copy<u8>(local.tee $load_0(out_4.repr), 0, repr_33, 0, 5);
+    is_negative_66 = x < 0;
     x_70 = builtin::i64_extend_i32_s(x);
     x_70 = select i64(x_70 < 0_i64, 0_i64 - x_70, x_70);
     x = $inline_count_digits_u64_1: block -> i32 {
@@ -749,49 +744,49 @@ fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.w
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if start_50 {
-        if @unlikely(local.tee start_50(out_4.used + 1) > builtin::array_len($load_2)) {
+    if is_negative_66 {
+        if @unlikely(local.tee is_negative_66(out_4.used + 1) > builtin::array_len($load_0)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, start_50);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, is_negative_66);
         }
-        new_used_49 = out_4.used;
-        out_4.used = start_50;
-        builtin::array_set_u8(out_4.repr, new_used_49, 45);
+        start_180 = out_4.used;
+        out_4.used = is_negative_66;
+        builtin::array_set_u8(out_4.repr, start_180, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_49(out_4.used + x) > builtin::array_len(out_4.repr)) {
+    if @unlikely(local.tee start_180(out_4.used + x) > builtin::array_len(out_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, new_used_49);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, start_180);
     }
-    start_50 = out_4.used;
-    out_4.used = new_used_49;
-    $load_2 = out_4.repr;
-    x = start_50 + x;
-    b103: block {
-        l104: loop {
-            break_if b103 (x - start_50) < 2;
+    is_negative_66 = out_4.used;
+    out_4.used = start_180;
+    $load_0 = out_4.repr;
+    x = is_negative_66 + x;
+    b102: block {
+        l103: loop {
+            break_if b102 (x - is_negative_66) < 2;
             q = x_70 /u 100_i64;
-            tens = local.tee new_used_49(builtin::i32_wrap_i64(x_70 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_2, x - 1, (48 + new_used_49) - (tens * 10));
-            builtin::array_set_u8($load_2, x - 2, 48 + tens);
+            tens = local.tee start_180(builtin::i32_wrap_i64(x_70 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_0, x - 1, (48 + start_180) - (tens * 10));
+            builtin::array_set_u8($load_0, x - 2, 48 + tens);
             x = x - 2;
             x_70 = q;
-            continue l104;
+            continue l103;
         };
     };
-    if x > start_50 {
-        builtin::array_set_u8($load_2, start_50, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
+    if x > is_negative_66 {
+        builtin::array_set_u8($load_0, is_negative_66, 48 + builtin::i32_wrap_i64(x_70 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
     };
-    start_50 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
+    is_negative_66 = builtin::i32_wrap_i64(local.tee x_70("wasi/stream-new"()));
     x = builtin::i32_wrap_i64(x_70 >> 32_i64);
-    new_used_49 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_49 = start_50; start_50 = 0; new_used_49);
-    start_50 = x;
+    start_180 = "effect_param_eager_closure_methods.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_180 = is_negative_66; is_negative_66 = 0; start_180);
+    is_negative_66 = x;
     x = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_50, out_4.repr, out_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_50 = new_used_49; new_used_49 = 0; start_50);
+    "core:rt/write_string_to_stream$dae[add_newline]"(is_negative_66, out_4.repr, out_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(is_negative_66 = start_180; start_180 = 0; is_negative_66);
 }
 
 fn "effect_param_eager_closure_methods.wado/effect_param_eager_closure_methods.wado/$Closure_1::$call$dae[self]"(a, b) {
@@ -968,16 +963,16 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/tr
         f.used = start_24;
         $load_4 = f.repr;
         new_used_23 = start_393 + new_used_23;
-        b140: block {
-            l141: loop {
-                break_if b140 (new_used_23 - start_393) < 2;
+        b139: block {
+            l140: loop {
+                break_if b139 (new_used_23 - start_393) < 2;
                 q = x_405 /u 100_i64;
                 tens = local.tee start_24(builtin::i32_wrap_i64(x_405 - (q * 100_i64))) / 10;
                 builtin::array_set_u8($load_4, new_used_23 - 1, (48 + start_24) - (tens * 10));
                 builtin::array_set_u8($load_4, new_used_23 - 2, 48 + tens);
                 new_used_23 = new_used_23 - 2;
                 x_405 = q;
-                continue l141;
+                continue l140;
             };
         };
         if new_used_23 > start_393 {

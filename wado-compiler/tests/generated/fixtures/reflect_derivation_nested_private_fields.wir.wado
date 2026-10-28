@@ -2446,11 +2446,10 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
 }
 
 fn "./sub/reflect_derivation_nested_private_fields_lib.wado/core:prelude/types.wado/Option<reflect_derivation_nested_private_fields.wado/Node>^./sub/reflect_derivation_nested_private_fields_lib.wado/Describe::describe"(depth) {
-    let $load_2: ref Array<u8>;
     let out_4: ref "core:prelude/string.wado//String";
     let repr_33: ref Array<u8>;
-    let start_50: i32;
     let $sroa_t_h0_90: ref "core:prelude/string.wado//String";
+    let new_used_240: i32;
     let start_241: i32;
     if depth > 2 {
         return struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(46, 46, 46), used: 3 };
@@ -2458,37 +2457,32 @@ fn "./sub/reflect_derivation_nested_private_fields_lib.wado/core:prelude/types.w
     $sroa_t_h0_90 = "./sub/reflect_derivation_nested_private_fields_lib.wado/reflect_derivation_nested_private_fields.wado/Node^./sub/reflect_derivation_nested_private_fields_lib.wado/Describe::describe"(depth + 1);
     out_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     repr_33 = global:./sub/reflect_derivation_nested_private_fields_lib.wado::$const_obj_9;
-    if @unlikely(local.tee depth(0 + 7) > builtin::array_len(out_4.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, depth);
-    }
-    start_50 = out_4.used;
-    out_4.used = depth;
-    builtin::array_copy<u8>(local.tee $load_2(out_4.repr), start_50, repr_33, 0, 7);
+    out_4.used = 7;
+    builtin::array_copy<u8>(out_4.repr, 0, repr_33, 0, 7);
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
             $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
-                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee start_50($sroa_t_h0_90.used) == 0;
-                if @unlikely(local.tee depth(out_4.used + start_50) > builtin::array_len($load_2)) {
+                break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee depth($sroa_t_h0_90.used) == 0;
+                if @unlikely(local.tee new_used_240(7 + depth) > 24) {
                     cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, depth);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, new_used_240);
                 }
                 start_241 = out_4.used;
-                out_4.used = depth;
-                builtin::array_copy<u8>(out_4.repr, start_241, $sroa_t_h0_90.repr, 0, start_50);
+                out_4.used = new_used_240;
+                builtin::array_copy<u8>(out_4.repr, start_241, $sroa_t_h0_90.repr, 0, depth);
             };
             break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
         };
         break $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0;
     };
-    $load_2 = global:./sub/reflect_derivation_nested_private_fields_lib.wado::$const_obj_8;
-    if @unlikely(local.tee start_50(out_4.used + 1) > builtin::array_len(out_4.repr)) {
+    repr_33 = global:./sub/reflect_derivation_nested_private_fields_lib.wado::$const_obj_8;
+    if @unlikely(local.tee depth(out_4.used + 1) > builtin::array_len(out_4.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, start_50);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_4, depth);
     }
     start_241 = out_4.used;
-    out_4.used = start_50;
-    builtin::array_copy<u8>(out_4.repr, start_241, $load_2, 0, 1);
+    out_4.used = depth;
+    builtin::array_copy<u8>(out_4.repr, start_241, repr_33, 0, 1);
     return out_4;
 }
 
@@ -2501,12 +2495,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b327: block {
-        l328: loop {
-            break_if b327 i >= n;
+    b326: block {
+        l327: loop {
+            break_if b326 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l328;
+            continue l327;
         };
     };
 }

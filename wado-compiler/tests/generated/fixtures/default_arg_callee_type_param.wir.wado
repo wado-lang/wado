@@ -4910,18 +4910,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<default_arg
     let $load_1: i32;
     let out_3: ref "core:prelude/string.wado//String";
     let repr_32: ref Array<u8>;
-    let new_used_48: i32;
     let start_49: i32;
+    let start_82: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>($mv$t$s1.used + (local.tee $load_1($mv$t$s0.used) + 16)), used: 0 };
     repr_32 = $mv$t$s0.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_20 $load_1 == 0;
-        if @unlikely(local.tee new_used_48(0 + $load_1) > builtin::array_len(out_3.repr)) {
+        if @unlikely($load_1 > builtin::array_len(out_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_1);
         }
         start_49 = out_3.used;
-        out_3.used = new_used_48;
+        out_3.used = $load_1;
         builtin::array_copy<u8>(out_3.repr, start_49, repr_32, 0, $load_1);
     };
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(out_3, $mv$t$h0.repr, $mv$t$h0.used);
@@ -4933,9 +4933,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<default_arg
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_49);
         }
-        new_used_48 = out_3.used;
+        start_82 = out_3.used;
         out_3.used = start_49;
-        builtin::array_copy<u8>(out_3.repr, new_used_48, repr_32, 0, $load_1);
+        builtin::array_copy<u8>(out_3.repr, start_82, repr_32, 0, $load_1);
     };
     return out_3;
 }
@@ -6194,32 +6194,26 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<default_arg_callee_type_param.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>$spec1$spec0$dae[t]"() {
     let out_2: ref "core:prelude/string.wado//String";
-    let new_used_47: i32;
-    let start_48: i32;
     let t_55: ref "core:prelude/string.wado//String";
+    let new_used_80: i32;
+    let start_81: i32;
     let $sroa_$bound_89_repr_90: ref Array<u8>;
     let $sroa_$bound_104_repr_105: ref Array<u8>;
     $sroa_$bound_104_repr_105 = array.new_data<u8>("Assertion failed in $test_4_a_variadic_pack_s_default_names_the_pack_it_stands_for at default_arg_callee_type_param.wado:273
 condition: PACKED == \"g:0\\\"\\\"\"
 PACKED: ");
     $sroa_$bound_89_repr_90 = array.new_fixed<u8>(10);
-    out_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(181), used: 0 };
-    if @unlikely(local.tee new_used_47(0 + 164) > builtin::array_len(out_2.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_2, new_used_47);
-    }
-    start_48 = out_2.used;
-    out_2.used = new_used_47;
-    builtin::array_copy<u8>(out_2.repr, start_48, $sroa_$bound_104_repr_105, 0, 164);
+    local.tee out_2(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(181), used: 0 }).used = 164;
+    builtin::array_copy<u8>(out_2.repr, 0, $sroa_$bound_104_repr_105, 0, 164);
     t_55 = global:default_arg_callee_type_param.wado::PACKED;
     "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>$spec0$sroa[f.buf]"(out_2, t_55.repr, t_55.used);
-    if @unlikely(local.tee start_48(out_2.used + 1) > builtin::array_len(out_2.repr)) {
+    if @unlikely(local.tee new_used_80(out_2.used + 1) > builtin::array_len(out_2.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_2, start_48);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_2, new_used_80);
     }
-    new_used_47 = out_2.used;
-    out_2.used = start_48;
-    builtin::array_copy<u8>(out_2.repr, new_used_47, $sroa_$bound_89_repr_90, 0, 1);
+    start_81 = out_2.used;
+    out_2.used = new_used_80;
+    builtin::array_copy<u8>(out_2.repr, start_81, $sroa_$bound_89_repr_90, 0, 1);
     return out_2;
 }
 
@@ -6326,14 +6320,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     if val_i64_66 == 0_i64 {
         builtin::array_set_u8(arr, start_230, 48);
     } else {
-        b868: block {
-            l869: loop {
-                break_if b868 val_i64_66 == 0_i64;
+        b867: block {
+            l868: loop {
+                break_if b867 val_i64_66 == 0_i64;
                 q = q - 1;
                 start_230 = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
                 builtin::array_set_u8(arr, q, select i32(start_230 < 10, 48 + start_230, (97 + start_230) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
-                continue l869;
+                continue l868;
             };
         };
     }

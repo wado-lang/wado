@@ -2471,7 +2471,6 @@ pub fn inline_functions(
             local_count,
             locals: &mut func.locals,
             address_taken: std::mem::take(&mut func.address_taken_locals),
-            stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
             splittable,
@@ -2517,7 +2516,6 @@ pub fn inline_functions(
             );
         }
         func.address_taken_locals = frame.address_taken;
-        func.stores_aliased_locals = frame.stores_aliased;
         lock(&deferrals).push((fid, frame.deferred));
         if inlined_funcs.is_empty() {
             return None;
@@ -2609,7 +2607,6 @@ struct CallerFrame<'f> {
     /// The caller's own, borrowed: a splice that mints none leaves them unwritten.
     locals: &'f mut Tracked<Vec<NirLocal>>,
     address_taken: IndexSet<u32>,
-    stores_aliased: IndexSet<u32>,
     /// Per enclosing loop, innermost last: how many sites in its body call
     /// each function, the ones its splices bring included.
     loop_calls: Vec<IndexMap<FuncId, usize>>,
@@ -3094,9 +3091,6 @@ fn build_inlined_labeled_block(
     frame
         .address_taken
         .extend(candidate.address_taken_locals.iter().map(carry));
-    frame
-        .stores_aliased
-        .extend(candidate.stores_aliased_locals.iter().map(carry));
 
     let mut inner_labels: IndexSet<String> = IndexSet::default();
     collect_inner_labels(callee, NodeRef::Block(callee.root()), &mut inner_labels);

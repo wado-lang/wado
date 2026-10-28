@@ -836,16 +836,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_flag_no_cold_paths.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(t) {
     let $load_0: ref "core:prelude/string.wado//String";
-    let $load_75: i32;
-    let $load_76: ref Array<u8>;
+    let $load_75: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let self_63: ref "core:prelude/string.wado//String";
     let repr_64: ref Array<u8>;
     let end_66: i32;
-    let new_used_80: i32;
     let capacity_85: i32;
     let new_repr_89: ref Array<u8>;
     let $temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0: ref "core:prelude/format.wado//Formatter";
+    let new_used_218: i32;
+    let capacity_223: i32;
     let x_276: i64;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((((local.tee $load_0(t.s5).used + (b107: block -> ref "core:prelude/string.wado//String" {
         b108: block {
@@ -1164,16 +1164,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = self_63.used;
     $inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_34 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee $load_76(out_3.repr)) {
+        if end_66 > builtin::array_len(local.tee $load_75(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_38: block {
-                capacity_85 = builtin::array_len($load_76);
-                break_if $inline_core_prelude_string_wado_String__grow_38 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, $load_76, 0, $load_75);
+                capacity_85 = builtin::array_len($load_75);
+                break_if $inline_core_prelude_string_wado_String__grow_38 end_66 <= capacity_85;
+                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > end_66, local.tee capacity_85(capacity_85 * 2), end_66)), 8))), 0, $load_75, 0, 0);
                 out_3.repr = new_repr_89;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        capacity_85 = out_3.used;
+        out_3.used = end_66;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     self_63 = t.h0;
@@ -1237,25 +1238,25 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = self_63.used;
     $inline_core_prelude_string_wado_String__internal_push_view_78: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_78 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
+        if local.tee new_used_218(local.tee capacity_85(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_82: block {
-                capacity_85 = builtin::array_len(new_repr_89);
-                break_if $inline_core_prelude_string_wado_String__grow_82 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee $load_76(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, new_repr_89, 0, $load_75);
-                out_3.repr = $load_76;
+                capacity_223 = builtin::array_len(new_repr_89);
+                break_if $inline_core_prelude_string_wado_String__grow_82 new_used_218 <= capacity_223;
+                builtin::array_copy<u8>(local.tee $load_75(builtin::array_new<u8>(select i32(capacity_223 > 8, local.tee capacity_223(select i32(capacity_223 > new_used_218, local.tee capacity_223(capacity_223 * 2), new_used_218)), 8))), 0, new_repr_89, 0, capacity_85);
+                out_3.repr = $load_75;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        out_3.used = new_used_218;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
-    $load_75 = local.tee end_66(t.h1) < 0;
+    capacity_85 = local.tee end_66(t.h1) < 0;
     end_66 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_276(x_276 = builtin::i64_extend_i32_s(end_66); select i64(x_276 < 0_i64, 0_i64 - x_276, x_276)));
-    $load_75 = block -> i32 {
+    capacity_85 = block -> i32 {
         self_63 = global:codegen_flag_no_cold_paths.wado::$const_obj_0;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0, $load_75, self_63.repr, self_63.used, end_66);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0, capacity_85, self_63.repr, self_63.used, end_66);
     };
-    "core:prelude/primitive.wado/write_decimal_digits"($temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0.buf.repr, $load_75, x_276, end_66);
+    "core:prelude/primitive.wado/write_decimal_digits"($temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0.buf.repr, capacity_85, x_276, end_66);
     repr_64 = local.tee self_63(b208: block -> ref "core:prelude/string.wado//String" {
         b209: block {
             b210: block {
@@ -1312,16 +1313,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = self_63.used;
     $inline_core_prelude_string_wado_String__internal_push_view_122: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_122 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee $load_76(out_3.repr)) {
+        if local.tee new_used_218(local.tee capacity_85(out_3.used) + end_66) > builtin::array_len(local.tee $load_75(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_126: block {
-                capacity_85 = builtin::array_len($load_76);
-                break_if $inline_core_prelude_string_wado_String__grow_126 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, $load_76, 0, $load_75);
+                capacity_223 = builtin::array_len($load_75);
+                break_if $inline_core_prelude_string_wado_String__grow_126 new_used_218 <= capacity_223;
+                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_223 > 8, local.tee capacity_223(select i32(capacity_223 > new_used_218, local.tee capacity_223(capacity_223 * 2), new_used_218)), 8))), 0, $load_75, 0, capacity_85);
                 out_3.repr = new_repr_89;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        out_3.used = new_used_218;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     self_63 = (if t.h2 -> ref "core:prelude/string.wado//String" {
         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
@@ -1385,16 +1386,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = self_63.used;
     $inline_core_prelude_string_wado_String__internal_push_view_166: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_166 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
+        if local.tee new_used_218(local.tee capacity_85(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_170: block {
-                capacity_85 = builtin::array_len(new_repr_89);
-                break_if $inline_core_prelude_string_wado_String__grow_170 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee $load_76(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, new_repr_89, 0, $load_75);
-                out_3.repr = $load_76;
+                capacity_223 = builtin::array_len(new_repr_89);
+                break_if $inline_core_prelude_string_wado_String__grow_170 new_used_218 <= capacity_223;
+                builtin::array_copy<u8>(local.tee $load_75(builtin::array_new<u8>(select i32(capacity_223 > 8, local.tee capacity_223(select i32(capacity_223 > new_used_218, local.tee capacity_223(capacity_223 * 2), new_used_218)), 8))), 0, new_repr_89, 0, capacity_85);
+                out_3.repr = $load_75;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        out_3.used = new_used_218;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     self_63 = t.h3;
@@ -1458,16 +1459,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = self_63.used;
     $inline_core_prelude_string_wado_String__internal_push_view_210: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_210 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee $load_76(out_3.repr)) {
+        if local.tee new_used_218(local.tee capacity_85(out_3.used) + end_66) > builtin::array_len(local.tee $load_75(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_214: block {
-                capacity_85 = builtin::array_len($load_76);
-                break_if $inline_core_prelude_string_wado_String__grow_214 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, $load_76, 0, $load_75);
+                capacity_223 = builtin::array_len($load_75);
+                break_if $inline_core_prelude_string_wado_String__grow_214 new_used_218 <= capacity_223;
+                builtin::array_copy<u8>(local.tee new_repr_89(builtin::array_new<u8>(select i32(capacity_223 > 8, local.tee capacity_223(select i32(capacity_223 > new_used_218, local.tee capacity_223(capacity_223 * 2), new_used_218)), 8))), 0, $load_75, 0, capacity_85);
                 out_3.repr = new_repr_89;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        out_3.used = new_used_218;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     $temp_inline_core_prelude_traits_wado_TemplateHole_codegen_flag_no_cold_paths_wado__tmpl_b145b32c9a586330_core_prelude_string_wado_String___fmt_43_0 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: out_3 };
     self_63 = t.h4;
@@ -1479,16 +1480,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<codegen_fla
     end_66 = $load_0.used;
     $inline_core_prelude_string_wado_String__internal_push_view_254: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_254 end_66 == 0;
-        if local.tee new_used_80(local.tee $load_75(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
+        if local.tee new_used_218(local.tee capacity_85(out_3.used) + end_66) > builtin::array_len(local.tee new_repr_89(out_3.repr)) {
             $inline_core_prelude_string_wado_String__grow_258: block {
-                capacity_85 = builtin::array_len(new_repr_89);
-                break_if $inline_core_prelude_string_wado_String__grow_258 new_used_80 <= capacity_85;
-                builtin::array_copy<u8>(local.tee $load_76(builtin::array_new<u8>(select i32(capacity_85 > 8, local.tee capacity_85(select i32(capacity_85 > new_used_80, local.tee capacity_85(capacity_85 * 2), new_used_80)), 8))), 0, new_repr_89, 0, $load_75);
-                out_3.repr = $load_76;
+                capacity_223 = builtin::array_len(new_repr_89);
+                break_if $inline_core_prelude_string_wado_String__grow_258 new_used_218 <= capacity_223;
+                builtin::array_copy<u8>(local.tee $load_75(builtin::array_new<u8>(select i32(capacity_223 > 8, local.tee capacity_223(select i32(capacity_223 > new_used_218, local.tee capacity_223(capacity_223 * 2), new_used_218)), 8))), 0, new_repr_89, 0, capacity_85);
+                out_3.repr = $load_75;
             };
         }
-        out_3.used = new_used_80;
-        builtin::array_copy<u8>(out_3.repr, $load_75, repr_64, 0, end_66);
+        out_3.used = new_used_218;
+        builtin::array_copy<u8>(out_3.repr, capacity_85, repr_64, 0, end_66);
     };
     return out_3;
 }

@@ -200,65 +200,60 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<tagged_template_format_loop_site.wado/$tmpl$14737082fca00a98,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
-    let $load_2: ref Array<u8>;
+    let $load_0: ref Array<u8>;
     let out_3: ref "core:prelude/string.wado//String";
     let repr_32: ref Array<u8>;
-    let new_used_48: i32;
-    let start_49: i32;
     let val_i64_67: i64;
+    let q: i32;
+    let start_230: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     repr_32 = global:core:prelude/string.wado::$const_obj_15;
-    if @unlikely(local.tee new_used_48(0 + 2) > builtin::array_len(out_3.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
-    }
-    start_49 = out_3.used;
-    out_3.used = new_used_48;
-    builtin::array_copy<u8>(local.tee $load_2(out_3.repr), start_49, repr_32, 0, 2);
+    out_3.used = 2;
+    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), 0, repr_32, 0, 2);
     val_i64_67 = builtin::i64_extend_i32_u(t);
-    start_49 = $inline_count_digits_u64_base_29: block -> i32 {
+    q = $inline_count_digits_u64_base_29: block -> i32 {
         if val_i64_67 == 0_i64 {
             break $inline_count_digits_u64_base_29: 1;
         }
-        break $inline_count_digits_u64_base_29: select i32((t - (start_49 * 4)) != 0, (local.tee start_49(local.tee t(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_67))) / 4) + 1) + ((t ^ 4) >> 31), start_49);
+        break $inline_count_digits_u64_base_29: select i32((t - (q * 4)) != 0, (local.tee q(local.tee t(64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_67))) / 4) + 1) + ((t ^ 4) >> 31), q);
     };
     repr_32 = global:core:prelude/string.wado::$const_obj_13;
-    if @unlikely(local.tee t(out_3.used + 2) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee t(out_3.used + 2) > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, t);
     }
-    new_used_48 = out_3.used;
+    start_230 = out_3.used;
     out_3.used = t;
-    builtin::array_copy<u8>(local.tee $load_2(out_3.repr), new_used_48, repr_32, 0, 2);
-    if @unlikely(local.tee new_used_48(out_3.used + start_49) > builtin::array_len($load_2)) {
+    builtin::array_copy<u8>(local.tee $load_0(out_3.repr), start_230, repr_32, 0, 2);
+    if @unlikely(local.tee start_230(out_3.used + q) > builtin::array_len($load_0)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_230);
     }
     t = out_3.used;
-    out_3.used = new_used_48;
-    $load_2 = out_3.repr;
-    start_49 = t + start_49;
+    out_3.used = start_230;
+    $load_0 = out_3.repr;
+    q = t + q;
     if val_i64_67 == 0_i64 {
-        builtin::array_set_u8($load_2, t, 48);
+        builtin::array_set_u8($load_0, t, 48);
     } else {
-        b22: block {
-            l23: loop {
-                break_if b22 val_i64_67 == 0_i64;
-                start_49 = start_49 - 1;
+        b21: block {
+            l22: loop {
+                break_if b21 val_i64_67 == 0_i64;
+                q = q - 1;
                 t = builtin::i32_wrap_i64(val_i64_67 & 15_i64);
-                builtin::array_set_u8($load_2, start_49, select i32(t < 10, 48 + t, (97 + t) - 10));
+                builtin::array_set_u8($load_0, q, select i32(t < 10, 48 + t, (97 + t) - 10));
                 val_i64_67 = val_i64_67 >>u 4_i64;
-                continue l23;
+                continue l22;
             };
         };
     }
     repr_32 = global:core:prelude/string.wado::$const_obj_14;
-    if @unlikely(local.tee start_49(out_3.used + 4) > builtin::array_len($load_2)) {
+    if @unlikely(local.tee q(out_3.used + 4) > builtin::array_len($load_0)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_49);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, q);
     }
     t = out_3.used;
-    out_3.used = start_49;
+    out_3.used = q;
     builtin::array_copy<u8>(out_3.repr, t, repr_32, 0, 4);
     return out_3;
 }

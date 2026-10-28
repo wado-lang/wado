@@ -264,7 +264,6 @@ fn make_trait_method(
         local_count,
         locals,
         address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         is_cm_export: false,

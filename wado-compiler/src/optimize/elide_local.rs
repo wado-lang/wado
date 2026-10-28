@@ -4,7 +4,6 @@
 //! `wir_optimize/elide_local.rs`; running here exposes the freshly dead
 //! expressions to the rest of the fixed-point loop, which the WIR pass cannot.
 
-use crate::hashmap::IndexSet;
 use crate::nir_arena::{BlockId, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 
@@ -23,7 +22,6 @@ enum Action {
 }
 
 pub(super) struct ElideRule<'a> {
-    stores_aliased: &'a IndexSet<u32>,
     /// What this body's calls may do, so a dead binding whose value is a call
     /// can still go: the structural purity predicate refuses every call on
     /// sight, while a summary can prove one has no effect and cannot trap.
@@ -31,17 +29,11 @@ pub(super) struct ElideRule<'a> {
 }
 
 impl<'a> ElideRule<'a> {
-    /// Build the rule for one function. `stores_aliased` lists params whose
-    /// reference a callee may retain past its return, keeping writes through the
-    /// local observable, so those are never elided; it is read off the function
-    /// before the engine borrows its body. Every other live read comes from
+    /// Build the rule for one function. A live read comes from
     /// `Engine::is_local_read`, so `address_taken_locals` — stale after `inline`
     /// / `ref_elim` — is deliberately not consulted.
-    pub(super) fn new(stores_aliased: &'a IndexSet<u32>, calls: CallFacts<'a>) -> Self {
-        Self {
-            stores_aliased,
-            calls,
-        }
+    pub(super) fn new(calls: CallFacts<'a>) -> Self {
+        Self { calls }
     }
 }
 
@@ -106,7 +98,7 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
             local_index, value, ..
         } => {
             let (idx, value) = (*local_index, *value);
-            if is_kept(engine, idx, rule.stores_aliased) {
+            if is_kept(engine, idx) {
                 Action::Keep
             } else if deletable(engine, value, rule) {
                 Action::Drop
@@ -141,7 +133,7 @@ fn classify(engine: &Engine, stmt: StmtId, is_tail: bool, rule: &ElideRule) -> A
                 && let ExprKind::Local { index, .. } = &engine.body.exprs[target].kind
             {
                 let index = *index;
-                if !is_kept(engine, index, rule.stores_aliased) {
+                if !is_kept(engine, index) {
                     return if deletable(engine, value, rule) {
                         Action::Drop
                     } else {
@@ -169,12 +161,9 @@ fn deletable(engine: &Engine, value: Operand, rule: &ElideRule) -> bool {
     }
 }
 
-/// A local is kept (not elidable) when a retaining callee aliased its
-/// reference, or it is read anywhere in the body.
-fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
-    stores_aliased.contains(&local)
-        || engine.is_local_read(local)
-        || engine.reads_promoted_local(local)
+/// A local is kept (not elidable) when it is read anywhere in the body.
+fn is_kept(engine: &Engine, local: u32) -> bool {
+    engine.is_local_read(local) || engine.reads_promoted_local(local)
 }
 
 #[cfg(test)]
@@ -232,14 +221,13 @@ mod tests {
     }
 
     fn run_elide(body: &mut Body, locals: &mut Tracked<Vec<NirLocal>>) {
-        let stores_aliased = IndexSet::default();
         let proofs = Proofs::default();
         // No callees in these bodies, so the summaries are unused.
         let calls = CallFacts {
             effects: &[],
             proofs: &proofs,
         };
-        let rule = ElideRule::new(&stores_aliased, calls);
+        let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(body, &mut buffers, locals, &[]);
         engine.run(&[&rule]);
@@ -283,14 +271,13 @@ mod tests {
             may_trap: true,
             ..FnEffect::default()
         }];
-        let stores_aliased = IndexSet::default();
         let proofs = Proofs::from_iter(proven_callee.map(|f| (call, FuncId::new(f))));
         let types = TypeTable::new();
         let calls = CallFacts {
             effects: &effects,
             proofs: &proofs,
         };
-        let rule = ElideRule::new(&stores_aliased, calls);
+        let rule = ElideRule::new(calls);
         let mut buffers = EngineBuffers::default();
         let mut engine = Engine::new(&mut body, &mut buffers, &mut locals, &[]);
         engine.set_value_graph_type_table(&types);

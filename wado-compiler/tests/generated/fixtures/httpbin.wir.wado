@@ -16988,18 +16988,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<httpbin.wad
     let $load_1: i32;
     let out_3: ref "core:prelude/string.wado//String";
     let repr_32: ref Array<u8>;
-    let new_used_48: i32;
     let start_49: i32;
+    let start_82: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>($mv$t$s1.used + (local.tee $load_1($mv$t$s0.used) + 16)), used: 0 };
     repr_32 = $mv$t$s0.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_20 $load_1 == 0;
-        if @unlikely(local.tee new_used_48(0 + $load_1) > builtin::array_len(out_3.repr)) {
+        if @unlikely($load_1 > builtin::array_len(out_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_1);
         }
         start_49 = out_3.used;
-        out_3.used = new_used_48;
+        out_3.used = $load_1;
         builtin::array_copy<u8>(out_3.repr, start_49, repr_32, 0, $load_1);
     };
     $inline_core_prelude_format_wado_pad_text_core_prelude_string_wado_String__spec0_sroa_f_buf__0: block {
@@ -17014,9 +17014,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<httpbin.wad
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, start_49);
         }
-        new_used_48 = out_3.used;
+        start_82 = out_3.used;
         out_3.used = start_49;
-        builtin::array_copy<u8>(out_3.repr, new_used_48, repr_32, 0, $load_1);
+        builtin::array_copy<u8>(out_3.repr, start_82, repr_32, 0, $load_1);
     };
     return out_3;
 }

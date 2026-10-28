@@ -502,7 +502,7 @@ impl Signatures {
                         if func.retains.contains(&p.name) {
                             None
                         } else {
-                            is_param_fixed(&func, p)
+                            is_param_fixed(p)
                                 .then(|| held_struct(p.type_id, types))
                                 .flatten()
                                 .or_else(|| reference_struct(p.type_id, types))
@@ -510,11 +510,7 @@ impl Signatures {
                     })
                     .collect(),
                 has_body: func.body.is_some() && !func.is_dead,
-                param_fixed: func
-                    .params
-                    .iter()
-                    .map(|p| is_param_fixed(&func, p))
-                    .collect(),
+                param_fixed: func.params.iter().map(is_param_fixed).collect(),
                 scalar_specializable: !func.params.iter().any(|p| p.is_mut_ref)
                     && !recursive.contains(&FuncId::new(index)),
             }
@@ -541,8 +537,8 @@ impl Signatures {
 /// Whether the parameter's slot holds exactly what the argument gave it for the
 /// whole body, so every read of it is that constant. A reference to an
 /// immutable slot cannot write it, so taking one leaves it fixed.
-fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
-    !param.is_mut && !param.is_mut_ref && !func.stores_aliased_locals.contains(&param.local_index)
+fn is_param_fixed(param: &NirParam) -> bool {
+    !param.is_mut && !param.is_mut_ref
 }
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.
@@ -1541,7 +1537,7 @@ fn propagate_scalar_constants(
             .iter()
             .zip(values)
             .filter_map(|(p, value)| {
-                is_param_fixed(&func, p)
+                is_param_fixed(p)
                     .then(|| value.clone())
                     .flatten()
                     .map(|v| (p.local_index, v))

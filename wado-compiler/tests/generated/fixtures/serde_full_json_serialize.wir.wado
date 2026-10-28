@@ -289,74 +289,76 @@ global global:core:prelude/string.wado::$const_obj_205: ref Array<u8> = array.ne
 global global:core:prelude/string.wado::$const_obj_206: ref Array<u8> = array.new_fixed<u8>(34);
 
 fn "serde_full_json_serialize.wado/run"() with Stdout {
-    let writer_6: ref "core:prelude/string.wado//String";
-    let new_used_26: i32;
     let start_27: i32;
     let writer_54: ref "serde_full_json_serialize.wado//JsonWriter";
     let $moved_4_73: i32;
     let $cm_pair_7_76: i64;
-    if @unlikely(local.tee new_used_26(local.tee writer_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }).used + 2) > builtin::array_len(writer_6.repr)) {
+    let $sroa_$pattern_temp_0_1_14_83: i32;
+    let $sroa_writer_buf_144: ref "core:prelude/string.wado//String";
+    $sroa_writer_buf_144 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if @unlikely(2 > builtin::array_len($sroa_writer_buf_144.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(writer_6, new_used_26);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_writer_buf_144, 2);
     }
-    start_27 = writer_6.used;
-    writer_6.used = new_used_26;
-    builtin::array_copy<u8>(writer_6.repr, start_27, global:serde_full_json_serialize.wado::$const_obj_18, 0, 2);
+    start_27 = $sroa_writer_buf_144.used;
+    $sroa_writer_buf_144.used = 2;
+    builtin::array_copy<u8>($sroa_writer_buf_144.repr, start_27, global:serde_full_json_serialize.wado::$const_obj_18, 0, 2);
     start_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    new_used_26 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
     $moved_4_73 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_73 = start_27; start_27 = 0; $moved_4_73);
-    start_27 = new_used_26;
-    new_used_26 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, writer_6.repr, writer_6.used);
+    start_27 = $sroa_$pattern_temp_0_1_14_83;
+    $sroa_$pattern_temp_0_1_14_83 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, $sroa_writer_buf_144.repr, $sroa_writer_buf_144.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_27 = $moved_4_73; $moved_4_73 = 0; start_27);
-    if @unlikely(local.tee start_27(local.tee writer_6(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }).used + 7) > builtin::array_len(writer_6.repr)) {
+    $sroa_writer_buf_144 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+    if @unlikely(7 > builtin::array_len($sroa_writer_buf_144.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(writer_6, start_27);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_writer_buf_144, 7);
     }
-    $moved_4_73 = writer_6.used;
-    writer_6.used = start_27;
-    builtin::array_copy<u8>(writer_6.repr, $moved_4_73, global:serde_full_json_serialize.wado::$const_obj_17, 0, 7);
-    $moved_4_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    start_27 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    new_used_26 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_26 = $moved_4_73; $moved_4_73 = 0; new_used_26);
-    $moved_4_73 = start_27;
-    start_27 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_73, writer_6.repr, writer_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_73 = new_used_26; new_used_26 = 0; $moved_4_73);
+    start_27 = $sroa_writer_buf_144.used;
+    $sroa_writer_buf_144.used = 7;
+    builtin::array_copy<u8>($sroa_writer_buf_144.repr, start_27, global:serde_full_json_serialize.wado::$const_obj_17, 0, 7);
+    start_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
+    $moved_4_73 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_83 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_83 = start_27; start_27 = 0; $sroa_$pattern_temp_0_1_14_83);
+    start_27 = $moved_4_73;
+    $moved_4_73 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, $sroa_writer_buf_144.repr, $sroa_writer_buf_144.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_27 = $sroa_$pattern_temp_0_1_14_83; $sroa_$pattern_temp_0_1_14_83 = 0; start_27);
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/Point^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]$dae[self]"(local.tee writer_54(struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } })));
-    writer_6 = writer_54.buf;
-    $moved_4_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    new_used_26 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    start_27 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_27 = $moved_4_73; $moved_4_73 = 0; start_27);
-    $moved_4_73 = new_used_26;
-    new_used_26 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_73, writer_6.repr, writer_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_73 = start_27; start_27 = 0; $moved_4_73);
+    $sroa_writer_buf_144 = writer_54.buf;
+    start_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
+    $moved_4_73 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_73 = start_27; start_27 = 0; $moved_4_73);
+    start_27 = $sroa_$pattern_temp_0_1_14_83;
+    $sroa_$pattern_temp_0_1_14_83 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, $sroa_writer_buf_144.repr, $sroa_writer_buf_144.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_27 = $moved_4_73; $moved_4_73 = 0; start_27);
     writer_54 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop(block -> ref null "serde_full_json_serialize.wado//SerializeError" {
         let $mv_arg_1: ref "serde_full_json_serialize.wado//User";
         "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$sroa[s.w]"(local.tee $mv_arg_1(global:serde_full_json_serialize.wado::$const_obj_16).name, $mv_arg_1.location, $mv_arg_1.tags, writer_54);
     });
-    writer_6 = writer_54.buf;
-    $moved_4_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    start_27 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    new_used_26 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_26 = $moved_4_73; $moved_4_73 = 0; new_used_26);
-    $moved_4_73 = start_27;
-    start_27 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_73, writer_6.repr, writer_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_73 = new_used_26; new_used_26 = 0; $moved_4_73);
+    $sroa_writer_buf_144 = writer_54.buf;
+    start_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
+    $moved_4_73 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_83 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_83 = start_27; start_27 = 0; $sroa_$pattern_temp_0_1_14_83);
+    start_27 = $moved_4_73;
+    $moved_4_73 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, $sroa_writer_buf_144.repr, $sroa_writer_buf_144.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_27 = $sroa_$pattern_temp_0_1_14_83; $sroa_$pattern_temp_0_1_14_83 = 0; start_27);
     writer_54 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop(block -> ref null "serde_full_json_serialize.wado//SerializeError" {
         "serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$sroa[s.w]"(local.tee $mv_arg_1(global:serde_full_json_serialize.wado::$const_obj_15).name, $mv_arg_1.location, $mv_arg_1.tags, writer_54);
     });
-    writer_6 = writer_54.buf;
-    $moved_4_73 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
-    new_used_26 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
-    start_27 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_27 = $moved_4_73; $moved_4_73 = 0; start_27);
-    $moved_4_73 = new_used_26;
-    new_used_26 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_73, writer_6.repr, writer_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_73 = start_27; start_27 = 0; $moved_4_73);
+    $sroa_writer_buf_144 = writer_54.buf;
+    start_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_76("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_83 = builtin::i32_wrap_i64($cm_pair_7_76 >> 32_i64);
+    $moved_4_73 = "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_73 = start_27; start_27 = 0; $moved_4_73);
+    start_27 = $sroa_$pattern_temp_0_1_14_83;
+    $sroa_$pattern_temp_0_1_14_83 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_27, $sroa_writer_buf_144.repr, $sroa_writer_buf_144.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_27 = $moved_4_73; $moved_4_73 = 0; start_27);
 }
 
 fn "serde_full_json_serialize.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

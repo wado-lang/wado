@@ -4,7 +4,7 @@
 //! trivial copies. A local bound to `&S { … }` or `&mut S { … }` splits the
 //! same way: the literal is a place only that local reaches.
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
 use cranelift_entity::EntityRef;
 
@@ -101,32 +101,22 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         if func.body.is_none() {
             return false;
         }
-        let stores_aliased_snapshot = func.stores_aliased_locals.clone();
         let rule = SroaRule {
             stores_lookup: &stores_lookup,
             value_copy_ids: &value_copy_ids,
             builtins: &builtins,
             type_table,
-            stores_aliased: stores_aliased_snapshot,
-            newly_aliased: RefCell::new(IndexSet::default()),
             applied: Cell::new(false),
         };
-        let changed = {
-            let FuncParts {
-                body,
-                locals,
-                params,
-                ..
-            } = func.parts();
-            let body = body.expect("checked above");
-            let mut engine = Engine::new(body, buffers, locals, params);
-            engine.run(&[&rule])
-        };
-        let newly = rule.newly_aliased.into_inner();
-        if !newly.is_empty() {
-            func.stores_aliased_locals.extend(newly);
-        }
-        changed
+        let FuncParts {
+            body,
+            locals,
+            params,
+            ..
+        } = func.parts();
+        let body = body.expect("checked above");
+        let mut engine = Engine::new(body, buffers, locals, params);
+        engine.run(&[&rule])
     })
 }
 
@@ -146,14 +136,6 @@ pub(super) struct SroaRule<'a> {
     /// Which sequence builtin each callee is, for an array candidate's reads.
     builtins: &'a CtfeBuiltinMap,
     type_table: &'a TypeTable,
-    /// Snapshot of `func.stores_aliased_locals` at session start. Used as a
-    /// blacklist when picking candidates so a local that the existing alias
-    /// analysis already flagged is never decomposed.
-    stores_aliased: IndexSet<u32>,
-    /// Locals discovered to be aliased by a decomposed candidate's `&local`
-    /// field value (step 3b). Merged into `func.stores_aliased_locals` by the
-    /// driver after the engine session ends.
-    newly_aliased: RefCell<IndexSet<u32>>,
     /// Whole-function rewrite: only run once per session. The engine's
     /// re-try-after-success loop and any block re-enqueue triggered by edits
     /// could otherwise call `apply_block` at the root again.
@@ -199,10 +181,6 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     let mut decomposed: IndexSet<u32> = IndexSet::default();
     let mut reconstruct_set: IndexSet<u32> = IndexSet::default();
     for c in &candidates {
-        if rule.stores_aliased.contains(&c.local_index) {
-            compiler_trace!("sroa", "{}: stores-aliased", c.local_name);
-            continue;
-        }
         if uses.out_of_range.contains(&c.local_index) {
             compiler_trace!("sroa", "{}: read past its length", c.local_name);
             continue;
@@ -291,15 +269,6 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         }
     }
 
-    // Step 3b: mark locals referenced via &local in decomposed struct fields.
-    // The delta is collected here and merged into `func.stores_aliased_locals`
-    // by the driver after the session closes (rules can't touch
-    // function-scope fields directly).
-    {
-        let mut newly = rule.newly_aliased.borrow_mut();
-        mark_ref_field_locals_as_aliased(engine.body, &candidates, &decomposed, &mut newly);
-    }
-
     // Step 4: rewrite — expand candidate Lets and replace field accesses.
     let ctx = Rewrite {
         decomposed: &decomposed,
@@ -315,57 +284,6 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     rewrite_block(engine, root, &ctx);
 
     true
-}
-
-// -----------------------------------------------------------------------
-// Step 3b: mark &local field values as stores-aliased
-// -----------------------------------------------------------------------
-
-/// Every literal a decomposed candidate takes: the one its `Let` binds and each
-/// a whole-literal assign writes.
-fn mark_ref_field_locals_as_aliased(
-    body: &Body,
-    candidates: &[SroaCandidate],
-    decomposed: &IndexSet<u32>,
-    stores_aliased: &mut IndexSet<u32>,
-) {
-    for c in candidates {
-        if decomposed.contains(&c.local_index) {
-            collect_ref_locals_in_fields(body, c.literal, stores_aliased);
-        }
-    }
-    body.for_each_reachable_node(|node| {
-        if let NodeRef::Expr(e) = node
-            && let Some((_, literal)) = whole_literal_assign(body, e, decomposed)
-        {
-            collect_ref_locals_in_fields(body, literal, stores_aliased);
-        }
-    });
-}
-
-fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
-    match &body.exprs[expr].kind {
-        ExprKind::StructLiteral { fields, .. } => {
-            for v in fields.iter().filter_map(|f| f.value.as_expr()) {
-                extract_ref_local(body, v, stores_aliased);
-            }
-        }
-        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => {
-            for e in elements.iter().filter_map(|e| e.as_expr()) {
-                extract_ref_local(body, e, stores_aliased);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn extract_ref_local(body: &Body, expr: ExprId, stores_aliased: &mut IndexSet<u32>) {
-    if let ExprKind::Unary { op, expr: inner } = &body.exprs[expr].kind
-        && matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-        && let Some(ExprKind::Local { index, .. }) = inner.as_expr().map(|e| &body.exprs[e].kind)
-    {
-        stores_aliased.insert(*index);
-    }
 }
 
 /// The scalar local one decomposed field became.

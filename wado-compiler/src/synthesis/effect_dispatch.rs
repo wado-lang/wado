@@ -1007,7 +1007,6 @@ fn build_dispatch_wrapper_function(
         local_count: next_local,
         locals,
         address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: true,
         is_cm_export: false,

@@ -71,17 +71,15 @@ fn forward_one(
     // it everywhere forwards into the hot paths too, which trades shared locals
     // for duplicated constants and measures slower.
     let is_cm_export = func.is_cm_export;
-    // `Local`-read forwarding excludes address-taken / `stores`-aliased
-    // locals: the canonical sets plus the engine's body scan — the
-    // canonical sets are static elaboration records and go stale after
-    // `inline` / `ref_elim` copy `Ref` nodes (see `elide_local::ElideRule`).
+    // `Local`-read forwarding excludes address-taken locals: the canonical set
+    // plus the engine's body scan — the canonical set is a static elaboration
+    // record and goes stale after `inline` / `ref_elim` copy `Ref` nodes (see
+    // `elide_local::ElideRule`).
     let mut unsafe_locals = func.address_taken_locals.clone();
-    unsafe_locals.extend(func.stores_aliased_locals.iter().copied());
     let FuncParts {
         body,
         locals,
         address_taken_locals,
-        stores_aliased_locals,
         params,
         ..
     } = func.parts();
@@ -90,7 +88,6 @@ fn forward_one(
         body,
         locals,
         address_taken_locals,
-        stores_aliased_locals,
         type_table,
         first_param_types,
         call_immutability,
@@ -111,7 +108,7 @@ fn forward_one(
     engine.build_value_graph_now();
     unsafe_locals.extend(engine.body_address_taken().iter().copied());
     // The complement of the unsafe set: what disqualifies a local is being
-    // address-taken or `stores`-aliased, not being an aggregate.
+    // address-taken, not being an aggregate.
     let forwardable_locals: IndexSet<u32> = (0..engine.locals().len() as u32)
         .filter(|i| !unsafe_locals.contains(i))
         .collect();

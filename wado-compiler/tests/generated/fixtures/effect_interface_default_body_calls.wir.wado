@@ -632,23 +632,17 @@ fn "effect_interface_default_body_calls.wado/effect_interface_default_body_calls
     let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
     let out_15: ref "core:prelude/string.wado//String";
     let repr_44: ref Array<u8>;
-    let new_used_60: i32;
-    let start_61: i32;
+    let is_negative: bool;
     let x: i64;
     self_2 = self.$capture_0.answer;
     out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     repr_44 = global:effect_interface_default_body_calls.wado::$const_obj_0;
-    if @unlikely(local.tee new_used_60(0 + 8) > builtin::array_len(out_15.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, new_used_60);
-    }
-    start_61 = out_15.used;
-    out_15.used = new_used_60;
-    builtin::array_copy<u8>(out_15.repr, start_61, repr_44, 0, 8);
-    start_61 = n < 0;
+    out_15.used = 8;
+    builtin::array_copy<u8>(out_15.repr, 0, repr_44, 0, 8);
+    is_negative = n < 0;
     n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_61 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_15, start_61, n);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_15.repr, start_61, x, n);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_15, is_negative, n);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_15.repr, is_negative, x, n);
     $inline_core_prelude_string_wado_String__format_effect_interface_default_body_calls_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_calls_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
     };
@@ -745,22 +739,16 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
     let repr_32: ref Array<u8>;
-    let new_used_48: i32;
-    let start_49: i32;
+    let is_negative: bool;
     let x: i64;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     repr_32 = global:core:prelude/string.wado::$const_obj_8;
-    if @unlikely(local.tee new_used_48(0 + 8) > builtin::array_len(out_3.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
-    }
-    start_49 = out_3.used;
-    out_3.used = new_used_48;
-    builtin::array_copy<u8>(out_3.repr, start_49, repr_32, 0, 8);
-    start_49 = t < 0;
+    out_3.used = 8;
+    builtin::array_copy<u8>(out_3.repr, 0, repr_32, 0, 8);
+    is_negative = t < 0;
     t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, start_49, t);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, start_49, x, t);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative, t);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative, x, t);
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };

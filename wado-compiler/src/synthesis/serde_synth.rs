@@ -480,7 +480,6 @@ fn field_schema_method_fn(
         local_count,
         locals,
         address_taken_locals: IndexSet::default(),
-        stores_aliased_locals: IndexSet::default(),
         is_cm_binding: false,
         is_dispatch_wrapper: false,
         inline_hint: InlineHint::Auto,

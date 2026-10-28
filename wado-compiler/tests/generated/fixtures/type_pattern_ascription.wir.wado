@@ -362,7 +362,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<type_patter
     let $load_1: i32;
     let out_3: ref "core:prelude/string.wado//String";
     let repr_37: ref Array<u8>;
-    let new_used_53: i32;
     let start_54: i32;
     let x_74: i64;
     let repr_93: ref Array<u8>;
@@ -370,12 +369,12 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<type_patter
     repr_37 = $mv$t$s0.repr;
     $inline_core_prelude_string_wado_String__internal_push_view_22: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_view_22 $load_1 == 0;
-        if @unlikely(local.tee new_used_53(0 + $load_1) > builtin::array_len(out_3.repr)) {
+        if @unlikely($load_1 > builtin::array_len(out_3.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_53);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $load_1);
         }
         start_54 = out_3.used;
-        out_3.used = new_used_53;
+        out_3.used = $load_1;
         builtin::array_copy<u8>(out_3.repr, start_54, repr_37, 0, $load_1);
     };
     $load_1 = $mv$t$h0 < 0;

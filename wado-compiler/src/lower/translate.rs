@@ -739,7 +739,6 @@ impl Translator<'_> {
             span: func.span,
             locals: Tracked::new(locals),
             address_taken_locals: func.address_taken_locals.clone(),
-            stores_aliased_locals: func.stores_aliased_locals.clone(),
             is_cm_binding: func.is_cm_binding,
             is_dispatch_wrapper: func.is_dispatch_wrapper,
             is_cm_export: func.is_cm_export,

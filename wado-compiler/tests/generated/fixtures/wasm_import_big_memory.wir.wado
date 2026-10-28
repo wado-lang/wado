@@ -69,27 +69,22 @@ import fn wasi/task-return from "wasi/task-return";
 global global:wasm_import_big_memory.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(104, 105, 103, 104, 95, 108, 111, 97, 100, 40, 41, 32, 61, 32);
 
 fn "wasm_import_big_memory.wado/run"() with Stdout {
-    let $load_2: ref Array<u8>;
+    let $load_0: ref Array<u8>;
     let out_12: ref "core:prelude/string.wado//String";
     let repr_41: ref Array<u8>;
-    let new_used_57: i32;
-    let start_58: i32;
+    let is_negative_74: bool;
     let x: i64;
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_139: i32;
+    let start_175: i32;
     "wasm:./sub/wasm_import_big_memory.wat/high_store"(7);
     $sroa_t_h0_139 = "wasm:./sub/wasm_import_big_memory.wat/high_load"();
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
     repr_41 = global:wasm_import_big_memory.wado::$const_obj_0;
-    if @unlikely(local.tee new_used_57(0 + 14) > builtin::array_len(out_12.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, new_used_57);
-    }
-    start_58 = out_12.used;
-    out_12.used = new_used_57;
-    builtin::array_copy<u8>(local.tee $load_2(out_12.repr), start_58, repr_41, 0, 14);
-    start_58 = $sroa_t_h0_139 < 0;
+    out_12.used = 14;
+    builtin::array_copy<u8>(local.tee $load_0(out_12.repr), 0, repr_41, 0, 14);
+    is_negative_74 = $sroa_t_h0_139 < 0;
     x = builtin::i64_extend_i32_s($sroa_t_h0_139);
     x = select i64(x < 0_i64, 0_i64 - x, x);
     $sroa_t_h0_139 = $inline_count_digits_u64_1: block -> i32 {
@@ -152,56 +147,56 @@ fn "wasm_import_big_memory.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if start_58 {
-        if @unlikely(local.tee start_58(out_12.used + 1) > builtin::array_len($load_2)) {
+    if is_negative_74 {
+        if @unlikely(local.tee is_negative_74(out_12.used + 1) > builtin::array_len($load_0)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, start_58);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_74);
         }
-        new_used_57 = out_12.used;
-        out_12.used = start_58;
-        builtin::array_set_u8(out_12.repr, new_used_57, 45);
+        start_175 = out_12.used;
+        out_12.used = is_negative_74;
+        builtin::array_set_u8(out_12.repr, start_175, 45);
     } else {
     }
-    if @unlikely(local.tee new_used_57(out_12.used + $sroa_t_h0_139) > builtin::array_len(out_12.repr)) {
+    if @unlikely(local.tee start_175(out_12.used + $sroa_t_h0_139) > builtin::array_len(out_12.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, new_used_57);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, start_175);
     }
-    start_58 = out_12.used;
-    out_12.used = new_used_57;
-    $load_2 = out_12.repr;
-    $sroa_t_h0_139 = start_58 + $sroa_t_h0_139;
-    b23: block {
-        l24: loop {
-            break_if b23 ($sroa_t_h0_139 - start_58) < 2;
+    is_negative_74 = out_12.used;
+    out_12.used = start_175;
+    $load_0 = out_12.repr;
+    $sroa_t_h0_139 = is_negative_74 + $sroa_t_h0_139;
+    b22: block {
+        l23: loop {
+            break_if b22 ($sroa_t_h0_139 - is_negative_74) < 2;
             q = x /u 100_i64;
-            tens = local.tee new_used_57(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_2, $sroa_t_h0_139 - 1, (48 + new_used_57) - (tens * 10));
-            builtin::array_set_u8($load_2, $sroa_t_h0_139 - 2, 48 + tens);
+            tens = local.tee start_175(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_0, $sroa_t_h0_139 - 1, (48 + start_175) - (tens * 10));
+            builtin::array_set_u8($load_0, $sroa_t_h0_139 - 2, 48 + tens);
             $sroa_t_h0_139 = $sroa_t_h0_139 - 2;
             x = q;
-            continue l24;
+            continue l23;
         };
     };
-    if $sroa_t_h0_139 > start_58 {
-        builtin::array_set_u8($load_2, start_58, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_139 > is_negative_74 {
+        builtin::array_set_u8($load_0, is_negative_74, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
-    start_58 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
+    is_negative_74 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $sroa_t_h0_139 = builtin::i32_wrap_i64(x >> 32_i64);
-    new_used_57 = "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_57 = start_58; start_58 = 0; new_used_57);
-    start_58 = $sroa_t_h0_139;
+    start_175 = "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_175 = is_negative_74; is_negative_74 = 0; start_175);
+    is_negative_74 = $sroa_t_h0_139;
     $sroa_t_h0_139 = 0;
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $sroa_t_h0_139(out_12.used) + 1)), 0, out_12.repr, 0, $sroa_t_h0_139);
-    builtin::array_set_u8($load_2, $sroa_t_h0_139, 10);
+    builtin::array_copy<u8>(local.tee $load_0(builtin::array_new<u8>(local.tee $sroa_t_h0_139(out_12.used) + 1)), 0, out_12.repr, 0, $sroa_t_h0_139);
+    builtin::array_set_u8($load_0, $sroa_t_h0_139, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        tens = start_58;
+        tens = is_negative_74;
         $sroa_t_h0_139 = $sroa_t_h0_139 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tens, $load_2, 0, $sroa_t_h0_139);
+        "core:rt/cm_stream_write_raw_all_u8"(tens, $load_0, 0, $sroa_t_h0_139);
     });
-    "wasi/stream-drop-writable"($sroa_t_h0_139 = start_58; start_58 = 0; $sroa_t_h0_139);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_t_h0_139 = new_used_57; new_used_57 = 0; $sroa_t_h0_139);
+    "wasi/stream-drop-writable"($sroa_t_h0_139 = is_negative_74; is_negative_74 = 0; $sroa_t_h0_139);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_t_h0_139 = start_175; start_175 = 0; $sroa_t_h0_139);
 }
 
 fn "wasm_import_big_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -231,9 +226,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b28: block {
-        l29: loop {
-            break_if b28 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b27: block {
+        l28: loop {
+            break_if b27 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -242,20 +237,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l29;
+            continue l28;
         };
-    }; b30: block {
-        l31: loop {
-            break_if b30 i > $licm_arith_7;
+    }; b29: block {
+        l30: loop {
+            break_if b29 i > $licm_arith_7;
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l31;
+            continue l30;
         };
-    }; b32: block {
-        l33: loop {
-            break_if b32 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+    }; b31: block {
+        l32: loop {
+            break_if b31 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -264,19 +259,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l33;
+            continue l32;
         };
-    }; b34: block {
-        l35: loop {
-            break_if b34 i >= $mv$data$end;
+    }; b33: block {
+        l34: loop {
+            break_if b33 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l35;
+            continue l34;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l37: loop {
+        l36: loop {
             ptr_19 = ptr_13 + i;
             count_20 = $mv$data$end - i;
             count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
@@ -308,7 +303,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_19;
             }
-            continue l37;
+            continue l36;
         };
     };
 }

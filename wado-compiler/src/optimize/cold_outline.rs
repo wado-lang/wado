@@ -571,11 +571,6 @@ fn build_helper(
         .iter()
         .map(|&i| ctx.local(i))
         .collect();
-    helper.stores_aliased_locals = parent
-        .stores_aliased_locals
-        .iter()
-        .map(|&i| ctx.local(i))
-        .collect();
     // What the enclosing function keeps of a parameter bounds what the region
     // keeps of it. What the region does with a lifted local nothing summarized,
     // so each is taken as kept.
