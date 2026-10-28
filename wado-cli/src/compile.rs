@@ -1169,7 +1169,9 @@ fn build_dep_generator_local_path(
     };
     let entry = normalize_path(&package_dir.join(entry));
     let rebased = relative_to(&absolute(manifest_root), &entry).expect("both paths are absolute");
-    Ok(Some(wado_compiler::kiln::InvocationPath::normalize(&rebased)))
+    Ok(Some(wado_compiler::kiln::InvocationPath::normalize(
+        &rebased,
+    )))
 }
 
 /// Resolve a generator *package directory* (absolute) to its

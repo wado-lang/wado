@@ -1722,15 +1722,30 @@ mod tests {
     #[test]
     fn resolve_decl_relative_reanchors_to_the_manifest_root() {
         let cases = [
-            ("project/sub/main.wado", "./dir/gen.wado", "project/sub", "dir/gen.wado"),
+            (
+                "project/sub/main.wado",
+                "./dir/gen.wado",
+                "project/sub",
+                "dir/gen.wado",
+            ),
             (
                 "package-gale/main.wado",
                 "./src/generator.wado",
                 "wasm-size/sqlite_highlight",
                 "../../package-gale/src/generator.wado",
             ),
-            ("a/x/main.wado", "./y/gen.wado", "a/b/c", "../../x/y/gen.wado"),
-            ("package/main.wado", "./src/gen.wado", "", "package/src/gen.wado"),
+            (
+                "a/x/main.wado",
+                "./y/gen.wado",
+                "a/b/c",
+                "../../x/y/gen.wado",
+            ),
+            (
+                "package/main.wado",
+                "./src/gen.wado",
+                "",
+                "package/src/gen.wado",
+            ),
             // A `.` root must not emit a spurious `..` that escapes the project.
             ("main.wado", "./generated", ".", "generated"),
             ("main.wado", "./schema.g4", "./", "schema.g4"),
