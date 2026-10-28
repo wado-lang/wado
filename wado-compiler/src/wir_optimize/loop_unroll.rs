@@ -148,7 +148,10 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
 
 /// How many iterations the copy of `work` runs, when it is a loop body the copy
 /// pays for: small, reading a GC array, holding no loop of its own, declaring
-/// no local, and never branching to the loop (depth 0) or its block (depth 1).
+/// no local, calling nothing, and never branching to the loop (depth 0) or its
+/// block (depth 1). A call costs more than the checks the copy shares, so the
+/// copy would only add code: unrolling `json_canada`'s serializer loops left
+/// `ser` flat and moved the deserializer enough to cost `de` 8%.
 fn unroll_factor<'a>(work: impl IntoIterator<Item = &'a WirInstr>) -> Option<usize> {
     let mut nodes = 0;
     let mut reads_array = false;
@@ -161,7 +164,11 @@ fn unroll_factor<'a>(work: impl IntoIterator<Item = &'a WirInstr>) -> Option<usi
                 WirInstr::ArrayGet { .. } | WirInstr::ArrayGetS { .. } | WirInstr::ArrayGetU { .. }
             );
             refused |= match node {
-                WirInstr::Loop { .. } | WirInstr::DeclareLocal { .. } => true,
+                WirInstr::Loop { .. }
+                | WirInstr::DeclareLocal { .. }
+                | WirInstr::Call { .. }
+                | WirInstr::CallIndirect { .. }
+                | WirInstr::CallRef { .. } => true,
                 WirInstr::Br { depth } | WirInstr::BrIf { depth, .. } => {
                     (nesting..nesting + 2).contains(depth)
                 }
