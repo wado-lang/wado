@@ -186,7 +186,7 @@ impl Walk<'_> {
                     }
                     return Some(());
                 }
-                condition
+                self.scan(engine, NodeRef::Stmt(s))?
             }
             StmtKind::LabeledBlock { block: inner, .. } => {
                 let inner_stmts = body.blocks[*inner].stmts.clone();
