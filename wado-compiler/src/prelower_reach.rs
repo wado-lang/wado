@@ -13,9 +13,11 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{FunctionId, LocalMethodName, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
+use crate::reflect_marker::{bridge_callee, is_marker_bridge};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
+use crate::type_table::TypeTable;
 
 const TRACE_TARGET: &str = "prelower_reach";
 
@@ -49,13 +51,13 @@ fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
 }
 
 /// Whether the program reaches `func` without any TIR body naming it: an
-/// export, a compiler item, a type bridge, a global initializer, a
-/// [`MINTABLE`] impl.
+/// export, a compiler item, a type bridge no reflection marker calls, a global
+/// initializer, a [`MINTABLE`] impl.
 fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
         || func.compiler_item.is_some()
-        || is_type_bridge(&func.name)
+        || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
         || global_init_target(&func.name).is_some()
         || func
             .method_info
@@ -78,6 +80,7 @@ pub(crate) struct Reached {
 /// reaches, which is the work [`prune`] saves.
 fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
     let mintable = mintable_traits(flat);
+    let type_table = flat.type_table.borrow();
     let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut work: Vec<FunctionId> = Vec::new();
     for func_rc in &flat.functions {
@@ -97,7 +100,7 @@ fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
             continue;
         };
         if let Some(body) = &func_rc.borrow().body {
-            work.extend(Callees::of_body(body));
+            work.extend(Callees::of_body(body, &type_table));
         }
     }
     reached
@@ -108,12 +111,13 @@ fn reachable(flat: &FlatPackage) -> Reached {
     let mut present: IndexSet<FunctionId> = IndexSet::default();
     let mut named: IndexSet<FunctionId> = IndexSet::default();
     let mut bodied = 0;
+    let type_table = flat.type_table.borrow();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         present.insert(function_key(&func));
         if let Some(body) = &func.body {
             bodied += 1;
-            named.extend(Callees::of_body(body));
+            named.extend(Callees::of_body(body, &type_table));
         }
     }
     Reached {
@@ -185,20 +189,15 @@ pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
 fn prune(flat: &mut FlatPackage) {
     let reached = reach(flat);
     let before = flat.functions.len();
-    #[cfg(debug_assertions)]
-    {
-        let dropped: Vec<FunctionId> = flat
-            .functions
-            .iter()
-            .filter_map(|func_rc| {
-                let key = function_key(&func_rc.borrow());
-                (!reached.contains(&key)).then_some(key)
-            })
-            .collect();
-        flat.pruned.extend(dropped);
-    }
-    flat.functions
-        .retain(|func_rc| reached.contains(&function_key(&func_rc.borrow())));
+    let pruned = &mut flat.pruned;
+    flat.functions.retain(|func_rc| {
+        let key = function_key(&func_rc.borrow());
+        let keep = reached.contains(&key);
+        if !keep {
+            pruned.insert(key);
+        }
+        keep
+    });
     compiler_trace!(
         TRACE_TARGET,
         "pruned {} of {before} functions",
@@ -206,25 +205,36 @@ fn prune(flat: &mut FlatPackage) {
     );
 }
 
-#[derive(Default)]
-struct Callees {
+struct Callees<'a> {
+    type_table: &'a TypeTable,
     keys: Vec<FunctionId>,
 }
 
-impl Callees {
-    fn of_body(body: &TirBlock) -> Vec<FunctionId> {
-        let mut collector = Self::default();
+impl<'a> Callees<'a> {
+    fn of_body(body: &TirBlock, type_table: &'a TypeTable) -> Vec<FunctionId> {
+        let mut collector = Self {
+            type_table,
+            keys: Vec::new(),
+        };
         collector.walk_block(body);
         collector.keys
     }
 }
 
-impl TirRefVisitor for Callees {
+impl TirRefVisitor for Callees<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
         match &expr.kind {
-            TirExprKind::Call { func, .. } => self
-                .keys
-                .push(FunctionId::free(&func.module_source, &func.name)),
+            TirExprKind::Call {
+                func, type_args, ..
+            } => {
+                self.keys
+                    .push(FunctionId::free(&func.module_source, &func.name));
+                // `lower` rewrites the marker into a call of its bridge.
+                if let Some(bridge) = bridge_callee(self.type_table, func, type_args) {
+                    self.keys
+                        .push(FunctionId::free(&bridge.module_source, &bridge.name));
+                }
+            }
             // A function used as a value: `IndirectCall` names the value, never
             // the function, so this is the only edge to what it may reach.
             TirExprKind::FuncRef {

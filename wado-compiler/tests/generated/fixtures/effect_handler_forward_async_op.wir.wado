@@ -2598,26 +2598,30 @@ fn "core:prelude/format.wado/core/prelude/format.wado/leading_sign_byte_len<core
 
 fn "core:prelude/types.wado/core/prelude/types.wado/take_written<u8>"(buffer, data) {
     let $load_4: i32;
-    let $load_5: i32;
     let packed_2: i32;
-    let $replaced_8: ref "core:prelude//List<u8>";
+    let $contract_arg_0: i32;
+    let $v1_12: i32;
     let elements: ref Array<u8>;
     buffer.packed = "core:prelude/types.wado/settled_copy"(buffer.handle, buffer.packed);
     packed_2 = buffer.packed;
     elements = array.new_fixed<u8>();
-    $replaced_8 = struct.new "core:prelude//List<u8>" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = data.repr; $load_4 = data.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_4)), 0, $array_clone_src_1, 0, $load_4); $array_clone_dst_2, used: $load_4 };
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = data.repr;
+    $load_4 = data.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_4)), 0, $array_clone_src_1, 0, $load_4);
     data.repr = elements;
     data.used = 0;
-    $load_4 = packed_2 >>u 4;
-    $load_5 = $replaced_8.used;
-    if @unlikely($load_4 >u $load_5) {
+    $contract_arg_0 = packed_2 >>u 4;
+    $v1_12 = $load_4;
+    if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 <= $v1_12)) == 0) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($load_4, $load_5, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:651"), used: 27 });
+        "core:prelude/list.wado/core:prelude/list.wado/List<u8>::split_off$contract_report0"($contract_arg_0, $v1_12, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/types.wado:651"), used: 27 });
         unreachable;
     }
-    builtin::array_copy<u8>(local.tee elements(builtin::array_new<u8>(local.tee $load_5($load_5 - $load_4))), 0, $replaced_8.repr, $load_4, $load_5);
-    $replaced_8.used = $load_4;
-    $replaced_8 = struct.new "core:prelude//List<u8>" { repr: elements, used: $load_5 };
+    builtin::array_copy<u8>(local.tee elements(builtin::array_new<u8>(local.tee $v1_12($load_4 - $contract_arg_0))), 0, $array_clone_dst_2, $contract_arg_0, $v1_12);
+    $load_4 = $contract_arg_0;
+    data = struct.new "core:prelude//List<u8>" { repr: elements, used: $v1_12 };
     packed_2 = (if local.tee packed_2(packed_2 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if packed_2 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
@@ -2633,7 +2637,7 @@ fn "core:prelude/types.wado/core/prelude/types.wado/take_written<u8>"(buffer, da
     } else {
         select i32(packed_2 == 1, 1, 2);
     });
-    return struct.new "core:prelude/types.wado//StreamWrite<u8>" { rest: $replaced_8, result: packed_2 };
+    return struct.new "core:prelude/types.wado//StreamWrite<u8>" { rest: data, result: packed_2 };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>::remove$contract_report0"(index, $v1, $site) {

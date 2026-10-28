@@ -1,0 +1,44 @@
+// `loop_version_bce` deletes a bounds check against a list the loop reloads.
+// The loop reads `h.data[i]` while `out` grows and `sink.reset()` replaces
+// `data`; `sink` and `h` are one object, and `out` may be the list read. The
+// fast loop re-tests the bound only where it can drop: after the reload. A
+// push only raises a list's length, so `out.used = used + 1` needs no test,
+// and the call to `grow` sits on the cold path with its own.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [9, 9, 9, 9];
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(h.data[i]);
+        if i == 0 {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    println(`${out:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 9, 9]\n",
+    "wir_expect:O2": [
+        "break_if b{} i >= $bce_limit_{};\n                $v1_{} = $load_{}.used;\n                value_{} = builtin::array_get_value<i32>($load_{}.repr, i);",
+        "out.used = used + 1;\n                if i == 0 {"
+    ]
+}

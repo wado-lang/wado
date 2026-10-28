@@ -441,14 +441,10 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_4_an_inner_closure_
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_5_a_nested_write_alone_boxes_the_binding"() {
-    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_6_a_let_bound_nested_closure_writes_the_same_binding"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
-    count.value = 2;
     "wasi/task-return"(0);
 }
 
@@ -469,14 +465,10 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_10_a_slot_mix_up_wo
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_11_a_nested_write_crosses_three_frames"() {
-    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_12_two_nested_closures_write_one_binding"() {
-    let count: ref "core:prelude/types.wado//Box<i32>";
-    local.tee count(struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }).value = 1;
-    count.value = 11;
     "wasi/task-return"(0);
 }
 
@@ -485,34 +477,31 @@ fn "closure_nested_transitive_capture.wado/$cm_export__$test_13_a_nested_closure
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_14_a_shadowing_local_is_not_the_boxed_outer_one"() {
-    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_15_an_if_let_binding_does_not_reach_the_else_branch"() {
-    let n: ref "core:prelude/types.wado//Box<i32>";
-    n = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
+    let $sroa_n_value_11: i32;
+    $sroa_n_value_11 = 0;
     let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $match_scrut_0(global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0)) {
         drop(ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0).payload_0);
     } else {
-        n.value = 7;
+        $sroa_n_value_11 = 7;
     }
-    if @unlikely(n.value != 7) {
+    if @unlikely($sroa_n_value_11 != 7) {
         cold_path;
-        "closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0"(n);
+        "closure_nested_transitive_capture.wado/$test_15_an_if_let_binding_does_not_reach_the_else_branch$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_n_value_11 });
         unreachable;
     }
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_16_an_if_let_binding_does_not_outlive_the_expression"() {
-    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 
 fn "closure_nested_transitive_capture.wado/$cm_export__$test_17_a_shadowing_binder_s_scope_ends_with_its_block"() {
-    struct.new "core:prelude/types.wado//Box<i32>" { value: 0 }.value = 1;
     "wasi/task-return"(0);
 }
 

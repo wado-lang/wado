@@ -230,8 +230,8 @@ fn "value_copy_nested_struct.wado/run"() {
     let $load_1: ref Array<i32>;
     let $v0_2: i32;
     let $sroa_a_items_110: ref "core:prelude//List<i32>";
-    let $sroa_b_items_111: ref "core:prelude//List<i32>";
-    let $sroa_$sroa_h_cells_114_repr_118: ref "Array<value_copy_nested_struct.wado/Inner>";
+    let $sroa_b_items_113: ref "core:prelude//List<i32>";
+    let $sroa_$sroa_h_cells_112_repr_116: ref "Array<value_copy_nested_struct.wado/Inner>";
     $sroa_a_items_110 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     if @unlikely(0 >= builtin::array_len($sroa_a_items_110.repr)) {
         cold_path;
@@ -239,13 +239,13 @@ fn "value_copy_nested_struct.wado/run"() {
     }
     builtin::array_set<i32>(local.tee $load_1($sroa_a_items_110.repr), 0, 1);
     $sroa_a_items_110.used = 1;
-    $sroa_b_items_111 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_1, 0, 1); $array_clone_dst_2, used: 1 };
-    if @unlikely(1 >= builtin::array_len($sroa_b_items_111.repr)) {
+    $sroa_b_items_113 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_1, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_b_items_113.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_items_111);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_items_113);
     }
-    builtin::array_set<i32>($sroa_b_items_111.repr, 1, 2);
-    $sroa_b_items_111.used = 2;
+    builtin::array_set<i32>($sroa_b_items_113.repr, 1, 2);
+    $sroa_b_items_113.used = 2;
     if @unlikely(local.tee $v0_2($sroa_a_items_110.used) != 1) {
         cold_path;
         "value_copy_nested_struct.wado/run$cold8"($v0_2);
@@ -258,19 +258,19 @@ fn "value_copy_nested_struct.wado/run"() {
     }
     builtin::array_set<i32>(local.tee $array_clone_dst_2($sroa_a_items_110.repr), 0, 10);
     $sroa_a_items_110.used = 1;
-    $sroa_b_items_111 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $load_1(builtin::array_new<i32>(1)), 0, $array_clone_dst_2, 0, 1); $load_1, used: 1 };
-    if @unlikely(1 >= builtin::array_len($sroa_b_items_111.repr)) {
+    $sroa_b_items_113 = struct.new "core:prelude//List<i32>" { repr: builtin::array_copy<i32>(local.tee $load_1(builtin::array_new<i32>(1)), 0, $array_clone_dst_2, 0, 1); $load_1, used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_b_items_113.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_items_111);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_b_items_113);
     }
-    builtin::array_set<i32>($sroa_b_items_111.repr, 1, 20);
-    $sroa_b_items_111.used = 2;
+    builtin::array_set<i32>($sroa_b_items_113.repr, 1, 20);
+    $sroa_b_items_113.used = 2;
     if @unlikely(local.tee $v0_2($sroa_a_items_110.used) != 1) {
         cold_path;
         "value_copy_nested_struct.wado/run$cold6"($v0_2);
         unreachable;
     }
-    $sroa_$sroa_h_cells_114_repr_118 = array.new_fixed<ref "value_copy_nested_struct.wado//Inner">(struct.new "value_copy_nested_struct.wado//Inner" { boxed: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(100), used: 1 } });
+    $sroa_$sroa_h_cells_112_repr_116 = array.new_fixed<ref "value_copy_nested_struct.wado//Inner">(struct.new "value_copy_nested_struct.wado//Inner" { boxed: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(100), used: 1 } });
     let $array_clone_dst_8: ref "Array<value_copy_nested_struct.wado/Inner>";
     $array_clone_dst_8 = builtin::array_new<ref "value_copy_nested_struct.wado//Inner">(1);
     $v0_2 = 0;
@@ -278,28 +278,28 @@ fn "value_copy_nested_struct.wado/run"() {
     b6: block {
         l7: loop {
             break_if b6 ((($v0_2 >= 1) | (($v0_2 + 1) >= 1)) | ((($v0_2 + 1) + 1) >= 1)) | (((($v0_2 + 1) + 1) + 1) >= 1);
-            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, $v0_2);
+            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, $v0_2);
             builtin::array_set<ref "value_copy_nested_struct.wado//Inner">($array_clone_dst_8, $v0_2, (if ref.is_null($array_clone_elem_11) -> ref null "value_copy_nested_struct.wado//Inner" {
                 $array_clone_elem_11;
             } else {
                 "value_copy_nested_struct.wado/$value_copy$value_copy_nested_struct.wado/Inner"(ref.as_non_null($array_clone_elem_11));
             }));
             $v0_2 = $v0_2 + 1;
-            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, $v0_2);
+            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, $v0_2);
             builtin::array_set<ref "value_copy_nested_struct.wado//Inner">($array_clone_dst_8, $v0_2, (if ref.is_null($array_clone_elem_11) -> ref null "value_copy_nested_struct.wado//Inner" {
                 $array_clone_elem_11;
             } else {
                 "value_copy_nested_struct.wado/$value_copy$value_copy_nested_struct.wado/Inner"(ref.as_non_null($array_clone_elem_11));
             }));
             $v0_2 = $v0_2 + 1;
-            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, $v0_2);
+            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, $v0_2);
             builtin::array_set<ref "value_copy_nested_struct.wado//Inner">($array_clone_dst_8, $v0_2, (if ref.is_null($array_clone_elem_11) -> ref null "value_copy_nested_struct.wado//Inner" {
                 $array_clone_elem_11;
             } else {
                 "value_copy_nested_struct.wado/$value_copy$value_copy_nested_struct.wado/Inner"(ref.as_non_null($array_clone_elem_11));
             }));
             $v0_2 = $v0_2 + 1;
-            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, $v0_2);
+            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, $v0_2);
             builtin::array_set<ref "value_copy_nested_struct.wado//Inner">($array_clone_dst_8, $v0_2, (if ref.is_null($array_clone_elem_11) -> ref null "value_copy_nested_struct.wado//Inner" {
                 $array_clone_elem_11;
             } else {
@@ -312,7 +312,7 @@ fn "value_copy_nested_struct.wado/run"() {
     $array_clone_deep_prefix: block {
         l12: loop {
             break_if $array_clone_deep_prefix $v0_2 >= 1;
-            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, $v0_2);
+            $array_clone_elem_11 = builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, $v0_2);
             builtin::array_set<ref "value_copy_nested_struct.wado//Inner">($array_clone_dst_8, $v0_2, (if ref.is_null($array_clone_elem_11) -> ref null "value_copy_nested_struct.wado//Inner" {
                 $array_clone_elem_11;
             } else {
@@ -328,7 +328,7 @@ fn "value_copy_nested_struct.wado/run"() {
     }
     builtin::array_set<i32>($sroa_a_items_110.repr, $v0_2, 200);
     $sroa_a_items_110.used = $v0_2 + 1;
-    if @unlikely(local.tee $v0_2(builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_114_repr_118, 0).boxed.used) != 1) {
+    if @unlikely(local.tee $v0_2(builtin::array_get_value<ref "value_copy_nested_struct.wado//Inner">($sroa_$sroa_h_cells_112_repr_116, 0).boxed.used) != 1) {
         cold_path;
         "value_copy_nested_struct.wado/run$cold2"($v0_2);
         unreachable;

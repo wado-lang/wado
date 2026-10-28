@@ -161,19 +161,18 @@ fn "licm_alias_mut_ref_loop.wado/$template_segment$licm_alias_mut_ref_loop.wado/
 }
 
 fn "licm_alias_mut_ref_loop.wado/$cm_export__run"() {
-    let $load_0: i32;
-    let pos_0: ref "core:prelude/types.wado//Box<i32>";
-    pos_0 = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
+    let $sroa_pos_value_3: i32;
+    $sroa_pos_value_3 = 0;
     b4: block {
         l5: loop {
-            break_if b4 local.tee $load_0(pos_0.value) >= 3;
-            pos_0.value = $load_0 + 1;
+            break_if b4 $sroa_pos_value_3 >= 3;
+            $sroa_pos_value_3 = $sroa_pos_value_3 + 1;
             continue l5;
         };
     };
-    if @unlikely(pos_0.value != 3) {
+    if @unlikely($sroa_pos_value_3 != 3) {
         cold_path;
-        "licm_alias_mut_ref_loop.wado/run$cold0"(pos_0);
+        "licm_alias_mut_ref_loop.wado/run$cold0"(struct.new "core:prelude/types.wado//Box<i32>" { value: $sroa_pos_value_3 });
         unreachable;
     }
     "wasi/task-return"(0);
