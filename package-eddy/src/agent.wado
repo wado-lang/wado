@@ -60,25 +60,24 @@ pub fn run_agent(
     assert max_turns >= 1;
     let declared = tools();
     let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
-    let mut run = AgentRun { answer: Err("no turn yet"), turns: 0, calls: [], usage: Usage {} };
+    let [mut turns, mut calls, mut usage] = [0, [] as List<Call>, Usage {}];
     loop {
-        run.turns += 1;
-        let last = run.turns == max_turns;
+        turns += 1;
+        let last = turns == max_turns;
         let turn = match converse(*api_key, model, system, &declared, !last, &messages, max_tokens) {
             Ok(turn) => turn,
             Err(e) => {
-                run.answer = Err(e);
-                return run;
+                return AgentRun { answer: Err(e), turns, calls, usage };
             },
         };
-        run.usage.add(&turn.usage);
+        usage.add(&turn.usage);
         if turn.stop_reason != "tool_use" {
-            run.answer = if turn.stop_reason == "end_turn" {
+            let answer: Result<String, String> = if turn.stop_reason == "end_turn" {
                 Ok(turn.text());
             } else {
                 Err(`stopped on ${turn.stop_reason}`);
             };
-            return run;
+            return AgentRun { answer, turns, calls, usage };
         }
         let mut results: List<Value> = [];
         for let b of turn.blocks() {
@@ -90,10 +89,10 @@ pub fn run_agent(
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
-            run.calls.push(Call { name, input: b.input, is_error });
+            calls.push(Call { name, input: b.input, is_error });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
-        if run.turns + 1 == max_turns {
+        if turns + 1 == max_turns {
             results.push(message(
                 &TextBlock { text: "This is your last turn: tools are no longer available. Give your answer now." },
             ));
