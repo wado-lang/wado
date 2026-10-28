@@ -6,7 +6,9 @@ use { Deserialize } from "core:serde";
 use { Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
-use { Graph } from "./graph.wado";
+use fs from "core:fs";
+use { Graph, InPlace } from "./graph.wado";
+use { leave_weights } from "./onnx_stream.wado";
 use { Checked, infer } from "./infer.wado";
 use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
 use { CheckpointFile, check_checkpoint, check_shards, placement, read_index } from "./safetensors.wado";
@@ -29,6 +31,11 @@ export struct Options {
     /// Off, every kernel writes its output, which is what a fused module is
     /// compared against.
     pub fuse: bool = true,
+    /// Whether the weights a `type: "onnx"` file carries are compiled into the
+    /// module. Off, the build reads past them, and `Prepared::load` reads them
+    /// out of that file where the build found them, so a model too large to
+    /// compile in still builds.
+    pub embed: bool = true,
 }
 
 impl Deserialize for Options;
@@ -90,6 +97,44 @@ pub fn check(path: &String, spelling: Spelling, bytes: ByteList, options: &Optio
         checked = infer(&graph).map_err(|e| at(path, &e))?;
     }
     return Result::Ok(Model { graph, checked, fuse: options.fuse });
+}
+
+/// The graph read off `content` with its weights' payloads left in the file at
+/// `path`, specialized by `options` and checked, as `embed: false` asks. Drops
+/// `content`.
+pub fn check_in_place(
+    path: &String,
+    spelling: Spelling,
+    content: Stream<u8>,
+    options: &Options,
+) -> Result<Model, String> {
+    if spelling matches { Text } {
+        content.drop();
+        return Result::Err(
+            at(
+                path,
+                &"`embed: false` leaves the weights in a `type: \"onnx\"` file's protobuf, and this is `type: \"onnxtext\"`",
+            ),
+        );
+    }
+    let slim = leave_weights(content).map_err(|e| at(path, &e))?;
+    let model = check(path, spelling, slim.model, options)?;
+    if slim.ranges.is_empty() {
+        return Result::Ok(model);
+    }
+    if let Some(external) = model.graph.in_place {
+        return Result::Err(at(
+            path,
+            &`weights in the model and in ${external.file}; the weights left in place are in one file`,
+        ));
+    }
+    // A path the reader was handed content for names a file.
+    let file = fs::file_name(path).unwrap().to_string();
+    let in_place = InPlace { file, ranges: slim.ranges, len: Option::Some(slim.len) };
+    return Result::Ok(Model {
+        ..model,
+        graph: { ..model.graph, in_place: Option::Some(in_place) },
+    });
 }
 
 /// What a graph's weights are checked against: nothing, one checkpoint file,

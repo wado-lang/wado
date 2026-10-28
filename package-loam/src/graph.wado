@@ -493,10 +493,14 @@ pub struct Graph {
 
 /// Weights left in one file at the byte ranges the build found them at.
 pub struct InPlace {
-    /// The file as the model names it: an external data file's location.
+    /// The file as the model names it: an external data file's location, or
+    /// the model file's own name.
     pub file: String,
     /// Each weight's first byte and the byte past its last, by its name.
     pub ranges: TreeMap<String, [i32, i32]>,
+    /// The file's length, where the build read the whole of it, which the file
+    /// `Prepared::load` is handed must have.
+    pub len: Option<i32> = null,
 }
 
 impl Graph {

@@ -214,6 +214,23 @@ test "gen reads weights in place from the external data file the model places th
     assert printed.contains("payload_at::<f32, Ck>(checkpoint, ");
 }
 
+test "gen with embed off reads the weights in place from the model file itself" {
+    let dir = scratch("gen-in-place");
+    fs::write(`${dir}/options.json`, &"{\"embed\": false}").unwrap();
+    let path = "tests/models/tiny-gpt2/model.onnx";
+    let printed = loam(["gen", "--type", "onnx", "--options", `${dir}/options.json`, path]).unwrap();
+    assert printed.contains("those the graph does not carry read from model.onnx where the build found them.");
+    assert printed.contains(`expect_len(checkpoint, ${fs::read(path).unwrap().len()})?;`);
+    assert printed.contains("payload_at::<f32, Ck>(checkpoint, ");
+}
+
+test "embed off reads a protobuf, not the textual format" {
+    let dir = scratch("gen-in-place-text");
+    fs::write(`${dir}/options.json`, &"{\"embed\": false}").unwrap();
+    let refused = on_graph("gen", &dir, []).unwrap_err();
+    assert refused == `loam: '${dir}/g.onnxtext': \`embed: false\` leaves the weights in a \`type: "onnx"\` file's protobuf, and this is \`type: "onnxtext"\``;
+}
+
 test "weights left in place take no checkpoint beside them" {
     let path = "tests/models/tiny-gpt2/external/model.onnx";
     let refused = loam(["gen", "--type", "onnx", "--checkpoint", "tests/models/tiny-gpt2/model.safetensors", path]).unwrap_err();

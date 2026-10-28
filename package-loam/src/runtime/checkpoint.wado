@@ -198,6 +198,16 @@ impl Checkpoint {
     }
 }
 
+/// Whether `bytes` are as long as the file the build found the weights in.
+pub fn expect_len<affine B: CheckpointBytes>(bytes: &B, len: i32) -> Result<(), LoadError> {
+    if bytes.byte_len() != len {
+        return Result::Err(
+            LoadError { reason: `the file is ${bytes.byte_len()} bytes, and the build found the weights in one of ${len}` },
+        );
+    }
+    return Result::Ok(());
+}
+
 /// `tensor`'s elements at bytes `start` to `end` of `bytes`, where the build
 /// found them.
 pub fn payload_at<U: FromLeBytes + AnyBits, affine B: CheckpointBytes>(

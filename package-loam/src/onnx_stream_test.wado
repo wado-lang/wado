@@ -1,0 +1,121 @@
+use grog from "lib:grog";
+use onnx from "./onnx.proto"
+    with {
+        generator: { module: "lib:grog" },
+    };
+use { Slim, leave_weights } from "./onnx_stream.wado";
+use { read } from "./onnx_proto.wado";
+
+/// Serves `content` a few bytes per read, so every field straddles a read.
+struct Trickle {
+    content: ByteList,
+    at: i32,
+}
+
+impl Stream<u8> for Trickle {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+        let _ = [this, into];
+        let end = i32::min(self.content.len(), self.at + i32::min(max, 3));
+        let items = self.content[self.at..<end].to_list() as List<u8>;
+        self.at = end;
+        let result = if end == self.content.len() { CopyResult::Dropped } else { CopyResult::Completed };
+        resume StartedRead::settled(StreamChunk { items, result });
+    }
+
+    fn drop(&mut self, this: &Stream<u8>) {
+        let _ = this;
+        resume ();
+    }
+
+    ..trap
+}
+
+fn walked(content: ByteList) -> Result<Slim, String> with (Stream, StreamWritable) {
+    // Made before `Trickle` is installed, since it traps on `new`.
+    let [stream, writer] = Stream::<u8>::new();
+    writer.drop();
+    let mut source = Trickle { content, at: 0 };
+    return with &mut source do {
+        leave_weights(stream);
+    };
+}
+
+fn typed(t: onnx::TensorProtoDataType) -> Option<i32> {
+    return Option::Some(t.number());
+}
+
+fn weight(name: String, raw: ByteList) -> onnx::TensorProto {
+    return onnx::TensorProto {
+        dims: [2],
+        data_type: typed(Float),
+        name: Option::Some(name),
+        raw_data: Option::Some(raw),
+    };
+}
+
+global V: ByteList = b"\x00\x00\x80\x3f\x00\x00\x00\x40";
+global W: ByteList = b"\x00\x00\x40\x40\x00\x00\x80\x40";
+
+fn model() -> ByteList {
+    return grog::encode(&onnx::ModelProto {
+        ir_version: Option::Some(8),
+        graph: Option::Some(onnx::GraphProto {
+            name: Option::Some("g"),
+            initializer: [
+                weight("V", V),
+                onnx::TensorProto {
+                    dims: [1],
+                    data_type: typed(Int64),
+                    name: Option::Some("S"),
+                    raw_data: Option::Some(b"\x02\x00\x00\x00\x00\x00\x00\x00"),
+                },
+                weight("W", W),
+            ],
+        }),
+        opset_import: [
+            onnx::OperatorSetIdProto { version: Option::Some(13) },
+        ],
+    });
+}
+
+test "a weight's raw data stays in the file at the range the walk records" {
+    let bytes = model();
+    let slim = walked(bytes).unwrap();
+
+    assert slim.len == bytes.len();
+    let [v_start, v_end] = slim.ranges["V"];
+    let [w_start, w_end] = slim.ranges["W"];
+    assert slim.ranges.len() == 2;
+    assert bytes[v_start..<v_end].to_list() as ByteList == V && bytes[w_start..<w_end].to_list() as ByteList == W;
+    let graph = read(&slim.model).unwrap();
+    assert graph.name == "g" && graph.opset == Option::Some(13);
+    assert graph.initializers[0].data matches { None } && graph.initializers[1].data matches { None };
+    assert graph.constants.contains_key("S");
+}
+
+test "a raw data ahead of the data type saying it is a weight's is kept" {
+    // Concatenated encodings merge, so the tensor reads as one whose
+    // `raw_data` comes first.
+    let mut tensor = grog::encode(&onnx::TensorProto { raw_data: Option::Some(V) });
+    tensor.extend(&grog::encode(&onnx::TensorProto {
+        dims: [2],
+        data_type: typed(Float),
+        name: Option::Some("V"),
+    }));
+    let mut graph: ByteList = [5 << 3 | 2, tensor.len() as u8];
+    graph.extend(&tensor);
+    let mut bytes: ByteList = [7 << 3 | 2, graph.len() as u8];
+    bytes.extend(&graph);
+    let slim = walked(bytes).unwrap();
+
+    assert slim.ranges.is_empty();
+    assert read(&slim.model).unwrap().initializers[0].data == Option::Some(V);
+}
+
+test "a model cut off inside a field names where it ends" {
+    let bytes = model();
+    let cut = bytes[0..<bytes.len() - 3].to_list() as ByteList;
+    let e = walked(cut).unwrap_err();
+
+    assert e == `the model ends at byte ${bytes.len() - 3}, inside a field`;
+}

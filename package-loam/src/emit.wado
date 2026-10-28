@@ -702,14 +702,25 @@ fn emit_constructor(
     block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
-        let [doc, param, ty, read] = match *placement {
-            File => ["a safetensors checkpoint", "checkpoint", `&${CHECKPOINT_PARAM}`, "read_checkpoint"],
+        // What `load` checks of its file before reading a weight out of it.
+        let [doc, param, ty, first]: [String, String, String, Option<String>] = match *placement {
+            File => [
+                "a safetensors checkpoint",
+                "checkpoint",
+                `&${CHECKPOINT_PARAM}`,
+                Option::Some("let header = read_checkpoint(checkpoint)?;"),
+            ],
             Shards(_) => [
-                "the shards of a safetensors checkpoint, by the file name its index gives each", "shards",
-                `&${MAP}<String, ByteList>`, "read_shards",
+                "the shards of a safetensors checkpoint, by the file name its index gives each",
+                "shards",
+                `&${MAP}<String, ByteList>`,
+                Option::Some("let header = read_shards(shards)?;"),
             ],
             InPlace(in_place) => [
-                `${in_place.file} where the build found them`, "checkpoint", `&${CHECKPOINT_PARAM}`, "",
+                `${in_place.file} where the build found them`,
+                "checkpoint",
+                `&${CHECKPOINT_PARAM}`,
+                in_place.len.map(|len: i32| `expect_len(checkpoint, ${len})?;`),
             ],
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
@@ -720,8 +731,8 @@ fn emit_constructor(
         load.add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
             `Result<${PREPARED_TYPE}, LoadError>`,
         ).add_effect("_").emit_begin(w);
-        if !read.is_empty() {
-            w.line(`let header = ${read}(${param})?;`);
+        if let Some(line) = first {
+            w.line(line);
         }
         emit_kept_binding(w, kept);
         w.begin(`return Result::Ok(${PREPARED}`);

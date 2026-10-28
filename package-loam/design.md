@@ -151,3 +151,13 @@ weights in two files, and a checkpoint given beside them.
 `tools/onnx_split.wado --external-data` writes a model this way, and
 `conformance/tiny_gpt2_external_test.wado` reproduces the tiny GPT-2's logits
 from one.
+
+A model under 2 GiB is published with its weights in the protobuf, each in a
+`raw_data` field. `embed: false` in the options leaves them there: the build
+copies the model field by field off its stream, records where each weight's
+`raw_data` sits, and lets the payload stream past unheld. The loader is handed
+the model file itself, and checks its length against the one the build read
+before reading a weight. A constant's `raw_data` is copied, since the build
+reads it, and so is any whose `data_type` comes after it, since the walk cannot
+know it is a weight's until then. `conformance/tiny_gpt2_in_place_test.wado`
+reproduces the tiny GPT-2's logits from its own `model.onnx` this way.

@@ -1,0 +1,249 @@
+//! A serialized `ModelProto` read off a stream with each weight's `raw_data`
+//! left where it is. The model is copied field by field, and a payload left in
+//! place streams past without being held, so a build reads a model of any size
+//! in the memory its graph takes.
+
+use { TreeMap } from "core:collections";
+use { is_build_time } from "./graph.wado";
+use { dtype_name } from "./onnx_proto.wado";
+
+/// The model with its weights' `raw_data` left out, the byte range each
+/// occupies in the file by the weight's name, and the file's length.
+pub struct Slim {
+    pub model: ByteList,
+    pub ranges: TreeMap<String, [i32, i32]>,
+    pub len: i32,
+}
+
+/// How many bytes each read asks the stream for.
+global READ_CHUNK: i32 = 65536;
+
+// The wire types, as the protobuf encoding numbers them.
+global VARINT: u64 = 0;
+global I64: u64 = 1;
+global LEN: u64 = 2;
+global I32: u64 = 5;
+
+// The tags the walk looks into, as `onnx.proto` numbers the fields: the field
+// number shifted past the three bits of its wire type.
+global MODEL_GRAPH: u64 = 7 << 3 | LEN;
+global GRAPH_INITIALIZER: u64 = 5 << 3 | LEN;
+global TENSOR_DATA_TYPE: u64 = 2 << 3 | VARINT;
+global TENSOR_NAME: u64 = 8 << 3 | LEN;
+global TENSOR_RAW_DATA: u64 = 9 << 3 | LEN;
+
+/// The model `content` holds, its weights' payloads left in the file. Drops
+/// `content`.
+pub fn leave_weights(content: Stream<u8>) -> Result<Slim, String> {
+    let mut c = Cursor { content: Option::Some(content), chunk: [], at: 0, before: 0, ended: false };
+    let walked = walk_model(&mut c);
+    c.content.take().unwrap().drop();
+    return walked;
+}
+
+fn walk_model(c: &mut Cursor) -> Result<Slim, String> {
+    let mut model: ByteList = [];
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    while c.more() {
+        let tag = c.varint()?;
+        if tag == MODEL_GRAPH {
+            let end = c.end_of_message()?;
+            put_message(&mut model, tag, &walk_graph(c, end, &mut ranges)?);
+        } else {
+            copy_field(c, tag, &mut model)?;
+        }
+    }
+    let len = c.pos();
+    if len > i32::MAX as i64 {
+        return Result::Err(`the model is ${len} bytes, past what a module can address`);
+    }
+    return Result::Ok(Slim { model, ranges, len: len as i32 });
+}
+
+fn walk_graph(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> {
+    let mut graph: ByteList = [];
+    while c.pos() < end {
+        let tag = c.varint()?;
+        if tag == GRAPH_INITIALIZER {
+            let tensor_end = c.end_of_message()?;
+            put_message(&mut graph, tag, &walk_tensor(c, tensor_end, ranges)?);
+        } else {
+            copy_field(c, tag, &mut graph)?;
+        }
+    }
+    return c.ended_at(end, graph);
+}
+
+/// A `TensorProto` up to `end`, its `raw_data` left in the file where its
+/// `data_type` is a weight's. A `raw_data` ahead of the `data_type` saying so
+/// is copied, as a constant's must be.
+fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]>) -> Result<ByteList, String> {
+    let mut tensor: ByteList = [];
+    let mut weight = false;
+    let mut name = "";
+    let mut left: Option<[i32, i32]> = null;
+    while c.pos() < end {
+        let tag = c.varint()?;
+        if tag == TENSOR_RAW_DATA && weight {
+            let length = c.varint()?;
+            let start = c.pos();
+            let stop = c.end_of(length)?;
+            if stop > i32::MAX as i64 {
+                return Result::Err(`a weight at byte ${start} for ${length} bytes, past what a module can address`);
+            }
+            c.skip(stop - start)?;
+            left = Option::Some([start as i32, stop as i32]);
+        } else if tag == TENSOR_DATA_TYPE {
+            let number = c.varint()?;
+            put_varint(&mut tensor, tag);
+            put_varint(&mut tensor, number);
+            weight = number <= i32::MAX as u64
+                && dtype_name(number as i32) matches { Some(dtype) && !is_build_time(&dtype) };
+        } else if tag == TENSOR_NAME {
+            let length = c.varint()?;
+            let mut bytes: ByteList = [];
+            c.copy(c.end_of(length)? - c.pos(), &mut bytes)?;
+            put_message(&mut tensor, tag, &bytes);
+            name = String::from_utf8_lossy(bytes);
+        } else {
+            copy_field(c, tag, &mut tensor)?;
+        }
+    }
+    if let Some(range) = left {
+        ranges[name] = range;
+    }
+    return c.ended_at(end, tensor);
+}
+
+/// The field `tag` opens, copied to `out` as it stands.
+fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String> {
+    put_varint(out, tag);
+    return match tag & 7 {
+        VARINT => {
+            put_varint(out, c.varint()?);
+            Result::Ok(());
+        },
+        I64 => c.copy(8, out),
+        I32 => c.copy(4, out),
+        LEN => {
+            let length = c.varint()?;
+            put_varint(out, length);
+            c.copy(c.end_of(length)? - c.pos(), out);
+        },
+        _ => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
+    };
+}
+
+fn put_varint(out: &mut ByteList, value: u64) {
+    let mut rest = value;
+    while rest >= 128 {
+        out.push((rest & 0x7f | 0x80) as u8);
+        rest >>= 7;
+    }
+    out.push(rest as u8);
+}
+
+/// A length-delimited field: `tag`, then `body` behind its length.
+fn put_message(out: &mut ByteList, tag: u64, body: &ByteList) {
+    put_varint(out, tag);
+    put_varint(out, body.len() as u64);
+    out.extend(body);
+}
+
+/// `content` read forward a chunk at a time, counting the bytes passed. A read
+/// takes the stream and hands it back, so it is held in an `Option`.
+affine struct Cursor {
+    content: Option<Stream<u8>>,
+    chunk: List<u8>,
+    at: i32,
+    /// The bytes ahead of `chunk`.
+    before: i64,
+    ended: bool,
+}
+
+impl Cursor {
+    fn pos(&self) -> i64 {
+        return self.before + self.at as i64;
+    }
+
+    /// Whether a byte follows, reading on once the chunk is spent.
+    fn more(&mut self) -> bool {
+        while self.at == self.chunk.len() && !self.ended {
+            let [content, read] = self.content.take().unwrap().start_read(READ_CHUNK).finish();
+            self.content = Option::Some(content);
+            self.before += self.chunk.len() as i64;
+            self.chunk = read.items;
+            self.at = 0;
+            self.ended = read.result != CopyResult::Completed;
+        }
+        return self.at < self.chunk.len();
+    }
+
+    fn varint(&mut self) -> Result<u64, String> {
+        let mut value: u64 = 0;
+        let mut shift: u64 = 0;
+        loop {
+            let byte = self.next(1)?[0];
+            // 64 = 9 * 7 + 1: a tenth byte holds one bit.
+            if shift == 63 && byte > 1 {
+                return Result::Err(`a varint ending at byte ${self.pos()} overflows 64 bits`);
+            }
+            value |= (byte & 0x7f) as u64 << shift;
+            if byte < 128 {
+                return Result::Ok(value);
+            }
+            shift += 7;
+        }
+    }
+
+    /// The position `length` bytes on.
+    fn end_of(&self, length: u64) -> Result<i64, String> {
+        if length > (i64::MAX - self.pos()) as u64 {
+            return Result::Err(`a length of ${length} at byte ${self.pos()}, past any file`);
+        }
+        return Result::Ok(self.pos() + length as i64);
+    }
+
+    /// Where the message whose length prefix comes next ends.
+    fn end_of_message(&mut self) -> Result<i64, String> {
+        let length = self.varint()?;
+        return self.end_of(length);
+    }
+
+    /// `body`, once the message it was read from ends at `end`.
+    fn ended_at(&self, end: i64, body: ByteList) -> Result<ByteList, String> {
+        if self.pos() != end {
+            return Result::Err(`a field runs from inside a message ending at byte ${end} to ${self.pos()}`);
+        }
+        return Result::Ok(body);
+    }
+
+    /// Up to `n` of the bytes next, and no fewer than one.
+    fn next(&mut self, n: i64) -> Result<Slice<u8>, String> {
+        if !self.more() {
+            return Result::Err(`the model ends at byte ${self.pos()}, inside a field`);
+        }
+        let take = i64::min(n, (self.chunk.len() - self.at) as i64) as i32;
+        let piece = self.chunk.as_slice().slice(self.at, self.at + take);
+        self.at += take;
+        return Result::Ok(piece);
+    }
+
+    fn copy(&mut self, n: i64, out: &mut ByteList) -> Result<(), String> {
+        let mut rest = n;
+        while rest > 0 {
+            let piece = self.next(rest)?;
+            out.extend_from_slice(piece);
+            rest -= piece.len() as i64;
+        }
+        return Result::Ok(());
+    }
+
+    fn skip(&mut self, n: i64) -> Result<(), String> {
+        let mut rest = n;
+        while rest > 0 {
+            rest -= self.next(rest)?.len() as i64;
+        }
+        return Result::Ok(());
+    }
+}

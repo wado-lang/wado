@@ -110,7 +110,7 @@ fn extents_of(t: &onnx::TensorProto, name: &String) -> Result<List<i32>, String>
 
 /// The element type name the textual format spells for a `TensorProto.DataType`:
 /// the enum's own name in lower case, for the types up to `bfloat16`.
-fn dtype_name(elem_type: i32) -> Option<String> {
+internal fn dtype_name(elem_type: i32) -> Option<String> {
     let Some(element) = onnx::TensorProtoDataType::from_number(elem_type) else {
         return null;
     };
