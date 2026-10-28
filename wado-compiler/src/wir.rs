@@ -570,6 +570,15 @@ pub struct WirStructType {
     pub supertype: Option<WirTypeId>,
 }
 
+impl WirStructType {
+    pub fn field(&self, name: &str) -> &WirField {
+        self.fields
+            .iter()
+            .find(|f| f.name == name)
+            .expect("a field access names a field of its struct")
+    }
+}
+
 /// A field in a struct type.
 #[derive(Debug)]
 pub struct WirField {

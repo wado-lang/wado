@@ -307,8 +307,7 @@ impl<'a> CostWalk<'a> {
             // A call the compile-time engine runs on constant arguments leaves
             // a literal behind, so it costs the caller nothing.
             ExprKind::Call { func_id, args, .. } => {
-                view.foldable.get(func_id.index()).copied().unwrap_or(false)
-                    && args.iter().all(|a| self.folds(a.expr))
+                view.foldable[func_id.index()] && args.iter().all(|a| self.folds(a.expr))
             }
             ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
@@ -774,8 +773,8 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
                 ExprKind::Call { func_id, args, .. } => {
                     // Both halves: the engine has to be able to run it away
                     // (`foldable`), and there has to be a loop in what goes.
-                    if view.foldable.get(func_id.index()).copied().unwrap_or(false)
-                        && view.loopy.get(func_id.index()).copied().unwrap_or(false)
+                    if view.foldable[func_id.index()]
+                        && view.loopy[func_id.index()]
                         && args.iter().all(|a| walk.folds(a.expr))
                     {
                         return true;
@@ -1143,7 +1142,7 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 /// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
 pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
-    folds_to_constant(body, op, const_locals, &[])
+    folds_to_constant(body, op, const_locals, None)
 }
 
 /// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
@@ -1152,7 +1151,7 @@ fn folds_to_constant(
     body: &Body,
     op: Operand,
     const_locals: &IndexSet<u32>,
-    ctfe_eligible: &[bool],
+    ctfe_eligible: Option<&[bool]>,
 ) -> bool {
     let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
     match op {
@@ -1172,7 +1171,7 @@ fn folds_to_constant(
             ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
             ExprKind::Local { index, .. } => const_locals.contains(index),
             ExprKind::Call { func_id, args, .. } => {
-                ctfe_eligible.get(func_id.index()).copied().unwrap_or(false)
+                ctfe_eligible.is_some_and(|eligible| eligible[func_id.index()])
                     && args.iter().all(|a| recurse(a.expr))
             }
             ExprKind::Dead
@@ -1920,7 +1919,10 @@ impl InlineHolds {
     fn settle_deferral(&mut self, caller: FuncId, deferred: bool) {
         // A deferral after the release would reopen the loop on every
         // convergence.
-        assert!(!(deferred && self.released), "a released loop defers no call");
+        assert!(
+            !(deferred && self.released),
+            "a released loop defers no call"
+        );
         if deferred {
             self.deferred.insert(caller);
         } else {
@@ -2235,9 +2237,7 @@ pub fn inline_functions(
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy.get(i).copied().unwrap_or(false)
-            || splice_barred(&func, &barred_cycle_members, type_table)
-        {
+        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table) {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -3172,7 +3172,7 @@ fn try_inline_call_expr(
                     caller,
                     Operand::Expr(call_id),
                     &IndexSet::default(),
-                    candidates.ctfe_eligible,
+                    Some(candidates.ctfe_eligible),
                 )
             {
                 frame.deferred = true;

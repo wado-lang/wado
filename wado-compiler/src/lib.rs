@@ -2237,7 +2237,11 @@ fn compile_after_load<H: CompilerHost>(
             })
             .chain(remarks::collect_param_gate_remarks(&nir))
             .chain(remarks::collect_const_region_remarks(&nir))
-            .chain(nir.specialization_cap.as_ref().map(remarks::specialization_cap_remark));
+            .chain(
+                nir.specialization_cap
+                    .as_ref()
+                    .map(remarks::specialization_cap_remark),
+            );
         for remark in residual {
             // `source_path` is empty for a synthetic entry name (`<stdin>`),
             // so the entry point keeps the caller's filename.

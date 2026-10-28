@@ -1014,9 +1014,12 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
         WirInstr::I64Add(l, r) => sum_width(64, l, r),
         // A divisor `const_int` reads as negative is a huge unsigned one, which
         // bounds nothing.
-        WirInstr::I32RemU(_, k) | WirInstr::I64RemU(_, k) => {
-            Some(u64::try_from(const_int(k)?).ok()?.checked_sub(1)?.bit_width())
-        }
+        WirInstr::I32RemU(_, k) | WirInstr::I64RemU(_, k) => Some(
+            u64::try_from(const_int(k)?)
+                .ok()?
+                .checked_sub(1)?
+                .bit_width(),
+        ),
         WirInstr::I32ShrU(x, n) => shifted_width(32, x, n),
         WirInstr::I64ShrU(x, n) => shifted_width(64, x, n),
         WirInstr::I32WrapI64(x) => unsigned_bit_width(x).filter(|w| *w <= 32),
@@ -1241,12 +1244,7 @@ fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
             let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
                 panic!("struct.set names a non-struct type");
             };
-            let field = def
-                .fields
-                .iter()
-                .find(|f| f.name == *field_name)
-                .expect("struct.set names a field of its struct");
-            (&field.ty, value)
+            (&def.field(field_name).ty, value)
         }
         _ => return false,
     };

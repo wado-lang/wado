@@ -2285,8 +2285,7 @@ impl<'a> WirEmitter<'a> {
         let Some(WirTypeDef::Struct(st)) = self.wir.types.get(wir_type_idx as usize) else {
             return None;
         };
-        let field = st.fields.iter().find(|f| f.name == field_name)?;
-        packed_signedness(&field.ty)
+        packed_signedness(&st.field(field_name).ty)
     }
 
     /// Emit the `array.get` flavour the element storage type calls for.

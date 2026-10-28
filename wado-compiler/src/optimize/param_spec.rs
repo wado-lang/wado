@@ -45,10 +45,9 @@ use crate::parallel::Executor;
 /// cannot trade unbounded code size for constant propagation;
 /// `--optimize-specializations` overrides it. Clones are minted first come,
 /// first served and a dead one still counts, so a cap a real program reaches
-/// decides by visit order which calls specialize: at 128, nine of the fifteen
-/// benchmarks reached it, and json-catalog lost the `Formatter` fold in
-/// `prepare_int_write` (15.7%). gale-gen needs between 1024 and 4096. Reaching
-/// it is reported as a remark ([`SpecializationCapHit`]).
+/// decides by visit order which calls specialize. The wado-performance skill's
+/// `trade-offs.md` records what the value was measured against. Reaching it is
+/// reported as a remark ([`SpecializationCapHit`]).
 pub(super) const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 
 /// Largest callee body (expression nodes) worth cloning. A body this large
@@ -395,7 +394,10 @@ impl ParamSpecState {
         }
         let hit = self.cap_hit.get_or_insert_with(|| {
             let func = project.functions[callee.index()].borrow();
-            let body = func.body.as_ref().expect("a specialization candidate has a body");
+            let body = func
+                .body
+                .as_ref()
+                .expect("a specialization candidate has a body");
             SpecializationCapHit {
                 limit: self.limit,
                 callee: func.diagnostic_name(),

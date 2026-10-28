@@ -453,10 +453,11 @@ fn transform_instr(
             }
             transform_instr(expr, types, vci, nullable_map);
             // Update result_ty to reflect the field's current type after substitution.
-            if let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize)
-                && let Some(field) = st.fields.iter().find(|f| f.name == *field_name)
-            {
-                *result_ty = field.ty.clone();
+            match &types[type_id.index() as usize] {
+                WirTypeDef::Struct(st) => *result_ty = st.field(field_name).ty.clone(),
+                // A variant's base type carries only its `i32` discriminant.
+                WirTypeDef::Variant(_) => {}
+                _ => unreachable!("struct.get names a struct or a variant"),
             }
         }
 
@@ -472,15 +473,11 @@ fn transform_instr(
             transform_instr(expr, types, vci, nullable_map);
             transform_instr(value, types, vci, nullable_map);
             // Check if the target field is now nullable after NullableRef substitution.
+            let WirTypeDef::Struct(st) = &types[type_id.index() as usize] else {
+                panic!("struct.set names a non-struct type");
+            };
             let field_is_nullable =
-                if let Some(WirTypeDef::Struct(st)) = types.get(type_id.index() as usize) {
-                    st.fields
-                        .iter()
-                        .find(|f| f.name == *field_name)
-                        .is_some_and(|f| matches!(f.ty, WirType::Ref { nullable: true, .. }))
-                } else {
-                    false
-                };
+                matches!(st.field(field_name).ty, WirType::Ref { nullable: true, .. });
             if field_is_nullable && let WirInstr::RefAsNonNull(inner) = value.as_mut() {
                 let inner_val = std::mem::replace(inner.as_mut(), WirInstr::Nop);
                 **value = inner_val;
