@@ -2581,15 +2581,21 @@ impl FunctionTranslator<'_, '_> {
 
     /// Emit a binary op from already-translated operand WIR. Shared by the
     /// skeleton `ExprKind::Binary` path and the value-graph extractor so the
-    /// short-circuit / width-truncation behaviour cannot diverge. `left_ty` is
-    /// the (left) operand's source type, which selects the op width.
+    /// short-circuit / width-truncation behaviour cannot diverge. The left
+    /// operand's source type selects the op width, unless it is `!`: then the
+    /// right operand's value is what reaches the op, so its type does.
     pub(super) fn emit_binary_wir(
         &mut self,
         op: NirBinaryOp,
         l: WirInstr,
         r: WirInstr,
-        left_ty: TypeId,
+        [left_ty, right_ty]: [TypeId; 2],
     ) -> WirInstr {
+        let left_ty = if self.type_table.is_never(left_ty) {
+            right_ty
+        } else {
+            left_ty
+        };
         // Short-circuit logical operators: `r`'s instruction tree sits in a
         // conditional branch, so it runs only when reached.
         if matches!(op, NirBinaryOp::And) {
@@ -2630,13 +2636,20 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Emit a pure unary op (`Neg` / `Not` / `BitNot`) from already-translated
-    /// operand WIR. Shared by the skeleton path and the extractor.
+    /// operand WIR. Shared by the skeleton path and the extractor. The operand's
+    /// type selects the op width, unless it is `!`: then the result's does,
+    /// since the result's consumer is what reads the op's value.
     pub(super) fn emit_unary_wir(
         &mut self,
         op: NirUnaryOp,
         o: WirInstr,
-        inner_ty: TypeId,
+        [inner_ty, result_ty]: [TypeId; 2],
     ) -> WirInstr {
+        let inner_ty = if self.type_table.is_never(inner_ty) {
+            result_ty
+        } else {
+            inner_ty
+        };
         let result = self.translate_unary_op(&op, Box::new(o), inner_ty);
         if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
             && let ResolvedType::Primitive(prim) = self.type_table.get(inner_ty)
@@ -2700,14 +2713,15 @@ impl FunctionTranslator<'_, '_> {
             }
             ValueKind::Unit => WirInstr::Nop,
             ValueKind::Binary { op, lhs, rhs, .. } => {
-                let left_ty = self
-                    .body
-                    .values
-                    .type_of(lhs)
-                    .expect("promoted Binary lhs has no recorded type");
+                let [left_ty, right_ty] = [lhs, rhs].map(|operand| {
+                    self.body
+                        .values
+                        .type_of(operand)
+                        .expect("promoted Binary operand has no recorded type")
+                });
                 let l = self.extract_value(lhs);
                 let r = self.extract_value(rhs);
-                self.emit_binary_wir(op, l, r, left_ty)
+                self.emit_binary_wir(op, l, r, [left_ty, right_ty])
             }
             ValueKind::Unary { op, operand, .. } => {
                 let inner_ty = self
@@ -2716,7 +2730,7 @@ impl FunctionTranslator<'_, '_> {
                     .type_of(operand)
                     .expect("promoted Unary operand has no recorded type");
                 let o = self.extract_value(operand);
-                self.emit_unary_wir(op, o, inner_ty)
+                self.emit_unary_wir(op, o, [inner_ty, type_id])
             }
             ValueKind::Cast { operand, target } => {
                 let from_ty = self
@@ -2852,7 +2866,8 @@ impl FunctionTranslator<'_, '_> {
                 let (op, left, right) = (*op, *left, *right);
                 let l = self.translate_operand(left);
                 let r = self.translate_operand(right);
-                self.emit_binary_wir(op, l, r, self.operand_type_id(left))
+                let operand_tys = [self.operand_type_id(left), self.operand_type_id(right)];
+                self.emit_binary_wir(op, l, r, operand_tys)
             }
 
             ExprKind::Unary { op, expr: inner } => match op {
@@ -2861,7 +2876,8 @@ impl FunctionTranslator<'_, '_> {
                 _ => {
                     let inner = *inner;
                     let o = self.translate_operand(inner);
-                    self.emit_unary_wir(*op, o, self.operand_type_id(inner))
+                    let tys = [self.operand_type_id(inner), self.body.exprs[expr_id].type_id];
+                    self.emit_unary_wir(*op, o, tys)
                 }
             },
 
