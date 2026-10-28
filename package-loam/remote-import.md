@@ -107,16 +107,16 @@ already has, such as `#include_bytes` in a test.
 ## Open questions
 
 - [ ] Whether a `use` can name an asset (`from "asset:gpt2-model"`), so GPT-2's
-      URL is declared once for the build and the run.
+  URL is declared once for the build and the run.
 - [ ] The assets of a dependency: whether a path or git dependency's
-      `[assets]` are fetched for the program, and how their names are scoped.
+  `[assets]` are fetched for the program, and how their names are scoped.
 - [ ] What `#asset` does where the host granted nothing, as under a host other
-      than `wado`: trap naming the asset, or yield a `Result`.
+  than `wado`: trap naming the asset, or yield a `Result`.
 - [ ] The reserved directory against `core:fs::root()`, which takes the first
-      directory granted, and against `--no-dir`.
+  directory granted, and against `--no-dir`.
 - [ ] What `wado compile` makes of a program naming an asset.
 - [ ] The methods `Asset` carries.
 - [ ] How another tool reads an asset: `wado fetch` for all of them, and a
-      command printing one's path in the cache.
+  command printing one's path in the cache.
 - [ ] Where the rules end up. Most of this is the compiler's and the CLI's, so
-      it belongs in the specification once settled.
+  it belongs in the specification once settled.
