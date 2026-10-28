@@ -324,18 +324,7 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
         .collect();
     let mut entry = String::new();
     for (i, path) in paths.iter().enumerate() {
-<<<<<<< HEAD
-        writeln!(entry, "use binding{i} from \"{path}\";")
-            .expect("writing to a String cannot fail");
-||||||| 1e7e11efa
-    let entry: String = paths
-        .iter()
-        .enumerate()
-        .map(|(i, path)| format!("use binding{i} from \"{path}\";\n"))
-        .collect();
-=======
         let _ = writeln!(entry, "use binding{i} from \"{path}\";");
->>>>>>> origin/main
     }
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
