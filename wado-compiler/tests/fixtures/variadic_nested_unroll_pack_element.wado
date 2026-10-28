@@ -11,7 +11,7 @@ trait Rebuild with () {
 
 /// One rebuilt copy per field: the outer walk picks the field, the inner
 /// comprehension reads every field's value back.
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F> Rebuild for S {
+impl<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F> Rebuild for S {
     fn rebuild(&self) -> List<S> {
         let members = ReflectStruct::<S>::members();
         let mut out = List::<S>::with_capacity(4);
@@ -29,7 +29,7 @@ trait Zero with () {
 
 /// The same nesting with a write into the rebuilt tuple, so the inner walk's
 /// element type has to survive a per-index slot assignment too.
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Default> Zero for S {
+impl<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Default> Zero for S {
     fn zeroed(&self) -> List<S> {
         let members = ReflectStruct::<S>::members();
         let mut out = List::<S>::with_capacity(4);

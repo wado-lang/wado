@@ -1,0 +1,22 @@
+// A newtype is closed because the struct it wraps is, so the note names that
+// struct and its reach, not the newtype's.
+use { to_string } from "core:json";
+
+pub struct Closed {
+    a: i32,
+}
+
+type Wrapped = Closed;
+
+export fn run() {
+    let _ = ReflectStruct::<Wrapped>::from_fields([0]);
+    let _ = to_string(&(Closed { a: 0 } as Wrapped));
+}
+
+__DATA__
+{
+    "compile_error": ":12:13: analysis error: `ReflectStruct::<Wrapped>::from_fields()` cannot build `Wrapped`\n  note: `Closed` is closed: its field `a` is private to its defining file while `Closed` is `pub`, so its `FieldInputs` is `!`\n  hint: build it with a function its module provides",
+    "compile_errors_contains": [
+        "note: `Closed` is closed: its field `a` is private to its defining file while `Closed` is `pub`\n  hint: widen `a` to `pub`, or write the impl"
+    ]
+}

@@ -158,12 +158,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if is_real_type
                 && (is_type_param
                     || !effect_trait.is_some_and(|trait_| {
-                        self.tysys.type_implements_trait(
-                            &self.annotate_ctx,
-                            &self.type_lookup(),
-                            handler_type,
-                            &trait_,
-                        )
+                        self.tysys
+                            .type_implements_trait(&self.annotate_ctx, handler_type, &trait_)
                     }))
             {
                 let type_name = self.tysys.type_table.borrow().type_name(handler_type);

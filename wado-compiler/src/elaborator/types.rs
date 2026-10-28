@@ -37,6 +37,7 @@ pub(crate) struct StructFieldInfo {
     /// identity: `TypeTable::type_of_symbol(defined_at)` gives the `TypeId`
     /// directly, without re-interning by `(name, module_source)`.
     pub(super) defined_at: AstId,
+    pub(super) visibility: Visibility,
     /// Field definitions: (name, `type_id`, visibility) triples
     pub(super) fields: Vec<(String, TypeId, Visibility)>,
     /// Parallel array to `fields` holding each field's defining `AstId`.
@@ -53,6 +54,38 @@ pub(crate) struct StructFieldInfo {
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
     pub(super) type_param_type_ids: Vec<TypeId>,
+}
+
+/// Why a struct is closed: `field` reaches less far than the struct.
+#[derive(Debug, Clone)]
+pub(crate) struct StructClosure {
+    /// The declaration, never a newtype over it: the reaches are its own.
+    struct_name: String,
+    struct_reach: Visibility,
+    field: String,
+    field_reach: Visibility,
+}
+
+impl StructClosure {
+    /// "`S` is closed: …", for a diagnostic to explain itself with.
+    pub(crate) fn explain(&self) -> String {
+        let struct_name = &self.struct_name;
+        format!(
+            "`{struct_name}` is closed: its field `{}` is {} while `{struct_name}` is {}",
+            self.field,
+            self.field_reach.reach_phrase(),
+            self.struct_reach.reach_phrase(),
+        )
+    }
+
+    /// "widen `f` to `pub`": what opens the struct.
+    pub(crate) fn widen(&self) -> String {
+        format!(
+            "widen `{}` to `{}`",
+            self.field,
+            self.struct_reach.keyword().trim_end()
+        )
+    }
 }
 
 /// What a path read as a value names, when only a call can use it.
@@ -142,6 +175,7 @@ impl StructFieldInfo {
             name: decl.name.clone(),
             module_source,
             defined_at: decl.id,
+            visibility: decl.visibility,
             fields,
             field_ast_ids: decl.fields.iter().map(|field| field.id).collect(),
             field_defaults: decl.fields.iter().map(|f| f.default.clone()).collect(),
@@ -159,16 +193,19 @@ impl StructFieldInfo {
         self.type_param_type_ids.is_empty() && self.field_defaults.iter().all(Option::is_some)
     }
 
-    /// Whether a reflection written in `module` can enumerate every field
-    /// (WEP 2026-06-13, Visibility).
-    pub(super) fn fields_visible_from(&self, module: &ModuleSource) -> bool {
-        if self.fields.is_empty() || &self.module_source == module {
-            return true;
-        }
-        let same_package = self.module_source.same_package(module);
-        self.fields
-            .iter()
-            .all(|(_, _, vis)| vis.reachable_from(same_package))
+    /// What makes the struct closed, if anything
+    /// ([`Visibility::first_hidden_field`]).
+    pub(super) fn closure(&self) -> Option<StructClosure> {
+        let index = self
+            .visibility
+            .first_hidden_field(self.fields.iter().map(|(_, _, vis)| *vis))?;
+        let (field, _, field_reach) = &self.fields[index];
+        Some(StructClosure {
+            struct_name: self.name.clone(),
+            struct_reach: self.visibility,
+            field: field.clone(),
+            field_reach: *field_reach,
+        })
     }
 }
 
@@ -971,6 +1008,16 @@ pub enum TypeError {
         type_param: String,
         method: String,
         pack_bound: String,
+        note: Option<&'static str>,
+        span: Span,
+    },
+
+    /// `ReflectStruct::<S>::from_fields` on a closed struct, whose
+    /// `FieldInputs` is `!`.
+    ClosedStructFromFields {
+        struct_name: String,
+        /// [`StructClosure::explain`].
+        why_closed: String,
         span: Span,
     },
 
@@ -2371,12 +2418,27 @@ impl TypeError {
                 type_param,
                 method,
                 pack_bound,
+                note,
                 span,
             } => (
                 Code::TraitBoundNotSatisfied,
                 format!(
                     "`{trait_name}::<{type_param}>::{method}()` needs `{type_param}` bound as \
-                     `{trait_name}<{pack_bound}>`"
+                     `{trait_name}<{pack_bound}>`{}",
+                    note.map_or(String::new(), |note| format!("\n  note: {note}")),
+                ),
+                *span,
+            ),
+            TypeError::ClosedStructFromFields {
+                struct_name,
+                why_closed,
+                span,
+            } => (
+                Code::TraitBoundNotSatisfied,
+                format!(
+                    "`ReflectStruct::<{struct_name}>::from_fields()` cannot build `{struct_name}`\n  \
+                     note: {why_closed}, so its `FieldInputs` is `!`\n  \
+                     hint: build it with a function its module provides"
                 ),
                 *span,
             ),

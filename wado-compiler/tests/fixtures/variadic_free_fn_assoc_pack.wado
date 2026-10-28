@@ -86,7 +86,7 @@ fn field_names<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> String {
     return out;
 }
 
-fn rebuilt<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> S {
+fn rebuilt<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F>(v: &S) -> S {
     return ReflectStruct::<S>::from_fields(
         [for let f of ReflectStruct::<S>::members() { f.get(v) }],
     );

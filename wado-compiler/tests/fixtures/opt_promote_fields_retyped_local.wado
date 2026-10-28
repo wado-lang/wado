@@ -11,7 +11,7 @@ struct Point {
     label: String,
 }
 
-fn rebuilt<S: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &S) -> S {
+fn rebuilt<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F>(v: &S) -> S {
     if builtin::black_box(false) { }
     return ReflectStruct::<S>::from_fields(
         [for let f of ReflectStruct::<S>::members() { f.get(v) }],

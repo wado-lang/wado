@@ -1,0 +1,32 @@
+// An open struct (no field less visible than the struct) derives serde and
+// builds from its fields, wherever it is used.
+use { to_string, from_string } from "core:json";
+use {
+    PubAllPub, InternalInternalField, InternalPubField,
+    pub_all_pub, internal_internal_field, internal_pub_field,
+} from "./sub/reflect_open_struct_dep.wado";
+
+struct Local {
+    a: i32,
+}
+
+test "every open cell serializes" {
+    assert to_string(&pub_all_pub()).unwrap() == "{\"a\":1}";
+    assert to_string(&internal_internal_field()).unwrap() == "{\"a\":4}";
+    assert to_string(&internal_pub_field()).unwrap() == "{\"a\":5}";
+    assert to_string(&Local { a: 7 }).unwrap() == "{\"a\":7}";
+}
+
+test "an open struct deserializes" {
+    assert from_string::<PubAllPub>("{\"a\":8}").unwrap().a == 8;
+    assert from_string::<Local>("{\"a\":9}").unwrap().a == 9;
+}
+
+test "an open struct builds from its fields" {
+    assert ReflectStruct::<InternalInternalField>::from_fields([10]).a == 10;
+    assert ReflectStruct::<InternalPubField>::from_fields([11]).a == 11;
+    assert ReflectStruct::<Local>::from_fields([12]).a == 12;
+}
+
+__DATA__
+{"test": {}}

@@ -10,15 +10,15 @@ resolved at compile time, and nothing is looked up at run time.
 The family has one root and one trait per kind of type. The root carries a
 type's identity. Each kind trait carries the structure of that kind.
 
-| Trait             | Implemented for                | Carries                                                                        |
-| ----------------- | ------------------------------ | ------------------------------------------------------------------------------ |
-| `Reflect`         | every type below               | `type_name()`, `wire_name_policy()`                                            |
-| `ReflectStruct`   | every struct                   | `FieldTypes`, `FieldSlots`, `Members`, `members()`, `from_fields()`, the slots |
-| `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`, `wire_tag()`         |
-| `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                |
-| `ReflectFlags`    | every flags type               | `Members`, `members()`, `bits()`, `from_bits()`                                |
-| `ReflectNewtype`  | every newtype                  | `Base`                                                                         |
-| `ReflectTemplate` | the shape of a tagged template | see [Tagged Template Literals](./spec-literals.md#tagged-template-literals)    |
+| Trait             | Implemented for                | Carries                                                                                       |
+| ----------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `Reflect`         | every type below               | `type_name()`, `wire_name_policy()`                                                           |
+| `ReflectStruct`   | every struct                   | `FieldTypes`, `FieldInputs`, `FieldSlots`, `Members`, `members()`, `from_fields()`, the slots |
+| `ReflectVariant`  | every variant                  | `CasePayloads`, `Members`, `members()`, `discriminant()`, `wire_tag()`                        |
+| `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                               |
+| `ReflectFlags`    | every flags type               | `Members`, `members()`, `bits()`, `from_bits()`                                               |
+| `ReflectNewtype`  | every newtype                  | `Base`                                                                                        |
+| `ReflectTemplate` | the shape of a tagged template | see [Tagged Template Literals](./spec-literals.md#tagged-template-literals)                   |
 
 The prelude declares all of them, so a bound names one with no import.
 
@@ -284,7 +284,9 @@ test "a handle reports what the field declares" {
 ```
 
 `from_fields(fields)` builds the struct from a tuple of its field values, in
-declaration order. It always succeeds, since the tuple is already typed:
+declaration order. It takes `FieldInputs`, which is `FieldTypes` for an open
+struct and `!` for a closed one (see [Visibility](#visibility)). On an open
+struct it always succeeds, since the tuple is already typed:
 
 <!-- {"fixture":"spec_reflection_struct.wado"} -->
 
@@ -752,23 +754,50 @@ test "a free function takes the bound and its caller names neither parameter" {
 
 ## Visibility
 
-A kind trait (`ReflectStruct` and its siblings) holds only where every member
-of the subject is visible at the use site. A generic body instantiated from
-there keeps that answer, so a derivation recurses through a field whose type
-its own module cannot see. The root `Reflect` names the type and
-no member, so it holds anywhere, a type whose fields are private included. The
-impls derived where the type is declared still see every field:
+Every reflection trait holds of its type in every module, whatever the
+visibility of the type's members. Reading a struct through reflection is
+therefore always allowed, private fields included:
 
 <!-- {"fixture":"spec_reflection_visibility.wado"} -->
 
 ```wado
-test "a type with private fields still names itself" {
-    let o = make_opaque();              // `Opaque { root: i32, size: i32 }`, both private
-    assert name_of(&o) == "Opaque";
+test "a closed struct still reads through reflection" {
+    let o = make_opaque();              // `pub struct Opaque { root: i32, size: i32 }`
     assert Reflect::<Opaque>::type_name() == "Opaque";
+    assert field_names(&o) == "root size ";
     assert `${o:?}` == "Opaque { root: 0, size: 0 }";
 }
 ```
+
+Building a struct from its fields is allowed only when the struct is open. A
+struct is open when no field reaches less far than the struct itself, on the
+ladder file-private < `internal` < `pub`. Otherwise it is closed:
+
+| Struct     | Fields all `pub` | An `internal` field | A file-private field |
+| ---------- | ---------------- | ------------------- | -------------------- |
+| `pub`      | open             | closed              | closed               |
+| `internal` | open             | open                | closed               |
+| private    | open             | open                | open                 |
+
+An anonymous struct is open. A newtype over a struct is open or closed as that
+struct is, since it inherits the structure. A closed struct's `FieldInputs` is `!`, so no
+argument reaches `from_fields`, and code outside the struct's module cannot
+forge one:
+
+<!-- {"fixture":"reflect_closed_struct_from_fields_error.wado"} -->
+
+```wado
+export fn run() {
+    let _ = ReflectStruct::<PubPrivateField>::from_fields([0]);
+}
+```
+
+A generic body building `T` from its fields must bound `T` with
+`FieldInputs = [..F]`. `FieldTypes` alone also holds of a closed struct.
+
+The derived `Serialize` and `Deserialize` cover open structs only, and a marker
+(`impl Serialize for T;`) on a closed struct is an error. A closed struct guards
+a field, so its author writes its wire form by hand.
 
 ## Secret Fields
 

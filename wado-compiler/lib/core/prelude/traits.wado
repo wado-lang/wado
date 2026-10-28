@@ -162,13 +162,18 @@ pub trait ReflectStruct: Reflect with () {
     /// `FieldTypes`. A filled slot is one the wire wrote.
     affine type FieldSlots;
 
+    /// What `from_fields` takes: `FieldTypes` when the struct is open (no
+    /// field reaches less far than the struct), `!` when it is closed, so a
+    /// struct guarding a field can be read but never forged.
+    affine type FieldInputs;
+
     /// Returns the per-field members.
     #[compiler_item("reflect_struct_members")]
     fn members() -> Self::Members;
 
     /// Assembles the struct from its field values.
     #[compiler_item("reflect_struct_from_fields")]
-    fn from_fields(fields: Self::FieldTypes) -> Self;
+    fn from_fields(fields: Self::FieldInputs) -> Self;
 
     /// Empty slots but `index`, which holds that field's declared default
     /// (`f: T = expr`) if it has one. No other field's default is evaluated.

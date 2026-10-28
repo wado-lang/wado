@@ -1,7 +1,7 @@
 //! Derivation as impl generation: a declaration whose members all satisfy a
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
-use super::holds::{at_defaults, at_self, holds};
+use super::holds::{admits, at_defaults, at_self, holds};
 use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
@@ -17,7 +17,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
         program.declarations.insert(decl.id, decl.clone());
-        if has_impl.contains(&decl.id) {
+        if has_impl.contains(&decl.id) || !sourced(program, trait_, decl) {
             continue;
         }
         let bounds = derived_bounds(trait_, decl, program.copyable == Some(trait_));
@@ -54,7 +54,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                 !decl
                     .members
                     .iter()
-                    .all(|member| holds(program, env, member, trait_, decl.module).is_some())
+                    .all(|member| holds(program, env, member, trait_).is_some())
             })
             .map(|(_, id, _)| *id)
             .collect();
@@ -100,6 +100,18 @@ fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId>
             | SolverType::AnyRow => None,
         })
         .collect()
+}
+
+/// Whether a source of `trait_` holds of `decl` at its own parameters, which
+/// the impl derived for it stands for. A trait with no sources needs none.
+#[must_use]
+pub fn sourced(program: &Program, trait_: TraitDeclId, decl: &Declaration) -> bool {
+    let ty = SolverType::Decl(decl.id, decl_params(decl));
+    program.sources.get(&trait_).is_none_or(|sources| {
+        sources
+            .iter()
+            .any(|source| admits(program, &Env::default(), source, &ty))
+    })
 }
 
 /// The declaration's own parameters, as its derived impl's target spells them.
@@ -189,7 +201,7 @@ fn derived_bounds(
 #[cfg(test)]
 mod tests {
     use super::super::holds::owed;
-    use super::super::program::{ArgDefault, ModuleId, TypeDef};
+    use super::super::program::{ArgDefault, AssocId, Fact, Pin, Source, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
 
@@ -201,7 +213,6 @@ mod tests {
     const OPAQUE: TypeDeclId = TypeDeclId(4);
     const NODE: TypeDeclId = TypeDeclId(5);
     const OPTION: TypeDeclId = TypeDeclId(6);
-    const HERE: ModuleId = ModuleId(0);
 
     fn declaration(id: TypeDeclId, params: u32, members: Vec<SolverType>) -> Declaration {
         Declaration {
@@ -209,7 +220,6 @@ mod tests {
             params,
             variadic: false,
             members,
-            module: HERE,
         }
     }
 
@@ -256,6 +266,46 @@ mod tests {
     fn a_struct_with_a_member_that_is_not_eq_does_not_derive() {
         let d = derived(prelude(), &[declaration(POINT, 0, vec![decl(OPAQUE)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// A derived impl stands for its source, so only a declaration whose fact
+    /// meets the source's pins derives: `KIND<Types = [..F], Inputs = [..F]>`
+    /// refuses one binding `Inputs` to `!`, and one with no fact at all.
+    #[test]
+    fn only_a_declaration_a_source_holds_of_derives() {
+        const KIND: TraitDeclId = TraitDeclId(1);
+        const NEVER: TypeDeclId = TypeDeclId(7);
+        let [types, inputs] = [AssocId(0), AssocId(1)];
+        let fact = |input: SolverType| Fact {
+            assoc: vec![(types, SolverType::Tuple(vec![decl(I32)])), (inputs, input)],
+        };
+        let pin = |assoc| Pin {
+            trait_: KIND,
+            assoc,
+            ty: SolverType::Tuple(vec![SolverType::Pack(1)]),
+        };
+        let mut p = Builder::default()
+            .concrete(EQ, decl(I32))
+            .fact(POINT, KIND, fact(SolverType::Tuple(vec![decl(I32)])))
+            .fact(OPAQUE, KIND, fact(decl(NEVER)))
+            .build();
+        p.sources.insert(
+            EQ,
+            vec![Source {
+                bounds: vec![ParamBound::bare(KIND)],
+                pins: vec![pin(types), pin(inputs)],
+                params: 2,
+            }],
+        );
+        let d = derived(
+            p,
+            &[
+                declaration(POINT, 0, vec![decl(I32)]),
+                declaration(OPAQUE, 0, vec![decl(I32)]),
+                declaration(WRAPPER, 0, vec![decl(I32)]),
+            ],
+        );
+        assert_eq!(targets(&d), vec![decl(POINT)]);
     }
 
     /// A plain `enum` or `flags` has no members and derives unconditionally.
@@ -337,7 +387,7 @@ mod tests {
         let mut p = prelude();
         derive(&mut p, EQ, &[shape]);
         let of = |elems| SolverType::Decl(WRAPPER, vec![SolverType::Tuple(elems)]);
-        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ, HERE).is_some();
+        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ).is_some();
         assert!(at(&of(vec![decl(I32), decl(I32)])));
         assert!(at(&of(vec![])));
         assert!(!at(&of(vec![decl(I32), decl(OPAQUE)])));
@@ -347,8 +397,8 @@ mod tests {
     fn owed_at(declarations: &[Declaration], ty: &SolverType) -> Vec<SolverType> {
         let mut p = prelude();
         derive(&mut p, EQ, declarations);
-        let held = holds(&p, &Env::default(), ty, EQ, HERE).expect("the bound holds");
-        let mut types: Vec<SolverType> = owed(&p, &Env::default(), HERE, held.requests)
+        let held = holds(&p, &Env::default(), ty, EQ).expect("the bound holds");
+        let mut types: Vec<SolverType> = owed(&p, &Env::default(), held.requests)
             .into_iter()
             .map(|request| request.ty)
             .collect();
@@ -484,7 +534,7 @@ mod tests {
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
+        let asked = |ty| holds(&p, &Env::default(), &ty, EQ).map(|h| h.requests.len());
         assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
         assert_eq!(
             asked(wrapper_of(SolverType::Decl(LIST, vec![decl(I32)]))),
@@ -565,7 +615,7 @@ mod tests {
             EQ,
             &[declaration(NODE, 2, vec![SolverType::Param(0)])],
         );
-        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).is_some();
+        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ).is_some();
         assert!(has_eq(node_of(decl(I32), decl(I32))));
         assert!(!has_eq(node_of(decl(OPAQUE), decl(I32))));
         assert!(has_eq(node_of(decl(OPAQUE), decl(OPTION))));
@@ -598,7 +648,7 @@ mod tests {
             ORD,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD, HERE).is_some();
+        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD).is_some();
         assert!(!ordered(wrapper_of(decl(I32))));
         assert!(!ordered(decl(ALIAS)));
         assert!(ordered(decl(ORDERED)));
@@ -629,7 +679,7 @@ mod tests {
             }
         );
         assert_eq!(
-            holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE),
+            holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ),
             None
         );
     }
@@ -651,7 +701,7 @@ mod tests {
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ, HERE)
+        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ)
             .expect("the written `Ord` holds at `i32`");
         assert!(held.requests.iter().all(|r| !r.structural));
     }

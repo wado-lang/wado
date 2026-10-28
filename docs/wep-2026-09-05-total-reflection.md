@@ -194,8 +194,9 @@ not the free option it looks like.
 
 `String`, `i128` and `u128` read as primitives to a programmer and are none.
 Each is a prelude struct with private fields — `i128` and `u128` are
-`#[compiler_item]` structs of two 64-bit limbs — so they classify as `Struct`
-and, having no visible members downstream, cannot be opened there either.
+`#[compiler_item]` structs of two 64-bit limbs — so they classify as `Struct`.
+This WEP sends them to `opaque` downstream; whether it still should is a known
+gap ([A struct with private fields opens everywhere](#a-struct-with-private-fields-opens-everywhere)).
 
 That they land in `opaque` rather than beside `i32` leaves nothing unanswered.
 The coarser question, leaf or aggregate, is computed from these cases and never
@@ -215,10 +216,11 @@ no answer would appear inside a tree a consumer is already walking, not at its
 root — `Pair<&Point>` and `struct Handler { cb: fn(i32) -> i32 }` each put one
 there.
 
-The visibility gate is unchanged: it sits on the kind traits and never on the
-root ([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md),
-Visibility). That split already implied a total root, since a type's name is
-public the moment the type is.
+The root is total because a type's name is public the moment the type is. The
+kind traits are now total as well
+([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md), Visibility),
+which leaves what `opaque` admits open (see
+[Known gaps](#a-struct-with-private-fields-opens-everywhere)).
 
 ### Symbol notation names a reference and a function type
 
@@ -372,9 +374,9 @@ than an inconsistency to remove:
 
 - `type_info()` — what the type is. A fact about the declaration, the same from
   everywhere it is asked.
-- `match type` — what the type may be opened as. Gated on visibility and on the
-  member seal, so a struct whose members are private elsewhere, and a member
-  handle anywhere, reach no `struct` arm.
+- `match type` — what the type may be opened as. Gated on the member seal, so a
+  member handle reaches no `struct` arm anywhere. What else it withholds is a
+  known gap ([A struct with private fields opens everywhere](#a-struct-with-private-fields-opens-everywhere)).
 
 A consumer composes the two: in the fallback arm `type_info()` still answers
 `Struct`, so "a struct this module may not enumerate" is expressible. Neither
@@ -430,6 +432,17 @@ unknown _value_ is `core:value::Value` through `Serialize`, and reflection
 answers for the _type_.
 
 ## Known gaps
+
+### A struct with private fields opens everywhere
+
+This WEP was written while a kind trait held only where every member was
+visible, so a struct with private fields (`String`, `i128`) reached `opaque`
+downstream. [Reflect Derivation](./wep-2026-06-13-reflect-derivation.md)
+§ Visibility removed that gate: every struct now satisfies `ReflectStruct`
+everywhere, and only building a closed struct is withheld. Under the rules
+above, every struct reaches the `struct` arm, and `opaque` holds only the
+sealed member handles. Whether `opaque` should still take a closed struct, and
+what `match type` answers for `String`, is undecided.
 
 ### A reference and a function type have no notation yet
 
