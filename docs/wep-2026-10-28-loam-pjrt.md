@@ -30,7 +30,7 @@ The two device backends differ in who decides fusion.
 
 | Backend         | Who fuses                                        | When a shape is fixed | What sets its speed                                   |
 | --------------- | ------------------------------------------------ | --------------------- | ----------------------------------------------------- |
-| `WebGpuBackend` | Loam's plan, chosen for the number of dispatches | at each call          | dispatches, residency on the device, f16, subgroups   |
+| `WebGpuBackend` | Loam's plan, chosen for the number of dispatches | at each call          | dispatches, residency on the device, weight width     |
 | PJRT            | XLA, over the whole program it is given          | at compile            | XLA's fusion, the matrix units, bf16, buffer donation |
 
 A PJRT backend that ran each kernel as its own program would pay a launch per
@@ -145,11 +145,8 @@ an API specification. The rest of XLA stays barred.
 - Text StableHLO carries no compatibility promise; only a portable artifact
   does, and writing one takes libStablehlo. Both plugins the research ran
   accepted the same text.
-- `libtpu.so` aborts the process on a program it rejects, rather than
-  returning an error.
+- `libtpu.so` aborts the process on an unknown extent rather than returning an
+  error, so a host cannot recover from a program that carries one.
 - The CPU plugin CI would run is ZML's build of XLA's
   `pjrt_c_api_cpu_plugin`. No CPU plugin is published by the XLA project.
 - No PJRT run on a GPU or a TPU has been measured.
-- XLA's own attention is what the PJRT backend gets. The fastest TPU attention
-  is a Pallas kernel lowered through Mosaic, which reaches XLA as a custom call
-  with no published specification.
