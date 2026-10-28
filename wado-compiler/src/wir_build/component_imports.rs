@@ -77,9 +77,9 @@ pub fn resolve_import_plan(
     // Phase 1: every interface with a function in `used_wasi_functions`, in
     // registry order. Records the resources those signatures touch for Phase 2.
     // An interface whose used signatures reference a resource *defined by another*
-    // interface is categorized `ResourceUsingInterface` (codegen defers it to the
-    // resource-using phase, after the resource-defining interfaces are imported);
-    // otherwise it is a plain `FunctionInterface`.
+    // interface is categorized `ResourceUsingInterface`, imported after the
+    // interfaces defining those resources; otherwise it is a plain
+    // `FunctionInterface`.
     let mut needed_resources: IndexSet<(String, String)> = IndexSet::default();
     for interface_info in registry.interfaces() {
         if interface_info.interface == "run" {

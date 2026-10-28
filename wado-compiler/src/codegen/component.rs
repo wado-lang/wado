@@ -2084,7 +2084,9 @@ fn generate_cm_imports(
             ImportKind::SharedTypes => import_cli_types(builder, ctx, project),
             // A `Component` import is emitted like a host interface;
             // `compose_dependency_components` wires in the dependency afterwards.
-            ImportKind::FunctionInterface | ImportKind::Component => {
+            ImportKind::FunctionInterface
+            | ImportKind::Component
+            | ImportKind::ResourceUsingInterface => {
                 if !nested_imports.contains(entry.fq.as_str()) {
                     import_function_interface(
                         builder,
@@ -2114,9 +2116,6 @@ fn generate_cm_imports(
                     entry.fq
                 );
                 import_interface_with_resource(builder, ctx, project, interface(&entry.fq));
-            }
-            ImportKind::ResourceUsingInterface => {
-                import_function_interface(builder, ctx, project, interface(&entry.fq), provides);
             }
             ImportKind::WorldFunction => {}
         }
