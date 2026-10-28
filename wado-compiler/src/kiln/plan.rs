@@ -173,7 +173,9 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
 /// directory?
 ///
 /// Path comparison is purely lexical: `b.output_dir` is treated as a prefix.
-/// "Inside" means the input path equals `b.output_dir` or is a child.
+/// "Inside" means the input path equals `b.output_dir` or is a child. An
+/// `output_dir` of `.` holds every source beside the manifest, so it orders
+/// nothing: taking it as a prefix of each would make two such clauses a cycle.
 #[must_use]
 pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
     if path_inside(&a.from, &b.output_dir) {
@@ -190,17 +192,7 @@ pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
 fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
     let c = candidate.as_str();
     let d = dir.as_str();
-    if d.is_empty() {
-        return false;
-    }
-    if c == d {
-        return true;
-    }
-    if !c.starts_with(d) {
-        return false;
-    }
-    let rest = &c[d.len()..];
-    rest.starts_with('/')
+    c == d || c.strip_prefix(d).is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]
@@ -256,6 +248,14 @@ mod tests {
         let dir = InvocationPath::normalize("build/kiln/a");
         let sibling = InvocationPath::normalize("build/kiln/abc");
         assert!(!path_inside(&sibling, &dir));
+    }
+
+    #[test]
+    fn two_clauses_writing_beside_the_manifest_are_no_cycle() {
+        let a = inv("a", "schema_a.g4", &[], "./");
+        let b = inv("b", "schema_b.g4", &[], "./");
+        let plan = build_plan(vec![a, b]).expect("no cycle");
+        assert_eq!(plan.order.len(), 2);
     }
 
     #[test]
