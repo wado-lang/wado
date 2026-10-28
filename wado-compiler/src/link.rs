@@ -8,7 +8,6 @@ use std::rc::Rc;
 use crate::builtin_facts::{ParamShape, ReturnShape};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-#[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
