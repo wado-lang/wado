@@ -141,12 +141,12 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
 /// worktree, so it shares the repository's objects, later commits included:
 /// only the tools' refusal to leave the tree keeps them out of reach. A
 /// symbolic link is checked out as a file holding its target, so no path
-/// resolves out of the tree through one.
+/// resolves out of the tree through one. A tree an interrupted run left is
+/// checked out again rather than trusted.
 pub fn snapshot(sha: &String) -> String with Process {
     let root = `scratchpad/eddy-trees/${*sha}`;
-    if try_git(["-C", root, "rev-parse", "HEAD"]) != Some(`${*sha}\n`) {
-        git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
-    }
+    try_git(["worktree", "remove", "--force", root]);
+    git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
     return root;
 }
 
