@@ -48,7 +48,9 @@ the header.
 publishes by its URL, pinned by its SHA-256, and read its weights in place as
 [Weights read in place](#weights-read-in-place) says. Nothing is split or
 committed. A program reaches no file its build read, so each `fetch.sh`
-downloads the file the weights load from. Building a model downloads it, so
+downloads the file the weights load from.
+[Runtime Assets](./remote-import.md) is the design that lets a program read
+it from the cache instead. Building a model downloads it, so
 `wado test` leaves the files naming one out. GPT-2's tokenizer test takes its
 `Tokenizer` from the committed `tokenizer.json`, so it runs without a download.
 
