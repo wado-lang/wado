@@ -231,9 +231,9 @@ fn optimize_scoped(
         });
     });
 
-    // Phase 6: strip the stores no read sees, of the WIR-synthesised locals
-    // (`$match_scrut_N`, multi-value temps, `$pair_temp_N`) that no TIR pass
-    // can reach among them, so codegen doesn't emit dead locals.
+    // Phase 6: strip the stores no read sees, so codegen doesn't emit dead
+    // locals. The WIR-synthesised ones (`$match_scrut_N`, multi-value temps,
+    // `$pair_temp_N`) are out of every TIR pass's reach.
     wir_pass(scope, "elide_dead_stores", module, profiler, |m| {
         elide_dead_stores(m);
     });
