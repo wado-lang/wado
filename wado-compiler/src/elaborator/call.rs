@@ -836,7 +836,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .with_args(vec![tt.fq_type_name(element)])
         };
         self.tysys
-            .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), arg, &list_arg)
+            .type_implements_trait(&self.annotate_ctx, arg, &list_arg)
     }
 }
 

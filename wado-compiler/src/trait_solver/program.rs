@@ -357,7 +357,6 @@ pub struct Declaration {
     pub variadic: bool,
     /// Every field of a struct, or every payload of a variant.
     pub members: Vec<SolverType>,
-    pub module: ModuleId,
 }
 
 impl Declaration {

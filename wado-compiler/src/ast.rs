@@ -2670,9 +2670,28 @@ impl Visibility {
         self <= other
     }
 
+    /// The first of `fields` reaching less far than a struct of reach `self`.
+    /// A struct with none is open: wherever it is named, its fields are too, so
+    /// building one from them bypasses nothing (spec-reflection.md
+    /// § Visibility).
+    pub fn first_hidden_field(self, fields: impl IntoIterator<Item = Self>) -> Option<usize> {
+        fields
+            .into_iter()
+            .position(|field| !self.reaches_no_further_than(field))
+    }
+
     /// The narrower reach of the two.
     pub fn narrower(self, other: Self) -> Self {
         self.min(other)
+    }
+
+    /// The reach as a diagnostic words it: "`x` is {phrase}".
+    pub fn reach_phrase(self) -> &'static str {
+        match self {
+            Visibility::Private => "private to its defining file",
+            Visibility::Internal => "`internal` to its package",
+            Visibility::Public => "`pub`",
+        }
     }
 
     /// Source keyword with a trailing space (`""` for file-private).

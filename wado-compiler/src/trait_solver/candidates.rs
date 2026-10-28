@@ -68,20 +68,20 @@ pub fn bound_candidates(
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
     collect(program, env, ty, &[trait_], |t, _| t == trait_)
-    .in_scope
-    .into_iter()
-    .filter(|c| {
-        let level = &levels[c.depth as usize];
-        answers_args(
-            program,
-            &program.impls()[&c.impl_],
-            level,
-            Some(ty),
-            &c.trait_args,
-            args,
-        )
-    })
-    .collect()
+        .in_scope
+        .into_iter()
+        .filter(|c| {
+            let level = &levels[c.depth as usize];
+            answers_args(
+                program,
+                &program.impls()[&c.impl_],
+                level,
+                Some(ty),
+                &c.trait_args,
+                args,
+            )
+        })
+        .collect()
 }
 
 /// The impls of `trait_` that could answer on `ty` for an instance of a generic
@@ -97,19 +97,19 @@ pub fn instance_candidates(
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
     collect(program, &Env::default(), ty, &[trait_], |t, _| t == trait_)
-    .in_scope
-    .into_iter()
-    .filter(|c| {
-        answers_named_args(
-            program,
-            &program.impls()[&c.impl_],
-            &levels[c.depth as usize],
-            ty,
-            &c.trait_args,
-            args,
-        )
-    })
-    .collect()
+        .in_scope
+        .into_iter()
+        .filter(|c| {
+            answers_named_args(
+                program,
+                &program.impls()[&c.impl_],
+                &levels[c.depth as usize],
+                ty,
+                &c.trait_args,
+                args,
+            )
+        })
+        .collect()
 }
 
 /// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`

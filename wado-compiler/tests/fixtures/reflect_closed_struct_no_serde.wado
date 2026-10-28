@@ -1,0 +1,21 @@
+// A closed struct (a field less visible than the struct) derives no serde, so
+// its author decides what its fields mean on the wire.
+use { to_string } from "core:json";
+use {
+    pub_internal_field, pub_private_field, internal_private_field,
+} from "./sub/reflect_open_struct_dep.wado";
+
+export fn run() {
+    let _ = to_string(&pub_internal_field());
+    let _ = to_string(&pub_private_field());
+    let _ = to_string(&internal_private_field());
+}
+
+__DATA__
+{
+    "compile_errors_contains": [
+        ":9:13: analysis error: type 'PubInternalField' does not implement trait 'Serialize' required by bound on 'T'\n  note: `PubInternalField` is closed: its field `a` is `internal` to its package while `PubInternalField` is `pub`, so it derives no `Serialize`\n  hint: write `impl Serialize for PubInternalField`",
+        "note: `PubPrivateField` is closed: its field `a` is private to its defining file while `PubPrivateField` is `pub`, so it derives no `Serialize`",
+        "note: `InternalPrivateField` is closed: its field `a` is private to its defining file while `InternalPrivateField` is `internal` to its package, so it derives no `Serialize`"
+    ]
+}

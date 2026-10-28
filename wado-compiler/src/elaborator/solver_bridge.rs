@@ -10,6 +10,7 @@ use crate::name::{
     ARRAY_TYPE_NAME, FqTraitName, FqTypeName, NEVER_TYPE_NAME, RefKind, TypeHead, UNIT_TYPE_NAME,
 };
 use crate::primitive::PrimitiveType;
+use crate::synthesis::traits::REFLECT_FIELD_INPUTS_ASSOC;
 use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
@@ -26,7 +27,7 @@ use super::trait_env::{
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::elaborator::scope;
-use crate::elaborator::types::{DataDecls, TypeLookup};
+use crate::elaborator::types::DataDecls;
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::StructDef;
 
@@ -505,11 +506,6 @@ impl Lowering {
     fn declared_type(&self, def: DefId) -> TypeDeclId {
         self.known_type(&DeclKey::Def(def))
             .expect("every declaration is interned before the program is read")
-    }
-
-    fn declared_module(&self, module: &ModuleSource) -> ModuleId {
-        self.known_module(module)
-            .expect("every module is interned before the program is read")
     }
 
     /// The head a written type reaching `def` lowers under, interned up front.
@@ -1069,7 +1065,7 @@ impl SolverBridge {
         // Before the declarations, whose derived `Copyable` reads them.
         bridge.state_copyable_facts();
         bridge.state_any_bits_facts(tysys);
-        let shapes = bridge.shapes(modules);
+        let shapes = bridge.shapes();
         bridge.state_declarations(tysys, &tysys.data, &table, shapes, ImplId(0));
         let heads: Vec<TypeDeclId> = (0..bridge.lowering.decls.len())
             .map(|id| TypeDeclId(u32::try_from(id).expect("fewer than 2^32 declarations")))
@@ -1158,12 +1154,8 @@ impl SolverBridge {
     /// The two shapes no module declares, as `derive` reads them: an anonymous
     /// struct's members are its fields and a template's its holes, each one
     /// tuple argument, so each derives a structural trait where every element
-    /// does. Their reflection kinds hold from every module, since a literal's
-    /// fields and a template's holes are all visible.
-    fn shapes(&self, modules: &[ModuleSource]) -> Vec<(Declaration, OnBoundTrait)> {
-        let module = self
-            .lowering
-            .declared_module(modules.first().expect("a program has a module"));
+    /// does.
+    fn shapes(&self) -> Vec<(Declaration, OnBoundTrait)> {
         [
             (self.lowering.anonymous_head(), OnBoundTrait::ReflectStruct),
             (self.lowering.template_head(), OnBoundTrait::ReflectTemplate),
@@ -1175,7 +1167,6 @@ impl SolverBridge {
                 params: 1,
                 variadic: true,
                 members: vec![SolverType::Pack(0)],
-                module,
             };
             (shape, kind)
         })
@@ -1197,7 +1188,7 @@ impl SolverBridge {
     ) -> Vec<TypeDeclId> {
         let Self { program, lowering } = self;
         let mut stated = Self::state_newtype_bases(tysys, data, table, lowering, program);
-        let (mut members, handles) = Self::declarations(tysys, data, table, lowering);
+        let (mut members, handles) = Self::declarations(data, table, lowering);
         let shape_kinds: Vec<(TypeDeclId, OnBoundTrait)> = shapes
             .iter()
             .map(|(shape, kind)| (shape.id, *kind))
@@ -1626,14 +1617,24 @@ impl SolverBridge {
             .into_iter()
             .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
             .collect();
+        // A closed struct guards a field, so its author writes its wire form:
+        // the serde blankets pin `FieldInputs = [..F]`, which it binds to `!`.
+        let open: Vec<Declaration> = declarations[..handles_from]
+            .iter()
+            .filter(|decl| {
+                !matches!(
+                    lowering.decl_key(decl.id),
+                    DeclKey::Def(def) if data.struct_fields.get(def).is_some_and(|info| info.closure().is_some())
+                )
+            })
+            .cloned()
+            .collect();
         let first = program.next_impl_id();
         for &(item, trait_) in &traits {
             let eligible = match item {
                 CompilerItem::Eq => &declarations[..],
-                CompilerItem::Ord
-                | CompilerItem::Hash
-                | CompilerItem::Serialize
-                | CompilerItem::Deserialize => &declarations[..handles_from],
+                CompilerItem::Ord | CompilerItem::Hash => &declarations[..handles_from],
+                CompilerItem::Serialize | CompilerItem::Deserialize => &open[..],
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
@@ -1677,9 +1678,8 @@ impl SolverBridge {
         derive_alongside(program, schema, structs);
     }
 
-    /// State each declaration's reflection kinds as facts. A struct's kind
-    /// holds only from the modules that see every field; each of `shapes`
-    /// holds its kind from every module.
+    /// State each declaration's reflection kinds as facts. A struct's `FieldInputs` is its members when it is open
+    /// and `!` when it is closed (`StructFieldInfo::closure`).
     fn state_reflect_facts(
         tysys: &TypeSystem,
         data: &DataDecls,
@@ -1707,9 +1707,15 @@ impl SolverBridge {
                 .ok()
                 .map(SolverType::Tuple)
         };
+        let never = SolverType::Decl(
+            program.never.expect("`!` is interned before the facts"),
+            Vec::new(),
+        );
+        // `inputs` is the `FieldInputs` binding, stated of a struct alone.
         let mut state = |head: TypeDeclId,
                          kind: OnBoundTrait,
-                         members: Option<SolverType>| {
+                         members: Option<SolverType>,
+                         inputs: Option<SolverType>| {
             for &(trait_, stated) in &kinds {
                 if stated == OnBoundTrait::Reflect {
                     program.facts.insert((head, trait_), Fact::default());
@@ -1722,8 +1728,13 @@ impl SolverBridge {
                     .member_channel()
                     .and_then(|name| lowering.known_assoc(trait_, name));
                 program.member_channels.extend(member_assoc);
+                let inputs_assoc = lowering.known_assoc(trait_, REFLECT_FIELD_INPUTS_ASSOC);
                 let fact = Fact {
-                    assoc: member_assoc.zip(members.clone()).into_iter().collect(),
+                    assoc: member_assoc
+                        .zip(members.clone())
+                        .into_iter()
+                        .chain(inputs_assoc.zip(inputs.clone()))
+                        .collect(),
                 };
                 program.facts.insert((head, trait_), fact);
             }
@@ -1732,19 +1743,24 @@ impl SolverBridge {
             if !eligible(def) {
                 continue;
             }
+            let members = channel(&mut info.fields.iter().map(|(_, ty, _)| *ty));
+            let inputs = match info.closure() {
+                Some(_) => Some(never.clone()),
+                None => members.clone(),
+            };
             state(
                 lowering.declared_type(def),
                 OnBoundTrait::ReflectStruct,
-                channel(&mut info.fields.iter().map(|(_, ty, _)| *ty)),
+                members,
+                inputs,
             );
         }
-        // A shape's members are its one argument, the tuple of them.
+        // A shape's members are its one argument, the tuple of them. Every
+        // field of a shape is as visible as the shape, so it is open.
         for &(head, kind) in shapes {
-            state(
-                head,
-                kind,
-                Some(SolverType::Tuple(vec![SolverType::Pack(0)])),
-            );
+            let members = SolverType::Tuple(vec![SolverType::Pack(0)]);
+            let inputs = (kind == OnBoundTrait::ReflectStruct).then(|| members.clone());
+            state(head, kind, Some(members), inputs);
         }
         for (&def, info) in &data.variant_cases {
             if eligible(def) {
@@ -1752,6 +1768,7 @@ impl SolverBridge {
                     lowering.declared_type(def),
                     OnBoundTrait::ReflectVariant,
                     channel(&mut info.cases.iter().map(|case| case.payload)),
+                    None,
                 );
             }
         }
@@ -1769,7 +1786,7 @@ impl SolverBridge {
             );
         for (def, kind) in memberless {
             if eligible(def) {
-                state(lowering.declared_type(def), kind, None);
+                state(lowering.declared_type(def), kind, None, None);
             }
         }
     }
@@ -1869,15 +1886,13 @@ impl SolverBridge {
     /// enums, flags and variants, and apart from them the unrestricted
     /// resources. One with a member the lowering cannot express is left out.
     fn declarations(
-        tysys: &TypeSystem,
         data: &DataDecls,
         table: &TypeTable,
         lowering: &Lowering,
     ) -> (Vec<Declaration>, Vec<Declaration>) {
         let lowered = |def: DefId,
                        params: usize,
-                       members: &mut dyn Iterator<Item = TypeId>,
-                       module: &ModuleSource|
+                       members: &mut dyn Iterator<Item = TypeId>|
          -> Option<Declaration> {
             let members = said(members.map(|ty| lowering.type_id(table, ty, &by_position))).ok()?;
             Some(Declaration {
@@ -1885,7 +1900,6 @@ impl SolverBridge {
                 params: u32::try_from(params).expect("fewer than 2^32 params"),
                 variadic: false,
                 members,
-                module: lowering.declared_module(module),
             })
         };
         let mut out = Vec::new();
@@ -1894,20 +1908,11 @@ impl SolverBridge {
                 def,
                 info.type_param_type_ids.len(),
                 &mut info.fields.iter().map(|(_, ty, _)| *ty),
-                &info.module_source,
             ));
         }
-        let memberless = data
-            .enum_cases
-            .iter()
-            .map(|(&def, info)| (def, &info.module_source))
-            .chain(
-                data.flags_cases
-                    .iter()
-                    .map(|(&def, info)| (def, &info.module_source)),
-            );
-        for (def, module) in memberless {
-            out.extend(lowered(def, 0, &mut std::iter::empty(), module));
+        let memberless = data.enum_cases.keys().chain(data.flags_cases.keys());
+        for &def in memberless {
+            out.extend(lowered(def, 0, &mut std::iter::empty()));
         }
         for (&def, info) in &data.variant_cases {
             out.extend(lowered(
@@ -1918,21 +1923,13 @@ impl SolverBridge {
                     .iter()
                     .filter(|c| c.has_payload(table))
                     .map(|c| c.payload),
-                &info.module_source,
             ));
         }
         let handles = data
             .resource_types
-            .iter()
-            .filter(|&(&def, _)| table.is_unrestricted_resource(def))
-            .filter_map(|(&def, _)| {
-                lowered(
-                    def,
-                    0,
-                    &mut std::iter::empty(),
-                    tysys.resolutions.defs().module(def),
-                )
-            })
+            .keys()
+            .filter(|&&def| table.is_unrestricted_resource(def))
+            .filter_map(|&def| lowered(def, 0, &mut std::iter::empty()))
             .collect();
         (out, handles)
     }
@@ -2073,7 +2070,6 @@ impl SolverBridge {
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
-        scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Result<Question, Unsaid> {
@@ -2081,10 +2077,6 @@ impl SolverBridge {
         if ty.mentions_decl(&|h| self.lowering.unstated.contains(&h)) {
             return Err(Unsaid::Unsayable);
         }
-        let module = self
-            .lowering
-            .known_module(scope.current_module_source)
-            .ok_or(Unsaid::Unsayable)?;
         let place = place_in(ctx);
         let ParamBound { trait_, args } = self
             .lowering
@@ -2093,7 +2085,6 @@ impl SolverBridge {
             env,
             ty,
             trait_,
-            module,
             args,
         })
     }
@@ -2105,11 +2096,10 @@ impl SolverBridge {
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
-        scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Option<Vec<OwedBody>> {
-        let q = match self.question(tysys, ctx, scope, type_id, asked) {
+        let q = match self.question(tysys, ctx, type_id, asked) {
             Ok(q) => q,
             // Its failure was reported where it failed, so it meets every
             // bound rather than failing them over again.
@@ -2129,8 +2119,8 @@ impl SolverBridge {
                 tysys.type_table.borrow().type_name(type_id)
             ),
         };
-        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args)?;
-        let owed = owed(&self.program, &q.env, q.module, held.requests);
+        let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;
+        let owed = owed(&self.program, &q.env, held.requests);
         let table = tysys.type_table.borrow();
         let shape_heads = [
             self.lowering.anonymous_head(),
@@ -2244,25 +2234,17 @@ impl SolverBridge {
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
-        scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<Option<DefId>> {
-        self.bound_order(
-            tysys,
-            ctx,
-            scope,
-            type_id,
-            asked,
-            |selection| match selection {
-                Selection::AmbiguousBlankets(live) => live,
-                Selection::None
-                | Selection::One(_)
-                | Selection::AmbiguousTraits(_)
-                | Selection::Overloaded(_)
-                | Selection::Duplicated(_) => Vec::new(),
-            },
-        )
+        self.bound_order(tysys, ctx, type_id, asked, |selection| match selection {
+            Selection::AmbiguousBlankets(live) => live,
+            Selection::None
+            | Selection::One(_)
+            | Selection::AmbiguousTraits(_)
+            | Selection::Overloaded(_)
+            | Selection::Duplicated(_) => Vec::new(),
+        })
     }
 
     /// The blocks the order selects to answer a bound `asked` on `type_id`:
@@ -2272,25 +2254,17 @@ impl SolverBridge {
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
-        scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
     ) -> Vec<DefId> {
-        self.bound_order(
-            tysys,
-            ctx,
-            scope,
-            type_id,
-            asked,
-            |selection| match selection {
-                Selection::One(index) => vec![index],
-                Selection::Duplicated(live) => live,
-                Selection::None
-                | Selection::AmbiguousTraits(_)
-                | Selection::AmbiguousBlankets(_)
-                | Selection::Overloaded(_) => Vec::new(),
-            },
-        )
+        self.bound_order(tysys, ctx, type_id, asked, |selection| match selection {
+            Selection::One(index) => vec![index],
+            Selection::Duplicated(live) => live,
+            Selection::None
+            | Selection::AmbiguousTraits(_)
+            | Selection::AmbiguousBlankets(_)
+            | Selection::Overloaded(_) => Vec::new(),
+        })
         .into_iter()
         .flatten()
         .collect()
@@ -2302,12 +2276,11 @@ impl SolverBridge {
         &self,
         tysys: &TypeSystem,
         ctx: &scope::Scope,
-        scope: &TypeLookup,
         type_id: TypeId,
         asked: &FqTraitName,
         pick: impl FnOnce(Selection) -> Vec<usize>,
     ) -> Vec<Option<DefId>> {
-        let Ok(q) = self.question(tysys, ctx, scope, type_id, asked) else {
+        let Ok(q) = self.question(tysys, ctx, type_id, asked) else {
             return Vec::new();
         };
         let found = bound_candidates(&self.program, &q.env, &q.ty, q.trait_, &q.args);
@@ -2647,7 +2620,6 @@ struct Question {
     env: Env,
     ty: SolverType,
     trait_: TraitDeclId,
-    module: ModuleId,
     /// The arguments the asking bound writes for the trait's own parameters.
     args: Vec<SolverType>,
 }

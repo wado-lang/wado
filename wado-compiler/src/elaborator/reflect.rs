@@ -11,15 +11,15 @@ use crate::type_table::TypeTable;
 
 use super::Elaborator;
 use super::trait_query::OnBoundTrait;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, StructFieldInfo, TypeError};
 use super::tysys::TypeSystem;
 use crate::elaborator::sem::types::StaticMethodDispatch;
 use crate::module_source::ModuleSource;
 use crate::name::FqTraitName;
 use crate::synthesis::template::has_reflect_kind;
 use crate::synthesis::traits::{
-    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC, REFLECT_FIELD_TYPES_ASSOC,
-    REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
+    REFLECT_CASE_PAYLOADS_ASSOC, REFLECT_FIELD_INPUTS_ASSOC, REFLECT_FIELD_SLOTS_ASSOC,
+    REFLECT_FIELD_TYPES_ASSOC, REFLECT_HOLES_ASSOC, REFLECT_MEMBERS_ASSOC,
 };
 use crate::{hashmap, tir};
 
@@ -223,10 +223,31 @@ pub(super) enum ReflectDispatch {
 }
 
 /// How the missing-pack-bound diagnostic spells the binding each payload kind
-/// needs on a generic subject.
-const STRUCT_PACK_BOUND: &str = "FieldTypes = [..F]";
-const VARIANT_PACK_BOUND: &str = "CasePayloads = [..P]";
-const TEMPLATE_PACK_BOUND: &str = "Holes = [..V]";
+/// needs on a generic subject, and what it adds to say why.
+struct PackBound {
+    spelling: &'static str,
+    note: Option<&'static str>,
+}
+
+const STRUCT_PACK_BOUND: PackBound = PackBound {
+    spelling: "FieldTypes = [..F]",
+    note: None,
+};
+const STRUCT_INPUTS_BOUND: PackBound = PackBound {
+    spelling: "FieldInputs = [..F]",
+    note: Some(
+        "`FieldTypes` holds of a closed struct too, which no one may build from its fields; \
+         `FieldInputs` is `[..F]` only for an open one",
+    ),
+};
+const VARIANT_PACK_BOUND: PackBound = PackBound {
+    spelling: "CasePayloads = [..P]",
+    note: None,
+};
+const TEMPLATE_PACK_BOUND: PackBound = PackBound {
+    spelling: "Holes = [..V]",
+    note: None,
+};
 
 /// The `[..P]` pack a reflect bound projects: the pack element type itself and
 /// the `(name, index)` handle a mapped pack is rebuilt from.
@@ -278,6 +299,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+
+        if method == StructMethods::resolve(&self.tysys.type_table.borrow()).from_fields
+            && let Some(closure) = self
+                .struct_fields_of_type(structure_ty)
+                .and_then(StructFieldInfo::closure)
+        {
+            let _ = self.emit(TypeError::ClosedStructFromFields {
+                why_closed: closure.explain(&self_name),
+                struct_name: self_name,
+                span: static_call.span,
+            });
+            return TypeTable::ERROR;
+        }
 
         let Some(subject) = self.reflect_struct_subject(self_ty) else {
             let _ = self.emit(TypeError::UnknownFunction {
@@ -471,28 +505,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The diagnostic for a reflect member on a generic subject `T` that
-    /// carries no pack bound to source the member's shape from. `pack_bound`
-    /// spells the missing binding, e.g. `FieldTypes = [..F]`.
+    /// carries no pack bound to source the member's shape from.
     fn emit_missing_pack_bound(
         &mut self,
         trait_name: &str,
         type_param_name: &str,
         method: &str,
-        pack_bound: &str,
+        pack_bound: PackBound,
         static_call: &ast::StaticMethodCallExpr,
     ) {
         let _ = self.emit(TypeError::MissingReflectPackBound {
             trait_name: trait_name.to_string(),
             type_param: type_param_name.to_string(),
             method: method.to_string(),
-            pack_bound: pack_bound.to_string(),
+            pack_bound: pack_bound.spelling.to_string(),
+            note: pack_bound.note,
             span: static_call.span,
         });
     }
 
     /// Resolve `ReflectStruct::<T>::from_fields(fields)` on a generic subject: the
-    /// argument is checked against `T`'s `FieldTypes = [..F]` pack binding and the
-    /// call yields `T` itself.
+    /// argument is checked against `T`'s `FieldInputs = [..F]` pack binding, so
+    /// `T` is open, and the call yields `T` itself.
     fn resolve_generic_reflect_from_fields(
         &mut self,
         self_ty: TypeId,
@@ -505,13 +539,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(fields_ty) = self.reflect_pack_bound_ty(
             type_param_name,
             CompilerItem::ReflectStruct,
-            REFLECT_FIELD_TYPES_ASSOC,
+            REFLECT_FIELD_INPUTS_ASSOC,
         ) else {
             self.emit_missing_pack_bound(
                 reflect_trait_name.base_name(),
                 type_param_name,
                 &method,
-                STRUCT_PACK_BOUND,
+                STRUCT_INPUTS_BOUND,
                 static_call,
             );
             return TypeTable::ERROR;

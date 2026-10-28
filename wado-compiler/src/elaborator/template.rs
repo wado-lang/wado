@@ -108,12 +108,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .compiler_trait(item)
             .expect("every format kind names a prelude trait");
-        if self.tysys.type_implements_trait(
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            receiver,
-            &trait_,
-        ) || self.report_unmet_trait_impl_bound(receiver, &[item], None, span)
+        if self
+            .tysys
+            .type_implements_trait(&self.annotate_ctx, receiver, &trait_)
+            || self.report_unmet_trait_impl_bound(receiver, &[item], None, span)
         {
             return;
         }

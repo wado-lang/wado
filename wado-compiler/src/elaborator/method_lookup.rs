@@ -973,7 +973,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.impl_reaches(def, receiver_type_args)
             && self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
-                &self.type_lookup(),
                 def,
                 Some(receiver),
                 bounded.as_deref(),
@@ -1101,7 +1100,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         }
                         self.tysys.unmet_impl_bound(
                             &self.annotate_ctx,
-                            &self.type_lookup(),
                             def,
                             Some(receiver),
                             Some(&args),
@@ -1130,13 +1128,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let receiver_args = self.bounded_at_answer(receiver_args);
         if let Some(block) = block
-            && let Some(unmet) = self.tysys.unmet_impl_bound(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                block,
-                None,
-                Some(&receiver_args),
-            )
+            && let Some(unmet) =
+                self.tysys
+                    .unmet_impl_bound(&self.annotate_ctx, block, None, Some(&receiver_args))
         {
             self.report_unmet(unmet, span);
         }
@@ -1324,7 +1318,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             if self.tysys.check_impl_block_bounds(
                 &self.annotate_ctx,
-                &self.type_lookup(),
                 def,
                 Some(receiver),
                 Some(&args),
@@ -3083,7 +3076,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let header = impl_header(&trait_env, impl_ref);
                 if !s.tysys.check_impl_block_bounds(
                     &s.annotate_ctx,
-                    &s.type_lookup(),
                     impl_ref.0,
                     Some(receiver),
                     Some(&concrete_type_args),
@@ -3274,7 +3266,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !concrete_type_args.is_empty()
                     && !s.tysys.check_impl_block_bounds(
                         &s.annotate_ctx,
-                        &s.type_lookup(),
                         impl_ref.0,
                         Some(base_type_id),
                         Some(&concrete_type_args),

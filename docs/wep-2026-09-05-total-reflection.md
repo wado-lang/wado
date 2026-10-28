@@ -215,10 +215,11 @@ no answer would appear inside a tree a consumer is already walking, not at its
 root — `Pair<&Point>` and `struct Handler { cb: fn(i32) -> i32 }` each put one
 there.
 
-The visibility gate is unchanged: it sits on the kind traits and never on the
-root ([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md),
-Visibility). That split already implied a total root, since a type's name is
-public the moment the type is.
+The root is total because a type's name is public the moment the type is. The
+kind traits are now total as well
+([Reflect Derivation](./wep-2026-06-13-reflect-derivation.md), Visibility),
+which leaves what `opaque` admits open (see
+[Known gaps](#a-struct-with-private-fields-opens-everywhere)).
 
 ### Symbol notation names a reference and a function type
 
@@ -430,6 +431,17 @@ unknown _value_ is `core:value::Value` through `Serialize`, and reflection
 answers for the _type_.
 
 ## Known gaps
+
+### A struct with private fields opens everywhere
+
+This WEP was written while a kind trait held only where every member was
+visible, so a struct with private fields (`String`, `i128`) reached `opaque`
+downstream. [Reflect Derivation](./wep-2026-06-13-reflect-derivation.md)
+§ Visibility removed that gate: every struct now satisfies `ReflectStruct`
+everywhere, and only building a closed struct is withheld. Under the rules
+above, every struct reaches the `struct` arm, and `opaque` holds only the
+sealed member handles. Whether `opaque` should still take a closed struct, and
+what `match type` answers for `String`, is undecided.
 
 ### A reference and a function type have no notation yet
 

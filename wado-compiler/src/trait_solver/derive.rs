@@ -54,7 +54,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                 !decl
                     .members
                     .iter()
-                    .all(|member| holds(program, env, member, trait_, decl.module).is_some())
+                    .all(|member| holds(program, env, member, trait_).is_some())
             })
             .map(|(_, id, _)| *id)
             .collect();
@@ -189,7 +189,7 @@ fn derived_bounds(
 #[cfg(test)]
 mod tests {
     use super::super::holds::owed;
-    use super::super::program::{ArgDefault, ModuleId, TypeDef};
+    use super::super::program::{ArgDefault, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
 
@@ -201,7 +201,6 @@ mod tests {
     const OPAQUE: TypeDeclId = TypeDeclId(4);
     const NODE: TypeDeclId = TypeDeclId(5);
     const OPTION: TypeDeclId = TypeDeclId(6);
-    const HERE: ModuleId = ModuleId(0);
 
     fn declaration(id: TypeDeclId, params: u32, members: Vec<SolverType>) -> Declaration {
         Declaration {
@@ -209,7 +208,6 @@ mod tests {
             params,
             variadic: false,
             members,
-            module: HERE,
         }
     }
 
@@ -337,7 +335,7 @@ mod tests {
         let mut p = prelude();
         derive(&mut p, EQ, &[shape]);
         let of = |elems| SolverType::Decl(WRAPPER, vec![SolverType::Tuple(elems)]);
-        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ, HERE).is_some();
+        let at = |ty: &SolverType| holds(&p, &Env::default(), ty, EQ).is_some();
         assert!(at(&of(vec![decl(I32), decl(I32)])));
         assert!(at(&of(vec![])));
         assert!(!at(&of(vec![decl(I32), decl(OPAQUE)])));
@@ -347,8 +345,8 @@ mod tests {
     fn owed_at(declarations: &[Declaration], ty: &SolverType) -> Vec<SolverType> {
         let mut p = prelude();
         derive(&mut p, EQ, declarations);
-        let held = holds(&p, &Env::default(), ty, EQ, HERE).expect("the bound holds");
-        let mut types: Vec<SolverType> = owed(&p, &Env::default(), HERE, held.requests)
+        let held = holds(&p, &Env::default(), ty, EQ).expect("the bound holds");
+        let mut types: Vec<SolverType> = owed(&p, &Env::default(), held.requests)
             .into_iter()
             .map(|request| request.ty)
             .collect();
@@ -484,7 +482,7 @@ mod tests {
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let asked = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).map(|h| h.requests.len());
+        let asked = |ty| holds(&p, &Env::default(), &ty, EQ).map(|h| h.requests.len());
         assert_eq!(asked(wrapper_of(decl(I32))), Some(0));
         assert_eq!(
             asked(wrapper_of(SolverType::Decl(LIST, vec![decl(I32)]))),
@@ -565,7 +563,7 @@ mod tests {
             EQ,
             &[declaration(NODE, 2, vec![SolverType::Param(0)])],
         );
-        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ, HERE).is_some();
+        let has_eq = |ty| holds(&p, &Env::default(), &ty, EQ).is_some();
         assert!(has_eq(node_of(decl(I32), decl(I32))));
         assert!(!has_eq(node_of(decl(OPAQUE), decl(I32))));
         assert!(has_eq(node_of(decl(OPAQUE), decl(OPTION))));
@@ -598,7 +596,7 @@ mod tests {
             ORD,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD, HERE).is_some();
+        let ordered = |ty| holds(&p, &Env::default(), &ty, ORD).is_some();
         assert!(!ordered(wrapper_of(decl(I32))));
         assert!(!ordered(decl(ALIAS)));
         assert!(ordered(decl(ORDERED)));
@@ -629,7 +627,7 @@ mod tests {
             }
         );
         assert_eq!(
-            holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ, HERE),
+            holds(&p, &Env::default(), &wrapper_of(decl(OPAQUE)), EQ),
             None
         );
     }
@@ -651,7 +649,7 @@ mod tests {
             EQ,
             &[declaration(WRAPPER, 1, vec![SolverType::Param(0)])],
         );
-        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ, HERE)
+        let held = holds(&p, &Env::default(), &wrapper_of(decl(I32)), EQ)
             .expect("the written `Ord` holds at `i32`");
         assert!(held.requests.iter().all(|r| !r.structural));
     }

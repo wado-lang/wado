@@ -1,0 +1,11 @@
+// A generic body builds `T` from its fields only under a `FieldInputs` pin:
+// `FieldTypes` alone describes a closed struct too, which no one may forge.
+fn forge<T: ReflectStruct<FieldTypes = [..F]>, ..F>(fields: [..F]) -> T {
+    return ReflectStruct::<T>::from_fields(fields);
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": ":4:12: analysis error: `ReflectStruct::<T>::from_fields()` needs `T` bound as `ReflectStruct<FieldInputs = [..F]>`\n  note: `FieldTypes` holds of a closed struct too, which no one may build from its fields; `FieldInputs` is `[..F]` only for an open one"}

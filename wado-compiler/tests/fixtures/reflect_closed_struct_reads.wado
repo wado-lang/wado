@@ -1,0 +1,40 @@
+// `ReflectStruct` holds of every struct wherever it is asked, so a derivation
+// that only reads — a blanket over the kind, `Inspect` — reaches a struct whose
+// fields are private. Only building one is withheld (`FieldInputs` is `!`).
+use { make_opaque, make_mixed } from "./sub/reflect_visibility_dep.wado";
+use { ReflectStruct } from "core:prelude";
+
+trait Tagged with () {
+    fn tag(&self) -> String;
+}
+
+impl<T: ReflectStruct> Tagged for T {
+    fn tag(&self) -> String {
+        return "struct";
+    }
+}
+
+fn field_names<T: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &T) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<T>::members() {
+        out.push_str(`${f.name()} `);
+    }
+    return out;
+}
+
+test "a kind blanket applies to a closed struct across modules" {
+    assert make_opaque().tag() == "struct";
+    assert make_mixed().tag() == "struct";
+}
+
+test "a closed struct's fields read through reflection" {
+    assert field_names(&make_mixed()) == "a secret ";
+}
+
+test "a closed struct inspects" {
+    assert `${make_opaque():?}` == "Opaque { root: 0, size: 0 }";
+    assert `${make_mixed():?}` == "Mixed { a: 1, secret: 2 }";
+}
+
+__DATA__
+{"test": {}}

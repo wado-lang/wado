@@ -203,6 +203,10 @@ The marker `impl Serialize for T;`
 forces the impl where no bound asks for it. `#[wire(...)]` attributes apply
 with or without it.
 
+A closed struct, one with a field that reaches less far than the struct, derives
+neither ([Visibility](./spec-reflection.md#visibility)); it needs a hand-written
+impl.
+
 Deriving on demand means a type becomes serializable the moment some code asks,
 and a field added later extends its wire shape. A hand-written impl is the
 control where that matters.
