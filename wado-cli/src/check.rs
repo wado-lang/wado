@@ -295,10 +295,13 @@ async fn check_package_unused(
             continue;
         }
         let member_identity = package.member_identity(member);
+        // The walk names what the member imports from the member's directory,
+        // so the host placing those modules in packages must stand there too.
+        let member_dir = file.parent().expect("a member names a file");
         let outcome = maybe_run_pipeline_for(
             file,
             Some(&member_identity),
-            &host,
+            &host.rebased(member_dir.to_path_buf()),
             opts.knobs.no_cache,
             Some(project.clone()),
             &mut settled,

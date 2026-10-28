@@ -619,6 +619,12 @@ This document states the order, and `candidates` with `rank` implement it.
 Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
+Monomorphization asks the same order. At each instance it ranks the impls
+reaching the concrete receiver (`instance_candidates`, `Asker::Instance`), and
+names the call after the link of the receiver's chain the winner answers at. It
+holds no selection rule of its own, so an instance runs the body the order
+selected rather than one a second walk found.
+
 ## Known gaps
 
 ### Scope does not gate a call through a bound

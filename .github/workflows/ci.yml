@@ -279,31 +279,38 @@ jobs:
 
       - run: mise run test-fuel
 
-  # The sandbox's escape tests, on the backend no other job runs: Seatbelt.
-  # See docs/wep-2026-10-21-core-process.md.
-  test-sandbox-macos:
-    name: Test (sandbox, macOS)
+  # The sandbox's escape tests, on what no other job runs: Seatbelt, and the
+  # seccomp filter's arm64 branch, whose architecture check and system call
+  # table differ from x86_64's. See docs/wep-2026-10-21-core-process.md.
+  test-sandbox:
+    name: Test (sandbox, ${{ matrix.name }})
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: macos-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: macOS, os: macos-latest }
+          - { name: Linux arm64, os: ubuntu-24.04-arm }
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # rustup installs the toolchain rust-toolchain.toml names; no mise tool
-      # is needed. Only main saves, as cargo-cache.yml does for Linux.
+      # is needed. Only main saves, as cargo-cache.yml does for Linux x86_64.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: sandbox-macos
+          shared-key: sandbox-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test --locked -p wado-host --lib sandbox::tests
       # Seatbelt logs each operation it denies, and a child it kills leaves a
       # crash report; the test sees only the exit status.
       - name: Show what the sandbox denied
-        if: failure()
+        if: failure() && runner.os == 'macOS'
         run: |
           log show --last 30m --style compact --predicate 'eventMessage CONTAINS "deny("' |
             grep -E 'Sandbox: (sh|cat|sandbox-exec|wado_host[^(]*)\(' | head -n 200 || true
@@ -357,14 +364,14 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox-macos]
+    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
     steps:
       # Every job named in `needs` must have succeeded, `changes` included, so
-      # adding one there is the only edit needed. `test-level` counts as one
-      # job, successful only if every level was.
+      # adding one there is the only edit needed. A matrix (`test-level`,
+      # `test-sandbox`) counts as one job, successful only if every entry was.
       - name: Check all jobs passed
         env:
           NEEDS: ${{ toJSON(needs) }}

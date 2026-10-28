@@ -8,14 +8,17 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use indexmap::IndexMap;
+use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{
     Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, LogLevel, ProbeRequest, Severity, SourceError, SourceReader,
 };
+use wado_manifest::LOCK_FILENAME;
 
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::dep_component::Acquisition;
-use crate::manifest::resolution_inputs;
+use crate::manifest::{package_root, resolution_inputs};
+use crate::remote;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use wado_host::kiln::driver::KilnSpan;
@@ -210,6 +213,9 @@ impl FilesystemCompilerHost {
             SourceError::IoError { .. } | SourceError::NetworkError { .. } => {
                 self.run.observe_untracked();
             }
+            SourceError::IntegrityMismatch { .. } | SourceError::Unpinned { .. } => {
+                unreachable!("only a remote read is held to a pin")
+            }
         }
     }
 
@@ -283,10 +289,22 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     /// Nothing read through the reader is recorded: the part of the file a
-    /// compile depends on is read again through [`Self::load_source_prefix`].
-    /// A file that fails to open is recorded, as one that fails to load is.
-    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
-        let opened = self.inner.open_source(path).await;
+    /// compile depends on is read again through [`Self::load_file`]. A file
+    /// that fails to open is recorded, as one that fails to load is.
+    async fn open_source(
+        &self,
+        path: &str,
+        integrity: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
+        if is_remote(path) {
+            let lock_root = package_root(self.base_path());
+            let opened = Box::pin(remote::open(path, integrity, lock_root.as_deref())).await;
+            if opened.is_err() {
+                self.run.observe_untracked();
+            }
+            return opened;
+        }
+        let opened = self.inner.open_source(path, integrity).await;
         if let Err(e) = &opened {
             self.observe_failure(path, e);
         }
@@ -306,6 +324,26 @@ impl CompilerHost for FilesystemCompilerHost {
                 .run
                 .observe(&self.inner.base_path().join(path), extent, bytes),
             Err(e) => self.observe_failure(path, e),
+        }
+        loaded
+    }
+
+    /// A pin settles the bytes, so a read records no file but the `wado.lock`
+    /// that pinned it, and only a failure leaves the compile untracked.
+    async fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> Result<Vec<u8>, SourceError> {
+        let lock_root = package_root(self.base_path());
+        let loaded = Box::pin(remote::load(url, extent, integrity, lock_root.as_deref())).await;
+        match (&loaded, &lock_root) {
+            (Err(_), _) => self.run.observe_untracked(),
+            (Ok(_), Some(root)) if integrity.is_none() => {
+                self.run.depend_on_file(&root.join(LOCK_FILENAME));
+            }
+            (Ok(_), _) => {}
         }
         loaded
     }

@@ -16,12 +16,12 @@ fn advance(c: &Cfg, tk: i32) -> List<Cfg> {
 
 #[inline(never)]
 fn build(closed: &List<Cfg>, tokens: &List<i32>) -> List<Cfg> {
-    let bumped: List<Cfg> = closed.iter_ref().map(|c: &Cfg| Cfg { ..*c, pos: c.pos + 1 }).collect();
+    let bumped: List<i32> = closed.iter_ref().map(|c: &Cfg| c.pos + 1).collect();
     let mut next: List<Cfg> = [];
     let mut opaque: List<i32> = [];
     for let mut t = 0; t < tokens.len(); t += 1 {
         for let mut i = 0; i < closed.len(); i += 1 {
-            if bumped[i].pos > 0 {
+            if bumped[i] > 0 {
                 for let a of advance(&closed[i], tokens[t]) {
                     if a.pos == -1 {
                         if !opaque.contains(&a.alt) { opaque.push(a.alt); }

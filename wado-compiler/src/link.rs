@@ -8,7 +8,6 @@ use std::rc::Rc;
 use crate::builtin_facts::{ParamShape, ReturnShape};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-#[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
@@ -96,7 +95,7 @@ pub fn link(package: Package) -> FlatPackage {
         is_test_world,
         &package.target_world,
         entry_tests,
-        &package.test_name_filters,
+        &package.test_selection,
         &package.export_binding_names,
         &package.post_return_binding_names,
         &package.world_registry,
@@ -104,6 +103,7 @@ pub fn link(package: Package) -> FlatPackage {
         package.lib_world_info.as_ref(),
         package.is_lib_world(),
         &package.callback_exports,
+        &package.guest_callbacks,
     );
 
     // Flatten all per-module TIR into flat lists.
@@ -189,7 +189,6 @@ pub fn link(package: Package) -> FlatPackage {
         builtin_registry: package.builtin_registry,
         wasm_assets: package.wasm_assets,
         trait_env: package.trait_env,
-        #[cfg(debug_assertions)]
         pruned: IndexSet::default(),
     }
 }

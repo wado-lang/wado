@@ -7,8 +7,9 @@ rule. A consumer's effect obligations are _reconstructed_ from a dependency's
 real host-leaf imports rather than from the mere presence of a function-bearing
 interface (the consuming direction). A Wado library, symmetrically, turns a
 guest effect it leaves unhandled into a CM import that a consumer satisfies (the
-producing direction) — either by holding the underlying capability, or by
-supplying a **provider component** composed in as a fused sibling.
+producing direction): by holding the underlying capability, by handling it with
+a `with` handler, or by supplying a **provider component** composed in as a
+fused sibling.
 
 Async import/export (`stream<T>` / `future<T>`) is out of scope for v1.
 
@@ -77,17 +78,20 @@ synthesized interface — the mirror of reconstruction. marl can thus perform a
 `RenderHook` effect it does not implement, leaving the choice to consumers. An
 effect handled inside the library stays internal and imports nothing.
 
-### Satisfying — hold the capability, or compose a provider
+### Satisfying — hold the capability, handle it, or compose a provider
 
 A reconstructed guest effect (a non-WASI import) materializes in the consumer's
 scope as an impl-able effect and is required like any other; using the
-dependency without providing it is a missing-effect error. Two ways to provide
+dependency without providing it is a missing-effect error. Three ways to provide
 it:
 
 - Hold the underlying capability and let it surface (for a leaf the host or an
   outer component ultimately satisfies).
+- Install a `with` handler around the call. The dependency's call to the
+  effect reaches the handler installed where the consumer called into the
+  dependency, as any effect operation does.
 - Name a **provider** on the import — the dependency-injection shape sanctioned
-  by the Component Model (donut/sibling linking):
+  by the Component Model (sibling linking):
 
   ```wado
   use { Marl } from "wado-lang:marl" with { provider: "./highlight.wado" };
@@ -98,13 +102,39 @@ it:
   dependency's imported interface, bound by operation name. Composition wires `provider.export → dependency.import` and
   discharges the effect, so the consumer calls `Marl` with no handler installed.
 
-A provider is a _static_ link-time choice, not a per-call dynamic handler.
-Attempting the latter — the consumer's in-process handler receiving calls from
-inside the dependency — forms a component instantiation cycle the Component Model
-forbids; see
+A provider is a _static_ link-time choice; a handler is a per-call dynamic one.
+
+A handler links the two components in a cycle: the consumer calls into the
+dependency, and the dependency calls back into the consumer. Neither can be
+instantiated first, so the consumer's component nests the dependency and links
+it by donut wrapping (`Linking.md`):
+
+- Each operation of the effect lifts its dispatch binding, the function that
+  calls the innermost handler. The lift calls through a funcref table, and uses
+  the memory and `realloc` the consumer's `mem` instance defines before the
+  main module.
+- The dependency is instantiated against those lifts, and its exports stand
+  where the consumer would have imported them.
+- Once the main module is instantiated, a small core module fills the table
+  with the main module's bindings.
+
+The dependency calling back while the consumer's own call into it is still on
+the stack is reentrance, which the Component Model permits since
+WebAssembly/component-model#705 removed `may_enter`. The dependency's other
+imports (`wasi:*`, or a guest effect the consumer leaves open) are forwarded
+from the consumer's own imports, which carry every function the dependency
+needs. A types-only interface (`wasi:clocks/types`) has nothing to run, so the
+consumer defines its types itself rather than importing it. Where one of the
+consumer's own imports reaches a type of it, the consumer imports it anyway, so
+that import can alias the type, and the dependency is handed that import too.
+Such an interface declares no operation, so it is no effect either.
+
+Where no handler is installed at run time, an operation falls back as any
+effect operation does: to the consumer's own import of the interface when the
+effect is open at the consumer's boundary, and to a trap otherwise.
+
 [Research: Callbacks across the CM Boundary](./research-cm-boundary-callbacks.md)
-for the surveyed alternatives (donut wrapping, a host effect pump, first-class
-function values) and why static provider composition is the one that ships.
+surveys the alternatives (a host effect pump, first-class function values).
 
 ## Scope
 
@@ -112,7 +142,8 @@ The rule covers the synchronous value-type surface. Consuming attributes to each
 export the union of the component's imports — sound, and exact for a
 well-factored pure package, over-approximating only where one component mixes
 pure and impure exports. Producing is the mirror: a guest effect left unhandled
-at a library boundary lowers to a CM import for a provider to satisfy.
+at a library boundary lowers to a CM import for a handler or a provider to
+satisfy.
 
 Not covered yet:
 

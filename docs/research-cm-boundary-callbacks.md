@@ -134,16 +134,41 @@ boundary; the provider cannot close over the consuming program's state (it is
 its own component). For self-contained parameterizations — a syntax
 highlighter, a codec, a policy function — this is a fit, not a limitation.
 
-### Effect channels — stream-encoded callbacks (the dynamic direction)
+### Donut wrapping — the consumer's handler (adopted)
+
+The consumer's component nests the dependency and satisfies its guest-effect
+import with lifts of the consumer's own dispatch bindings, the functions that
+call the innermost installed handler. The lifts call through a funcref table
+that a small core module fills once the consumer's main module is
+instantiated, so the dependency can be instantiated first. The consumer's
+`mem` instance defines the memory and `realloc` before either, so the lifts
+can name them.
+
+This gives a `with h do` handler dynamic extent across the boundary: the
+handler closes over the consuming program's state, and nested handlers shadow
+outer ones as they do for any effect. A handler may call back into the
+dependency while the dependency's call to it is still on the stack, which is
+the reentrance WebAssembly/component-model#705 permits. The artifact stays self-satisfying and portable:
+donut wrapping is the spec's own linking shape, and needs nothing from the
+host.
+
+Cost: the dependency is nested rather than composed as a sibling, so its other
+imports are forwarded from the consumer's own. The consumer imports, on the
+dependency's behalf, every function the dependency imports from an interface
+the consumer also reaches, and defines the types of a types-only one, unless it
+imports that one for its own imports' sake.
+
+### Effect channels — stream-encoded callbacks (the concurrent direction)
 
 Encode the effect protocol in values: the library's export takes/returns
 `stream<request>` / `stream<response>` handles; the consumer runs a pump —
 `loop { read request; handle; write response }` — as a task concurrent with
 the call. Pure guest-to-guest, portable to any P3 host, and real dynamic
-extent (the handler closes over the consuming program's state). This is the
-principled way to reach the dynamic quadrant provider composition and the
-host pump cannot both cover; it is the reification of an effect as an async
-channel, and an effect signature is a (degenerate) session type over it.
+extent (the handler closes over the consuming program's state). Donut wrapping
+already covers a synchronous effect operation; channels add the operations a
+library fires without awaiting each. This is the reification of an effect as
+an async channel, and an effect signature is a (degenerate) session type over
+it.
 
 Buffering is not a problem for the base case. CM streams are rendezvous
 (buffer 0): a `write` with no pending `read` **parks** and completes when a
@@ -176,14 +201,8 @@ host function that pumps calls to the consumer's handler (a detached task
 against an async-lifted shim export — legal, see Host reentry above).
 It offers dynamic extent, but the artifact is no longer self-satisfying: it
 runs only on a wado-aware host, forfeiting the portability that is the point of
-targeting Wasm. Rejected on that ground; effect channels reach the same
+targeting Wasm. Rejected on that ground; donut wrapping reaches the same
 dynamic quadrant portably.
-
-### Available since wasmtime 49: donut wrapping
-
-The spec-sanctioned mechanism (above). wasmtime 49 executes it, and
-`cm_donut_canary.rs` fails if that stops. Not yet evaluated against provider
-composition and effect channels.
 
 ### Future spec: first-class function values
 
@@ -193,11 +212,12 @@ Concurrency.md's future extensions; nothing to build against today.
 
 ## Decision
 
-Adopt **provider composition** now for static parameterization. Keep the
-library-side contract (guest effect → synthesized CM import) unchanged so
-**effect channels** can be added later for dynamic, portable cross-boundary
-effects, and so a future donut / first-class-function world needs no contract
-change. The **host effect pump** is rejected (non-portable).
+Adopt **provider composition** for static parameterization and **donut
+wrapping** for a consumer's `with` handler. Keep the library-side contract
+(guest effect → synthesized CM import) unchanged so **effect channels** can be
+added later for concurrent cross-boundary effects, and so a future
+first-class-function world needs no contract change. The **host effect pump**
+is rejected (non-portable).
 
 ## Status
 
@@ -215,5 +235,8 @@ change. The **host effect pump** is rejected (non-portable).
   `cm_provider_compose.rs`). One guest interface per dependency for now; a single
   provider file spanning several imported interfaces (bind by op name across all)
   is the next increment.
-- Effect channels (dynamic direction): not started; own WEP when motivated.
-- Host effect pump: rejected (non-portable). Donut wrapping: runs on wasmtime 49, not yet evaluated.
+- Donut wrapping: implemented — a guest effect the consumer handles nests the
+  dependency against lifts of its dispatch bindings
+  (`codegen/component/guest_callbacks.rs`; fixtures `guest_effect_handler*.wado`).
+- Effect channels (concurrent direction): not started; own WEP when motivated.
+- Host effect pump: rejected (non-portable).

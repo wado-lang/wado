@@ -60,3 +60,14 @@ test "newtype steps over a half and a wide integer" {
     let wide_back: Wide = from_i128(-9);
     assert wide_back as i128 == -9;
 }
+
+// The step holds behind a reference, which `&mut` narrows to `&` across.
+fn peek_base<N: ReflectNewtype<Base = f64>>(n: &mut N) -> f64 {
+    let base = n as &f64;
+    return *base;
+}
+
+test "newtype steps behind a narrowed reference" {
+    let mut m: Meters = 2.5;
+    assert peek_base(&mut m) == 2.5;
+}

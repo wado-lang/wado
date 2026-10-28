@@ -151,6 +151,11 @@ impl ComponentModelContext {
         self.decl_types.contains_key(&def)
     }
 
+    /// Every declaration bound so far, with its outer type index.
+    pub fn decl_types(&self) -> impl Iterator<Item = (DefId, u32)> + '_ {
+        self.decl_types.iter().map(|(&def, &idx)| (def, idx))
+    }
+
     /// Reserve a component type index without binding a name.
     pub fn register_anon_type(&mut self) -> u32 {
         let idx = self.next_type_idx;

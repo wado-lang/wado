@@ -98,14 +98,14 @@ internal fn find_jdk() -> Result<(), JdkProblem> with Process {
         if let Err(e) = Command::new(tool).arg("-version").output() {
             return Err(
                 match e.kind {
-                    NotFound => JdkProblem::Missing(
+                    Spawn(NotFound) => JdkProblem::Missing(
                         if tool == "javac" {
                             "'javac' not on PATH (need a JDK, not just a JRE)";
                         } else {
                             "'java' not on PATH";
                         },
                     ),
-                    NotPermitted => JdkProblem::Unreachable(
+                    Spawn(NotPermitted) => JdkProblem::Unreachable(
                         `'${tool}' lies outside what a spawned child may read: add its JDK to \`[process] read\` in ~/.config/wado/config.toml, or pass --process-read`,
                     ),
                     _ => JdkProblem::Unreachable(`${e}`),
@@ -257,7 +257,7 @@ fn sha1_of(path: String) -> Result<Option<String>, String> with Process {
             Ok(out) => {
                 return Ok(Some(first_field_lowercase(String::from_utf8_lossy(&out))));
             },
-            Err(e) && e.kind matches { NotFound } => {
+            Err(e) && e.kind matches { Spawn(NotFound) } => {
                 continue;
             },
             Err(e) => {

@@ -770,8 +770,9 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     async fn open_source(
         &self,
         path: &str,
+        integrity: Option<wado_compiler::remote::Integrity>,
     ) -> Result<std::sync::Arc<dyn wado_compiler::SourceReader>, wado_compiler::SourceError> {
-        self.inner.open_source(path).await
+        self.inner.open_source(path, integrity).await
     }
 
     async fn load_source_prefix(
@@ -780,6 +781,15 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         extent: Option<u64>,
     ) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_source_prefix(path, extent).await
+    }
+
+    async fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<wado_compiler::remote::Integrity>,
+    ) -> Result<Vec<u8>, wado_compiler::SourceError> {
+        self.inner.load_remote(url, extent, integrity).await
     }
 
     fn emit_diagnostic(&self, diagnostic: CompilerDiagnostic) {

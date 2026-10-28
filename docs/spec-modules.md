@@ -170,8 +170,9 @@ Rationale: [WEP: Visibility — `internal` / `pub` / `export`](./wep-2026-06-25-
 | [CM coordinate](./spec-packages.md#package-specifiers) | `"<ns>:<pkg>[@<ver>]"`        | `"docs:regex"`, `"docs:regex@1.0.0"` |
 | [Library alias](./spec-packages.md#package-specifiers) | `"lib:<nick>"`                | `"lib:router"`, `"lib:shared"`       |
 | Local file                                             | `"./<path>"` or `"../<path>"` | `"./utils.wado"`, `"../config.wado"` |
+| [Remote file](#remote-modules)                         | `"https://<host>/<path>"`     | `"https://example.com/util.wado"`    |
 
-A specifier names a package or a local file. It never carries an interface segment: interfaces and their members
+A specifier names a package, a local file, or a remote file. It never carries an interface segment: interfaces and their members
 are selected in the `use { ... }` list (`Iface`, `Iface::{op}`). `core:` and
 `wasi:` are coordinates whose namespace is bundled with the compiler, not a
 separate scheme. Nested namespaces (`a:b:pkg`) follow WIT.
@@ -186,12 +187,63 @@ A module path resolves by its form:
 2. An open coordinate `<ns>:<pkg>`, in any other namespace, resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 3. A library alias `lib:<nick>` resolves to a dependency ([Package Specifiers](./spec-packages.md#package-specifiers)).
 4. A local path, starting `./` or `../`, resolves relative to the importing module.
-5. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
+5. A URL, starting `https://`, names a [remote module](#remote-modules).
+6. Any other path is an error: `invalid module path 'xxx'; use './' for local modules or 'namespace:' for library modules`. A bare name (`"router"`) is one, except a deprecated bare `[dependencies]` key ([Package Specifiers](./spec-packages.md#package-specifiers)).
 
 The reserved namespaces are `core`, `wasi`, and `lib`. `core` and `wasi` are
 bundled; `lib` is not. Every other namespace is open.
 
 Rationale: [WEP: Package and Module Specifier Syntax](./wep-2026-06-17-package-module-syntax.md).
+
+## Remote Modules
+
+A `use` may name a file by its URL. The file is fetched when the program is
+built, and from then on it is read as a local file would be.
+
+<!-- {"fixture": "remote_import.wado"} -->
+
+```wado
+use { greet } from "https://example.com/lib/greet.wado"
+    with { integrity: "sha256:9ceb5c048c24f2a36440cdcb5c7bcd48e52bd119028e88a0e38b5580b583d9c8" };
+
+test "a remote module and the one beside it load" {
+    assert greet("wado") == "hello, wado!";
+}
+```
+
+The URL starts `https://`. A plain `http://` URL is an error unless its host is
+`localhost`, `127.0.0.1` or `[::1]`, since anything between this machine and
+another could change the bytes. A redirect is held to the same rule, and to
+two more, since a server could otherwise send the build where its own URL
+could not have named:
+
+- A redirect never leaves `https://`.
+- A redirect never crosses between the internet and this network: this
+  machine, or a private, link-local or shared address. A host whose name
+  resolves to any such address is on this network, and one this machine cannot
+  resolve is on the internet.
+
+Every remote file is pinned to the SHA-256 digest of its content. The pin comes
+from one of two places:
+
+1. The `use` writes it as `integrity: "sha256:<64 lowercase hex digits>"`.
+2. The `wado.lock` of the package that builds the program records it
+   ([Remote Pins](./spec-packages.md#remote-pins)).
+
+A file in no package has no `wado.lock`, so its `use` must write the pin. The
+error for a missing pin names the digest to write. A file whose content hashes
+to anything other than its pin is an error, and so is `integrity` on an import
+of a local file. Where several `use`s pin one URL, each is held to its own pin.
+
+A URL names a [Wasm asset](#wasm-module-and-component-imports) the same way,
+pinned by the same rules.
+
+A remote module reaches no local file. A `./` or `../` path inside it, whether
+in a `use` or an `#include_*`, names the URL beside the module, resolved as
+[RFC 3986](https://www.rfc-editor.org/rfc/rfc3986#section-5) resolves a
+reference: an empty segment in the module's path stays. No `use` names
+an included file, so only `wado.lock` pins it, and a file in no package cannot
+import a remote module that includes one.
 
 ## Symbol Notation
 
@@ -323,7 +375,8 @@ test {
 
 The other keys have sections of their own. The dependency source keys give a
 dependency its source with no `wado.toml`
-([Inline Sources](./spec-packages.md#inline-sources)). `generator` makes the
+([Inline Sources](./spec-packages.md#inline-sources)). `integrity` pins a
+[remote module](#remote-modules). `generator` makes the
 import a [generated import](./spec-kiln.md), and `provider` satisfies a
 component's guest effect ([Wasm Module and Component Imports](#wasm-module-and-component-imports)).
 
@@ -389,7 +442,7 @@ test "a .txt file under generator is a generator's input" {
 
 ## Wasm Module and Component Imports
 
-A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path.
+A Wasm asset is imported directly with `with { type: "wasm" | "wat" }`. Whether the file is a core module or a Component Model component is detected from its content, not declared, and either may be written as `.wasm` or `.wat`. A single `use` may pull several names (functions from a core module, interfaces from a component). The path is a `./` or `../` path, or a URL ([Remote Modules](#remote-modules)).
 
 | Imported file | Exposes as                                                   | Call style                                                                      |
 | ------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------- |
@@ -508,7 +561,32 @@ component requires the effects its own host imports map to
 (`wasi:clocks/monotonic-clock` requires `MonotonicClock`), and a component that
 imports nothing from the host requires no effect. A component that imports an
 interface no host provides (a guest effect) makes that interface an effect its
-caller must handle. `with { provider: "./impl.wado" }` supplies it instead: the
+caller must handle. The handler installed where the caller calls into the
+component answers each call the component makes to the interface, while the
+component is still running:
+
+<!-- {"fixture":"spec_modules_guest_effect_handler.wado"} -->
+
+```wado
+use { Hlc, Highlight } from "./sub/hlc.wasm" with { type: "wasm" };
+
+struct Tag {}
+
+impl Highlight for Tag {
+    fn highlight(&mut self, code: String, lang: String) -> String {
+        resume `${lang}:${code}`
+    }
+}
+
+test {
+    let mut tag = Tag {};
+    with Highlight => &mut tag do {
+        assert Hlc::wrap("x", "wado").text == "[wado:x]";
+    }
+}
+```
+
+`with { provider: "./impl.wado" }` supplies the interface instead: the
 named Wado file is compiled into a component that exports the interface, bound
 by operation name, and composed in, so the caller needs no handler. A `provider`
 on a component that imports no guest effect is an error. So is one that does not

@@ -213,6 +213,7 @@
 - [Fuel Benchmarks](./wep-2026-10-25-fuel-benchmarks.md)
 - [Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md)
 - [Refined Types — Types That Carry a Contract](./wep-2026-10-25-refined-types.md)
+- [Linear Arrays — Arrays Outside the GC Heap](./wep-2026-10-26-linear-arrays.md)
 
 ## Standard Library
 
@@ -231,6 +232,7 @@
 - [core:jsonc](./stdlib-core-jsonc.md)
 - [core:jwt](./stdlib-core-jwt.md)
 - [core:kiln](./stdlib-core-kiln.md)
+- [core:linear](./stdlib-core-linear.md)
 - [core:log](./stdlib-core-log.md)
 - [core:prelude](./stdlib-core-prelude.md)
 - [core:prng](./stdlib-core-prng.md)
@@ -264,6 +266,7 @@
 - [ML Inference and WebGPU — Research Reference](./research-ml-inference-webgpu.md)
 - [Operator Precedence Research](./research-operator-precedence.md)
 - [Research: Rust Reference Semantics Edge Cases](./research-rust-reference-semantics.md)
+- [Google TPU Through PJRT — Research Reference](./research-tpu.md)
 - [Research: Variadic Generics / Variadic Templates](./research-variadic-generics.md)
 - [Wasm Component Model Async Primitives — Research Reference](./research-wasm-cm.md)
 - [Wasm Stack Switching — Research Reference](./research-wasm-stack-switching.md)

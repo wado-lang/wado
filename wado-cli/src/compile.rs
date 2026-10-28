@@ -142,9 +142,9 @@ const BUILD_DIR: &str = "build";
 pub struct CompileFlags {
     pub knobs: CompileKnobs,
     pub target_world: Option<String>,
-    /// `--test-name` substring filters for the test world (empty elsewhere).
-    /// Forwarded to `CompilerOptions::test_name_filters`.
-    pub test_name_filters: Vec<String>,
+    /// The tests the test world keeps. Forwarded to
+    /// `CompilerOptions::test_selection`.
+    pub test_selection: wado_compiler::TestSelection,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
     /// Retain the WIR module in the result. `wado compile` sets it when
@@ -154,7 +154,8 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
-    /// `wado test --coverage`. Forwarded to `CompilerOptions::coverage`.
+    /// `wado test --coverage` or `--pgo`. Forwarded to
+    /// `CompilerOptions::coverage`.
     pub coverage: Option<wado_compiler::coverage::CoverageScope>,
 }
 
@@ -399,7 +400,7 @@ pub async fn try_compile_with_run_cache(
         params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,
-        test_name_filters: flags.test_name_filters.clone(),
+        test_selection: flags.test_selection.clone(),
         lib_world: flags.lib_world.clone(),
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),
@@ -1024,7 +1025,9 @@ pub(crate) fn rewrite_build_dep_modules(
             continue;
         };
         let key = spec_key(&spec.spec);
-        if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root)? {
+        if let Some(local) =
+            build_dep_generator_local_path(key, manifest, manifest_root, manifest_root)?
+        {
             inv.module = GeneratorModule::LocalPath(local);
         }
     }
@@ -1040,7 +1043,7 @@ fn adopt_dependency_invocation(
     package: Option<(&Path, &wado_manifest::Manifest)>,
     manifest_root: &Path,
 ) -> Result<(), PipelineError> {
-    use wado_compiler::kiln::{DeclSite, GeneratorModule, GeneratorSpec, InvocationPath};
+    use wado_compiler::kiln::{DeclSite, GeneratorModule, GeneratorSpec};
     let DeclSite {
         module,
         synthetic_id,
@@ -1072,18 +1075,16 @@ fn adopt_dependency_invocation(
     };
     invocation.module = match &dep.source {
         DependencySource::Path { .. } => {
-            let Some(local) = build_dep_generator_local_path(key, manifest, package_root)
-                .map_err(manifest_error)?
+            let Some(local) =
+                build_dep_generator_local_path(key, manifest, package_root, manifest_root)
+                    .map_err(manifest_error)?
             else {
                 return Err(unsupported(format!(
                     "kiln: build-dependency `{key}` of {declared_in} declares no \
                      `{GENERATOR_WORLD_FQ}` world"
                 )));
             };
-            let entry = normalize_path(&absolute(package_root).join(local.as_str()));
-            let rebased =
-                relative_to(&absolute(manifest_root), &entry).expect("both paths are absolute");
-            GeneratorModule::LocalPath(InvocationPath::normalize(&rebased))
+            GeneratorModule::LocalPath(local)
         }
         DependencySource::Registry {
             registry,
@@ -1145,13 +1146,15 @@ pub(crate) fn rewrite_local_dir_modules(
     Ok(())
 }
 
-/// The generator entry of a path `[build-dependencies]` package, as a
-/// manifest-root-relative [`InvocationPath`]: `<dep-path>/<generator world
-/// entry>`. `None` when the dependency is absent, not a path dep, or declares
-/// no `core:kiln/generator` world.
+/// The generator entry of a path `[build-dependencies]` package of the
+/// manifest at `package_root`, relative to `manifest_root`, so an absolute
+/// `path` names the generator as a relative one does and the identity does not
+/// carry the checkout's location. `None` when the dependency is absent, not a
+/// path dep, or declares no `core:kiln/generator` world.
 fn build_dep_generator_local_path(
     key: &str,
     manifest: &wado_manifest::Manifest,
+    package_root: &Path,
     manifest_root: &Path,
 ) -> Result<Option<wado_compiler::kiln::InvocationPath>, DiscoveryError> {
     let Some(dep) = manifest.build_dependencies.get(key) else {
@@ -1160,9 +1163,15 @@ fn build_dep_generator_local_path(
     let DependencySource::Path { path, .. } = &dep.source else {
         return Ok(None);
     };
-    let entry = package_generator_entry(&manifest_root.join(path))?;
-    Ok(entry
-        .map(|entry| wado_compiler::kiln::InvocationPath::normalize(&format!("{path}/{entry}"))))
+    let package_dir = absolute(package_root).join(path);
+    let Some(entry) = package_generator_entry(&package_dir)? else {
+        return Ok(None);
+    };
+    let entry = normalize_path(&package_dir.join(entry));
+    let rebased = relative_to(&absolute(manifest_root), &entry);
+    Ok(Some(wado_compiler::kiln::InvocationPath::normalize(
+        &rebased,
+    )))
 }
 
 /// Resolve a generator *package directory* (absolute) to its
@@ -1217,10 +1226,7 @@ async fn collect_inline_invocations_for_entry_with_identities(
     let entry_identity = entry_identity
         .map(str::to_string)
         .unwrap_or_else(|| entry_file.to_string_lossy().to_string());
-    // The root either comes from the manifest above the entry or is the entry's
-    // own directory, so it always contains the entry.
-    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
-        .expect("the entry lies under the root it was resolved from");
+    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file));
     // An unreadable entry harvests nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
         return Harvested::default();
@@ -1589,6 +1595,7 @@ mod kiln_dir_module_tests {
             invoked_as: module_path.to_string(),
             use_type: None,
             from: InvocationPath::normalize("grammar.g4"),
+            integrity: None,
             inputs: Vec::new(),
             output_dir: InvocationPath::normalize("build"),
             options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -1678,6 +1685,40 @@ mod kiln_dir_module_tests {
             other => panic!("expected LocalPath, got {other:?}"),
         }
 
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rewrite_build_dep_modules_rebases_an_absolute_path_onto_the_manifest_root() {
+        let root = absolute(&unique_tmp("abs-dep"));
+        let _ = std::fs::remove_dir_all(&root);
+        let gen_pkg = write_pkg(&root, "gen-pkg", Some("src/generator.wado"));
+        let app = write_pkg(&root, "app", None);
+        let spellings = [gen_pkg.display().to_string(), "../gen-pkg".to_string()];
+        for path in spellings {
+            std::fs::write(
+                app.join("wado.toml"),
+                format!(
+                    "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n\
+                     [build-dependencies]\n\"lib:gen\" = {{ path = {path:?} }}\n"
+                ),
+            )
+            .unwrap();
+            let manifest = manifest_in(&app).unwrap().unwrap();
+            let mut inline = vec![local_invocation("./unused.wado")];
+            inline[0].module = GeneratorModule::Spec(wado_compiler::kiln::GeneratorSpec {
+                spec: "lib:gen".to_string(),
+                version: None,
+                registry: None,
+            });
+            rewrite_build_dep_modules(&mut inline, &manifest, &app).unwrap();
+            match &inline[0].module {
+                GeneratorModule::LocalPath(p) => {
+                    assert_eq!(p.as_str(), "../gen-pkg/src/generator.wado", "path {path}");
+                }
+                other => panic!("expected LocalPath, got {other:?}"),
+            }
+        }
         let _ = std::fs::remove_dir_all(&root);
     }
 

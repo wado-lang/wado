@@ -488,6 +488,7 @@ fn resolve_imports(project: &mut NirPackage, graph: &AnalysisGraph, reachable: &
     project.reserve_asset_memory();
 
     project.used_wasi_functions = used_wasi_functions;
+    project.use_nested_dependency_imports();
 }
 
 /// Filter string literals to those owned by surviving functions.

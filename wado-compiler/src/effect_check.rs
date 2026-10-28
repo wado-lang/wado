@@ -1178,10 +1178,12 @@ fn operation_requirements(
         && registry.is_component_interface(fq)
     {
         // Composition-relative: the imported interface is composed away, so its
-        // operations demand the dependency's own host-leaf capabilities.
+        // operations demand the dependency's own host-leaf capabilities. A
+        // types-only leaf has no operation to perform.
         return registry
             .host_leaf_imports_for(fq)
             .iter()
+            .filter(|leaf| registry.declares_functions(leaf))
             .filter(|leaf| !index.provided_import_fqs.contains(leaf.as_str()))
             .filter_map(|leaf| index.effect_by_cm_fq.get(leaf).cloned())
             .collect();
@@ -1741,7 +1743,7 @@ fn indirect_callee_types(
     {
         return vec![*type_id];
     }
-    expr_types_of(callee, sem)
+    sem.expr_types(callee)
 }
 
 /// The static dispatches recorded at a call, with whether each spells its
@@ -2997,21 +2999,6 @@ fn fn_rows(table: &TypeTable, types: impl IntoIterator<Item = TypeId>) -> Vec<&[
         .collect()
 }
 
-/// Types of `expr`, one per walk that reached it, preferring the type of the
-/// binding an identifier names — where a parameter or a function-typed local
-/// has one and the use site does not.
-fn expr_types_of(expr: &Expr, sem: &Semantics) -> Vec<TypeId> {
-    if let Expr::Ident(ident) = expr
-        && let Some(def) = sem.referenced_symbol(ident.id)
-    {
-        let bound: Vec<TypeId> = sem.local_types(def).collect();
-        if !bound.is_empty() {
-            return bound;
-        }
-    }
-    sem.expression_types(expr.id()).collect()
-}
-
 /// The spans of the bindings `expr` declares with a closure literal as its
 /// initializer.
 fn closure_bindings(expr: &Expr) -> Vec<Span> {
@@ -3245,18 +3232,15 @@ impl<'a> PurityWalker<'a> {
     /// holding a `&mut` shares what that `&mut` points to, wherever the copy
     /// is bound.
     fn flag_write(&mut self, place: &Expr) {
-        let owned = match place {
-            Expr::FieldAccess(access) if !self.is_reference(&access.expr) => {
-                return self.flag_write(&access.expr);
+        let written = self.sem.write_target(place).place;
+        let owned = match written {
+            Expr::Ident(_) => {
+                self.declared_in_clause(written) && !self.sem.expr_reaches_mut_ref(written)
             }
-            Expr::Index(index) if !self.is_reference(&index.expr) => {
-                return self.flag_write(&index.expr);
-            }
-            Expr::Ident(_) => self.declared_in_clause(place) && !self.reaches_mut_ref(place),
             Expr::FieldAccess(_) | Expr::Index(_) => false,
             Expr::Unary(unary) if unary.op == ast::UnaryOp::Deref => false,
             // A value the clause computed, which nothing outside it holds.
-            _ => !self.reaches_mut_ref(place),
+            _ => !self.sem.expr_reaches_mut_ref(written),
         };
         if !owned {
             self.flag_mutate(place);
@@ -3296,18 +3280,6 @@ impl<'a> PurityWalker<'a> {
         self.sem
             .referenced_symbol_at(ident.id)
             .and_then(|symbol| symbol.span)
-    }
-
-    fn is_reference(&self, expr: &Expr) -> bool {
-        expr_types_of(expr, self.sem)
-            .into_iter()
-            .any(|ty| self.sem.types.is_reference_shaped(ty))
-    }
-
-    fn reaches_mut_ref(&self, expr: &Expr) -> bool {
-        expr_types_of(expr, self.sem)
-            .into_iter()
-            .any(|ty| self.sem.reaches_mut_ref(ty))
     }
 
     fn flag(&mut self, impurity: Impurity, span: Span) {

@@ -1,0 +1,20 @@
+// A pin covers what the generator reads, so the digest of the whole file does
+// not match a generator that reads only its header.
+
+use { hello } from "https://example.com/data/header_and_payload.schema"
+    with {
+        generator: { module: "./sub/kiln/header_probe_generator.wado" },
+        integrity: "sha256:a69e9c579dbd1af35c28b2f085dfe4bb9149d9afbac0ee905799b4df47b94a24",
+    };
+
+test {
+    assert hello() == 7;
+}
+
+__DATA__
+{
+  "compile_error": "the `use` pins sha256:a69e9c579dbd1af35c28b2f085dfe4bb9149d9afbac0ee905799b4df47b94a24, and the content is sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58; to accept the content, write `integrity: \"sha256:10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58\"`",
+  "remote": {
+    "https://example.com/data/header_and_payload.schema": "sub/kiln/header_and_payload.schema"
+  }
+}

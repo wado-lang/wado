@@ -1,0 +1,56 @@
+// `loop_version_bce` re-tests a reloaded bound after the statement that may
+// lower it, which a `continue` inside that statement would jump past: here
+// `shrink` truncates the list the loop reads, then continues. The loop is not
+// versioned, so the next read traps as it does unoptimized, rather than
+// reading past the list's length.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [7, 7, 7, 7, 7];
+    }
+
+    #[inline("never")]
+    fn shrink(&mut self) {
+        self.data.truncate(1);
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    let mut i = 0;
+    loop {
+        if i >= n {
+            break;
+        }
+        out.push(h.data[i]);
+        i += 1;
+        let v = if i == 1 {
+            sink.shrink();
+            continue;
+        } else {
+            1
+        };
+        if i == v + 1 {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3, 4] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    println(`${out:?}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["Contract of List::index_value failed"]
+}

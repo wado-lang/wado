@@ -161,7 +161,7 @@ fn strip_executable_extension(file: &str) -> Option<&str> {
 /// Whether this user can run it, not merely whether someone can: a file with
 /// an execute bit for another user is one the `PATH` search must walk past.
 #[cfg(unix)]
-fn is_executable(path: &Path) -> bool {
+pub(crate) fn is_executable(path: &Path) -> bool {
     use std::os::unix::ffi::OsStrExt as _;
 
     if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {

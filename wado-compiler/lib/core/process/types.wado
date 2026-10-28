@@ -4,15 +4,12 @@
 /// How a child ended.
 #[cm("core:process/types@0.1.0#exit-status")]
 pub variant ExitStatus {
-    /// It exited with this status.
+    /// It exited with this status, as the host's OS reports it.
     #[cm("exited")]
-    Exited(u8),
-    /// A signal ended it.
+    Exited(i32),
+    /// The host's OS ended it with this signal.
     #[cm("signaled")]
-    Signaled(u8),
-    /// The host ended it at its timeout.
-    #[cm("timed-out")]
-    TimedOut,
+    Signaled(i32),
 }
 
 /// Whether this host spawns. Fixed when the host starts.
@@ -23,23 +20,40 @@ pub enum Availability {
     /// The host turned spawning off.
     #[cm("denied")]
     Denied,
-    /// The OS cannot confine a child.
+    /// The host cannot run a child as its policy requires.
     #[cm("unsupported")]
     Unsupported,
 }
 
 #[cm("core:process/types@0.1.0#error-code")]
-pub enum ErrorCode {
-    /// No such program.
+pub variant ErrorCode {
+    /// No program by that name, or nothing at the path given.
     #[cm("not-found")]
     NotFound,
-    /// The sandbox refused to execute this program.
+    /// The host's policy does not let a child run this program.
     #[cm("not-permitted")]
     NotPermitted,
+    /// What the name or path leads to is not a program the host can run.
+    #[cm("not-executable")]
+    NotExecutable,
+    /// `program`, an argument, or an environment variable is not one the
+    /// host can pass: it holds a NUL, or a variable's name is empty or
+    /// holds `=`.
+    #[cm("invalid-argument")]
+    InvalidArgument,
+    /// The arguments and the environment together are more than the host
+    /// can pass.
+    #[cm("argument-list-too-long")]
+    ArgumentListTooLong,
+    /// `cwd` is not a directory.
+    #[cm("not-directory")]
+    NotDirectory,
+    /// The host lacks a resource that running a child takes.
     #[cm("resource-exhausted")]
     ResourceExhausted,
-    #[cm("io")]
-    Io,
+    /// Anything else, with a message for a person where the host has one.
+    #[cm("other")]
+    Other(Option<String>),
 }
 
 #[cm("core:process/types@0.1.0#input")]
@@ -66,15 +80,13 @@ pub enum Output {
 
 #[cm("core:process/types@0.1.0#command")]
 pub affine struct Command {
-    /// A path when it holds a `/`; otherwise a name looked up on the
-    /// host's `PATH`, skipping empty and relative entries.
+    /// A path when it holds a `/`; otherwise a name the host looks up.
     #[cm("program")]
     pub program: String,
     #[cm("args")]
     pub args: List<String>,
-    /// Laid over the baseline variables: `PATH`, a private `HOME` and
-    /// `TMPDIR`, `LANG` and `LC_*`, and `TERM` where a stream is
-    /// inherited. The guest's own environment is not passed on.
+    /// Laid over the variables the host gives every child. The guest's own
+    /// environment is not passed on.
     #[cm("env")]
     pub env: List<[String, String]>,
     #[cm("stdin")]
@@ -83,11 +95,6 @@ pub affine struct Command {
     pub stdout: Output,
     #[cm("stderr")]
     pub stderr: Output,
-    /// Nanoseconds, as `wasi:clocks` counts a duration. At the timeout the
-    /// host sends SIGTERM to the child's process group, then SIGKILL after
-    /// a grace period the host sets.
-    #[cm("timeout")]
-    pub timeout: Option<u64>,
 }
 
 #[cm("core:process/types@0.1.0#spawned")]
@@ -104,11 +111,16 @@ pub affine struct Spawned {
     pub exit: Future<Result<ExitStatus, ErrorCode>>,
 }
 
-/// A running child. Dropping it kills its process group, and the host
-/// kills every child when the guest exits.
+/// A running child. Dropping it ends the child and every process it
+/// started, and the host ends every child when the guest exits.
 #[cm("core:process/types@0.1.0#child")]
 pub resource Child {
-    /// Kill the child's process group now.
+    /// Ask the child and every process it started to end. A child may
+    /// ignore it, and a host with no way to ask does nothing.
+    #[cm("core:process/types@0.1.0#[method]child.terminate")]
+    #[cm_params("self")]
+    fn terminate(&self);
+    /// End the child and every process it started, now.
     #[cm("core:process/types@0.1.0#[method]child.kill")]
     #[cm_params("self")]
     fn kill(&self);

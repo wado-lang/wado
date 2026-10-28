@@ -36,9 +36,10 @@ the child is fully trusted. An allowlist can only record intent.
 A child is confined to the guest's own grants plus a fixed system baseline. A
 host that cannot confine a child does not offer process spawning at all.
 
-This one rule carries the security model, so the WIT states it as the
-interface's contract. Everything Wado would otherwise manage follows from it and
-is left out:
+This one rule carries the security model. It is the `wado` host's policy, not
+the interface's contract: the WIT says only that a host confines a child as its
+own policy says. Everything Wado would otherwise manage follows from it and is
+left out:
 
 - No program allowlist and no executable handle: the sandbox decides what may
   run.
@@ -213,15 +214,16 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                        | Linux                                                    | macOS                                 |
-| ------------------------------ | -------------------------------------------------------- | ------------------------------------- |
-| Loader and shared libraries    | `/lib*`                                                  | `/usr/lib`, `/System`, the dyld cache |
-| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                    | `/usr`, `/opt/homebrew`, `/opt/local` |
-| System configuration           | `/etc`, name resolution and TLS certificates among it    | `/private/etc`, the keychain          |
-| Name resolution (network only) | nothing beyond `/etc`                                    | mDNSResponder                         |
-| Locale and time zones          | `/usr/share/zoneinfo`, locale data                       | the same                              |
-| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting  | the same                              |
-| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit | the same                              |
+| Purpose                        | Linux                                                                                         | macOS                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Loader and shared libraries    | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache   |
+| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`   |
+| System configuration           | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the keychain            |
+| Name resolution (network only) | nothing beyond `/etc`                                                                         | mDNSResponder                           |
+| Locale and time zones          | `/usr/share/zoneinfo`, locale data                                                            | the same                                |
+| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same                                |
+| System and own process state   | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl` |
+| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                |
 
 - The baseline is read and execute only. The writable entries are the private
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
@@ -279,6 +281,70 @@ child may read more than the guest. It is defined, not open-ended:
   built can run. This adds no authority, since the child cannot leave the grants
   either way.
 
+### Diagnostics
+
+The guest learns a failure as an `error-code` or an exit status. The host knows
+more, and says it on its own stderr, with the fix where one exists:
+
+- A trap from a host that offers no spawning names the reason and, for
+  `--deny-process` or a grant at another host path, the flag that changes it.
+- A program outside the grants and the baseline warns at its spawn with the
+  resolved path, and names the `--process-read` grant of the file refused and
+  the user config entry that would let it run. So does a program whose `#!`
+  interpreter or ELF loader
+  lies outside them, which `exec` opens too. A program that does not exist stays silent: a guest
+  that probes for an optional tool expects `not-found`.
+- A child that fails, with a nonzero status or a signal, after the
+  filter refused it a call warns with the calls refused. The refusal may not be
+  why it failed, so the warning puts the two side by side and claims no cause.
+  Linux alone reports this: the filter refers each such call to the host
+  through a seccomp listener, and a host thread records it and answers `EPERM`,
+  so the child sees what a plain `SECCOMP_RET_ERRNO` would give it. The child
+  waits to `exec` until the host holds its listener, so a host out of
+  descriptors fails the spawn rather than leave a call unanswered. The kernel
+  allows one listener per chain of filters, so under an enclosing sandbox that
+  holds one, the filter answers `EPERM` itself and nothing is reported. The
+  host takes the listener on every spawn, `--process-trace` or not, so a child
+  that installs its own (a container runtime's seccomp notify) fails with
+  `EBUSY`. That was chosen over taking it only under the trace: a refusal
+  leaves the child no clue that the sandbox caused its failure, so the report
+  must come without a flag that only someone who already suspects the sandbox
+  would pass.
+- `--process-trace` (`run`, `serve`, `test`) also names each path the sandbox
+  refused a child, with the grant that would allow it: `--process-read` for a
+  read, `--dir` for a write, which the guest gains too. It reports whatever the
+  child's end, since a child can carry on past a refusal and still go wrong.
+  It needs the listener, so Linux alone offers it, and only on request, because
+  each call that names a path then waits on the host. Where it cannot see, the
+  first spawn under it warns why.
+
+Each warning prints once per run however often the guest repeats the spawn.
+
+Landlock answers a refused path with `EACCES` and leaves no record the host
+can read; its audit log needs `CAP_AUDIT_READ`. So the trace watches the calls
+rather than the refusals. The filter refers each call Landlock mediates (`open`,
+`execve`, `mkdir`, `unlink`, `rename`, `link`, `truncate` and their `at`
+forms) to the host with `SECCOMP_USER_NOTIF_FLAG_CONTINUE`. A host thread reads
+the path from the child's memory and resolves it as the kernel does for the
+child: against its working directory or the descriptor the call names, one
+component at a time, with `/proc/self` naming the child. A link in a
+process's `/proc` entry (`cwd`, `fd/N`) leads to an object rather than its
+text, so its text counts only where it still names that object. The thread
+leaves out a call that fails before Landlock's hook, as its flags and the
+spelling of its path decide. A trailing `/` or `.` asks a lookup for a
+directory and has it follow a link, and each call that removes or moves an
+entry treats the `/` its own way. The thread checks the rest against the policy
+where Landlock does: a call that makes, removes or moves an entry on the
+directory holding it, an open on the file, an `exec` on the program and on each
+interpreter it needs. The host reads an interpreter only where it is a regular
+file, the one kind `exec` runs, so a FIFO the child names cannot hold the
+host's thread. A call whose path the host may not read, under Yama's
+`ptrace_scope` or from a non-dumpable process, is not reported as refused: a
+warning says the trace missed calls, and why.
+The kernel then runs the call, and Landlock judges it as it would have. Moving
+enforcement itself to seccomp was rejected: the path a call names can change
+after the host reads it, and no filter can emulate `execve`.
+
 ### WIT
 
 The interface ships as `core:process@0.1.0`, as `core:eval` and `core:kiln`
@@ -287,166 +353,113 @@ ship theirs, written in the shape a WASI proposal takes. Its WIT sits in
 Claiming `wasi:` before the subgroup adopts it would promise compatibility Wado
 cannot keep with other hosts. On adoption only the namespace changes.
 
-```wit
-package core:process@0.1.0;
+The specification is the `core:process` module documentation, generated into
+[`stdlib-core-process.md`](./stdlib-core-process.md), with the WIT's own
+comments for the interface. What follows is why it takes the shape it does.
 
-interface types {
-    variant exit-status { exited(u8), signaled(u8), timed-out }
-
-    enum availability { available, denied, unsupported }
-
-    /// `not-permitted`: the sandbox refused to execute this program.
-    enum error-code { not-found, not-permitted, resource-exhausted, io }
-
-    variant input { null, inherit, piped(stream<u8>) }
-    enum output { null, inherit, piped }
-
-    record command {
-        program: string,
-        args: list<string>,
-        env: list<tuple<string, string>>,
-        stdin: input,
-        stdout: output,
-        stderr: output,
-        /// Nanoseconds, as `wasi:clocks` counts a duration.
-        timeout: option<u64>,
-    }
-
-    resource child {
-        kill: func();
-    }
-
-    record spawned {
-        child: child,
-        stdout: option<stream<u8>>,
-        stderr: option<stream<u8>>,
-        exit: future<result<exit-status, error-code>>,
-    }
-}
-
-interface process {
-    use wasi:filesystem/types@0.3.0.{descriptor};
-    use types.{availability, command, spawned, error-code};
-
-    get-availability: func() -> availability;
-
-    spawn: func(cmd: command, cwd: option<borrow<descriptor>>) -> result<spawned, error-code>;
-}
-```
-
-- Dropping a `child` kills its process group. The host kills every child when
-  the guest exits. The host signals a group only before it reaps the group's
-  leader: the unreaped leader holds its pid, so the group's id cannot pass to an
-  unrelated process.
-- The group dies with its leader. Once the child exits, the host kills what is
-  left of its group before reaping it, so no descendant keeps the child's grants
-  with nobody watching, and none holds a pipe the guest is reading open.
-- `exit-status` takes Unix's shape, a `u8`, since Windows runs only under WSL2.
-  `timed-out` is distinct from `signaled(9)`.
+- The WIT describes running a child, not confining one. Confinement is the
+  `wado` host's policy, so the WIT names no sandbox, no `PATH`, no particular
+  signal and no process group: another host may confine differently, or run on an OS that has
+  none of them. Each such word lives in the module documentation's section on
+  the `wado` host.
+- `get-availability` stays in the WIT. Not every WASI host should offer
+  spawning, and a guest needs to learn which answer it got without trying.
+- `exit-status` carries an `s32` in both cases. An earlier draft used `u8`,
+  Unix's exit range, on the grounds that Windows runs only under WSL2. That
+  bound the interface to one OS family for no gain: a Windows exit code is 32
+  bits, and an `s32` holds every Unix status and signal number. WASI's own
+  `exit-with-code` takes a `u8` because it sets the guest's own status, which a
+  Unix host truncates anyway; reporting a child's status has no such limit.
+- `error-code` names what a guest can act on: a missing program, one the host
+  refuses, one that is no program, an argument or variable the host cannot pass
+  (a NUL, or a name that is empty or holds `=`), arguments too long, a working
+  directory that is not one, the host out of resources. `other` carries a
+  message for a person, as WASI's error variants do. A catch-all `io` said
+  nothing a guest could branch on.
 - `cwd` is its own parameter because a record cannot hold a `borrow`. With
   `none`, the child starts in the first preopened directory, the one `core:fs`
   resolves paths against. The directory the host started in may lie outside the
-  grants.
-- A `program` holding a `/` is a path. Any other is looked up on the host's
-  `PATH`, skipping empty and relative entries, the rule external subcommands
-  already follow. There is no `find-executable`: the sandbox decides what runs,
-  and a name it cannot find is `not-found`.
-- The guest's environment is not passed on. The child gets the baseline
-  variables (`PATH`, its private `HOME` and `TMPDIR`, `LANG` and `LC_*`, and
-  `TERM` only when a stream is inherited) and then the guest's `env`, which
-  overrides them.
-- At the timeout the host sends `SIGTERM` to the process group, then `SIGKILL`
-  after a grace period. The grace is 3 seconds and a host option changes it; the
-  guest does not. The host enforces the timeout, so it holds even while the
-  guest is blocked reading a stream.
+  grants. A guest with no preopen gets the host's choice, and `wado` picks the
+  child's private `HOME`.
+- There is no `find-executable`: the host decides what runs, and a name it
+  cannot find is `not-found`.
+- The guest's environment is not passed on. The host's baseline variables come
+  first, and the guest's `env` overrides them.
+- The `wado` host signals a group only before it reaps the group's leader: the
+  unreaped leader holds its pid, so the group's id cannot pass to an unrelated
+  process. Once the child exits, the host kills what is left of its group before
+  reaping it, so no descendant keeps the child's grants with nobody watching,
+  and none holds a pipe the guest is reading open.
+
+### The timeout is the guest's
+
+An earlier draft carried `timeout: option<u64>` in `command`, with a
+`timed-out` exit status. At the deadline the host sent `SIGTERM` to the group,
+then `SIGKILL` after a grace period the host set. It held while the guest was
+blocked reading a stream, which was its reason to exist.
+
+It was removed. A deadline is a policy, and the guest already has every piece
+of it: `exit` is a `future`, `wasi:clocks` has a timer, and `child` has `kill`.
+A host-side timeout fixed the policy's shape (one deadline, one grace, a host
+option for the grace) and wrote `SIGTERM` into the interface.
+
+Two pieces were missing, and were added instead:
+
+- `child.terminate` asks the child to end, where `kill` ends it. Without it a
+  guest could only kill, so a child never got to clean up. A host with no way
+  to ask does nothing, and a guest that needs the child gone follows with
+  `kill`.
+- Wado could not wait on a `future` beside a timer: `Future::read` blocked, and
+  a bare end could not join a `WaitableSet`. `Future::start_read` now starts the
+  read and returns a `FutureReadCopy`, which a set waits on as it waits on a
+  stream copy, and `WaitableSet::drain` hands back what a race left.
+
+`Child::wait_timeout` and `Child::stop` build the policy from those, in
+`core:process` rather than in every host. A guest blocked reading a pipe still
+cannot watch the clock; it reads in a set beside the timer, as `output` reads
+stdout and stderr together.
 
 ### `core:process`
 
-```wado
-use { Command, cmd } from "core:process";
-
-let rev = cmd`git rev-parse ${branch}`.read()?;            // stdout as a ByteList; a non-zero exit is an error
-let out = Command::new("cargo").args(["build"]).output()?;  // stdout and stderr, read together
-let status = cmd`make -j${n}`.inherit_stdio().status()?;   // the child writes to the terminal itself
-
-let mut child = Command::new("wc").stdin_piped().stdout_piped().spawn()?;
-// child.stdin: StreamWritable<u8>, child.stdout: Stream<u8>
-```
-
-- One effect, `Process`. `spawn`, `output`, `status` and `read` declare it, and
-  so does `process::availability()`, which returns an `Availability` mirroring
-  the WIT enum. The others require it to be `Available` and trap otherwise. A
-  `contract` clause cannot perform an effect, so this one is documented rather
-  than written as a clause.
-- `inherit_stdin`, `inherit_stdout`, `inherit_stderr` and `inherit_stdio` also
-  declare `Stdin`, `Stdout` and `Stderr`: a guest passes on only a capability
-  it holds.
+- One effect, `Process`. A `contract` clause cannot perform an effect, so the
+  requirement that `availability` answer `Available` is documented rather than
+  written as a clause.
+- `inherit_*` declare `Stdin`, `Stdout` and `Stderr`: a guest passes on only a
+  capability it holds.
 - `output` reads stdout and stderr concurrently, so a child filling one pipe
   cannot deadlock against a parent reading the other.
-- `Child` is `affine`, and dropping it kills the process. `wait(self)` returns
-  `Result<ExitStatus, ProcessError>`, and `kill(&self)` ends it early. There is
-  no `detach`: the host kills every child when the guest exits anyway.
-- A pipe nothing can reach would block the child, so none is left open.
-  `wait` closes every stream still in the `Child`, and `output` and `status`,
-  which hand out no `Child`, give the child `/dev/null` for a stream piped
-  there.
-- A pipeline passes one child's `stdout` stream to the next one's `stdin`.
-- `Command::timeout(d: Duration)` sets the timeout, in `wasi:clocks`'s
-  `Duration`, the nanoseconds the WIT carries. There is no default. A child
-  that runs out ends in `ExitStatus::TimedOut`: `output` returns what it read
-  so far along with that status, and `read` fails.
-- Captured output is capped at 64 MiB by default, and
-  `Command::capture_limit(bytes)` changes the cap for both streams. Past it,
-  stderr keeps its tail. Stdout past it is an `OutputTooLarge` error, since
-  output with its middle cut out (JSON, say) is wrong rather than short. The
-  host kills the process group the moment stdout passes the cap, and the error
-  returns once the child has exited: a child left writing into a pipe nobody
-  reads would block forever.
+- `Child` is `affine`, and dropping it kills the process. There is no `detach`:
+  the host kills every child when the guest exits anyway.
+- A pipe nothing can reach would block the child, so none is left open. `wait`
+  closes every stream still in the `Child`, and `output` and `status`, which
+  hand out no `Child`, give the child no stream for one piped there.
+- Stdout past the capture limit is an `OutputTooLarge` error, since output with
+  its middle cut out (JSON, say) is wrong rather than short. Stderr keeps its
+  tail instead. The child is killed the moment stdout passes the cap: a child
+  left writing into a pipe nobody reads would block forever.
 - Captured output is a `ByteList`, never a `String`. A program's output is bytes,
   and decoding it is the caller's call, so no kind reports bad UTF-8.
-- `ProcessError { program, kind }` names the program as `FsError` names its
-  path. The kinds are `NotFound`, `NotPermitted`, `Io(ErrorCode)`,
-  `Failed([ExitStatus, ByteList])`, carrying stderr, and `OutputTooLarge`. Only `read` returns
-  `Failed`: `output` and `status` hand the exit status back as a value, while
-  `read` returns only stdout and has nowhere else to report it.
+- `ProcessError` wraps the host's `ErrorCode` in one `Spawn` kind rather than
+  mirroring each code, so a code the WIT gains reaches the guest unchanged. Only
+  `read` returns `Failed`: `output` and `status` hand the exit status back as a
+  value, while `read` returns only stdout and has nowhere else to report it.
 
 ### The `cmd` template
 
-`` cmd`…` `` builds an argument vector without a shell, so a hole can neither
-split into several arguments nor run as shell syntax. It can still be read as an
-option: a value starting with `-` is one to the program, so a hole that may hold
-one goes after `--` where the program accepts it.
+`` cmd`…` `` builds an argument vector without a shell, so a hole never runs as
+shell syntax and splits only as its type says: a `List<String>` hole is one
+argument per element, and any other hole is one argument. Its rules are in the
+`cmd` documentation. It can still be read as an option: a value starting with
+`-` is one to the program, so a hole that may hold one goes after `--` where
+the program accepts it.
 
-1. Literal text splits on whitespace, newlines included:
-   `` cmd`git status --short` `` is `["git", "status", "--short"]`.
-2. A hole is exactly one argument, whatever it holds: in
-   `` cmd`git commit -m ${msg}` ``, a `msg` of `"fix the bug"` is the one
-   argument after `-m`.
-3. A `List<String>` hole expands to one argument per element:
-   `` cmd`rm -- ${files}` ``.
-4. Parts with no whitespace between them join into one argument:
-   `` cmd`cp ${src} ${dir}/out.txt` ``. A `List<String>` hole joined to
-   anything is a contract violation (`` cmd`--file=${files}` ``): neither one
-   argument nor one per element is the obvious reading.
-
-Literal text must not hold a character a shell would treat specially, since
-here it would mean nothing and the program would read it wrong. Writing
-`` cmd`git commit -m "fix bug"` `` would otherwise pass `"fix` and `bug"` as
-two arguments. Each of these in literal text is a contract violation:
-
-| Kind                      | Characters                          |
-| ------------------------- | ----------------------------------- |
-| Quoting and escaping      | `"` `'` `\`                         |
-| Pipes, lists, redirection | `\|` `&` `;` `<` `>`                |
-| Subshells and groups      | `(` `)` `{` `}`                     |
-| Expansion                 | `$` (other than `${`), `` ` ``, `~` |
-| Globbing                  | `*` `?` `[` `]`                     |
-| Comments                  | `#`                                 |
-
-A value holding any of them goes through a hole: `` cmd`grep ${"a|b"} log` ``.
-Everything else is allowed, so `--flag=value` and `user@host:path` stay
-literal. Starting strict leaves room to admit a character later; admitting one
-cannot be taken back.
+- A `List<String>` hole joined to other text is refused rather than read one
+  way: neither one argument nor one per element is the obvious reading.
+- Literal text must not hold a character a shell would treat specially, since
+  here it would mean nothing and the program would read it wrong. Writing
+  `` cmd`git commit -m "fix bug"` `` would otherwise pass `"fix` and `bug"` as
+  two arguments. Starting strict leaves room to admit a character later;
+  admitting one cannot be taken back.
 
 ### Deliberate omissions
 
@@ -464,11 +477,12 @@ cannot be taken back.
   `posix_spawn` of `sandbox-exec`. Done when the escape tests pass in CI on
   macOS.
 - [x] `core:process@0.1.0` in the `wado` host: `get-availability`, spawning,
-  streams, the timeout, killing the process group on drop and on guest
-  exit, `--deny-process`, and `denied` for a mapping that is not the same
-  path.
+  streams, `terminate` and `kill`, killing the process group on drop and on
+  guest exit, `--deny-process`, and `denied` for a mapping that is not the
+  same path.
 - [x] `core:process` in the stdlib: `Command`, `cmd`, `Child`, `output`,
-  `status` and `read`, with its stdlib reference and a cheatsheet entry.
+  `status` and `read`, `wait_timeout` and `stop`, with its stdlib reference and
+  a cheatsheet entry.
 - [ ] Bounded resources. A child can run many children, use memory and CPU
   without bound, and fork without limit. Done when a child that tries any of
   these is stopped at a limit the host sets.
@@ -478,9 +492,8 @@ cannot be taken back.
   the selected world does not import is imported all the same
   ([Worlds](./spec-worlds.md)). Done when compiling such a component reports
   it.
-- [ ] The remaining CLI surface: a flag that grants the real `HOME`, and the
-  option that sets the grace period, which stays at 3 seconds until it is.
-  Done when both are named and documented.
+- [ ] The remaining CLI surface: a flag that grants the real `HOME`. Done when
+  it is named and documented.
 - [ ] `core:process` in the compiler's e2e harness. It does not link the
   interface, so a fixture cannot spawn; the stdlib's own tests cover it under
   `wado test`. Done when a fixture can spawn.
@@ -514,6 +527,26 @@ cannot be taken back.
 - On macOS, a program the sandbox refuses to execute starts `sandbox-exec`,
   which then exits with a status, rather than failing the spawn with
   `not-permitted`.
+- A confined child cannot confine a child of its own. Its `setpgid` is refused,
+  so a `wado` that `core:process` started fails every spawn. The same refusal
+  meets any descendant that calls `setsid` or `setpgid` itself: a shell with job
+  control, or a program that detaches into the background. A plain `fork` and
+  `exec`, which is how `git` runs its hooks and helpers, is not refused.
+- A child cannot take a seccomp listener of its own: the kernel allows one per
+  chain of filters, and the host holds it. A container runtime using seccomp
+  notify, run as a child, fails with `EBUSY`.
+- Without `--process-trace`, a file or directory the sandbox refused a child
+  is not reported, so the child's own message is all there is. Under it, the
+  host predicts the refusal from the policy rather than observing Landlock's.
+  It resolves the path as the child does, and leaves out a call that
+  `fs/namei.c` fails before Landlock's hook. It does not model the file
+  permissions, which may refuse the call first, `openat2`'s `RESOLVE_*` flags,
+  or a rename between two mounts of one filesystem, which fails with `EXDEV`,
+  so such a call may be reported though Landlock never judged it.
+- Of the per-process entries of `/proc`, a child reads only its own. A process
+  it starts in turn cannot read its own `/proc/self`: Landlock rules name a
+  path when the rule is made, and that process's pid does not exist yet.
+  Another process's entry stays unreadable by design.
 
 ## Related WEPs
 

@@ -21,11 +21,11 @@ use crate::type_table::{AnonStructId, TypeTable};
 
 use super::state::Monomorphizer;
 use super::{Templates, module_source_for_trait_impl};
-use crate::defs::DefId;
 use crate::name::FqTraitName;
 use crate::synthesis::template::{
     blanket_impl_args, blanket_is_reflect_keyed, has_reflect_kind, method_template_at,
-    ranked_value_blanket, ref_blanket_instance, trait_call_template,
+    ranked_ref_blanket, ranked_value_blanket, ref_blanket_instance, trait_call_template,
+    written_impl_at, written_newtype_link,
 };
 use crate::tir;
 use crate::token::Span;
@@ -890,18 +890,14 @@ impl Monomorphizer {
                 tid
             };
         }
-        if let Some(decl) = self.functions.trait_env.trait_def_of_fq(trait_name) {
-            if self.has_own_trait_impl(type_table, tid, decl) {
-                return tid;
-            }
-            if let Some(link) = self.newtype_link_with_trait_impl(tid, type_table, decl) {
-                return link;
-            }
+        let trait_env = &self.functions.trait_env;
+        if written_impl_at(trait_env, trait_name, tid, type_table) {
+            return tid;
         }
-        if trait_name
-            .canonical()
-            .is_some_and(|trait_| self.value_blanket_serves(tid, trait_, type_table))
-        {
+        if let Some(link) = written_newtype_link(trait_env, trait_name, tid, type_table) {
+            return link;
+        }
+        if ranked_value_blanket(trait_env, trait_name, tid, type_table).is_some() {
             return tid;
         }
         base
@@ -916,11 +912,9 @@ impl Monomorphizer {
         tid: TypeId,
         info: &LocalMethodName,
     ) -> Option<ModuleSource> {
-        let link = info
-            .trait_name
-            .as_ref()
-            .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-            .and_then(|trait_| self.newtype_link_with_trait_impl(tid, type_table, trait_));
+        let link = info.trait_name.as_ref().and_then(|trait_name| {
+            written_newtype_link(&self.functions.trait_env, trait_name, tid, type_table)
+        });
         match link {
             Some(link) => type_table.nominal_head(link).map(|(_, m)| m),
             None => module_source_for_trait_impl(type_table, tid),
@@ -934,7 +928,7 @@ impl Monomorphizer {
         &self,
         type_table: &TypeTable,
         id: TypeId,
-        trait_decl: Option<DefId>,
+        trait_name: Option<&FqTraitName>,
     ) -> bool {
         if !type_table.is_scalar_primitive_like(id) {
             return false;
@@ -942,16 +936,15 @@ impl Monomorphizer {
         if matches!(type_table.get(id), ResolvedType::Primitive(_)) {
             return true;
         }
-        let Some(trait_) = trait_decl else {
+        let Some(trait_name) = trait_name else {
             return true;
         };
         // `enum` and `flags` erase to a scalar without being a newtype link,
         // and an impl a link below the receiver wrote is still inherited.
         // Relowering over either takes the primitive's instruction instead.
-        !self.has_own_trait_impl(type_table, id, trait_)
-            && self
-                .newtype_link_with_trait_impl(id, type_table, trait_)
-                .is_none()
+        let trait_env = &self.functions.trait_env;
+        !written_impl_at(trait_env, trait_name, id, type_table)
+            && written_newtype_link(trait_env, trait_name, id, type_table).is_none()
     }
 
     /// `a.cmp(&b) == Ordering::Less` and its five siblings, on a receiver whose
@@ -990,10 +983,10 @@ impl Monomorphizer {
             return None;
         }
         let info = func.method_info.as_ref()?;
-        let trait_decl = info.trait_name.as_ref().and_then(FqTraitName::canonical)?;
+        let trait_name = info.trait_name.as_ref()?;
         let item = type_table
             .compiler_items()
-            .trait_item_of_decl(type_table.defs().ast_id(trait_decl));
+            .trait_item_of_decl(type_table.defs().ast_id(trait_name.canonical()?));
         if item != Some(CompilerItem::Ord) || info.method_name != "cmp" {
             return None;
         }
@@ -1001,7 +994,7 @@ impl Monomorphizer {
             return None;
         };
         let receiver_type = type_table.peel_refs(receiver.expr.type_id);
-        if !self.operator_lowers_to_scalar(type_table, receiver_type, Some(trait_decl)) {
+        if !self.operator_lowers_to_scalar(type_table, receiver_type, Some(trait_name)) {
             return None;
         }
         let items = type_table.compiler_items();
@@ -1021,17 +1014,6 @@ impl Monomorphizer {
             left: Box::new(unref_operand(&receiver.expr, type_table)),
             right: Box::new(unref_operand(&other.expr, type_table)),
         })
-    }
-
-    fn value_blanket_serves(&self, tid: TypeId, trait_: DefId, type_table: &TypeTable) -> bool {
-        ranked_value_blanket(
-            &self.functions.trait_env,
-            trait_,
-            module_source_for_trait_impl(type_table, tid).as_ref(),
-            tid,
-            type_table,
-        )
-        .is_some()
     }
 
     /// What synthesis gave open shape `origin` — its associated types and
@@ -1699,7 +1681,6 @@ impl Monomorphizer {
                             // `&List<i32>^Inspect` to List's impl instead of the
                             // ref blanket's, dropping the leading `&` at codegen.
                             // A generic impl lives in the receiver's own module.
-                            let trait_name_for_blanket = new_info.trait_decl();
                             let generic_or_concrete =
                                 self.functions.generic_or_concrete_impl_module(
                                     &new_info,
@@ -1708,11 +1689,10 @@ impl Monomorphizer {
                                     type_table,
                                 );
                             let blanket = if generic_or_concrete.is_none() {
-                                trait_name_for_blanket.and_then(|tn| {
+                                new_info.trait_name.as_ref().and_then(|tn| {
                                     ranked_value_blanket(
                                         &self.functions.trait_env,
                                         tn,
-                                        receiver_module.as_ref(),
                                         concrete_type_id,
                                         type_table,
                                     )
@@ -1892,7 +1872,9 @@ impl Monomorphizer {
                 // Capture trait info before substitution clears is_type_param_receiver
                 let type_param_trait_info = method_func.method_info.as_ref().and_then(|i| {
                     if i.is_type_param_receiver {
-                        Some((i.trait_name.clone(), i.method_name.clone()))
+                        let at_instance =
+                            self.trait_named_at_instance(i.clone(), substitution, type_table);
+                        Some((at_instance.trait_name, i.method_name.clone()))
                     } else {
                         None
                     }
@@ -1923,7 +1905,11 @@ impl Monomorphizer {
                     let unary = trait_method_to_unary_op(item, &method_name_before);
                     let binary = trait_method_to_binary_op(item, &method_name_before);
                     let lowers_to_scalar = (unary.is_some() || binary.is_some())
-                        && self.operator_lowers_to_scalar(type_table, recv_inner, trait_decl);
+                        && self.operator_lowers_to_scalar(
+                            type_table,
+                            recv_inner,
+                            trait_name_before.as_ref(),
+                        );
                     if let Some(unary_op) = unary
                         && lowers_to_scalar
                     {
@@ -2161,6 +2147,9 @@ impl Monomorphizer {
             }
             TirExprKind::FieldAccess { expr: inner, .. } | TirExprKind::Move { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
+            }
+            TirExprKind::ListViewOf { .. } => {
+                unreachable!("synthesis::list_view expands every conversion")
             }
             TirExprKind::TupleSpread { expr: inner } => {
                 self.substitute_types_in_expr(inner, substitution, type_table, local_count, locals);
@@ -2439,9 +2428,9 @@ impl Monomorphizer {
     /// ref/mutref blanket (`impl<T: Inspect> Inspect for &T`), keyed by shape.
     /// The general path peels every ref off the auto-`&self`'d receiver, which
     /// would collapse `&List<i32>^Inspect` to `List<i32>::inspect` and drop the
-    /// leading `&`. Resolve the param's own value (ref intact) and, if it is a
-    /// reference to a universal-ref-blanket trait, route to that blanket in its
-    /// own module and report `true`. Otherwise leave `method_func` untouched.
+    /// leading `&`. Resolve the param's own value (ref intact) and, if the order
+    /// selects a `&T` blanket for it, route to that blanket in its own module
+    /// and report `true`. Otherwise leave `method_func` untouched.
     fn try_ref_blanket_shortcut(
         &self,
         method_func: &mut FunctionRef,
@@ -2463,13 +2452,8 @@ impl Monomorphizer {
         let Some(trait_fq) = info.trait_name.as_ref() else {
             return false;
         };
-        let Some(trait_) = trait_fq.canonical() else {
-            return false;
-        };
         let Some(blanket) =
-            self.functions
-                .trait_env
-                .universal_ref_blanket(trait_, ref_kind, trait_fq.args())
+            ranked_ref_blanket(&self.functions.trait_env, trait_fq, self_tid, type_table)
         else {
             return false;
         };
@@ -2674,13 +2658,14 @@ impl Monomorphizer {
     }
 
     /// The impl written on the reference a type-param receiver binds
-    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one.
+    /// (`impl Show for &Wrap<T>` under `T = &Wrap<bool>`), if there is one:
+    /// the call named as it names itself, and the template it instantiates.
     fn ref_impl_at_instance(
         &self,
         info: &LocalMethodName,
         substitution: &IndexMap<u32, TypeId>,
         type_table: &TypeTable,
-    ) -> Option<LocalMethodName> {
+    ) -> Option<(LocalMethodName, TemplateId)> {
         let binder = info.fq_struct_name();
         let key = self
             .current_param_substitution_key
@@ -2688,8 +2673,15 @@ impl Monomorphizer {
         let bound = *substitution.get(key)?;
         RefKind::from_resolved(type_table.get(bound))?;
         let at_bound = info.at_owner(&type_table.fq_type_name(bound));
-        let written = self.impl_written_trait_args(&at_bound)?;
-        Some(at_bound.with_trait_type_args(written))
+        let trait_fq = at_bound.trait_name.as_ref()?;
+        let trait_env = &self.functions.trait_env;
+        let trait_ = trait_env.trait_def_of_fq(trait_fq)?;
+        let block = trait_env.answering_impl(at_bound.receiver(), trait_, trait_fq.args())?;
+        let named = at_bound.with_trait_type_args(trait_env.spelled_trait_args(block, trait_));
+        let template = trait_env
+            .method_template(block, named.declared_method_name())?
+            .called_by(&named);
+        Some((named, template))
     }
 
     fn is_universal_ref_blanket_call(&self, func: &FunctionRef) -> bool {
@@ -2723,10 +2715,11 @@ impl Monomorphizer {
         let info = self.trait_named_at_instance(info, substitution, type_table);
 
         // An impl written for the reference itself outranks the `&T` blanket.
-        let ref_impl = info
+        let (ref_impl, ref_impl_template) = info
             .is_type_param_receiver
             .then(|| self.ref_impl_at_instance(&info, substitution, type_table))
-            .flatten();
+            .flatten()
+            .unzip();
         if ref_impl.is_none()
             && self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table)
         {
@@ -2809,12 +2802,9 @@ impl Monomorphizer {
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
                 candidate
-            } else if let Some(link) = info
-                .trait_name
-                .as_ref()
-                .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
-                .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
-            {
+            } else if let Some(link) = info.trait_name.as_ref().and_then(|trait_name| {
+                written_newtype_link(&self.functions.trait_env, trait_name, inner, type_table)
+            }) {
                 self.named_by_impl(
                     info.with_substituted_struct_name(&type_table.fq_type_name(link)),
                 )
@@ -2865,7 +2855,13 @@ impl Monomorphizer {
             module_source,
         };
         if info.is_type_param_receiver {
-            self.resolve_type_param_dispatch(method_func, receiver_type_id, type_table, call);
+            self.resolve_type_param_dispatch(
+                method_func,
+                receiver_type_id,
+                ref_impl_template,
+                type_table,
+                call,
+            );
         } else {
             self.resolve_generic_dispatch(
                 method_func,
@@ -2889,21 +2885,14 @@ impl Monomorphizer {
         receiver: TypeId,
         type_table: &TypeTable,
     ) -> bool {
-        let Some(trait_name) = info.trait_decl() else {
+        let Some(trait_name) = &info.trait_name else {
             return false;
         };
         if !has_reflect_kind(receiver, type_table) {
             return false;
         }
-        let receiver_module = module_source_for_trait_impl(type_table, receiver);
-        ranked_value_blanket(
-            &self.functions.trait_env,
-            trait_name,
-            receiver_module.as_ref(),
-            receiver,
-            type_table,
-        )
-        .is_some_and(|blanket| blanket_is_reflect_keyed(&blanket.bounds, type_table))
+        ranked_value_blanket(&self.functions.trait_env, trait_name, receiver, type_table)
+            .is_some_and(|blanket| blanket_is_reflect_keyed(&blanket.bounds, type_table))
     }
 
     /// Route a type-param receiver (`T^Trait::method`, resolved to a concrete
@@ -2911,10 +2900,13 @@ impl Monomorphizer {
     /// module, or — when the type has none — a blanket impl in the blanket's
     /// module. Only claims the blanket if the receiver satisfies its param
     /// bound, and keys the `ReflectStruct` struct blanket by `[T, Fields]`.
+    /// `ref_impl` is the template of an impl written on the reference the
+    /// receiver binds, which answers ahead of any lookup on the receiver.
     fn resolve_type_param_dispatch(
         &self,
         method_func: &mut FunctionRef,
         receiver_type_id: TypeId,
+        ref_impl: Option<TemplateId>,
         type_table: &mut TypeTable,
         call: SubstitutedCall,
     ) {
@@ -2935,7 +2927,6 @@ impl Monomorphizer {
         // ref blanket's, dropping the leading `&` at codegen. With no concrete
         // impl, a generic one lives in the receiver type's own module — how
         // newtype inheritance reuses it — and only a blanket in `blanket_impls`.
-        let trait_name_for_blanket = new_info.trait_decl();
         let generic_or_concrete = self.functions.generic_or_concrete_impl_module(
             &new_info,
             receiver_module.as_ref(),
@@ -2944,29 +2935,24 @@ impl Monomorphizer {
         );
         // Module and receiver param must be read off this same blanket: the
         // call-site type-param head matches only a direct `T::method` call.
-        let blanket = if generic_or_concrete.is_none() {
+        let blanket = if ref_impl.is_none() && generic_or_concrete.is_none() {
             let recv_inner = type_table.peel_refs(receiver_type_id);
-            trait_name_for_blanket.and_then(|tn| {
-                ranked_value_blanket(
-                    &self.functions.trait_env,
-                    tn,
-                    receiver_module.as_ref(),
-                    recv_inner,
-                    type_table,
-                )
-                .cloned()
+            new_info.trait_name.as_ref().and_then(|tn| {
+                ranked_value_blanket(&self.functions.trait_env, tn, recv_inner, type_table).cloned()
             })
         } else {
             None
         };
         let blanket_module = blanket.as_ref().map(|b| b.module.clone());
-        let template = self.served_template(
-            blanket.as_ref(),
-            &new_info,
-            type_table.peel_refs(receiver_type_id),
-            receiver_module.as_ref().unwrap_or(&module_source),
-            type_table,
-        );
+        let template = ref_impl.or_else(|| {
+            self.served_template(
+                blanket.as_ref(),
+                &new_info,
+                type_table.peel_refs(receiver_type_id),
+                receiver_module.as_ref().unwrap_or(&module_source),
+                type_table,
+            )
+        });
         let concrete_module = template
             .as_ref()
             .map(|template| template.home(type_table.defs()))

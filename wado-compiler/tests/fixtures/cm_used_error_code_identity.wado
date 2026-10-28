@@ -14,7 +14,6 @@ export fn run() with (Stdout, Process) {
         stdin: Input::Null,
         stdout: Output::Null,
         stderr: Output::Null,
-        timeout: null,
     }, null);
     println(`${spawned matches { Ok(_) }}`);
 }
@@ -24,7 +23,7 @@ __DATA__
   "compile_only": true,
   "skip_os": true,
   "wat_lines": [
-    { "contains": ["(enum \"not-found\" \"not-permitted\" \"resource-exhausted\" \"io\")"] },
+    { "contains": ["(variant (case \"not-found\") (case \"not-permitted\") (case \"not-executable\")"] },
     { "contains": ["(alias export $core:process/types@0.1.0 \"error-code\" (type $\"#type6 error-code\""] },
     { "contains": ["(alias outer 1 $\"#type6 error-code\""], "count": 1 }
   ]

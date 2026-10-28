@@ -13,8 +13,10 @@ use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
-use crate::tir::TirModule;
-use crate::world_registry::{self, CallbackExport, ExportMappings, WorldInfo, WorldRegistry};
+use crate::tir::{TirModule, TirTest};
+use crate::world_registry::{
+    self, CallbackExport, ExportMappings, GuestCallback, WorldInfo, WorldRegistry,
+};
 use std::sync::Arc;
 
 /// A Wado package in per-module form.
@@ -51,7 +53,8 @@ pub struct Package {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
-    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
+    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
+    /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Threaded unchanged through to the WIR emitter, which consults them to
@@ -70,11 +73,9 @@ pub struct Package {
     pub lib_world_info: Option<WorldInfo>,
     /// What each `export(World::name)` in the entry module names.
     pub export_mappings: ExportMappings,
-    /// `--test-name` substring filters (test world only). When non-empty, only
-    /// `test "name"` blocks whose name contains one of these strings are kept
-    /// as component exports; the rest are dropped before adapter synthesis so
-    /// early DCE removes their bodies. Empty means "every test".
-    pub test_name_filters: Vec<String>,
+    /// The tests kept as component exports (test world only); the rest are
+    /// dropped before adapter synthesis so early DCE removes their bodies.
+    pub test_selection: TestSelection,
 
     /// Maps world export name → adapter function name.
     /// Populated by `synthesis::cm_binding` when export adapters are synthesized.
@@ -87,6 +88,13 @@ pub struct Package {
     pub post_return_binding_names: IndexMap<String, String>,
     /// One per closure signature an import takes. Populated by `synthesis::cm_binding`.
     pub callback_exports: Vec<CallbackExport>,
+    /// The guest-effect interfaces a provider component satisfies, which no
+    /// handler of the program answers.
+    pub provided_import_fqs: IndexSet<String>,
+    /// One per operation of a guest effect a dependency imports and a handler
+    /// of the program answers. Populated by `synthesis::effect_dispatch`, and
+    /// given its binding by `synthesis::cm_binding`.
+    pub guest_callbacks: Vec<GuestCallback>,
 
     /// Wasm assets loaded by the loader from
     /// `use ... from "<path>" with { type: "wat"|"wasm" }` declarations.
@@ -111,20 +119,31 @@ pub struct Package {
     pub interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
 }
 
-/// Decide whether a `test "name"` block is selected by the active
-/// `--test-name` filters.
-///
-/// Matching follows `cargo test`: case-sensitive substring against the
-/// original (lossless) test name. Empty `filters` selects every test.
-/// Multiple filters combine with OR. Unnamed tests (`test { … }`) carry no
-/// name to match, so they are dropped whenever any filter is active.
-pub fn test_selected(original_name: Option<&str>, filters: &[String]) -> bool {
-    if filters.is_empty() {
-        return true;
-    }
-    match original_name {
-        Some(name) => filters.iter().any(|f| name.contains(f.as_str())),
-        None => false,
+/// Which test blocks a test-world compile keeps. The default keeps every one.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+pub struct TestSelection {
+    /// `--test-name` substring filters. Matching follows `cargo test`:
+    /// case-sensitive substring against the original (lossless) test name.
+    /// Empty selects every test, and several combine with OR. Unnamed tests
+    /// (`test { … }`) carry no name to match, so they are dropped whenever any
+    /// filter is active.
+    pub names: Vec<String>,
+    /// Only the `#[workload]` tests, which `wado test --pgo` records.
+    pub workloads_only: bool,
+}
+
+impl TestSelection {
+    #[must_use]
+    pub fn selects(&self, test: &TirTest) -> bool {
+        if self.workloads_only && !test.is_workload {
+            return false;
+        }
+        if self.names.is_empty() {
+            return true;
+        }
+        test.name
+            .as_deref()
+            .is_some_and(|name| self.names.iter().any(|f| name.contains(f.as_str())))
     }
 }
 
@@ -163,11 +182,13 @@ impl Package {
             target_world: "wasi:cli/command".to_string(),
             lib_world_info: None,
             export_mappings: ExportMappings::default(),
-            test_name_filters: Vec::new(),
+            test_selection: TestSelection::default(),
             // CM export adapter mapping
             export_binding_names: IndexMap::default(),
             post_return_binding_names: IndexMap::default(),
             callback_exports: Vec::new(),
+            provided_import_fqs: IndexSet::default(),
+            guest_callbacks: Vec::new(),
             // Wasm assets loaded from `use _ from "<path>" with { type: ... }`
             wasm_assets: IndexMap::default(),
             resource_wrappers: IndexMap::default(),
@@ -219,41 +240,78 @@ impl Package {
 
 #[cfg(test)]
 mod tests {
-    use super::test_selected;
+    use super::TestSelection;
+    use crate::tir::TirTest;
+    use crate::token::Span;
+
+    fn test(name: Option<&str>, is_workload: bool) -> TirTest {
+        TirTest {
+            name: name.map(str::to_string),
+            function_name: "$test_0".to_string(),
+            line: 1,
+            span: Span::default(),
+            expect_trap: false,
+            is_todo: false,
+            timeout_ms: None,
+            is_synopsis: false,
+            is_workload,
+        }
+    }
+
+    fn by_names(names: &[&str]) -> TestSelection {
+        TestSelection {
+            names: names.iter().map(|n| (*n).to_string()).collect(),
+            workloads_only: false,
+        }
+    }
+
+    fn selects(selection: &TestSelection, name: Option<&str>) -> bool {
+        selection.selects(&test(name, false))
+    }
 
     #[test]
     fn empty_filters_select_everything() {
-        assert!(test_selected(Some("anything"), &[]));
-        assert!(test_selected(None, &[]));
+        assert!(selects(&by_names(&[]), Some("anything")));
+        assert!(selects(&by_names(&[]), None));
     }
 
     #[test]
     fn substring_match_is_case_sensitive() {
-        let filters = vec!["alpha".to_string()];
-        assert!(test_selected(Some("alpha addition"), &filters));
-        assert!(test_selected(Some("the alpha test"), &filters));
-        assert!(!test_selected(Some("beta"), &filters));
+        let filters = by_names(&["alpha"]);
+        assert!(selects(&filters, Some("alpha addition")));
+        assert!(selects(&filters, Some("the alpha test")));
+        assert!(!selects(&filters, Some("beta")));
         // Case-sensitive, like `cargo test`.
-        assert!(!test_selected(Some("ALPHA"), &filters));
+        assert!(!selects(&filters, Some("ALPHA")));
     }
 
     #[test]
     fn multiple_filters_are_or() {
-        let filters = vec!["beta".to_string(), "gamma".to_string()];
-        assert!(test_selected(Some("beta one"), &filters));
-        assert!(test_selected(Some("gamma two"), &filters));
-        assert!(!test_selected(Some("alpha"), &filters));
+        let filters = by_names(&["beta", "gamma"]);
+        assert!(selects(&filters, Some("beta one")));
+        assert!(selects(&filters, Some("gamma two")));
+        assert!(!selects(&filters, Some("alpha")));
     }
 
     #[test]
     fn unnamed_tests_are_dropped_when_a_filter_is_active() {
-        assert!(!test_selected(None, &["x".to_string()]));
+        assert!(!selects(&by_names(&["x"]), None));
     }
 
     #[test]
     fn matches_multibyte_names() {
-        let filters = vec!["日本語".to_string()];
-        assert!(test_selected(Some("日本語 ok"), &filters));
-        assert!(!test_selected(Some("english only"), &filters));
+        let filters = by_names(&["日本語"]);
+        assert!(selects(&filters, Some("日本語 ok")));
+        assert!(!selects(&filters, Some("english only")));
+    }
+
+    #[test]
+    fn workloads_only_drops_every_other_test() {
+        let workloads = TestSelection {
+            names: Vec::new(),
+            workloads_only: true,
+        };
+        assert!(workloads.selects(&test(None, true)));
+        assert!(!workloads.selects(&test(None, false)));
     }
 }

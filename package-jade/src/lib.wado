@@ -1,210 +1,605 @@
-//! Jade — JSON Schema for Wado (minimal: the Schema document model).
-//!
-//! Capability A of the Jade design (see `docs/wep-2026-06-13-jade.md`): a typed
-//! model of a JSON Schema (Draft 2020-12) document that serializes to JSON or
-//! CBOR. This is the subset used to describe Kiln generator options (see the
-//! Kiln WEP): objects, primitives, string enums, `required`, `default`,
-//! `additionalProperties`.
-//!
-//! Type→schema derivation (capability B) waits on `ReflectStruct`; schema→value
-//! validation (capability C) is future work. For now a schema is built
-//! explicitly and emitted; the shape here is the one canonical definition
-//! producers and consumers agree on.
+//! Jade — JSON Schema (Draft 2020-12) for Wado: the schema model, and the
+//! schema of a Wado type derived from its reflection. See
+//! `docs/wep-2026-06-13-jade.md`.
 
-use { Serialize, SerializeError, Serializer } from "core:serde";
-use { Value } from "core:value";
-use { TreeMap } from "core:collections";
+use { Serialize, SerializeError, SerializeMap, Serializer, wire_name } from "core:serde";
+use { Value, to_value } from "core:value";
+use { TreeMap, TreeSet } from "core:collections";
 
-/// A JSON Schema `type` keyword: one type name (`"string"`) or a union
-/// including null (`["string", "null"]` for an optional field).
-pub variant TypeSet {
-    One(String),
-    Many(List<String>),
-}
-
-impl Serialize for TypeSet {
-    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        return match self {
-            One(name) => s.serialize_string(name),
-            Many(names) => {
-                let mut seq = s.begin_seq(names.len())?;
-                for let n of names {
-                    seq.element(n)?;
-                }
-                seq.end();
-            },
-        };
-    }
-}
-
-/// A JSON Schema (Draft 2020-12) document — the subset Jade needs to describe
-/// option structs. Absent fields (`None` / empty collections) are omitted on
-/// serialize, so the emitted schema stays idiomatic (no `"minimum": null`).
+/// A JSON Schema document, one field per keyword. A keyword that is `null`,
+/// empty or `false` is left out of the output.
 pub struct Schema {
-    /// `$schema` — set on a root schema only.
+    /// `$schema`
     pub dialect: Option<String> = null,
-    /// `type`
-    pub type: Option<TypeSet> = null,
-    /// `properties` (object schemas)
-    pub properties: TreeMap<String, Schema> = TreeMap::new(),
-    /// `required` (property names without a default)
-    pub required: List<String> = [],
-    /// `additionalProperties`
-    pub additional_properties: Option<bool> = null,
-    /// `enum` (allowed values, e.g. string variants)
-    pub enum_: List<Value> = [],
-    /// `default`
-    pub default_: Option<Value> = null,
-    /// `format` (e.g. an integer width hint)
-    pub format: Option<String> = null,
-    /// `minimum`
-    pub minimum: Option<f64> = null,
-    /// `maximum`
-    pub maximum: Option<f64> = null,
-    /// `title`
+    /// `$ref`
+    pub reference: Option<String> = null,
     pub title: Option<String> = null,
-    /// `description`
     pub description: Option<String> = null,
+    pub type: Option<String> = null,
+    pub format: Option<String> = null,
+    pub content_encoding: Option<String> = null,
+    pub const_: Option<Value> = null,
+    pub enum_: List<Value> = [],
+    pub any_of: List<Schema> = [],
+    pub one_of: List<Schema> = [],
+    pub minimum: Option<f64> = null,
+    pub maximum: Option<f64> = null,
+    pub min_length: Option<i32> = null,
+    pub max_length: Option<i32> = null,
+    pub pattern: Option<String> = null,
+    pub items: Option<Schema> = null,
+    pub prefix_items: List<Schema> = [],
+    pub min_items: Option<i32> = null,
+    pub max_items: Option<i32> = null,
+    pub unique_items: bool = false,
+    pub properties: TreeMap<String, Schema> = TreeMap::new(),
+    pub required: List<String> = [],
+    pub additional_properties: Option<Schema> = null,
+    pub max_properties: Option<i32> = null,
+    pub default_: Option<Value> = null,
+    /// `$defs`
+    pub defs: TreeMap<String, Schema> = TreeMap::new(),
 }
 
 impl Schema {
     /// The `$schema` dialect Jade emits.
     pub const DRAFT: String = "https://json-schema.org/draft/2020-12/schema";
 
-    /// An object schema with `additionalProperties: false`.
-    pub fn object() -> Schema {
-        return Schema {
-            type: Option::Some(TypeSet::One("object")),
-            additional_properties: Option::Some(false),
-        };
+    /// A schema admitting one JSON type: `"object"`, `"string"` and so on.
+    pub fn of_type<S: AsStrSlice>(name: S) -> Schema {
+        return Schema { type: Option::Some(name.to_string()) };
     }
 
-    pub fn boolean() -> Schema {
-        return Schema { type: Option::Some(TypeSet::One("boolean")) };
+    /// A schema admitting the single value `value`.
+    pub fn constant(value: Value) -> Schema {
+        return Schema { const_: Option::Some(value) };
     }
 
-    pub fn string() -> Schema {
-        return Schema { type: Option::Some(TypeSet::One("string")) };
+    fn each_keyword<K: KeywordSink>(&self, k: &mut K) -> Result<(), SerializeError> {
+        k.some("$schema", &self.dialect)?;
+        k.some("$ref", &self.reference)?;
+        k.some("title", &self.title)?;
+        k.some("description", &self.description)?;
+        k.some("type", &self.type)?;
+        k.some("format", &self.format)?;
+        k.some("contentEncoding", &self.content_encoding)?;
+        k.some("const", &self.const_)?;
+        k.list("enum", &self.enum_)?;
+        k.list("anyOf", &self.any_of)?;
+        k.list("oneOf", &self.one_of)?;
+        k.some("minimum", &self.minimum)?;
+        k.some("maximum", &self.maximum)?;
+        k.some("minLength", &self.min_length)?;
+        k.some("maxLength", &self.max_length)?;
+        k.some("pattern", &self.pattern)?;
+        k.some("items", &self.items)?;
+        k.list("prefixItems", &self.prefix_items)?;
+        k.some("minItems", &self.min_items)?;
+        k.some("maxItems", &self.max_items)?;
+        if self.unique_items {
+            k.put("uniqueItems", &true)?;
+        }
+        if !self.properties.is_empty() {
+            k.put("properties", &self.properties)?;
+        }
+        k.list("required", &self.required)?;
+        k.some("additionalProperties", &self.additional_properties)?;
+        k.some("maxProperties", &self.max_properties)?;
+        k.some("default", &self.default_)?;
+        if !self.defs.is_empty() {
+            k.put("$defs", &self.defs)?;
+        }
+        return Result::Ok(());
+    }
+}
+
+/// Where `Schema::each_keyword` sends each keyword it writes: once to count
+/// them, as a map must know its length before its first entry, and once to
+/// write them.
+trait KeywordSink with () {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError>;
+
+    fn some<V: Serialize>(&mut self, key: String, value: &Option<V>) -> Result<(), SerializeError> {
+        if let Some(v) = value {
+            return self.put(key, v);
+        }
+        return Result::Ok(());
     }
 
-    pub fn integer() -> Schema {
-        return Schema { type: Option::Some(TypeSet::One("integer")) };
+    fn list<V: Serialize>(&mut self, key: String, value: &List<V>) -> Result<(), SerializeError> {
+        if value.is_empty() {
+            return Result::Ok(());
+        }
+        return self.put(key, value);
     }
+}
 
-    pub fn number() -> Schema {
-        return Schema { type: Option::Some(TypeSet::One("number")) };
+struct KeywordCount {
+    n: i32,
+}
+
+impl KeywordSink for KeywordCount {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.n += 1;
+        return Result::Ok(());
     }
+}
 
-    /// Mark this the root schema by stamping `$schema`.
-    pub fn as_root(&mut self) {
-        self.dialect = Option::Some(Schema::DRAFT);
-    }
+struct KeywordWriter<M> {
+    map: M,
+}
 
-    /// Add a property named `name` with schema `schema`.
-    pub fn property<S: AsStrSlice>(&mut self, name: S, schema: Schema) {
-        self.properties[name.to_string()] = schema;
-    }
-
-    /// Mark `name` a required property.
-    pub fn require<S: AsStrSlice>(&mut self, name: S) {
-        self.required.push(name.to_string());
-    }
-
-    /// Set the `default` keyword.
-    pub fn set_default(&mut self, value: Value) {
-        self.default_ = Option::Some(value);
+impl<M: SerializeMap> KeywordSink for KeywordWriter<M> {
+    fn put<V: Serialize>(&mut self, key: String, value: &V) -> Result<(), SerializeError> {
+        self.map.key(&key)?;
+        return self.map.value(value);
     }
 }
 
 impl Serialize for Schema {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
-        let mut n = 0;
-        if self.dialect matches { Some(_) } {
-            n += 1;
-        }
-        if self.type matches { Some(_) } {
-            n += 1;
-        }
-        if !self.properties.is_empty() {
-            n += 1;
-        }
-        if !self.required.is_empty() {
-            n += 1;
-        }
-        if self.additional_properties matches { Some(_) } {
-            n += 1;
-        }
-        if !self.enum_.is_empty() {
-            n += 1;
-        }
-        if self.default_ matches { Some(_) } {
-            n += 1;
-        }
-        if self.format matches { Some(_) } {
-            n += 1;
-        }
-        if self.minimum matches { Some(_) } {
-            n += 1;
-        }
-        if self.maximum matches { Some(_) } {
-            n += 1;
-        }
-        if self.title matches { Some(_) } {
-            n += 1;
-        }
-        if self.description matches { Some(_) } {
-            n += 1;
-        }
+        let mut count = KeywordCount { n: 0 };
+        self.each_keyword(&mut count)?;
+        let mut writer = KeywordWriter { map: s.begin_map(count.n)? };
+        self.each_keyword(&mut writer)?;
+        return writer.map.end();
+    }
+}
 
-        let mut m = s.begin_map(n)?;
-        if let Some(d) = &self.dialect {
-            m.key(&"$schema")?;
-            m.value(d)?;
+/// A type whose JSON form a schema describes. Every value `core:json` writes
+/// for the type validates against the schema, and every document that
+/// validates decodes into the type.
+pub trait JsonSchema with () {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema;
+}
+
+/// Collects the definitions the schemas it builds refer to. A struct, a
+/// variant, an enum and a flags type are each defined once and referred to by
+/// `$ref` at every use, which is also how a recursive type ends.
+pub struct SchemaGenerator {
+    prefix: String,
+    definitions: TreeMap<String, Schema>,
+}
+
+impl SchemaGenerator {
+    /// Refers to definitions under the root schema's `$defs`.
+    pub fn new() -> SchemaGenerator {
+        return SchemaGenerator { prefix: "#/$defs/", definitions: TreeMap::new() };
+    }
+
+    /// Refers to definitions under an OpenAPI document's `components/schemas`.
+    pub fn openapi() -> SchemaGenerator {
+        return SchemaGenerator { prefix: "#/components/schemas/", definitions: TreeMap::new() };
+    }
+
+    /// The definitions built so far, by name.
+    pub fn definitions(&self) -> TreeMap<String, Schema> {
+        return self.definitions;
+    }
+
+    /// Returns a `$ref` to the definition `name`, building it by `build` the
+    /// first time. An anonymous type, named `""`, is built in place instead.
+    pub fn define(&mut self, name: String, build: fn(&mut SchemaGenerator) -> Schema) -> Schema {
+        if name.is_empty() {
+            return build(self);
         }
-        if let Some(t) = &self.type {
-            m.key(&"type")?;
-            m.value(t)?;
+        if !self.definitions.contains_key(name) {
+            // In place before the build, so a recursive use refers to it.
+            self.definitions[name] = Schema {};
+            let body = build(self);
+            self.definitions[name] = body;
         }
-        if !self.properties.is_empty() {
-            m.key(&"properties")?;
-            m.value(&self.properties)?;
+        return Schema { reference: Option::Some(`${self.prefix}${name}`) };
+    }
+}
+
+/// The standalone schema of `T`: the `$schema` dialect, with the definitions it
+/// refers to under `$defs`.
+pub fn schema_for<T: JsonSchema>() -> Schema {
+    let mut gen = SchemaGenerator::new();
+    let mut root = T::json_schema(&mut gen);
+    root.dialect = Option::Some(Schema::DRAFT);
+    root.defs = gen.definitions;
+    return root;
+}
+
+// ── The derivation, one blanket per reflection kind ──
+
+impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Serialize> JsonSchema for T {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<T>::type_name(), |g| struct_schema::<T>(g));
+    }
+}
+
+fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Serialize>(gen: &mut SchemaGenerator) -> Schema {
+    let policy = Reflect::<T>::wire_name_policy();
+    let mut s = Schema::of_type("object");
+    for let [i, f] of ReflectStruct::<T>::members().enumerate() {
+        let name = wire_name(&f, policy);
+        let mut field = field_schema(&f, gen);
+        if let Some(fallback) = ReflectStruct::<T>::default_slot(i)[i] {
+            field.default_ = Option::Some(to_value(&fallback).expect("a field's default serializes"));
+        } else {
+            s.required.push(name);
         }
-        if !self.required.is_empty() {
-            m.key(&"required")?;
-            m.value(&self.required)?;
+        s.properties[name] = field;
+    }
+    return s;
+}
+
+fn field_schema<T, F: JsonSchema>(_field: &StructField<T, F>, gen: &mut SchemaGenerator) -> Schema {
+    return F::json_schema(gen);
+}
+
+impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema> JsonSchema for V {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<V>::type_name(), |g| variant_schema::<V>(g));
+    }
+}
+
+fn variant_schema<V: ReflectVariant<CasePayloads = [..P]>, ..P: JsonSchema>(gen: &mut SchemaGenerator) -> Schema {
+    let policy = Reflect::<V>::wire_name_policy();
+    let tag = ReflectVariant::<V>::wire_tag();
+    let mut s = Schema {};
+    for let case of ReflectVariant::<V>::members() {
+        s.one_of.push(case_schema(&case, wire_name(&case, policy), &tag, gen));
+    }
+    return s;
+}
+
+/// A case as the derived `Serialize` writes it: untagged, a unit case is its
+/// name and a payload case an object holding the payload under the name;
+/// under `#[wire(tag)]`, an object whose `tag` property holds the name, beside
+/// the payload struct's fields.
+fn case_schema<V, P: JsonSchema>(
+    case: &VariantCase<V, P>,
+    name: String,
+    tag: &Option<String>,
+    gen: &mut SchemaGenerator,
+) -> Schema {
+    if let Some(tag) = tag {
+        let mut s = if case.is_unit() { Schema::of_type("object") } else { P::json_schema(gen) };
+        s.properties[*tag] = Schema::constant(Value::String(name));
+        s.required.push(*tag);
+        return s;
+    }
+    if case.is_unit() {
+        return Schema::constant(Value::String(name));
+    }
+    return one_property(name, P::json_schema(gen));
+}
+
+/// An object holding `value` under `name` and nothing else, as `core:json`
+/// writes a payload case.
+fn one_property(name: String, value: Schema) -> Schema {
+    let mut s = Schema::of_type("object");
+    s.properties[name] = value;
+    s.required.push(name);
+    s.max_properties = Option::Some(1);
+    return s;
+}
+
+impl<E: ReflectEnum<Members = [..M]>, ..M> JsonSchema for E {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<E>::type_name(), |_| enum_schema::<E>());
+    }
+}
+
+fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
+    let policy = Reflect::<E>::wire_name_policy();
+    let mut s = Schema::of_type("string");
+    for let case of ReflectEnum::<E>::members() {
+        s.enum_.push(Value::String(wire_name(&case, policy)));
+    }
+    return s;
+}
+
+impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return gen.define(Reflect::<L>::type_name(), |_| flags_schema::<L>());
+    }
+}
+
+fn flags_schema<L: ReflectFlags<Members = [..M]>, ..M>() -> Schema {
+    let policy = Reflect::<L>::wire_name_policy();
+    let mut member = Schema::of_type("string");
+    for let bit of ReflectFlags::<L>::members() {
+        member.enum_.push(Value::String(wire_name(&bit, policy)));
+    }
+    return Schema { ..array_of(member), unique_items: true };
+}
+
+fn array_of(items: Schema) -> Schema {
+    return Schema {
+        ..Schema::of_type("array"),
+        items: Option::Some(items),
+    };
+}
+
+// ── The leaves ──
+
+impl JsonSchema for bool {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("boolean");
+    }
+}
+
+fn integer(minimum: f64, maximum: f64) -> Schema {
+    return Schema {
+        ..Schema::of_type("integer"),
+        minimum: Option::Some(minimum),
+        maximum: Option::Some(maximum),
+    };
+}
+
+impl JsonSchema for i8 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i8::MIN as f64, i8::MAX as f64);
+    }
+}
+
+impl JsonSchema for i16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i16::MIN as f64, i16::MAX as f64);
+    }
+}
+
+impl JsonSchema for i32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(i32::MIN as f64, i32::MAX as f64);
+    }
+}
+
+impl JsonSchema for u8 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u8::MAX as f64);
+    }
+}
+
+impl JsonSchema for u16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u16::MAX as f64);
+    }
+}
+
+impl JsonSchema for u32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return integer(0.0, u32::MAX as f64);
+    }
+}
+
+// `core:json` writes a 64-bit integer as a number within ±(2^53 − 1), where a
+// double holds it exactly, and as a decimal string beyond.
+
+impl JsonSchema for i64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            any_of: [
+                integer(f64::MIN_SAFE_INTEGER, f64::MAX_SAFE_INTEGER),
+                signed_decimal(`${i64::MAX}`),
+            ],
+        };
+    }
+}
+
+impl JsonSchema for u64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            any_of: [
+                integer(0.0, f64::MAX_SAFE_INTEGER),
+                unsigned_decimal(`${u64::MAX}`),
+            ],
+        };
+    }
+}
+
+impl JsonSchema for i128 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return signed_decimal(`${i128::MAX}`);
+    }
+}
+
+impl JsonSchema for u128 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return unsigned_decimal(`${u128::MAX}`);
+    }
+}
+
+fn decimal_string(pattern: String) -> Schema {
+    return Schema {
+        ..Schema::of_type("string"),
+        pattern: Option::Some(pattern),
+    };
+}
+
+/// A decimal string in `0..=max`, spelled as `core:json` spells it.
+fn unsigned_decimal(max: String) -> Schema {
+    return decimal_string(`^(0|${one_to(max)})$`);
+}
+
+/// A decimal string in `-max - 1..=max`, spelled as `core:json` spells it.
+fn signed_decimal(max: String) -> Schema {
+    // A two's complement range ends one further below zero than above it, and
+    // that one bound's last digit is never 9, so incrementing it carries nothing.
+    let last = max.len() - 1;
+    let below = `${max.substr_bytes(0, last)}${(max.byte_at(last) + 1) as char}`;
+    return decimal_string(`^(0|-?${one_to(max)}|-${below})$`);
+}
+
+/// A regular expression, as a group, matching the decimal integers in
+/// `1..=max` without leading zeros.
+fn one_to(max: String) -> String {
+    let n = max.len();
+    let mut alternatives: List<String> = [];
+    if n > 1 {
+        alternatives.push(`[1-9]${any_digits(0, n - 2)}`);
+    }
+    // A number of `max`'s length is below it where it first falls below
+    // `max`'s digit, after a prefix it shares.
+    for let i of 0..<n {
+        let lowest = if i == 0 { b'1' } else { b'0' };
+        let digit = max.byte_at(i);
+        if digit > lowest {
+            let rest = any_digits(n - i - 1, n - i - 1);
+            alternatives.push(`${max.substr_bytes(0, i)}${digit_class(lowest, digit - 1)}${rest}`);
         }
-        if let Some(ap) = &self.additional_properties {
-            m.key(&"additionalProperties")?;
-            m.value(ap)?;
+    }
+    alternatives.push(max);
+    return `(${alternatives.join("|")})`;
+}
+
+/// From `min` to `max` digits, written as briefly as the count allows.
+fn any_digits(min: i32, max: i32) -> String {
+    if max == 0 {
+        return "";
+    }
+    if max == 1 {
+        return if min == 1 { "[0-9]" } else { "[0-9]?" };
+    }
+    if min == max {
+        return `[0-9]{${max}}`;
+    }
+    return `[0-9]{${min},${max}}`;
+}
+
+fn digit_class(low: u8, high: u8) -> String {
+    if low == high {
+        return `${low as char}`;
+    }
+    return `[${low as char}-${high as char}]`;
+}
+
+test "one_to matches exactly the numbers up to max" {
+    assert one_to("9") == "([1-8]|9)";
+    assert one_to("10") == "([1-9]|10)";
+    assert one_to("255") == "([1-9][0-9]?|1[0-9]{2}|2[0-4][0-9]|25[0-4]|255)";
+    assert one_to("3000") == "([1-9][0-9]{0,2}|[1-2][0-9]{3}|3000)";
+}
+
+impl JsonSchema for f32 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("number");
+    }
+}
+
+impl JsonSchema for f64 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("number");
+    }
+}
+
+impl JsonSchema for f16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("number");
+    }
+}
+
+impl JsonSchema for bf16 {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("number");
+    }
+}
+
+impl JsonSchema for char {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            ..Schema::of_type("string"),
+            min_length: Option::Some(1),
+            max_length: Option::Some(1),
+        };
+    }
+}
+
+impl JsonSchema for String {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("string");
+    }
+}
+
+fn base64url() -> Schema {
+    return Schema {
+        ..Schema::of_type("string"),
+        content_encoding: Option::Some("base64url"),
+    };
+}
+
+impl JsonSchema for ByteList {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for ByteArray {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for ByteSlice {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return base64url();
+    }
+}
+
+impl JsonSchema for () {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema::of_type("null");
+    }
+}
+
+// `anyOf` rather than `oneOf`: in `Option<Option<T>>` both branches accept null.
+impl<T: JsonSchema> JsonSchema for Option<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            any_of: [
+                T::json_schema(gen),
+                Schema::of_type("null"),
+            ],
+        };
+    }
+}
+
+impl<T: JsonSchema, E: JsonSchema> JsonSchema for Result<T, E> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            one_of: [
+                one_property("Ok", T::json_schema(gen)),
+                one_property("Err", E::json_schema(gen)),
+            ],
+        };
+    }
+}
+
+impl<T: JsonSchema> JsonSchema for List<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return array_of(T::json_schema(gen));
+    }
+}
+
+impl<T: Ord + JsonSchema> JsonSchema for TreeSet<T> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema { ..array_of(T::json_schema(gen)), unique_items: true };
+    }
+}
+
+impl<V: JsonSchema> JsonSchema for TreeMap<String, V> {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        return Schema {
+            ..Schema::of_type("object"),
+            additional_properties: Option::Some(V::json_schema(gen)),
+        };
+    }
+}
+
+impl<..T: JsonSchema> JsonSchema for [..T] {
+    fn json_schema(gen: &mut SchemaGenerator) -> Schema {
+        let mut s = Schema::of_type("array");
+        for let item of [..T::json_schema(gen)] {
+            s.prefix_items.push(item);
         }
-        if !self.enum_.is_empty() {
-            m.key(&"enum")?;
-            m.value(&self.enum_)?;
-        }
-        if let Some(v) = &self.default_ {
-            m.key(&"default")?;
-            m.value(v)?;
-        }
-        if let Some(f) = &self.format {
-            m.key(&"format")?;
-            m.value(f)?;
-        }
-        if let Some(mn) = &self.minimum {
-            m.key(&"minimum")?;
-            m.value(mn)?;
-        }
-        if let Some(mx) = &self.maximum {
-            m.key(&"maximum")?;
-            m.value(mx)?;
-        }
-        if let Some(t) = &self.title {
-            m.key(&"title")?;
-            m.value(t)?;
-        }
-        if let Some(d) = &self.description {
-            m.key(&"description")?;
-            m.value(d)?;
-        }
-        return m.end();
+        let arity = s.prefix_items.len();
+        s.min_items = Option::Some(arity);
+        s.max_items = Option::Some(arity);
+        return s;
     }
 }

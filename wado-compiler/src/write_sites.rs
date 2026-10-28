@@ -105,12 +105,11 @@ impl<F: FnMut(WriteSite<'_>)> Sites<'_, F> {
 impl<F: FnMut(WriteSite<'_>)> AstVisitor<'_> for Sites<'_, F> {
     fn visit_expr(&mut self, expr: &Expr) {
         match expr {
-            Expr::Assign(assign) => {
-                for place in assign.places() {
+            Expr::Assign(_) | Expr::CompoundAssign(_) => {
+                for place in expr.assigned_places() {
                     (self.found)(WriteSite::Place(place));
                 }
             }
-            Expr::CompoundAssign(compound) => (self.found)(WriteSite::Place(&compound.target)),
             Expr::Unary(unary) if unary.op == UnaryOp::MutRef => {
                 (self.found)(WriteSite::Place(&unary.expr));
             }

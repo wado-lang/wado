@@ -4,121 +4,111 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Countdown<i32>> {  // TypeId(1)
-    mut value: ref "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>",
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-struct core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Two<i32>> {  // TypeId(2)
-    mut value: ref "bug_mut_self_operator_receiver_boxed.wado//Two<i32>",
-}
-
-struct core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Cell<i32>> {  // TypeId(3)
-    mut value: ref "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>",
-}
-
-array Array<u8> (mut u8);  // TypeId(4)
-
-struct core:prelude/string.wado//String {  // TypeId(5)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct tuple//[i32, i32] {  // TypeId(6)
+struct tuple//[i32, i32] {  // TypeId(3)
     mut 0: i32,
     mut 1: i32,
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Point {  // TypeId(7)
+struct bug_mut_self_operator_receiver_boxed.wado//Point {  // TypeId(4)
     mut x: i32,
     mut calls: i32,
 }
 
-variant bug_mut_self_operator_receiver_boxed.wado//Two<i32> {  // TypeId(8)
+variant bug_mut_self_operator_receiver_boxed.wado//Two<i32> {  // TypeId(5)
     Pair(ref "tuple//[i32, i32]"),
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair {  // TypeId(9)
+struct bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair {  // TypeId(6)
     discriminant: i32,
     payload_0: ref "tuple//[i32, i32]",
 }
 
-variant bug_mut_self_operator_receiver_boxed.wado//Cell<i32> {  // TypeId(10)
+variant bug_mut_self_operator_receiver_boxed.wado//Cell<i32> {  // TypeId(7)
     One(ref "bug_mut_self_operator_receiver_boxed.wado//Point"),
     Never(i32),
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One {  // TypeId(11)
+struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One {  // TypeId(8)
     discriminant: i32,
     payload_0: ref "bug_mut_self_operator_receiver_boxed.wado//Point",
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::Never {  // TypeId(12)
+struct bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::Never {  // TypeId(9)
     discriminant: i32,
     payload_0: i32,
 }
 
-variant bug_mut_self_operator_receiver_boxed.wado//Countdown<i32> {  // TypeId(13)
+variant bug_mut_self_operator_receiver_boxed.wado//Countdown<i32> {  // TypeId(10)
     Left(i32),
     Never(i32),
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left {  // TypeId(14)
+struct bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left {  // TypeId(11)
     discriminant: i32,
     payload_0: i32,
 }
 
-struct bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Never {  // TypeId(15)
+struct bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Never {  // TypeId(12)
     discriminant: i32,
     payload_0: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(16)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(13)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(17)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(14)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(18)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(15)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(19)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(16)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(20)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(17)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(21)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(18)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//bug_mut_self_operator_receiver_boxed.wado/$cm_export__run" = fn();  // TypeId(23)
+type "functype//bug_mut_self_operator_receiver_boxed.wado/$cm_export__run" = fn();  // TypeId(20)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(22)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(23)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(27)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(24)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(28)
+type "functype//core:rt/unreachable" = fn();  // TypeId(25)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(29)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(26)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(30)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(27)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$fb51c04d54491732,[i32]>" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(31)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(28)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>" = fn(i32, i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(32)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$fb51c04d54491732,[i32]>" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(29)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>" = fn(i32, i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(30)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(31)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(36)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(33)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(34)
 
-type "functype//bug_mut_self_operator_receiver_boxed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
+type "functype//bug_mut_self_operator_receiver_boxed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(36)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -138,27 +128,26 @@ fn "bug_mut_self_operator_receiver_boxed.wado/$cm_binding__wasi:cli/stdout@0.3.0
 }
 
 fn "bug_mut_self_operator_receiver_boxed.wado/$cm_export__run"() {
-    let t: ref "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Two<i32>>";
-    let c: ref "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Cell<i32>>";
-    let $iter_4: ref "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Countdown<i32>>";
     let $local_8: ref "tuple//[i32, i32]";
     let $pattern_temp_0_14: ref "bug_mut_self_operator_receiver_boxed.wado//Two<i32>";
     let v_17: i32;
     let x_18: i32;
     let seen: ref "bug_mut_self_operator_receiver_boxed.wado//Point";
     let $local_4_56: ref "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>";
+    let $sroa_t_value_60: ref "bug_mut_self_operator_receiver_boxed.wado//Two<i32>";
+    let $sroa_c_value_61: ref "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>";
+    let $sroa_$iter_4_value_62: ref "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>";
     cold_path;
-    drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14(local.tee t(struct.new "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Two<i32>>" { value: struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 } } }).value)).payload_0.0);
-    t.value = struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 5, 1: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1 } };
-    v_17 = drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14(t.value)).payload_0.0); ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1 + 4;
-    x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.0;
+    drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14(local.tee $sroa_t_value_60(struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 1, 1: 2 } }))).payload_0.0);
+    v_17 = drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $sroa_t_value_60(struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: 5, 1: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1 } })).payload_0.0); ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.1 + 4;
+    x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14($sroa_t_value_60)).payload_0.0;
     drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1);
-    t.value = struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: x_18, 1: v_17 } };
+    $sroa_t_value_60 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: x_18, 1: v_17 } };
     "core:cli/println"(local.tee $mv_field_7(block -> ref "core:prelude/string.wado//String" {
-        v_17 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14(t.value)).payload_0.0;
-        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1);
-        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.0);
-        x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1;
+        v_17 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.0;
+        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.1);
+        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.0);
+        x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.1;
         let $mv_field_3: ref "core:prelude/string.wado//String";
         $mv_field_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         let $mv_field_5: ref "core:prelude/string.wado//String";
@@ -167,28 +156,27 @@ fn "bug_mut_self_operator_receiver_boxed.wado/$cm_export__run"() {
         $mv_field_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(v_17, x_18, $mv_field_3, $mv_field_5, $mv_field_7);
     }).repr, $mv_field_7.used);
-    $pattern_temp_0_14 = t.value;
-    t.value = struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1, 1: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.0 } };
+    $pattern_temp_0_14 = $sroa_t_value_60;
+    $sroa_t_value_60 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair" { discriminant: 0, payload_0: struct.new "tuple//[i32, i32]" { 0: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1, 1: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.0 } };
     "core:cli/println"(local.tee $mv_field_3(block -> ref "core:prelude/string.wado//String" {
-        x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"(local.tee $pattern_temp_0_14(t.value)).payload_0.0;
-        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1);
-        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.0);
-        v_17 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($pattern_temp_0_14).payload_0.1;
+        x_18 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.0;
+        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.1);
+        drop(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.0);
+        v_17 = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Two<i32>::Pair"($sroa_t_value_60).payload_0.1;
         $mv_field_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         $mv_field_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         $mv_field_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(x_18, v_17, $mv_field_7, $mv_field_5, $mv_field_3);
     }).repr, $mv_field_3.used);
-    c = struct.new "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Cell<i32>>" { value: struct.new "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One" { discriminant: 0, payload_0: struct.new "bug_mut_self_operator_receiver_boxed.wado//Point" { x: 1, calls: 0 } } };
+    $sroa_c_value_61 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One" { discriminant: 0, payload_0: struct.new "bug_mut_self_operator_receiver_boxed.wado//Point" { x: 1, calls: 0 } };
     $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Cell_i32__core_prelude_traits_wado_IndexRefMut_i32___index_ref_mut_9: block -> ref "bug_mut_self_operator_receiver_boxed.wado//Point" {
         cold_path;
-        cold_path;
-        if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"(local.tee $local_4_56(c.value))) {
+        if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"(local.tee $local_4_56($sroa_c_value_61))) {
             seen = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"($local_4_56).payload_0;
             cold_path;
-            c.value = struct.new "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One" { discriminant: 0, payload_0: struct.new "bug_mut_self_operator_receiver_boxed.wado//Point" { x: seen.x, calls: seen.calls + 1 } };
+            $sroa_c_value_61 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One" { discriminant: 0, payload_0: struct.new "bug_mut_self_operator_receiver_boxed.wado//Point" { x: seen.x, calls: seen.calls + 1 } };
             cold_path;
-            if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"(local.tee $local_4_56(c.value))) {
+            if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"(local.tee $local_4_56($sroa_c_value_61))) {
                 break $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Cell_i32__core_prelude_traits_wado_IndexRefMut_i32___index_ref_mut_9: ref.cast "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"($local_4_56).payload_0;
             } else {
                 cold_path;
@@ -203,8 +191,8 @@ fn "bug_mut_self_operator_receiver_boxed.wado/$cm_export__run"() {
         }
         unreachable;
     }.x = 5;
-    if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"(local.tee $local_4_56(c.value))) {
-        seen = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"($local_4_56).payload_0;
+    if @likely(ref.test "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"($sroa_c_value_61)) {
+        seen = ref.cast "bug_mut_self_operator_receiver_boxed.wado//Cell<i32>::One"($sroa_c_value_61).payload_0;
         cold_path;
         "core:cli/println"(local.tee $mv_field_7(block -> ref "core:prelude/string.wado//String" {
             v_17 = seen.x;
@@ -215,19 +203,18 @@ fn "bug_mut_self_operator_receiver_boxed.wado/$cm_export__run"() {
             "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_mut_self_operator_receiver_boxed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>"(v_17, x_18, $mv_field_3, $mv_field_5, $mv_field_7);
         }).repr, $mv_field_7.used);
         x_18 = 0;
-        $iter_4 = struct.new "core:prelude/types.wado//Box<bug_mut_self_operator_receiver_boxed.wado/Countdown<i32>>" { value: struct.new "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left" { discriminant: 0, payload_0: 3 } };
+        $sroa_$iter_4_value_62 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left" { discriminant: 0, payload_0: 3 };
         b6: block {
             l7: loop {
                 cold_path;
                 $local_8 = $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Countdown_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: block -> ref "tuple//[i32, i32]" {
                     cold_path;
-                    cold_path;
                     let $match_scrut_3: ref "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>";
-                    if ref.test "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left"(local.tee $match_scrut_3($iter_4.value)) {
+                    if ref.test "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left"(local.tee $match_scrut_3($sroa_$iter_4_value_62)) {
                         if local.tee v_17(ref.cast "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left"($match_scrut_3).payload_0) == 0 {
                             break $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Countdown_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: struct.new "tuple//[i32, i32]" { 0: 0, 1: 0 };
                         }
-                        $iter_4.value = struct.new "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left" { discriminant: 0, payload_0: v_17 - 1 };
+                        $sroa_$iter_4_value_62 = struct.new "bug_mut_self_operator_receiver_boxed.wado//Countdown<i32>::Left" { discriminant: 0, payload_0: v_17 - 1 };
                         break $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Countdown_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: struct.new "tuple//[i32, i32]" { 0: 1, 1: v_17 };
                     } else {
                         break $inline_run_1__$inline_bug_mut_self_operator_receiver_boxed_wado_Countdown_i32__core_prelude_traits_wado_Iterator__next_sroa_return__11: struct.new "tuple//[i32, i32]" { 0: 0, 1: 0 };
@@ -352,6 +339,61 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
+fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
+    let i: i32;
+    let at: i32;
+    let w: i64;
+    let $licm_arith_7: i32;
+    i = 0;
+    $licm_arith_7 = len - 8;
+    b34: block {
+        l35: loop {
+            break_if b34 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l35;
+        };
+    };
+    b36: block {
+        l37: loop {
+            break_if b36 i > $licm_arith_7;
+            at = src_start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr + i, w);
+            i = i + 8;
+            continue l37;
+        };
+    };
+    b38: block {
+        l39: loop {
+            break_if b38 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l39;
+        };
+    };
+    b40: block {
+        l41: loop {
+            break_if b40 i >= len;
+            builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
+            i = i + 1;
+            continue l41;
+        };
+    };
+}
+
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
     let new_repr: ref Array<u8>;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
@@ -373,31 +415,24 @@ fn "core:rt/unreachable"() {
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let written: i32;
     let ptr_13: i32;
-    let i: i32;
-    let ptr_24: i32;
-    let count_25: i32;
+    let ptr_19: i32;
+    let count_20: i32;
+    let packed_22: i32;
     let ws: i32;
     let evt_ptr: i32;
     let status: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; b36: block {
-        l37: loop {
-            break_if b36 i >= $mv$data$end;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            continue l37;
-        };
-    }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
-    i = 0;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); "core:rt/gc_array_to_memory"($mv$data$repr, $mv$data$start, ptr_13, $mv$data$end); builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    $mv$data$start = 0;
     block {
-        l39: loop {
-            ptr_24 = ptr_13 + i;
-            count_25 = $mv$data$end - i;
-            count_25 = local.tee written($inline_cm_await_blocked_7: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_24, select i32(count_25 < 268435455, count_25, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_7: $mv$data$start;
+        l45: loop {
+            ptr_19 = ptr_13 + $mv$data$start;
+            count_20 = $mv$data$end - $mv$data$start;
+            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee packed_22("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: packed_22;
                 }
                 ws = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, ws);
@@ -407,24 +442,24 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(evt_ptr, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
                 "wasi/waitable-set-drop"(ws);
-                break $inline_cm_await_blocked_7: status;
+                break $inline_cm_await_blocked_6: status;
             }) >>u 4;
-            ptr_24 = (if local.tee ptr_24(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_19 = (if local.tee ptr_19(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if ptr_24 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_24 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_25;
-            if ((ptr_24 != 0) | (count_25 <= 0)) | (i >= $mv$data$end) {
+            $mv$data$start = $mv$data$start + count_20;
+            if ((ptr_19 != 0) | (count_20 <= 0)) | ($mv$data$start >= $mv$data$end) {
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return ptr_24;
+                return ptr_19;
             }
-            continue l39;
+            continue l45;
         };
     };
 }

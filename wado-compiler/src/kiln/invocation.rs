@@ -7,6 +7,8 @@ use crate::ast::AttrValue;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
 use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
+use crate::path;
+use crate::remote::{Integrity, is_remote};
 use crate::token::Span;
 use std::fmt;
 
@@ -49,7 +51,9 @@ pub fn spec_key(spec: &str) -> &str {
     parse_spec(spec).key
 }
 
-/// A forward-slash, NFC-normalized file path relative to the project root.
+/// A forward-slash, NFC-normalized file path relative to the manifest root, or
+/// absolute where no relative spelling reaches it: a file in a module whose own
+/// identity is absolute.
 ///
 /// Wrapped to keep cache-key hashing consistent regardless of where the path
 /// was typed (manifest vs. inline) or how the OS separates path components.
@@ -57,21 +61,20 @@ pub fn spec_key(spec: &str) -> &str {
 pub struct InvocationPath(pub String);
 
 impl InvocationPath {
-    /// Normalize a raw manifest / source path: backslashes become forward
-    /// slashes, a `./` prefix and trailing slashes go, and empty segments
-    /// collapse. Only the structural cases that change identity — full NFC
-    /// normalization happens in [`crate::kiln::cache`] at cache-key time.
+    /// Normalize a raw manifest / source path lexically, as [`path::normalize`]
+    /// does, minus its `./` prefix: an absolute root stays. Full NFC
+    /// normalization happens in [`crate::kiln::cache`] at cache-key time. A URL
+    /// is kept as written: its `//` and its trailing `/` are the server's.
     #[must_use]
     pub fn normalize(raw: &str) -> Self {
-        let mut s = raw.replace('\\', "/");
-        if let Some(rest) = s.strip_prefix("./") {
-            s = rest.to_string();
+        if is_remote(raw) {
+            return Self(raw.to_string());
         }
-        while s.ends_with('/') {
-            s.pop();
+        let normalized = path::normalize(raw);
+        match normalized.strip_prefix("./") {
+            Some(rest) => Self(rest.to_string()),
+            None => Self(normalized),
         }
-        let parts: Vec<&str> = s.split('/').filter(|p| !p.is_empty()).collect();
-        Self(parts.join("/"))
     }
 
     #[must_use]
@@ -86,12 +89,14 @@ impl fmt::Display for InvocationPath {
     }
 }
 
-/// One supplementary input of an invocation: its path, and the `type` the use
-/// site gave it, which says how the generator reads it.
+/// One supplementary input of an invocation: its path, the `type` the use
+/// site gave it, which says how the generator reads it, and the `integrity`
+/// pinning a remote one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InvocationInput {
     pub path: InvocationPath,
     pub use_type: Option<String>,
+    pub integrity: Option<Integrity>,
 }
 
 /// Where a generator invocation was declared in the source tree.
@@ -218,8 +223,11 @@ pub struct Invocation {
     pub use_type: Option<String>,
     /// Primary schema file, resolved relative to the declaring `.wado` file
     /// (project-root-relative). Drives input loading, the cache key, and the
-    /// default `output_dir`.
+    /// default `output_dir`. A URL where the primary is remote.
     pub from: InvocationPath,
+    /// The use site's `integrity` beside `generator`: what the part of a remote
+    /// `from` the generator reads hashes to.
+    pub integrity: Option<Integrity>,
     /// Supplementary schema files, resolved relative to the declaring `.wado`
     /// file, preserving declaration order.
     pub inputs: Vec<InvocationInput>,
@@ -265,14 +273,16 @@ impl Invocation {
         self.output_dir = default_output_dir(&self.decl_site().synthetic_id);
     }
 
-    /// Every file the generator reads, primary first, each with its `type`.
-    /// This is the order a probe answers in and the order extents are recorded
-    /// in.
-    pub fn files(&self) -> impl Iterator<Item = (&InvocationPath, Option<&String>)> {
-        std::iter::once((&self.from, self.use_type.as_ref())).chain(
+    /// Every file the generator reads, primary first, each with its `type` and
+    /// pin. This is the order a probe answers in and the order extents are
+    /// recorded in.
+    pub fn files(
+        &self,
+    ) -> impl Iterator<Item = (&InvocationPath, Option<&String>, Option<Integrity>)> {
+        std::iter::once((&self.from, self.use_type.as_ref(), self.integrity)).chain(
             self.inputs
                 .iter()
-                .map(|input| (&input.path, input.use_type.as_ref())),
+                .map(|input| (&input.path, input.use_type.as_ref(), input.integrity)),
         )
     }
 
@@ -295,6 +305,7 @@ impl Invocation {
         &str,
         Option<&str>,
         &str,
+        Option<Integrity>,
         &[InvocationInput],
         &str,
         Vec<u8>,
@@ -304,6 +315,7 @@ impl Invocation {
             &self.invoked_as,
             self.use_type.as_deref(),
             self.from.as_str(),
+            self.integrity,
             self.inputs.as_slice(),
             self.output_dir.as_str(),
             encode_written_options(self.raw_options.as_ref()),
@@ -364,6 +376,24 @@ mod tests {
     }
 
     #[test]
+    fn normalize_keeps_an_absolute_root() {
+        assert_eq!(
+            InvocationPath::normalize("/home/u/pkg/src/generator.wado").as_str(),
+            "/home/u/pkg/src/generator.wado"
+        );
+        assert_eq!(
+            InvocationPath::normalize("C:\\pkg\\g.wado").as_str(),
+            "C:/pkg/g.wado"
+        );
+    }
+
+    #[test]
+    fn normalize_keeps_a_url_as_written() {
+        let url = "https://huggingface.co/o/m/resolve/0123/model.onnx";
+        assert_eq!(InvocationPath::normalize(url).as_str(), url);
+    }
+
+    #[test]
     fn decl_site_display_inline() {
         let site = DeclSite {
             module: "main.wado".to_string(),
@@ -385,6 +415,7 @@ mod tests {
             invoked_as: "ns:x@1.0.0".to_string(),
             use_type: None,
             from: InvocationPath::normalize("s.proto"),
+            integrity: None,
             inputs: vec![],
             output_dir: InvocationPath::normalize("build/kiln/a"),
             options: CanonicalOptions::default(),

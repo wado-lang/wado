@@ -13,7 +13,9 @@ use std::rc::Rc;
 use crate::ast::cm_function_path;
 use crate::builtin_registry::BuiltinRegistry;
 use crate::codegen_flags::CodegenFlags;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
+};
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -202,7 +204,8 @@ pub struct NirPackage {
     pub ambient_stdio: Option<AmbientStdio>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
-    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
+    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
+    /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     /// Consulted by the WIR emitter to select alternative lowerings.
@@ -244,6 +247,17 @@ pub struct NirPackage {
     /// instantiation layer once it has materialised the concrete
     /// trait-method instances.
     pub trait_env: std::sync::Arc<TraitEnv>,
+}
+
+/// A dependency the program's component nests, rather than composition placing
+/// it beside the program.
+pub struct NestedDependency<'a> {
+    pub asset: &'a WasmAsset,
+    /// `(the dependency's export, the program's import of it)` per interface
+    /// the program uses.
+    pub provides: Vec<(&'a str, &'a str)>,
+    /// The interfaces the dependency imports.
+    pub imports: &'a [String],
 }
 
 /// How a function's signature stands against that of its root: the function
@@ -499,6 +513,70 @@ impl NirPackage {
                 "[DCE] the imports grew to reserve {pages} pages past the {fixed} already fixed"
             ),
         }
+    }
+
+    /// The dependencies the program's component nests: those the program calls
+    /// that import an interface a handler of the program answers.
+    pub fn nested_dependencies(&self) -> Vec<NestedDependency<'_>> {
+        let answered = self.component_plan.answered_interfaces();
+        let registry = &self.cm_interface_registry;
+        let used_interfaces: IndexSet<String> = registry
+            .interfaces()
+            .filter(|interface| {
+                interface
+                    .functions
+                    .iter()
+                    .any(|func| self.used_wasi_functions.contains(&func.cm_identifier()))
+            })
+            .map(|interface| interface.path)
+            .collect();
+        self.wasm_assets
+            .values()
+            .filter_map(|asset| {
+                let provides: Vec<(&str, &str)> = asset
+                    .component_interfaces
+                    .iter()
+                    .filter(|exported| used_interfaces.contains(&exported.import))
+                    .map(|exported| (exported.export.as_str(), exported.import.as_str()))
+                    .collect();
+                let imports = registry.host_leaf_imports_for(provides.first()?.1);
+                imports
+                    .iter()
+                    .any(|fq| answered.contains(fq.as_str()))
+                    .then_some(NestedDependency {
+                        asset,
+                        provides,
+                        imports,
+                    })
+            })
+            .collect()
+    }
+
+    /// The program's imports a nested dependency supplies instead.
+    pub fn nested_imports<'a>(nested: &[NestedDependency<'a>]) -> IndexSet<&'a str> {
+        nested
+            .iter()
+            .flat_map(|dependency| dependency.provides.iter().map(|(_, import)| *import))
+            .collect()
+    }
+
+    /// Count every function a nested dependency imports, and no handler of the
+    /// program answers, as one the program uses: the program forwards its own
+    /// import to the dependency, which needs the instance to carry each of them.
+    pub fn use_nested_dependency_imports(&mut self) {
+        let answered = self.component_plan.answered_interfaces();
+        let forwarded: Vec<String> = self
+            .nested_dependencies()
+            .iter()
+            .flat_map(|dependency| &dependency.asset.imported_functions)
+            .filter(|path| {
+                self.cm_interface_registry
+                    .get_function(path)
+                    .is_some_and(|func| !answered.contains(func.interface_path.as_str()))
+            })
+            .cloned()
+            .collect();
+        self.used_wasi_functions.extend(forwarded);
     }
 
     /// The address the allocator's heap starts at, past the pages the embedded
@@ -843,6 +921,52 @@ impl NirPackage {
         self.used_wasi_functions
             .iter()
             .any(|f| f.starts_with(&prefix))
+    }
+
+    /// Whether an import of `func`'s interface declares it: a function the
+    /// program uses and the registry can lower. Declaring a supported but unused
+    /// one would drag in resource types the world never imports.
+    pub fn emits_cm_function(&self, func: &CmFunctionInfo) -> bool {
+        self.cm_interface_registry.is_function_supported(func)
+            && self.used_wasi_functions.contains(&func.cm_identifier())
+    }
+
+    /// The functions the import of the resource-defining `interface` declares,
+    /// in its instance type's order: every constructor and static of its
+    /// resources first, since their signatures spell the types the methods then
+    /// reference, then its own used functions, then its used methods.
+    pub fn resource_defining_functions<'a>(
+        &self,
+        interface: &'a CmInterfaceInfo,
+    ) -> Vec<&'a CmFunctionInfo> {
+        let prefix = interface.path.split('@').next().unwrap_or(&interface.path);
+        let resources: IndexSet<&str> = self
+            .cm_interface_registry
+            .resources_for_interface(prefix)
+            .map(|(wado_name, _)| wado_name)
+            .collect();
+        let of_resource = |func: &CmFunctionInfo| resources.contains(func.interface_name.as_str());
+        let kind = |func: &CmFunctionInfo| {
+            parse_resource_func(&func.wasi_func_name).map(|(kind, ..)| kind)
+        };
+        let is_constructor_or_static = |func: &CmFunctionInfo| {
+            of_resource(func) && matches!(kind(func), Some(ResKind::Constructor | ResKind::Static))
+        };
+        let functions = &interface.functions;
+        let constructors = functions
+            .iter()
+            .filter(|func| is_constructor_or_static(func));
+        let own = functions
+            .iter()
+            .filter(|func| !of_resource(func) && self.emits_cm_function(func));
+        // An unused method would reference a resource type the instance never
+        // emits, such as `RequestOptions`.
+        let methods = functions.iter().filter(|func| {
+            of_resource(func)
+                && matches!(kind(func), Some(ResKind::Method))
+                && self.used_wasi_functions.contains(&func.cm_identifier())
+        });
+        constructors.chain(own).chain(methods).collect()
     }
 }
 

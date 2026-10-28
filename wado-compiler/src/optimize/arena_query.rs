@@ -423,6 +423,11 @@ pub(super) fn expr_mentions_local(body: &Body, id: ExprId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Expr(id), idx)
 }
 
+/// Whether `idx` appears anywhere in the statement subtree at `id`.
+pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
+    node_mentions_local(body, NodeRef::Stmt(id), idx)
+}
+
 /// Every local `op` reads, skeleton or promoted.
 pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
     let mut out = IndexSet::default();

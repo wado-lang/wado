@@ -1,0 +1,19 @@
+// A relative import inside a remote module resolves as a URL reference does,
+// so the empty segment in its base stays: `./util.wado` beside
+// `https://example.com/lib//greet.wado` is `https://example.com/lib//util.wado`.
+
+use { greet } from "https://example.com/lib//greet.wado"
+    with { integrity: "sha256:9ceb5c048c24f2a36440cdcb5c7bcd48e52bd119028e88a0e38b5580b583d9c8" };
+
+test "a relative import keeps the empty segment of its remote base" {
+    assert greet("wado") == "hello, wado!";
+}
+
+__DATA__
+{
+  "test": {},
+  "remote": {
+    "https://example.com/lib//greet.wado": "sub/remote_import_greet.wado",
+    "https://example.com/lib//util.wado": "sub/remote_import_util.wado"
+  }
+}

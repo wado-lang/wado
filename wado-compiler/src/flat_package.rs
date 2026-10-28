@@ -15,7 +15,6 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-#[cfg(debug_assertions)]
 use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
@@ -81,7 +80,8 @@ pub struct FlatPackage {
     pub used_wasi_functions: IndexSet<String>,
     /// When true, strip debug name sections for smaller binary size (-Os)
     pub strip_names: bool,
-    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`.
+    /// The `org.wado-lang.coverage` section payload, under `wado test --coverage`
+    /// or `--pgo`.
     pub coverage_section: Option<Vec<u8>>,
     /// Fine-grained codegen feature flags from the CLI's `-f <flag>` option.
     pub codegen_flags: CodegenFlags,
@@ -113,7 +113,6 @@ pub struct FlatPackage {
 
     /// What `prelower_reach` dropped. Minting a stub for one of these means the
     /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.
-    #[cfg(debug_assertions)]
     pub pruned: IndexSet<FunctionId>,
 }
 

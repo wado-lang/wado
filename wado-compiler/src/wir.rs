@@ -26,28 +26,25 @@ pub enum ImportKind {
     /// `wasi:cli/types` — the shared `error-code` enum instance.
     SharedTypes,
     /// A function-bearing interface whose signatures touch only resources it
-    /// defines itself, if any (cli/stdout, clocks/monotonic-clock, …). Encoded
-    /// inline by codegen's main import loop.
+    /// defines itself, if any (cli/stdout, clocks/monotonic-clock, …).
     FunctionInterface,
     /// A function-bearing interface whose signatures reference resources
     /// *defined by another* interface (e.g. `filesystem/preopens` returning
-    /// `descriptor`). Deferred to the resource-using phase, which imports it
-    /// after the resource-defining interfaces it depends on.
+    /// `descriptor`), imported after the interfaces defining them.
     ResourceUsingInterface,
-    /// A resource-defining interface imported so its resource type is available.
-    ResourceSource,
+    /// An interface imported for its types alone: the resources it defines, its
+    /// own `error-code`, and the value types its entry `provides`. No function.
+    TypeSource,
     /// A getter interface returning `option<resource>` for a resource defined by
     /// another interface (e.g. `wasi:cli/terminal-stdin` → `terminal-input`).
-    /// Emitted by codegen's resource phase (after the resource sources it depends
-    /// on). Membership follows `NirPackage::has_interface` (whether the getter's
-    /// accessor appears in `used_wasi_functions`), the same gate codegen applied
-    /// inline before this became plan-driven.
+    /// Imported after the resource sources it depends on. Membership follows
+    /// `NirPackage::has_interface` (whether the getter's accessor appears in
+    /// `used_wasi_functions`).
     ResourceGetter,
     /// An interface that both defines its own resources and exposes an
     /// `option<resource>` getter method over one of them (e.g. `wasi:http/types`,
     /// whose `Request::get-options` returns `option<request-options>`). The
-    /// combined shape — resources plus a getter — is encoded as one instance by
-    /// codegen's dedicated resource-defining pass.
+    /// combined shape — resources plus a getter — is encoded as one instance.
     ResourceDefiningInterface,
     /// An interface imported from a CM component dependency. Codegen imports it
     /// like a host interface, then composes the dependency in with `wasm-compose`.
@@ -65,6 +62,10 @@ pub enum ImportKind {
 pub struct ImportEntry {
     pub fq: String,
     pub kind: ImportKind,
+    /// The value types this interface declares that another import reaches, by
+    /// Wado name. Its instance exports each, and the component aliases each into
+    /// outer scope for the readers to alias in turn, as a WIT `use` reads.
+    pub provides: IndexSet<String>,
 }
 
 /// A complete Wasm module in WIR form.
@@ -1657,6 +1658,11 @@ pub enum WirInstr {
         value: Box<WirInstr>,
         len: Box<WirInstr>,
     },
+    MemoryCopy {
+        dst: Box<WirInstr>,
+        src: Box<WirInstr>,
+        len: Box<WirInstr>,
+    },
     I32Load {
         offset: u64,
         align: u32,
@@ -2548,9 +2554,14 @@ impl WirInstr {
                 f(addr);
                 f(value);
             }
-            Self::MemoryFill { dst, value, len } => {
+            Self::MemoryFill {
+                dst,
+                value: src,
+                len,
+            }
+            | Self::MemoryCopy { dst, src, len } => {
                 f(dst);
-                f(value);
+                f(src);
                 f(len);
             }
             // Vec<WirInstr> children
@@ -3154,9 +3165,14 @@ impl WirInstr {
                 f(addr);
                 f(value);
             }
-            Self::MemoryFill { dst, value, len } => {
+            Self::MemoryFill {
+                dst,
+                value: src,
+                len,
+            }
+            | Self::MemoryCopy { dst, src, len } => {
                 f(dst);
-                f(value);
+                f(src);
                 f(len);
             }
             // Vec<WirInstr> children

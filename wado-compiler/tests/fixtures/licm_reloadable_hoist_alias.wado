@@ -2,7 +2,7 @@
 // &mut Holder` and `h: &Holder`; `run` passes the *same* object as both (Wado
 // has no borrow checker, so this is legal). The loop reads `h.data[i]` each
 // iteration and, at `i == 0`, calls a `&mut Holder` method that REPLACES `data`
-// with a different-length, different-content list. LICM hoists `h.data` but
+// with a different-content list. LICM hoists `h.data` but
 // must reload it after the clobber, so the aliased replacement is observed:
 // the result must match the unoptimized (O0) run — `1 9 9`, never `1 2 3`.
 use { println, Stdout } from "core:cli";
@@ -44,5 +44,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "1 9 9 \n",
-    "wir_expect:O2": ["n = h.used;", "$licm_repr_{} = h.repr;", "array_get_value<i32>($licm_repr_{}, i)"]
+    "wir_expect:O2": ["n = local.tee $load_{}(h.data).used;", "$load_{} = h.data;", "array_get_value<i32>($load_{}.repr, i)"]
 }

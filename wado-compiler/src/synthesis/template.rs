@@ -12,10 +12,10 @@ use std::sync::Arc;
 
 use crate::compiler_item::{CompilerItem, FormatterField};
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::SolverBridge;
 use crate::elaborator::trait_env::{
-    BlanketBound, BlanketImpl, BlanketParamSource, ImplReceiver, TraitEnv,
+    BlanketBound, BlanketImpl, BlanketParamSource, BlanketReceiver, ImplReceiver, TraitEnv,
 };
+use crate::elaborator::{InstanceBody, InstanceImpl, InstanceOrder, SolverBridge};
 use crate::format_spec::{Align, FormatKind, TemplateFormatSpec};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -443,12 +443,8 @@ fn peel_transparent_newtype(
     if !matches!(tt.get(type_id), ResolvedType::Newtype { .. }) {
         return type_id;
     }
-    let owner = tt.newtype_link_owning(type_id, |tid| {
-        ctx.trait_env
-            .trait_def_of_fq(trait_name)
-            .is_some_and(|trait_| written_impl_reaches(ctx.trait_env, trait_, tid, &tt))
-    });
-    owner.unwrap_or_else(|| tt.reflect_structure_head(type_id))
+    written_newtype_link(ctx.trait_env, trait_name, type_id, &tt)
+        .unwrap_or_else(|| tt.reflect_structure_head(type_id))
 }
 
 /// Unified format trait dispatch: emit the `value.fmt(&mut f)` call,
@@ -657,56 +653,63 @@ pub(crate) fn answering_link(
     tt: &TypeTable,
 ) -> Option<(TypeId, TemplateId)> {
     let trait_ = trait_name.called_decl();
-    let key = tt.impl_receiver_key(receiver);
-    let solver = trait_env.solver();
-    // Two blocks on one target are told apart by their bounds, as the call
-    // site told them apart.
-    if let Some(template) = trait_env.answering_template(
-        &key,
-        Some(trait_),
-        trait_name.args(),
-        method,
-        solver.blocks_applying_at(tt, receiver),
-    ) {
-        return Some((receiver, template));
-    }
-    if let Some(paired) = eq_from_written_cmp(trait_env, solver, trait_, receiver, tt) {
-        return Some((receiver, paired.template()));
-    }
-    let resolved = tt.get(receiver);
-    let blanket = match resolved {
-        ResolvedType::Ref(_) | ResolvedType::MutRef(_) => trait_env.universal_ref_blanket(
-            trait_,
-            RefKind::from_resolved(resolved).expect("ref classify"),
-            trait_name.args(),
+    match instance_order(trait_env, trait_name, receiver, tt)? {
+        InstanceOrder::One(chosen) => Some((
+            chain_link(receiver, chosen.depth, tt),
+            instance_template(trait_env, chosen.body, trait_, method)?,
+        )),
+        InstanceOrder::Nothing => None,
+        InstanceOrder::Tied(blocks) => unreachable!(
+            "the elaborator accepted `{}: {trait_name}`, which {blocks:?} tie on",
+            tt.fq_type_name(receiver)
         ),
-        // A newtype inherits its base's answer before any blanket but one
-        // keyed on its own reflected shape (WEP 2026-09-01).
-        ResolvedType::Newtype { .. } => trait_env.value_blanket_for_receiver(
-            trait_,
-            type_module_hint_tt(receiver, tt).as_ref(),
-            &|bounds| {
-                blanket_is_reflect_keyed(bounds, tt)
-                    && receiver_satisfies_blanket_bounds(receiver, bounds, tt)
-            },
-        ),
-        _ => trait_env.value_blanket_for_receiver(
-            trait_,
-            type_module_hint_tt(receiver, tt).as_ref(),
-            &|bounds| receiver_satisfies_blanket_bounds(receiver, bounds, tt),
-        ),
-    };
-    if let Some(blanket) = blanket {
-        return trait_env
-            .method_template(blanket.def, method)
-            .map(|template| (receiver, template));
     }
-    match tt.get(receiver) {
-        ResolvedType::Newtype { base_type, .. } => {
-            answering_link(trait_env, trait_name, method, *base_type, tt)
+}
+
+/// The template `method` of `trait_` instantiates from `body`; `None` where
+/// the compiler supplies it.
+fn instance_template(
+    trait_env: &TraitEnv,
+    body: InstanceBody,
+    trait_: DefId,
+    method: &str,
+) -> Option<TemplateId> {
+    match body {
+        InstanceBody::Block(block) => trait_env.method_template(block, method),
+        InstanceBody::Supplied => None,
+        InstanceBody::EqFromCmp(block) => Some(
+            PairedEq {
+                eq: trait_env
+                    .trait_method_decl(trait_, "eq")
+                    .expect("`Eq` declares `eq`"),
+                block,
+            }
+            .template(),
+        ),
+    }
+}
+
+/// The type a call answered at `depth` along the chain the solver walks from
+/// `receiver` is named by. A call through a reference is named by the
+/// reference, whichever level of its pointee's chain answers.
+fn chain_link(receiver: TypeId, depth: u32, tt: &TypeTable) -> TypeId {
+    let (steps, mut level) = match tt.get_unerased(receiver) {
+        ResolvedType::Ref(_) | ResolvedType::MutRef(_) if depth.is_multiple_of(2) => {
+            return receiver;
         }
-        _ => None,
+        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (depth / 2, *inner),
+        _ => (depth, receiver),
+    };
+    for _ in 0..steps {
+        level = match tt.get_unerased(level) {
+            ResolvedType::Newtype { base_type, .. } => *base_type,
+            ResolvedType::Flags { .. } => TypeTable::U32,
+            // Only a newtype over a reference goes on through one.
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
+            _ => unreachable!("the solver's chain from `{receiver:?}` has no level {depth}"),
+        };
     }
+    level
 }
 
 /// The template a call of `info` on `receiver` instantiates, else the derived
@@ -797,7 +800,9 @@ pub(crate) fn written_impl_reaches(
 }
 
 /// Whether an impl written for this reference's own referent (`&R`) reaches
-/// `receiver`, which the universal `&T` blanket does not count as.
+/// `receiver`, which the universal `&T` blanket does not count as. Format
+/// desugaring asks it during elaboration, before the solver joins the
+/// environment, so it cannot ask the order.
 fn ref_impl_written(trait_env: &TraitEnv, trait_: DefId, receiver: TypeId, tt: &TypeTable) -> bool {
     written_impl_reaches_where(trait_env, trait_, receiver, tt, |block| {
         trait_env.blanket_of_block(block).is_none()
@@ -857,28 +862,117 @@ pub(crate) fn has_reflect_kind(type_id: TypeId, tt: &TypeTable) -> bool {
     tt.reflect_kind(type_id).is_some()
 }
 
-/// The value blanket serving `receiver`, else one down its newtype chain until
-/// a link with its own impl, which outranks any blanket (WEP 2026-09-01).
+/// The value blanket the order selects for `receiver`, at whichever level of
+/// its newtype chain answers (WEP 2026-09-01).
 pub(crate) fn ranked_value_blanket<'a>(
     trait_env: &'a TraitEnv,
-    trait_: DefId,
-    type_module: Option<&ModuleSource>,
+    trait_name: &FqTraitName,
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<&'a BlanketImpl> {
-    if let Some(blanket) = trait_env.value_blanket_for_receiver(trait_, type_module, &|bounds| {
-        receiver_satisfies_blanket_bounds(receiver, bounds, tt)
-    }) {
-        return Some(blanket);
-    }
-    let ResolvedType::Newtype { base_type, .. } = tt.get(tt.peel_refs(receiver)) else {
+    value_blanket_link(trait_env, trait_name, receiver, tt).map(|(blanket, _)| blanket)
+}
+
+/// [`ranked_value_blanket`] with the link of `receiver`'s chain it answers.
+fn value_blanket_link<'a>(
+    trait_env: &'a TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(&'a BlanketImpl, TypeId)> {
+    ranked_blanket(trait_env, trait_name, receiver, tt)
+        .filter(|(blanket, _)| blanket.receiver == BlanketReceiver::Value)
+}
+
+/// The `&T` blanket the order selects for the reference `receiver` itself.
+pub(crate) fn ranked_ref_blanket<'a>(
+    trait_env: &'a TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<&'a BlanketImpl> {
+    ranked_blanket(trait_env, trait_name, receiver, tt)
+        .filter(|(blanket, link)| {
+            matches!(blanket.receiver, BlanketReceiver::Ref { .. }) && *link == receiver
+        })
+        .map(|(blanket, _)| blanket)
+}
+
+/// The blanket the order selects for `receiver`, with the link of its chain
+/// the blanket answers.
+fn ranked_blanket<'a>(
+    trait_env: &'a TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(&'a BlanketImpl, TypeId)> {
+    let InstanceOrder::One(InstanceImpl {
+        body: InstanceBody::Block(block),
+        depth,
+    }) = instance_order(trait_env, trait_name, receiver, tt)?
+    else {
         return None;
     };
-    let base = *base_type;
-    if written_impl_reaches(trait_env, trait_, base, tt) {
+    let blanket = trait_env.blanket_of_block(block)?;
+    Some((blanket, chain_link(receiver, depth, tt)))
+}
+
+/// What the order selects for `trait_name`, its arguments included, on
+/// `receiver`.
+fn instance_order(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<InstanceOrder> {
+    trait_env
+        .solver()
+        .instance_order(tt, receiver, trait_name.canonical()?, trait_name.args())
+}
+
+/// The link of `receiver`'s chain whose written impl of `trait_name` the order
+/// selects, with its depth: the receiver itself at depth 0.
+fn written_impl_link(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<(TypeId, u32)> {
+    let InstanceOrder::One(InstanceImpl { body, depth }) =
+        instance_order(trait_env, trait_name, receiver, tt)?
+    else {
         return None;
-    }
-    ranked_value_blanket(trait_env, trait_, type_module, base, tt)
+    };
+    let written = match body {
+        InstanceBody::Block(block) => trait_env.blanket_of_block(block).is_none(),
+        InstanceBody::EqFromCmp(_) => true,
+        InstanceBody::Supplied => false,
+    };
+    written.then(|| (chain_link(receiver, depth, tt), depth))
+}
+
+/// Whether the order answers `receiver: trait_name` with an impl written for
+/// `receiver` itself, or the `Eq` a `cmp` it writes alone gives it.
+pub(crate) fn written_impl_at(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> bool {
+    written_impl_link(trait_env, trait_name, receiver, tt).is_some_and(|(_, depth)| depth == 0)
+}
+
+/// The newtype link at or below `receiver` whose written impl of `trait_name`
+/// the order selects.
+pub(crate) fn written_newtype_link(
+    trait_env: &TraitEnv,
+    trait_name: &FqTraitName,
+    receiver: TypeId,
+    tt: &TypeTable,
+) -> Option<TypeId> {
+    written_impl_link(trait_env, trait_name, tt.peel_refs(receiver), tt)
+        .map(|(link, _)| link)
+        .filter(|&link| matches!(tt.get_unerased(link), ResolvedType::Newtype { .. }))
 }
 
 /// The reflection trait `bound` names, or `None` for any other bound.
@@ -895,39 +989,10 @@ pub(crate) fn blanket_is_reflect_keyed(bounds: &[BlanketBound], tt: &TypeTable) 
         .any(|bound| reflect_bound_item(bound, tt).is_some())
 }
 
-/// Whether `type_id` itself is the reflection kind a blanket's `bounds` ask for.
-/// Any other bound reads as held: only the elaborator's trait query decides one.
-pub(crate) fn receiver_satisfies_blanket_bounds(
-    type_id: TypeId,
-    bounds: &[BlanketBound],
-    tt: &TypeTable,
-) -> bool {
-    if bounds.is_empty() {
-        return true;
-    }
-    // A value blanket's parameter is the value type, while the receiver of a
-    // `&self` method — every `Serialize::serialize` call — arrives as a
-    // reference. Asking the reference for its reflection kind answers `None`
-    // and rejects the blanket that should have served the call.
-    let kind = tt.reflect_kind(tt.peel_refs(type_id));
-    bounds
-        .iter()
-        .all(|bound| match reflect_bound_item(bound, tt) {
-            // The root asks for a name, not for a shape: any reflected kind.
-            Some(CompilerItem::Reflect) => kind.is_some(),
-            Some(required) => kind == Some(required),
-            None => true,
-        })
-}
-
-/// The module of a struct-like `type_id`, used as the disambiguation hint for
-/// trait-impl lookups.
-fn type_module_hint_tt(type_id: TypeId, tt: &TypeTable) -> Option<ModuleSource> {
-    tt.nominal_head(type_id).map(|(_, m)| m)
-}
-
-/// The blanket a `type_id.trait::method()` call dispatches to where no written
-/// impl reaches the receiver, with the blanket's module and method template.
+/// The blanket a `type_id.trait::method()` call dispatches to where the order
+/// selects one at the receiver itself, with the blanket's module and method
+/// template. One a newtype inherits from its base is called by the base's name,
+/// which [`answering_link`] names.
 pub(crate) fn blanket_dispatch_for(
     trait_env: &TraitEnv,
     type_id: TypeId,
@@ -935,20 +1000,10 @@ pub(crate) fn blanket_dispatch_for(
     method_name: &str,
     tt: &mut TypeTable,
 ) -> Option<(MonomorphInfo, ModuleSource, TemplateId)> {
-    if trait_env
-        .trait_def_of_fq(trait_name)
-        .is_some_and(|trait_| written_impl_reaches(trait_env, trait_, type_id, tt))
-    {
+    let (blanket, link) = value_blanket_link(trait_env, trait_name, type_id, tt)?;
+    if link != type_id {
         return None;
     }
-    let type_module = type_module_hint_tt(type_id, tt);
-    // The receiver unpeeled: a newtype's own `ReflectNewtype` derive owns its
-    // method, not the base's `ReflectStruct` one, which drops its ` as Name`.
-    let blanket = trait_env.value_blanket_for_receiver(
-        trait_name.canonical()?,
-        type_module.as_ref(),
-        &|bounds| receiver_satisfies_blanket_bounds(type_id, bounds, tt),
-    )?;
     let blanket_module = blanket.module.clone();
     let generic_name = LocalMethodName::new(
         blanket.receiver_binder(tt.defs()),

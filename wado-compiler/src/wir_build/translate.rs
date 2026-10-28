@@ -7,7 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
+use crate::nir::{CallParamSource, FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::primitive::PrimitiveType;
 use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::TypeTable;
@@ -284,61 +284,21 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         };
         let functor_struct_type_id = functor_struct_type_id.clone();
 
-        // Map each surviving `call_method.params` entry to its source slot
-        // in the wrapper. Position 0 is always self (env, refcast); the
-        // other positions match canonical_user_params by name. The mapping
-        // tells `register_call_wrapper` exactly which wrapper-local to
-        // forward into the inner `$call` per surviving param, so DAE can
-        // freely shrink `$call.params` without breaking the wrapper.
-        let call_func = functor.call_method.borrow();
-        // Map each surviving `call_method.params` entry back to its source.
-        // The synthesised env self always lives at position 0 with name
-        // "self" AND the functor's ref type; that combination is the env
-        // discriminator (a user-declared `self` parameter — common in
-        // trait-method dispatch closures synthesised by `effect_dispatch`
-        // — has the user's resource ref type, not the functor's struct
-        // ref). Every other surviving param matches a `canonical_user_params`
-        // entry by name, which the closure planner keeps distinct.
-        let distinct_names: IndexSet<&String> = functor
-            .canonical_user_params
-            .iter()
-            .map(|(name, _)| name)
-            .collect();
-        assert_eq!(
-            distinct_names.len(),
-            functor.canonical_user_params.len(),
-            "closure {functor_name}::$call repeats a param name",
-        );
-        let live_param_sources: Vec<CallWrapperArg> = call_func
-            .params
-            .iter()
-            .enumerate()
-            .filter_map(|(i, p)| {
-                if i == 0 && p.name == "self" && p.type_id == functor.ref_type_id {
-                    return Some(CallWrapperArg::TypedEnv);
-                }
-                let idx = functor
-                    .canonical_user_params
-                    .iter()
-                    .position(|(name, _)| name == &p.name)
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "closure {functor_name}::$call param `{}` has no matching \
-                             canonical user param (canonical: {:?})",
-                            p.name,
-                            functor
-                                .canonical_user_params
-                                .iter()
-                                .map(|(n, _)| n)
-                                .collect::<Vec<_>>(),
-                        )
-                    });
+        // Which wrapper local to forward into the inner `$call` per surviving
+        // param, so DAE can freely shrink `$call.params` without breaking the
+        // wrapper.
+        let live_param_sources: Vec<CallWrapperArg> = functor
+            .call_param_sources()
+            .into_iter()
+            .filter_map(|source| match source {
+                CallParamSource::Env => Some(CallWrapperArg::TypedEnv),
                 // A unit-typed param is erased from both the wrapper and
                 // `$call`'s own WIR signature, so nothing is forwarded.
-                canonical_to_wrapper[idx].map(CallWrapperArg::UserParam)
+                CallParamSource::User(idx) => {
+                    canonical_to_wrapper[idx].map(CallWrapperArg::UserParam)
+                }
             })
             .collect();
-        drop(call_func);
 
         // Register the call wrapper.
         let global_id = ctx.closure_wrapper_funcs.len();
@@ -2905,13 +2865,23 @@ impl FunctionTranslator<'_, '_> {
                 }
             },
 
-            ExprKind::Call { func_id, args, .. } => {
+            ExprKind::Call {
+                func_id,
+                args,
+                type_args,
+            } => {
                 // The callee descriptor comes from the function record by
                 // `func_id` (Phase 5); the call node carries no `FunctionRef`.
                 let func = &self.callee_descriptor(*func_id);
+                // Monomorphization moves a generic builtin's type arguments
+                // off a call it instantiates and onto the instance.
+                let type_args = match &func.monomorph_info {
+                    Some(mi) if type_args.is_empty() => &mi.method_type_args,
+                    _ => type_args,
+                };
                 if let Some(builtin_name) = func.intrinsic()
                     && let Some(instr) =
-                        self.translate_builtin_call(builtin_name, args, expr.type_id)
+                        self.translate_builtin_call(builtin_name, args, type_args, expr.type_id)
                 {
                     return instr;
                 }

@@ -166,7 +166,7 @@ fn read_constant_data(
     let Some(element) = element_of(dtype) else {
         return Result::Ok(null);
     };
-    let Some(tokens) = inline_tokens(s, toks, vi, name, rank)? else {
+    let Some(tokens) = inline_tokens(s, vi, name, rank)? else {
         return Result::Ok(null);
     };
     let width = element.width;
@@ -180,13 +180,7 @@ fn read_constant_data(
 
 /// A value's inline elements as their literal tokens, or `None` where the value
 /// is written without any.
-fn inline_tokens(
-    s: &onnx::CstStore,
-    toks: &onnx::TokenStream,
-    vi: i32,
-    name: &String,
-    rank: &Rank,
-) -> Result<Option<List<i32>>, String> {
+fn inline_tokens(s: &onnx::CstStore, vi: i32, name: &String, rank: &Rank) -> Result<Option<List<i32>>, String> {
     let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
         return Result::Ok(null);
     };
@@ -195,17 +189,11 @@ fn inline_tokens(
     let Some(values) = first_child_of_kind(s, data, onnx::RK_TENSOR_VALUES) else {
         return Result::Err(`${name}: an initializer whose data lives in another file is not read`);
     };
-    return Result::Ok(Option::Some(element_tokens(s, toks, values, name, rank)?));
+    return Result::Ok(Option::Some(element_tokens(s, values, name, rank)?));
 }
 
 /// A `tensorValues`'s elements as their literal tokens, as many as `rank` says.
-fn element_tokens(
-    s: &onnx::CstStore,
-    toks: &onnx::TokenStream,
-    values: i32,
-    name: &String,
-    rank: &Rank,
-) -> Result<List<i32>, String> {
+fn element_tokens(s: &onnx::CstStore, values: i32, name: &String, rank: &Rank) -> Result<List<i32>, String> {
     let Some(extents) = static_extents(rank) else {
         return Result::Err(`${name}: inline values need every extent stated`);
     };
@@ -225,7 +213,7 @@ fn element_text(toks: &onnx::TokenStream, token: i32, name: &String) -> Result<S
 
 /// An initializer the build reads, as its inline values spell it.
 fn read_known(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32, info: &ValueInfo) -> Result<Known, String> {
-    let Some(tokens) = inline_tokens(s, toks, vi, &info.name, &info.rank)? else {
+    let Some(tokens) = inline_tokens(s, vi, &info.name, &info.rank)? else {
         return Result::Err(constant_without_values(&info.name));
     };
     return Result::Ok(known_of(toks, &info.name, &info.dtype, static_extents(&info.rank).unwrap(), &tokens)?.unwrap());
@@ -292,7 +280,7 @@ fn read_tensor_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32, n
     };
     let [dtype, rank] = read_tensor_type(s, toks, tensor_type, &name)?;
     let values = first_child_of_kind(s, tensor, onnx::RK_TENSOR_VALUES).unwrap();
-    let tokens = element_tokens(s, toks, values, &name, &rank)?;
+    let tokens = element_tokens(s, values, &name, &rank)?;
     let known = known_of(toks, &name, &dtype, static_extents(&rank).unwrap(), &tokens)?;
     return Result::Ok(Attr {
         name,

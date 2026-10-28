@@ -2,6 +2,7 @@
 //! disagree with the graph a module was compiled for.
 
 use { HashMap } from "core:collections";
+use { LinearArray } from "core:linear";
 use { push_element } from "./graph.wado";
 use {
     Expected,
@@ -78,35 +79,45 @@ fn b() -> Expected {
 test "a payload comes back as the elements written under its name" {
     let bytes = two_tensors();
     let checkpoint = read_checkpoint(&bytes).unwrap();
-    let weight = checkpoint.payload(&bytes, &w()).unwrap();
-    assert List::<f32>::from_le_bytes(weight) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
-    let bias = checkpoint.payload(&bytes, &b()).unwrap();
-    assert List::<f32>::from_le_bytes(bias) == [-1.0, 0.5, 0.25] as List<f32>;
+    assert checkpoint.payload::<f32, ByteList>(&bytes, &w()).unwrap() == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    assert checkpoint.payload::<f32, ByteList>(&bytes, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
+}
+
+test "a checkpoint in linear memory reads as one in the GC heap" {
+    let bytes = LinearArray::from_slice(&two_tensors());
+    let checkpoint = read_checkpoint(&bytes).unwrap();
+    let weight = checkpoint.payload::<f32, LinearArray<u8>>(&bytes, &w()).unwrap();
+    assert weight == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as List<f32>;
+    assert checkpoint.payload::<f32, LinearArray<u8>>(&bytes, &b()).unwrap() == [-1.0, 0.5, 0.25] as List<f32>;
 }
 
 test "the header is read from its prefix alone" {
     let bytes = two_tensors();
     let prefix = bytes.as_byte_slice().slice(0, header_end(&bytes).unwrap());
-    let checkpoint = read_checkpoint(prefix).unwrap();
+    let checkpoint = read_checkpoint(&prefix).unwrap();
     let [start, end] = checkpoint.range(&w()).unwrap();
     assert end - start == 24;
 }
 
 test "a tensor the checkpoint lacks names itself" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "missing" }).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected { ..b(), tensor: "missing" }).unwrap_err();
     assert `${e}` == "missing: the checkpoint has no such tensor";
 }
 
 test "an element type that disagrees names both" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), dtype: "F16", width: 2 }).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f16, ByteList>(&bytes, &Expected {
+        ..b(),
+        dtype: "F16",
+        width: 2,
+    }).unwrap_err();
     assert `${e}` == "b: the checkpoint holds F32, and the graph F16";
 }
 
 test "a rank that disagrees names the graph's axes" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected {
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
         ..w(),
         axes: ["Out", "In", "Extra"],
         extents: [2, 3, 1],
@@ -117,7 +128,7 @@ test "a rank that disagrees names the graph's axes" {
 
 test "an extent that disagrees names the axis" {
     let bytes = two_tensors();
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected {
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
         ..w(),
         extents: [2, 4],
         elements: 8,
@@ -134,20 +145,20 @@ test "offsets that disagree with the shape name the tensor" {
             data: floats([1.0, 2.0]),
         },
     ]);
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &b()).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &b()).unwrap_err();
     assert `${e}` == "b: the checkpoint's offsets hold 8 bytes, and 3 F32 elements need 12";
 }
 
 test "a payload past the end of the bytes given names the tensor" {
     let bytes = two_tensors();
     let cut = bytes.as_byte_slice().slice(0, bytes.len() - 1);
-    let e = read_checkpoint(cut).unwrap().payload(cut, &b()).unwrap_err();
+    let e = read_checkpoint(&cut).unwrap().payload::<f32, ByteSlice>(&cut, &b()).unwrap_err();
     assert `${e}` == `b: the payload ends at byte ${bytes.len()}, past the ${cut.len()} given`;
 }
 
 test "a header longer than the bytes given is refused" {
     let bytes = two_tensors();
-    let e = read_checkpoint(bytes.as_byte_slice().slice(0, 12)).unwrap_err();
+    let e = read_checkpoint(&bytes.as_byte_slice().slice(0, 12)).unwrap_err();
     assert `${e}`.starts_with("the header is ");
 }
 
@@ -176,7 +187,10 @@ test "a tensor named twice in the header is refused" {
 
 test "the header's metadata is not a tensor" {
     let bytes = with_header("{\"__metadata__\":{\"format\":\"pt\"}}");
-    let e = read_checkpoint(&bytes).unwrap().payload(&bytes, &Expected { ..b(), tensor: "__metadata__" }).unwrap_err();
+    let e = read_checkpoint(&bytes).unwrap().payload::<f32, ByteList>(&bytes, &Expected {
+        ..b(),
+        tensor: "__metadata__",
+    }).unwrap_err();
     assert `${e}` == "__metadata__: the checkpoint has no such tensor";
 }
 
@@ -205,20 +219,20 @@ fn two_shards() -> HashMap<String, ByteList> {
 test "a shard's payload comes back from the shard the index places it in" {
     let given = two_shards();
     let shards = read_shards(&given).unwrap();
-    let bias = shards.payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap();
-    assert List::<f32>::from_le_bytes(bias) == [-1.0, 0.5, 0.25] as List<f32>;
+    let bias = shards.payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap();
+    assert bias == [-1.0, 0.5, 0.25] as List<f32>;
 }
 
 test "a tensor whose shard is not given names the shard" {
     let mut given = two_shards();
     given.remove("m-00002-of-00002.safetensors");
-    let e = read_shards(&given).unwrap().payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
+    let e = read_shards(&given).unwrap().payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
     assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
 }
 
 test "a tensor its shard lacks names itself and the shard" {
     let given = two_shards();
-    let e = read_shards(&given).unwrap().payload(&given, "m-00001-of-00002.safetensors", &b()).unwrap_err();
+    let e = read_shards(&given).unwrap().payload::<f32>(&given, "m-00001-of-00002.safetensors", &b()).unwrap_err();
     assert `${e}` == "m-00001-of-00002.safetensors: b: the checkpoint has no such tensor";
 }
 
@@ -226,7 +240,7 @@ test "a shard read but then left out of the payloads names the shard" {
     let mut given = two_shards();
     let shards = read_shards(&given).unwrap();
     given.remove("m-00002-of-00002.safetensors");
-    let e = shards.payload(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
+    let e = shards.payload::<f32>(&given, "m-00002-of-00002.safetensors", &b()).unwrap_err();
     assert `${e}` == "b: the index places it in m-00002-of-00002.safetensors, which is not given";
 }
 

@@ -12,6 +12,7 @@ use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::nir_package::{FieldForm, ReturnShape};
 use crate::path::{is_cwd_relative, normalize, relative_path};
 use crate::primitive::PrimitiveType;
+use crate::remote::{is_remote, resolve_url};
 use crate::syntax::{CONTEXTUAL_KEYWORDS, KEYWORDS, NAME_KEYWORDS};
 use crate::tir::ResolvedType;
 use crate::{ast, tir};
@@ -384,12 +385,18 @@ pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
 /// `builtin::variant_case_extract::<V, P>` calls to it (WEP 2026-06-13 §3e).
 pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_extract${mangled_variant}${mangled_payload}")
+    MarkerBridge::CaseExtract.pair_name(mangled_variant, mangled_payload)
+}
+
+/// [`case_extract_helper_name`]'s twin answering a reference to the payload,
+/// which lowering rewrites `builtin::variant_case_ref::<V, P>` calls to.
+pub fn case_ref_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
+    MarkerBridge::CaseRef.pair_name(mangled_variant, mangled_payload)
 }
 
 /// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
 pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_construct${mangled_variant}${mangled_payload}")
+    MarkerBridge::CaseConstruct.pair_name(mangled_variant, mangled_payload)
 }
 
 /// The `discriminant` of one instantiated generic variant, identified by the
@@ -404,38 +411,119 @@ pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
 /// `builtin::struct_field_get::<S, F>` calls to it (WEP 2026-06-13 §2).
 pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    format!("$field_get${mangled_struct}${mangled_field}")
+    MarkerBridge::FieldGet.pair_name(mangled_struct, mangled_field)
 }
 
 /// [`field_get_helper_name`]'s twin answering a reference to the field, which
 /// lowering rewrites `builtin::struct_field_ref::<S, F>` calls to.
 pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    format!("$field_ref${mangled_struct}${mangled_field}")
+    MarkerBridge::FieldRef.pair_name(mangled_struct, mangled_field)
 }
 
 /// Name of the synthesized hole-read helper for a template shape and one of
 /// its hole types, both by structural mangle. Lowering rewrites
 /// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
 pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    format!("$hole_get${mangled_shape}${mangled_hole}")
+    MarkerBridge::HoleGet.pair_name(mangled_shape, mangled_hole)
 }
 
 /// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
 /// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
 pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    format!("$hole_ref${mangled_shape}${mangled_hole}")
+    MarkerBridge::HoleRef.pair_name(mangled_shape, mangled_hole)
 }
 
 /// Name of the synthesized segment-read helper for a template shape. Lowering
 /// rewrites `builtin::template_segment::<T>` calls to it (WEP 2026-01-10).
 pub fn template_segment_helper_name(mangled_shape: &str) -> String {
-    format!("$template_segment${mangled_shape}")
+    MarkerBridge::TemplateSegment.shape_name(mangled_shape)
 }
 
 /// Name of the synthesized hole-render helper for a template shape. Lowering
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
-    format!("$hole_fmt${mangled_shape}")
+    MarkerBridge::HoleFmt.shape_name(mangled_shape)
+}
+
+/// The kinds of bridge a reflection marker calls ([`case_extract_helper_name`]
+/// and its siblings; [`variant_tag_helper_name`] is not one).
+#[derive(Clone, Copy)]
+pub enum MarkerBridge {
+    CaseExtract,
+    CaseRef,
+    CaseConstruct,
+    FieldGet,
+    FieldRef,
+    HoleGet,
+    HoleRef,
+    TemplateSegment,
+    HoleFmt,
+}
+
+impl MarkerBridge {
+    pub const ALL: [Self; 9] = [
+        Self::CaseExtract,
+        Self::CaseRef,
+        Self::CaseConstruct,
+        Self::FieldGet,
+        Self::FieldRef,
+        Self::HoleGet,
+        Self::HoleRef,
+        Self::TemplateSegment,
+        Self::HoleFmt,
+    ];
+
+    /// The `builtin::` marker that `lower` rewrites into a call of this bridge.
+    #[must_use]
+    pub const fn marker(self) -> &'static str {
+        match self {
+            Self::CaseExtract => "variant_case_extract",
+            Self::CaseRef => "variant_case_ref",
+            Self::CaseConstruct => "variant_case_construct",
+            Self::FieldGet => "struct_field_get",
+            Self::FieldRef => "struct_field_ref",
+            Self::HoleGet => "hole_get",
+            Self::HoleRef => "hole_ref",
+            Self::TemplateSegment => "template_segment",
+            Self::HoleFmt => "hole_fmt",
+        }
+    }
+
+    /// Whether the bridge names a member type besides its head, by
+    /// [`Self::pair_name`], rather than the template shape alone, by
+    /// [`Self::shape_name`].
+    #[must_use]
+    pub const fn names_member(self) -> bool {
+        !matches!(self, Self::TemplateSegment | Self::HoleFmt)
+    }
+
+    /// What every bridge of this kind starts with.
+    #[must_use]
+    pub const fn prefix(self) -> &'static str {
+        match self {
+            Self::CaseExtract => "$case_extract$",
+            Self::CaseRef => "$case_ref$",
+            Self::CaseConstruct => "$case_construct$",
+            Self::FieldGet => "$field_get$",
+            Self::FieldRef => "$field_ref$",
+            Self::HoleGet => "$hole_get$",
+            Self::HoleRef => "$hole_ref$",
+            Self::TemplateSegment => "$template_segment$",
+            Self::HoleFmt => "$hole_fmt$",
+        }
+    }
+
+    /// The bridge for a head type and one member type, by structural mangle.
+    #[must_use]
+    pub fn pair_name(self, mangled_head: &str, mangled_member: &str) -> String {
+        format!("{}{mangled_head}${mangled_member}", self.prefix())
+    }
+
+    /// The bridge for a template shape alone, by structural mangle.
+    #[must_use]
+    pub fn shape_name(self, mangled_shape: &str) -> String {
+        format!("{}{mangled_shape}", self.prefix())
+    }
 }
 
 /// Name of the synthesized function that drops the resources a value of a
@@ -585,6 +673,12 @@ pub fn cm_lift_func_name(cm_identifier: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_lift__{cm_identifier}")
 }
 
+/// The function freeing what an async CM import's arguments were lowered into,
+/// which `ArgBuffer` points to.
+pub fn cm_release_args_func_name(cm_identifier: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_release_args__{cm_identifier}")
+}
+
 /// The function packaging a handler's result of an async CM import as the
 /// `AsyncCall<T>` its call site reads.
 pub fn cm_wrap_async_func_name(cm_identifier: &str) -> String {
@@ -599,6 +693,18 @@ pub fn cm_future_write_func_name(payload: &str) -> String {
 /// The helper reading a future of the payload type mangled as `payload`.
 pub fn cm_future_read_func_name(payload: &str) -> String {
     format!("{INTERNAL_PREFIX}cm_future_read_{payload}")
+}
+
+/// The helper starting a read of a future of the payload type mangled as
+/// `payload`.
+pub fn cm_future_begin_read_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_begin_read_{payload}")
+}
+
+/// The function lifting what a read copied from a future of the payload type
+/// mangled as `payload`.
+pub fn cm_future_lift_func_name(payload: &str) -> String {
+    format!("{INTERNAL_PREFIX}cm_future_lift_{payload}")
 }
 
 /// The helper writing a stream of the element type mangled as `element`.
@@ -1919,10 +2025,7 @@ pub fn wado_identifier(idl_name: &str) -> String {
 /// must never be normalized: a reserved namespace (`core:`, `wasi:`) or
 /// a remote URI (`http://` / `https://`).
 fn has_special_prefix(path: &str) -> bool {
-    path.starts_with("core:")
-        || CmNamespace::split_specifier(path).is_some()
-        || path.starts_with("https://")
-        || path.starts_with("http://")
+    path.starts_with("core:") || CmNamespace::split_specifier(path).is_some() || is_remote(path)
 }
 
 /// Normalize a module path lexically via [`crate::path::normalize`] — resolve
@@ -1947,10 +2050,14 @@ pub fn try_normalize_module_path(path: &str) -> Result<String, String> {
 }
 
 /// Resolve an import against the importing module's path: base `./sub/main.wado`
-/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and authority.
+/// with `../lib.wado` gives `./lib.wado`. A URI base keeps its scheme and
+/// authority, and a remote one resolves as a URL reference does.
 pub fn resolve_module_path(base: &str, relative: &str) -> String {
     if has_special_prefix(relative) {
         return relative.to_string();
+    }
+    if is_remote(base) {
+        return resolve_url(base, relative);
     }
     let (origin, base_path) = split_uri_origin(base);
     let joined = match base_path.rfind('/') {
@@ -2060,6 +2167,7 @@ pub fn decl_file_of(source: &ModuleSource) -> &str {
         ModuleSource::Local { path, .. } | ModuleSource::Dependency { path, .. } => path.as_str(),
         ModuleSource::EntryPoint { filename, .. } => filename.as_str(),
         ModuleSource::Redirected { uri, .. } => uri.as_str(),
+        ModuleSource::Remote { url, .. } => url.as_str(),
         _ => "",
     }
 }
@@ -2115,7 +2223,7 @@ pub fn resolve_import_with_entry(
     if let Some((namespace, interface)) = CmNamespace::split_specifier(import_source) {
         return interner.binding(namespace, interface);
     }
-    if import_source.starts_with("https://") || import_source.starts_with("http://") {
+    if is_remote(import_source) {
         return interner.remote(import_source);
     }
 
@@ -2681,6 +2789,20 @@ pub fn wir_type_key(module_source: &ModuleSource, name: &str) -> String {
     format!("{module_source}//{name}")
 }
 
+/// The name a type's key names: past `module` where [`wir_type_key`] qualified
+/// it, past the [`wir_tuple_type_key`] prefix of a tuple, and the whole key of
+/// a builtin. A URL module may spell `//` anywhere in its path, and a name in
+/// its type arguments, so the boundary is found from the module.
+#[must_use]
+pub fn unqualified_name<'a>(key: &'a str, module: Option<&ModuleSource>) -> &'a str {
+    let Some(module) = module else {
+        return key.strip_prefix(TUPLE_KEY_PREFIX).unwrap_or(key);
+    };
+    key.strip_prefix(module.to_string().as_str())
+        .and_then(|rest| rest.strip_prefix("//"))
+        .expect("a type with a module is keyed by wir_type_key")
+}
+
 /// Key of a plain `enum`, prefixed so a same-named variant keeps
 /// [`wir_type_key`].
 ///
@@ -2716,8 +2838,10 @@ pub fn wir_func_type_key(func_key: &str) -> String {
 /// - `wir_tuple_type_key(&["i32", "i32"])` → `"tuple//[i32, i32]"`
 #[must_use]
 pub fn wir_tuple_type_key(elems: &[String]) -> String {
-    format!("tuple//[{}]", elems.join(", "))
+    format!("{TUPLE_KEY_PREFIX}[{}]", elems.join(", "))
 }
+
+const TUPLE_KEY_PREFIX: &str = "tuple//";
 
 /// Build a local method name from struct name and method name.
 ///
@@ -2838,6 +2962,20 @@ mod tests {
     use crate::compiler_host::DependencyIndex;
     use crate::hashmap::IndexSet;
     use std::assert_matches;
+
+    #[test]
+    fn a_key_names_what_follows_its_module_whatever_either_spells() {
+        let mut interner = ModuleSourceInterner::new();
+        let remote = interner.remote("https://example.com/lib//a.wado");
+        let name = "Hole<https://example.com/b.wado/$t>";
+        assert_eq!(
+            unqualified_name(&wir_type_key(&remote, name), Some(&remote)),
+            name
+        );
+        let tuple = wir_tuple_type_key(&["core:prelude//String".to_string()]);
+        assert_eq!(unqualified_name(&tuple, None), "[core:prelude//String]");
+        assert_eq!(unqualified_name("Array<i32>", None), "Array<i32>");
+    }
 
     #[test]
     fn cm_names() {

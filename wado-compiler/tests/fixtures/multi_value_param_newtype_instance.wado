@@ -1,0 +1,34 @@
+// One instance of `Pair::first` serves `Pair<Meters>` and `Pair<f32>`, since a
+// newtype argument erases to its base. A caller holding a `Pair<Meters>`
+// forwards it to that instance, whose parameter is a `Pair<f32>`: the two
+// aggregates differ and their fields agree, which is what the split ABI passes.
+type Meters = f32;
+
+struct Pair<T> {
+    a: T,
+    b: T,
+}
+
+impl<T> Pair<T> {
+    fn first(&self) -> T {
+        return self.a;
+    }
+}
+
+fn total(p: &Pair<Meters>) -> f32 {
+    return p.first() as f32;
+}
+
+fn first_of<T>(p: &Pair<T>) -> T {
+    return p.first();
+}
+
+test "a newtype instance forwards to the base's" {
+    let floats = Pair::<f32> { a: 1.0, b: 2.0 };
+    assert first_of(&floats) == 1.0;
+    let distances = Pair::<Meters> { a: 3.0, b: 4.0 };
+    assert total(&distances) == 3.0;
+}
+
+__DATA__
+{"test": {}}

@@ -1,17 +1,16 @@
 //! Spawning on a POSIX host, where `wado_host::sandbox` confines the child.
 
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
 use std::io::{self, Read};
+use std::iter;
 use std::os::fd::OwnedFd;
-use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::task::{Context, Poll};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use tempfile::TempDir;
@@ -27,15 +26,13 @@ use wasmtime_wasi::filesystem::Descriptor;
 use wasmtime_wasi::p2::OutputStream;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 
-use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio};
+use wado_host::sandbox::{self, Access as Reach, Child, Network, Policy, Stdio, Trace};
+use wado_host::sync::{join, lock};
 
 use super::types::{ExitStatus, Input, Output};
-use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned};
-use crate::external::find_program;
-use crate::user_config::user_config;
-
-/// How long a child has between `SIGTERM` at its timeout and `SIGKILL`.
-const TIMEOUT_GRACE: Duration = Duration::from_secs(3);
+use super::{Command, ErrorCode, GuestStdio, ProcessHost, ProcessView, Spawned, Spawning};
+use crate::external::{find_program, is_executable};
+use crate::user_config::{config_path, user_config};
 
 const PIPE_BUFFER: usize = 8192;
 
@@ -44,9 +41,17 @@ const PIPE_BUFFER: usize = 8192;
 pub struct ChildHandle(Arc<Child>);
 
 impl ChildHandle {
+    pub(super) fn terminate(&self) {
+        self.signal(libc::SIGTERM);
+    }
+
     pub(super) fn kill(&self) {
+        self.signal(libc::SIGKILL);
+    }
+
+    fn signal(&self, signal: libc::c_int) {
         self.0
-            .signal_group(libc::SIGKILL)
+            .signal_group(signal)
             .expect("a confined child cannot leave the group its host signals");
     }
 }
@@ -82,6 +87,7 @@ struct Started {
     stdout: Route,
     stderr: Route,
     scratch: TempDir,
+    trace: Trace,
 }
 
 pub(super) fn spawn<U>(
@@ -96,7 +102,6 @@ pub(super) fn spawn<U>(
         stdin,
         stdout,
         stderr,
-        timeout,
     } = cmd;
     let started = start(
         store.get(),
@@ -112,6 +117,7 @@ pub(super) fn spawn<U>(
         stdout,
         stderr,
         scratch,
+        trace,
     } = match started {
         Ok(started) => started,
         Err(code) => {
@@ -130,7 +136,17 @@ pub(super) fn spawn<U>(
     let mut copies = Vec::new();
     let stdout = route(&mut store, stdout, spawned.stdout, &mut copies)?;
     let stderr = route(&mut store, stderr, spawned.stderr, &mut copies)?;
-    let exited = supervise(child, timeout.map(Duration::from_nanos), scratch, copies)?;
+    let exited = supervise(
+        Supervised {
+            child,
+            refusals: spawned.refusals,
+            program,
+            spawning: store.get().ctx.spawning.clone(),
+            trace,
+        },
+        scratch,
+        copies,
+    )?;
     let exit = FutureReader::new(&mut store, async move {
         wasmtime::error::Ok(exited.await.expect("the waiter reports every child"))
     })?;
@@ -156,7 +172,7 @@ fn start(
     let cwd = match cwd {
         Some(cwd) => match view.table.get(cwd)? {
             Descriptor::Dir(dir) => Some(Arc::clone(&dir.dir)),
-            Descriptor::File(_) => return Ok(Err(ErrorCode::Io)),
+            Descriptor::File(_) => return Ok(Err(ErrorCode::NotDirectory)),
         },
         None => grants.dirs.first().map(|grant| Arc::clone(&grant.dir)),
     };
@@ -180,13 +196,16 @@ fn start(
     let inherits = stdin == Stdio::Inherit
         || matches!(stdout, Route::Inherit)
         || matches!(stderr, Route::Inherit);
+    if !passable(program, args, env) {
+        return Ok(Err(ErrorCode::InvalidArgument));
+    }
     let launched = (|| {
-        let scratch = Scratch::new()?;
+        let scratch = Scratch::new().map_err(error_code)?;
         let cwd = match cwd {
             Some(cwd) => cwd,
-            None => Arc::new(File::open(scratch.home())?),
+            None => Arc::new(File::open(scratch.home()).map_err(error_code)?),
         };
-        let program = resolve(program, &cwd)?;
+        let path = resolve(program, &cwd).map_err(error_code)?;
         let mut policy = Policy::new(Network::Granted);
         for grant in &grants.dirs {
             policy.grant_dir(grant.path.clone(), Arc::clone(&grant.dir));
@@ -198,9 +217,27 @@ fn start(
         if inherits {
             policy.grant_terminal();
         }
+        if let Ok(real) = fs::canonicalize(&path) {
+            // `exec` answers it as it answers a refusal, with `EACCES`, and no
+            // grant would let it run.
+            if !is_executable(&real) {
+                return Err(ErrorCode::NotExecutable);
+            }
+            let resolved = policy.resolved();
+            let refused = if resolved.permits(&real, Reach::ReadExecute) {
+                resolved.refused_interpreter(&real)
+            } else {
+                Some(real.clone())
+            };
+            if let Some(refused) = refused {
+                view.ctx
+                    .spawning
+                    .warn(refused_warning(program, &path, &real, &refused));
+            }
+        }
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
         let spawned = sandbox::spawn(&sandbox::Command {
-            program: &program,
+            program: &path,
             args: &args,
             env: &child_env(env, &scratch, inherits),
             cwd: Some(&cwd),
@@ -208,18 +245,125 @@ fn start(
             stdout: stdout.stdio(),
             stderr: stderr.stdio(),
             policy: &policy,
-        })?;
-        io::Result::Ok((spawned, scratch))
+            trace: grants.trace,
+        })
+        .map_err(error_code)?;
+        if grants.trace == Trace::Files
+            && let Some(reason) = spawned.unobserved
+        {
+            view.ctx.spawning.warn(format!(
+                "warning: core:process: `--process-trace` sees nothing here: {reason}"
+            ));
+        }
+        Ok((spawned, scratch))
     })();
-    Ok(match launched {
-        Ok((spawned, scratch)) => Ok(Started {
-            spawned,
-            stdout,
-            stderr,
-            scratch: scratch.0,
-        }),
-        Err(err) => Err(error_code(&err)),
+    Ok(launched.map(|(spawned, scratch)| Started {
+        spawned,
+        stdout,
+        stderr,
+        scratch: scratch.0,
+        trace: grants.trace,
+    }))
+}
+
+/// Whether the OS can pass these to a child: no string holds a NUL, and no
+/// variable's name is empty or holds `=`, which would read as another variable.
+fn passable(program: &str, args: &[String], env: &[(String, String)]) -> bool {
+    let has_nul = iter::once(program)
+        .chain(args.iter().map(String::as_str))
+        .chain(
+            env.iter()
+                .flat_map(|(key, value)| [key.as_str(), value.as_str()]),
+        )
+        .any(|string| string.contains('\0'));
+    !has_nul
+        && env
+            .iter()
+            .all(|(key, _)| !key.is_empty() && !key.contains('='))
+}
+
+impl Spawning {
+    fn warn(&self, warning: String) {
+        let mut warned = lock(&self.0.warned);
+        if !warned.contains(&warning) {
+            eprintln!("{warning}");
+            warned.insert(warning);
+        }
+    }
+}
+
+/// What the sandbox refused a child, once it failed, or whatever its end
+/// under `Trace::Files`, which asked. A refusal may not be why the child
+/// failed, so the warning states the two side by side.
+pub(super) fn refusals_warning(
+    program: &str,
+    status: &ExitStatus,
+    refusals: &BTreeSet<sandbox::Refusal>,
+    trace: Trace,
+) -> Option<String> {
+    let failed = !matches!(status, ExitStatus::Exited(0));
+    if refusals.is_empty() || (!failed && trace == Trace::Off) {
+        return None;
+    }
+    let ended = match status {
+        ExitStatus::Exited(code) => format!("exited with status {code}"),
+        ExitStatus::Signaled(signal) => format!("was killed by signal {signal}"),
+    };
+    let refused: Vec<String> = refusals.iter().map(ToString::to_string).collect();
+    let mut warning = format!(
+        "warning: core:process: `{program}` {ended} after the sandbox refused it {}",
+        refused.join("; ")
+    );
+    for refusal in refusals {
+        if let Some(fix) = path_fix(refusal) {
+            warning.push_str("\nhelp: ");
+            warning.push_str(&fix);
+        }
+    }
+    Some(warning)
+}
+
+/// The grant that would let a child reach a path it was refused. Writing
+/// takes a directory the guest is granted too: nothing grants a child more
+/// than its guest but reading.
+fn path_fix(refusal: &sandbox::Refusal) -> Option<String> {
+    let sandbox::Refusal::Path { path, dir, access } = refusal else {
+        return None;
+    };
+    Some(match access {
+        Reach::ReadExecute => format!(
+            "let a child read {} with `--process-read {}`",
+            path.display(),
+            path.display()
+        ),
+        Reach::ReadWrite => format!(
+            "let the guest and its children write {} with `--dir {}`",
+            path.display(),
+            dir.display()
+        ),
     })
+}
+
+/// The warning for a program at `path`, `real` once resolved, the sandbox
+/// will not execute: `refused` is `real` itself or the interpreter it needs.
+pub(super) fn refused_warning(program: &str, path: &Path, real: &Path, refused: &Path) -> String {
+    let config = config_path().map_or_else(
+        || "the user config".to_owned(),
+        |config| config.display().to_string(),
+    );
+    let mut at = if path == real {
+        path.display().to_string()
+    } else {
+        format!("{}, a link to {}", path.display(), real.display())
+    };
+    if refused != real {
+        at = format!("{at}, run by {}", refused.display());
+    }
+    format!(
+        "warning: core:process: `{program}` is {at}, outside the guest's grants and the system baseline\n\
+         help: let a child run it with `--process-read {}`, or with `read` under `[process]` in {config}",
+        refused.display()
+    )
 }
 
 /// A child's private `HOME` and `TMPDIR`, removed once it exits.
@@ -273,15 +417,17 @@ fn child_env(
     vars
 }
 
-fn error_code(err: &io::Error) -> ErrorCode {
+fn error_code(err: io::Error) -> ErrorCode {
     match err.raw_os_error() {
         Some(libc::ENOENT | libc::ENOTDIR) => ErrorCode::NotFound,
         Some(libc::EACCES | libc::EPERM) => ErrorCode::NotPermitted,
+        Some(libc::ENOEXEC | libc::EISDIR) => ErrorCode::NotExecutable,
+        Some(libc::E2BIG) => ErrorCode::ArgumentListTooLong,
         Some(libc::EAGAIN | libc::ENOMEM | libc::EMFILE | libc::ENFILE) => {
             ErrorCode::ResourceExhausted
         }
         _ if err.kind() == io::ErrorKind::NotFound => ErrorCode::NotFound,
-        _ => ErrorCode::Io,
+        _ => ErrorCode::Other(Some(err.to_string())),
     }
 }
 
@@ -334,12 +480,21 @@ fn copy_into(fd: OwnedFd, mut sink: MemoryOutputPipe) -> io::Result<JoinHandle<(
         })
 }
 
-/// Wait for `child` on a thread of its own, enforcing `timeout`, and remove
-/// its scratch directory once it exits. The exit is reported once `copies`
-/// have drained what the child wrote, so the guest never sees it first.
-fn supervise(
+/// A running child, and what its host reports once it ends.
+struct Supervised {
     child: Arc<Child>,
-    timeout: Option<Duration>,
+    refusals: sandbox::Refusals,
+    /// As the guest named it.
+    program: String,
+    spawning: Spawning,
+    trace: Trace,
+}
+
+/// Wait for the child on a thread of its own, and remove its scratch directory
+/// once it exits. The exit is reported once `copies` have drained what the
+/// child wrote, so the guest never sees it first.
+fn supervise(
+    supervised: Supervised,
     scratch: TempDir,
     copies: Vec<JoinHandle<()>>,
 ) -> io::Result<oneshot::Receiver<Result<ExitStatus, ErrorCode>>> {
@@ -347,47 +502,40 @@ fn supervise(
     thread::Builder::new()
         .name("process-wait".to_owned())
         .spawn(move || {
-            let (alive, deadline) = mpsc::channel::<()>();
-            let timer = timeout.map(|timeout| {
-                let child = Arc::clone(&child);
-                thread::spawn(move || enforce(&child, &deadline, timeout))
-            });
+            let Supervised {
+                child,
+                refusals,
+                program,
+                spawning,
+                trace,
+            } = supervised;
             let waited = child.wait();
-            drop(alive);
-            let timed_out =
-                timer.is_some_and(|timer| timer.join().unwrap_or_else(|p| resume_unwind(p)));
             drop(scratch);
-            for copy in copies {
-                copy.join().unwrap_or_else(|p| resume_unwind(p));
-            }
+            copies.into_iter().for_each(join);
             let status = match waited {
-                Err(_) => Err(ErrorCode::Io),
-                Ok(_) if timed_out => Ok(ExitStatus::TimedOut),
-                Ok(sandbox::ExitStatus::Exited(code)) => Ok(ExitStatus::Exited(code)),
-                Ok(sandbox::ExitStatus::Signaled(signal)) => Ok(ExitStatus::Signaled(signal)),
+                Err(err) => Err(error_code(err)),
+                Ok(sandbox::ExitStatus::Exited(code)) => Ok(ExitStatus::Exited(code.into())),
+                Ok(sandbox::ExitStatus::Signaled(signal)) => {
+                    Ok(ExitStatus::Signaled(signal.into()))
+                }
             };
+            if let Ok(status) = &status
+                && let Some(warning) =
+                    refusals_warning(&program, status, &refusals.collect(), trace)
+            {
+                spawning.warn(warning);
+            }
+            if trace == Trace::Files
+                && let Some(reason) = refusals.unseen()
+            {
+                spawning.warn(format!(
+                    "warning: core:process: `--process-trace` missed calls `{program}` made: {reason}"
+                ));
+            }
             // The guest may have dropped the future without waiting.
             let _ = report.send(status);
         })?;
     Ok(exited)
-}
-
-/// End the child's group at `timeout`: `SIGTERM`, then `SIGKILL` after the
-/// grace. Returns whether the timeout ended it; `alive` disconnects at exit.
-fn enforce(child: &Child, alive: &Receiver<()>, timeout: Duration) -> bool {
-    if alive.recv_timeout(timeout) != Err(RecvTimeoutError::Timeout) {
-        return false;
-    }
-    let signal = |signal| {
-        child
-            .signal_group(signal)
-            .expect("a confined child cannot leave the group its host signals");
-    };
-    signal(libc::SIGTERM);
-    if alive.recv_timeout(TIMEOUT_GRACE) == Err(RecvTimeoutError::Timeout) {
-        signal(libc::SIGKILL);
-    }
-    true
 }
 
 /// A child's output, read as the guest asks.

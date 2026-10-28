@@ -3,15 +3,17 @@ use std::env;
 use std::path::{Component, Path, PathBuf};
 use std::{fs, io};
 
+use wado_compiler::remote::Integrity;
 use wado_lsp::host::discovery::{
     absolutize, governing_workspace, normalize_path, resolve_member_manifest,
 };
 use wado_manifest::{
-    DependencySource, MANIFEST_FILENAME, Manifest, ManifestError, WORKSPACE_FILENAME,
-    WorkspaceManifest,
+    DependencySource, LOCK_FILENAME, MANIFEST_FILENAME, Manifest, ManifestError,
+    WORKSPACE_FILENAME, WorkspaceManifest,
 };
 
 use crate::args::CliExit;
+use crate::cache;
 
 /// A discovered manifest with its root directory.
 #[derive(Debug, Clone)]
@@ -55,6 +57,23 @@ pub fn discover(start_dir: &Path) -> Result<Option<ProjectManifest>, DiscoveryEr
     Ok(Some(ProjectManifest { manifest, root }))
 }
 
+/// A package's `wado.lock`, held against every other writer until this drops.
+/// A writer relying on its caller to hold the lock takes one, so it cannot be
+/// called unheld.
+pub(crate) struct LockFileHeld(#[expect(dead_code, reason = "held for its drop")] fs::File);
+
+/// Hold the `wado.lock` of the package at `root`. A writer replaces the lock
+/// whole, so the hold is on a file of its own, in the cache.
+///
+/// # Errors
+///
+/// `root` cannot be resolved, or [`cache::hold`] fails.
+pub(crate) fn hold_lock_file(root: &Path) -> Result<LockFileHeld, String> {
+    let root = fs::canonicalize(root).map_err(|e| format!("{}: {e}", root.display()))?;
+    let key = Integrity::of(root.as_os_str().as_encoded_bytes()).hex();
+    cache::hold(&format!("{key}.{LOCK_FILENAME}")).map(LockFileHeld)
+}
+
 /// The nearest directory at or above `start_dir` holding a `wado.toml`, short
 /// of one holding a `wado-workspace.toml`, which no package encloses.
 pub(crate) fn package_root(start_dir: &Path) -> Option<PathBuf> {
@@ -96,7 +115,7 @@ pub(crate) fn resolution_inputs(root: &Path) -> Vec<PathBuf> {
         }
         let manifest_path = root.join(MANIFEST_FILENAME);
         files.push(manifest_path.clone());
-        files.push(root.join("wado.lock"));
+        files.push(root.join(LOCK_FILENAME));
         if let Some(workspace) = governing_workspace_root_dir(&root) {
             files.push(workspace.join(WORKSPACE_FILENAME));
         }
@@ -557,19 +576,16 @@ command = "src/main.wado"
         assert_eq!(result.root, tmp.path());
     }
 
+    /// A directory above the temporary one may hold a `wado.toml`, so only
+    /// what lies inside it is asserted.
     #[test]
-    fn discover_returns_none_when_missing() {
+    fn discover_finds_no_manifest_where_there_is_none() {
         let tmp = tempfile::tempdir().unwrap();
         let subdir = tmp.path().join("no-manifest");
         fs::create_dir_all(&subdir).unwrap();
 
-        // Discovery will walk up, but tempdir root won't have wado.toml either,
-        // so eventually it should return None (at filesystem root).
-        // We test that it doesn't panic and doesn't find a spurious manifest.
-        let result = discover(&subdir).unwrap();
-        // Can't guarantee None since parent dirs might have wado.toml,
-        // but in practice tempdir is deep enough. Just check no panic.
-        let _ = result;
+        let found = discover(&subdir).unwrap();
+        assert!(found.is_none_or(|manifest| !manifest.root.starts_with(tmp.path())));
     }
 
     #[test]

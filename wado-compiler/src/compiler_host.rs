@@ -14,6 +14,7 @@ use std::sync::Arc;
 use crate::ast::AstIdSpace;
 use crate::hashmap;
 use crate::kiln::options_check::CanonicalOptions;
+use crate::remote::{Integrity, PinMismatch, PinnedBy, held_to_use, is_remote};
 use crate::token::Span;
 
 /// Log level for filtering diagnostics and log messages
@@ -165,6 +166,9 @@ pub enum Code {
     // I/O errors
     /// File read error
     FileReadError,
+    /// A remote file whose content hashes to something other than its pin, or
+    /// that nothing pins.
+    RemoteIntegrity,
 
     // Coherence errors
     /// Orphan rule violation
@@ -199,6 +203,10 @@ pub enum Code {
     TestOnlyGlobal,
     /// A `use` brings in a name its module never refers to.
     UnusedImport,
+    /// A local variable is never read.
+    UnusedVariable,
+    /// A function or closure parameter is never read.
+    UnusedParameter,
     /// A binder takes a name that already reaches a declaration or an enclosing
     /// binding.
     ShadowedName,
@@ -291,6 +299,8 @@ impl Code {
                 | Code::TestOnlyFunction
                 | Code::TestOnlyGlobal
                 | Code::UnusedImport
+                | Code::UnusedVariable
+                | Code::UnusedParameter
         )
     }
 }
@@ -337,6 +347,7 @@ impl std::fmt::Display for Code {
             Code::PrivateSymbol => "PRIVATE_SYMBOL",
             Code::ImportAttrInvalid => "IMPORT_ATTR_INVALID",
             Code::FileReadError => "FILE_READ_ERROR",
+            Code::RemoteIntegrity => "REMOTE_INTEGRITY",
             Code::OrphanRule => "ORPHAN_RULE",
             Code::CodegenError => "CODEGEN_ERROR",
             Code::UnsupportedFeature => "UNSUPPORTED_FEATURE",
@@ -349,6 +360,8 @@ impl std::fmt::Display for Code {
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::UnusedImport => "UNUSED_IMPORT",
+            Code::UnusedVariable => "UNUSED_VARIABLE",
+            Code::UnusedParameter => "UNUSED_PARAMETER",
             Code::ShadowedName => "SHADOWED_NAME",
             Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::SelfComparison => "SELF_COMPARISON",
@@ -458,8 +471,13 @@ pub enum SourceError {
     NotFound { path: String },
     /// I/O error reading the source
     IoError { path: String, message: String },
-    /// Network error (for future HTTP support)
+    /// Fetching a remote file failed
     NetworkError { url: String, message: String },
+    /// A remote file hashes to something other than its pin; boxed, since its
+    /// two digests would triple the size of every `Result` carrying the error
+    IntegrityMismatch(Box<PinMismatch>),
+    /// A remote file nothing pins, where no lock file can record it
+    Unpinned { url: String, actual: Integrity },
 }
 
 impl std::fmt::Display for SourceError {
@@ -472,6 +490,28 @@ impl std::fmt::Display for SourceError {
             SourceError::NetworkError { url, message } => {
                 write!(f, "network error fetching '{url}': {message}")
             }
+            SourceError::IntegrityMismatch(mismatch) => {
+                let PinMismatch {
+                    url,
+                    expected,
+                    actual,
+                    pinned_by,
+                } = mismatch.as_ref();
+                let accept = match pinned_by {
+                    PinnedBy::Use => format!("write `integrity: \"{actual}\"`"),
+                    PinnedBy::Lock => "run `wado update`".to_string(),
+                };
+                write!(
+                    f,
+                    "'{url}' does not match its integrity: {pinned_by} pins {expected}, \
+                     and the content is {actual}; to accept the content, {accept}"
+                )
+            }
+            SourceError::Unpinned { url, actual } => write!(
+                f,
+                "'{url}' is not pinned, and no `wado.lock` governs this module to record \
+                 a pin: add `integrity: \"{actual}\"`"
+            ),
         }
     }
 }
@@ -525,13 +565,16 @@ pub trait CompilerHost: Send + Sync {
     /// `path` opened to be read a range at a time, for a reader that learns how
     /// far to read only by reading, as a Kiln probe does. What is read through
     /// it is no dependency of the compile: the part one depends on is read again
-    /// through [`Self::load_source_prefix`].
+    /// through [`Self::load_file`]. `integrity` is the pin the import site
+    /// wrote, as [`Self::load_file`] takes it, so a host keeping pinned bytes
+    /// serves them rather than fetching the file again.
     ///
     /// The default loads the file whole; a filesystem host overrides it, so a
     /// probe of a checkpoint reads the header rather than the payloads.
     fn open_source(
         &self,
         path: &str,
+        _integrity: Option<Integrity>,
     ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
         async move {
             let bytes = self.load_source(path).await?;
@@ -556,6 +599,36 @@ pub trait CompilerHost: Send + Sync {
         }
     }
 
+    /// [`Self::load_source_prefix`] for a remote file, which must hash to
+    /// `integrity`. A host with a lock file pins what the import site leaves
+    /// unpinned; the default has none, so it refuses such a file.
+    fn load_remote(
+        &self,
+        url: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move { held_to_use(url, self.load_source_prefix(url, extent).await?, integrity) }
+    }
+
+    /// The first `extent` bytes of `path`, or all of it, whichever kind of path
+    /// it is: a URL through [`Self::load_remote`], held to `integrity`, and
+    /// anything else through [`Self::load_source_prefix`].
+    fn load_file(
+        &self,
+        path: &str,
+        extent: Option<u64>,
+        integrity: Option<Integrity>,
+    ) -> impl Future<Output = Result<Vec<u8>, SourceError>> + Send {
+        async move {
+            if is_remote(path) {
+                self.load_remote(path, extent, integrity).await
+            } else {
+                self.load_source_prefix(path, extent).await
+            }
+        }
+    }
+
     /// Emit a diagnostic (error, warning, etc.)
     ///
     /// This method is called synchronously by the compiler whenever a diagnostic
@@ -567,8 +640,7 @@ pub trait CompilerHost: Send + Sync {
     /// the host's choosing carrying `file_stem`, and answer where they landed.
     /// The default keeps none: a host with no filesystem has nowhere to put
     /// them.
-    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
-        let _ = (file_stem, bytes);
+    fn save_internal_artifact(&self, _file_stem: &str, _bytes: &[u8]) -> Option<String> {
         None
     }
 
@@ -726,6 +798,8 @@ pub struct ProbeInput {
     /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
     /// file depends on what kind of file it is.
     pub use_type: Option<String>,
+    /// The pin the import site wrote, as [`CompilerHost::open_source`] takes it.
+    pub integrity: Option<Integrity>,
 }
 
 /// A file read a range at a time. See [`CompilerHost::open_source`].
@@ -1044,6 +1118,8 @@ mod tests {
             Code::TestOnlyFunction,
             Code::TestOnlyGlobal,
             Code::UnusedImport,
+            Code::UnusedVariable,
+            Code::UnusedParameter,
         ] {
             assert!(code.is_unused_lint(), "{code} should be an unused lint");
         }

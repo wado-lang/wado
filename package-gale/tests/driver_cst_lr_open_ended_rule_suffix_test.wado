@@ -14,13 +14,13 @@ use g from "./grammars/lr_open_ended_rule_suffix.g4"
     };
 
 fn assert_tree_of<S: AsStrSlice, S1: AsStrSlice>(result: &g::ParseResult, input: S, expected: S1) {
-    assert result.ok();
+    assert result.ok(), input.to_string();
     let actual = g::to_string_tree(result);
-    assert actual == expected.to_string();
+    assert actual == expected.to_string(), input.to_string();
 }
 
 fn assert_rejected_of<S: AsStrSlice>(result: &g::ParseResult, input: S) {
-    assert !result.ok();
+    assert !result.ok(), input.to_string();
 }
 
 test "open-ended rule suffix: the wildcard behind a rule continues the loop" {
