@@ -1161,7 +1161,6 @@ impl TypeSystem {
         trait_: DefId,
     ) -> Option<String> {
         let decl = self.unsourced(type_id, trait_)?;
-        let owner = self.type_id_to_string(type_id);
         Some(
             match scope
                 .struct_fields_of(decl)
@@ -1169,11 +1168,12 @@ impl TypeSystem {
             {
                 Some(closure) => format!(
                     "{}\n  hint: {}, or write the impl",
-                    closure.explain(&owner),
+                    closure.explain(),
                     closure.widen()
                 ),
                 None => format!(
-                    "`{owner}` does not meet the reflection bound the derivation of `{}` states",
+                    "`{}` does not meet the reflection bound the derivation of `{}` states",
+                    self.type_id_to_string(type_id),
                     self.resolutions.defs().name(trait_)
                 ),
             },

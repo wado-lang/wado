@@ -304,7 +304,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(closure) = self.reflect_struct_closure(self_ty)
         {
             let _ = self.emit(TypeError::ClosedStructFromFields {
-                why_closed: closure.explain(&self_name),
+                why_closed: closure.explain(),
                 struct_name: self_name,
                 span: static_call.span,
             });

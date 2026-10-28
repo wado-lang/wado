@@ -59,6 +59,8 @@ pub(crate) struct StructFieldInfo {
 /// Why a struct is closed: `field` reaches less far than the struct.
 #[derive(Debug, Clone)]
 pub(crate) struct StructClosure {
+    /// The declaration, never a newtype over it: the reaches are its own.
+    struct_name: String,
     struct_reach: Visibility,
     field: String,
     field_reach: Visibility,
@@ -66,7 +68,8 @@ pub(crate) struct StructClosure {
 
 impl StructClosure {
     /// "`S` is closed: …", for a diagnostic to explain itself with.
-    pub(crate) fn explain(&self, struct_name: &str) -> String {
+    pub(crate) fn explain(&self) -> String {
+        let struct_name = &self.struct_name;
         format!(
             "`{struct_name}` is closed: its field `{}` is {} while `{struct_name}` is {}",
             self.field,
@@ -198,6 +201,7 @@ impl StructFieldInfo {
             .first_hidden_field(self.fields.iter().map(|(_, _, vis)| *vis))?;
         let (field, _, field_reach) = &self.fields[index];
         Some(StructClosure {
+            struct_name: self.name.clone(),
             struct_reach: self.visibility,
             field: field.clone(),
             field_reach: *field_reach,
