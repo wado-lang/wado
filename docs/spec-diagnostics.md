@@ -347,10 +347,11 @@ it.
 A name used only as the target of an assignment is not read. That covers `=`, a
 destructuring assignment, and a compound assignment such as `+=`, whether they
 write the name itself or a field or element of the value it holds (`p.x = 1`,
-`xs[0] = 1`). Such a variable warns that it is assigned to, but never read. A
-write through a reference lands in what the reference points to, so it reads
-the reference, as does an index assignment on a value holding a `&mut`, which
-may write through it.
+`xs[0] = 1`). Such a variable warns that it is assigned to, but never read.
+
+A write through a reference reads the reference, since it lands in what the
+reference points to. So does an index assignment on a value holding a `&mut`,
+which may write through it.
 
 <!-- {"fixture":"spec_diagnostics_unused_variables.wado"} -->
 

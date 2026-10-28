@@ -26,12 +26,13 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
             waived: inner_attrs_allow(&module.inner_attributes, lint::UNUSED_VARIABLES),
             found: Vec::new(),
             shorthand: IndexSet::default(),
-            writes: &mut writes,
+            writes: IndexSet::default(),
         };
         for item in &module.items {
             walk.visit_item(item);
         }
         binders.extend(walk.found);
+        writes.extend(walk.writes);
     }
     // A binder the elaborator did not bind as a local is a constant or a case
     // a pattern tests against, not a variable.
@@ -43,7 +44,7 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
             )
         })
     });
-    let candidates: IndexSet<AstId> = binders.iter().flat_map(|b| b.ids.clone()).collect();
+    let candidates: IndexSet<AstId> = binders.iter().flat_map(|b| b.ids.iter().copied()).collect();
     let mut reads = IndexSet::default();
     let mut written = IndexSet::default();
     for (site, target) in sem.iter_references() {
@@ -66,7 +67,6 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
         .collect()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
 enum BinderKind {
     Parameter,
     Variable,
@@ -114,21 +114,21 @@ impl Binder<'_> {
     }
 }
 
-/// The binders of one module, and the sites where it assigns to a name.
-struct Binders<'a, 'w> {
+/// The binders of one module, and the names it assigns to.
+struct Binders<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     waived: bool,
     found: Vec<Binder<'a>>,
     /// The pattern ids a struct pattern binds by its field's own name.
     shorthand: IndexSet<AstId>,
-    /// Every module's: the names an assignment writes into, by `=` or a
-    /// compound assignment, directly or through the fields and indexes of a
-    /// value they hold. None reads anything back.
-    writes: &'w mut IndexSet<AstId>,
+    /// The names an assignment writes into, by `=` or a compound assignment,
+    /// directly or through the fields and indexes of a value they hold. None
+    /// reads anything back.
+    writes: IndexSet<AstId>,
 }
 
-impl<'a> Binders<'a, '_> {
+impl<'a> Binders<'a> {
     fn bind_parameter(&mut self, attrs: &'a [Attribute], id: AstId, name: &'a str, span: Span) {
         self.visit_attributed(attrs, |s| s.bind(BinderKind::Parameter, id, name, span));
     }
@@ -160,7 +160,7 @@ impl<'a> Binders<'a, '_> {
     }
 }
 
-impl<'a> AstVisitor<'a> for Binders<'a, '_> {
+impl<'a> AstVisitor<'a> for Binders<'a> {
     fn visit_attributed(&mut self, attrs: &'a [Attribute], body: impl FnOnce(&mut Self)) {
         let saved = self.waived;
         self.waived |= attrs_allow(attrs, lint::UNUSED_VARIABLES);
