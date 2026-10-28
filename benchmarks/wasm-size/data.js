@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793155127315,
+  "lastUpdate": 1793164323683,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71841,6 +71841,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295756,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6c1b356354e619d53a57c9a7bfa9fbd5f0c673f6",
+          "message": "Merge pull request #2482 from wado-lang/claude/youthful-turing-qpiroj\n\nperf(optimize): return a one-field aggregate as its field",
+          "timestamp": "2026-10-28T13:51:57+09:00",
+          "tree_id": "a61a1741f52e72bfff28f2474d9fcd94d7782270",
+          "url": "https://github.com/wado-lang/wado/commit/6c1b356354e619d53a57c9a7bfa9fbd5f0c673f6"
+        },
+        "date": 1793164322628,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295752,
             "unit": "bytes"
           }
         ]
