@@ -1,0 +1,47 @@
+// A one-field aggregate returns its field as its one result, so a nested
+// variant in that field is a result slot like any other: `slot_flatten`
+// spreads `Result<Option<i32>, i32>` into `[tag, Ok payload, Err payload]`
+// rather than build a `Result` and an `Option` per call.
+
+struct Wrapped {
+    r: Result<Option<i32>, i32>,
+}
+
+#[inline("never")]
+fn classify(n: i32) -> Wrapped {
+    if n > 0 {
+        return Wrapped { r: Ok(Some(n)) };
+    }
+    if n == 0 {
+        return Wrapped { r: Ok(null) };
+    }
+    return Wrapped { r: Err(n) };
+}
+
+#[inline("never")]
+fn score(n: i32) -> i32 {
+    let w = classify(n);
+    return match w.r {
+        Ok(Some(v)) => v,
+        Ok(None) => 0,
+        Err(e) => e * 10,
+    };
+}
+
+export fn run() {
+    assert score(builtin::black_box(5)) == 5;
+    assert score(builtin::black_box(0)) == 0;
+    assert score(builtin::black_box(-2)) == -20;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "return 1, ref.null none, n;"
+    ],
+    "wir_scope": "/classify",
+    "wir_not_expect:O2": [
+        "struct.new \"core:prelude/types.wado//Result<core:prelude/types.wado/Option<i32>,i32>::Ok\""
+    ]
+}

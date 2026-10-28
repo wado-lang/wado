@@ -7,7 +7,8 @@
 //! and the embedded `component-type` section is additive full-fidelity metadata
 //! decodable as a standalone WIT package.
 
-use crate::common::{block_on, in_memory_host, world_surface};
+use crate::common::{StubHost, block_on, in_memory_host, world_surface};
+use std::path::Path;
 use wado_compiler::OptLevel;
 use wado_compiler::semantics::semantics;
 use wado_compiler::wit_bundle::{embed_component_type, encode_component_type};
@@ -152,6 +153,33 @@ fn encoded_payload_decodes_as_wit_package() {
         matches!(decode(&payload), Ok(DecodedWasm::WitPackage(..))),
         "payload must decode as a standalone WIT package"
     );
+}
+
+/// An imported dependency interface whose signature `use`s a type from another
+/// of its package's interfaces brings that interface into the payload, so the
+/// `use` resolves when the payload is parsed back.
+#[test]
+fn a_type_used_from_a_sibling_dependency_interface_embeds() {
+    let source = r#"
+use { println, Stdout } from "core:cli";
+use { Tag, Types } from "./sub/wasm_import_cm_guest_effect_types.wat" with { type: "wat" };
+
+export fn run() with (Stdout, Tag) {
+    println(`${Tag::tag(Types::Level::High)}`);
+}
+"#;
+    let host = StubHost::new(Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures"));
+    let sem = with_contract(
+        block_on(semantics(source, &host, Some("entry.wado"))),
+        CLI_WORLD,
+    );
+    let payload = encode_component_type(&sem, &world_surface(&host, source, CLI_WORLD))
+        .expect("encode_component_type");
+    match decode(&payload) {
+        Ok(DecodedWasm::WitPackage(..)) => {}
+        Ok(DecodedWasm::Component(..)) => panic!("payload decoded as a component"),
+        Err(err) => panic!("payload does not decode: {err:#}"),
+    }
 }
 
 /// A minimal-import command embeds and round-trips just like the hello shape.

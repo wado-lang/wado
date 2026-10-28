@@ -8,6 +8,9 @@ that is in three documents:
 - [Loam on WebGPU](./webgpu.md), the design of its WebGPU backend.
 - [Loam Tokenizer](./tokenizer.md), the design of its tokenizer.
 
+[Loam on TPU](./tpu.md) is the design of the PJRT backend, for TPUs and native
+GPUs, which the roadmap builds.
+
 A roadmap item in [TODO.md](./TODO.md) writes its design here when it is
 finished. Where it changes a decision the WEP made, it names the WEP's section.
 
