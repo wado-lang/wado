@@ -602,7 +602,9 @@ pub(crate) fn relative_to(base: &Path, target: &Path) -> String {
     use std::path::Component;
 
     fn root_of(path: &Path) -> Option<Component<'_>> {
-        path.is_absolute().then(|| path.components().next()).flatten()
+        path.is_absolute()
+            .then(|| path.components().next())
+            .flatten()
     }
     if root_of(base) != root_of(target) {
         return target.to_string_lossy().into_owned();
