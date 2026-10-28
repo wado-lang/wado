@@ -1289,8 +1289,7 @@ fn and_floor_terms(
 /// single-purpose `let $cond = <cmp>` temp feeding each check — in the fast
 /// arm the comparison is provably constant, so this is exact for any reader.
 /// `fast_body` is a clone of `plan.loop_body`, so `plan`'s guard layout applies.
-/// Delete the checks the plan proves in the fast clone, answering the failure
-/// arms they leave behind.
+/// Answers the dead panic arms.
 fn eliminate_checks_in_fast(
     engine: &mut Engine,
     binds: &Binds,
@@ -1337,13 +1336,28 @@ fn eliminate_checks_in_fast(
 /// Where the original rebinds the slot in a top-level `let` before naming it,
 /// and nothing else names it, the fast arm's value is never observed. The
 /// `dead_arms` of the deleted checks still name the bound they report.
-fn unshare_unread_lets(engine: &mut Engine, plan: &Plan, fast_body: BlockId, dead_arms: &[NodeRef]) {
+fn unshare_unread_lets(
+    engine: &mut Engine,
+    plan: &Plan,
+    fast_body: BlockId,
+    dead_arms: &[NodeRef],
+) {
     let body = &*engine.body;
     let mut named_in_fast = IndexSet::default();
-    mentioned_locals_except(body, NodeRef::Block(fast_body), dead_arms, &mut named_in_fast);
+    mentioned_locals_except(
+        body,
+        NodeRef::Block(fast_body),
+        dead_arms,
+        &mut named_in_fast,
+    );
     let mut named_outside = IndexSet::default();
     let root = NodeRef::Block(body.root());
-    mentioned_locals_except(body, root, &[NodeRef::Stmt(plan.loop_stmt)], &mut named_outside);
+    mentioned_locals_except(
+        body,
+        root,
+        &[NodeRef::Stmt(plan.loop_stmt)],
+        &mut named_outside,
+    );
     let mut named_in_slow = IndexSet::default();
     let mut rebound_first = IndexSet::default();
     for &s in &body.blocks[plan.loop_body].stmts {
@@ -1868,7 +1882,7 @@ fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
 fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
     let body = &engine.body;
     let root = NodeRef::Block(body.root());
-    !mentions_local_except(body, root, &[NodeRef::Stmt(version_if)], l)
+    !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
 }
 
 /// Whether `block` sits inside a loop, and so may run more than once.
