@@ -1,0 +1,38 @@
+// The list `loop_version_bce` reloads comes back shorter than the loop runs:
+// the fast loop's re-test after the reload fails, the iteration finishes, and
+// the original loop takes over at the next index, whose check traps.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [9];
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(h.data[i]);
+        if i == 0 {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    println(`${out.len()}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["Contract of List::index_value failed"]
+}
