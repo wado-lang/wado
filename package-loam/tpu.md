@@ -66,22 +66,39 @@ the other.
 
 ### The PJRT backend traces once and replays
 
-The first `forward` over a set of extents runs against tensors that hold no
-values. Each trait method appends StableHLO operations. An `upload` becomes a
-parameter, a prepared weight a parameter that stays on the device, and a
-`download` an output. The backend then compiles the program.
+A `pass` is one program. The first pass over a set of extents runs against
+tensors that hold no values, and each trait method appends StableHLO
+operations. Every later pass over the same extents replays: each method returns
+a handle and appends nothing.
 
-Every later `forward` over the same extents replays. Each method returns a
-handle and appends nothing, and the first `download` executes the compiled
-program once. Replay hashes the sequence of calls it sees and traces again if
-the sequence differs from the trace.
+What a method takes from the host is either the program's shape or a value the
+program reads:
+
+- Extents, axes, a rank, a permutation, a slice's length and step, and an
+  `Expr` shape the program. Together with the extents of the pass's inputs
+  they are its key.
+- `range_i64`'s `start` and `delta`, `slice_axis`'s `start`, and `filled`'s
+  `value` are values. A decoder's position reaches `range_i64` as its `start`
+  and changes every token. Each becomes a scalar parameter, so a replay passes
+  the new value rather than compiling again. A slice from a parameter is a
+  `stablehlo.dynamic_slice`, whose start is an operand.
+- An `upload` is a parameter, and a prepared weight a parameter that stays on
+  the device.
+
+The pass ends at a trait method that names its outputs, which the generated
+`forward` calls once `pass` returns and before any `download`. The backend
+compiles there when tracing, and executes there when replaying. Each
+`download` then copies out one result of that execution. `begin` and `retain`
+already mark where a pass starts and what outlives it.
+
+The calls of a pass depend only on its key, once every value is a parameter and
+an `If` is a trait method (below): `forward` reads nothing from the device
+before the pass ends. So replay checks each call against the trace as it
+arrives, and traps on a difference, which would be a defect in Loam.
 
 `fused`, `rows` and the products with prologues and epilogues lower to the
 StableHLO operations they mean. XLA fuses them again for its target, so the
 plan's fusion, chosen for WebGPU, costs XLA nothing.
-
-A `pass` is one program. `begin` and `retain` already mark where one pass ends
-and what outlives it.
 
 ### The seam carries what a compiled program cannot learn at run time
 
@@ -102,16 +119,19 @@ per program, with what is valid within it as a value:
 
 ### What every device backend gets
 
-Each of these serves both device backends, and the trait changes once for
-them:
+Each of these serves both device backends. The trait changes once for them,
+in the step or roadmap item named:
 
 - A batch of rows of different lengths, each with its own position and valid
-  length.
+  length: the roadmap item "Many requests at once".
 - The next token picked on the device, so a pass reads back token ids alone.
-- Weights held at half width on the device: f16 on WebGPU, bf16 on PJRT.
-  `Self::Rhs` already lets a backend choose a weight's storage.
+  `arg_max` is already a trait method, and `WebGpuBackend` reads back one
+  index a pass; the PJRT backend lowers it with the rest.
+- Weights held at half width on the device: f16 on WebGPU in the roadmap item
+  "A half graph keeps its type", bf16 on PJRT in step 5 below. `Self::Rhs`
+  already lets a backend choose a weight's storage.
 - The attention cache donated from a pass's input to its output, so it is
-  updated in place.
+  updated in place: step 5 below.
 
 ## Plan
 

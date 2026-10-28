@@ -17,7 +17,7 @@ draws no conclusions about Wado.
 1. [Summary](#1-summary)
 2. [The Only Public Entry Is PJRT](#2-the-only-public-entry-is-pjrt)
 3. [Plugins](#3-plugins)
-4. [The Program Is StableHLO](#4-the-program-is-stablehlo)
+4. [The Program](#4-the-program)
 5. [Without a TPU](#5-without-a-tpu)
 6. [Shapes Must Be Static](#6-shapes-must-be-static)
 7. [The Compiler's Cost Model](#7-the-compilers-cost-model)
@@ -30,9 +30,10 @@ draws no conclusions about Wado.
 
 ## 1. Summary
 
-- A TPU has no public instruction set or driver API. JAX, PyTorch/XLA and
-  TensorFlow all reach it the same way: they load `libtpu.so` as a PJRT plugin
-  and hand it a StableHLO program, which XLA compiles for the TPU.
+- A TPU has no public instruction set or driver API. What is public is
+  `libtpu.so`, a PJRT plugin, which compiles a program with XLA and runs it.
+  PyTorch/XLA's documentation names it as the Cloud TPU plugin. It takes a
+  StableHLO module or a serialized HLO module.
 - PJRT is a C API in one header. A plugin exports one symbol, `GetPjrtApi`,
   which returns a table of function pointers. Nothing else is linked, so a host
   in any language that can call C can drive it.
@@ -41,8 +42,8 @@ draws no conclusions about Wado.
 - `libtpu.so` still compiles for a TPU it does not have. Given a topology name
   such as `v5e:1x1`, it compiles a program for that TPU generation, reports the
   device memory the program needs, and estimates its run time from its cost
-  model. No Google simulator of TPU execution is published; this is the closest
-  thing.
+  model. The search found no published simulator of TPU execution, so this is
+  as near to one as a machine without a TPU gets.
 - An XLA CPU plugin runs the same StableHLO through the same API, on the CPU.
   ZML publishes it prebuilt.
 - XLA on both plugins refuses a dimension of unknown extent. On `libtpu.so` the
@@ -99,10 +100,13 @@ PyPI carries NVIDIA GPU plugins, `jax-cuda12-pjrt` and `jax-cuda13-pjrt`,
 which the probe did not run, and no CPU plugin. `jaxlib` 0.12.0.1 links XLA's
 CPU client into `libjax_common.so`, which exports no `GetPjrtApi`.
 
-## 4. The Program Is StableHLO
+## 4. The Program
 
-A PJRT program is named by a format string. `"mlir"` takes a StableHLO module,
-as MLIR bytecode or as text. Both plugins accepted the same text module.
+A PJRT program is named by a format string, which `PJRT_Program` lists:
+`"mlir"` takes a StableHLO module as MLIR bytecode or as text, `"hlo"` a
+serialized `HloModuleProto`, and `"hlo_with_config"` an
+`HloModuleProtoWithConfig`. The probe used `"mlir"` alone, and both plugins
+accepted the same text module.
 
 StableHLO promises compatibility only for a _portable artifact_, which is MLIR
 bytecode written for a named StableHLO version. One build reads an artifact
@@ -123,26 +127,29 @@ artifact takes libStablehlo: `stablehlo-translate --serialize`, or
 | Serialize the compiled executable        | —                                 | works                                                 |
 | Device memory and cost of the executable | —                                 | works                                                 |
 
+```sh
+./probe libpjrt_cpu.so affine.mlir run
+./probe libpjrt_cpu.so affine.mlir aot cpu
+TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so affine.mlir run
+TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
+```
+
 `libtpu.so` asks the Compute Engine metadata server for the TPU's environment
 when it initializes. With no metadata server it retries each key 30 times
-before moving on, which takes minutes. `TPU_SKIP_MDS_QUERY=1` skips the query.
+before moving on. `TPU_SKIP_MDS_QUERY=1` skips the query.
 A topology name must match `^([a-zA-Z0-9_ ]+)[=_:]([0-9x]+)(_twisted|_untwisted)?$`,
 so a generation's marketing name such as `TPU v5 lite` is refused.
 
 The run on the CPU plugin computed `tanh(x · w + b)` over `f32[2,3]`,
 `f32[3,2]` and `f32[2,2]` (`affine.mlir` in the appendix). The result matched
 the value computed by hand. The first execution includes one-time setup, so
-the later ones are the cost of a call:
+the later ones are the cost of a call. Over three runs of the command above:
 
-| Execution | Time   |
-| --------- | ------ |
-| first     | 400 µs |
-| second    | 7.3 µs |
-| third     | 3.8 µs |
-
-```sh
-./probe libpjrt_cpu.so affine.mlir run
-```
+| Execution | Time, the third's as 1 |
+| --------- | ---------------------- |
+| first     | 10 to 16               |
+| second    | 1.2 to 1.6             |
+| third     | 1                      |
 
 ## 6. Shapes Must Be Static
 
@@ -155,6 +162,11 @@ appendix):
 | CPU         | `PJRT_Client_Compile` returns an error: `Unbounded dynamism is disabled for instruction`       |
 | `libtpu.so` | `PJRT_Compile` fails the assertion `!count_overflow` in `shape_util.cc` and aborts the process |
 
+```sh
+./probe libpjrt_cpu.so dynamic.mlir run
+TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so dynamic.mlir aot v5e:1x1
+```
+
 A program that varies an extent compiles once per extent.
 
 ## 7. The Compiler's Cost Model
@@ -166,22 +178,30 @@ compiler's estimate of its run time on that generation.
 
 The program below is a matrix-vector product the size of GPT-2's output layer:
 a `bf16[1,768]` row times a `bf16[768,50257]` matrix, accumulated in `f32`
-(`gemv.mlir` in the appendix). It reads 77.2 MB of arguments and does
-1.16 × 10⁸ operations, so it is bound by memory bandwidth. The effective
-bandwidth is the bytes it moves divided by `optimal_seconds`.
+(`gemv.mlir` in the appendix). Its arguments take 77,208,576 bytes of device
+memory. The cost analysis reports the same on every topology: `bytes accessed`
+of 7.78276 × 10⁷ and `flops` of 1.15743 × 10⁸, about 1.5 per byte, so the
+program is bound by memory bandwidth. Its effective bandwidth is
+`bytes accessed` divided by `optimal_seconds`.
 
-| Topology   | Compile | `optimal_seconds` | Effective bandwidth |
-| ---------- | ------- | ----------------- | ------------------- |
-| `v4:2x2x1` | 372 ms  | 158 µs            | 491 GB/s            |
-| `v5e:1x1`  | 87 ms   | 106 µs            | 738 GB/s            |
-| `v6e:1x1`  | 95 ms   | 47.5 µs           | 1638 GB/s           |
+| Topology   | `optimal_seconds` | Effective bandwidth |
+| ---------- | ----------------- | ------------------- |
+| `v4:2x2x1` | 1.58432 × 10⁻⁴    | 491 GB/s            |
+| `v5e:1x1`  | 1.05506 × 10⁻⁴    | 738 GB/s            |
+| `v5e:2x2`  | 1.05506 × 10⁻⁴    | 738 GB/s            |
+| `v6e:1x1`  | 4.75138 × 10⁻⁵    | 1638 GB/s           |
 
 ```sh
-TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v6e:1x1
+TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
 ```
 
-The compile of the first topology includes the compiler's one-time setup. The
-estimate is the compiler's model, not a measurement on a device.
+`flops` is XLA's count. A product of one row by a 768 × 50257 matrix is
+3.86 × 10⁷ multiply-adds, and XLA's count is 2.9987 times that, which the
+research did not explain. `optimal_seconds` is the compiler's model, not a
+measurement on a device.
+
+The first compile in a process includes the compiler's one-time setup. The
+compiles after it took within 1.3 times of one another.
 
 ## 8. Routes That Do Not Reach a TPU
 
@@ -192,8 +212,9 @@ estimate is the compiler's model, not a measurement on a device.
 - Pallas TPU interpret mode: JAX runs a Pallas TPU kernel on the CPU,
   simulating the TPU's memories, DMAs and semaphores in Python. It serves
   kernels written in Pallas, from Python, and runs no XLA program.
-- Open TPU-like designs: OpenTPU (UCSB), tiny-tpu and similar projects model
-  a systolic array of their own. None models a Google TPU or runs its programs.
+- Open TPU-like designs: OpenTPU (UCSB) reimplements a TPU in RTL with an
+  instruction set, simulator and compiler of its own, and tiny-tpu is a
+  teaching-scale systolic array. Neither runs a program `libtpu.so` compiles.
 
 ## 9. Real TPUs
 
@@ -358,15 +379,31 @@ int main(int argc, char** argv) {
     fprintf(stderr, "%s\n", dlerror());
     return 1;
   }
-  api = ((const PJRT_Api* (*)(void))dlsym(lib, "GetPjrtApi"))();
+  const PJRT_Api* (*get_api)(void) = (const PJRT_Api* (*)(void))dlsym(lib, "GetPjrtApi");
+  if (!get_api) {
+    fprintf(stderr, "%s exports no GetPjrtApi\n", argv[1]);
+    return 1;
+  }
+  api = get_api();
   printf("PJRT %d.%d\n", api->pjrt_api_version.major_version, api->pjrt_api_version.minor_version);
   ARGS(PJRT_Plugin_Initialize_Args, init);
   check(api->PJRT_Plugin_Initialize(&init), "Plugin_Initialize");
 
-  static char code[1 << 20];
   FILE* f = fopen(argv[2], "rb");
-  PJRT_Program program = {.struct_size = PJRT_Program_STRUCT_SIZE, .code = code,
-                          .code_size = fread(code, 1, sizeof code, f), .format = "mlir", .format_size = 4};
+  if (!f) {
+    perror(argv[2]);
+    return 1;
+  }
+  fseek(f, 0, SEEK_END);
+  size_t code_size = ftell(f);
+  rewind(f);
+  char* code = malloc(code_size);
+  if (fread(code, 1, code_size, f) != code_size) {
+    perror(argv[2]);
+    return 1;
+  }
+  PJRT_Program program = {.struct_size = PJRT_Program_STRUCT_SIZE, .code = code, .code_size = code_size,
+                          .format = "mlir", .format_size = 4};
 
   if (strcmp(argv[3], "aot") == 0)
     aot(&program, argc - 4, argv + 4);

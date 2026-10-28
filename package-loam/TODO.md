@@ -165,7 +165,9 @@ leaves this file, and `design.md` states what it built.
 26. [ ] Gemma 3 on a TPU, through the PJRT backend. Finished when it picks
     onnxruntime's tokens on a TPU VM, and its time a token is recorded beside
     the compiler's `optimal_seconds` for the same program.
-27. [ ] Many requests at once. Finished when the tokens a second at several
+27. [ ] Many requests at once. A pass takes a batch of rows of different
+    lengths, each with its own position and valid length (see
+    [Loam on TPU](./tpu.md)). Finished when the tokens a second at several
     numbers of concurrent requests are recorded on a TPU and on
     `WebGpuBackend`, each request's tokens unchanged from its run alone.
 
