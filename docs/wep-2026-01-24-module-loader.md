@@ -176,6 +176,11 @@ it, and its path from the host's base. The loader asks once per directory, for
 every module it reads, and `ModuleSourceInterner` composes the name from the
 answer. A host without a filesystem places every module in no package.
 
+A name stands for one module only if one file is one module. A path that
+reaches a dependency's entry module, compared as the host places the file,
+resolves to that dependency; otherwise a single-file dependency reached by its
+name and by a path would be two modules under one name.
+
 ## Consequences
 
 ### Positive

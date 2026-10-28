@@ -314,8 +314,7 @@ impl ModuleSourceInterner {
     /// The file at `path` as the host places it: one spelling for every path
     /// that reaches it.
     fn host_file(&mut self, path: &str, host: &impl PackageHost) -> String {
-        let file = path.rsplit('/').next().unwrap_or(path);
-        join_dir(&self.dir_of(path, host).path, file)
+        join_dir(&self.dir_of(path, host).path, file_name(path))
     }
 
     /// `source` named by where the host says its file lies, the host asked
@@ -356,7 +355,7 @@ impl ModuleSourceInterner {
         if is_bundled_specifier(path) || is_remote(path) {
             return self.intern(path);
         }
-        let file = path.rsplit('/').next().unwrap_or(path);
+        let file = file_name(path);
         let name = match self.dirs.get(module_parent_dir(path)) {
             Some(ModuleDir {
                 package:
@@ -1299,6 +1298,11 @@ fn shared_dir_len(path: &str, root: &str) -> usize {
 fn climb(path: &str, dir: &str) -> String {
     let ups = dir.split('/').filter(|segment| !segment.is_empty()).count();
     join_dir(path, &"../".repeat(ups))
+}
+
+/// The last segment of `path`, its counterpart to [`module_parent_dir`].
+fn file_name(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
 }
 
 /// `file` in the directory `dir`, both relative paths, with no leading `./`.
