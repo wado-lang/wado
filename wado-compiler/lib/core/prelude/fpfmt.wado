@@ -585,15 +585,6 @@ internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, dig
     }
 }
 
-/// `d` with its last `count` decimal digits cut off, unrounded.
-fn drop_low_digits(d: u64, count: i32) -> u64 {
-    let mut kept = d;
-    for let mut i = 0; i < count; i += 1 {
-        kept /= 10;
-    }
-    return kept;
-}
-
 // Fill n bytes of '0' at `offset`. The span must already be reserved.
 fn zeros_at(buf: &mut String, offset: i32, n: i32) {
     if n <= 0 {
@@ -631,9 +622,9 @@ pub fn write_decimal(buf: &mut String, d: u64, p: i32, nd: i32) {
     } else {
         // Decimal point in the middle: dig.its
         let start = reserve_uninit(buf, nd + 1);
-        let raw = buf.internal_raw_bytes_mut();
-        write_decimal_digits(raw, start, d, nd);
+        write_decimal_digits(buf.internal_raw_bytes_mut(), start, d, nd);
         // Shift fractional part right by 1 and insert '.'
+        let raw = buf.internal_raw_bytes_mut();
         builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
         buf.internal_set_byte_unchecked(start + decimal_pos, b'.');
     }
@@ -661,8 +652,8 @@ pub fn write_exp(buf: &mut String, d: u64, p: i32, nd: i32, upper: bool) {
     // Write digits: first digit, then '.' and rest
     if nd > 1 {
         let start = reserve_uninit(buf, nd + 1);
+        write_decimal_digits(buf.internal_raw_bytes_mut(), start, d, nd);
         let raw = buf.internal_raw_bytes_mut();
-        write_decimal_digits(raw, start, d, nd);
         builtin::array_copy(raw, start + 2, raw, start + 1, nd - 1);
         buf.internal_set_byte_unchecked(start + 1, b'.');
     } else {
@@ -726,7 +717,12 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         zeros_at(buf, frac, leading_zeros);
         let remaining_prec = precision - leading_zeros;
         let digits_to_output = if remaining_prec < nd { remaining_prec } else { nd };
-        let trim_d = drop_low_digits(d, nd - digits_to_output);
+        let mut trim_d = d;
+        let mut skip = nd - digits_to_output;
+        while skip > 0 {
+            trim_d /= 10;
+            skip -= 1;
+        }
         write_decimal_digits(buf.internal_raw_bytes_mut(), frac + leading_zeros, trim_d, digits_to_output);
         zeros_at(buf, frac + leading_zeros + digits_to_output, remaining_prec - digits_to_output);
     } else if decimal_pos >= nd {
@@ -742,18 +738,23 @@ pub fn write_decimal_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: 
         let after_decimal = nd - decimal_pos;
         if precision <= after_decimal {
             let output_nd = decimal_pos + precision;
-            let trim_d = drop_low_digits(d, nd - output_nd);
+            let mut trim_d = d;
+            let mut skip = nd - output_nd;
+            while skip > 0 {
+                trim_d /= 10;
+                skip -= 1;
+            }
             let start = reserve_uninit(buf, output_nd + 1);
+            write_decimal_digits(buf.internal_raw_bytes_mut(), start, trim_d, output_nd);
             let raw = buf.internal_raw_bytes_mut();
-            write_decimal_digits(raw, start, trim_d, output_nd);
             builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, output_nd - decimal_pos);
             buf.internal_set_byte_unchecked(start + decimal_pos, b'.');
             return;
         }
         let trailing = precision - after_decimal;
         let start = reserve_uninit(buf, nd + 1 + trailing);
+        write_decimal_digits(buf.internal_raw_bytes_mut(), start, d, nd);
         let raw = buf.internal_raw_bytes_mut();
-        write_decimal_digits(raw, start, d, nd);
         builtin::array_copy(raw, start + decimal_pos + 1, raw, start + decimal_pos, nd - decimal_pos);
         buf.internal_set_byte_unchecked(start + decimal_pos, b'.');
         zeros_at(buf, start + nd + 1, trailing);
@@ -781,15 +782,26 @@ pub fn write_exp_prec(buf: &mut String, d: u64, p: i32, nd: i32, precision: i32,
         let trailing = precision - to_output;
         let digit_count = 1 + to_output;
         let start = reserve_uninit(buf, digit_count + 1 + trailing);
-        let trim_d = drop_low_digits(d, nd - digit_count);
+        let mut trim_d = d;
+        let mut skip = nd - digit_count;
+        while skip > 0 {
+            trim_d /= 10;
+            skip -= 1;
+        }
+        write_decimal_digits(buf.internal_raw_bytes_mut(), start, trim_d, digit_count);
         let raw = buf.internal_raw_bytes_mut();
-        write_decimal_digits(raw, start, trim_d, digit_count);
         builtin::array_copy(raw, start + 2, raw, start + 1, digit_count - 1);
         buf.internal_set_byte_unchecked(start + 1, b'.');
         zeros_at(buf, start + digit_count + 1, trailing);
     } else {
         let start = reserve_uninit(buf, 1);
-        write_decimal_digits(buf.internal_raw_bytes_mut(), start, drop_low_digits(d, nd - 1), 1);
+        let mut first_d = d;
+        let mut skip = nd - 1;
+        while skip > 0 {
+            first_d /= 10;
+            skip -= 1;
+        }
+        write_decimal_digits(buf.internal_raw_bytes_mut(), start, first_d, 1);
     }
 
     let exp = p + nd - 1;
