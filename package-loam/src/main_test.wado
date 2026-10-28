@@ -207,6 +207,19 @@ test "several checkpoints with no index are refused" {
     assert refused == "loam: 2 checkpoints and no index; the shards of one are given beside the index placing each tensor";
 }
 
+test "gen reads weights in place from the external data file the model places them in" {
+    let path = "tests/models/tiny-gpt2/external/model.onnx";
+    let printed = loam(["gen", "--type", "onnx", path]).unwrap();
+    assert printed.contains("those the graph does not carry read from model.onnx_data where the build found them.");
+    assert printed.contains("payload_at::<f32, Ck>(checkpoint, ");
+}
+
+test "weights left in place take no checkpoint beside them" {
+    let path = "tests/models/tiny-gpt2/external/model.onnx";
+    let refused = loam(["gen", "--type", "onnx", "--checkpoint", "tests/models/tiny-gpt2/model.safetensors", path]).unwrap_err();
+    assert refused == `loam: '${path}': the weights are left in place in model.onnx_data, so no checkpoint is given`;
+}
+
 test "dump reports each node's lowering and each tensor's shape" {
     let dir = scratch("dump");
     let report = on_graph("dump", &dir, []).unwrap();

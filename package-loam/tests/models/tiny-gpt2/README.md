@@ -25,6 +25,13 @@ tool writes them. It also writes `sharded/model.onnxtext`, which is
 
     wado run ../../../tools/onnx_split.wado -- --max-shard-bytes 200000 model.onnx sharded/model
 
+`external/` holds `model.onnx` as an exporter writes a model too large for one
+protobuf: the graph in `external/model.onnx`, and its weights back to back in
+`external/model.onnx_data`, which the graph places each weight in by offset and
+length. The same tool writes them:
+
+    wado run ../../../tools/onnx_split.wado -- --external-data model.onnx external/model
+
 The repository ships no expected outputs, so `test_data_set_0/` and
 `test_data_set_1/` are onnxruntime's. `oracle.mjs` writes them with
 onnxruntime-node 1.30.0. Each holds token ids, a mask of ones, and the logits the

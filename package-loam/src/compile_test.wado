@@ -1,0 +1,29 @@
+use { TreeMap } from "core:collections";
+use { Model, Spelling, Weights, check, generate_model } from "./compile.wado";
+use { InPlace } from "./graph.wado";
+
+global GRAPH: String = "<ir_version: 8, opset_import: [ \"\" : 13 ]>
+g (float[N, 2] X) => (float[N, 3] Y)
+<float[2, 3] W, float[3] B>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+}
+";
+
+/// The graph, with `W` left in place in `w.bin` and `B` given no data at all.
+fn half_in_place() -> Model {
+    let path = "g.onnxtext";
+    let model = check(&path, Spelling::Text, GRAPH.bytes().collect(), &{}).unwrap();
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    ranges["W"] = [0, 24];
+    return Model {
+        ..model,
+        graph: { ..model.graph, in_place: Option::Some(InPlace { file: "w.bin", ranges }) },
+    };
+}
+
+test "a weight with no data beside weights left in place names itself" {
+    let refused = generate_model(&half_in_place(), &"g.onnx", Weights::Unchecked, &"lib:loam").unwrap_err();
+    assert refused == "loam: 'g.onnx': B: no data, and the weights left in place are in w.bin";
+}

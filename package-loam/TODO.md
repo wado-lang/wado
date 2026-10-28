@@ -273,12 +273,12 @@ classes. A merged decoder's branch without a past joins its keys with its
 queries, so in the branch with one a key and a query are one type, and so are
 the mask and the input ids at the boundary.
 
-An initializer naming its own data file stops the build, naming the tensor. The
-textual format lets one carry a `["location": ...]` list, the protobuf form an
-`external_data` entry, and Loam takes its weights from the checkpoint the
-invocation names, so the two say different things about where one tensor's
-bytes are. `tools/onnx_split.wado` reads the protobuf form's files from beside
-the model, so a model kept that way is split into a checkpoint first.
+An initializer the textual format gives a `["location": ...]` list stops the
+build, naming the tensor. The protobuf form's `external_data` is read in place
+instead, as `design.md` describes, from one file. A model spreading its weights
+over several data files stops the build naming two of them, and so does a
+constant kept in one, since the build reads a constant and Kiln hands the
+generator the model alone.
 
 ### Element types and precision
 

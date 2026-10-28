@@ -1,7 +1,7 @@
 //! Reading a graph out of a serialized ONNX `ModelProto`. The schema is
 //! `onnx.proto` as ONNX ships it, and Grog generates its types.
 
-use { HashMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 use grog from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -12,6 +12,7 @@ use {
     Dim,
     Elements,
     Graph,
+    InPlace,
     Known,
     Stored,
     Node,
@@ -170,22 +171,26 @@ fn is_external(t: &onnx::TensorProto) -> bool {
     return !t.external_data.is_empty() || t.data_location matches { Some(External) };
 }
 
+/// The `external_data` entry `key` of `t` as a number, or `absent`.
+fn external_number(t: &onnx::TensorProto, name: &String, key: String, absent: i64) -> Result<i64, String> {
+    let Some(text) = external_entry(t, key) else {
+        return Result::Ok(absent);
+    };
+    return i64::from_str(&text).map_err(|_| `${*name}: external data ${key} ${text}`);
+}
+
+fn external_location(t: &onnx::TensorProto, name: &String) -> Result<String, String> {
+    return external_entry(t, "location").ok_or(`${*name}: external data with no location`);
+}
+
 /// `t`'s bytes out of the file its `external_data` names, among `files`.
 fn external_bytes(t: &onnx::TensorProto, name: &String, files: &HashMap<String, ByteList>) -> Result<ByteList, String> {
-    let Some(location) = external_entry(t, "location") else {
-        return Result::Err(`${*name}: external data with no location`);
-    };
+    let location = external_location(t, name)?;
     let Some(file) = files.get_ref_str(&location) else {
         return Result::Err(`${*name}: external data in ${location}, which the reader was not given`);
     };
-    let number = |key: String, absent: i64| -> Result<i64, String> {
-        let Some(text) = external_entry(t, key) else {
-            return Result::Ok(absent);
-        };
-        return i64::from_str(&text).map_err(|_| `${*name}: external data ${key} ${text}`);
-    };
-    let offset = number("offset", 0)?;
-    let length = number("length", file.len() as i64 - offset)?;
+    let offset = external_number(t, name, "offset", 0)?;
+    let length = external_number(t, name, "length", file.len() as i64 - offset)?;
     if offset < 0 || length < 0 || length > file.len() as i64 - offset {
         return Result::Err(
             `${*name}: external data at ${offset} for ${length} bytes, past the end of ${location}'s ${file.len()}`,
@@ -194,25 +199,71 @@ fn external_bytes(t: &onnx::TensorProto, name: &String, files: &HashMap<String, 
     return Result::Ok(file[offset as i32..<(offset + length) as i32].to_list() as ByteList);
 }
 
-/// An initializer as a `ValueInfo`: its name, type, extents and data, the data
-/// out of `files` where it is external.
+/// An initializer as a `ValueInfo`: its name, type, extents and data. External
+/// data comes out of `files`, or stays `in_place` where its file is not given.
 fn read_initializer(
     t: &onnx::TensorProto,
     name: String,
     dtype: String,
     files: &HashMap<String, ByteList>,
+    in_place: &mut Option<InPlace>,
 ) -> Result<ValueInfo, String> {
     let extents = extents_of(t, &name)?;
     let mut dims: List<Dim> = [];
     for let e of extents {
         dims.push(Dim::Static(e));
     }
-    let data = if is_external(t) {
+    let data = if !is_external(t) {
+        payload(t, &name, &dtype, &extents)?;
+    } else if files.contains_key(external_location(t, &name)?) {
         Option::Some(external_payload(t, &name, &dtype, &extents, files)?);
     } else {
-        payload(t, &name, &dtype, &extents)?;
+        leave_in_place(t, &name, &dtype, &extents, in_place)?;
+        null;
     };
     return Result::Ok(ValueInfo { name, dtype, rank: rank_of(dims), data });
+}
+
+/// Records where `t`'s external data sits in its file, which the reader was
+/// not given, for `Prepared::load` to read it there.
+fn leave_in_place(
+    t: &onnx::TensorProto,
+    name: &String,
+    dtype: &String,
+    extents: &List<i32>,
+    in_place: &mut Option<InPlace>,
+) -> Result<(), String> {
+    let location = external_location(t, name)?;
+    let Some(element) = element_of(dtype) else {
+        return Result::Err(`${*name}: external ${*dtype} data`);
+    };
+    let length = external_number(t, name, "length", -1)?;
+    if length == -1 {
+        return Result::Err(`${*name}: external data in ${location} with no length, which a weight left in place states`);
+    }
+    let offset = external_number(t, name, "offset", 0)?;
+    if offset < 0 || length < 0 || length > i32::MAX as i64 - offset {
+        return Result::Err(`${*name}: external data at ${offset} for ${length} bytes, past what a module can address`);
+    }
+    let width = element.width;
+    if length % width as i64 != 0 {
+        return Result::Err(`${*name}: ${length} raw bytes is not whole ${*dtype} elements`);
+    }
+    check_element_count(name, (length / width as i64) as i32, extents)?;
+    if in_place matches { None } {
+        *in_place = Option::Some(InPlace { file: location, ranges: TreeMap::new() });
+    }
+    let Some(held) = in_place else {
+        unreachable();
+    };
+    if held.file != location {
+        let [first, _] = held.ranges.entries().next().unwrap();
+        return Result::Err(
+            `${*name}: external data in ${location}, and ${first}'s in ${held.file}; the weights left in place are in one file`,
+        );
+    }
+    held.ranges[*name] = [offset as i32, (offset + length) as i32];
+    return Result::Ok(());
 }
 
 /// An external tensor's bytes, checked against its shape. They are copied out
@@ -370,6 +421,41 @@ pub fn external_locations<S: AsByteSlice>(bytes: S) -> Result<List<String>, Read
     return Result::Ok(locations);
 }
 
+/// The serialized `ModelProto` `bytes` with every weight's `raw_data` moved to
+/// an external data file at `location`, as an exporter writes a model too large
+/// for one protobuf: the model, then that file. A constant keeps its data,
+/// since the build reads it.
+pub fn externalize<S: AsByteSlice>(bytes: S, location: String) -> Result<[ByteList, ByteList], ReadError> {
+    let mut model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| ReadError { reason: `${e}` })?;
+    let mut data: ByteList = [];
+    if let Some(graph) = &mut model.graph {
+        for let t of &mut graph.initializer {
+            let Some(raw) = t.raw_data else {
+                continue;
+            };
+            let Some(dtype) = dtype_name(t.data_type.unwrap_or(0)) else {
+                continue;
+            };
+            if is_build_time(&dtype) {
+                continue;
+            }
+            let entry = |key: String, value: String| onnx::StringStringEntryProto {
+                key: Option::Some(key),
+                value: Option::Some(value),
+            };
+            t.external_data = [
+                entry("location", location),
+                entry("offset", `${data.len()}`),
+                entry("length", `${raw.len()}`),
+            ];
+            t.data_location = Option::Some(onnx::TensorProtoDataLocation::External);
+            t.raw_data = null;
+            data.extend(&raw);
+        }
+    }
+    return Result::Ok([grog::encode(&model), data]);
+}
+
 fn read_model<S: AsByteSlice>(bytes: S, files: &HashMap<String, ByteList>) -> Result<Graph, String> {
     let model = grog::decode::<onnx::ModelProto, S>(bytes).map_err(|e| `${e}`)?;
     let Some(graph) = &model.graph else {
@@ -387,6 +473,7 @@ fn read_model<S: AsByteSlice>(bytes: S, files: &HashMap<String, ByteList>) -> Re
 /// A `GraphProto` as written, its operators not yet read at an opset.
 fn read_graph(graph: &onnx::GraphProto, files: &HashMap<String, ByteList>) -> Result<Graph, String> {
     let mut initializers: List<ValueInfo> = [];
+    let mut in_place: Option<InPlace> = null;
     let mut constants = HashMap::<String, Known>::new();
     for let t of graph.initializer {
         let name = name_of(&t);
@@ -402,7 +489,7 @@ fn read_graph(graph: &onnx::GraphProto, files: &HashMap<String, ByteList>) -> Re
             };
             constants[name] = known_tensor(&inline)?.unwrap();
         } else {
-            initializers.push(read_initializer(&t, name, dtype, files)?);
+            initializers.push(read_initializer(&t, name, dtype, files, &mut in_place)?);
         }
     }
     let mut declared: List<ValueInfo> = [];
@@ -425,5 +512,6 @@ fn read_graph(graph: &onnx::GraphProto, files: &HashMap<String, ByteList>) -> Re
         initializers,
         constants,
         nodes,
+        in_place,
     });
 }

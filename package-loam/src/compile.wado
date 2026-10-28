@@ -137,6 +137,19 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
     let emit_with = |weights_from: Placement| emit(graph, &model.checked, runtime, model.fuse, weights_from).map_err(
         |e| at(path, &e),
     );
+    if let Some(in_place) = graph.in_place {
+        if !weights matches { Unchecked } {
+            return Result::Err(
+                at(path, &`the weights are left in place in ${in_place.file}, so no checkpoint is given`),
+            );
+        }
+        if let Some(vi) = graph.initializers.iter_ref().find(
+            |vi| vi.data matches { None } && !in_place.ranges.contains_key(vi.name),
+        ) {
+            return Result::Err(at(path, &`${vi.name}: no data, and the weights left in place are in ${in_place.file}`));
+        }
+        return emit_with(Placement::InPlace(in_place));
+    }
     return match weights {
         Unchecked => emit_with(Placement::File),
         File(file) => {

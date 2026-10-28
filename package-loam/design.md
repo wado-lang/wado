@@ -122,3 +122,32 @@ the shard. A single file's use site and loader are unchanged.
 It fills each shard in the graph's order up to `n` payload bytes, and a tensor
 larger than that goes alone. `conformance/tiny_gpt2_sharded_test.wado` loads
 the tiny GPT-2 from three shards and reproduces the logits of its single file.
+
+### Weights read in place
+
+An exporter writes a model past protobuf's 2 GiB as a graph whose initializers
+name an external data file, each weight at an offset and a length in it. Hugging
+Face publishes such a model as it is, so reading the file in place spares a
+consumer the split into a checkpoint. The graph alone is the use site's file:
+
+```wado
+use { Prepared, forward } from "./model.onnx" with {
+    type: "onnx",
+    generator: { module: "lib:loam" },
+};
+```
+
+The build reads no byte of the data file. It takes each weight's range from
+the graph, checked against the weight's shape, so the generated module carries
+the ranges and the loader is handed the data file:
+
+```wado
+Prepared::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Prepared<Bk>, LoadError>
+```
+
+A file shorter than a range is a `LoadError` naming the tensor. A build
+refuses a weight with no length, a range past what a module can address,
+weights in two files, and a checkpoint given beside them.
+`tools/onnx_split.wado --external-data` writes a model this way, and
+`conformance/tiny_gpt2_external_test.wado` reproduces the tiny GPT-2's logits
+from one.
