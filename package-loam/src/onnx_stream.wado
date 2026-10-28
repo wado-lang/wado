@@ -4,6 +4,8 @@
 //! in the memory its graph takes.
 
 use { TreeMap } from "core:collections";
+use grog from "lib:grog";
+use { WireType } from "lib:grog";
 use { is_build_time } from "./graph.wado";
 use { dtype_name } from "./onnx_proto.wado";
 
@@ -18,21 +20,12 @@ pub struct Slim {
 /// How many bytes each read asks the stream for.
 global READ_CHUNK: i32 = 65536;
 
-// The wire types, as the protobuf encoding numbers them.
-global VARINT: u64 = 0;
-global I64: u64 = 1;
-global LEN: u64 = 2;
-global GROUP_START: u64 = 3;
-global GROUP_END: u64 = 4;
-global I32: u64 = 5;
-
-// The tags the walk looks into, as `onnx.proto` numbers the fields: the field
-// number shifted past the three bits of its wire type.
-global MODEL_GRAPH: u64 = 7 << 3 | LEN;
-global GRAPH_INITIALIZER: u64 = 5 << 3 | LEN;
-global TENSOR_DATA_TYPE: u64 = 2 << 3 | VARINT;
-global TENSOR_NAME: u64 = 8 << 3 | LEN;
-global TENSOR_RAW_DATA: u64 = 9 << 3 | LEN;
+// The tags the walk looks into, by the field numbers `onnx.proto` gives.
+global MODEL_GRAPH: u64 = grog::tag_of(7, WireType::Len);
+global GRAPH_INITIALIZER: u64 = grog::tag_of(5, WireType::Len);
+global TENSOR_DATA_TYPE: u64 = grog::tag_of(2, WireType::Varint);
+global TENSOR_NAME: u64 = grog::tag_of(8, WireType::Len);
+global TENSOR_RAW_DATA: u64 = grog::tag_of(9, WireType::Len);
 
 /// The model `content` holds, its weights' payloads left in the file. Drops
 /// `content`.
@@ -97,8 +90,8 @@ fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]
             left = Option::Some([start as i32, stop as i32]);
         } else if tag == TENSOR_DATA_TYPE {
             let number = c.varint()?;
-            put_varint(&mut tensor, tag);
-            put_varint(&mut tensor, number);
+            grog::push_varint(&mut tensor, tag);
+            grog::push_varint(&mut tensor, number);
             weight = number <= i32::MAX as u64
                 && dtype_name(number as i32) matches { Some(dtype) && !is_build_time(&dtype) };
         } else if tag == TENSOR_NAME {
@@ -119,37 +112,30 @@ fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]
 
 /// The field `tag` opens, copied to `out` as it stands.
 fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String> {
-    put_varint(out, tag);
-    return match tag & 7 {
-        VARINT => {
-            put_varint(out, c.varint()?);
+    grog::push_varint(out, tag);
+    let Some(wire_type) = grog::wire_type_of(tag & 7) else {
+        return Result::Err(`wire type ${tag & 7} at byte ${c.pos()}, which protobuf does not define`);
+    };
+    return match wire_type {
+        Varint => {
+            grog::push_varint(out, c.varint()?);
             Result::Ok(());
         },
         I64 => c.copy(8, out),
         I32 => c.copy(4, out),
-        LEN => {
+        Len => {
             let length = c.varint()?;
-            put_varint(out, length);
+            grog::push_varint(out, length);
             c.copy_len(length, out);
         },
-        GROUP_START | GROUP_END => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
-        wire => Result::Err(`wire type ${wire} at byte ${c.pos()}, which protobuf does not define`),
+        SGroup | EGroup => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
     };
-}
-
-fn put_varint(out: &mut ByteList, value: u64) {
-    let mut rest = value;
-    while rest >= 128 {
-        out.push((rest & 0x7f | 0x80) as u8);
-        rest >>= 7;
-    }
-    out.push(rest as u8);
 }
 
 /// A length-delimited field: `tag`, then `body` behind its length.
 fn put_message(out: &mut ByteList, tag: u64, body: &ByteList) {
-    put_varint(out, tag);
-    put_varint(out, body.len() as u64);
+    grog::push_varint(out, tag);
+    grog::push_varint(out, body.len() as u64);
     out.extend(body);
 }
 
@@ -183,19 +169,17 @@ impl Cursor {
     }
 
     fn varint(&mut self) -> Result<u64, String> {
-        let mut value: u64 = 0;
-        let mut shift: u64 = 0;
+        let mut decoder = grog::VarintDecoder::new();
         loop {
-            let byte = self.next(1)?[0];
-            // 64 = 9 * 7 + 1: a tenth byte holds one bit.
-            if shift == 63 && byte > 1 {
-                return Result::Err(`a varint ending at byte ${self.pos()} overflows 64 bits`);
+            match decoder.feed(self.next(1)?[0]) {
+                Ok(Some(value)) => {
+                    return Result::Ok(value);
+                },
+                Ok(None) => {},
+                Err(reason) => {
+                    return Result::Err(`${reason} at byte ${self.pos()}`);
+                },
             }
-            value |= (byte & 0x7f) as u64 << shift;
-            if byte < 128 {
-                return Result::Ok(value);
-            }
-            shift += 7;
         }
     }
 

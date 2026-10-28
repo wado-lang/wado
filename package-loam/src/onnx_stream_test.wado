@@ -118,6 +118,12 @@ test "a wire type protobuf does not define names itself, not a group" {
     assert e == "wire type 6 at byte 3, which protobuf does not define";
 }
 
+test "a varint past 64 bits names the byte that overflows it" {
+    let e = walked(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02").unwrap_err();
+
+    assert e == "a varint overflows 64 bits at byte 10";
+}
+
 test "a model cut off inside a field names where it ends" {
     let bytes = model();
     let cut = bytes[0..<bytes.len() - 3].to_list() as ByteList;
