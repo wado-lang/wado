@@ -4,15 +4,15 @@
 //! [WEP: Profile-Guided Optimization](../../docs/wep-2026-10-25-profile-guided-optimization.md).
 //!
 //! The format is the specification's,
-//! [Profiles](../../docs/spec-testing.md#profiles). A `module` line names a
-//! module as [`Coverage::files`] keys it.
+//! [Profiles](../../docs/spec-testing.md#profiles). A `module` line is a
+//! [`Coverage::files`] key, which `--pgo` makes the module's name.
 
 use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
 use crate::ast::{self, AstId};
 use crate::coverage::{
-    Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module, plan_path,
+    Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module,
 };
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -171,7 +171,7 @@ pub(crate) struct ColdMap {
     sites: IndexSet<(ProbeSite, AstId)>,
     /// The modules applied, which a compile seeded with this map leaves alone.
     sources: IndexSet<ModuleSource>,
-    /// Each region marked, as `path:line:column kind`.
+    /// Each region marked, as `module:line:column kind`.
     regions: Vec<String>,
     remarks: Vec<(Span, String)>,
 }
@@ -191,7 +191,7 @@ impl ColdMap {
             if map.sources.contains(source) {
                 continue;
             }
-            let Some(functions) = profile.modules.get(&plan_path(source)) else {
+            let Some(functions) = profile.modules.get(&source.to_string()) else {
                 continue;
             };
             map.apply(plan_module(source, module, rt_unreachable_calls), functions);
@@ -271,7 +271,7 @@ impl ColdMap {
             self.sites.insert(site_of[&(id as u32)]);
             self.regions.push(format!(
                 "{}:{}:{} {}",
-                plan.path,
+                plan.name,
                 region.start.line,
                 region.start.column,
                 region.kind.label()
@@ -304,7 +304,7 @@ impl ColdMap {
         self.sites.contains(&(site, id))
     }
 
-    /// Each region marked, as `path:line:column kind`.
+    /// Each region marked, as `module:line:column kind`.
     #[must_use]
     pub(crate) fn regions(&self) -> &[String] {
         &self.regions
@@ -338,7 +338,8 @@ mod tests {
 
     fn recorded() -> Coverage {
         let plan = ModulePlan {
-            path: "a.wado".to_string(),
+            name: "a.wado".to_string(),
+            path: "./a.wado".to_string(),
             functions: vec![
                 PlannedFunction {
                     name: "f".to_string(),

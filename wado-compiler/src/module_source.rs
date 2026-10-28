@@ -1217,11 +1217,10 @@ impl ModuleSource {
         format!("{self}//{name}")
     }
 
-    /// The module's real source location — the counterpart to its name
-    /// ([`Display`]), keeping the entry point's full compile path rather than
-    /// its base name. Read where a real path must resolve a sibling
-    /// file (`#include_str`) and as the filename in diagnostics. Empty for an
-    /// entry point with no real filename, such as `<stdin>`.
+    /// Where the host reads the module — the counterpart to its name
+    /// ([`Display`]). Read where a real path must resolve a sibling file
+    /// (`#include_str`) and as the filename in diagnostics. Empty for an entry
+    /// point with no real filename, such as `<stdin>`.
     #[must_use]
     pub fn source_path(&self) -> String {
         match self {

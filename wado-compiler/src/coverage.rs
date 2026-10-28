@@ -180,8 +180,9 @@ pub struct PlannedFunction {
 /// The regions a module's source implies, numbered from zero.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModulePlan {
-    /// The module's source path: relative to the entry module's directory
-    /// for a file, as the loader reads it, or the import path (`core:json`).
+    /// The module's name, the same on any machine and from any entry.
+    pub name: String,
+    /// Where the host reads the module: [`ModuleSource::source_path`].
     pub path: String,
     pub functions: Vec<PlannedFunction>,
     pub regions: Vec<Region>,
@@ -343,6 +344,7 @@ impl CoverageMap {
         let mut w = Writer::default();
         w.u32(self.modules.len() as u32);
         for (plan, &base) in self.modules.iter().zip(&self.bases) {
+            w.str(&plan.name);
             w.str(&plan.path);
             w.u32(base);
             w.u32(plan.functions.len() as u32);
@@ -391,9 +393,11 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
     let count = r.u32()?;
     let mut out = Vec::new();
     for _ in 0..count {
+        let name = r.str()?;
         let path = r.str()?;
         let base = r.u32()?;
         let mut plan = ModulePlan {
+            name,
             path,
             ..ModulePlan::default()
         };
@@ -516,16 +520,6 @@ impl Reader<'_> {
 
 type Sites = Vec<(ProbeSite, AstId, u32)>;
 
-/// The path a plan names its module by. The loader reads a local module
-/// relative to the entry module's directory, so the entry is named by its file
-/// name alone to share that base.
-pub(crate) fn plan_path(source: &ModuleSource) -> String {
-    match source {
-        ModuleSource::EntryPoint { .. } => source.to_string(),
-        _ => source.source_path(),
-    }
-}
-
 /// The regions each `for-of` body holds, by the loop's node.
 type ForOfBodies = Vec<(AstId, Range<u32>)>;
 
@@ -564,7 +558,8 @@ pub(crate) fn plan_module(
 ) -> PlannedModule {
     let mut planner = Planner {
         plan: ModulePlan {
-            path: plan_path(source),
+            name: source.to_string(),
+            path: source.source_path(),
             ..ModulePlan::default()
         },
         rt_unreachable_calls,
@@ -1540,7 +1535,8 @@ mod tests {
     /// `fn f` whose body derives from an `if` and its omitted `else`.
     fn plan() -> ModulePlan {
         ModulePlan {
-            path: "a.wado".to_string(),
+            name: "a.wado".to_string(),
+            path: "./a.wado".to_string(),
             functions: vec![PlannedFunction {
                 name: "f".to_string(),
                 line: 1,

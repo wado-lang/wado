@@ -152,7 +152,29 @@ Left unfolded, the loader interns two `ModuleSource`s for one file and loads it 
 
 `name::resolve_local_identity(entry_dir, from_path, import)` (compose then canonicalize) is the single resolver every site goes through, so they cannot drift: the loader's `resolve_import`, the analyze/elaborator re-resolution `name::resolve_import_with_entry`, and the CLI Kiln harvest (they must agree, or a module is looked up under a different identity than it was loaded). It is applied to the `Local`-importer branch and to the `EntryPoint` branch (an escape-reentry spelled in the entry itself must collapse too) and to the wasm-asset path; the stdlib/`Dependency`/`Remote` branches keep their own identity spaces. Every re-resolution site threads the entry `ModuleSource` so `entry_dir` is non-empty exactly where the loader had it; a site that passed `None` would silently skip canonicalization and diverge for escape-reentry imports.
 
-Anchoring at the entry directory — rather than the manifest root — keeps non-escape identities byte-identical to the pre-canonicalization scheme, so no qualified name or golden output changes; only the previously-double-loaded escape case is affected. With entry context absent (`entry_dir` empty, e.g. a bare entry filename or a stdlib-identity entry) the input passes through unchanged, matching the older behavior.
+Anchoring at the entry directory — rather than the manifest root — keeps non-escape identities byte-identical to the pre-canonicalization scheme; only the previously-double-loaded escape case is affected. With entry context absent (`entry_dir` empty, e.g. a bare entry filename or a stdlib-identity entry) the input passes through unchanged, matching the older behavior.
+
+### A module has one name
+
+The identity above is where the host reads a module, and it moves with the
+entry. A module's name does not: it is the one spelling of the module in a
+symbol, a diagnostic's function name, a coverage plan and a profile, the same on
+any machine and from any entry. `ModuleSource`'s `Display` prints it.
+
+- A file in a package whose `wado.toml` has a `[package]` is the package's
+  `namespace:name@version`, then the file's path inside the package:
+  `acme:app@0.1.0/src/main.wado`. The entry's own package is named this way
+  too.
+- Any other file is its path from the build root, the entry's package root or,
+  in no package, the entry's own directory: `main.wado`, `sub/y.wado`,
+  `../shared/z.wado`.
+- A `core:` or `wasi:` module is its import path, and a remote module its URL.
+
+The host answers where a directory lies, `CompilerHost::module_dir`: the
+package it is in, with the package's coordinate and the directory's path inside
+it, and its path from the host's base. The loader asks once per directory, for
+every module it reads, and `ModuleSourceInterner` composes the name from the
+answer. A host without a filesystem places every module in no package.
 
 ## Consequences
 
@@ -208,3 +230,9 @@ See WEP-2026-01-10-wasm-import for details. JSON file import is not a core impor
 - [x] Update `CompilerHost::load_source` to document URL support
 - [x] Update error messages
 - [x] Add tests for namespace validation
+
+## Known gaps
+
+- [ ] Two packages with one coordinate in a build, such as two copies of a
+  package at one version, give their modules one name each. Their symbols then
+  collide, and nothing reports it.

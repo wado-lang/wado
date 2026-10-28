@@ -59,7 +59,7 @@ fn only_the_workloads_are_recorded_into_the_package_profile() {
     let profile = fs::read_to_string(tmp.path().join("pgo/default.pgo")).unwrap();
     assert!(profile.starts_with("wado-pgo 1\n"), "{profile}");
     assert!(profile.contains("\nmodule core:prelude\n"), "{profile}");
-    let lib = section(&profile, "lib.wado");
+    let lib = section(&profile, "acme:app@0.1.0/lib.wado");
     assert_eq!(lib.len(), 5, "{profile}");
     assert!(
         lib[0].starts_with("fn ") && lib[0].ends_with(" 1 pick"),
@@ -130,7 +130,10 @@ fn a_dependency_is_named_by_its_package() {
         profile.contains("\nmodule acme:dep@0.1.0/src/lib.wado\n"),
         "{profile}"
     );
-    assert!(profile.contains("\nmodule bench_test.wado\n"), "{profile}");
+    assert!(
+        profile.contains("\nmodule app@0.1.0/bench_test.wado\n"),
+        "{profile}"
+    );
 }
 
 #[test]

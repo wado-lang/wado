@@ -248,7 +248,8 @@ pub fn diagnostic_function_name(
 /// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
 /// own first character rather than a suffix marker; so may a type argument.
 fn as_declared(name: &str) -> String {
-    let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
+    let is_module_path =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-' | '@');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
     for c in name.chars() {
@@ -2937,6 +2938,11 @@ mod tests {
         let f1 = interner.entry_point("f1.wado");
         assert_eq!(named(&f1, "id<&f1.wado/P>"), "id<&P>");
         assert_eq!(named(&f1, "id<[f1.wado/P,i32]>"), "id<[P,i32]>");
+        // A packaged module is named by its package's coordinate.
+        assert_eq!(
+            named(&f1, "id<acme:dep@0.2.0/src/lib.wado/P,../x.wado/Q>"),
+            "id<P,Q>"
+        );
         assert_eq!(
             named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
             "id<fn(P)->i32with($e263)>"

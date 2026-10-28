@@ -360,19 +360,20 @@ A profile is text, one record per line:
 
 ```text
 wado-pgo 1
-module src/lib.wado
+module acme:app@0.1.0/src/lib.wado
 fn 3f2a9c0d1e2b4a59 12 pick
 0 5
 1 4
 ```
 
-A `module` line names a module the same way on any machine:
+A `module` line names a module the same way on any machine and from any entry:
 
-- A file of the package is relative to the package's root, or for a program in
-  no package, to the program's directory.
-- A dependency's file is the dependency's `namespace:name@version`, then the
-  file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
-- A `core:` module is its import path.
+- A file of a package whose `wado.toml` has a `[package]`, the recording
+  package's own or a dependency's, is the package's `namespace:name@version`,
+  then the file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
+- Any other file is relative to the package's root, or for a program in no
+  package, to the program's directory.
+- A `core:` module is its import path, and a remote module its URL.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
 the function's source text, a CRLF read as LF, and its regions' kinds and
