@@ -57,7 +57,7 @@ use crate::nir::FuncId;
 use crate::nir_arena;
 use crate::optimize::arena_query::{
     binary_parts, expr_node_may_trap_typed, is_pure_operand, local_written_by,
-    mentions_local_except, operand_local,
+    mentions_local_except, node_mentions_local, operand_local, stmt_mentions_local,
 };
 use crate::optimize::mod_ref::{CallFacts, summarize};
 
@@ -1320,14 +1320,13 @@ fn unshare_unread_lets(engine: &mut Engine, plan: &Plan, fast_body: BlockId) -> 
     let body = &*engine.body;
     let slow = &body.blocks[plan.loop_body].stmts;
     let arms = [NodeRef::Block(fast_body), NodeRef::Block(plan.loop_body)];
-    let names = |node: NodeRef, l: u32| mentions_local_except(body, node, &[], l);
     let rebound_first = |l: u32| {
         let Some(j) = slow.iter().position(|&s| {
             matches!(body.stmts[s].kind, StmtKind::Let { local_index, .. } if local_index == l)
         }) else {
             return false;
         };
-        !slow[..=j].iter().any(|&s| names(NodeRef::Stmt(s), l))
+        !slow[..=j].iter().any(|&s| stmt_mentions_local(body, s, l))
     };
     let mut lets: Vec<(StmtId, u32)> = Vec::new();
     body.for_each_node_under(NodeRef::Block(fast_body), |n| {
@@ -1338,7 +1337,7 @@ fn unshare_unread_lets(engine: &mut Engine, plan: &Plan, fast_body: BlockId) -> 
         }
     });
     lets.retain(|&(_, l)| {
-        !names(NodeRef::Block(fast_body), l)
+        !node_mentions_local(body, NodeRef::Block(fast_body), l)
             && rebound_first(l)
             && !mentions_local_except(body, NodeRef::Block(body.root()), &arms, l)
     });
