@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793180002883,
+  "lastUpdate": 1793181049983,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71909,6 +71909,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8bbc55b88470f298c607d0fee0994b74d5ef66e1"
         },
         "date": 1793180001837,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1e7e11efa0e4201dc65f58818e3c46e97c44866f",
+          "message": "Merge pull request #2485 from wado-lang/ccr-8641bdb7-o0k3k6\n\nfix(kiln): an absolute path build-dependency resolves its generator",
+          "timestamp": "2026-10-28T18:16:04+09:00",
+          "tree_id": "32fd9f04e7facbbe8c6c4cb2178500122da6a984",
+          "url": "https://github.com/wado-lang/wado/commit/1e7e11efa0e4201dc65f58818e3c46e97c44866f"
+        },
+        "date": 1793181048844,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
