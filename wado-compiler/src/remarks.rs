@@ -11,6 +11,8 @@
 //! into a caller of another module. So a remark stays where its cost was written
 //! whatever the inliner chose.
 
+use std::sync::RwLockReadGuard;
+
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
@@ -47,13 +49,20 @@ pub struct Remark {
 /// carries its spans into each, and one cost written once is one remark.
 #[derive(Default)]
 struct RemarkSink {
-    seen: IndexSet<(ModuleSource, Span, String)>,
+    seen: IndexSet<(ModuleSource, Span, String, usize)>,
     remarks: Vec<Remark>,
 }
 
 impl RemarkSink {
     fn push(&mut self, remark: Remark) {
-        let key = (remark.module.clone(), remark.span, remark.message.clone());
+        self.push_nth(remark, 0);
+    }
+
+    /// Push the `nth` of the like remarks one copy of their span makes, so two
+    /// costs written at one place stay two, while a splice of that place
+    /// repeats the same `nth`s.
+    fn push_nth(&mut self, remark: Remark, nth: usize) {
+        let key = (remark.module.clone(), remark.span, remark.message.clone(), nth);
         if self.seen.insert(key) {
             self.remarks.push(remark);
         }
@@ -61,12 +70,32 @@ impl RemarkSink {
 }
 
 /// Where the entry package's code is: the module each span indexes, and the
-/// functions holding any of it.
-struct EntryCode<'a> {
+/// functions holding any of it, their own or spliced in.
+pub struct EntryCode<'a> {
     parses: &'a ParseModules,
+    /// By function index; every collector walks only these bodies.
+    holders: Vec<bool>,
 }
 
-impl EntryCode<'_> {
+impl<'a> EntryCode<'a> {
+    pub fn new(package: &NirPackage, parses: &'a ParseModules) -> Self {
+        let mut entry = Self {
+            parses,
+            holders: Vec::new(),
+        };
+        entry.holders = package
+            .functions
+            .iter()
+            .map(|f| {
+                let func = f.borrow();
+                func.body
+                    .as_ref()
+                    .is_some_and(|body| entry.holds_any(&func, body))
+            })
+            .collect();
+        entry
+    }
+
     /// The entry package's module whose text `span` indexes, or `None` for
     /// another package's. A synthesized span answers with `home`, the module of
     /// the function holding it.
@@ -75,48 +104,55 @@ impl EntryCode<'_> {
         module.is_entry_package().then(|| module.clone())
     }
 
-    /// Whether `func` holds any of the entry package's code, its own or spliced in.
-    fn reaches(&self, func: &NirFunction, body: &Body) -> bool {
+    fn holds_any(&self, func: &NirFunction, body: &Body) -> bool {
         func.module_source.is_entry_package()
             || body
                 .find_in_nodes_under(NodeRef::Block(body.root()), |node| {
-                    self.module_of(body.span_of(node), &func.module_source)
+                    let module = self.parses.module_of_span(body.span_of(node), &func.module_source);
+                    module.is_entry_package().then_some(())
                 })
                 .is_some()
+    }
+
+    /// Each function holding any of the entry package's code, with its body.
+    fn bodies<'p>(
+        &self,
+        package: &'p NirPackage,
+    ) -> impl Iterator<Item = RwLockReadGuard<'p, NirFunction>> {
+        package
+            .functions
+            .iter()
+            .zip(&self.holders)
+            .filter(|&(_, &holds)| holds)
+            .map(|(f, _)| f.borrow())
     }
 }
 
 /// Collect remarks for value-semantic copies that survive optimization in the
 /// entry package's code.
-pub fn collect_value_copy_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
+pub fn collect_value_copy_remarks(package: &NirPackage, entry: &EntryCode) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
     let callees: Vec<FunctionRef> = package.callee_descriptors_from(0).collect();
-    let entry = EntryCode { parses };
 
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
     let mut sink = RemarkSink::default();
-    for func_rc in &package.functions {
-        let func = func_rc.borrow();
+    for func in entry.bodies(package) {
         // Skipping helper *bodies* keeps the copies inside a value-copy helper
         // from being reported against the helper itself.
         if func.is_value_copy() {
             continue;
         }
-        let Some(body) = &func.body else {
-            continue;
-        };
-        if !entry.reaches(&func, body) {
-            continue;
-        }
+        let body = func.body.as_ref().expect("an entry code holder has a body");
         let mut collector = Collector {
             value_copy_set: &value_copy_set,
             callees: &callees,
             type_table,
-            entry: &entry,
+            entry,
             home: &func.module_source,
             sink: &mut sink,
             current_span: body.blocks[body.root()].span,
+            copied_here: Vec::new(),
         };
         collector.scan_node(body, NodeRef::Block(body.root()));
     }
@@ -137,6 +173,8 @@ struct Collector<'a> {
     /// and SROA reconstruction write carry synthetic spans, so the remark
     /// points at the statement that performs the copy (`let mut b = a;`).
     current_span: Span,
+    /// The types copied so far under this instance of that statement.
+    copied_here: Vec<TypeId>,
 }
 
 impl Collector<'_> {
@@ -179,19 +217,26 @@ impl Collector<'_> {
         match node {
             NodeRef::Stmt(s) if !body.stmts[s].span.is_synthetic() => {
                 let prev = std::mem::replace(&mut self.current_span, body.stmts[s].span);
+                let prev_copied = std::mem::take(&mut self.copied_here);
                 self.scan_children(body, node);
                 self.current_span = prev;
+                self.copied_here = prev_copied;
             }
             NodeRef::Expr(e) => {
                 if let Some(type_id) = self.copied_type(body, e)
                     && let Some(module) = self.entry.module_of(self.current_span, self.home)
                 {
+                    let nth = self.copied_here.iter().filter(|&&t| t == type_id).count();
+                    self.copied_here.push(type_id);
                     let type_name = self.type_table.type_name(type_id);
-                    self.sink.push(Remark {
-                        message: format!("a copy of `{type_name}` survives optimization"),
-                        module,
-                        span: self.current_span,
-                    });
+                    self.sink.push_nth(
+                        Remark {
+                            message: format!("a copy of `{type_name}` survives optimization"),
+                            module,
+                            span: self.current_span,
+                        },
+                        nth,
+                    );
                 }
                 self.scan_children(body, node);
             }
@@ -237,24 +282,17 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
 /// A read outside a scrutinee is an ordinary use of the value, not a gate that
 /// failed, and is not reported. Scoped to the entry package's code, like the
 /// value-copy remarks.
-pub fn collect_param_gate_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
+pub fn collect_param_gate_remarks(package: &NirPackage, entry: &EntryCode) -> Vec<Remark> {
     let params = parameter_decided_globals(package);
     if params.is_empty() {
         return Vec::new();
     }
-    let entry = EntryCode { parses };
     let mut sink = RemarkSink::default();
-    for func_rc in &package.functions {
-        let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            continue;
-        };
-        if !entry.reaches(&func, body) {
-            continue;
-        }
+    for func in entry.bodies(package) {
+        let body = func.body.as_ref().expect("an entry code holder has a body");
         ParamGateScan {
             params: &params,
-            entry: &entry,
+            entry,
             home: &func.module_source,
             sink: &mut sink,
         }
@@ -445,8 +483,7 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
 /// compile-time region, or a runnable callee given constants, the fold did not
 /// reach. Read off the final IR, never off a refusal a pass recorded, so it
 /// retires itself as the fold reaches each shape.
-pub fn collect_const_region_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
-    let entry = EntryCode { parses };
+pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> Vec<Remark> {
     let in_order = Executor::default();
     let callees = build_callee_map(package, &in_order, |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
@@ -462,14 +499,8 @@ pub fn collect_const_region_remarks(package: &NirPackage, parses: &ParseModules)
     let type_table: &TypeTable = &type_table_ref;
 
     let mut sink = RemarkSink::default();
-    for func_rc in &package.functions {
-        let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            continue;
-        };
-        if !entry.reaches(&func, body) {
-            continue;
-        }
+    for func in entry.bodies(package) {
+        let body = func.body.as_ref().expect("an entry code holder has a body");
         let in_entry = |e: ExprId| {
             let span = body.exprs[e].span;
             Some((entry.module_of(span, &func.module_source)?, span))
@@ -481,7 +512,10 @@ pub fn collect_const_region_remarks(package: &NirPackage, parses: &ParseModules)
             // reported through its parent.
             if region.reads_outer
                 || region.writes_outer
-                || performs_effect(body, region.expr, &effectful)
+                || region
+                    .unrunnable_callees
+                    .iter()
+                    .any(|callee| effectful[callee.index()])
             {
                 continue;
             }
@@ -615,19 +649,6 @@ fn walk_hot_calls(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
-}
-
-/// Whether the block `region` calls a function declaring an effect, whose
-/// result the run decides.
-fn performs_effect(body: &Body, region: ExprId, effectful: &[bool]) -> bool {
-    body.find_in_nodes_under(NodeRef::Expr(region), |node| match node {
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Call { func_id, .. } if effectful[func_id.index()] => Some(()),
-            _ => None,
-        },
-        _ => None,
-    })
-    .is_some()
 }
 
 /// Display name per `func_id`, for the functions a compile-time frame can run.

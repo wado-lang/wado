@@ -1,6 +1,6 @@
 // A destructuring assignment that keeps its copying desugaring, rather than a move or an `index_swap`, is remarked with a note naming why.
-// One `#[inline(never)]` function per cause (spliced into `run`, a copy is reported at the call),
-// and one in a trait's default body declared in another module.
+// One function per cause, and one in a trait's default body declared in another module. Each is
+// free to splice into `run`, and its remark stays on the line the assignment is written on.
 
 use { println, Stdout } from "core:cli";
 use { Rotate } from "./sub/remark_destructuring_default_body.wado";
@@ -11,7 +11,7 @@ fn rows() -> List<List<i32>> {
     return [[builtin::black_box(1)], [2]];
 }
 
-#[inline(never)] fn not_a_permutation() -> i32 {
+fn not_a_permutation() -> i32 {
     let mut a: List<i32> = [builtin::black_box(1)];
     let mut b: List<i32> = [2];
     [a, b] = [b, b];
@@ -19,7 +19,7 @@ fn rows() -> List<List<i32>> {
     return a.len() + b.len();
 }
 
-#[inline(never)] fn reference_readable() -> i32 {
+fn reference_readable() -> i32 {
     let mut a: List<i32> = [builtin::black_box(1)];
     let mut b: List<i32> = [2];
     let r = &a;
@@ -27,19 +27,19 @@ fn rows() -> List<List<i32>> {
     return r.len() + b.len();
 }
 
-#[inline(never)] fn not_owned(rs: &mut List<List<i32>>, x: &mut List<i32>) -> i32 {
+fn not_owned(rs: &mut List<List<i32>>, x: &mut List<i32>) -> i32 {
     [rs[0], *x] = [*x, rs[0]];
     return rs.len();
 }
 
-#[inline(never)] fn other_container() -> i32 {
+fn other_container() -> i32 {
     let mut ts = rows();
     let mut us = rows();
     [ts[0], us[1]] = [us[1], ts[0]];
     return ts.len() + us.len();
 }
 
-#[inline(never)] fn index_referenced() -> i32 {
+fn index_referenced() -> i32 {
     let mut ts = rows();
     let i = builtin::black_box(0);
     let r = &i;
@@ -47,7 +47,7 @@ fn rows() -> List<List<i32>> {
     return ts[0].len() + *r;
 }
 
-#[inline(never)] fn mutable_global_index() -> i32 {
+fn mutable_global_index() -> i32 {
     let mut ts = rows();
     [ts[K], ts[1]] = [ts[1], ts[K]];
     return ts[0].len();
@@ -76,7 +76,7 @@ impl IndexSwap<String> for Shelf {
     fn index_swap(&mut self, a: String, b: String) {}
 }
 
-#[inline(never)] fn no_index_swap() -> i32 {
+fn no_index_swap() -> i32 {
     let mut s = Shelf { rows: rows() };
     [s[0], s[1]] = [s[1], s[0]];
     return s.rows.len();
@@ -84,13 +84,13 @@ impl IndexSwap<String> for Shelf {
 
 global mut SHELF: List<List<i32>> = [];
 
-#[inline(never)] fn container_not_local() -> i32 {
+fn container_not_local() -> i32 {
     SHELF = rows();
     [SHELF[0], SHELF[1]] = [SHELF[1], SHELF[0]];
     return SHELF[0].len();
 }
 
-#[inline(never)] fn unplain_index() -> i32 {
+fn unplain_index() -> i32 {
     let mut ts = rows();
     let ks: List<i32> = [0, 1];
     [ts[ks[0]], ts[ks[1]]] = [ts[ks[1]], ts[ks[0]]];
@@ -99,7 +99,7 @@ global mut SHELF: List<List<i32>> = [];
 
 struct Holder { p: &mut List<List<i32>> }
 
-#[inline(never)] fn reference_field(h: &mut Holder) -> i32 {
+fn reference_field(h: &mut Holder) -> i32 {
     [h.p[0], h.p[1]] = [h.p[1], h.p[0]];
     return h.p[0].len();
 }

@@ -983,12 +983,10 @@ fn run_optimization_passes(
     }
     project.specialization_cap = param_spec_state.cap_hit();
     if !iter_changed.is_empty() {
-        // A run that stopped before the release still holds its callees, and
-        // each kept every call it makes. Nothing downstream would say so.
-        let held = match inline_holds.still_held() {
-            0 => String::new(),
-            n => format!("; {n} function(s) still held by the inliner"),
-        };
+        let held = inline_holds
+            .unreleased()
+            .map(|unreleased| format!("; the inliner has {unreleased}"))
+            .unwrap_or_default();
         let report = format!(
             "NIR optimizer hit the {limit}-iteration cap without converging; \
              still changing: [{}]{held}",

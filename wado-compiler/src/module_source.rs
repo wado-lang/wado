@@ -1216,26 +1216,27 @@ pub struct ParseModules(hashmap::IndexMap<AstIdSpace, ModuleSource>);
 
 impl ParseModules {
     pub fn of<'m>(modules: impl IntoIterator<Item = (&'m ModuleSource, &'m Module)>) -> Self {
-        let mut spaces = hashmap::IndexMap::default();
+        let mut parses = Self(hashmap::IndexMap::default());
         for (source, module) in modules {
-            let claimed = spaces.insert(module.ast_id_space(), source.clone());
-            assert!(
-                claimed.is_none(),
-                "one module is one `AstIdSpace`, but {source} shares one with {}",
-                claimed.expect("just checked")
-            );
+            parses.claim(module.ast_id_space(), source);
         }
-        Self(spaces)
+        parses
     }
 
-    /// Add another load's parses. A space is minted once, so none is in both.
+    /// Add another load's parses.
     pub fn extend(&mut self, other: &Self) {
-        self.0.extend(
-            other
-                .0
-                .iter()
-                .map(|(space, source)| (*space, source.clone())),
-        );
+        for (space, source) in &other.0 {
+            self.claim(*space, source);
+        }
+    }
+
+    fn claim(&mut self, space: AstIdSpace, source: &ModuleSource) {
+        if let Some(claimed) = self.0.insert(space, source.clone()) {
+            assert!(
+                claimed == *source,
+                "one `AstIdSpace` is one module, but {source} shares one with {claimed}"
+            );
+        }
     }
 
     /// The module `space` was parsed from, or `None` for a synthesized node,

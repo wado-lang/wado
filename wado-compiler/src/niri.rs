@@ -499,6 +499,9 @@ pub struct RegionQuery {
     /// walk met first and can name something else.
     pub writes_outer: bool,
     pub refusal: Option<RegionRefusal>,
+    /// The callees no frame could run, so a reporter can tell one whose result
+    /// the run decides from one the engine merely lacks.
+    pub unrunnable_callees: Vec<FuncId>,
 }
 
 /// Every region-shaped block in `body`, in walk order, for a caller reporting on
@@ -531,6 +534,7 @@ pub fn region_queries(
                 reads_outer: !needs.free_reads.is_empty(),
                 writes_outer: needs.writes_outer,
                 refusal: needs.refusal,
+                unrunnable_callees: needs.unrunnable_callees,
             });
         }
     });

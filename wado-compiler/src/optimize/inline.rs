@@ -38,7 +38,6 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{self, ColdRuns, stmt_diverges, unreached_through};
 use super::body_memo::BodyMemo;
-use super::cold_outline::is_splittable;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
@@ -1145,15 +1144,15 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
     folds_to_constant(body, op, const_locals, None)
 }
 
-/// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
-/// given such arguments, which the compile-time engine runs to its value.
+/// [`is_constant_arg`], also seeing through a call to a `foldable` callee given
+/// such arguments, which the compile-time engine runs to its value.
 fn folds_to_constant(
     body: &Body,
     op: Operand,
     const_locals: &IndexSet<u32>,
-    ctfe_eligible: Option<&[bool]>,
+    foldable: Option<&[bool]>,
 ) -> bool {
-    let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
+    let recurse = |op| folds_to_constant(body, op, const_locals, foldable);
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
         // `promote_pure_values_early` freezes it.
@@ -1171,7 +1170,7 @@ fn folds_to_constant(
             ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
             ExprKind::Local { index, .. } => const_locals.contains(index),
             ExprKind::Call { func_id, args, .. } => {
-                ctfe_eligible.is_some_and(|eligible| eligible[func_id.index()])
+                foldable.is_some_and(|foldable| foldable[func_id.index()])
                     && args.iter().all(|a| recurse(a.expr))
             }
             ExprKind::Dead
@@ -1930,8 +1929,16 @@ impl InlineHolds {
         }
     }
 
-    pub(super) fn still_held(&self) -> usize {
-        self.held.len()
+    /// What a run stopped before the release leaves un-spliced, which nothing
+    /// downstream would say.
+    pub(super) fn unreleased(&self) -> Option<String> {
+        match (self.held.len(), self.deferred.len()) {
+            (0, 0) => None,
+            (held, deferred) => Some(format!(
+                "{held} function(s) still held and {deferred} caller(s) still deferring \
+                 a call to the engine"
+            )),
+        }
     }
 }
 
@@ -2044,9 +2051,9 @@ struct Candidates<'a> {
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
-    /// Per function, whether the compile-time engine may replace a call to it
-    /// given constant arguments by its value ([`is_ctfe_eligible`]).
-    ctfe_eligible: &'a [bool],
+    /// Per function, whether a call to it given constant arguments folds away
+    /// ([`ConstView`]'s table, so the deferral and the price agree).
+    foldable: &'a [bool],
     /// Whether a call the engine may fold is still left to it: until the loop
     /// first converges ([`InlineHolds::release`]).
     fold_pending: bool,
@@ -2184,15 +2191,11 @@ pub fn inline_functions(
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
-    let ctfe_eligible: Vec<bool> = project
+    let foldable: Vec<bool> = project
         .functions
         .iter()
-        .map(|f| is_ctfe_eligible(&f.borrow()))
-        .collect();
-    let foldable: Vec<bool> = ctfe_eligible
-        .iter()
         .zip(&fn_effects)
-        .map(|(&eligible, e)| eligible && e.is_pure())
+        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
 
@@ -2435,11 +2438,12 @@ pub fn inline_functions(
     let read = &*read;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
-    // visit reads what another writes.
-    let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
+    // visit reads what another writes. Answers whether the visit left a call to
+    // the engine, and what it spliced.
+    let inline_into = |fid: FuncId| -> (bool, Option<Vec<FuncId>>) {
         // A dead caller's sites were priced as never running, so none is taken.
         if !live[fid.index()] || held.contains(&fid) {
-            return None;
+            return (false, None);
         }
         let candidates = Candidates {
             bodies: &inline_candidates,
@@ -2447,7 +2451,7 @@ pub fn inline_functions(
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
-            ctfe_eligible: &ctfe_eligible,
+            foldable: &foldable,
             fold_pending,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
@@ -2458,14 +2462,14 @@ pub fn inline_functions(
         // Asked before the frame is taken, so a caller with nothing to splice
         // is not written.
         if !func.calls_any(|id| inline_candidates.contains_key(id)) {
-            return None;
+            return (false, None);
         }
         // Track which functions (by `FuncId`) were inlined into this function
         let mut inlined_funcs: Vec<FuncId> = Vec::new();
         // Splice-point re-valuation records (Method A): one per inlined block.
         let mut reval: Vec<InlineRevalInfo> = Vec::new();
         let local_count = func.local_count();
-        let splittable = is_splittable(&func);
+        let glue = func.is_cm_binding || func.is_dispatch_wrapper;
         let func = &mut *func;
         let mut frame = CallerFrame {
             local_count,
@@ -2473,7 +2477,7 @@ pub fn inline_functions(
             address_taken: std::mem::take(&mut func.address_taken_locals),
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
-            splittable,
+            glue,
             deferred: false,
         };
         let mut labels = InlineLabels::default();
@@ -2516,9 +2520,9 @@ pub fn inline_functions(
             );
         }
         func.address_taken_locals = frame.address_taken;
-        lock(&deferrals).push((fid, frame.deferred));
+        let deferred = frame.deferred;
         if inlined_funcs.is_empty() {
-            return None;
+            return (deferred, None);
         }
         // The splice restructures the body, staling the persisted graph's
         // `loop_entry_values` (licm's pre-header snapshots — the only
@@ -2541,7 +2545,14 @@ pub fn inline_functions(
         // modified), so the sweep marks just the caller. Its call-graph edges
         // shift, but stale edges only cost 1-hop propagation precision
         // (quality), not correctness.
-        Some(inlined_funcs)
+        (deferred, Some(inlined_funcs))
+    };
+    // Every visit settles its caller's deferral, a visit that leaves early
+    // included: a deferred call the fold has since removed leaves one.
+    let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
+        let (deferred, spliced) = inline_into(fid);
+        lock(&deferrals).push((fid, deferred));
+        spliced
     });
     drop(inline_call_immutability);
     drop(inline_type_table);
@@ -2614,11 +2625,10 @@ struct CallerFrame<'f> {
     /// The arena only appends, so a call below it is one the round's site
     /// counts saw, and one above it came in with a splice.
     original_exprs: usize,
-    /// Whether `cold_outline` may split the caller. A body moved into one it
-    /// may not (an ABI bridge, an effect dispatcher, an async frame) keeps
-    /// inline the cold regions it would have outlined, and `container_sroa`
-    /// and `const_object_globalization` skip the bridges too.
-    splittable: bool,
+    /// The caller is synthesized glue, a CM binding or a dispatch wrapper,
+    /// whose body `container_sroa` and `const_object_globalization` skip: a
+    /// callee moved into one goes without the cleanup it gets where it stands.
+    glue: bool,
     /// A call was left to the compile-time engine this visit.
     deferred: bool,
 }
@@ -3153,20 +3163,20 @@ fn try_inline_call_expr(
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) => frame.splittable && frame.original_site(call_id),
+        (Site::Plain | Site::Loop, Reach::Sole) => !frame.glue && frame.original_site(call_id),
         // A call the compile-time engine may run to its value is left to it
         // until the loop converges: spliced, it becomes statements
         // `let_block_flatten` lays into the caller before the fold reaches
         // them. One still standing then is one the engine could not fold.
         (Site::Plain, Reach::SoleOutsideLoops) => {
-            if !frame.splittable || !frame.original_site(call_id) {
+            if frame.glue || !frame.original_site(call_id) {
                 false
             } else if candidates.fold_pending
                 && folds_to_constant(
                     caller,
                     Operand::Expr(call_id),
                     &IndexSet::default(),
-                    Some(candidates.ctfe_eligible),
+                    Some(candidates.foldable),
                 )
             {
                 frame.deferred = true;
@@ -3176,7 +3186,7 @@ fn try_inline_call_expr(
             }
         }
         (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => frame.splittable && frame.sole_loop_site(func_id),
+        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
         (Site::Plain | Site::Loop, Reach::Nowhere) => {
             unreachable!("a candidate is reached somewhere")

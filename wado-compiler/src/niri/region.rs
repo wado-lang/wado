@@ -5,7 +5,7 @@
 //! the whole enclosing body while this only walks the block.
 
 use crate::name::RefKind;
-use crate::nir::NirUnaryOp;
+use crate::nir::{FuncId, NirUnaryOp};
 use crate::nir_arena::{
     BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
@@ -217,6 +217,7 @@ pub(super) fn region_needs(
     let mut seen = LocalSet::default();
     let mut mentioned: Vec<(u32, Option<TypeId>)> = Vec::new();
     let mut written = LocalSet::default();
+    let mut unrunnable_callees = Vec::new();
     body.for_each_node_under(NodeRef::Block(block), |node| {
         match node {
             NodeRef::Stmt(s) => {
@@ -256,6 +257,7 @@ pub(super) fn region_needs(
                         match facts.ctfe_builtins.and_then(|m| m.get(func_id)) {
                             None => {
                                 refusal.get_or_insert(RegionRefusal::UnrunnableCall);
+                                unrunnable_callees.push(*func_id);
                             }
                             Some(builtin) if builtin.is_write() => {
                                 let written_place = args
@@ -329,6 +331,7 @@ pub(super) fn region_needs(
         free_reads: out,
         refusal,
         writes_outer,
+        unrunnable_callees,
     }
 }
 
@@ -340,6 +343,8 @@ pub(super) struct RegionNeeds {
     /// Whether an outer local is written. `refusal` may name an earlier fact
     /// instead, since the walk keeps the first it meets.
     pub(super) writes_outer: bool,
+    /// Every callee a frame could not run, where `refusal` names only the first.
+    pub(super) unrunnable_callees: Vec<FuncId>,
 }
 
 /// A local a region reads without declaring, and whether the mention names a

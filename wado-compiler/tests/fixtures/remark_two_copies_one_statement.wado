@@ -1,0 +1,23 @@
+// One statement copying `a` twice makes two copies, so it gets two remarks.
+// Remarks written once but spliced into several callers are deduped; that
+// dedupe must not merge two copies that one statement really makes.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let a: List<i32> = [1, 2, builtin::black_box(3)];
+    let mut c: List<List<i32>> = [a, a];
+    c[0].push(4);
+    c[1].push(5);
+    println(`${a.len()} ${c[0].len()} ${c[1].len()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4 4\n",
+    "remarks": {
+        "O2": [
+            {"contains": [":9:34 remark: a copy of `Array<i32>`"], "count": 2}
+        ]
+    }
+}
