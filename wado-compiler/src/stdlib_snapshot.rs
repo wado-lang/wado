@@ -5,6 +5,7 @@
 //! closure.
 
 use std::cell::{Cell, OnceCell, RefCell};
+use std::fmt::Write as _;
 use std::future::Future;
 use std::pin::pin;
 use std::rc::Rc;
@@ -288,11 +289,11 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
         .map(|(path, _)| *path)
         .chain(stdlib::wit_core_submodules().map(|(path, _)| path))
         .collect();
-    let entry: String = paths
-        .iter()
-        .enumerate()
-        .map(|(i, path)| format!("use binding{i} from \"{path}\";\n"))
-        .collect();
+    let mut entry = String::new();
+    for (i, path) in paths.iter().enumerate() {
+        writeln!(entry, "use binding{i} from \"{path}\";")
+            .expect("writing to a String cannot fail");
+    }
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);
     let load = poll_to_completion(async {
