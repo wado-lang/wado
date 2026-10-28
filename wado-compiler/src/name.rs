@@ -2088,7 +2088,7 @@ pub fn resolve_import_with_entry(
     // A relative import inherits the importer's package root.
     if relative {
         match from_module {
-            ModuleSource::Dependency { pkg, path } => {
+            ModuleSource::Dependency { pkg, path, .. } => {
                 let resolved = resolve_module_path(path, import_source);
                 let pkg = pkg.to_string();
                 return interner.dependency_module(&pkg, &resolved);
@@ -3045,7 +3045,7 @@ mod tests {
     fn test_struct_name_to_string() {
         let mut interner = ModuleSourceInterner::new();
         let struct_name = StructName::new(interner.local("./geometry.wado"), "Point".to_string());
-        assert_eq!(struct_name.to_string(), "./geometry.wado/Point");
+        assert_eq!(struct_name.to_string(), "geometry.wado/Point");
     }
 
     #[test]

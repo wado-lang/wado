@@ -50,7 +50,7 @@ use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::remote::{Integrity, is_remote};
-use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
+use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel, ModuleDir};
 use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
 
@@ -698,8 +698,8 @@ impl CompilerHost for SilentHost {
         self.inner.serves_core()
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root(path)
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        self.inner.module_dir(path)
     }
 
     fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {

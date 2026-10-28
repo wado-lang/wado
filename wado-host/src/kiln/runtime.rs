@@ -841,8 +841,8 @@ mod tests {
 
         fn stdlib_module_read(&self, _import_path: &str) {}
 
-        fn package_root(&self, _path: &str) -> Option<String> {
-            None
+        fn module_dir(&self, path: &str) -> wado_compiler::ModuleDir {
+            wado_compiler::ModuleDir::unpackaged(path)
         }
 
         fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {

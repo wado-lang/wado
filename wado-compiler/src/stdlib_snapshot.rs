@@ -17,7 +17,7 @@ use crate::ast;
 use crate::cm_type_decls::CmTypeDecls;
 use crate::compiler_host::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, LogLevel, SourceError,
+    GeneratorRunnerError, LogLevel, ModuleDir, SourceError,
 };
 use crate::coverage::CoverageScope;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -400,8 +400,8 @@ impl CompilerHost for SnapshotHost {
     fn stdlib_module_read(&self, _import_path: &str) {}
 
     /// The stdlib lies in no package a manifest roots.
-    fn package_root(&self, _path: &str) -> Option<String> {
-        None
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        ModuleDir::unpackaged(path)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {

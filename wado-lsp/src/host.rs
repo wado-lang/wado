@@ -13,14 +13,14 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::{
-    CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
-    SourceReader,
+    CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, ModuleDir, PackageDir,
+    Severity, SourceError, SourceReader,
 };
 
 pub mod discovery;
 pub mod prefetch;
 
-use discovery::{DependencyEntry, absolutize, normalize_path};
+use discovery::{DependencyEntry, absolutize, normalize_path, slash_separated};
 
 /// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
 /// build serves what is on disk now and the compiler itself reads no file.
@@ -113,22 +113,43 @@ impl FilesystemCompilerHost {
         self.buffer().push(diagnostic);
     }
 
-    /// [`CompilerHost::package_root`], telling `probed` each file the walk
-    /// looks for and whether one is there. The walk starts from the
-    /// module's directory as the OS resolves it, `..` after a symlink
-    /// included, since that is the directory [`CompilerHost::load_source`]
-    /// reads from. A directory that does not exist has no root, and the load
-    /// of the module reports it.
-    pub fn package_root_probing(
-        &self,
-        path: &str,
-        probed: impl FnMut(&Path, bool),
-    ) -> Option<String> {
+    /// [`CompilerHost::module_dir`], telling `probed` each file the walk for
+    /// the package root looks for and whether one is there. The directory is
+    /// the module's as the OS resolves it, `..` after a symlink included,
+    /// since that is the directory [`CompilerHost::load_source`] reads from. A
+    /// directory that does not exist lies in no package, and the load of the
+    /// module reports it.
+    pub fn module_dir_probing(&self, path: &str, probed: impl FnMut(&Path, bool)) -> ModuleDir {
         let file = self.base_path.join(path);
-        let dir = std::fs::canonicalize(file.parent().expect("a module path names a file")).ok()?;
-        let root = discovery::nearest_manifest_dir_probing(&dir, probed)?;
-        Some(root.display().to_string())
+        let parent = file.parent().expect("a module path names a file");
+        let (Ok(dir), Ok(base)) = (
+            std::fs::canonicalize(parent),
+            std::fs::canonicalize(&self.base_path),
+        ) else {
+            return ModuleDir::unpackaged(path);
+        };
+        let package = discovery::nearest_manifest_dir_probing(&dir, probed).map(|root| {
+            let inside = dir
+                .strip_prefix(&root)
+                .expect("a directory lies under its package root");
+            PackageDir {
+                coordinate: package_coordinate(&root),
+                dir: slash_separated(inside),
+                root: root.display().to_string(),
+            }
+        });
+        ModuleDir {
+            package,
+            path: relative_path(&base, &dir),
+        }
     }
+}
+
+/// The package rooted at `root` as its `[package]` names it. `None` where it
+/// has none, or where its manifest does not parse, which its index reports.
+fn package_coordinate(root: &Path) -> Option<String> {
+    let package = read_manifest(root).ok()?.package?;
+    Some(package.coordinate())
 }
 
 /// A file on disk, read a range at a time.
@@ -257,8 +278,8 @@ impl CompilerHost for FilesystemCompilerHost {
         is_in_dev_stdlib_core(&self.base_path)
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.package_root_probing(path, |_, _| {})
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        self.module_dir_probing(path, |_, _| {})
     }
 
     /// The language service recompiles on every edit and caches no outcome.

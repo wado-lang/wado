@@ -130,8 +130,8 @@ pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, DiagnosticSpan,
     GeneratorDiagnostic, GeneratorDiagnosticLevel, GeneratorError, GeneratorInputFile,
     GeneratorOutputFile, GeneratorRequest, GeneratorResponse, GeneratorRunnerError,
-    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ProbeInput, ProbeRequest, Severity,
-    SourceError, SourceReader,
+    GeneratorSourceSpan, KILN_GENERATOR_WIT, LogLevel, ModuleDir, PackageDir, ProbeInput,
+    ProbeRequest, Severity, SourceError, SourceReader,
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{

@@ -300,6 +300,15 @@ pub struct Package {
 }
 
 impl Package {
+    /// `namespace:name@version`, or `name@version` with no namespace.
+    #[must_use]
+    pub fn coordinate(&self) -> String {
+        match &self.namespace {
+            Some(namespace) => format!("{namespace}:{}@{}", self.name, self.version),
+            None => format!("{}@{}", self.name, self.version),
+        }
+    }
+
     /// Homepage, falling back to the repository URL when unset.
     #[must_use]
     pub fn effective_homepage(&self) -> Option<&str> {

@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{
     Code, CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, LogLevel, ProbeRequest, Severity, SourceError, SourceReader,
+    GeneratorRunnerError, LogLevel, ModuleDir, ProbeRequest, Severity, SourceError, SourceReader,
 };
 use wado_manifest::LOCK_FILENAME;
 
@@ -387,8 +387,8 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.serves_core()
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root_probing(path, |manifest, found| {
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        self.inner.module_dir_probing(path, |manifest, found| {
             if found {
                 self.run.depend_on_file(manifest);
             } else {

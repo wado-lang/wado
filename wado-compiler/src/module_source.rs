@@ -4,10 +4,15 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
-use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
+use crate::compiler_host::{
+    CompilerHost, DependencyIndex, DependencyManifest, ModuleDir, PackageDir,
+};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
-use crate::name::{DeclaredHead, effect_namespace, module_parent_dir};
+use crate::loader::strip_kiln_scheme;
+use crate::name::{DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir};
+use crate::path::{normalize, relative_path};
+use crate::remote::is_remote;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
@@ -120,13 +125,13 @@ static STDLIB_NAME_ARCS: LazyLock<Vec<Arc<str>>> = LazyLock::new(|| {
 /// What placing a module asks the host: the [`CompilerHost`] methods of the
 /// same names.
 pub trait PackageHost {
-    fn package_root(&self, path: &str) -> Option<String>;
+    fn module_dir(&self, path: &str) -> ModuleDir;
     fn package_index(&self, root: &str) -> DependencyIndex;
 }
 
 impl<H: CompilerHost> PackageHost for H {
-    fn package_root(&self, path: &str) -> Option<String> {
-        CompilerHost::package_root(self, path)
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        CompilerHost::module_dir(self, path)
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
@@ -134,8 +139,8 @@ impl<H: CompilerHost> PackageHost for H {
     }
 }
 
-/// A [`PackageHost`] answering roots from `root` and indexes from `indexes`,
-/// empty for a root it does not list.
+/// A [`PackageHost`] answering roots from `root`, each package unnamed, and
+/// indexes from `indexes`, empty for a root it does not list.
 #[cfg(test)]
 pub(crate) struct TestPackages<F> {
     pub root: F,
@@ -144,8 +149,16 @@ pub(crate) struct TestPackages<F> {
 
 #[cfg(test)]
 impl<F: Fn(&str) -> Option<String>> PackageHost for TestPackages<F> {
-    fn package_root(&self, path: &str) -> Option<String> {
-        (self.root)(path)
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        let package = (self.root)(path).map(|root| PackageDir {
+            root,
+            coordinate: None,
+            dir: String::new(),
+        });
+        ModuleDir {
+            package,
+            ..ModuleDir::unpackaged(path)
+        }
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {
@@ -190,9 +203,11 @@ pub struct ModuleSourceInterner {
     undeclared_packages: hashmap::IndexMap<InternedStr, DependencyIndex>,
     /// What a module in no package declares: nothing.
     no_dependencies: DependencyIndex,
-    /// Each directory a placed module lies in, and the package root the host
-    /// answered for it.
-    dir_roots: hashmap::IndexMap<String, Option<String>>,
+    /// Each directory a module lies in, as the host answered it.
+    dirs: hashmap::IndexMap<String, ModuleDir>,
+    /// The directory a module in no package is named from, relative to the
+    /// host's base: the entry's package root, or the entry's own directory.
+    build_root: String,
 }
 
 impl ModuleSourceInterner {
@@ -209,7 +224,8 @@ impl ModuleSourceInterner {
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
             no_dependencies: DependencyIndex::default(),
-            dir_roots: hashmap::IndexMap::default(),
+            dirs: hashmap::IndexMap::default(),
+            build_root: String::new(),
         }
     }
 
@@ -231,19 +247,24 @@ impl ModuleSourceInterner {
     }
 
     /// Bound the package of the entry at `entry` and of each path dependency at
-    /// the root `package_root` answers for it. A single-file dependency has no
+    /// the root the host answers for it. A single-file dependency has no
     /// manifest, so it claims no root: the tree around it is not its package.
     pub fn bound_packages(&mut self, entry: &str, host: &impl PackageHost) {
         let libs: Vec<String> = self.dependency_libs().map(str::to_string).collect();
         self.bound_dependency_roots(libs, host);
-        self.root_dir = host.package_root(entry);
+        let ModuleDir { package, path } = self.dir_of(entry, host);
+        self.build_root = match &package {
+            Some(package) => climb(&path, &package.dir),
+            None => path,
+        };
+        self.root_dir = package.map(|package| package.root);
     }
 
     /// Claim the root of each package among `libs` that has a manifest.
     fn bound_dependency_roots(&mut self, libs: Vec<String>, host: &impl PackageHost) {
         for lib in libs {
             if self.package(&lib).manifest.is_some()
-                && let Some(root) = host.package_root(&lib)
+                && let Some(root) = self.root_of(&lib, host)
             {
                 let interned = self.intern(&root);
                 if self.undeclared_packages.contains_key(&interned) {
@@ -261,20 +282,70 @@ impl ModuleSourceInterner {
     pub fn place(&mut self, path: &str, host: &impl PackageHost) -> ModuleSource {
         let interned = self.intern(path);
         if !self.local_packages.contains_key(&interned) {
-            let root = match self.dir_roots.get(module_parent_dir(path)) {
-                Some(root) => root.clone(),
-                None => host.package_root(path),
-            };
+            let root = self.root_of(path, host);
             self.place_local(path, root, host);
         }
         self.local(path)
     }
 
+    /// `source` named by where the host says its file lies, the host asked
+    /// for the file's directory if no module there has been named yet.
+    pub fn locate(&mut self, source: ModuleSource, host: &impl PackageHost) -> ModuleSource {
+        let Some(file) = source.file() else {
+            return source;
+        };
+        self.dir_of(&file, host);
+        let name = self.name_of(&file);
+        source.named(name)
+    }
+
+    /// Where the directory of the module at `path` lies, asking the host once
+    /// per directory.
+    fn dir_of(&mut self, path: &str, host: &impl PackageHost) -> ModuleDir {
+        let dir = module_parent_dir(path);
+        if let Some(answer) = self.dirs.get(dir) {
+            return answer.clone();
+        }
+        let answer = host.module_dir(path);
+        self.dirs.insert(dir.to_string(), answer.clone());
+        answer
+    }
+
+    /// The root of the package the module at `path` lies in.
+    fn root_of(&mut self, path: &str, host: &impl PackageHost) -> Option<String> {
+        self.dir_of(path, host).package.map(|package| package.root)
+    }
+
+    /// The name of the module whose file is `path`: the package's coordinate
+    /// and the file's path inside the package, or, for a file in a package
+    /// with no `[package]` or in none, its path from [`Self::build_root`].
+    /// A directory the host was never asked about is named as one in no
+    /// package, from its lexical path; no compile emits such a name, since the
+    /// loader asks about every module it reads.
+    fn name_of(&mut self, path: &str) -> InternedStr {
+        if is_bundled_specifier(path) || is_remote(path) {
+            return self.intern(path);
+        }
+        let file = path.rsplit('/').next().unwrap_or(path);
+        let name = match self.dirs.get(module_parent_dir(path)) {
+            Some(ModuleDir {
+                package:
+                    Some(PackageDir {
+                        coordinate: Some(coordinate),
+                        dir,
+                        ..
+                    }),
+                ..
+            }) => format!("{coordinate}/{}", join_dir(dir, file)),
+            Some(ModuleDir { path: dir, .. }) => from_root(&self.build_root, &join_dir(dir, file)),
+            None => from_root(&self.build_root, path),
+        };
+        self.intern(&name)
+    }
+
     /// Place the local module at `path` in the package rooted at
     /// `package_root`, or with the modules in no package where it is `None`.
     fn place_local(&mut self, path: &str, package_root: Option<String>, host: &impl PackageHost) {
-        self.dir_roots
-            .insert(module_parent_dir(path).to_string(), package_root.clone());
         let package = if package_root == self.root_dir {
             self.root_package.clone()
         } else if let Some(root) = package_root {
@@ -324,14 +395,19 @@ impl ModuleSourceInterner {
     /// A package a path reached first stays the [`PackageId::Path`] its first
     /// modules were placed in, so each module of it is a placed local one.
     pub fn dependency_module(&mut self, pkg: &str, path: &str) -> ModuleSource {
+        let name = self.name_of(path);
         let path = self.intern(path);
         if let Some(root) = self.reached_first.get(pkg) {
             let package = PackageId::Path(root.clone());
             self.local_packages.insert(path.clone(), package.clone());
-            return ModuleSource::Local { path, package };
+            return ModuleSource::Local {
+                path,
+                name,
+                package,
+            };
         }
         let pkg = self.elect_package_root(&path, pkg);
-        ModuleSource::Dependency { pkg, path }
+        ModuleSource::Dependency { pkg, path, name }
     }
 
     /// Whether the local module at `path` has been placed in its package.
@@ -467,6 +543,7 @@ impl ModuleSourceInterner {
         self.binding(CmNamespace::Wasi, interface)
     }
     pub fn local(&mut self, path: &str) -> ModuleSource {
+        let name = self.name_of(path);
         let path = self.intern(path);
         let package = match self.local_packages.get(&path) {
             Some(PackageId::Dependency(lib)) => {
@@ -476,7 +553,11 @@ impl ModuleSourceInterner {
             Some(package) => package.clone(),
             None => self.root_package.clone(),
         };
-        ModuleSource::Local { path, package }
+        ModuleSource::Local {
+            path,
+            name,
+            package,
+        }
     }
 
     /// A remote package's entry module: it is its own package root.
@@ -493,23 +574,33 @@ impl ModuleSourceInterner {
     }
     /// A Kiln-generated module, in the package of the first module importing it.
     pub fn redirected(&mut self, uri: &str, importer: &ModuleSource) -> ModuleSource {
+        let name = self.name_of(&redirected_file(uri));
         let uri = self.intern(uri);
         let package = self
             .redirect_packages
             .entry(uri.clone())
             .or_insert_with(|| importer.package_id())
             .clone();
-        ModuleSource::Redirected { uri, package }
+        ModuleSource::Redirected { uri, name, package }
     }
     pub fn wasm(&mut self, path: &str, kind: WasmAssetKind) -> ModuleSource {
         ModuleSource::Wasm {
+            name: self.name_of(path),
             path: self.intern(path),
             kind,
         }
     }
+    /// The entry point read from `filename`, or a synthetic one (`<stdin>`),
+    /// which is named by its filename.
     pub fn entry_point(&mut self, filename: &str) -> ModuleSource {
+        let name = if filename.starts_with('<') {
+            self.intern(filename)
+        } else {
+            self.name_of(&canonicalize_entry_point(filename))
+        };
         ModuleSource::EntryPoint {
             filename: self.intern(filename),
+            name,
             package: self.root_package.clone(),
         }
     }
@@ -635,12 +726,15 @@ pub enum ModuleSource {
         /// Interface path within the namespace (e.g., "cli", "cli/stdout.wado")
         interface: InternedStr,
     },
-    /// Local module relative to project root
+    /// A module read from a file the entry reaches by a path.
     Local {
-        /// Relative path (e.g., "./geometry.wado", "./utils/helper.wado")
+        /// The file, relative to the host's base (e.g., "./geometry.wado").
         path: InternedStr,
+        /// The module's name, as [`ModuleSourceInterner`] makes it. Not part
+        /// of identity, which is `path`; the two answer for each other.
+        name: InternedStr,
         /// The entry's package, unless the module lies outside the entry's
-        /// package root. Not part of identity, which is `path`.
+        /// package root. Not part of identity.
         package: PackageId,
     },
     /// A module of a dependency package, resolved from a bare-name
@@ -652,6 +746,8 @@ pub enum ModuleSource {
         /// by every module of the package, and inherited by a relative import.
         pkg: InternedStr,
         path: InternedStr,
+        /// As [`Self::Local`]'s.
+        name: InternedStr,
     },
     /// Remote module loaded via HTTP/HTTPS
     Remote {
@@ -663,8 +759,10 @@ pub enum ModuleSource {
     },
     /// Entry point module (the main file being compiled)
     EntryPoint {
-        /// Filename of the entry point (e.g., `"hello.wado"`, `"<stdin>"`, `"<entry>"`)
+        /// Filename of the entry point (e.g., `"hello.wado"`, `"<stdin>"`)
         filename: InternedStr,
+        /// As [`Self::Local`]'s; not part of identity.
+        name: InternedStr,
         /// [`PackageId::Root`], or [`PackageId::Core`] for a stdlib test. Not
         /// part of identity.
         package: PackageId,
@@ -675,8 +773,10 @@ pub enum ModuleSource {
     /// `CompilerHost::load_source`. A URI rather than a path keeps
     /// `wado-compiler` free of `std::path`, and so `wasm32`-friendly.
     Redirected {
-        /// Absolute URI (typically `file:///abs/path/to/file.wado`).
+        /// Absolute URI (typically `kiln:/abs/path/to/file.wado`).
         uri: InternedStr,
+        /// As [`Self::Local`]'s; not part of identity.
+        name: InternedStr,
         /// The importing module's package. Not part of identity, which is `uri`.
         package: PackageId,
     },
@@ -687,10 +787,12 @@ pub enum ModuleSource {
     /// bytes; the resulting
     /// Wado module exposes one extern fn per requested export.
     Wasm {
-        /// Canonical path identifier (used as the unique module key and
-        /// as the namespace component of the synthesized
-        /// `#[canonical("wasm:<path>", "<export>")]` attributes).
+        /// Canonical path identifier, the unique module key.
         path: InternedStr,
+        /// As [`Self::Local`]'s, and the namespace of the synthesized
+        /// `#[canonical("wasm:<name>", "<export>")]` attributes. Not part of
+        /// identity.
+        name: InternedStr,
         /// `wat` or `wasm` source format.
         kind: WasmAssetKind,
     },
@@ -716,7 +818,7 @@ pub enum PackageId {
     Dependency(InternedStr),
     Remote(InternedStr),
     /// A local module's package other than the entry's, named by the root
-    /// [`CompilerHost::package_root`] answers for it.
+    /// [`CompilerHost::module_dir`] answers for it.
     Path(InternedStr),
     /// The local modules in no package, where the entry is in one. They share
     /// one scope, as they do with an entry in no package, which is `Root`.
@@ -767,10 +869,12 @@ impl PartialEq for ModuleSource {
                 Self::Wasm {
                     path: a,
                     kind: kind_a,
+                    ..
                 },
                 Self::Wasm {
                     path: b,
                     kind: kind_b,
+                    ..
                 },
             ) => a == b && kind_a == kind_b,
             (Self::Effect(a), Self::Effect(b)) => a == b,
@@ -800,7 +904,7 @@ impl std::hash::Hash for ModuleSource {
             Self::Dependency { path, .. } => path.hash(state),
             Self::Remote { url, .. } => url.hash(state),
             Self::Redirected { uri, .. } => uri.hash(state),
-            Self::Wasm { path, kind } => {
+            Self::Wasm { path, kind, .. } => {
                 path.hash(state);
                 kind.hash(state);
             }
@@ -896,12 +1000,53 @@ impl ModuleSource {
 
         /// `<uninitialized>` sentinel for elaborator bootstrap.
         pub fn entry_point_uninitialized() = EntryPoint {
-            filename: ENTRY_FILENAME_UNINITIALIZED, package: PackageId::Root
+            filename: ENTRY_FILENAME_UNINITIALIZED,
+            name: InternedStr::from_arc(ENTRY_FILENAME_UNINITIALIZED.clone()),
+            package: PackageId::Root
         },
         /// `<stdin>` placeholder.
         pub fn entry_point_stdin() = EntryPoint {
-            filename: ENTRY_FILENAME_STDIN, package: PackageId::Root
+            filename: ENTRY_FILENAME_STDIN,
+            name: InternedStr::from_arc(ENTRY_FILENAME_STDIN.clone()),
+            package: PackageId::Root
         },
+    }
+
+    /// The file a module of a file is read from, relative to the host's base:
+    /// what its name is made from. `None` for a module that is no file, or
+    /// that is named by the specifier it is reached through.
+    #[must_use]
+    pub fn file(&self) -> Option<String> {
+        match self {
+            Self::Local { path, .. } | Self::Dependency { path, .. } | Self::Wasm { path, .. } => {
+                (!is_bundled_specifier(path) && !is_remote(path)).then(|| path.to_string())
+            }
+            Self::Redirected { uri, .. } => Some(redirected_file(uri)),
+            Self::EntryPoint { filename, .. } if !filename.starts_with('<') => {
+                Some(canonicalize_entry_point(filename))
+            }
+            Self::Core { .. }
+            | Self::Binding { .. }
+            | Self::Remote { .. }
+            | Self::EntryPoint { .. }
+            | Self::Effect(_) => None,
+        }
+    }
+
+    /// `self` under `name`, the same module.
+    #[must_use]
+    pub fn named(mut self, name: InternedStr) -> Self {
+        match &mut self {
+            Self::Local { name: slot, .. }
+            | Self::Dependency { name: slot, .. }
+            | Self::Wasm { name: slot, .. }
+            | Self::Redirected { name: slot, .. }
+            | Self::EntryPoint { name: slot, .. } => *slot = name,
+            Self::Core { .. } | Self::Binding { .. } | Self::Remote { .. } | Self::Effect(_) => {
+                unreachable!("{self} is named by the specifier it is reached through")
+            }
+        }
+        self
     }
 
     /// The module holding `prim`'s impls. `v128` answers `primitive.wado` even
@@ -932,13 +1077,13 @@ impl ModuleSource {
         matches!(self, Self::Wasm { .. })
     }
 
-    /// Namespace key used by `#[canonical("wasm:<path>", ...)]` attributes
+    /// Namespace key used by `#[canonical("wasm:<name>", ...)]` attributes
     /// synthesized for this wasm asset. Returns `None` for non-wasm
     /// module sources.
     #[must_use]
     pub fn wasm_canonical_namespace(&self) -> Option<String> {
         match self {
-            Self::Wasm { path, .. } => Some(format!("wasm:{path}")),
+            Self::Wasm { name, .. } => Some(format!("wasm:{name}")),
             _ => None,
         }
     }
@@ -1087,13 +1232,15 @@ impl ModuleSource {
                     filename.to_string()
                 }
             }
-            // The real, loadable filename — not the `dep:`-prefixed `Display`
-            // (that is symbol identity). A `#include_str` in a dependency module
-            // resolves against this, so it must be the same base-relative path
-            // the module itself was loaded from, or the include would resolve
-            // against the consumer's directory instead of the dependency's.
-            Self::Dependency { path, .. } => path.to_string(),
-            other => other.to_string(),
+            // A `#include_str` in a module resolves against this, so it must be
+            // the same base-relative path the module itself was loaded from.
+            Self::Local { path, .. } | Self::Dependency { path, .. } | Self::Wasm { path, .. } => {
+                path.to_string()
+            }
+            Self::Redirected { uri, .. } => uri.to_string(),
+            Self::Core { .. } | Self::Binding { .. } | Self::Remote { .. } | Self::Effect(_) => {
+                self.to_string()
+            }
         }
     }
 }
@@ -1114,12 +1261,43 @@ fn shared_dir_len(path: &str, root: &str) -> usize {
         .count()
 }
 
-/// The portable base name of an entry-point filename: its path relative to
-/// its own directory.
-fn entry_basename(filename: &str) -> &str {
-    filename.rsplit(['/', '\\']).next().unwrap_or(filename)
+/// The package root, from a directory `path` that lies at `dir` inside it.
+fn climb(path: &str, dir: &str) -> String {
+    let ups = dir.split('/').filter(|segment| !segment.is_empty()).count();
+    join_dir(path, &"../".repeat(ups))
 }
 
+/// `file` in the directory `dir`, both relative paths, with no leading `./`.
+fn join_dir(dir: &str, file: &str) -> String {
+    if dir.is_empty() {
+        return file.to_string();
+    }
+    without_dot(normalize(&format!("{dir}/{file}")))
+}
+
+/// `path` spelled from `root`, both relative to the host's base, with no
+/// leading `./`.
+fn from_root(root: &str, path: &str) -> String {
+    without_dot(relative_path(root, path))
+}
+
+fn without_dot(path: String) -> String {
+    match path.strip_prefix("./") {
+        Some(inside) => inside.to_string(),
+        None => path,
+    }
+}
+
+/// The file a Kiln redirect's `uri` names, as the host reads it: a `kiln:` URI
+/// decoded to its path, any other URI as it is.
+fn redirected_file(uri: &str) -> String {
+    strip_kiln_scheme(uri).unwrap_or_else(|| uri.to_string())
+}
+
+/// A module's name: the one spelling of it in a symbol, a coverage plan or a
+/// profile. A module of a file is named where it lies, never by the path the
+/// compile reached it through, so the name is the same on any machine and
+/// from any entry; [`ModuleSource::source_path`] says where it is read.
 impl fmt::Display for ModuleSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -1128,17 +1306,12 @@ impl fmt::Display for ModuleSource {
                 namespace,
                 interface,
             } => write!(f, "{namespace}:{interface}"),
-            Self::Local { path, .. } => write!(f, "{path}"),
-            Self::Dependency { path, .. } => write!(f, "dep:{path}"),
             Self::Remote { url, .. } => write!(f, "{url}"),
-            // Symbol identity, not a file path: the entry's qualifier is its
-            // base name (its path relative to its own directory), so WIR names
-            // stay stable across invocations and machines — the compile path is
-            // absolute under the test harness, relative on the CLI. The real
-            // path for diagnostics comes from `source_path`.
-            Self::EntryPoint { filename, .. } => write!(f, "{}", entry_basename(filename)),
-            Self::Redirected { uri, .. } => write!(f, "{uri}"),
-            Self::Wasm { path, .. } => write!(f, "{path}"),
+            Self::Local { name, .. }
+            | Self::Dependency { name, .. }
+            | Self::EntryPoint { name, .. }
+            | Self::Redirected { name, .. }
+            | Self::Wasm { name, .. } => write!(f, "{name}"),
             Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.rendered())),
         }
     }
@@ -1203,7 +1376,6 @@ mod tests {
         // the package boundary.
         let local = interner.local("../greet/src/lib.wado");
         assert_ne!(a, local);
-        assert_eq!(a.qualify_name("hello"), "dep:../greet/src/lib.wado//hello");
     }
 
     #[test]
@@ -1281,23 +1453,79 @@ mod tests {
         assert_eq!(ModuleSource::prelude().to_string(), "core:prelude");
         assert_eq!(ModuleSource::cli().to_string(), "core:cli");
         assert_eq!(interner.wasi("cli").to_string(), "wasi:cli");
-        assert_eq!(
-            interner.local("./geometry.wado").to_string(),
-            "./geometry.wado"
-        );
+        assert_eq!(interner.local("./geometry.wado").to_string(), "geometry.wado");
         assert_eq!(interner.entry_point("hello.wado").to_string(), "hello.wado");
     }
 
+    /// The tree `app/` (the package `acme:app@0.1.0`), `dep/`
+    /// (`acme:dep@0.2.0`), `bare/` (a package with no `[package]`) and
+    /// `loose/` (in none), read from a host based at `base`.
+    struct Tree {
+        base: &'static str,
+    }
+
+    impl PackageHost for Tree {
+        fn module_dir(&self, path: &str) -> ModuleDir {
+            let dir = normalize(&format!("{}/{}", self.base, module_parent_dir(path)));
+            let packages = [
+                ("app", Some("acme:app@0.1.0")),
+                ("dep", Some("acme:dep@0.2.0")),
+                ("bare", None),
+            ];
+            let package = packages.iter().find_map(|&(root, coordinate)| {
+                let inside = dir.strip_prefix(root)?;
+                let inside = inside.strip_prefix('/').or(inside.is_empty().then_some(""))?;
+                Some(PackageDir {
+                    root: root.to_string(),
+                    coordinate: coordinate.map(str::to_string),
+                    dir: inside.to_string(),
+                })
+            });
+            ModuleDir {
+                package,
+                path: without_dot(relative_path(self.base, &dir)),
+            }
+        }
+
+        fn package_index(&self, _root: &str) -> DependencyIndex {
+            DependencyIndex::default()
+        }
+    }
+
     #[test]
-    fn dependency_source_path_is_the_loadable_path_not_the_dep_display() {
-        // `Display` is symbol identity (`dep:`-prefixed); `source_path` is the
-        // real, loadable filename a `#include_str` in the dependency resolves
-        // against. Keeping the base-relative `../` (not `dep:../…`) is what makes
-        // the include land in the dependency's directory, not the consumer's.
+    fn a_module_is_named_where_it_lies_and_read_where_it_was_reached() {
+        let host = Tree { base: "app/src" };
         let mut interner = ModuleSourceInterner::new();
-        let source = interner.dependency("../dep/src/highlight/facade.wado");
-        assert_eq!(source.to_string(), "dep:../dep/src/highlight/facade.wado");
-        assert_eq!(source.source_path(), "../dep/src/highlight/facade.wado");
+        interner.bound_packages("./main.wado", &host);
+        let entry = interner.entry_point("/abs/app/src/main.wado");
+        assert_eq!(entry.to_string(), "acme:app@0.1.0/src/main.wado");
+        assert_eq!(entry.source_path(), "/abs/app/src/main.wado");
+
+        let named = |interner: &mut ModuleSourceInterner, path: &str| {
+            interner.place(path, &host).to_string()
+        };
+        assert_eq!(named(&mut interner, "../lib/u.wado"), "acme:app@0.1.0/lib/u.wado");
+        assert_eq!(named(&mut interner, "../../loose/x.wado"), "../loose/x.wado");
+        assert_eq!(named(&mut interner, "../../bare/b.wado"), "../bare/b.wado");
+
+        let dep = interner.dependency("../../dep/src/lib.wado");
+        let dep = interner.locate(dep, &host);
+        assert_eq!(dep.to_string(), "acme:dep@0.2.0/src/lib.wado");
+        assert_eq!(dep.source_path(), "../../dep/src/lib.wado");
+    }
+
+    #[test]
+    fn a_program_in_no_package_names_its_modules_from_its_own_directory() {
+        let host = Tree { base: "loose" };
+        let mut interner = ModuleSourceInterner::new();
+        interner.bound_packages("./main.wado", &host);
+        assert_eq!(interner.entry_point("main.wado").to_string(), "main.wado");
+        let named = |interner: &mut ModuleSourceInterner, path: &str| {
+            interner.place(path, &host).to_string()
+        };
+        assert_eq!(named(&mut interner, "./sub/y.wado"), "sub/y.wado");
+        assert_eq!(named(&mut interner, "../shared/z.wado"), "../shared/z.wado");
+        assert_eq!(named(&mut interner, "../app/lib/u.wado"), "acme:app@0.1.0/lib/u.wado");
     }
 
     #[test]
@@ -1399,7 +1627,8 @@ mod tests {
         let s = interner.place("../loose/s.wado", &counting);
         let t = interner.place("../loose/t.wado", &counting);
         assert_eq!(interner.place("./a.wado", &counting), a);
-        assert_eq!(asked.get(), 3, "once per directory");
+        // The entry's own directory was asked when its packages were bounded.
+        assert_eq!(asked.get(), 2, "once per directory");
 
         // Each resolves against its own package's manifest, and one in no
         // package against none.
@@ -1500,7 +1729,7 @@ mod tests {
         );
         assert_eq!(
             interner.local("./geometry.wado").qualify_name("Point"),
-            "./geometry.wado//Point"
+            "geometry.wado//Point"
         );
         assert_eq!(
             interner.wasi("cli").qualify_name("Stdout"),

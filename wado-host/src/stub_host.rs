@@ -8,10 +8,10 @@ use indexmap::IndexMap;
 use wado_compiler::remote::is_remote;
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
-    GeneratorRunnerError, ProbeRequest, SourceError, SourceReader,
+    GeneratorRunnerError, ModuleDir, PackageDir, ProbeRequest, SourceError, SourceReader,
 };
 use wado_lsp::FilesystemCompilerHost;
-use wado_lsp::host::discovery::normalize_path;
+use wado_lsp::host::discovery::{normalize_path, slash_separated};
 
 use crate::kiln::component_cache::ComponentCache;
 use crate::kiln::runtime::{generate_for, probe_for};
@@ -129,19 +129,29 @@ impl CompilerHost for StubHost {
         self.filesystem.stdlib_module_read(import_path);
     }
 
-    /// The nearest stubbed root above the module, compared lexically: a
-    /// fixture directory holds no symlink.
-    fn package_root(&self, path: &str) -> Option<String> {
+    /// In the nearest stubbed root above the module, compared lexically: a
+    /// fixture directory holds no symlink. A stubbed package has no
+    /// `[package]`.
+    fn module_dir(&self, path: &str) -> ModuleDir {
         let base = self.filesystem.base_path();
         let file = normalize_path(&base.join(path));
         let dir = file.parent().expect("a module path names a file");
-        self.stubs
+        let package = self
+            .stubs
             .package_roots
             .iter()
             .map(|root| (root, normalize_path(&base.join(root))))
             .filter(|(_, abs)| dir.starts_with(abs))
             .max_by_key(|(_, abs)| abs.components().count())
-            .map(|(root, _)| root.clone())
+            .map(|(root, abs)| PackageDir {
+                root: root.clone(),
+                coordinate: None,
+                dir: slash_separated(dir.strip_prefix(abs).expect("filtered on the prefix")),
+            });
+        ModuleDir {
+            package,
+            ..ModuleDir::unpackaged(path)
+        }
     }
 
     /// A stubbed package declares no dependencies of its own.

@@ -1542,7 +1542,8 @@ mod tests {
         use std::assert_matches;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
-            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, SourceReader,
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, ModuleDir,
+            SourceReader,
         };
 
         struct MockHost {
@@ -1582,8 +1583,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -1850,8 +1851,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -1925,7 +1926,7 @@ mod tests {
         use indexmap::IndexMap;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
-            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, ModuleDir,
         };
 
         struct HashOnlyHost {
@@ -1957,8 +1958,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -2017,8 +2018,8 @@ mod tests {
                 }
                 fn emit_diagnostic(&self, _d: Diagnostic) {}
                 fn stdlib_module_read(&self, _import_path: &str) {}
-                fn package_root(&self, _path: &str) -> Option<String> {
-                    None
+                fn module_dir(&self, path: &str) -> ModuleDir {
+                    ModuleDir::unpackaged(path)
                 }
                 fn package_index(&self, root: &str) -> DependencyIndex {
                     unreachable!("no module lies in a package: {root}")
