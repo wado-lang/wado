@@ -124,48 +124,51 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let out_path = arguments[3];
     let earlier = earlier_runs(&out_path);
 
+    // Every entry is in `out` before any run, so the file written after each
+    // run keeps the earlier runs of entries not reached yet.
     let mut out = Baseline { reviewer: CLAUDE_MODEL, grader: GRADER, tools: TOOLS, entries: [] };
     for let c of &checked.pairs {
         if !c.usable() {
             continue;
         }
-        let r = fix_result(&census, c.fix);
-        let culprit = &r.blamed[0];
-        assert culprit.pr == c.culprit, "the census must still blame the checked culprit";
-        let defect = judged_defect(&judged, c.fix);
-        let review_prompt = match source_diff(&culprit.sha, &changed_paths(&culprit.sha), "culprit", LIMIT) {
-            Ok(diff) => `PULL REQUEST #${c.culprit}: ${merge_title(&culprit.sha)}
-
-<diff>
-${diff}
-</diff>`,
-            Err(e) => panic(`#${c.fix}: ${e}`),
-        };
-        let fix_diff = source_diff(&r.sha, &changed_paths(&r.sha), "fix", LIMIT).unwrap();
-        let known = `KNOWN DEFECT, fixed by #${c.fix}: ${r.title}
-${defect}
-
-<fix_diff>
-${fix_diff}
-</fix_diff>`;
-
-        let mut entry = Entry { fix: c.fix, culprit: c.culprit, defect, runs: [] };
+        assert fix_result(&census, c.fix).blamed[0].pr == c.culprit, "the census must still blame the checked culprit";
+        let mut entry = Entry { fix: c.fix, culprit: c.culprit, defect: judged_defect(&judged, c.fix), runs: [] };
         for let graded of earlier.get(c.fix).unwrap_or([]) {
             if graded.grade matches { Some(_) } && entry.runs.len() < RUNS {
                 entry.runs.push(graded);
             }
         }
         out.entries.push(entry);
-        let last = out.entries.len() - 1;
-        if out.entries[last].runs.len() >= RUNS {
+    }
+    for let i of 0..<out.entries.len() {
+        if out.entries[i].runs.len() >= RUNS {
             continue;
         }
+        let fix = out.entries[i].fix;
+        let r = fix_result(&census, fix);
+        let culprit = &r.blamed[0];
+        let review_prompt = match source_diff(&culprit.sha, &changed_paths(&culprit.sha), "culprit", LIMIT) {
+            Ok(diff) => `PULL REQUEST #${culprit.pr}: ${merge_title(&culprit.sha)}
+
+<diff>
+${diff}
+</diff>`,
+            Err(e) => panic(`#${fix}: ${e}`),
+        };
+        let fix_diff = source_diff(&r.sha, &changed_paths(&r.sha), "fix", LIMIT).unwrap();
+        let known = `KNOWN DEFECT, fixed by #${fix}: ${r.title}
+${out.entries[i].defect}
+
+<fix_diff>
+${fix_diff}
+</fix_diff>`;
+
         let ws: Option<Workspace> = if TOOLS { Some(Workspace { root: snapshot(&culprit.sha) }) } else { null };
-        while out.entries[last].runs.len() < RUNS {
-            out.entries[last].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
+        while out.entries[i].runs.len() < RUNS {
+            out.entries[i].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
-            eprintln(`#${c.fix} run ${out.entries[last].runs.len()}`);
+            eprintln(`#${fix} run ${out.entries[i].runs.len()}`);
         }
         if let Some(w) = &ws {
             drop_snapshot(&w.root);

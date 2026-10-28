@@ -18,7 +18,7 @@ repository root.
 - [x] Grep: ripgrep, with Claude Code's Grep parameters.
 - [x] Glob: file paths matching a glob, sorted by path. ripgrep lists them.
 
-Reading lifts the hits on the evaluation set, most where the defect needs
+Reading finds more of the evaluation set's defects, most where the defect needs
 something outside the diff, such as the names another program writes. It can
 also talk the reviewer out of a right finding: on one entry, every run traced
 the code at length and then dropped the defect a single pass had named.

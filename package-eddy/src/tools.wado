@@ -317,7 +317,7 @@ fn page(lines: &List<String>, offset: i32, limit: i32) -> Result<String, String>
         return Err("offset and head_limit must be at least 0");
     }
     let mut out = "";
-    let end = if limit == 0 { lines.len() } else { i32::min(lines.len(), offset + limit) };
+    let end = if limit == 0 || limit > lines.len() - offset { lines.len() } else { offset + limit };
     for let i of offset..<end {
         out.push_str(&lines[i]);
         out.push_str("\n");

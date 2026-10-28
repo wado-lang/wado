@@ -41,6 +41,8 @@ test "Read takes a limit past the end as the rest of the file" {
     let ws = Workspace { root: "src" };
     let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
     assert out.starts_with("     2\t");
+    let rest = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`)).unwrap();
+    assert !rest.is_empty();
 }
 
 test "a reply names paths from the root, never the host's" {

@@ -126,9 +126,10 @@ is done.
   run in three hits for a third of the entries, so a single run says little
   about a change to the reviewer. Whether the other findings are real is not
   measured yet.
-- Reading the tree with tools lifts the hits from 23 to 29 of 45 runs, and the
-  entries hit at least once from 10 to 12 of 15. Both reviews ran Opus 5.5 at
-  its default effort. The table counts runs that hit, out of 3:
+- An agent that reads the tree with tools finds the defect in 29 of 45 runs,
+  and in 12 of the 15 entries at least once, against 23 and 10 for one pass.
+  Both reviews ran Opus 5.5 at its default effort, once each over the set. The
+  table counts runs that hit, out of 3:
 
   | Entry | One pass | Agent |
   | ----- | -------: | ----: |

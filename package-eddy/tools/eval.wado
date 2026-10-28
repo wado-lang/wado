@@ -139,11 +139,13 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
 
 /// A checkout of `sha` for a reviewer to read, and its directory. It is a
 /// worktree, so it shares the repository's objects, later commits included:
-/// only the tools' refusal to leave the tree keeps them out of reach.
+/// only the tools' refusal to leave the tree keeps them out of reach. A
+/// symbolic link is checked out as a file holding its target, so no path
+/// resolves out of the tree through one.
 pub fn snapshot(sha: &String) -> String with Process {
     let root = `scratchpad/eddy-trees/${*sha}`;
     if try_git(["-C", root, "rev-parse", "HEAD"]) != Some(`${*sha}\n`) {
-        git(["worktree", "add", "--force", "--detach", root, *sha]);
+        git(["-c", "core.symlinks=false", "worktree", "add", "--force", "--detach", root, *sha]);
     }
     return root;
 }
@@ -152,10 +154,11 @@ pub fn drop_snapshot(root: &String) with Process {
     git(["worktree", "remove", "--force", *root]);
 }
 
-/// The paths merge `sha` changed.
+/// The paths merge `sha` changed, both sides of a rename: a diff given only
+/// the new path shows the renamed file as wholly added.
 pub fn changed_paths(sha: &String) -> List<String> with Process {
     let mut paths: List<String> = [];
-    for let f of git(["diff", "--name-only", `${*sha}^1`, *sha]).lines() {
+    for let f of git(["diff", "--name-only", "--no-renames", `${*sha}^1`, *sha]).lines() {
         paths.push(f.to_string());
     }
     return paths;
