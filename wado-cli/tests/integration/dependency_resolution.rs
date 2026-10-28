@@ -664,13 +664,36 @@ fn an_exported_file_of_a_package_reached_by_a_path_is_named_by_its_package() {
         &root.join("app"),
         "",
         "use { make } from \"../../b/src/lib.wado\";\nuse { ax } from \"../../a/src/lib.wado\";\n\
-         pub fn api() -> i32 { return make() + ax(); }\n",
+         export fn run() { let _ = make() + ax(); }\n",
     );
     wado_in(&root.join("app"))
         .args(["dump", "--modules", "src/lib.wado"])
         .assert()
         .success()
         .stdout(predicate::str::contains("\n  b@0.1.0/src/sub/x.wado\n"));
+}
+
+/// A single-file dependency reached by its name and by a path is one module,
+/// with one type.
+#[test]
+fn a_single_file_dependency_reached_by_a_path_is_one_module() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    library(
+        &app,
+        "\"lib:token\" = { path = \"src/token.wado\" }\n",
+        "use { Token } from \"lib:token\";\nuse { make } from \"./token.wado\";\n\
+         pub fn api() -> i32 { let t: Token = make(); return t.v; }\n",
+    );
+    fs::write(
+        app.join("src/token.wado"),
+        "pub struct Token { pub v: i32 }\npub fn make() -> Token { return Token { v: 1 }; }\n",
+    )
+    .unwrap();
+    wado_in(&app)
+        .args(["check", "src/lib.wado"])
+        .assert()
+        .success();
 }
 
 /// A dependency is named by the path the OS reaches it by, so a source tree

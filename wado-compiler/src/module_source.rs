@@ -206,6 +206,11 @@ pub struct ModuleSourceInterner {
     undeclared_packages: hashmap::IndexMap<InternedStr, DependencyIndex>,
     /// What a module in no package declares: nothing.
     no_dependencies: DependencyIndex,
+    /// Each dependency's entry module, by its file as the host places it.
+    lib_files: hashmap::IndexMap<String, String>,
+    /// Each path a local import reached a dependency's entry module by, and
+    /// that entry module: one file is one module, however it is reached.
+    libs_by_path: hashmap::IndexMap<InternedStr, InternedStr>,
     /// Each directory a module lies in, as the host answered it.
     dirs: hashmap::IndexMap<String, ModuleDir>,
     /// The directory a module in no package is named from, relative to the
@@ -227,6 +232,8 @@ impl ModuleSourceInterner {
             local_packages: hashmap::IndexMap::default(),
             undeclared_packages: hashmap::IndexMap::default(),
             no_dependencies: DependencyIndex::default(),
+            lib_files: hashmap::IndexMap::default(),
+            libs_by_path: hashmap::IndexMap::default(),
             dirs: hashmap::IndexMap::default(),
             build_root: String::new(),
         }
@@ -263,9 +270,12 @@ impl ModuleSourceInterner {
         self.root_dir = package.map(|package| package.root);
     }
 
-    /// Claim the root of each package among `libs` that has a manifest.
+    /// Claim the root of each package among `libs` that has a manifest, and
+    /// each lib's file.
     fn bound_dependency_roots(&mut self, libs: Vec<String>, host: &impl PackageHost) {
         for lib in libs {
+            let file = self.host_file(&lib, host);
+            self.lib_files.insert(file, lib.clone());
             if self.package(&lib).manifest.is_some()
                 && let Some(root) = self.root_of(&lib, host)
             {
@@ -284,11 +294,28 @@ impl ModuleSourceInterner {
     /// declares, once per package.
     pub fn place(&mut self, path: &str, host: &impl PackageHost) -> ModuleSource {
         let interned = self.intern(path);
-        if !self.local_packages.contains_key(&interned) {
-            let root = self.root_of(path, host);
-            self.place_local(path, root, host);
+        if !self.local_packages.contains_key(&interned) && !self.libs_by_path.contains_key(&interned)
+        {
+            let file = self.host_file(path, host);
+            match self.lib_files.get(&file).cloned() {
+                Some(lib) => {
+                    let lib = self.intern(&lib);
+                    self.libs_by_path.insert(interned, lib);
+                }
+                None => {
+                    let root = self.root_of(path, host);
+                    self.place_local(path, root, host);
+                }
+            }
         }
         self.local(path)
+    }
+
+    /// The file at `path` as the host places it: one spelling for every path
+    /// that reaches it.
+    fn host_file(&mut self, path: &str, host: &impl PackageHost) -> String {
+        let file = path.rsplit('/').next().unwrap_or(path);
+        join_dir(&self.dir_of(path, host).path, file)
     }
 
     /// `source` named by where the host says its file lies, the host asked
@@ -546,8 +573,13 @@ impl ModuleSourceInterner {
         self.binding(CmNamespace::Wasi, interface)
     }
     pub fn local(&mut self, path: &str) -> ModuleSource {
+        let interned = self.intern(path);
+        if let Some(lib) = self.libs_by_path.get(&interned) {
+            let lib = lib.clone();
+            return self.dependency(&lib);
+        }
         let name = self.name_of(path);
-        let path = self.intern(path);
+        let path = interned;
         let package = match self.local_packages.get(&path) {
             Some(PackageId::Dependency(lib)) => {
                 let lib = lib.clone();
@@ -1643,8 +1675,9 @@ mod tests {
         let s = interner.place("../loose/s.wado", &counting);
         let t = interner.place("../loose/t.wado", &counting);
         assert_eq!(interner.place("./a.wado", &counting), a);
-        // The entry's own directory was asked when its packages were bounded.
-        assert_eq!(asked.get(), 2, "once per directory");
+        // The entry's own directory was asked when its packages were bounded;
+        // `/other`'s lib's directory, when `/other` was indexed.
+        assert_eq!(asked.get(), 3, "once per directory");
 
         // Each resolves against its own package's manifest, and one in no
         // package against none.

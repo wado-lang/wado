@@ -1906,11 +1906,11 @@ mod tests {
             &snap.state.as_ref().expect("complete").module_semantics[prelude],
         ));
 
-        let base_of = |map: &CoverageMap, path: &str| {
+        let base_of = |map: &CoverageMap, name: &str| {
             map.modules
                 .iter()
                 .zip(&map.bases)
-                .find_map(|(plan, &base)| (plan.path == path).then_some(base))
+                .find_map(|(plan, &base)| (plan.name == name).then_some(base))
         };
         let map = sem.coverage.as_ref().expect("the compile measures");
         assert_eq!(base_of(map, "core:prelude"), base_of(seed, "core:prelude"));
