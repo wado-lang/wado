@@ -836,7 +836,8 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// literal a `return` hands back is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
 /// that takes it apart deletes it. Nor is a literal of constants that a `let`
-/// binds to a local outside `written`, or that a shared `&` lends:
+/// binds to a local the body never writes (none in `written`), or that a
+/// shared `&` lends:
 /// `const_object_globalization` builds it once for the module rather than per
 /// run. A cold run is no part of the run.
 fn has_safepoint(

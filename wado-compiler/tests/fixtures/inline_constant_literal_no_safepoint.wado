@@ -1,6 +1,7 @@
-// A literal of constants is built once for the module, not on each run of the
-// body holding it, so it is no safepoint: a looping callee that reads a
-// constant table is spliced at its only site like one reading none.
+// A literal of constants the body only reads is built once for the module, not
+// on each run of the body holding it, so it is no safepoint: a looping callee
+// that reads a constant table is spliced at its only site like one reading
+// none.
 use { println, Stdout } from "core:cli";
 
 fn write_digits(out: &mut Array<u8>, value: i32) {
