@@ -152,11 +152,8 @@ pub(super) fn slot_flatten_candidates(
             continue;
         }
         let ft = module.types[func.type_id.index() as usize].expect_func();
-        // Only already-multi-value functions have a `ref W` *slot* to flatten;
-        // sole-result `ref W` returns are the province of single-level SROA.
-        if ft.results.len() < 2 {
-            continue;
-        }
+        // A one-result function may be multi-value too (a one-field aggregate);
+        // `validate_slot_sites` keeps only those every call binds as one.
         let arity = ft.results.len();
         for slot in 0..arity {
             let Some((v_idx, layout)) = slot_variant_layout(module, &ft.results[slot]) else {

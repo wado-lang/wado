@@ -385,18 +385,18 @@ pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites
 /// `builtin::variant_case_extract::<V, P>` calls to it (WEP 2026-06-13 §3e).
 pub fn case_extract_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_extract${mangled_variant}${mangled_payload}")
+    MarkerBridge::CaseExtract.pair_name(mangled_variant, mangled_payload)
 }
 
 /// [`case_extract_helper_name`]'s twin answering a reference to the payload,
 /// which lowering rewrites `builtin::variant_case_ref::<V, P>` calls to.
 pub fn case_ref_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_ref${mangled_variant}${mangled_payload}")
+    MarkerBridge::CaseRef.pair_name(mangled_variant, mangled_payload)
 }
 
 /// The `Case::<V, P>::construct` sibling of [`case_extract_helper_name`].
 pub fn case_construct_helper_name(mangled_variant: &str, mangled_payload: &str) -> String {
-    format!("$case_construct${mangled_variant}${mangled_payload}")
+    MarkerBridge::CaseConstruct.pair_name(mangled_variant, mangled_payload)
 }
 
 /// The `discriminant` of one instantiated generic variant, identified by the
@@ -411,38 +411,119 @@ pub fn variant_tag_helper_name(mangled_variant: &str) -> String {
 /// identity discipline as [`case_extract_helper_name`]). Lowering rewrites
 /// `builtin::struct_field_get::<S, F>` calls to it (WEP 2026-06-13 §2).
 pub fn field_get_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    format!("$field_get${mangled_struct}${mangled_field}")
+    MarkerBridge::FieldGet.pair_name(mangled_struct, mangled_field)
 }
 
 /// [`field_get_helper_name`]'s twin answering a reference to the field, which
 /// lowering rewrites `builtin::struct_field_ref::<S, F>` calls to.
 pub fn field_ref_helper_name(mangled_struct: &str, mangled_field: &str) -> String {
-    format!("$field_ref${mangled_struct}${mangled_field}")
+    MarkerBridge::FieldRef.pair_name(mangled_struct, mangled_field)
 }
 
 /// Name of the synthesized hole-read helper for a template shape and one of
 /// its hole types, both by structural mangle. Lowering rewrites
 /// `builtin::hole_get::<T, V>` calls to it (WEP 2026-01-10).
 pub fn hole_get_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    format!("$hole_get${mangled_shape}${mangled_hole}")
+    MarkerBridge::HoleGet.pair_name(mangled_shape, mangled_hole)
 }
 
 /// [`hole_get_helper_name`]'s twin answering a reference to the hole, which
 /// lowering rewrites `builtin::hole_ref::<T, V>` calls to.
 pub fn hole_ref_helper_name(mangled_shape: &str, mangled_hole: &str) -> String {
-    format!("$hole_ref${mangled_shape}${mangled_hole}")
+    MarkerBridge::HoleRef.pair_name(mangled_shape, mangled_hole)
 }
 
 /// Name of the synthesized segment-read helper for a template shape. Lowering
 /// rewrites `builtin::template_segment::<T>` calls to it (WEP 2026-01-10).
 pub fn template_segment_helper_name(mangled_shape: &str) -> String {
-    format!("$template_segment${mangled_shape}")
+    MarkerBridge::TemplateSegment.shape_name(mangled_shape)
 }
 
 /// Name of the synthesized hole-render helper for a template shape. Lowering
 /// rewrites `builtin::hole_fmt::<T>` calls to it (WEP 2026-01-10).
 pub fn hole_fmt_helper_name(mangled_shape: &str) -> String {
-    format!("$hole_fmt${mangled_shape}")
+    MarkerBridge::HoleFmt.shape_name(mangled_shape)
+}
+
+/// The kinds of bridge a reflection marker calls ([`case_extract_helper_name`]
+/// and its siblings; [`variant_tag_helper_name`] is not one).
+#[derive(Clone, Copy)]
+pub enum MarkerBridge {
+    CaseExtract,
+    CaseRef,
+    CaseConstruct,
+    FieldGet,
+    FieldRef,
+    HoleGet,
+    HoleRef,
+    TemplateSegment,
+    HoleFmt,
+}
+
+impl MarkerBridge {
+    pub const ALL: [Self; 9] = [
+        Self::CaseExtract,
+        Self::CaseRef,
+        Self::CaseConstruct,
+        Self::FieldGet,
+        Self::FieldRef,
+        Self::HoleGet,
+        Self::HoleRef,
+        Self::TemplateSegment,
+        Self::HoleFmt,
+    ];
+
+    /// The `builtin::` marker that `lower` rewrites into a call of this bridge.
+    #[must_use]
+    pub const fn marker(self) -> &'static str {
+        match self {
+            Self::CaseExtract => "variant_case_extract",
+            Self::CaseRef => "variant_case_ref",
+            Self::CaseConstruct => "variant_case_construct",
+            Self::FieldGet => "struct_field_get",
+            Self::FieldRef => "struct_field_ref",
+            Self::HoleGet => "hole_get",
+            Self::HoleRef => "hole_ref",
+            Self::TemplateSegment => "template_segment",
+            Self::HoleFmt => "hole_fmt",
+        }
+    }
+
+    /// Whether the bridge names a member type besides its head, by
+    /// [`Self::pair_name`], rather than the template shape alone, by
+    /// [`Self::shape_name`].
+    #[must_use]
+    pub const fn names_member(self) -> bool {
+        !matches!(self, Self::TemplateSegment | Self::HoleFmt)
+    }
+
+    /// What every bridge of this kind starts with.
+    #[must_use]
+    pub const fn prefix(self) -> &'static str {
+        match self {
+            Self::CaseExtract => "$case_extract$",
+            Self::CaseRef => "$case_ref$",
+            Self::CaseConstruct => "$case_construct$",
+            Self::FieldGet => "$field_get$",
+            Self::FieldRef => "$field_ref$",
+            Self::HoleGet => "$hole_get$",
+            Self::HoleRef => "$hole_ref$",
+            Self::TemplateSegment => "$template_segment$",
+            Self::HoleFmt => "$hole_fmt$",
+        }
+    }
+
+    /// The bridge for a head type and one member type, by structural mangle.
+    #[must_use]
+    pub fn pair_name(self, mangled_head: &str, mangled_member: &str) -> String {
+        format!("{}{mangled_head}${mangled_member}", self.prefix())
+    }
+
+    /// The bridge for a template shape alone, by structural mangle.
+    #[must_use]
+    pub fn shape_name(self, mangled_shape: &str) -> String {
+        format!("{}{mangled_shape}", self.prefix())
+    }
 }
 
 /// Name of the synthesized function that drops the resources a value of a

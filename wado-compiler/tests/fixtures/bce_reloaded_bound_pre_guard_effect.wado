@@ -1,0 +1,51 @@
+// The original loop always runs after `loop_version_bce`'s fast loop over a
+// reloaded bound, and runs what precedes the guard once more before its own
+// guard ends it. `tick` precedes the guard here, so the loop is not versioned:
+// it would tick once more than the source does.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [9, 9, 9, 9];
+    }
+}
+
+#[inline("never")]
+fn tick(count: &mut i32) -> i32 {
+    *count += 1;
+    return *count;
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>, count: &mut i32) {
+    let n = h.data.len();
+    let mut i = 0;
+    loop {
+        let t = tick(count);
+        if i >= n {
+            break;
+        }
+        out.push(h.data[i] + t * 0);
+        if i == 0 {
+            sink.reset();
+        }
+        i += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    let mut count = 0;
+    probe(&mut hh, &hh, &mut out, &mut count);
+    println(`${out:?} ${count}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 9, 9] 4\n"
+}

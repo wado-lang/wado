@@ -1,0 +1,38 @@
+// `loop_version_bce` over a reloaded bound with a guard `i + 1 < n`: the fast
+// loop runs while `i + 1 < $bce_limit`, the original guard with the limit for
+// its bound, so it stops where the original would.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [9, 9, 9, 9];
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i + 1 < n; i += 1 {
+        out.push(h.data[i]);
+        if i == 0 {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    println(`${out:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 9]\n",
+    "wir_expect:O2": ["break_if b{} (i + 1) >= $bce_limit_{};"]
+}

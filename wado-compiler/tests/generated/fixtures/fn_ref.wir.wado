@@ -565,20 +565,20 @@ fn "fn_ref.wado/$cm_export__$test_6_a_generic_function_may_reference_itself_thro
 }
 
 fn "fn_ref.wado/$cm_export__$test_7__mut_fn_replaces_the_caller_s_fn_typed_slot"() {
-    let f: ref "core:prelude/types.wado//Box<fn(i32)->i32>";
     let $v0_1: i32;
-    f = struct.new "core:prelude/types.wado//Box<fn(i32)->i32>" { value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_ref.wado//$Closure_16" {  }, inspect: ref.func "closure/fn_ref.wado/$closure_inspect_wrapper_7", func: ref.func "closure/fn_ref.wado/$closure_wrapper_7" } };
+    let $sroa_f_value_6: ref struct;
+    $sroa_f_value_6 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_ref.wado//$Closure_16" {  }, inspect: ref.func "closure/fn_ref.wado/$closure_inspect_wrapper_7", func: ref.func "closure/fn_ref.wado/$closure_wrapper_7" };
     if @unlikely(local.tee $v0_1(block -> i32 {
         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f.value)).env, 10);
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_f_value_6)).env, 10);
     }) != 20) {
         cold_path;
         "fn_ref.wado/$test_7__mut_fn_replaces_the_caller_s_fn_typed_slot$cold1"($v0_1);
         unreachable;
     }
-    f.value = struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_ref.wado//$Closure_1" {  }, inspect: ref.func "closure/fn_ref.wado/$closure_inspect_wrapper_1", func: ref.func "closure/fn_ref.wado/$closure_wrapper_1" };
+    $sroa_f_value_6 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "fn_ref.wado//$Closure_1" {  }, inspect: ref.func "closure/fn_ref.wado/$closure_inspect_wrapper_1", func: ref.func "closure/fn_ref.wado/$closure_wrapper_1" };
     if @unlikely(local.tee $v0_1(block -> i32 {
-        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f.value)).env, 10);
+        call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_f_value_6)).env, 10);
     }) != 30) {
         cold_path;
         "fn_ref.wado/$test_7__mut_fn_replaces_the_caller_s_fn_typed_slot$cold0"($v0_1);

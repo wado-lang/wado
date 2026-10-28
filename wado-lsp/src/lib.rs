@@ -770,8 +770,9 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     async fn open_source(
         &self,
         path: &str,
+        integrity: Option<wado_compiler::remote::Integrity>,
     ) -> Result<std::sync::Arc<dyn wado_compiler::SourceReader>, wado_compiler::SourceError> {
-        self.inner.open_source(path).await
+        self.inner.open_source(path, integrity).await
     }
 
     async fn load_source_prefix(
