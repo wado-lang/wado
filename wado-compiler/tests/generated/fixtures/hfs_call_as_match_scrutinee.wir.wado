@@ -93,9 +93,9 @@ fn "hfs_call_as_match_scrutinee.wado/run"() with Stdout {
             break_if b0 i >= 4;
             b.v = $hfs_v_18;
             if local.tee $match_2("hfs_call_as_match_scrutinee.wado/pre_inc5"(b)) == 0 {
-                $hfs_v_18 = local.tee $hfs_v_18(b.v) + 1;
+                $hfs_v_18 = b.v + 1;
             } else if $match_2 == 5 {
-                $hfs_v_18 = local.tee $hfs_v_18(b.v) + 1;
+                $hfs_v_18 = b.v + 1;
             } else {
                 $hfs_v_18 = b.v;
             }
@@ -107,15 +107,13 @@ fn "hfs_call_as_match_scrutinee.wado/run"() with Stdout {
     message_3 = "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_call_as_match_scrutinee.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(b.v);
     $hfs_v_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $match_2 = "hfs_call_as_match_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($match_2 = $hfs_v_18; $hfs_v_18 = 0; $match_2);
-    $hfs_v_18 = i;
-    i = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_18, message_3.repr, message_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_18 = $match_2; $match_2 = 0; $hfs_v_18);
+    $hfs_v_18 = "hfs_call_as_match_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_v_18);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i, message_3.repr, message_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_18);
 }
 
 fn "hfs_call_as_match_scrutinee.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "hfs_call_as_match_scrutinee.wado/$cm_export__run"() {
@@ -133,7 +131,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

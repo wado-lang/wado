@@ -157,7 +157,6 @@ fn "match_wide_int_or_pattern.wado/only_or_arms"($mv$n$low, $mv$n$high) {
 
 fn "match_wide_int_or_pattern.wado/run"() with Stdout {
     let message_8: ref "core:prelude/string.wado//String";
-    let $moved_4_12: i32;
     let $cm_pair_7_15: i64;
     message_8 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_2: i32;
@@ -173,35 +172,32 @@ fn "match_wide_int_or_pattern.wado/run"() with Stdout {
     };
     $mv_field_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"()));
     $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64);
-    $moved_4_12 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_12 = $mv_field_4; $mv_field_4 = 0; $moved_4_12);
-    $mv_field_4 = $mv_field_2;
-    $mv_field_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_4, message_8.repr, message_8.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_4 = $moved_4_12; $moved_4_12 = 0; $mv_field_4);
+    $mv_field_4 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_2, message_8.repr, message_8.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_4);
     message_8 = block -> ref "core:prelude/string.wado//String" {
         $mv_field_4 = block -> i32 {
             let $mv_arg_11: ref "core:prelude/int128.wado//i128";
             "match_wide_int_or_pattern.wado/only_or_arms"(local.tee $mv_arg_11(black_box(global:match_wide_int_or_pattern.wado::$const_obj_2)).low, $mv_arg_11.high);
         };
-        $moved_4_12 = block -> i32 {
+        $mv_field_2 = block -> i32 {
             "match_wide_int_or_pattern.wado/only_or_arms"(local.tee $mv_arg_11(black_box(global:match_wide_int_or_pattern.wado::$const_obj_1)).low, $mv_arg_11.high);
         };
-        $mv_field_2 = block -> i32 {
+        let $mv_field_16: i32;
+        $mv_field_16 = block -> i32 {
             "match_wide_int_or_pattern.wado/only_or_arms"(local.tee $mv_arg_11(black_box(global:match_wide_int_or_pattern.wado::$const_obj_0)).low, $mv_arg_11.high);
         };
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_wide_int_or_pattern.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($mv_field_4, $moved_4_12, $mv_field_2);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_wide_int_or_pattern.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($mv_field_4, $mv_field_2, $mv_field_16);
     };
-    $mv_field_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"()));
-    $moved_4_12 = builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64);
-    $mv_field_4 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_4 = $mv_field_2; $mv_field_2 = 0; $mv_field_4);
-    $mv_field_2 = $moved_4_12;
-    $moved_4_12 = 0;
+    $mv_field_16 = builtin::i32_wrap_i64(local.tee $cm_pair_7_15("wasi/stream-new"()));
+    $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7_15 >> 32_i64);
+    $mv_field_16 = "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_16);
     "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_2, message_8.repr, message_8.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_2 = $mv_field_4; $mv_field_4 = 0; $mv_field_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_16);
 }
 
 fn "match_wide_int_or_pattern.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "match_wide_int_or_pattern.wado/$cm_export__run"() {
@@ -302,7 +298,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

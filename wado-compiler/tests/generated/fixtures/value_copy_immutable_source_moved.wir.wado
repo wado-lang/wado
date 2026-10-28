@@ -92,7 +92,6 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     let c: ref "value_copy_immutable_source_moved.wado//Point";
     let l: ref "core:prelude//List<value_copy_immutable_source_moved.wado/Point>";
     let message_82: ref "core:prelude/string.wado//String";
-    let $moved_4_86: i32;
     let $cm_pair_7_89: i64;
     $load_0 = local.tee c(struct.new "value_copy_immutable_source_moved.wado//Point" { x: black_box(3), y: 4 }).x;
     l = struct.new "core:prelude//List<value_copy_immutable_source_moved.wado/Point>" { repr: array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">(), used: 0 };
@@ -110,11 +109,9 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     };
     $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_89("wasi/stream-new"()));
     $load_0 = builtin::i32_wrap_i64($cm_pair_7_89 >> 32_i64);
-    $moved_4_86 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_86 = $mv_field_3; $mv_field_3 = 0; $moved_4_86);
-    $mv_field_3 = $load_0;
-    $load_0 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, message_82.repr, message_82.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $moved_4_86; $moved_4_86 = 0; $mv_field_3);
+    $mv_field_3 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_3);
+    "core:rt/write_string_to_stream$dae[add_newline]"($load_0, message_82.repr, message_82.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3);
     $mv_field_3 = black_box(5);
     l = struct.new "core:prelude//List<value_copy_immutable_source_moved.wado/Point>" { repr: array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">(), used: 0 };
     c = struct.new "value_copy_immutable_source_moved.wado//Point" { x: $mv_field_3, y: 6 };
@@ -126,20 +123,18 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     l.used = 1;
     builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($load_2, 0).x = 77;
     message_82 = block -> ref "core:prelude/string.wado//String" {
-        $moved_4_86 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($load_2, 0).x;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($mv_field_3, $mv_field_3, $moved_4_86);
+        $load_0 = builtin::array_get_value<ref "value_copy_immutable_source_moved.wado//Point">($load_2, 0).x;
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_immutable_source_moved.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($mv_field_3, $mv_field_3, $load_0);
     };
-    $moved_4_86 = builtin::i32_wrap_i64(local.tee $cm_pair_7_89("wasi/stream-new"()));
+    $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_89("wasi/stream-new"()));
     $mv_field_3 = builtin::i32_wrap_i64($cm_pair_7_89 >> 32_i64);
-    $load_0 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0 = $moved_4_86; $moved_4_86 = 0; $load_0);
-    $moved_4_86 = $mv_field_3;
-    $mv_field_3 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_86, message_82.repr, message_82.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_86 = $load_0; $load_0 = 0; $moved_4_86);
+    $load_0 = "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, message_82.repr, message_82.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0);
 }
 
 fn "value_copy_immutable_source_moved.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "value_copy_immutable_source_moved.wado/$cm_export__run"() {
@@ -240,7 +235,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

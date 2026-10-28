@@ -156,7 +156,6 @@ fn "effect_handler_bundled_mixed.wado/run"() with Stdout {
     let $local_0_17: ref null "effect_handler_bundled_mixed.wado//$Dispatch_effect_handler_bundled_mixed.wado/Counter";
     let $local_1_18: ref "effect_handler_bundled_mixed.wado//$Dispatch_effect_handler_bundled_mixed.wado/Counter";
     let $local_2_22: i32;
-    let $moved_4_27: i32;
     let $cm_pair_7_30: i64;
     let $av_53: i32;
     h = struct.new "effect_handler_bundled_mixed.wado//MultiMock" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 97, 100, 111), used: 4 }, count: 0 };
@@ -215,30 +214,26 @@ fn "effect_handler_bundled_mixed.wado/run"() with Stdout {
     };
     $local_2_22 = builtin::i32_wrap_i64(local.tee $cm_pair_7_30("wasi/stream-new"()));
     $av_53 = builtin::i32_wrap_i64($cm_pair_7_30 >> 32_i64);
-    $moved_4_27 = "effect_handler_bundled_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_27 = $local_2_22; $local_2_22 = 0; $moved_4_27);
-    $local_2_22 = $av_53;
-    $av_53 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_22, $local_2_16.repr, $local_2_16.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_22 = $moved_4_27; $moved_4_27 = 0; $local_2_22);
+    $local_2_22 = "effect_handler_bundled_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2_22);
+    "core:rt/write_string_to_stream$dae[add_newline]"($av_53, $local_2_16.repr, $local_2_16.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2_22);
     global:effect_handler_bundled_mixed.wado::$effect_effect_handler_bundled_mixed.wado/Counter = $save_effect_handler_bundled_mixed.wado/Counter_11;
     global:effect_handler_bundled_mixed.wado::$effect_effect_handler_bundled_mixed.wado/Counter = $save_effect_handler_bundled_mixed.wado/Counter_8;
     global:effect_handler_bundled_mixed.wado::$effect_effect_handler_bundled_mixed.wado/Greeting = $save_effect_handler_bundled_mixed.wado/Greeting;
     $local_2_16 = block -> ref "core:prelude/string.wado//String" {
         $local_2_22 = h.count;
-        $moved_4_27 = alt.bias;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_bundled_mixed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($local_2_22, $moved_4_27);
+        $av_53 = alt.bias;
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_bundled_mixed.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($local_2_22, $av_53);
     };
-    $moved_4_27 = builtin::i32_wrap_i64(local.tee $cm_pair_7_30("wasi/stream-new"()));
+    $av_53 = builtin::i32_wrap_i64(local.tee $cm_pair_7_30("wasi/stream-new"()));
     $local_2_22 = builtin::i32_wrap_i64($cm_pair_7_30 >> 32_i64);
-    $av_53 = "effect_handler_bundled_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_53 = $moved_4_27; $moved_4_27 = 0; $av_53);
-    $moved_4_27 = $local_2_22;
-    $local_2_22 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_27, $local_2_16.repr, $local_2_16.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_27 = $av_53; $av_53 = 0; $moved_4_27);
+    $av_53 = "effect_handler_bundled_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_53);
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2_22, $local_2_16.repr, $local_2_16.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($av_53);
 }
 
 fn "effect_handler_bundled_mixed.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "effect_handler_bundled_mixed.wado/$cm_export__run"() {
@@ -339,19 +334,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

@@ -531,7 +531,6 @@ fn "self_comparison_lint.wado/run"() with Stdout {
     let t: ref "self_comparison_lint.wado//Tally";
     let ts_51: ref "core:prelude//List<self_comparison_lint.wado/Tally>";
     let elements: ref "Array<self_comparison_lint.wado/Tally>";
-    let $moved_4_123: i32;
     let $cm_pair_7_126: i64;
     let $sroa_$pattern_temp_0_1_14_133: i32;
     let new_repr_153: ref Array<u8>;
@@ -559,57 +558,53 @@ fn "self_comparison_lint.wado/run"() with Stdout {
     }
     $v1_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_126("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_133 = builtin::i32_wrap_i64($cm_pair_7_126 >> 32_i64);
-    $moved_4_123 = "self_comparison_lint.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_123 = $v1_20; $v1_20 = 0; $moved_4_123);
-    $v1_20 = $sroa_$pattern_temp_0_1_14_133;
-    $sroa_$pattern_temp_0_1_14_133 = 0;
-    builtin::array_copy<u8>(local.tee new_repr_153(builtin::array_new<u8>(5)), 0, global:self_comparison_lint.wado::$const_obj_19, 0, 4);
-    builtin::array_set_u8(new_repr_153, 4, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v1_20, new_repr_153);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_133 = $v1_20; $v1_20 = 0; $sroa_$pattern_temp_0_1_14_133);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_133 = $moved_4_123; $moved_4_123 = 0; $sroa_$pattern_temp_0_1_14_133);
-    $sroa_$pattern_temp_0_1_14_133 = builtin::i32_wrap_i64(local.tee $cm_pair_7_126("wasi/stream-new"()));
-    $moved_4_123 = builtin::i32_wrap_i64($cm_pair_7_126 >> 32_i64);
-    $v1_20 = "self_comparison_lint.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_20 = $sroa_$pattern_temp_0_1_14_133; $sroa_$pattern_temp_0_1_14_133 = 0; $v1_20);
-    $sroa_$pattern_temp_0_1_14_133 = $moved_4_123;
-    $moved_4_123 = 0;
+    $v1_20 = "self_comparison_lint.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_20);
     builtin::array_copy<u8>(local.tee new_repr_153(builtin::array_new<u8>(5)), 0, global:self_comparison_lint.wado::$const_obj_19, 0, 4);
     builtin::array_set_u8(new_repr_153, 4, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_133, new_repr_153);
-    "wasi/stream-drop-writable"($moved_4_123 = $sroa_$pattern_temp_0_1_14_133; $sroa_$pattern_temp_0_1_14_133 = 0; $moved_4_123);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_123 = $v1_20; $v1_20 = 0; $moved_4_123);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_133);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($v1_20);
+    $v1_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_126("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_133 = builtin::i32_wrap_i64($cm_pair_7_126 >> 32_i64);
+    $v1_20 = "self_comparison_lint.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_20);
+    builtin::array_copy<u8>(local.tee new_repr_153(builtin::array_new<u8>(5)), 0, global:self_comparison_lint.wado::$const_obj_19, 0, 4);
+    builtin::array_set_u8(new_repr_153, 4, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_133, new_repr_153);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_133);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($v1_20);
     local.tee c_35(struct.new "self_comparison_lint.wado//Counter" { n: 0 }).n = 1;
     c_35.n = 2;
     c_35.n = 3;
     c_35.n = 4;
     local.tee $load_3(local.tee t(struct.new "self_comparison_lint.wado//Tally" { n: struct.new "core:prelude/types.wado//Box<i32>" { value: 0 } }).n).value = 1;
-    $moved_4_123 = $load_3.value;
-    $load_3.value = $moved_4_123 + 1;
     $v1_20 = $load_3.value;
-    if @unlikely($moved_4_123 == $v1_20) {
+    $load_3.value = $v1_20 + 1;
+    $sroa_$pattern_temp_0_1_14_133 = $load_3.value;
+    if @unlikely($v1_20 == $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
-        "self_comparison_lint.wado/run$cold2"($moved_4_123, $v1_20);
+        "self_comparison_lint.wado/run$cold2"($v1_20, $sroa_$pattern_temp_0_1_14_133);
         unreachable;
     }
-    $v1_20 = builtin::array_len(local.tee elements(array.new_fixed<ref "self_comparison_lint.wado//Tally">(t)));
-    ts_51 = struct.new "core:prelude//List<self_comparison_lint.wado/Tally>" { repr: elements, used: $v1_20 };
-    if @unlikely(0 >= $v1_20) {
+    $sroa_$pattern_temp_0_1_14_133 = builtin::array_len(local.tee elements(array.new_fixed<ref "self_comparison_lint.wado//Tally">(t)));
+    ts_51 = struct.new "core:prelude//List<self_comparison_lint.wado/Tally>" { repr: elements, used: $sroa_$pattern_temp_0_1_14_133 };
+    if @unlikely(0 >= $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
-        "self_comparison_lint.wado/bump_first$cold0$dae[ts,$contract_arg_0]"($v1_20);
+        "self_comparison_lint.wado/bump_first$cold0$dae[ts,$contract_arg_0]"($sroa_$pattern_temp_0_1_14_133);
         unreachable;
     }
     local.tee $load_3(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(local.tee elements(ts_51.repr), 0).n).value = $load_3.value + 1;
-    $moved_4_123 = $load_3.value;
-    if @unlikely(0 >= $v1_20) {
+    $v1_20 = $load_3.value;
+    if @unlikely(0 >= $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
-        "self_comparison_lint.wado/bump_first$cold0$dae[ts,$contract_arg_0]"($v1_20);
+        "self_comparison_lint.wado/bump_first$cold0$dae[ts,$contract_arg_0]"($sroa_$pattern_temp_0_1_14_133);
         unreachable;
     }
     local.tee $load_3(builtin::array_get_value<ref "self_comparison_lint.wado//Tally">(elements, 0).n).value = $load_3.value + 1;
-    $v1_20 = $load_3.value;
-    if @unlikely($moved_4_123 == $v1_20) {
+    $sroa_$pattern_temp_0_1_14_133 = $load_3.value;
+    if @unlikely($v1_20 == $sroa_$pattern_temp_0_1_14_133) {
         cold_path;
         let $mv_arg_7: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<self_comparison_lint.wado/$tmpl$b7c013981ac25165,[core:prelude/list.wado/List<self_comparison_lint.wado/Tally>,i32,i32]>"(struct.new "self_comparison_lint.wado//$tmpl$b7c013981ac25165" { h0: ts_51, h1: $moved_4_123, h2: $v1_20, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at self_comparison_lint.wado:96
+        "core:rt/panic"(local.tee $mv_arg_7("core:prelude/string.wado/core:prelude/string.wado/String::format<self_comparison_lint.wado/$tmpl$b7c013981ac25165,[core:prelude/list.wado/List<self_comparison_lint.wado/Tally>,i32,i32]>"(struct.new "self_comparison_lint.wado//$tmpl$b7c013981ac25165" { h0: ts_51, h1: $v1_20, h2: $sroa_$pattern_temp_0_1_14_133, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at self_comparison_lint.wado:96
 condition: bump_first(&ts) != bump_first(&ts)
 ts: "), used: 106 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at self_comparison_lint.wado:96
 condition: bump_first(&ts) != bump_first(&ts)
@@ -691,7 +686,7 @@ fn "self_comparison_lint.wado/$template_segment$self_comparison_lint.wado/$tmpl$
 }
 
 fn "self_comparison_lint.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "self_comparison_lint.wado/$cm_export__run"() {
@@ -877,7 +872,7 @@ fn "core:prelude/fpfmt.wado/fixed_width$unchecked"(f, n) {
     let $mv$pm$lo: u64;
     multivalue_bind [$mv$pm$hi, $mv$pm$lo] = "core:prelude/fpfmt.wado/get_pow10"(p);
     if local.tee $mv$pm$hi("core:prelude/fpfmt.wado/unrounded_round"(local.tee $mv$pm$lo("core:prelude/fpfmt.wado/uscale"($mv$unpack$mantissa, $mv$pm$hi, $mv$pm$lo, 0 - (($mv$unpack$exponent + lp) + 3))))) >=u "core:prelude/fpfmt.wado/pow10"(n) {
-        return local.tee $mv$pm$hi("core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm$lo))), (0 - p) + 1, n;
+        return "core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm$lo)), (0 - p) + 1, n;
     }
     return $mv$pm$hi, 0 - p, n;
 }
@@ -920,7 +915,7 @@ fn "core:prelude/fpfmt.wado/fixed_width_out_of_range"(m, e, log10_e63, precision
     precision = (local.tee log10_e63((local.tee p1(select i32(p1 > 18, 18, p1)) - 1) - log10_e63) * 108853) >> 15;
     multivalue_bind [$mv$pm1$hi, $mv$pm1$lo] = "core:prelude/fpfmt.wado/get_pow10"(log10_e63);
     if local.tee $mv$pm1$hi("core:prelude/fpfmt.wado/unrounded_round"(local.tee $mv$pm1$lo("core:prelude/fpfmt.wado/uscale"(m, $mv$pm1$hi, $mv$pm1$lo, 0 - ((e + precision) + 3))))) >=u "core:prelude/fpfmt.wado/pow10"(p1) {
-        return local.tee $mv$pm1$hi("core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm1$lo))), (0 - log10_e63) + 1, p1;
+        return "core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm1$lo)), (0 - log10_e63) + 1, p1;
     }
     return $mv$pm1$hi, 0 - log10_e63, p1;
 }
@@ -935,9 +930,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let $mv$unpack$mantissa: u64;
     let $mv$unpack$exponent: i32;
     multivalue_bind [$mv$unpack$mantissa, $mv$unpack$exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    min_m = 0_i64;
     z = 11;
-    p = 0;
     if ($mv$unpack$mantissa == -9223372036854775808_i64) & ($mv$unpack$exponent > -1085) {
         p = 0 - (((($mv$unpack$exponent + 11) * 631305) - 261663) >> 21);
         min_m = $mv$unpack$mantissa - 512_i64;
@@ -1451,19 +1444,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2338,7 +2330,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<self_compar
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,&f64>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,bool>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "self_comparison_lint.wado/self_comparison_lint.wado/$tmpl$4c0447f1dcf50280^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,&f64>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2))).end - self_11.start + 16)) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,bool>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7)).end - self_11.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((capacity_1 + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,&f64>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2))).end - self_11.start + 16)) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,bool>::lit$sroa[self.index]"(1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7)).end - self_11.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "self_comparison_lint.wado/self_comparison_lint.wado/$tmpl$4c0447f1dcf50280^core:prelude/traits.wado/ReflectTemplate::members"();
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<self_comparison_lint.wado/$tmpl$4c0447f1dcf50280,&f64>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);

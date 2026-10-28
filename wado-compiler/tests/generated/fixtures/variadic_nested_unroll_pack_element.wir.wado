@@ -1394,19 +1394,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2354,18 +2353,18 @@ fn "variadic_nested_unroll_pack_element.wado/variadic_nested_unroll_pack_element
         global:variadic_nested_unroll_pack_element.wado::$const_obj_17 = struct.new "tuple//[core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,i32>, core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,bool>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
     }
     out = struct.new "core:prelude//List<variadic_nested_unroll_pack_element.wado/Mixed>" { repr: builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4), used: 0 };
-    drop((if ref.is_null(local.tee v_34(local.tee $mv_0_1(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.0).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_34(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.0.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_34;
     } else {
         $vc_payload_1_35 = ref.as_non_null(v_34);
         struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = $vc_payload_1_35.repr; $load_2 = $vc_payload_1_35.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_2)), 0, $array_clone_src_4, 0, $load_2); $array_clone_dst_5, used: $load_2 };
     }));
-    drop((if ref.is_null(local.tee v_34(local.tee $mv_1_2(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.1).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_34(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.1.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_34;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_5 = local.tee $vc_payload_1_35(ref.as_non_null(v_34)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_4(builtin::array_new<u8>(local.tee $load_2($vc_payload_1_35.used))), 0, $array_clone_dst_5, 0, $load_2); $array_clone_src_4, used: $load_2 };
     }));
-    drop((if ref.is_null(local.tee v_34(local.tee $mv_2_3(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.2).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_34(global:variadic_nested_unroll_pack_element.wado::$const_obj_17.2.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_34;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_4 = local.tee $vc_payload_1_35(ref.as_non_null(v_34)).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(local.tee $load_2($vc_payload_1_35.used))), 0, $array_clone_src_4, 0, $load_2); $array_clone_dst_5, used: $load_2 };
@@ -2998,18 +2997,18 @@ fn "variadic_nested_unroll_pack_element.wado/variadic_nested_unroll_pack_element
         global:variadic_nested_unroll_pack_element.wado::$const_obj_36 = struct.new "tuple//[core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,i32>, core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,core:prelude/string.wado/String>, core:prelude/traits.wado/StructField<variadic_nested_unroll_pack_element.wado/Mixed,bool>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
     }
     out = struct.new "core:prelude//List<variadic_nested_unroll_pack_element.wado/Mixed>" { repr: builtin::array_new<ref "variadic_nested_unroll_pack_element.wado//Mixed">(4), used: 0 };
-    drop((if ref.is_null(local.tee v_33(local.tee $mv_0_1(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.0).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_33(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.0.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_33;
     } else {
         $vc_payload_1_34 = ref.as_non_null(v_33);
         struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = $vc_payload_1_34.repr; $load_2 = $vc_payload_1_34.used; let $array_clone_dst_5: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>($load_2)), 0, $array_clone_src_4, 0, $load_2); $array_clone_dst_5, used: $load_2 };
     }));
-    drop((if ref.is_null(local.tee v_33(local.tee $mv_1_2(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.1).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_33(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.1.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_33;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_5 = local.tee $vc_payload_1_34(ref.as_non_null(v_33)).repr; builtin::array_copy<u8>(local.tee $array_clone_src_4(builtin::array_new<u8>(local.tee $load_2($vc_payload_1_34.used))), 0, $array_clone_dst_5, 0, $load_2); $array_clone_src_4, used: $load_2 };
     }));
-    drop((if ref.is_null(local.tee v_33(local.tee $mv_2_3(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.2).wire_override)) -> ref null "core:prelude/string.wado//String" {
+    drop((if ref.is_null(local.tee v_33(global:variadic_nested_unroll_pack_element.wado::$const_obj_36.2.wire_override)) -> ref null "core:prelude/string.wado//String" {
         v_33;
     } else {
         struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_4 = local.tee $vc_payload_1_34(ref.as_non_null(v_33)).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_5(builtin::array_new<u8>(local.tee $load_2($vc_payload_1_34.used))), 0, $array_clone_src_4, 0, $load_2); $array_clone_dst_5, used: $load_2 };
@@ -3018,7 +3017,6 @@ fn "variadic_nested_unroll_pack_element.wado/variadic_nested_unroll_pack_element
     value_60 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 0, label: $vc_payload_1_34, on: 1 };
     builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">(local.tee $load_9(out.repr), 0, value_60);
     out.used = 1;
-    $vc_payload_1_34 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
     $vc_payload_1_34 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     value_60 = struct.new "variadic_nested_unroll_pack_element.wado//Mixed" { count: 7, label: $vc_payload_1_34, on: 1 };
     builtin::array_set<ref "variadic_nested_unroll_pack_element.wado//Mixed">($load_9, 1, value_60);

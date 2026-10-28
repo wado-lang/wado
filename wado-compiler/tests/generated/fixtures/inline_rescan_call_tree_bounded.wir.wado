@@ -1198,15 +1198,13 @@ fn "inline_rescan_call_tree_bounded.wado/run"() with Stdout {
     message_196 = "core:prelude/string.wado/core:prelude/string.wado/String::format<inline_rescan_call_tree_bounded.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(((a_56 * 3) + x_0) % 10007);
     x_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     a_56 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    a_117 = "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(a_117 = x_0; x_0 = 0; a_117);
-    x_0 = a_56;
-    a_56 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(x_0, message_196.repr, message_196.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x_0 = a_117; a_117 = 0; x_0);
+    x_0 = "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(x_0);
+    "core:rt/write_string_to_stream$dae[add_newline]"(a_56, message_196.repr, message_196.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x_0);
 }
 
 fn "inline_rescan_call_tree_bounded.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "inline_rescan_call_tree_bounded.wado/$cm_export__run"() {
@@ -1224,7 +1222,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

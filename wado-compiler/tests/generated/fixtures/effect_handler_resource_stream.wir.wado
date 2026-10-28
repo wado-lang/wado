@@ -366,12 +366,11 @@ fn "effect_handler_resource_stream.wado/run"() with Stdout {
     let $local_0_34: ref null "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_1_35: ref "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2_36: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
-    let $moved_3_37: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_5_39: i64;
     s = struct.new "effect_handler_resource_stream.wado//MockStream" { log: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 }, drops: 0 };
     global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = struct.new "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>" { outer: local.tee $save_core:prelude/types.wado/Stream<u8>(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>), op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_stream.wado//$Closure_0" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_0" }, op_begin_read: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_stream.wado//$Closure_1" {  }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_1" }, op_cancel_read: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_2" }, op_drop: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_stream.wado//$Closure_3" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_3" } };
     global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = struct.new "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/StreamWritable<u8>" { outer: local.tee $save_core:prelude/types.wado/StreamWritable<u8>(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8>), op_begin_write: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_stream.wado//$Closure_4" {  }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_4" }, op_cancel_write: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_stream.wado//$Closure_5" {  }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_5" }, op_write_raw_all: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_stream.wado//$Closure_6" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_6" }, op_drop: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_stream.wado//$Closure_7" { $capture_0: s }, func: ref.func "closure/effect_handler_resource_stream.wado/$closure_wrapper_7" } };
-    rx_1 = local.tee $moved_3_37($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
+    rx_1 = local.tee $local_2_36($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_34(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_35(ref.as_non_null($local_0_34)).outer;
             $local_2_36 = block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
@@ -379,15 +378,13 @@ fn "effect_handler_resource_stream.wado/run"() with Stdout {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1_35.op_new)).env);
             };
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_0_34;
-            $moved_3_37 = $local_2_36;
-            $local_2_36 = ref.null none;
-            break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: $moved_3_37;
+            break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: $local_2_36;
         } else {
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_1: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5_39("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5_39 >> 32_i64) } };
         }
         unreachable;
     }).0;
-    tx_2 = $moved_3_37.1;
+    tx_2 = $local_2_36.1;
     if @unlikely((local.tee $local_4($inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___write_raw_all_3: block -> "core:prelude/types.wado//enum:CopyResult" {
         self_21 = tx_2;
         data = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: local.tee $v0(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: global:effect_handler_resource_stream.wado::$const_obj_1, start: 0, end: 2 }).repr, start: 0, end: 2 };
@@ -418,27 +415,23 @@ CopyResult::Completed: "), used: 24 }, s3: struct.new "core:prelude/string.wado/
         unreachable;
     }
     $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_2: block {
-        self_21 = tx_2;
-        tx_2 = ref.null none;
         if ref.is_null(local.tee $local_2_23(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8>)) == 0 {
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = local.tee $local_3(ref.as_non_null($local_2_23)).outer;
             let $indirect_call_4: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_3"($local_3.op_drop)).env, tx_2 = self_21; self_21 = ref.null none; tx_2);
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_3"($local_3.op_drop)).env, tx_2);
             break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_2: global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = $local_2_23;
         } else {
-            "wasi/stream-drop-writable"(tx_2 = self_21; self_21 = ref.null none; tx_2.value);
+            "wasi/stream-drop-writable"(tx_2.value);
             break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_2;
         }
     };
     $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_3: block {
-        tx_2 = rx_1;
-        rx_1 = ref.null none;
         if ref.is_null(local.tee $local_0_34(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_35(ref.as_non_null($local_0_34)).outer;
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_3"($local_1_35.op_drop)).env, rx_1 = tx_2; tx_2 = ref.null none; rx_1);
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_4.func, local.tee $indirect_call_4(ref.cast "canonical//CanonicalClosure_3"($local_1_35.op_drop)).env, rx_1);
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_3: global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_0_34;
         } else {
-            "wasi/stream-drop-readable"(rx_1 = tx_2; tx_2 = ref.null none; rx_1.value);
+            "wasi/stream-drop-readable"(rx_1.value);
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___drop_3;
         }
     };
@@ -453,12 +446,10 @@ CopyResult::Completed: "), used: 24 }, s3: struct.new "core:prelude/string.wado/
     rx_1 = local.tee $local_2_36($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_5: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $save_core:prelude/types.wado/Stream<u8>(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1_35(ref.as_non_null($save_core:prelude/types.wado/Stream<u8>)).outer;
-            $moved_3_37 = block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
+            $local_2_36 = block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1_35.op_new)).env);
             };
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = $save_core:prelude/types.wado/Stream<u8>;
-            $local_2_36 = $moved_3_37;
-            $moved_3_37 = ref.null none;
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_5: $local_2_36;
         } else {
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_5: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5_39("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5_39 >> 32_i64) } };
@@ -466,11 +457,9 @@ CopyResult::Completed: "), used: 24 }, s3: struct.new "core:prelude/string.wado/
         unreachable;
     }).0;
     tx_2 = $local_2_36.1;
-    $mv_field_7 = "effect_handler_resource_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(self_21 = rx_1; rx_1 = ref.null none; self_21);
-    self_21 = tx_2;
-    tx_2 = ref.null none;
-    "core:rt/write_string_to_stream$dae[add_newline]"(self_21, $mv_arg_3.repr, $mv_arg_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_4 = $mv_field_7; $mv_field_7 = 0; $local_4);
+    $mv_field_7 = "effect_handler_resource_stream.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_1);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_2, $mv_arg_3.repr, $mv_arg_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_7);
 }
 
 fn "effect_handler_resource_stream.wado/$template_segment$effect_handler_resource_stream.wado/$tmpl$cdb440ff7333898b"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {
@@ -499,7 +488,6 @@ fn "effect_handler_resource_stream.wado/$effect_dispatch__core:prelude/types.wad
     let $saved: ref null "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_1: ref "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
-    let $moved_3: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_5: i64;
     if ref.is_null(local.tee $saved(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
         global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = local.tee $local_1(ref.as_non_null($saved)).outer;
@@ -508,9 +496,7 @@ fn "effect_handler_resource_stream.wado/$effect_dispatch__core:prelude/types.wad
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_new)).env);
         };
         global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = $saved;
-        $moved_3 = $local_2;
-        $local_2 = ref.null none;
-        return $moved_3;
+        return $local_2;
     } else {
         return struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) } };
     }
@@ -633,15 +619,13 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         unreachable;
     });
     $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_0: block {
-        self_7 = tx;
-        tx = ref.null none;
         if ref.is_null(local.tee $local_2_9(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8>)) == 0 {
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = local.tee $local_3_10(ref.as_non_null($local_2_9)).outer;
             let $indirect_call_2: ref "canonical//CanonicalClosure_3";
-            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($local_3_10.op_drop)).env, tx = self_7; self_7 = ref.null none; tx);
+            call_ref "functype/$canonical_closure_fn_3"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_3"($local_3_10.op_drop)).env, tx);
             break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_0: global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/StreamWritable<u8> = $local_2_9;
         } else {
-            "wasi/stream-drop-writable"(tx = self_7; self_7 = ref.null none; tx.value);
+            "wasi/stream-drop-writable"(tx.value);
             break $inline__effect_dispatch__core_prelude_types_wado_StreamWritable_u8___drop_0;
         }
     };
@@ -651,13 +635,12 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let rx: ref null "core:prelude//$Resource";
     let tx: ref null "core:prelude//$Resource";
     let written: i32;
-    let $moved_4: ref null "core:prelude//$Resource";
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     rx = local.tee $pattern_temp_0("effect_handler_resource_stream.wado/$effect_dispatch__core:prelude/types.wado/Stream<u8>__new"()).0;
     tx = $pattern_temp_0.1;
-    written = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = rx; rx = ref.null none; $moved_4.value);
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4 = tx; tx = ref.null none; $moved_4, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = written; written = 0; $mv$message$used);
+    written = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(rx.value);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(written);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1054,7 +1037,6 @@ fn "effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Clo
     let $local_0: ref null "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_1: ref "effect_handler_resource_stream.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let $local_2: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
-    let $moved_3: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]";
     let $cm_pair_5: i64;
     return $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_0: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0(global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -1064,9 +1046,7 @@ fn "effect_handler_resource_stream.wado/effect_handler_resource_stream.wado/$Clo
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($local_1.op_new)).env);
             };
             global:effect_handler_resource_stream.wado::$effect_core:prelude/types.wado/Stream<u8> = $local_0;
-            $moved_3 = $local_2;
-            $local_2 = ref.null none;
-            break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_0: $moved_3;
+            break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_0: $local_2;
         } else {
             break $inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_0: struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" { 0: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())) }, 1: struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) } };
         }

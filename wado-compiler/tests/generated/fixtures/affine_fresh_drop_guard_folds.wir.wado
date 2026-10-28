@@ -71,22 +71,21 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 fn "affine_fresh_drop_guard_folds.wado/run"() {
     let t: i32;
     let message_2: ref "core:prelude/string.wado//String";
-    let $moved_4_6: i32;
     let $cm_pair_7_9: i64;
     let $sroa_$pattern_temp_0_0_9_11: i32;
     let $sroa_$pattern_temp_0_1_10_12: i32;
     message_2 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_fresh_drop_guard_folds.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(local.tee t(black_box(1)));
     $sroa_$pattern_temp_0_0_9_11 = builtin::i32_wrap_i64(local.tee $cm_pair_7_9("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10_12 = builtin::i32_wrap_i64($cm_pair_7_9 >> 32_i64);
-    $moved_4_6 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_6 = $sroa_$pattern_temp_0_0_9_11; $sroa_$pattern_temp_0_0_9_11 = 0; $moved_4_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9_11 = $sroa_$pattern_temp_0_1_10_12; $sroa_$pattern_temp_0_1_10_12 = 0; $sroa_$pattern_temp_0_0_9_11, message_2.repr, message_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_11 = $moved_4_6; $moved_4_6 = 0; $sroa_$pattern_temp_0_0_9_11);
+    $sroa_$pattern_temp_0_0_9_11 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9_11);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10_12, message_2.repr, message_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9_11);
     message_2 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_fresh_drop_guard_folds.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t);
     t = builtin::i32_wrap_i64(local.tee $cm_pair_7_9("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_9_11 = builtin::i32_wrap_i64($cm_pair_7_9 >> 32_i64);
-    $moved_4_6 = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_6 = t; t = 0; $moved_4_6);
-    "core:rt/write_string_to_stream$dae[add_newline]"(t = $sroa_$pattern_temp_0_0_9_11; $sroa_$pattern_temp_0_0_9_11 = 0; t, message_2.repr, message_2.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(t = $moved_4_6; $moved_4_6 = 0; t);
+    t = "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(t);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9_11, message_2.repr, message_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(t);
 }
 
 fn "affine_fresh_drop_guard_folds.wado/$cm_export__run"() {
@@ -104,7 +103,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

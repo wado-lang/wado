@@ -93,7 +93,6 @@ global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_
 fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
     let $load_0: ref "wir_optimize_vcopy_return_struct.wado//Inner";
     let o: ref "wir_optimize_vcopy_return_struct.wado//Outer";
-    let $moved_4_8: i32;
     let $cm_pair_7_11: i64;
     let $mv$r$0: i32;
     let $mv$r$1: ref null "wir_optimize_vcopy_return_struct.wado//Outer";
@@ -111,29 +110,25 @@ fn "wir_optimize_vcopy_return_struct.wado/run"() with Stdout {
         };
         $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
         $mv$r$0 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $moved_4_8 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_8 = $mv_field_3; $mv_field_3 = 0; $moved_4_8);
-        $mv_field_3 = $mv$r$0;
-        $mv$r$0 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, $mv_field_2.repr, $mv_field_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $moved_4_8; $moved_4_8 = 0; $mv_field_3);
+        $mv_field_3 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_3);
+        "core:rt/write_string_to_stream$dae[add_newline]"($mv$r$0, $mv_field_2.repr, $mv_field_2.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3);
     } else {
     }
     multivalue_bind [$mv_field_3, $mv$r$1, $mv$r$2] = "wir_optimize_vcopy_return_struct.wado/make_outer$sroa[return]$spec1$dae[v]"();
     if $mv_field_3 == 1 {
         $mv_field_2 = ref.as_non_null($mv$r$2);
         $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
-        $moved_4_8 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $mv$r$0 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0 = $mv_field_3; $mv_field_3 = 0; $mv$r$0);
-        $mv_field_3 = $moved_4_8;
-        $moved_4_8 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, $mv_field_2.repr, $mv_field_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $mv$r$0; $mv$r$0 = 0; $mv_field_3);
+        $mv$r$0 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
+        $mv_field_3 = "wir_optimize_vcopy_return_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_3);
+        "core:rt/write_string_to_stream$dae[add_newline]"($mv$r$0, $mv_field_2.repr, $mv_field_2.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3);
     } else {
     }
 }
 
 fn "wir_optimize_vcopy_return_struct.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "wir_optimize_vcopy_return_struct.wado/$cm_export__run"() {
@@ -264,7 +259,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

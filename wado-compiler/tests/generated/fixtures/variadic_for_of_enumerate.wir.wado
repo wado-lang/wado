@@ -518,47 +518,45 @@ fn "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pac
     let $load_0: ref "core:prelude/string.wado//String";
     let $load_2: i32;
     let $load_4: i32;
-    let self_8: ref "tuple//[i32, core:prelude/string.wado/String, i32]";
-    let $sroa_out_0_34: i32;
-    let $sroa_out_1_35: ref "core:prelude/string.wado//String";
-    self_8 = struct.new "tuple//[i32, core:prelude/string.wado/String, i32]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 2: 2 };
-    $sroa_out_0_34 = 1;
-    $load_0 = self_8.1;
-    $sroa_out_1_35 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $load_0.repr; $load_2 = $load_0.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_2)), 0, $array_clone_src_1, 0, $load_2); $array_clone_dst_2, used: $load_2 };
-    $load_2 = 2;
-    $sroa_out_0_34 = 1;
-    $sroa_out_1_35 = $load_0;
-    $load_2 = 2;
-    $sroa_out_1_35 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_dst_2 = $sroa_out_1_35.repr; builtin::array_copy<u8>(local.tee $array_clone_src_1(builtin::array_new<u8>(local.tee $load_4($sroa_out_1_35.used))), 0, $array_clone_dst_2, 0, $load_4); $array_clone_src_1, used: $load_4 };
-    if @unlikely($sroa_out_0_34 != 1) {
+    let $sroa_out_2_36: i32;
+    $load_0 = struct.new "tuple//[i32, core:prelude/string.wado/String, i32]" { 0: 1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 2: 2 }.1;
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = $load_0.repr;
+    $load_2 = $load_0.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(builtin::array_new<u8>($load_2), 0, $array_clone_src_1, 0, $load_2);
+    $load_2 = 1;
+    $sroa_out_2_36 = 2;
+    $load_0 = struct.new "core:prelude/string.wado//String" { repr: $array_clone_src_1 = $load_0.repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(local.tee $load_4($load_0.used))), 0, $array_clone_src_1, 0, $load_4); $array_clone_dst_2, used: $load_4 };
+    if @unlikely($load_2 != 1) {
         cold_path;
-        "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pack_typed_tuple$cold1"($sroa_out_0_34);
+        "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pack_typed_tuple$cold1"($load_2);
         unreachable;
     }
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__6: block -> bool {
-        $array_clone_src_1 = $sroa_out_1_35.repr;
-        $sroa_out_0_34 = $sroa_out_1_35.used;
-        $array_clone_dst_2 = global:variadic_for_of_enumerate.wado::$const_obj_8;
-        if $sroa_out_0_34 != 1 {
+        $array_clone_dst_2 = $load_0.repr;
+        $load_2 = $load_0.used;
+        $array_clone_src_1 = global:variadic_for_of_enumerate.wado::$const_obj_8;
+        if $load_2 != 1 {
             break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
         $load_4 = 0;
         b5: block {
             l6: loop {
-                break_if b5 ((($load_4 >= $sroa_out_0_34) | (($load_4 + 1) >= $sroa_out_0_34)) | ((($load_4 + 1) + 1) >= $sroa_out_0_34)) | (((($load_4 + 1) + 1) + 1) >= $sroa_out_0_34);
-                if builtin::array_get_value<u8>($array_clone_src_1, $load_4) != builtin::array_get_value<u8>($array_clone_dst_2, $load_4) {
+                break_if b5 ((($load_4 >= $load_2) | (($load_4 + 1) >= $load_2)) | ((($load_4 + 1) + 1) >= $load_2)) | (((($load_4 + 1) + 1) + 1) >= $load_2);
+                if builtin::array_get_value<u8>($array_clone_dst_2, $load_4) != builtin::array_get_value<u8>($array_clone_src_1, $load_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 $load_4 = $load_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $load_4) != builtin::array_get_value<u8>($array_clone_dst_2, $load_4) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, $load_4) != builtin::array_get_value<u8>($array_clone_src_1, $load_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 $load_4 = $load_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $load_4) != builtin::array_get_value<u8>($array_clone_dst_2, $load_4) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, $load_4) != builtin::array_get_value<u8>($array_clone_src_1, $load_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 $load_4 = $load_4 + 1;
-                if builtin::array_get_value<u8>($array_clone_src_1, $load_4) != builtin::array_get_value<u8>($array_clone_dst_2, $load_4) {
+                if builtin::array_get_value<u8>($array_clone_dst_2, $load_4) != builtin::array_get_value<u8>($array_clone_src_1, $load_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 $load_4 = $load_4 + 1;
@@ -567,8 +565,8 @@ fn "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pac
         };
         b11: block {
             l12: loop {
-                break_if b11 $load_4 >= $sroa_out_0_34;
-                if builtin::array_get_value<u8>($array_clone_src_1, $load_4) != builtin::array_get_value<u8>($array_clone_dst_2, $load_4) {
+                break_if b11 $load_4 >= $load_2;
+                if builtin::array_get_value<u8>($array_clone_dst_2, $load_4) != builtin::array_get_value<u8>($array_clone_src_1, $load_4) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 $load_4 = $load_4 + 1;
@@ -578,16 +576,16 @@ fn "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pac
         break $inline_core_prelude_array_wado_seq_eq_u8__6: 1;
     } == 0) {
         cold_path;
-        "core:rt/panic"(local.tee $sroa_out_1_35("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_for_of_enumerate.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "variadic_for_of_enumerate.wado//$tmpl$d48748ffcad618c0" { h0: $sroa_out_1_35, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_the_enumerate_index_also_writes_a_pack_typed_tuple at variadic_for_of_enumerate.wado:61
+        "core:rt/panic"(local.tee $load_0("core:prelude/string.wado/core:prelude/string.wado/String::format<variadic_for_of_enumerate.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "variadic_for_of_enumerate.wado//$tmpl$d48748ffcad618c0" { h0: $load_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_the_enumerate_index_also_writes_a_pack_typed_tuple at variadic_for_of_enumerate.wado:61
 condition: out.1 == \"a\"
 out.1: "), used: 147 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_3_the_enumerate_index_also_writes_a_pack_typed_tuple at variadic_for_of_enumerate.wado:61
 condition: out.1 == \"a\"
-out.1: "), used: 147 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $sroa_out_1_35.used);
+out.1: "), used: 147 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $load_0.used);
         unreachable;
     }
-    if @unlikely($load_2 != 2) {
+    if @unlikely($sroa_out_2_36 != 2) {
         cold_path;
-        "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pack_typed_tuple$cold0"($load_2);
+        "variadic_for_of_enumerate.wado/$test_3_the_enumerate_index_also_writes_a_pack_typed_tuple$cold0"($sroa_out_2_36);
         unreachable;
     }
 }
@@ -1179,19 +1177,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1749,8 +1746,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
     if local.tee $load_0(self.byte_index) >= self.used {
         return 0, 0;
     }
-    $sroa_slot_33 = 0;
-    $sroa_slot_34 = 0;
     $inline_decode_char_at_0: block {
         if local.tee b0(builtin::array_get_value<u8>(local.tee repr(self.repr), $load_0)) <u 128 {
             $sroa_slot_33 = b0;
@@ -2453,7 +2448,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, new_used_288);
                 } else {
                 }
-                start_289 = local.tee new_used_48(self_38.used);
+                start_289 = self_38.used;
                 new_used_288 = local.tee new_used_48(new_used_288);
                 if @unlikely(((0 <= start_289) & (start_289 < new_used_288)) == 0) {
                     cold_path;
@@ -2721,7 +2716,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, start_158);
                 } else {
                 }
-                new_used_51 = local.tee start_74(self_38.used);
+                new_used_51 = self_38.used;
                 start_158 = local.tee start_74(start_158);
                 if @unlikely(((0 <= new_used_51) & (new_used_51 < start_158)) == 0) {
                     cold_path;
@@ -3175,7 +3170,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, new_used_26);
                 } else {
                 }
-                start_430 = local.tee start_27(self_21.used);
+                start_430 = self_21.used;
                 new_used_26 = local.tee start_27(new_used_26);
                 if @unlikely(((0 <= start_430) & (start_430 < new_used_26)) == 0) {
                     cold_path;

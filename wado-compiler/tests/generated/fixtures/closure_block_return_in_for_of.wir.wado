@@ -429,7 +429,7 @@ fn "closure_block_return_in_for_of.wado/$cm_export__$test_4_shapes_that_already_
         "closure_block_return_in_for_of.wado/$test_4_shapes_that_already_worked$cold1"(total);
         unreachable;
     }
-    if @unlikely(local.tee total(local.tee total(local.tee total(local.tee total(total + 1) + 1) + 2) + 2) != 9) {
+    if @unlikely(local.tee total((((total + 1) + 1) + 2) + 2) != 9) {
         cold_path;
         "closure_block_return_in_for_of.wado/$test_4_shapes_that_already_worked$cold0"(total);
         unreachable;
@@ -439,8 +439,7 @@ fn "closure_block_return_in_for_of.wado/$cm_export__$test_4_shapes_that_already_
 
 fn "closure_block_return_in_for_of.wado/$cm_export__$test_5_the_only_return_sits_inside_a_bare_loop"() {
     let total: i32;
-    total = 0;
-    if @unlikely(local.tee total(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_13___call_3: block -> i32 {
+    if @unlikely(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_13___call_3: block -> i32 {
         block {
             l10: loop {
                 break $inline_closure_block_return_in_for_of_wado__Closure_13___call_3: 10;
@@ -448,7 +447,7 @@ fn "closure_block_return_in_for_of.wado/$cm_export__$test_5_the_only_return_sits
             };
         };
         unreachable;
-    }) + $inline_closure_block_return_in_for_of_wado__Closure_14___call_5: block -> i32 {
+    } + $inline_closure_block_return_in_for_of_wado__Closure_14___call_5: block -> i32 {
         block {
             l12: loop {
                 break $inline_closure_block_return_in_for_of_wado__Closure_14___call_5: 20;
@@ -474,11 +473,10 @@ fn "closure_block_return_in_for_of.wado/$cm_export__$test_7_the_only_return_sits
 
 fn "closure_block_return_in_for_of.wado/$cm_export__$test_8_the_only_return_sits_inside_a_match_arm"() {
     let total: i32;
-    total = 0;
-    if @unlikely(local.tee total(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_19___call_3: block -> i32 {
+    if @unlikely(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_19___call_3: block -> i32 {
         break $inline_closure_block_return_in_for_of_wado__Closure_19___call_3: 100;
         break $inline_closure_block_return_in_for_of_wado__Closure_19___call_3;
-    }) + $inline_closure_block_return_in_for_of_wado__Closure_20___call_5: block -> i32 {
+    } + $inline_closure_block_return_in_for_of_wado__Closure_20___call_5: block -> i32 {
         break $inline_closure_block_return_in_for_of_wado__Closure_20___call_5: 200;
         break $inline_closure_block_return_in_for_of_wado__Closure_20___call_5;
     }) != 300) {
@@ -492,12 +490,11 @@ fn "closure_block_return_in_for_of.wado/$cm_export__$test_8_the_only_return_sits
 fn "closure_block_return_in_for_of.wado/$cm_export__$test_9_the_only_return_sits_inside_an_if_else"() {
     let total: i32;
     cold_path;
-    total = 0;
-    if @unlikely(local.tee total(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_21___call_3: block -> i32 {
+    if @unlikely(local.tee total($inline_closure_block_return_in_for_of_wado__Closure_21___call_3: block -> i32 {
         cold_path;
         break $inline_closure_block_return_in_for_of_wado__Closure_21___call_3: 7;
         break $inline_closure_block_return_in_for_of_wado__Closure_21___call_3;
-    }) + $inline_closure_block_return_in_for_of_wado__Closure_22___call_5: block -> i32 {
+    } + $inline_closure_block_return_in_for_of_wado__Closure_22___call_5: block -> i32 {
         cold_path;
         break $inline_closure_block_return_in_for_of_wado__Closure_22___call_5: 9;
         break $inline_closure_block_return_in_for_of_wado__Closure_22___call_5;
@@ -972,19 +969,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

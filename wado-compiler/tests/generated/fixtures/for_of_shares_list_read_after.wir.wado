@@ -108,15 +108,13 @@ fn "for_of_shares_list_read_after.wado/run"() with Stdout {
     };
     $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$iter_0_index_34 = "for_of_shares_list_read_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_34 = $load_0; $load_0 = 0; $sroa_$iter_0_index_34);
-    $load_0 = sum;
-    sum = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_0, message_18.repr, message_18.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = $sroa_$iter_0_index_34; $sroa_$iter_0_index_34 = 0; $load_0);
+    $load_0 = "for_of_shares_list_read_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_18.repr, message_18.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0);
 }
 
 fn "for_of_shares_list_read_after.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "for_of_shares_list_read_after.wado/$cm_export__run"() {
@@ -217,7 +215,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

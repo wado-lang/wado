@@ -387,7 +387,6 @@ fn "resource_extraction_result_owned.wado/drain"(list) {
     $licm_repr_9 = list.repr;
     b0: block {
         l1: loop {
-            $temp_1 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0;
             if ref.test "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>::Some"(local.tee $temp_1($inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_0: block -> ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" {
                 if local.tee $load_1(list.used) == 0 {
                     break $inline_core_prelude_list_wado_List_wasi_http_types_wado_Fields___pop_0: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0;
@@ -476,10 +475,7 @@ fn "resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[st
     let $cm_handle_2: i32;
     $cm_handle_2 = headers.value;
     headers.value = 0;
-    let $cm_handle_6: i32;
-    $cm_handle_6 = trailers;
-    trailers = 0;
-    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, $cm_handle_6, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, trailers, $outptr);
     headers = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -494,17 +490,13 @@ fn "resource_extraction_result_owned.wado/$cm_task_entry__handle"(request) {
     let list: ref null "core:prelude//List<wasi:http/types.wado/Fields>";
     let response: ref null "core:prelude//$Resource";
     let _sent: ref null "core:prelude//$Resource";
-    let $moved_7: i32;
-    let $moved_8: ref null "core:prelude//$Resource";
     let $cm_pair_181: i64;
     let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let elements: ref null "Array<wasi:http/types.wado/Fields>";
     let used: i32;
-    let $moved_2: ref null "Array<wasi:http/types.wado/Fields>";
     let $sroa_$pattern_temp_0_1_190: i32;
-    let $sroa_$task_ret_1_192: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
     used = builtin::array_len(local.tee elements(array.new_fixed<ref null "core:prelude//$Resource">("resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), "resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"())));
-    "resource_extraction_result_owned.wado/drain"(local.tee list(struct.new "core:prelude//List<wasi:http/types.wado/Fields>" { repr: ref.as_non_null($moved_2 = elements; elements = ref.null none; $moved_2), used: used }));
+    "resource_extraction_result_owned.wado/drain"(local.tee list(struct.new "core:prelude//List<wasi:http/types.wado/Fields>" { repr: ref.as_non_null(elements), used: used }));
     if @unlikely((list.used == 0) == 0) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("Assertion failed in handle at resource_extraction_result_owned.wado:16
@@ -514,21 +506,17 @@ condition: list.is_empty()
     }
     used = builtin::i32_wrap_i64(local.tee $cm_pair_181("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_190 = builtin::i32_wrap_i64($cm_pair_181 >> 32_i64);
-    response = local.tee $pattern_temp_1("resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:resource_extraction_result_owned.wado::$const_obj_0, $moved_7 = used; used = 0; $moved_7)).0;
+    response = local.tee $pattern_temp_1("resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("resource_extraction_result_owned.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:resource_extraction_result_owned.wado::$const_obj_0, used)).0;
     _sent = $pattern_temp_1.1;
-    $sroa_$task_ret_1_192 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_8 = response; response = ref.null none; $moved_8 };
-    $moved_7 = 0;
-    $moved_7 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_192).payload_0.value;
-    "wasi/task-return:handle"(0, $moved_7, 0, 0_i64, 0, 0, 0, 0);
-    drop("resource_extraction_result_owned.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_7 = $sroa_$pattern_temp_0_1_190; $sroa_$pattern_temp_0_1_190 = 0; $moved_7, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
+    used = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: response }).payload_0.value;
+    "wasi/task-return:handle"(0, used, 0, 0_i64, 0, 0, 0, 0);
+    drop("resource_extraction_result_owned.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_190, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_sent) == 0 {
         "wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode"(_sent.value);
     }
     "resource_extraction_result_owned.wado/$drop$core:prelude/list.wado/List<wasi:http/types.wado/Fields>"(list);
     if (request == 0) == 0 {
-        $moved_7 = request;
-        request = 0;
-        "wasi/resource-drop:wasi/http/types.wado#Request"($moved_7);
+        "wasi/resource-drop:wasi/http/types.wado#Request"(request);
     }
 }
 
@@ -935,19 +923,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

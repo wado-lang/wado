@@ -536,7 +536,6 @@ fn "reflect_newtype_inherits_kind.wado/$test_2_the_kind_s_members_are_reachable_
     let result_44: ref "core:prelude/string.wado//String";
     let b: ref Array<u8>;
     let i: i32;
-    names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     names = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     local.tee result_44(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(2), used: 0 }).used = 1;
     builtin::array_copy<u8>(local.tee $load_0(result_44.repr), 0, names.repr, 0, 1);
@@ -576,7 +575,6 @@ fn "reflect_newtype_inherits_kind.wado/$test_3_an_enum_newtype_reflects_the_base
     let result_48: ref "core:prelude/string.wado//String";
     let b: ref Array<u8>;
     let i: i32;
-    names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     names = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 100), used: 3 };
     local.tee result_48(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 }).used = 3;
     builtin::array_copy<u8>(local.tee $load_0(result_48.repr), 0, names.repr, 0, 3);
@@ -652,7 +650,6 @@ fn "reflect_newtype_inherits_kind.wado/$test_4_a_flags_newtype_reflects_the_base
     let result_44: ref "core:prelude/string.wado//String";
     let b_84: ref Array<u8>;
     let i: i32;
-    names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     names = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 97, 100), used: 4 };
     local.tee result_44(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(9), used: 0 }).used = 4;
     builtin::array_copy<u8>(local.tee $load_0(result_44.repr), 0, names.repr, 0, 4);
@@ -713,7 +710,6 @@ fn "reflect_newtype_inherits_kind.wado/$test_5_a_variant_newtype_reflects_the_ba
     let result_44: ref "core:prelude/string.wado//String";
     let b: ref Array<u8>;
     let i: i32;
-    names = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     names = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(68, 111, 116), used: 3 };
     local.tee result_44(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(7), used: 0 }).used = 3;
     builtin::array_copy<u8>(local.tee $load_0(result_44.repr), 0, names.repr, 0, 3);
@@ -1548,19 +1544,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2340,7 +2335,7 @@ fn "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/Wrappe
     builtin::array_copy<u8>(local.tee $load_0(result_10.repr), 0, result_7.repr, 0, 10);
     result_10.used = 11;
     builtin::array_copy<u8>($load_0, 10, global:reflect_newtype_inherits_kind.wado::$const_obj_8, 0, 1);
-    return local.tee out_0(result_10);
+    return result_10;
 }
 
 fn "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/PP^reflect_newtype_inherits_kind.wado/Describe::describe$dae[self]"() {
@@ -2366,7 +2361,7 @@ fn "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/PP^ref
     builtin::array_copy<u8>(local.tee $load_0(result_10.repr), 0, result_7.repr, 0, 5);
     result_10.used = 6;
     builtin::array_copy<u8>($load_0, 5, global:reflect_newtype_inherits_kind.wado::$const_obj_8, 0, 1);
-    return local.tee out_0(result_10);
+    return result_10;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,[reflect_newtype_inherits_kind.wado/Color,reflect_newtype_inherits_kind.wado/C,&reflect_newtype_inherits_kind.wado/C,i32]>"(t) {
@@ -2380,7 +2375,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_new
     let $mv$$tuple_0$2: ref "core:prelude/traits.wado//TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,&reflect_newtype_inherits_kind.wado/C>";
     let $mv$$tuple_0$3: ref "core:prelude/traits.wado//TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,i32>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$2, $mv$$tuple_0$3] = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d^core:prelude/traits.wado/ReflectTemplate::members"();
-    out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,reflect_newtype_inherits_kind.wado/Color>::lit$sroa[self.index]"(0, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,reflect_newtype_inherits_kind.wado/C>::lit$sroa[self.index]"(1, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,&reflect_newtype_inherits_kind.wado/C>::lit"($mv$$tuple_0$2, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,i32>::lit$sroa[self.index]"(3, t)).end - self_15.start + 16))), used: 0 };
+    out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((((capacity_1 + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,reflect_newtype_inherits_kind.wado/Color>::lit$sroa[self.index]"(0, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,reflect_newtype_inherits_kind.wado/C>::lit$sroa[self.index]"(1, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,&reflect_newtype_inherits_kind.wado/C>::lit"($mv$$tuple_0$2, t)).end - self_15.start + 16)) + (local.tee self_15("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,i32>::lit$sroa[self.index]"(3, t)).end - self_15.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$1, $mv$$tuple_0$0, $mv$$tuple_0$2, $mv$$tuple_0$3] = "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d^core:prelude/traits.wado/ReflectTemplate::members"();
     "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<reflect_newtype_inherits_kind.wado/$tmpl$2987ead9517b781d,reflect_newtype_inherits_kind.wado/Color>::lit$sroa[self.index]"(0, t), out);
     $temp_inline_core_prelude_traits_wado_TemplateHole_reflect_newtype_inherits_kind_wado__tmpl_2987ead9517b781d_reflect_newtype_inherits_kind_wado_Color___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out);
@@ -2421,7 +2416,7 @@ fn "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/Point^
     builtin::array_copy<u8>(local.tee $load_0(result_10.repr), 0, result_7.repr, 0, 8);
     result_10.used = 9;
     builtin::array_copy<u8>($load_0, 8, global:reflect_newtype_inherits_kind.wado::$const_obj_8, 0, 1);
-    return local.tee out_0(result_10);
+    return result_10;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<reflect_newtype_inherits_kind.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(t) {
@@ -2464,7 +2459,7 @@ fn "reflect_newtype_inherits_kind.wado/reflect_newtype_inherits_kind.wado/P^refl
     builtin::array_copy<u8>(local.tee $load_0(result_10.repr), 0, result_7.repr, 0, 4);
     result_10.used = 5;
     builtin::array_copy<u8>($load_0, 4, global:reflect_newtype_inherits_kind.wado::$const_obj_8, 0, 1);
-    return local.tee out_0(result_10);
+    return result_10;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelude/string.wado/$tmpl$b145b32c9a586330,[core:prelude/string.wado/String,i32,bool,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(t) {

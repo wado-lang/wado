@@ -249,7 +249,6 @@ global global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0: ref Array<u8>
 
 fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
     let message_2: ref "core:prelude/string.wado//String";
-    let $moved_4_6: i32;
     let new_repr: ref Array<u8>;
     let $mv$r$0: i32;
     let $mv$r$1: u64;
@@ -259,27 +258,23 @@ fn "trait_bound_assoc_type_ambiguous.wado/run"() with Stdout {
         message_2 = "core:prelude/string.wado/core:prelude/string.wado/String::format<trait_bound_assoc_type_ambiguous.wado/$tmpl$222261c75441ed71,[u64]>$spec0$spec0$sroa[t.h0]"($mv$r$1);
         $mv$r$0 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
         $mv$r$2 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
-        $moved_4_6 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_6 = $mv$r$0; $mv$r$0 = 0; $moved_4_6);
-        $mv$r$0 = $mv$r$2;
-        $mv$r$2 = 0;
-        "core:rt/write_string_to_stream$dae[add_newline]"($mv$r$0, message_2.repr, message_2.used);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$r$0 = $moved_4_6; $moved_4_6 = 0; $mv$r$0);
+        $mv$r$0 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0);
+        "core:rt/write_string_to_stream$dae[add_newline]"($mv$r$2, message_2.repr, message_2.used);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$r$0);
     } else {
         $mv$r$0 = builtin::i32_wrap_i64(local.tee $mv$r$1("wasi/stream-new"()));
-        $moved_4_6 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
-        $mv$r$2 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$2 = $mv$r$0; $mv$r$0 = 0; $mv$r$2);
-        $mv$r$0 = $moved_4_6;
-        $moved_4_6 = 0;
+        $mv$r$2 = builtin::i32_wrap_i64($mv$r$1 >> 32_i64);
+        $mv$r$0 = "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv$r$0);
         builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, global:trait_bound_assoc_type_ambiguous.wado::$const_obj_0, 0, 3);
         builtin::array_set_u8(new_repr, 3, 10);
-        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$0, new_repr));
-        "wasi/stream-drop-writable"($moved_4_6 = $mv$r$0; $mv$r$0 = 0; $moved_4_6);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_6 = $mv$r$2; $mv$r$2 = 0; $moved_4_6);
+        drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($mv$r$2, new_repr));
+        "wasi/stream-drop-writable"($mv$r$2);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$r$0);
     }
 }
 
 fn "trait_bound_assoc_type_ambiguous.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "trait_bound_assoc_type_ambiguous.wado/$cm_export__run"() {
@@ -328,15 +323,15 @@ fn "core:prelude/intparse.wado/split_plus$sroa[return]"(s) {
 }
 
 fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,max]"(s) {
-    let $load_1: i32;
-    let len: i32;
     let acc: u64;
     let i: i32;
     let d: i32;
     let d64: u64;
     let b: u8;
     let $licm_repr_24: ref Array<u8>;
+    let $sroa_slot_43: i32;
     let $sroa_slot_44: u64;
+    let $sroa_slot_45: "core:prelude/intparse.wado//enum:IntErrorKind";
     let $mv$$vr_11$0: i32;
     let $mv$$vr_11$1: ref null "core:prelude/string.wado//StrSlice";
     let $mv$$vr_11$2: "core:prelude/intparse.wado//enum:IntErrorKind";
@@ -348,14 +343,11 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
     } else {
         unreachable;
     });
-    $mv$$vr_11$2 = 0;
-    $sroa_slot_44 = 0_i64;
-    $mv$$vr_11$0 = 0;
     $inline_parse_u64_digits_unchecked_sroa_return__0: block {
-        if local.tee len(s.end - local.tee $load_1(s.start)) == 0 {
-            $mv$$vr_11$2 = 1;
+        if local.tee $mv$$vr_11$0(s.end - local.tee $mv$$vr_11$2(s.start)) == 0 {
+            $sroa_slot_43 = 1;
             $sroa_slot_44 = 0_i64;
-            $mv$$vr_11$0 = 0;
+            $sroa_slot_45 = 0;
             break $inline_parse_u64_digits_unchecked_sroa_return__0;
         }
         acc = 0_i64;
@@ -363,9 +355,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
         $licm_repr_24 = s.repr;
         b10: block {
             l11: loop {
-                break_if b10 (i >= len) | ((i + 1) >= len);
+                break_if b10 (i >= $mv$$vr_11$0) | ((i + 1) >= $mv$$vr_11$0);
                 d = $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: block -> i32 {
-                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $load_1 + i)) >= 48) & (b <= 57) {
+                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $mv$$vr_11$2 + i)) >= 48) & (b <= 57) {
                         break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: b - 48;
                     }
                     if (b >= 97) & (b <= 122) {
@@ -377,9 +369,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                     break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: -1;
                 };
                 if 10 <=u d {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 1;
+                    $sroa_slot_45 = 1;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
@@ -388,15 +380,15 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                 } else {
                     (acc == 1844674407370955161_i64) & (d64 >u 5_i64);
                 }) {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 2;
+                    $sroa_slot_45 = 2;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 acc = (acc * 10_i64) + d64;
                 i = i + 1;
                 d = $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: block -> i32 {
-                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $load_1 + i)) >= 48) & (b <= 57) {
+                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $mv$$vr_11$2 + i)) >= 48) & (b <= 57) {
                         break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: b - 48;
                     }
                     if (b >= 97) & (b <= 122) {
@@ -408,9 +400,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                     break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: -1;
                 };
                 if 10 <=u d {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 1;
+                    $sroa_slot_45 = 1;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
@@ -419,9 +411,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                 } else {
                     (acc == 1844674407370955161_i64) & (d64 >u 5_i64);
                 }) {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 2;
+                    $sroa_slot_45 = 2;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 acc = (acc * 10_i64) + d64;
@@ -431,9 +423,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
         };
         b24: block {
             l25: loop {
-                break_if b24 i >= len;
+                break_if b24 i >= $mv$$vr_11$0;
                 d = $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: block -> i32 {
-                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $load_1 + i)) >= 48) & (b <= 57) {
+                    if (local.tee b(builtin::array_get_value<u8>($licm_repr_24, $mv$$vr_11$2 + i)) >= 48) & (b <= 57) {
                         break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: b - 48;
                     }
                     if (b >= 97) & (b <= 122) {
@@ -445,9 +437,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                     break $inline_parse_u64_digits_unchecked_sroa_return__0__$inline_digit_value_1: -1;
                 };
                 if 10 <=u d {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 1;
+                    $sroa_slot_45 = 1;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 d64 = builtin::i64_extend_i32_s(d);
@@ -456,9 +448,9 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                 } else {
                     (acc == 1844674407370955161_i64) & (d64 >u 5_i64);
                 }) {
-                    $mv$$vr_11$2 = 1;
+                    $sroa_slot_43 = 1;
                     $sroa_slot_44 = 0_i64;
-                    $mv$$vr_11$0 = 2;
+                    $sroa_slot_45 = 2;
                     break $inline_parse_u64_digits_unchecked_sroa_return__0;
                 }
                 acc = (acc * 10_i64) + d64;
@@ -466,19 +458,19 @@ fn "core:prelude/intparse.wado/parse_u64_radix$unchecked$sroa[return]$dae[radix,
                 continue l25;
             };
         };
-        $mv$$vr_11$2 = 0;
+        $sroa_slot_43 = 0;
         $sroa_slot_44 = acc;
-        $mv$$vr_11$0 = 0;
+        $sroa_slot_45 = 0;
         break $inline_parse_u64_digits_unchecked_sroa_return__0;
     };
-    if $mv$$vr_11$2 == 0 {
+    if $sroa_slot_43 == 0 {
         if $sroa_slot_44 >u -1_i64 {
             return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: 2 };
         } else {
             return 0, $sroa_slot_44, ref.null none;
         }
-    } else if @likely($mv$$vr_11$2 == 1) {
-        return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: $mv$$vr_11$0 };
+    } else if @likely($sroa_slot_43 == 1) {
+        return 1, 0_i64, struct.new "core:prelude/intparse.wado//ParseIntError" { kind: $sroa_slot_45 };
     } else {
         unreachable;
     }
@@ -738,19 +730,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

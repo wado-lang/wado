@@ -68,6 +68,7 @@ global global:match_char_range_switch.wado::$const_obj_0: ref Array<u8> = array.
 
 fn "match_char_range_switch.wado/run"() with Stdout {
     let sum: i32;
+    let $fused_slot_14: char;
     let b0: u32;
     let b1_22: u32;
     let b1_23: u32;
@@ -87,8 +88,6 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     b0: block {
         l1: loop {
             break_if b0 $sroa_$iter_0_byte_index_61 >= 5;
-            $sroa_slot_57 = 0;
-            $sroa_slot_58 = 0;
             $inline_decode_char_at_1: block {
                 if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_0_repr_59, $sroa_$iter_0_byte_index_61)) <u 128 {
                     $sroa_slot_57 = b0;
@@ -116,13 +115,14 @@ fn "match_char_range_switch.wado/run"() with Stdout {
                 break $inline_decode_char_at_1;
             };
             $sroa_$iter_0_byte_index_61 = $sroa_$iter_0_byte_index_61 + $sroa_slot_58;
+            $fused_slot_14 = $sroa_slot_57;
             sum = sum + b5: block -> i32 {
                 b6: block {
                     b7: block {
                         b8: block {
                             b9: block {
                                 b10: block {
-                                    br_table $sroa_slot_57 - 48 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 3, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4] default=0;
+                                    br_table $fused_slot_14 - 48 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 3, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4] default=0;
                                 };
                                 0;
                                 break b5;
@@ -144,15 +144,13 @@ fn "match_char_range_switch.wado/run"() with Stdout {
     message_42 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_char_range_switch.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(sum);
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     b3 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    b2_26 = "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(b2_26 = sum; sum = 0; b2_26);
-    sum = b3;
-    b3 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_42.repr, message_42.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = b2_26; b2_26 = 0; sum);
+    sum = "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
+    "core:rt/write_string_to_stream$dae[add_newline]"(b3, message_42.repr, message_42.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum);
 }
 
 fn "match_char_range_switch.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "match_char_range_switch.wado/$cm_export__run"() {
@@ -170,7 +168,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

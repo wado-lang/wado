@@ -60,25 +60,22 @@ fn "effect_propagation_signature_return.wado/run"() with Stdout {
     let $cm_pair_0: i64;
     let $sroa_$pattern_temp_0_0_6: i32;
     let $sroa_$pattern_temp_0_1_7: i32;
-    let $moved_4: i32;
     let new_repr: ref Array<u8>;
     $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_0("wasi/stream-new"()));
-    "wasi/stream-drop-writable"(local.tee $sroa_$pattern_temp_0_1_7(builtin::i32_wrap_i64($cm_pair_0 >> 32_i64)));
-    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_1_7 = $sroa_$pattern_temp_0_0_6; $sroa_$pattern_temp_0_0_6 = 0; $sroa_$pattern_temp_0_1_7);
-    $sroa_$pattern_temp_0_1_7 = builtin::i32_wrap_i64(local.tee $cm_pair_0("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64($cm_pair_0 >> 32_i64);
-    $moved_4 = "effect_propagation_signature_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_1_7; $sroa_$pattern_temp_0_1_7 = 0; $moved_4);
-    $sroa_$pattern_temp_0_1_7 = $sroa_$pattern_temp_0_0_6;
-    $sroa_$pattern_temp_0_0_6 = 0;
+    "wasi/stream-drop-writable"(builtin::i32_wrap_i64($cm_pair_0 >> 32_i64));
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_6);
+    $sroa_$pattern_temp_0_0_6 = builtin::i32_wrap_i64(local.tee $cm_pair_0("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_7 = builtin::i32_wrap_i64($cm_pair_0 >> 32_i64);
+    $sroa_$pattern_temp_0_0_6 = "effect_propagation_signature_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_6);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:effect_propagation_signature_return.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_7, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_6 = $sroa_$pattern_temp_0_1_7; $sroa_$pattern_temp_0_1_7 = 0; $sroa_$pattern_temp_0_0_6);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_6 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_6);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_6);
 }
 
 fn "effect_propagation_signature_return.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "effect_propagation_signature_return.wado/$cm_export__run"() {

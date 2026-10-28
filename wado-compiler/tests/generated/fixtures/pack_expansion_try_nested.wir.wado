@@ -384,7 +384,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
     } else {
         0;
     }) -> bool {
-        $local_6_6 = ref.as_non_null($mv$$vr_12_12$1);
+        drop(ref.as_non_null($mv$$vr_12_12$1));
         $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             a_17 = s_0.repr;
             $mv$$vr_12_12$0 = s_0.used;
@@ -445,7 +445,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
     } else {
         0;
     }) -> bool {
-        $local_6_6 = ref.as_non_null($mv$$vr_12_12$1);
+        drop(ref.as_non_null($mv$$vr_12_12$1));
         $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
             b_20 = s_2.repr;
             i_24 = s_2.used;
@@ -497,7 +497,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
     }
     if @unlikely($inline__test_0_nested_in_two_elements_0__$fused_$inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__0: block -> bool {
         cold_path;
-        if @unlikely((-5 + cold_path; $qm_e_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = ref.as_non_null(local.tee s_2($qm_e_47)); $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+        if @unlikely((-5 + cold_path; $qm_e_47 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = $qm_e_47; $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
             b_20 = $qm_e_47.repr;
             i_24 = $qm_e_47.used;
             a_17 = array.new_data<u8>("negative");
@@ -542,7 +542,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
             cold_path;
             $qm_e_49 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 };
             cold_path;
-            $qm_e_47 = ref.as_non_null(local.tee s_2($qm_e_49));
+            $qm_e_47 = $qm_e_49;
             $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
                 b_20 = $qm_e_47.repr;
                 i_24 = $qm_e_47.used;
@@ -587,7 +587,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
             };
             break $inline__test_0_nested_in_two_elements_0__$fused_$inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__0;
         }
-        drop("core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(-5 + cold_path; $qm_e_49 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = ref.as_non_null(local.tee s_2($qm_e_49)); $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+        drop("core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(-5 + cold_path; $qm_e_49 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = $qm_e_49; $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
             b_20 = $qm_e_47.repr;
             i_24 = $qm_e_47.used;
             a_17 = array.new_data<u8>("negative");
@@ -1109,19 +1109,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

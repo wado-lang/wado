@@ -313,7 +313,6 @@ fn "stream_read_eof.wado/run"() with Stdout {
     let $cm_pair_7_7: i64;
     let $sroa_$pattern_temp_0_0_11: i32;
     let $sroa_$pattern_temp_0_1_12: i32;
-    let $moved_4: i32;
     let new_repr: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:stream_read_eof.wado::$modules_initialized);
@@ -321,23 +320,21 @@ fn "stream_read_eof.wado/run"() with Stdout {
         "stream_read_eof.wado/$initialize_modules$cold0"();
     };
     $sroa_$pattern_temp_0_0_11 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
-    "wasi/stream-drop-writable"(local.tee $sroa_$pattern_temp_0_1_12(builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64)));
+    "wasi/stream-drop-writable"(builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64));
     if @unlikely((local.tee $sroa_$pattern_temp_0_1_12("core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"($sroa_$pattern_temp_0_0_11).used) == 0) == 0) {
         cold_path;
         "stream_read_eof.wado/run$cold0"($sroa_$pattern_temp_0_1_12);
         unreachable;
     }
-    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_1_12 = $sroa_$pattern_temp_0_0_11; $sroa_$pattern_temp_0_0_11 = 0; $sroa_$pattern_temp_0_1_12);
-    $sroa_$pattern_temp_0_1_12 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_0_11 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
-    $moved_4 = "stream_read_eof.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_1_12; $sroa_$pattern_temp_0_1_12 = 0; $moved_4);
-    $sroa_$pattern_temp_0_1_12 = $sroa_$pattern_temp_0_0_11;
-    $sroa_$pattern_temp_0_0_11 = 0;
+    "wasi/stream-drop-readable"($sroa_$pattern_temp_0_0_11);
+    $sroa_$pattern_temp_0_0_11 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_12 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_11 = "stream_read_eof.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_11);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, global:stream_read_eof.wado::$const_obj_1, 0, 6);
     builtin::array_set_u8(new_repr, 6, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_12, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_11 = $sroa_$pattern_temp_0_1_12; $sroa_$pattern_temp_0_1_12 = 0; $sroa_$pattern_temp_0_0_11);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_11 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_11);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_11);
 }
 
 fn "stream_read_eof.wado/$template_segment$stream_read_eof.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -355,7 +352,7 @@ fn "stream_read_eof.wado/$template_segment$stream_read_eof.wado/$tmpl$ebaa20f4a9
 }
 
 fn "stream_read_eof.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "stream_read_eof.wado/$cm_export__run"() {
@@ -630,19 +627,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1090,7 +1086,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>";
     let $mv$$tuple_0$1: ref "core:prelude/traits.wado//TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,&mut bool>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/$tmpl$b7f89f2160c441f4^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2))).end - self_11.start + 16)) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,&mut bool>::lit"($mv$$tuple_0$1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7)).end - self_11.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((capacity_1 + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1), local.tee $load_6(t.s2), local.tee $load_7(t.r2))).end - self_11.start + 16)) + (local.tee self_11("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,&mut bool>::lit"($mv$$tuple_0$1, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7)).end - self_11.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1] = "core:prelude/types.wado/core:prelude/types.wado/$tmpl$b7f89f2160c441f4^core:prelude/traits.wado/ReflectTemplate::members"();
     self_11 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_11.repr, self_11.start, self_11.end);
@@ -1314,6 +1310,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_sized$dae[expected]"(self) {
     let all: ref "core:prelude//List<u8>";
     let chunk: ref "core:prelude/types.wado//StreamChunk<u8>";
+    let packed: i32;
     let lending: ref "core:prelude/types.wado//Box<bool>";
     let other_len: i32;
     let new_used: i32;
@@ -1323,9 +1320,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Stream<u8>::read_to_end_size
     all = struct.new "core:prelude//List<u8>" { repr: builtin::array_new<u8>(0), used: 0 };
     block {
         l134: loop {
-            $sroa_slot_31 = 0;
-            $sroa_slot_32 = 0;
-            $sroa_slot_33 = 0;
             $inline_core_prelude_types_wado_ReadInto__landing_3: block {
                 if ref.is_null(ref.null none) == 0 {
                     if @unlikely(local.tee lending(ref.as_non_null(ref.null none)).value == 0) {
@@ -1348,8 +1342,8 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
                 $sroa_slot_33 = 4096;
                 break $inline_core_prelude_types_wado_ReadInto__landing_3;
             };
-            $sroa_slot_32 = "wasi/stream-read"(self, $sroa_slot_31, $sroa_slot_32);
-            chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: $sroa_slot_32, ptr: $sroa_slot_31, size: $sroa_slot_33, align: 1 }, items: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
+            packed = "wasi/stream-read"(self, $sroa_slot_31, $sroa_slot_32);
+            chunk = "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(struct.new "core:prelude/types.wado//StartedRead<u8>" { buffer: struct.new "core:prelude/types.wado//CopyBuffer" { handle: self, packed: packed, ptr: $sroa_slot_31, size: $sroa_slot_33, align: 1 }, items: struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(), used: 0 } });
             $inline_core_prelude_list_wado_List_u8___extend_9: block {
                 break_if $inline_core_prelude_list_wado_List_u8___extend_9 local.tee other_len(chunk.items.used) == 0;
                 if @unlikely(local.tee new_used(all.used + other_len) > builtin::array_len(all.repr)) {
@@ -1370,7 +1364,6 @@ lending: "), used: 30 }, s2: struct.new "core:prelude/string.wado//String" { rep
 fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[end]"(self) {
     let packed_2: i32;
     let count_3: i32;
-    let $moved_6: ref null "core:prelude/types.wado//StartedRead<u8>";
     let $drop_spill_7: ref "core:prelude/types.wado//StreamChunk<u8>";
     let self_7: ref null "core:prelude/types.wado//CopyBuffer";
     let ptr_10: i32;
@@ -1379,12 +1372,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
     let w: i64;
     let to: i32;
     let $licm_arith_7: i32;
-    $moved_6 = self;
-    self = ref.null none;
-    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: (if local.tee count_3(local.tee packed_2(local.tee self_7($moved_6.buffer).packed = "core:prelude/types.wado/settled_copy"(self_7.handle, self_7.packed); self_7.packed) >>u 4) == 0 -> ref "core:prelude//List<u8>" {
-        $moved_6.items;
+    $drop_spill_7 = struct.new "core:prelude/types.wado//StreamChunk<u8>" { items: (if local.tee count_3(local.tee packed_2(local.tee self_7(self.buffer).packed = "core:prelude/types.wado/settled_copy"(self_7.handle, self_7.packed); self_7.packed) >>u 4) == 0 -> ref "core:prelude//List<u8>" {
+        self.items;
     } else {
-        ptr_10 = $moved_6.buffer.ptr;
+        ptr_10 = self.buffer.ptr;
         arr_16 = builtin::array_new<u8>(count_3);
         i = 0;
         $licm_arith_7 = count_3 - 8;
@@ -1424,14 +1415,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>::settle$dae[
         "core:rt/unreachable"();
         unreachable;
     }) };
-    if ref.is_null($moved_6) == 0 {
-        if ref.is_null(local.tee self_7($moved_6.buffer)) == 0 {
+    if ref.is_null(self) == 0 {
+        if ref.is_null(local.tee self_7(self.buffer)) == 0 {
             drop("core:prelude/types.wado/settled_copy"(self_7.handle, self_7.packed));
             if local.tee packed_2(self_7.size) > 0 {
                 drop("mem/realloc"(self_7.ptr, packed_2, self_7.align, 0));
             }
         }
-        $moved_6.buffer = ref.null none;
+        self.buffer = ref.null none;
     }
     return $drop_spill_7;
 }

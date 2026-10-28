@@ -92,44 +92,34 @@ fn "opt_unit_case_shared.wado/run"() with Stdout {
     let n_4: i64;
     let n_5: i64;
     let $sroa_slot_6: i32;
-    let $sroa_slot_7: i64;
     let $sroa_slot_8: i32;
     let $sroa_slot_10: i32;
     let message_12: ref "core:prelude/string.wado//String";
-    $sroa_slot_6 = 0;
-    $sroa_slot_7 = 0_i64;
     $inline_pick_sroa_return__1: block {
         if local.tee n_3(black_box(0_i64)) > 0_i64 {
             $sroa_slot_6 = 1;
-            $sroa_slot_7 = n_3;
             break $inline_pick_sroa_return__1;
         }
         $sroa_slot_6 = 0;
-        $sroa_slot_7 = 0_i64;
+        n_3 = 0_i64;
         break $inline_pick_sroa_return__1;
     };
-    $sroa_slot_8 = 0;
-    n_3 = 0_i64;
     $inline_pick_sroa_return__2: block {
         if local.tee n_4(black_box(-1_i64)) > 0_i64 {
             $sroa_slot_8 = 1;
-            n_3 = n_4;
             break $inline_pick_sroa_return__2;
         }
         $sroa_slot_8 = 0;
-        n_3 = 0_i64;
+        n_4 = 0_i64;
         break $inline_pick_sroa_return__2;
     };
-    $sroa_slot_10 = 0;
-    n_4 = 0_i64;
     $inline_pick_sroa_return__3: block {
         if local.tee n_5(black_box(5_i64)) > 0_i64 {
             $sroa_slot_10 = 1;
-            n_4 = n_5;
             break $inline_pick_sroa_return__3;
         }
         $sroa_slot_10 = 0;
-        n_4 = 0_i64;
+        n_5 = 0_i64;
         break $inline_pick_sroa_return__3;
     };
     message_12 = block -> ref "core:prelude/string.wado//String" {
@@ -137,33 +127,31 @@ fn "opt_unit_case_shared.wado/run"() with Stdout {
         $mv_field_1 = (if $sroa_slot_6 == 0 -> ref "core:prelude/types.wado//Option<i64>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0;
         } else {
-            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: $sroa_slot_7 };
+            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n_3 };
         });
         let $mv_field_2: ref "core:prelude/types.wado//Option<i64>";
         $mv_field_2 = (if $sroa_slot_8 == 0 -> ref "core:prelude/types.wado//Option<i64>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0;
         } else {
-            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n_3 };
+            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n_4 };
         });
         let $mv_field_3: ref "core:prelude/types.wado//Option<i64>";
         $mv_field_3 = (if $sroa_slot_10 == 0 -> ref "core:prelude/types.wado//Option<i64>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Option<i64>$0;
         } else {
-            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n_4 };
+            struct.new "core:prelude/types.wado//Option<i64>::Some" { discriminant: 1, payload_0: n_5 };
         });
         "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_unit_case_shared.wado/$tmpl$97034147da4d931e,[core:prelude/types.wado/Option<i64>,core:prelude/types.wado/Option<i64>,core:prelude/types.wado/Option<i64>]>$spec0$spec0"($mv_field_1, $mv_field_2, $mv_field_3);
     };
-    $sroa_slot_10 = builtin::i32_wrap_i64(local.tee n_4("wasi/stream-new"()));
-    $sroa_slot_8 = builtin::i32_wrap_i64(n_4 >> 32_i64);
-    $sroa_slot_6 = "opt_unit_case_shared.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_6 = $sroa_slot_10; $sroa_slot_10 = 0; $sroa_slot_6);
-    $sroa_slot_10 = $sroa_slot_8;
-    $sroa_slot_8 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_10, message_12.repr, message_12.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_slot_10 = $sroa_slot_6; $sroa_slot_6 = 0; $sroa_slot_10);
+    $sroa_slot_10 = builtin::i32_wrap_i64(local.tee n_5("wasi/stream-new"()));
+    $sroa_slot_8 = builtin::i32_wrap_i64(n_5 >> 32_i64);
+    $sroa_slot_10 = "opt_unit_case_shared.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_10);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_8, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_slot_10);
 }
 
 fn "opt_unit_case_shared.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "opt_unit_case_shared.wado/$cm_export__run"() {
@@ -181,7 +169,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

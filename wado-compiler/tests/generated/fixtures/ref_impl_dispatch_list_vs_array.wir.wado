@@ -91,22 +91,20 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     message_46 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ref_impl_dispatch_list_vs_array.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($sroa_c_total_76);
     $sroa_c_total_76 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
     $sroa_$iter_0_index_78 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
-    ref_val_20 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(ref_val_20 = $sroa_c_total_76; $sroa_c_total_76 = 0; ref_val_20);
-    $sroa_c_total_76 = $sroa_$iter_0_index_78;
-    $sroa_$iter_0_index_78 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_c_total_76, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_c_total_76 = ref_val_20; ref_val_20 = 0; $sroa_c_total_76);
+    $sroa_c_total_76 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_c_total_76);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_78, message_46.repr, message_46.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_c_total_76);
     builtin::array_set<i32>(local.tee $sroa_$iter_0_repr_77(builtin::array_new<i32>(3)), 0, 10);
     builtin::array_set<i32>($sroa_$iter_0_repr_77, 1, 20);
     builtin::array_set<i32>($sroa_$iter_0_repr_77, 2, 30);
     $sroa_c_total_76 = 0;
-    ref_val_20 = builtin::array_len($sroa_$iter_0_repr_77);
-    $sroa_$iter_0_index_78 = 0;
+    $sroa_$iter_0_index_78 = builtin::array_len($sroa_$iter_0_repr_77);
+    ref_val_20 = 0;
     b2: block {
         l3: loop {
-            break_if b2 $sroa_$iter_0_index_78 >= ref_val_20;
-            ref_val_41 = builtin::array_get_value<i32>($sroa_$iter_0_repr_77, $sroa_$iter_0_index_78);
-            $sroa_$iter_0_index_78 = $sroa_$iter_0_index_78 + 1;
+            break_if b2 ref_val_20 >= $sroa_$iter_0_index_78;
+            ref_val_41 = builtin::array_get_value<i32>($sroa_$iter_0_repr_77, ref_val_20);
+            ref_val_20 = ref_val_20 + 1;
             $sroa_c_total_76 = $sroa_c_total_76 + ref_val_41;
             continue l3;
         };
@@ -114,15 +112,13 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     message_46 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ref_impl_dispatch_list_vs_array.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($sroa_c_total_76);
     $sroa_c_total_76 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
     ref_val_20 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
-    $sroa_$iter_0_index_78 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_78 = $sroa_c_total_76; $sroa_c_total_76 = 0; $sroa_$iter_0_index_78);
-    $sroa_c_total_76 = ref_val_20;
-    ref_val_20 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_c_total_76, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_c_total_76 = $sroa_$iter_0_index_78; $sroa_$iter_0_index_78 = 0; $sroa_c_total_76);
+    $sroa_c_total_76 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_c_total_76);
+    "core:rt/write_string_to_stream$dae[add_newline]"(ref_val_20, message_46.repr, message_46.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_c_total_76);
 }
 
 fn "ref_impl_dispatch_list_vs_array.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "ref_impl_dispatch_list_vs_array.wado/$cm_export__run"() {
@@ -140,7 +136,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

@@ -272,15 +272,13 @@ fn "ctfe_view_of_mutable_global.wado/run"() with Stdout {
     message_50 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_of_mutable_global.wado/$tmpl$746b3bd30636aac0,[i32,i32,i32,i32]>"(struct.new "ctfe_view_of_mutable_global.wado//$tmpl$746b3bd30636aac0" { h0: before, h1: $v1_29, h2: $load_0, h3: r.used, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r4: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     $load_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $v1_29 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    before = "ctfe_view_of_mutable_global.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(before = $load_0; $load_0 = 0; before);
-    $load_0 = $v1_29;
-    $v1_29 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($load_0, message_50.repr, message_50.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0 = before; before = 0; $load_0);
+    $load_0 = "ctfe_view_of_mutable_global.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($load_0);
+    "core:rt/write_string_to_stream$dae[add_newline]"($v1_29, message_50.repr, message_50.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_0);
 }
 
 fn "ctfe_view_of_mutable_global.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "ctfe_view_of_mutable_global.wado/$cm_export__run"() {
@@ -476,19 +474,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

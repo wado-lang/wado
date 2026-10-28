@@ -124,28 +124,26 @@ fn "opt_sroa_variant_return_unit_payload.wado/run"() with Stdout {
     };
     s_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7_23("wasi/stream-new"()));
     i_2 = builtin::i32_wrap_i64($cm_pair_7_23 >> 32_i64);
-    n_0 = "opt_sroa_variant_return_unit_payload.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_0 = s_1; s_1 = 0; n_0);
-    s_1 = i_2;
-    i_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(s_1, out_49.repr, out_49.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(s_1 = n_0; n_0 = 0; s_1);
+    s_1 = "opt_sroa_variant_return_unit_payload.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(s_1);
+    "core:rt/write_string_to_stream$dae[add_newline]"(i_2, out_49.repr, out_49.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(s_1);
     t_46 = $inline_sum_3: block -> ref "core:prelude/types.wado//Result<i32,i32>" {
         s_1 = black_box(9);
-        n_0 = 0;
         i_2 = 0;
+        n_0 = 0;
         b3: block {
             l4: loop {
-                break_if b3 i_2 >= s_1;
-                if @unlikely(local.tee x_6(i_2) == 7) {
+                break_if b3 n_0 >= s_1;
+                if @unlikely(local.tee x_6(n_0) == 7) {
                     cold_path;
                     break $inline_sum_3: struct.new "core:prelude/types.wado//Result<i32,i32>::Err" { discriminant: 1, payload_0: x_6 };
                 }
-                n_0 = n_0 + i_2;
-                i_2 = i_2 + 1;
+                i_2 = i_2 + n_0;
+                n_0 = n_0 + 1;
                 continue l4;
             };
         };
-        break $inline_sum_3: struct.new "core:prelude/types.wado//Result<i32,i32>::Ok" { discriminant: 0, payload_0: n_0 };
+        break $inline_sum_3: struct.new "core:prelude/types.wado//Result<i32,i32>::Ok" { discriminant: 0, payload_0: i_2 };
     };
     out_49 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__format_opt_sroa_variant_return_unit_payload_wado__tmpl_651479d66d042136__core_prelude_types_wado_Result_i32_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_20: block {
@@ -155,17 +153,15 @@ fn "opt_sroa_variant_return_unit_payload.wado/run"() with Stdout {
     $inline_core_prelude_string_wado_String__format_opt_sroa_variant_return_unit_payload_wado__tmpl_651479d66d042136__core_prelude_types_wado_Result_i32_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_34: block {
         break $inline_core_prelude_string_wado_String__format_opt_sroa_variant_return_unit_payload_wado__tmpl_651479d66d042136__core_prelude_types_wado_Result_i32_i32____spec0_spec0_sroa_t_h0__1__$inline_core_prelude_string_wado_String__internal_push_view_34;
     };
-    n_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_23("wasi/stream-new"()));
-    i_2 = builtin::i32_wrap_i64($cm_pair_7_23 >> 32_i64);
-    s_1 = "opt_sroa_variant_return_unit_payload.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(s_1 = n_0; n_0 = 0; s_1);
-    n_0 = i_2;
-    i_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(n_0, out_49.repr, out_49.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n_0 = s_1; s_1 = 0; n_0);
+    i_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_23("wasi/stream-new"()));
+    s_1 = builtin::i32_wrap_i64($cm_pair_7_23 >> 32_i64);
+    i_2 = "opt_sroa_variant_return_unit_payload.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_2);
+    "core:rt/write_string_to_stream$dae[add_newline]"(s_1, out_49.repr, out_49.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i_2);
 }
 
 fn "opt_sroa_variant_return_unit_payload.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "opt_sroa_variant_return_unit_payload.wado/$cm_export__run"() {
@@ -183,7 +179,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

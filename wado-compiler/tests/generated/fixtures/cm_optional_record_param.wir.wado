@@ -131,10 +131,7 @@ fn "cm_optional_record_param.wado/$cm_export__run"() {
     let device: i32;
     drop("cm_optional_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.configure"(local.tee device("cm_optional_record_param.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"()), ref.null none));
     if (device == 0) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = device;
-        device = 0;
-        "wasi/resource-drop:cm_optional_record_param.wado#Device"($cm_handle_2);
+        "wasi/resource-drop:cm_optional_record_param.wado#Device"(device);
     }
     "wasi/task-return"(0);
 }

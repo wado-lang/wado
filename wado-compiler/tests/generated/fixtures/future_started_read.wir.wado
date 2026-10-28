@@ -586,75 +586,55 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prel
 
 fn "future_started_read.wado/completed_then_dropped"() with Stdout {
     let read: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
-    let $moved_3_3: ref null "core:prelude//$Resource";
-    let $moved_4_4: i32;
-    let $moved_5_5: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
     let $cm_pair_7_7: i64;
     let $sroa_$pattern_temp_0_0_11: ref null "core:prelude//$Resource";
     let $sroa_$pattern_temp_0_1_12: i32;
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
-    let $moved_3_16: ref null "core:prelude/types.wado//CopyBuffer";
     let message_19: ref "core:prelude/string.wado//String";
-    let $moved_4_23: i32;
+    let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_11 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/future-new:float64"())) };
     $sroa_$pattern_temp_0_1_12 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
-    $moved_3_3 = $sroa_$pattern_temp_0_0_11;
-    $sroa_$pattern_temp_0_0_11 = ref.null none;
-    buffer = "future_started_read.wado/$cm_future_begin_read_f64"($moved_3_3.value);
-    read = struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: $sroa_$pattern_temp_0_0_11 = $moved_3_3; $moved_3_3 = ref.null none; $sroa_$pattern_temp_0_0_11, 1: $moved_3_16 = buffer; buffer = ref.null none; $moved_3_16 } } } };
-    message_19 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec1"($moved_4_4 = $sroa_$pattern_temp_0_1_12; $sroa_$pattern_temp_0_1_12 = 0; $moved_4_4, 2.5).result);
-    $moved_4_4 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_12 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
-    $moved_4_23 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_23 = $moved_4_4; $moved_4_4 = 0; $moved_4_23);
-    $moved_4_4 = $sroa_$pattern_temp_0_1_12;
-    $sroa_$pattern_temp_0_1_12 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_4, message_19.repr, message_19.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_4 = $moved_4_23; $moved_4_23 = 0; $moved_4_4);
-    $moved_5_5 = read;
-    read = ref.null none;
-    "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($moved_5_5);
+    buffer = "future_started_read.wado/$cm_future_begin_read_f64"($sroa_$pattern_temp_0_0_11.value);
+    read = struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: $sroa_$pattern_temp_0_0_11, 1: buffer } } } };
+    message_19 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec1"($sroa_$pattern_temp_0_1_12, 2.5).result);
+    $sroa_$pattern_temp_0_1_12 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    $sroa_$pattern_temp_0_1_12 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_12);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_19.repr, message_19.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_12);
+    "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"(read);
 }
 
 fn "future_started_read.wado/dropped_in_flight"() with Stdout {
-    let $moved_2_2: ref null "core:prelude//$Resource";
-    let $moved_4_4: i32;
     let $cm_pair_5: i64;
     let $sroa_$pattern_temp_0_0_8: ref null "core:prelude//$Resource";
     let $sroa_$pattern_temp_0_1_9: i32;
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
-    let $moved_3_13: ref null "core:prelude/types.wado//CopyBuffer";
     let message_16: ref "core:prelude/string.wado//String";
-    let $moved_4_20: i32;
+    let $sroa_$pattern_temp_0_1_14: i32;
     $sroa_$pattern_temp_0_0_8 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/future-new:float64"())) };
     $sroa_$pattern_temp_0_1_9 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    $moved_2_2 = $sroa_$pattern_temp_0_0_8;
-    $sroa_$pattern_temp_0_0_8 = ref.null none;
-    buffer = "future_started_read.wado/$cm_future_begin_read_f64"($moved_2_2.value);
-    "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"(struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: $sroa_$pattern_temp_0_0_8 = $moved_2_2; $moved_2_2 = ref.null none; $sroa_$pattern_temp_0_0_8, 1: $moved_3_13 = buffer; buffer = ref.null none; $moved_3_13 } } } });
-    message_16 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec2"($moved_4_4 = $sroa_$pattern_temp_0_1_9; $sroa_$pattern_temp_0_1_9 = 0; $moved_4_4, 3.5).result);
-    $moved_4_4 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_9 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
-    $moved_4_20 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_20 = $moved_4_4; $moved_4_4 = 0; $moved_4_20);
-    $moved_4_4 = $sroa_$pattern_temp_0_1_9;
-    $sroa_$pattern_temp_0_1_9 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_4, message_16.repr, message_16.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_4 = $moved_4_20; $moved_4_20 = 0; $moved_4_4);
+    buffer = "future_started_read.wado/$cm_future_begin_read_f64"($sroa_$pattern_temp_0_0_8.value);
+    "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"(struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: $sroa_$pattern_temp_0_0_8, 1: buffer } } } });
+    message_16 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec2"($sroa_$pattern_temp_0_1_9, 3.5).result);
+    $sroa_$pattern_temp_0_1_9 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_5 >> 32_i64);
+    $sroa_$pattern_temp_0_1_9 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_16.repr, message_16.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_9);
 }
 
 fn "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "future_started_read.wado/$cm_export__run"() {
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/FutureReadCopy<f64>>";
     let ready: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
-    let $moved_5_5: ref null "core:prelude//$Resource";
     let $cm_pair_8: i64;
     let elements_10: ref null "Array<core:prelude/types.wado/FutureReadCopy<f64>>";
     let used_11: i32;
-    let $moved_2_12: ref null "Array<core:prelude/types.wado/FutureReadCopy<f64>>";
     let elements_14: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>";
-    let $moved_2_16: ref null "Array<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>";
     let $sroa_$pattern_temp_0_0_20: ref null "core:prelude//$Resource";
     let $sroa_$pattern_temp_0_1_21: i32;
     let member: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
@@ -664,7 +644,7 @@ fn "future_started_read.wado/$cm_export__run"() {
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
     let self_31: ref null "core:prelude//List<core:prelude/types.wado/FutureReadCopy<f64>>";
     let used_33: i32;
-    let $moved_3_34: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
+    let $held_7: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
     let message_50: ref "core:prelude/string.wado//String";
     cold_path;
     $inline__initialize_modules_0: block {
@@ -679,8 +659,8 @@ fn "future_started_read.wado/$cm_export__run"() {
     };
     $sroa_$pattern_temp_0_0_20 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/future-new:float64"())) };
     $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
-    set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/FutureReadCopy<f64>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: used_11 = builtin::array_len(local.tee elements_10(array.new_fixed<ref null "core:prelude/types.wado//FutureReadCopy<f64>">())); struct.new "core:prelude//List<core:prelude/types.wado/FutureReadCopy<f64>>" { repr: ref.as_non_null($moved_2_12 = elements_10; elements_10 = ref.null none; $moved_2_12), used: used_11 }, ready: used_11 = builtin::array_len(local.tee elements_14(array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>" { repr: ref.as_non_null($moved_2_16 = elements_14; elements_14 = ref.null none; $moved_2_16), used: used_11 } };
-    member = "core:prelude/types.wado/core:prelude/types.wado/Future<f64>::start_read"($moved_5_5 = $sroa_$pattern_temp_0_0_20; $sroa_$pattern_temp_0_0_20 = ref.null none; $moved_5_5);
+    set = struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/FutureReadCopy<f64>>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: used_11 = builtin::array_len(local.tee elements_10(array.new_fixed<ref null "core:prelude/types.wado//FutureReadCopy<f64>">())); struct.new "core:prelude//List<core:prelude/types.wado/FutureReadCopy<f64>>" { repr: ref.as_non_null(elements_10), used: used_11 }, ready: used_11 = builtin::array_len(local.tee elements_14(array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">())); struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>" { repr: ref.as_non_null(elements_14), used: used_11 } };
+    member = "core:prelude/types.wado/core:prelude/types.wado/Future<f64>::start_read"($sroa_$pattern_temp_0_0_20);
     if local.tee used_11(local.tee $match_6($inline_finished_0__$inline_core_prelude_types_wado_WaitableSet_core_prelude_types_wado_FutureReadCopy_f64____insert_0__$inline_core_prelude_types_wado_FutureReadCopy_f64__core_prelude_types_wado_Waitable__wait_on_sroa_return__0: block -> ref "tuple//[i32, core:prelude/types.wado/Option<core:prelude/types.wado/ResourceId>, core:prelude/types.wado/Option<core:prelude/types.wado/ReadyEvent>]" {
         cold_path;
         self_29 = member;
@@ -708,23 +688,18 @@ fn "future_started_read.wado/$cm_export__run"() {
             cold_path;
             "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/FutureReadCopy<f64>>::grow"(self_31);
         }
-        $moved_3_34 = self_29;
-        self_29 = ref.null none;
-        $moved_2_12 = self_31.repr;
-        self_29 = $moved_3_34;
-        $moved_3_34 = ref.null none;
-        if ref.is_null(local.tee $moved_3_34(builtin::array_get_value<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($moved_2_12, used_33))) {
-            builtin::array_set<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($moved_2_12, used_33, self_29);
+        if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "core:prelude/types.wado//FutureReadCopy<f64>">(local.tee elements_10(self_31.repr), used_33))) {
+            builtin::array_set<ref null "core:prelude/types.wado//FutureReadCopy<f64>">(elements_10, used_33, self_29);
         } else {
-            "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($moved_3_34);
+            "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($held_7);
             let $slot_box_5: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>";
             $match_scrut_0 = (if ref.is_null(local.tee $slot_box_5(self_29.read)) -> ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>" {
                 ref.null none;
             } else {
                 $slot_box_5.value;
             });
-            if ref.is_null(local.tee $slot_box_5($moved_3_34.read)) {
-                $moved_3_34.read = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: $match_scrut_0 };
+            if ref.is_null(local.tee $slot_box_5($held_7.read)) {
+                $held_7.read = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: $match_scrut_0 };
             } else {
                 $slot_box_5.value = $match_scrut_0;
             }
@@ -745,14 +720,12 @@ fn "future_started_read.wado/$cm_export__run"() {
     if ref.is_null(member) == 0 {
         "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"(member);
     }
-    message_50 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec0"(used_11 = $sroa_$pattern_temp_0_1_21; $sroa_$pattern_temp_0_1_21 = 0; used_11, 1.5).result);
-    used_11 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
-    used_33 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_33 = used_11; used_11 = 0; used_33);
-    used_11 = $sroa_$pattern_temp_0_1_21;
-    $sroa_$pattern_temp_0_1_21 = 0;
+    message_50 = "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$4b6777201cf41549,[core:prelude/types.wado/FutureWriteResult]>$spec0$spec0$sroa[t.h0]"("future_started_read.wado/$cm_future_write_f64$spec0"($sroa_$pattern_temp_0_1_21, 1.5).result);
+    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
+    used_11 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
+    $sroa_$pattern_temp_0_1_21 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_21);
     "core:rt/write_string_to_stream$dae[add_newline]"(used_11, message_50.repr, message_50.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_11 = used_33; used_33 = 0; used_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_21);
     event = local.tee ready("core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/FutureReadCopy<f64>>::wait"(set)).event;
     $mv_field_18 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_13: ref "core:prelude/types.wado//Option<f64>";
@@ -764,13 +737,11 @@ fn "future_started_read.wado/$cm_export__run"() {
         $mv_field_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
         "core:prelude/string.wado/core:prelude/string.wado/String::format<future_started_read.wado/$tmpl$d38ef268ba5f1d7b,[core:prelude/types.wado/ReadyEvent,core:prelude/types.wado/Option<f64>]>"(event, $mv_field_13, message_50, $mv_field_16, $mv_field_18);
     };
-    used_11 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
-    used_33 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
-    $sroa_$pattern_temp_0_1_21 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_21 = used_11; used_11 = 0; $sroa_$pattern_temp_0_1_21);
-    used_11 = used_33;
-    used_33 = 0;
+    $sroa_$pattern_temp_0_1_21 = builtin::i32_wrap_i64(local.tee $cm_pair_8("wasi/stream-new"()));
+    used_11 = builtin::i32_wrap_i64($cm_pair_8 >> 32_i64);
+    $sroa_$pattern_temp_0_1_21 = "future_started_read.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_21);
     "core:rt/write_string_to_stream$dae[add_newline]"(used_11, $mv_field_18.repr, $mv_field_18.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_11 = $sroa_$pattern_temp_0_1_21; $sroa_$pattern_temp_0_1_21 = 0; used_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_21);
     if ref.is_null(ready) == 0 {
         if ref.is_null(local.tee member(ready.member)) == 0 {
             "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"(member);
@@ -1097,9 +1068,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let $mv$unpack$mantissa: u64;
     let $mv$unpack$exponent: i32;
     multivalue_bind [$mv$unpack$mantissa, $mv$unpack$exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    min_m = 0_i64;
     z = 11;
-    p_7 = 0;
     if ($mv$unpack$mantissa == -9223372036854775808_i64) & ($mv$unpack$exponent > -1085) {
         p_7 = 0 - (((($mv$unpack$exponent + 11) * 631305) - 261663) >> 21);
         min_m = $mv$unpack$mantissa - 512_i64;
@@ -1113,8 +1082,6 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     max_m = $mv$unpack$mantissa + (1_i64 << builtin::i64_extend_i32_s(z - 1));
     z = builtin::i32_wrap_i64(($mv$unpack$mantissa >>u builtin::i64_extend_i32_s(z)) & 1_i64);
     lp = (p_7 * 108853) >> 15;
-    $sroa_slot_116 = 0_i64;
-    $sroa_slot_117 = 0_i64;
     $inline_get_pow10_3: block {
         if p_7 <u 27 {
             $sroa_slot_116 = builtin::array_get_value<u64>(global:core:prelude/fpfmt.wado::POW10_FINE.repr, p_7);
@@ -1596,19 +1563,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2392,29 +2358,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>::finish"
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
     let $moved_4: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
     let $drop_spill_6: ref "core:prelude/types.wado//Option<f64>";
+    let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]";
     let self_8: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>";
     let $replaced_3: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>";
-    let v: ref null "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]";
-    let $moved_2: ref null "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]";
     $moved_4 = self;
     self = ref.null none;
-    end = local.tee $moved_2($inline_core_prelude_types_wado_Option__core_prelude_types_wado_Future_f64__core_prelude_types_wado_CopyBuffer____unwrap_0: block -> ref null "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" {
+    end = local.tee $pattern_temp_0($inline_core_prelude_types_wado_Option__core_prelude_types_wado_Future_f64__core_prelude_types_wado_CopyBuffer____unwrap_0: block -> ref null "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" {
         $replaced_3 = local.tee self_8($moved_4.read).value;
         self_8.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>$0;
-        let $match_scrut_0: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>";
-        if ref.test "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some"(local.tee $match_scrut_0($replaced_3)) {
-            v = ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some"($match_scrut_0).payload_0;
-            $replaced_3 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>$0;
-            $moved_2 = v;
-            v = ref.null none;
-            break $inline_core_prelude_types_wado_Option__core_prelude_types_wado_Future_f64__core_prelude_types_wado_CopyBuffer____unwrap_0: $moved_2;
+        if ref.test "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some"($replaced_3) {
+            break $inline_core_prelude_types_wado_Option__core_prelude_types_wado_Future_f64__core_prelude_types_wado_CopyBuffer____unwrap_0: ref.cast "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some"($replaced_3).payload_0;
         } else {
         }
         cold_path;
         "core:rt/panic"(array.new_data<u8>("called Option::unwrap() on a None value"), 39);
         unreachable;
     }).0;
-    if local.tee buffer($moved_2.1).packed = "core:prelude/types.wado/settled_copy"(buffer.handle, buffer.packed); let $match_scrut_1: i32; (if local.tee $match_scrut_1(local.tee $load_6(buffer.packed) & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+    if local.tee buffer($pattern_temp_0.1).packed = "core:prelude/types.wado/settled_copy"(buffer.handle, buffer.packed); let $match_scrut_1: i32; (if local.tee $match_scrut_1(local.tee $load_6(buffer.packed) & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
         0;
     } else if $match_scrut_1 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
         1;
@@ -2512,9 +2472,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     let $load_3: i32;
     let $load_7: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
     let $v0: bool;
-    let ready: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
     let $temp_4: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>";
-    let $moved_5: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
     let $drop_v_8: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
     let $match_15: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>";
     let code: i32;
@@ -2532,7 +2490,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
     }
     block {
         l284: loop {
-            $temp_4 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>$0;
             if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>::Some"(local.tee $match_15(local.tee $temp_4(block -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>" {
                 $load_3 = self.raw.value;
                 $v0 = "mem/realloc"(0, 0, 4, 8);
@@ -2543,11 +2500,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
                 multivalue_bind [$mv_handle_2, $mv_event_3, $mv_payload_4] = "core:rt/cm_wait_event"(code, $v0);
                 "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/FutureReadCopy<f64>>::take_reported"(self, $mv_handle_2, $mv_event_3, $mv_payload_4);
             }))) {
-                ready = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>::Some"($match_15).payload_0;
-                $temp_4 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>$0;
-                $moved_5 = ready;
-                ready = ref.null none;
-                return $moved_5;
+                return ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>::Some"($match_15).payload_0;
             } else {
             }
             if ref.is_null($temp_4) == 0 {
@@ -2567,10 +2520,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/typ
 
 fn "core:prelude/types.wado/core:prelude/types.wado/Future<f64>::start_read"(self) {
     let buffer: ref null "core:prelude/types.wado//CopyBuffer";
-    let $moved_2: ref null "core:prelude//$Resource";
-    let $moved_3: ref null "core:prelude/types.wado//CopyBuffer";
     buffer = "future_started_read.wado/$cm_future_begin_read_f64"(self.value);
-    return struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: $moved_2 = self; self = ref.null none; $moved_2, 1: $moved_3 = buffer; buffer = ref.null none; $moved_3 } } } };
+    return struct.new "core:prelude/types.wado//FutureReadCopy<f64>" { read: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>>" { value: struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Future<f64>,core:prelude/types.wado/CopyBuffer]>::Some" { discriminant: 1, payload_0: struct.new "tuple//[core:prelude/types.wado/Future<f64>, core:prelude/types.wado/CopyBuffer]" { 0: self, 1: buffer } } } };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>^core:prelude/traits.wado/From<Array<T>>::from"(elements) {
@@ -2784,12 +2735,11 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>::push"(self, value) {
     let used: i32;
-    let $moved_3: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
     if @unlikely(local.tee used(self.used) >= builtin::array_len(self.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>::grow"(self);
     }
-    "core:prelude/array.wado/Array<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self.repr, used, $moved_3 = value; value = ref.null none; $moved_3);
+    "core:prelude/array.wado/Array<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self.repr, used, value);
     self.used = used + 1;
 }
 
@@ -2997,9 +2947,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">($load_0, $load_1, ref.null none);
-    $slot_20 = $taken_9;
-    $taken_9 = ref.null none;
-    return $slot_20;
+    return $taken_9;
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/FutureReadCopy<f64>>::grow"(self) {
@@ -3014,24 +2962,22 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/F
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($load_0, 0, ref.null none, a);
     }
-    self.repr = ref.as_non_null($arg_4 = new_repr; new_repr = ref.null none; $arg_4);
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn "core:prelude/array.wado/Array<core:prelude/types.wado/Ready<core:prelude/types.wado/FutureReadCopy<f64>>>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(self, index, value) {
     let $load_0: ref null "core:prelude/types.wado//FutureReadCopy<f64>";
-    let $moved_3: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
-    $moved_3 = value;
-    value = ref.null none;
-    if ref.is_null(local.tee value(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">(self, index))) {
-        builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">(self, index, $moved_3);
+    let $held_7: ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>";
+    if ref.is_null(local.tee $held_7(builtin::array_get_value<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">(self, index))) {
+        builtin::array_set<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">(self, index, value);
     } else {
-        if ref.is_null(local.tee $load_0(value.member)) == 0 {
+        if ref.is_null(local.tee $load_0($held_7.member)) == 0 {
             "core:prelude/types.wado/core:prelude/types.wado/FutureReadCopy<f64>^core:prelude/traits.wado/Drop::drop"($load_0);
         }
+        $held_7.member = ref.null none;
+        $held_7.member = value.member;
+        $held_7.event = value.event;
         value.member = ref.null none;
-        value.member = $moved_3.member;
-        value.event = $moved_3.event;
-        $moved_3.member = ref.null none;
     }
 }
 
@@ -3047,7 +2993,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/R
     } else {
         builtin::array_fill<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/FutureReadCopy<f64>>">($load_0, 0, ref.null none, a);
     }
-    self.repr = ref.as_non_null($arg_4 = new_repr; new_repr = ref.null none; $arg_4);
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/Resolution>::grow"(self) {
@@ -3123,9 +3069,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/types.wado/F
         };
     };
     builtin::array_set<ref null "core:prelude/types.wado//FutureReadCopy<f64>">($load_0, $load_1, ref.null none);
-    $slot_20 = $taken_9;
-    $taken_9 = ref.null none;
-    return $slot_20;
+    return $taken_9;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
@@ -3512,9 +3456,6 @@ fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]$spec0$sroa[f.
     let $sroa_slot_66: bool;
     let $sroa_slot_67: bool;
     let $sroa_slot_68: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    $sroa_slot_66 = 0;
-    $sroa_slot_67 = 0;
-    $sroa_slot_68 = 0;
     $inline_check_special_0: block {
         if local.tee bits(builtin::i64_reinterpret_f64(self)) == 0_i64 {
             $sroa_slot_66 = 1;
@@ -3552,7 +3493,7 @@ fn "core:prelude/primitive.wado/f64::inspect_into$sroa[self.value]$spec0$sroa[f.
         "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(f, $sroa_slot_66, $sroa_slot_68, $mv_arg_4.repr, $mv_arg_4.used);
         return;
     }
-    multivalue_bind [bits, $sroa_slot_68, $sroa_slot_66] = "core:prelude/fpfmt.wado/short"(local.tee self(builtin::f64_abs(self)));
+    multivalue_bind [bits, $sroa_slot_68, $sroa_slot_66] = "core:prelude/fpfmt.wado/short"(builtin::f64_abs(self));
     is_neg_16 = ($sroa_slot_68 + $sroa_slot_66) - 1;
     if $sroa_slot_67 {
         if @unlikely(local.tee $sroa_slot_67(f.used + 1) > builtin::array_len(f.repr)) {

@@ -386,11 +386,9 @@ fn "local_item_in_with_body.wado/$test_0_a_local_item_declared_in_a_with_body"()
     let $local_0: ref null "local_item_in_with_body.wado//$Dispatch_local_item_in_with_body.wado/Counter";
     let $local_1: ref "local_item_in_with_body.wado//$Dispatch_local_item_in_with_body.wado/Counter";
     let $local_2: i32;
-    let $sroa_$with_result_7_1_12: i32;
     m = struct.new "local_item_in_with_body.wado//MyCounter" { value: 0 };
     global:local_item_in_with_body.wado::$effect_local_item_in_with_body.wado/Counter = struct.new "local_item_in_with_body.wado//$Dispatch_local_item_in_with_body.wado/Counter" { outer: local.tee $local_5(global:local_item_in_with_body.wado::$effect_local_item_in_with_body.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "local_item_in_with_body.wado//$Closure_0" { $capture_0: m }, func: ref.func "closure/local_item_in_with_body.wado/$closure_wrapper_0" } };
-    $sroa_$with_result_7_1_12 = 0;
-    $sroa_$with_result_7_1_12 = $inline__effect_dispatch__local_item_in_with_body_wado_Counter__next_0: block -> i32 {
+    $local_2 = $inline__effect_dispatch__local_item_in_with_body_wado_Counter__next_0: block -> i32 {
         if @likely(ref.is_null(local.tee $local_0(global:local_item_in_with_body.wado::$effect_local_item_in_with_body.wado/Counter)) == 0) {
             global:local_item_in_with_body.wado::$effect_local_item_in_with_body.wado/Counter = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
@@ -407,9 +405,9 @@ fn "local_item_in_with_body.wado/$test_0_a_local_item_declared_in_a_with_body"()
         unreachable;
     };
     global:local_item_in_with_body.wado::$effect_local_item_in_with_body.wado/Counter = $local_5;
-    if @unlikely($sroa_$with_result_7_1_12 != 1) {
+    if @unlikely($local_2 != 1) {
         cold_path;
-        "local_item_in_with_body.wado/$test_0_a_local_item_declared_in_a_with_body$cold0"($sroa_$with_result_7_1_12);
+        "local_item_in_with_body.wado/$test_0_a_local_item_declared_in_a_with_body$cold0"($local_2);
         unreachable;
     }
 }
@@ -856,19 +854,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

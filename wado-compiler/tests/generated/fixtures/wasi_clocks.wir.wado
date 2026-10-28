@@ -79,7 +79,6 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
     let t1: u64;
     let t2: u64;
     let t3: u64;
-    let $moved_4_8: i32;
     let $cm_pair_7_11: i64;
     let $sroa_$pattern_temp_0_0_13_17: i32;
     let $sroa_$pattern_temp_0_1_14_18: i32;
@@ -90,109 +89,91 @@ fn "wasi_clocks.wado/run"() with Stdout, MonotonicClock {
     if t2 >=u t1 {
         $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $moved_4_8 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
-        $sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18;
-        $sroa_$pattern_temp_0_1_14_18 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(31)), 0, global:wasi_clocks.wado::$const_obj_8, 0, 30);
         builtin::array_set_u8(new_repr_142, 30, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_17, new_repr_142);
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $sroa_$pattern_temp_0_1_14_18);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
-    } else {
-        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
-        $moved_4_8 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
-        $sroa_$pattern_temp_0_1_14_18 = $moved_4_8;
-        $moved_4_8 = 0;
-        builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(46)), 0, global:wasi_clocks.wado::$const_obj_5, 0, 45);
-        builtin::array_set_u8(new_repr_142, 45, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
-        "wasi/stream-drop-writable"($moved_4_8 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $moved_4_8);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
-    }
-    if t3 >=u t2 {
-        $moved_4_8 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
-        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_18 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
-        $moved_4_8 = $sroa_$pattern_temp_0_0_13_17;
-        $sroa_$pattern_temp_0_0_13_17 = 0;
-        builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(31)), 0, global:wasi_clocks.wado::$const_obj_6, 0, 30);
-        builtin::array_set_u8(new_repr_142, 30, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($moved_4_8, new_repr_142);
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_17 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_0_13_17);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     } else {
         $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
-        $moved_4_8 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
-        $sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18;
-        $sroa_$pattern_temp_0_1_14_18 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(46)), 0, global:wasi_clocks.wado::$const_obj_5, 0, 45);
         builtin::array_set_u8(new_repr_142, 45, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_17, new_repr_142);
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $sroa_$pattern_temp_0_1_14_18);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
+        "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
+    }
+    if t3 >=u t2 {
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
+        builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(31)), 0, global:wasi_clocks.wado::$const_obj_6, 0, 30);
+        builtin::array_set_u8(new_repr_142, 30, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
+    } else {
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_11("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64($cm_pair_7_11 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
+        builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(46)), 0, global:wasi_clocks.wado::$const_obj_5, 0, 45);
+        builtin::array_set_u8(new_repr_142, 45, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     }
     if ((t1 >u 0_i64) | (t2 >u 0_i64)) | (t3 >u 0_i64) {
-        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(local.tee t2("wasi/stream-new"()));
-        $moved_4_8 = builtin::i32_wrap_i64(t2 >> 32_i64);
-        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
-        $sroa_$pattern_temp_0_1_14_18 = $moved_4_8;
-        $moved_4_8 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee t2("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(t2 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(46)), 0, global:wasi_clocks.wado::$const_obj_4, 0, 45);
         builtin::array_set_u8(new_repr_142, 45, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
-        "wasi/stream-drop-writable"($moved_4_8 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $moved_4_8);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     } else {
-        $moved_4_8 = builtin::i32_wrap_i64(local.tee t2("wasi/stream-new"()));
-        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(t2 >> 32_i64);
-        $sroa_$pattern_temp_0_1_14_18 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
-        $moved_4_8 = $sroa_$pattern_temp_0_0_13_17;
-        $sroa_$pattern_temp_0_0_13_17 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee t2("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(t2 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(51)), 0, global:wasi_clocks.wado::$const_obj_3, 0, 50);
         builtin::array_set_u8(new_repr_142, 50, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"($moved_4_8, new_repr_142);
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_17 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_0_13_17);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
+        "core:rt/cm_stream_write_raw_all_u8$spec2$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     }
     if (t3 - t1) >=u 0_i64 {
         $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
         $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(t1 >> 32_i64);
-        $moved_4_8 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
-        $sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18;
-        $sroa_$pattern_temp_0_1_14_18 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(35)), 0, global:wasi_clocks.wado::$const_obj_2, 0, 34);
         builtin::array_set_u8(new_repr_142, 34, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_17, new_repr_142);
-        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $sroa_$pattern_temp_0_1_14_18);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
+        "core:rt/cm_stream_write_raw_all_u8$spec3$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     } else {
-        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
-        $moved_4_8 = builtin::i32_wrap_i64(t1 >> 32_i64);
-        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
-        $sroa_$pattern_temp_0_1_14_18 = $moved_4_8;
-        $moved_4_8 = 0;
+        $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
+        $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(t1 >> 32_i64);
+        $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
         builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(40)), 0, global:wasi_clocks.wado::$const_obj_1, 0, 39);
         builtin::array_set_u8(new_repr_142, 39, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec4$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
-        "wasi/stream-drop-writable"($moved_4_8 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $moved_4_8);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_8 = $sroa_$pattern_temp_0_0_13_17; $sroa_$pattern_temp_0_0_13_17 = 0; $moved_4_8);
+        "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
     }
-    $moved_4_8 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(t1 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_18 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_18 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_1_14_18);
-    $moved_4_8 = $sroa_$pattern_temp_0_0_13_17;
-    $sroa_$pattern_temp_0_0_13_17 = 0;
+    $sroa_$pattern_temp_0_0_13_17 = builtin::i32_wrap_i64(local.tee t1("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_18 = builtin::i32_wrap_i64(t1 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_17 = "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_17);
     builtin::array_copy<u8>(local.tee new_repr_142(builtin::array_new<u8>(24)), 0, global:wasi_clocks.wado::$const_obj_0, 0, 23);
     builtin::array_set_u8(new_repr_142, 23, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]$dae[return]"($moved_4_8, new_repr_142);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_17 = $moved_4_8; $moved_4_8 = 0; $sroa_$pattern_temp_0_0_13_17);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17 = $sroa_$pattern_temp_0_1_14_18; $sroa_$pattern_temp_0_1_14_18 = 0; $sroa_$pattern_temp_0_0_13_17);
+    "core:rt/cm_stream_write_raw_all_u8$spec5$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_18, new_repr_142);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_17);
 }
 
 fn "wasi_clocks.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "wasi_clocks.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"() with MonotonicClock {

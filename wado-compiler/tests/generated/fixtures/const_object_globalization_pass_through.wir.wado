@@ -248,7 +248,6 @@ fn "const_object_globalization_pass_through.wado/run"() with Stdout {
     let first: f64;
     let second: f64;
     let message_3: ref "core:prelude/string.wado//String";
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
@@ -260,15 +259,13 @@ fn "const_object_globalization_pass_through.wado/run"() with Stdout {
     };
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "const_object_globalization_pass_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13, message_3.repr, message_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_13);
+    $sroa_$pattern_temp_0_0_13 = "const_object_globalization_pass_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_3.repr, message_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
 }
 
 fn "const_object_globalization_pass_through.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "const_object_globalization_pass_through.wado/$cm_export__run"() {
@@ -335,64 +332,58 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let bits: u64;
     let raw_mantissa: u64;
     let raw_exp: i32;
+    let m_128: u64;
     let s_130: u64;
-    let $sroa_slot_135: u64;
     let $sroa_slot_136: i32;
-    $sroa_slot_135 = 0_i64;
-    $sroa_slot_136 = 0;
     $inline_unpack64_0: block {
         raw_mantissa = local.tee bits(builtin::i64_reinterpret_f64(f)) & 4503599627370495_i64;
         if local.tee raw_exp(builtin::i32_wrap_i64((bits >>u 52_i64) & 2047_i64)) == 0 {
             if raw_mantissa == 0_i64 {
-                $sroa_slot_135 = 0_i64;
+                bits = 0_i64;
                 $sroa_slot_136 = 0;
                 break $inline_unpack64_0;
             }
-            bits = raw_mantissa << 11_i64;
-            s_130 = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(bits))));
-            $sroa_slot_135 = bits << s_130;
+            m_128 = raw_mantissa << 11_i64;
+            s_130 = builtin::i64_extend_i32_s(64 - (64 - builtin::i32_wrap_i64(builtin::i64_clz(m_128))));
+            bits = m_128 << s_130;
             $sroa_slot_136 = -1085 - builtin::i32_wrap_i64(s_130);
             break $inline_unpack64_0;
         }
         raw_mantissa = -9223372036854775808_i64 | (raw_mantissa << 11_i64);
         raw_exp = (raw_exp - 1) + -1085;
-        $sroa_slot_135 = raw_mantissa;
+        bits = raw_mantissa;
         $sroa_slot_136 = raw_exp;
         break $inline_unpack64_0;
     };
-    raw_mantissa = 0_i64;
     raw_exp = 11;
-    p_7 = 0;
-    if ($sroa_slot_135 == -9223372036854775808_i64) & ($sroa_slot_136 > -1085) {
+    if (bits == -9223372036854775808_i64) & ($sroa_slot_136 > -1085) {
         p_7 = 0 - (((($sroa_slot_136 + 11) * 631305) - 261663) >> 21);
-        raw_mantissa = $sroa_slot_135 - 512_i64;
+        raw_mantissa = bits - 512_i64;
     } else {
         if $sroa_slot_136 < -1085 {
             raw_exp = 11 + (-1085 - $sroa_slot_136);
         }
         p_7 = 0 - ((($sroa_slot_136 + raw_exp) * 78913) >> 18);
-        raw_mantissa = $sroa_slot_135 - (1_i64 << builtin::i64_extend_i32_s(raw_exp - 1));
+        raw_mantissa = bits - (1_i64 << builtin::i64_extend_i32_s(raw_exp - 1));
     }
-    s_130 = $sroa_slot_135 + (1_i64 << builtin::i64_extend_i32_s(raw_exp - 1));
-    raw_exp = builtin::i32_wrap_i64(($sroa_slot_135 >>u builtin::i64_extend_i32_s(raw_exp)) & 1_i64);
+    s_130 = bits + (1_i64 << builtin::i64_extend_i32_s(raw_exp - 1));
+    raw_exp = builtin::i32_wrap_i64((bits >>u builtin::i64_extend_i32_s(raw_exp)) & 1_i64);
     lp = (p_7 * 108853) >> 15;
-    bits = 0_i64;
-    $sroa_slot_117 = 0_i64;
     $inline_get_pow10_3: block {
         if p_7 <u 27 {
-            bits = builtin::array_get_value<u64>(global:core:prelude/fpfmt.wado::POW10_FINE.repr, p_7);
+            m_128 = builtin::array_get_value<u64>(global:core:prelude/fpfmt.wado::POW10_FINE.repr, p_7);
             $sroa_slot_117 = 0_i64;
             break $inline_get_pow10_3;
         }
         let $mv$$sroa_agg_118$hi: u64;
         let $mv$$sroa_agg_118$lo: u64;
         multivalue_bind [$mv$$sroa_agg_118$hi, $mv$$sroa_agg_118$lo] = "core:prelude/fpfmt.wado/mul_pow10"(p_7);
-        bits = $mv$$sroa_agg_118$hi;
+        m_128 = $mv$$sroa_agg_118$hi;
         $sroa_slot_117 = $mv$$sroa_agg_118$lo;
         break $inline_get_pow10_3;
     };
     lp = 0 - (($sroa_slot_136 + lp) + 3);
-    multivalue_bind [$mv$$sroa_agg_118$lo, $mv$$sroa_agg_118$hi] = i64.mul_wide_u(raw_mantissa, bits);
+    multivalue_bind [$mv$$sroa_agg_118$lo, $mv$$sroa_agg_118$hi] = i64.mul_wide_u(raw_mantissa, m_128);
     sticky_49 = 1_i64;
     if ($mv$$sroa_agg_118$hi & ((1_i64 << builtin::i64_extend_i32_s(lp & 63)) - 1_i64)) == 0_i64 {
         multivalue_bind [_, raw_mantissa] = i64.mul_wide_u(raw_mantissa, $sroa_slot_117);
@@ -400,7 +391,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
         $mv$$sroa_agg_118$hi = $mv$$sroa_agg_118$hi - builtin::i64_extend_i32_u($mv$$sroa_agg_118$lo <u raw_mantissa);
     }
     sticky_49 = (((($mv$$sroa_agg_118$hi >>u builtin::i64_extend_i32_s(lp)) | sticky_49) + builtin::i64_extend_i32_s(raw_exp)) + 3_i64) >>u 2_i64;
-    multivalue_bind [$mv$$sroa_agg_118$hi, raw_mantissa] = i64.mul_wide_u(s_130, bits);
+    multivalue_bind [$mv$$sroa_agg_118$hi, raw_mantissa] = i64.mul_wide_u(s_130, m_128);
     $mv$$sroa_agg_118$lo = 1_i64;
     if (raw_mantissa & ((1_i64 << builtin::i64_extend_i32_s(lp & 63)) - 1_i64)) == 0_i64 {
         multivalue_bind [_, s_130] = i64.mul_wide_u(s_130, $sroa_slot_117);
@@ -417,12 +408,12 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     }
     raw_mantissa = sticky_49;
     if sticky_49 <u $mv$$sroa_agg_118$lo {
-        multivalue_bind [bits, $mv$$sroa_agg_118$lo] = i64.mul_wide_u($sroa_slot_135, bits);
+        multivalue_bind [m_128, $mv$$sroa_agg_118$lo] = i64.mul_wide_u(bits, m_128);
         sticky_49 = 1_i64;
         if ($mv$$sroa_agg_118$lo & ((1_i64 << builtin::i64_extend_i32_s(lp & 63)) - 1_i64)) == 0_i64 {
-            multivalue_bind [_, $sroa_slot_117] = i64.mul_wide_u($sroa_slot_135, $sroa_slot_117);
-            sticky_49 = builtin::i64_extend_i32_u((bits - $sroa_slot_117) >u 1_i64);
-            $mv$$sroa_agg_118$lo = $mv$$sroa_agg_118$lo - builtin::i64_extend_i32_u(bits <u $sroa_slot_117);
+            multivalue_bind [_, $sroa_slot_117] = i64.mul_wide_u(bits, $sroa_slot_117);
+            sticky_49 = builtin::i64_extend_i32_u((m_128 - $sroa_slot_117) >u 1_i64);
+            $mv$$sroa_agg_118$lo = $mv$$sroa_agg_118$lo - builtin::i64_extend_i32_u(m_128 <u $sroa_slot_117);
         }
         raw_mantissa = ((local.tee sticky_49(($mv$$sroa_agg_118$lo >>u builtin::i64_extend_i32_s(lp)) | sticky_49) + 1_i64) + ((sticky_49 >>u 2_i64) & 1_i64)) >>u 2_i64;
     }
@@ -717,19 +708,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1377,9 +1367,6 @@ fn "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]
     let $sroa_slot_52: bool;
     let $sroa_slot_53: bool;
     let $sroa_slot_54: "core:prelude/fpfmt.wado//enum:SpecialKind";
-    $sroa_slot_52 = 0;
-    $sroa_slot_53 = 0;
-    $sroa_slot_54 = 0;
     $inline_check_special_0: block {
         if local.tee bits(builtin::i64_reinterpret_f64(self)) == 0_i64 {
             $sroa_slot_52 = 1;
@@ -1417,7 +1404,7 @@ fn "core:prelude/primitive.wado/f64::fmt_into$sroa[self.value]$spec0$sroa[f.buf]
         "core:prelude/primitive.wado/fmt_float_special$spec0$spec0$sroa[f.buf]"(f, $sroa_slot_52, $sroa_slot_54, $mv_arg_4.repr, $mv_arg_4.used);
         return;
     }
-    multivalue_bind [bits, $sroa_slot_54, $sroa_slot_52] = "core:prelude/fpfmt.wado/short"(local.tee self(builtin::f64_abs(self)));
+    multivalue_bind [bits, $sroa_slot_54, $sroa_slot_52] = "core:prelude/fpfmt.wado/short"(builtin::f64_abs(self));
     if $sroa_slot_53 {
         if @unlikely(local.tee $sroa_slot_53(f.used + 1) > builtin::array_len(f.repr)) {
             cold_path;

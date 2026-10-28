@@ -71,24 +71,23 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
 
 fn "stream_write_raw_offset.wado/run"() with Stderr {
-    let $moved_5: i32;
     let $cm_pair_9: i64;
     let elements: ref Array<u8>;
     let $sroa_$pattern_temp_0_0_49: i32;
     let $sroa_$pattern_temp_0_1_50: i32;
     $sroa_$pattern_temp_0_0_49 = builtin::i32_wrap_i64(local.tee $cm_pair_9("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_50 = builtin::i32_wrap_i64($cm_pair_9 >> 32_i64);
-    $moved_5 = "stream_write_raw_offset.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($moved_5 = $sroa_$pattern_temp_0_0_49; $sroa_$pattern_temp_0_0_49 = 0; $moved_5);
+    $sroa_$pattern_temp_0_0_49 = "stream_write_raw_offset.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_49);
     elements = array.new_fixed<u8>(88, 88, 101, 114, 114, 32, 109, 115, 103, 10, 89, 89);
     let $array_clone_dst_2: ref Array<u8>;
     builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(12)), 0, elements, 0, 12);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_50, $array_clone_dst_2);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_49 = $sroa_$pattern_temp_0_1_50; $sroa_$pattern_temp_0_1_50 = 0; $sroa_$pattern_temp_0_0_49);
-    drop("stream_write_raw_offset.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"($sroa_$pattern_temp_0_0_49 = $moved_5; $moved_5 = 0; $sroa_$pattern_temp_0_0_49));
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_50);
+    drop("stream_write_raw_offset.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"($sroa_$pattern_temp_0_0_49));
 }
 
 fn "stream_write_raw_offset.wado/$cm_binding__wasi:cli/stderr@0.3.0#write-via-stream"(data) with Stderr {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"(data);
 }
 
 fn "stream_write_raw_offset.wado/$cm_export__run"() {

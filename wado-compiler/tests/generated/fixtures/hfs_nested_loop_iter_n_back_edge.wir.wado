@@ -124,15 +124,13 @@ fn "hfs_nested_loop_iter_n_back_edge.wado/run"() with Stdout {
     };
     $hfs_pos_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    outer = "hfs_nested_loop_iter_n_back_edge.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(outer = $hfs_pos_19; $hfs_pos_19 = 0; outer);
-    $hfs_pos_19 = sum;
-    sum = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_pos_19, message_4.repr, message_4.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_pos_19 = outer; outer = 0; $hfs_pos_19);
+    $hfs_pos_19 = "hfs_nested_loop_iter_n_back_edge.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hfs_pos_19);
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_4.repr, message_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_pos_19);
 }
 
 fn "hfs_nested_loop_iter_n_back_edge.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "hfs_nested_loop_iter_n_back_edge.wado/$cm_export__run"() {
@@ -233,7 +231,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

@@ -706,7 +706,6 @@ fn "async_call_wait_where_started.wado/$test_0"() {
     let $local_1_15: ref null "async_call_wait_where_started.wado//$Dispatch_async_call_wait_where_started.wado/Fetch";
     let $local_2_16: ref "async_call_wait_where_started.wado//$Dispatch_async_call_wait_where_started.wado/Fetch";
     let $local_3_17: ref null "core:prelude/types.wado//AsyncCall<i32>";
-    let $moved_4_18: ref null "core:prelude/types.wado//AsyncCall<i32>";
     $h_async_call_wait_where_started.wado/Fetch = struct.new "async_call_wait_where_started.wado//Canned" {  };
     global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = struct.new "async_call_wait_where_started.wado//$Dispatch_async_call_wait_where_started.wado/Fetch" { outer: local.tee $save_async_call_wait_where_started.wado/Fetch(global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch), op_get: struct.new "canonical//CanonicalClosure_2" { env: struct.new "async_call_wait_where_started.wado//$Closure_1" { $capture_0: $h_async_call_wait_where_started.wado/Fetch }, func: ref.func "closure/async_call_wait_where_started.wado/$closure_wrapper_0" } };
     if @unlikely(local.tee $v0_0("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"($inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: block -> ref null "core:prelude/types.wado//AsyncCall<i32>" {
@@ -718,9 +717,7 @@ fn "async_call_wait_where_started.wado/$test_0"() {
                 call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_16.op_get)).env, url_14);
             };
             global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = $local_1_15;
-            $moved_4_18 = $local_3_17;
-            $local_3_17 = ref.null none;
-            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: $moved_4_18;
+            break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: $local_3_17;
         } else {
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_0: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_14);
         }
@@ -734,12 +731,10 @@ fn "async_call_wait_where_started.wado/$test_0"() {
         url_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 97), used: 2 };
         if ref.is_null(local.tee $local_1_15(global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch)) == 0 {
             global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = local.tee $local_2_16(ref.as_non_null($local_1_15)).outer;
-            $moved_4_18 = block -> ref null "core:prelude/types.wado//AsyncCall<i32>" {
+            $local_3_17 = block -> ref null "core:prelude/types.wado//AsyncCall<i32>" {
                 call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_16.op_get)).env, url_14);
             };
             global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = $local_1_15;
-            $local_3_17 = $moved_4_18;
-            $moved_4_18 = ref.null none;
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_3: $local_3_17;
         } else {
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_3: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_14);
@@ -750,7 +745,8 @@ fn "async_call_wait_where_started.wado/$test_0"() {
         $v0_2 = $local_3_17;
     } else {
         "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>^core:prelude/traits.wado/Drop::drop"($v0_2);
-        $moved_4_18 = $v0_2;
+        let $slot_store_4: ref null "core:prelude/types.wado//AsyncCall<i32>";
+        $slot_store_4 = $v0_2;
         let $slot_store_5: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
         let $slot_box_3: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
         $slot_store_5 = (if ref.is_null(local.tee $slot_box_3($local_3_17.subtask)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>" {
@@ -758,12 +754,12 @@ fn "async_call_wait_where_started.wado/$test_0"() {
         } else {
             $slot_box_3.value;
         });
-        if ref.is_null(local.tee $slot_box_3($moved_4_18.subtask)) {
-            $moved_4_18.subtask = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $slot_store_5 };
+        if ref.is_null(local.tee $slot_box_3($slot_store_4.subtask)) {
+            $slot_store_4.subtask = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>" { value: $slot_store_5 };
         } else {
             $slot_box_3.value = $slot_store_5;
         }
-        $moved_4_18 = $v0_2;
+        $slot_store_4 = $v0_2;
         let $slot_store_9: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
         let $slot_box_7: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
         $slot_store_9 = (if ref.is_null(local.tee $slot_box_7($local_3_17.buffer)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>" {
@@ -771,13 +767,13 @@ fn "async_call_wait_where_started.wado/$test_0"() {
         } else {
             $slot_box_7.value;
         });
-        if ref.is_null(local.tee $slot_box_7($moved_4_18.buffer)) {
-            $moved_4_18.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $slot_store_9 };
+        if ref.is_null(local.tee $slot_box_7($slot_store_4.buffer)) {
+            $slot_store_4.buffer = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>" { value: $slot_store_9 };
         } else {
             $slot_box_7.value = $slot_store_9;
         }
         $v0_2.lift = $local_3_17.lift;
-        $moved_4_18 = $v0_2;
+        $slot_store_4 = $v0_2;
         let $slot_store_13: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>";
         let $slot_box_11: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>";
         $slot_store_13 = (if ref.is_null(local.tee $slot_box_11($local_3_17.args)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>" {
@@ -785,8 +781,8 @@ fn "async_call_wait_where_started.wado/$test_0"() {
         } else {
             $slot_box_11.value;
         });
-        if ref.is_null(local.tee $slot_box_11($moved_4_18.args)) {
-            $moved_4_18.args = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>" { value: $slot_store_13 };
+        if ref.is_null(local.tee $slot_box_11($slot_store_4.args)) {
+            $slot_store_4.args = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>>" { value: $slot_store_13 };
         } else {
             $slot_box_11.value = $slot_store_13;
         }
@@ -803,9 +799,7 @@ fn "async_call_wait_where_started.wado/$test_0"() {
             $slot_box_11.value = $slot_store_13;
         }
     }
-    $local_3_17 = $v0_2;
-    $v0_2 = ref.null none;
-    if @unlikely(local.tee $v0_0("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"($local_3_17)) != 2) {
+    if @unlikely(local.tee $v0_0("core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"($v0_2)) != 2) {
         cold_path;
         "core:rt/panic"(local.tee url_14("core:prelude/string.wado/core:prelude/string.wado/String::format<async_call_wait_where_started.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "async_call_wait_where_started.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $v0_0, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at async_call_wait_where_started.wado:16
 condition: finish(Fetch::get(\"/a\")) == 2
@@ -820,12 +814,10 @@ finish(Fetch::get(\"/a\")): "), used: 27 }, s2: struct.new "core:prelude/string.
         url_14 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(47, 97, 98), used: 3 };
         if ref.is_null(local.tee $local_1_15(global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch)) == 0 {
             global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = local.tee $local_2_16(ref.as_non_null($local_1_15)).outer;
-            $local_3_17 = block -> ref null "core:prelude/types.wado//AsyncCall<i32>" {
+            $v0_2 = block -> ref null "core:prelude/types.wado//AsyncCall<i32>" {
                 call_ref "functype/$canonical_closure_fn_2"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_2"($local_2_16.op_get)).env, url_14);
             };
             global:async_call_wait_where_started.wado::$effect_async_call_wait_where_started.wado/Fetch = $local_1_15;
-            $v0_2 = $local_3_17;
-            $local_3_17 = ref.null none;
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_9: $v0_2;
         } else {
             break $inline__effect_dispatch__async_call_wait_where_started_wado_Fetch__get_9: "async_call_wait_where_started.wado/$cm_binding__example:demo/fetch#get"(url_14);
@@ -1485,19 +1477,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -2799,15 +2790,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"(self) 
     let subtask: ref null "core:prelude//$Resource";
     let set: ref null "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>";
     let buffer: ref null "core:prelude/types.wado//ResultBuffer";
-    let $moved_5: ref null "core:prelude/types.wado//AsyncCall<i32>";
     let $block_v_6: i32;
     let self_9: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>>";
     let $replaced_3_12: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>";
     let self_18: ref null "core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>>";
     let $replaced_3_21: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>";
-    $moved_5 = self;
-    self = ref.null none;
-    $replaced_3_12 = local.tee self_9($moved_5.subtask).value;
+    $replaced_3_12 = local.tee self_9(self.subtask).value;
     self_9.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>$0;
     if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_12) {
         subtask = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>::Some"($replaced_3_12).payload_0;
@@ -2818,13 +2806,13 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"(self) 
         }
     } else {
     }
-    $replaced_3_21 = local.tee self_18($moved_5.buffer).value;
+    $replaced_3_21 = local.tee self_18(self.buffer).value;
     self_18.value = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>$0;
     $block_v_6 = (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($replaced_3_21) -> i32 {
         buffer = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>::Some"($replaced_3_21).payload_0;
         $block_v_6 = block -> i32 {
             let $indirect_call_2: ref "canonical//CanonicalClosure_1";
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($moved_5.lift)).env, buffer.ptr);
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"(self.lift)).env, buffer.ptr);
         };
         if ref.is_null(buffer) == 0 {
             drop("mem/realloc"(buffer.ptr, buffer.size, buffer.align, 0));
@@ -2832,11 +2820,11 @@ fn "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>::wait"(self) 
         $block_v_6;
     } else {
         block -> i32 {
-            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"($moved_5.lift)).env, 0);
+            call_ref "functype/$canonical_closure_fn_1"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_1"(self.lift)).env, 0);
         };
     });
-    if ref.is_null($moved_5) == 0 {
-        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>^core:prelude/traits.wado/Drop::drop"($moved_5);
+    if ref.is_null(self) == 0 {
+        "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<i32>^core:prelude/traits.wado/Drop::drop"(self);
     }
     return $block_v_6;
 }

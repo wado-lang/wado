@@ -72,7 +72,6 @@ global global:param_spec_scalar_clone_wir.wado::$const_obj_0: ref Array<u8> = ar
 
 fn "param_spec_scalar_clone_wir.wado/run"() with Stdout {
     let n: i32;
-    let $moved_4_5: i32;
     let $cm_pair_7_8: i64;
     let $sroa_$pattern_temp_0_0_13_14: i32;
     let $sroa_$pattern_temp_0_1_14_15: i32;
@@ -81,26 +80,22 @@ fn "param_spec_scalar_clone_wir.wado/run"() with Stdout {
     n = black_box(7);
     $sroa_$pattern_temp_0_0_13_14 = builtin::i32_wrap_i64(local.tee $cm_pair_7_8("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_15 = builtin::i32_wrap_i64($cm_pair_7_8 >> 32_i64);
-    $moved_4_5 = "param_spec_scalar_clone_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_5 = $sroa_$pattern_temp_0_0_13_14; $sroa_$pattern_temp_0_0_13_14 = 0; $moved_4_5);
-    $sroa_$pattern_temp_0_0_13_14 = $sroa_$pattern_temp_0_1_14_15;
-    $sroa_$pattern_temp_0_1_14_15 = 0;
+    $sroa_$pattern_temp_0_0_13_14 = "param_spec_scalar_clone_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_14);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(2)), 0, global:param_spec_scalar_clone_wir.wado::$const_obj_0, 0, 1);
     builtin::array_set_u8(new_repr, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_14, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_15 = $sroa_$pattern_temp_0_0_13_14; $sroa_$pattern_temp_0_0_13_14 = 0; $sroa_$pattern_temp_0_1_14_15);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_15 = $moved_4_5; $moved_4_5 = 0; $sroa_$pattern_temp_0_1_14_15);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_15, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_14);
     message_16 = "core:prelude/string.wado/core:prelude/string.wado/String::format<param_spec_scalar_clone_wir.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"("param_spec_scalar_clone_wir.wado/scaled$spec1$dae[factor]"(n));
     n = builtin::i32_wrap_i64(local.tee $cm_pair_7_8("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_15 = builtin::i32_wrap_i64($cm_pair_7_8 >> 32_i64);
-    $moved_4_5 = "param_spec_scalar_clone_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_5 = n; n = 0; $moved_4_5);
-    n = $sroa_$pattern_temp_0_1_14_15;
-    $sroa_$pattern_temp_0_1_14_15 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(n, message_16.repr, message_16.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n = $moved_4_5; $moved_4_5 = 0; n);
+    $sroa_$pattern_temp_0_0_13_14 = builtin::i32_wrap_i64($cm_pair_7_8 >> 32_i64);
+    n = "param_spec_scalar_clone_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_14, message_16.repr, message_16.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n);
 }
 
 fn "param_spec_scalar_clone_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "param_spec_scalar_clone_wir.wado/$cm_export__run"() {
@@ -122,7 +117,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

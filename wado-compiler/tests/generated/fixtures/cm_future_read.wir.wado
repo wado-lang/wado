@@ -377,12 +377,7 @@ fn "cm_future_read.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"
     } else {
     }
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    let $cm_handle_2: i32;
-    $cm_handle_2 = headers;
-    headers = 0;
-    headers = trailers;
-    trailers = 0;
-    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"(headers, $contents_disc, $contents_inner0, trailers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -396,32 +391,25 @@ fn "cm_future_read.wado/$cm_export__handle"($p0) {
 fn "cm_future_read.wado/$cm_task_entry__handle"(request) {
     let response: ref null "core:prelude//$Resource";
     let _tx_future: ref null "core:prelude//$Resource";
-    let $moved_11: i32;
-    let $moved_13: ref null "core:prelude//$Resource";
     let $cm_pair_186: i64;
     let $pattern_temp_2: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $sroa_$pattern_temp_0_0_191: i32;
     let $sroa_$pattern_temp_0_1_192: i32;
-    let $sroa_$task_ret_1_196: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
     $sroa_$pattern_temp_0_0_191 = builtin::i32_wrap_i64(local.tee $cm_pair_186("wasi/future-new:s32"()));
-    drop("cm_future_read.wado/$cm_future_write_i32"(local.tee $sroa_$pattern_temp_0_1_192(builtin::i32_wrap_i64($cm_pair_186 >> 32_i64)), 42));
-    drop("cm_future_read.wado/$cm_future_read_i32"($sroa_$pattern_temp_0_1_192 = $sroa_$pattern_temp_0_0_191; $sroa_$pattern_temp_0_0_191 = 0; $sroa_$pattern_temp_0_1_192));
-    $sroa_$pattern_temp_0_1_192 = builtin::i32_wrap_i64(local.tee $cm_pair_186("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
-    $sroa_$pattern_temp_0_0_191 = builtin::i32_wrap_i64($cm_pair_186 >> 32_i64);
-    response = local.tee $pattern_temp_2("cm_future_read.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(local.tee $moved_11("cm_future_read.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:cm_future_read.wado::$const_obj_0, $moved_11 = $sroa_$pattern_temp_0_1_192; $sroa_$pattern_temp_0_1_192 = 0; $moved_11)).0;
+    drop("cm_future_read.wado/$cm_future_write_i32"(builtin::i32_wrap_i64($cm_pair_186 >> 32_i64), 42));
+    drop("cm_future_read.wado/$cm_future_read_i32"($sroa_$pattern_temp_0_0_191));
+    $sroa_$pattern_temp_0_0_191 = builtin::i32_wrap_i64(local.tee $cm_pair_186("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
+    $sroa_$pattern_temp_0_1_192 = builtin::i32_wrap_i64($cm_pair_186 >> 32_i64);
+    response = local.tee $pattern_temp_2("cm_future_read.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("cm_future_read.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:cm_future_read.wado::$const_obj_0, $sroa_$pattern_temp_0_0_191)).0;
     _tx_future = $pattern_temp_2.1;
-    $sroa_$task_ret_1_196 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_13 = response; response = ref.null none; $moved_13 };
-    $moved_11 = 0;
-    $moved_11 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_196).payload_0.value;
-    "wasi/task-return:handle"(0, $moved_11, 0, 0_i64, 0, 0, 0, 0);
-    drop("cm_future_read.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_11 = $sroa_$pattern_temp_0_0_191; $sroa_$pattern_temp_0_0_191 = 0; $moved_11, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
+    $sroa_$pattern_temp_0_0_191 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: response }).payload_0.value;
+    "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_191, 0, 0_i64, 0, 0, 0, 0);
+    drop("cm_future_read.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_192, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode"(_tx_future.value);
     }
     if (request == 0) == 0 {
-        $moved_11 = request;
-        request = 0;
-        "wasi/resource-drop:wasi/http/types.wado#Request"($moved_11);
+        "wasi/resource-drop:wasi/http/types.wado#Request"(request);
     }
 }
 

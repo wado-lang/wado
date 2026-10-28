@@ -190,7 +190,6 @@ fn "array_bounds_elim_offset_chain.wado/run"() with Stdout {
     let base: i32;
     let q_7: i32;
     let message_38: ref "core:prelude/string.wado//String";
-    let $moved_4_42: i32;
     let $cm_pair_7_45: i64;
     let $sroa_$pattern_temp_0_1_14_52: i32;
     base = "array_bounds_elim_offset_chain.wado/opaque"(7);
@@ -208,11 +207,9 @@ fn "array_bounds_elim_offset_chain.wado/run"() with Stdout {
     });
     q_7 = builtin::i32_wrap_i64(local.tee $cm_pair_7_45("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_52 = builtin::i32_wrap_i64($cm_pair_7_45 >> 32_i64);
-    $moved_4_42 = "array_bounds_elim_offset_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_42 = q_7; q_7 = 0; $moved_4_42);
-    q_7 = $sroa_$pattern_temp_0_1_14_52;
-    $sroa_$pattern_temp_0_1_14_52 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(q_7, message_38.repr, message_38.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(q_7 = $moved_4_42; $moved_4_42 = 0; q_7);
+    q_7 = "array_bounds_elim_offset_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(q_7);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_52, message_38.repr, message_38.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(q_7);
     message_38 = "core:prelude/string.wado/core:prelude/string.wado/String::format<array_bounds_elim_offset_chain.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"($inline_pick_6: block -> i32 {
         if (local.tee base(base + 4) + 3) >= 5 {
             break $inline_pick_6: 0;
@@ -227,15 +224,13 @@ fn "array_bounds_elim_offset_chain.wado/run"() with Stdout {
     });
     base = builtin::i32_wrap_i64(local.tee $cm_pair_7_45("wasi/stream-new"()));
     q_7 = builtin::i32_wrap_i64($cm_pair_7_45 >> 32_i64);
-    $moved_4_42 = "array_bounds_elim_offset_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_42 = base; base = 0; $moved_4_42);
-    base = q_7;
-    q_7 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(base, message_38.repr, message_38.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(base = $moved_4_42; $moved_4_42 = 0; base);
+    base = "array_bounds_elim_offset_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(base);
+    "core:rt/write_string_to_stream$dae[add_newline]"(q_7, message_38.repr, message_38.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(base);
 }
 
 fn "array_bounds_elim_offset_chain.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "array_bounds_elim_offset_chain.wado/$cm_export__run"() {
@@ -352,19 +347,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

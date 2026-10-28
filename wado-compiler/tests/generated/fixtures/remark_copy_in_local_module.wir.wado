@@ -108,7 +108,6 @@ fn "remark_copy_in_local_module.wado/run"() with Stdout, Environment {
     let item: ref "core:prelude/string.wado//String";
     let $local_3: ref null "core:prelude/string.wado//String";
     let used_17: i32;
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
     item = "core:prelude/string.wado/core:prelude/string.wado/String::format<remark_copy_in_local_module.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("./sub/remark_copy_helper.wado/grow"($temp_inline_core_prelude_traits_wado_IterSkip_core_prelude_slice_wado_SliceValueIter_core_prelude_string_wado_String___core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_core_prelude_string_wado_String___3_0 = struct.new "core:prelude/traits.wado//IterSkip<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<core:prelude/string.wado/String>" { repr: local.tee self_5("remark_copy_in_local_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"()).repr, index: 0, end: self_5.used }, remaining: 1 }; self_5 = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 }; b0: block {
@@ -129,15 +128,13 @@ fn "remark_copy_in_local_module.wado/run"() with Stdout, Environment {
     }; self_5.used));
     used_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "remark_copy_in_local_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = used_17; used_17 = 0; $moved_4);
-    used_17 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(used_17, item.repr, item.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_17 = $moved_4; $moved_4 = 0; used_17);
+    used_17 = "remark_copy_in_local_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_17);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, item.repr, item.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_17);
 }
 
 fn "remark_copy_in_local_module.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "remark_copy_in_local_module.wado/$cm_binding__wasi:cli/environment@0.3.0#get-arguments"() with Environment {
@@ -243,7 +240,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

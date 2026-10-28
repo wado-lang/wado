@@ -102,11 +102,9 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     };
     i = builtin::i32_wrap_i64(local.tee $cm_pair_7_173("wasi/stream-new"()));
     start_85 = builtin::i32_wrap_i64($cm_pair_7_173 >> 32_i64);
-    new_used_84 = "opt_string_append_fuse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_84 = i; i = 0; new_used_84);
-    i = start_85;
-    start_85 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i, buf_0.repr, buf_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = new_used_84; new_used_84 = 0; i);
+    i = "opt_string_append_fuse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_85, buf_0.repr, buf_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i);
     buf_0 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     if @unlikely(3 > builtin::array_len(buf_0.repr)) {
         cold_path;
@@ -124,16 +122,14 @@ fn "opt_string_append_fuse.wado/run"() with Stdout {
     builtin::array_copy<u8>(local.tee $load_0(buf_0.repr), i, $load_0, 0, 3);
     builtin::array_set_u8($load_0, i + 3, 62);
     i = builtin::i32_wrap_i64(local.tee $cm_pair_7_173("wasi/stream-new"()));
-    new_used_84 = builtin::i32_wrap_i64($cm_pair_7_173 >> 32_i64);
-    start_85 = "opt_string_append_fuse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_85 = i; i = 0; start_85);
-    i = new_used_84;
-    new_used_84 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(i, buf_0.repr, buf_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = start_85; start_85 = 0; i);
+    start_85 = builtin::i32_wrap_i64($cm_pair_7_173 >> 32_i64);
+    i = "opt_string_append_fuse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i);
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_85, buf_0.repr, buf_0.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i);
 }
 
 fn "opt_string_append_fuse.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "opt_string_append_fuse.wado/$cm_export__run"() {
@@ -151,7 +147,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

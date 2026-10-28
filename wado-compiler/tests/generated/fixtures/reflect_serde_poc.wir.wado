@@ -3798,19 +3798,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -4959,8 +4958,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
     if local.tee $load_0(self.byte_index) >= self.used {
         return 0, 0;
     }
-    $sroa_slot_33 = 0;
-    $sroa_slot_34 = 0;
     $inline_decode_char_at_0: block {
         if local.tee b0(builtin::array_get_value<u8>(local.tee repr(self.repr), $load_0)) <u 128 {
             $sroa_slot_33 = b0;
@@ -6291,7 +6288,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, new_used_288);
                 } else {
                 }
-                start_289 = local.tee new_used_48(self_38.used);
+                start_289 = self_38.used;
                 new_used_288 = local.tee new_used_48(new_used_288);
                 if @unlikely(((0 <= start_289) & (start_289 < new_used_288)) == 0) {
                     cold_path;
@@ -6623,7 +6620,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_38, start_158);
                 } else {
                 }
-                new_used_51 = local.tee start_74(self_38.used);
+                new_used_51 = self_38.used;
                 start_158 = local.tee start_74(start_158);
                 if @unlikely(((0 <= new_used_51) & (new_used_51 < start_158)) == 0) {
                     cold_path;
@@ -9966,7 +9963,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
             return 1, ref.null none, $qm_e;
         } else {
             unreachable;
-        }); multivalue_bind [used_88, $array_clone_i_13, $mv$$vr_57$2] = "reflect_serde_poc.wado/reflect_serde_poc.wado/Rank^reflect_serde_poc.wado/FromWire::from_wire$sroa[n.value,return]"(local.tee value_87((if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee value_87("reflect_serde_poc.wado/reflect_serde_poc.wado/Cursor::take"(cursor))) -> ref "reflect_serde_poc.wado//Node" {
+        }); multivalue_bind [used_88, $array_clone_i_13, $mv$$vr_57$2] = "reflect_serde_poc.wado/reflect_serde_poc.wado/Rank^reflect_serde_poc.wado/FromWire::from_wire$sroa[n.value,return]"((if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee value_87("reflect_serde_poc.wado/reflect_serde_poc.wado/Cursor::take"(cursor))) -> ref "reflect_serde_poc.wado//Node" {
             used_88 = ref.cast "reflect_serde_poc.wado//Node::Int"(value_87).payload_0;
             struct.new "reflect_serde_poc.wado//Node::Int" { discriminant: 0, payload_0: used_88 };
         } else if ref.test "reflect_serde_poc.wado//Node::Text"(value_87) -> ref "reflect_serde_poc.wado//Node" {
@@ -10071,7 +10068,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     continue l1487;
                 };
             }; $array_clone_dst_11, used: used_88 } };
-        }))); used_88 = (if used_88 == 0 -> "reflect_serde_poc.wado//enum:Rank" {
+        })); used_88 = (if used_88 == 0 -> "reflect_serde_poc.wado//enum:Rank" {
             $array_clone_i_13;
         } else if @unlikely(used_88 == 1) -> "reflect_serde_poc.wado//enum:Rank" {
             cold_path;
@@ -10080,7 +10077,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
             return 1, ref.null none, $qm_e;
         } else {
             unreachable;
-        }); multivalue_bind [$array_clone_i_13, $load_14, $mv$$vr_57$2] = "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/FromWire::from_wire$sroa[n.value,return]"(local.tee value_87((if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee value_87("reflect_serde_poc.wado/reflect_serde_poc.wado/Cursor::take"(cursor))) -> ref "reflect_serde_poc.wado//Node" {
+        }); multivalue_bind [$array_clone_i_13, $load_14, $mv$$vr_57$2] = "reflect_serde_poc.wado/reflect_serde_poc.wado/Perms^reflect_serde_poc.wado/FromWire::from_wire$sroa[n.value,return]"((if ref.test "reflect_serde_poc.wado//Node::Int"(local.tee value_87("reflect_serde_poc.wado/reflect_serde_poc.wado/Cursor::take"(cursor))) -> ref "reflect_serde_poc.wado//Node" {
             $array_clone_i_13 = ref.cast "reflect_serde_poc.wado//Node::Int"(value_87).payload_0;
             struct.new "reflect_serde_poc.wado//Node::Int" { discriminant: 0, payload_0: $array_clone_i_13 };
         } else if ref.test "reflect_serde_poc.wado//Node::Text"(value_87) -> ref "reflect_serde_poc.wado//Node" {
@@ -10185,7 +10182,7 @@ fn "reflect_serde_poc.wado/reflect_serde_poc.wado/Outer^reflect_serde_poc.wado/F
                     continue l1509;
                 };
             }; $array_clone_src_10, used: $array_clone_i_13 } };
-        }))); $array_clone_i_13 = (if $array_clone_i_13 == 0 -> u32 {
+        })); $array_clone_i_13 = (if $array_clone_i_13 == 0 -> u32 {
             $load_14;
         } else if @unlikely($array_clone_i_13 == 1) -> u32 {
             cold_path;

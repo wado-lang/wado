@@ -404,39 +404,32 @@ fn "affine_array_move_beside_user_select.wado/$test_0"() {
     let toks: ref null "core:prelude//List<affine_array_move_beside_user_select.wado/Tok>";
     let elements: ref null "Array<affine_array_move_beside_user_select.wado/Tok>";
     let used_18: i32;
-    let $moved_2: ref null "Array<affine_array_move_beside_user_select.wado/Tok>";
     let self_24: ref null "core:prelude//List<affine_array_move_beside_user_select.wado/Tok>";
     let value_25: ref null "affine_array_move_beside_user_select.wado//Tok";
-    let $moved_3_27: ref null "affine_array_move_beside_user_select.wado//Tok";
+    let $held_7_37: ref null "affine_array_move_beside_user_select.wado//Tok";
     let $index_3: i32;
     used_18 = builtin::array_len(local.tee elements(array.new_fixed<ref null "affine_array_move_beside_user_select.wado//Tok">()));
-    self_24 = local.tee toks(struct.new "core:prelude//List<affine_array_move_beside_user_select.wado/Tok>" { repr: ref.as_non_null($moved_2 = elements; elements = ref.null none; $moved_2), used: used_18 });
+    self_24 = local.tee toks(struct.new "core:prelude//List<affine_array_move_beside_user_select.wado/Tok>" { repr: ref.as_non_null(elements), used: used_18 });
     value_25 = struct.new "affine_array_move_beside_user_select.wado//Tok" { id: 1 };
     if @unlikely(used_18 >= builtin::array_len(self_24.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<affine_array_move_beside_user_select.wado/Tok>::grow"(self_24);
     }
-    $moved_2 = self_24.repr;
-    $moved_3_27 = value_25;
-    value_25 = ref.null none;
-    if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, used_18))) {
-        builtin::array_set<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, used_18, $moved_3_27);
+    if ref.is_null(local.tee $held_7_37(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(local.tee elements(self_24.repr), used_18))) {
+        builtin::array_set<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, used_18, value_25);
     } else {
-        global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
-        value_25.id = 1;
+        global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $held_7_37.id;
+        $held_7_37.id = 1;
     }
     self_24.used = used_18 + 1;
     self_24 = toks;
-    value_25 = struct.new "affine_array_move_beside_user_select.wado//Tok" { id: 10 };
+    $held_7_37 = struct.new "affine_array_move_beside_user_select.wado//Tok" { id: 10 };
     if @unlikely(local.tee used_18(self_24.used) >= builtin::array_len(self_24.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<affine_array_move_beside_user_select.wado/Tok>::grow"(self_24);
     }
-    $moved_2 = self_24.repr;
-    $moved_3_27 = value_25;
-    value_25 = ref.null none;
-    if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, used_18))) {
-        builtin::array_set<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, used_18, $moved_3_27);
+    if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(local.tee elements(self_24.repr), used_18))) {
+        builtin::array_set<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, used_18, $held_7_37);
     } else {
         global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
         value_25.id = 10;
@@ -451,31 +444,27 @@ fn "affine_array_move_beside_user_select.wado/$test_0"() {
         "affine_array_move_beside_user_select.wado/$test_0$cold2"(used_18);
         unreachable;
     }
-    $moved_3_27 = value_25;
-    value_25 = ref.null none;
-    global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
-    self_24 = toks;
-    toks = ref.null none;
-    $moved_2 = self_24.repr;
-    used_18 = self_24.used;
+    global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
+    elements = toks.repr;
+    used_18 = toks.used;
     $index_3 = 0;
     b6: block {
         l7: loop {
             break_if b6 ((($index_3 >= used_18) | (($index_3 + 1) >= used_18)) | ((($index_3 + 1) + 1) >= used_18)) | (((($index_3 + 1) + 1) + 1) >= used_18);
-            if ref.is_null(local.tee $moved_3_27(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, $index_3))) == 0 {
-                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
+            if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, $index_3))) == 0 {
+                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
             }
             $index_3 = $index_3 + 1;
-            if ref.is_null(local.tee $moved_3_27(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, $index_3))) == 0 {
-                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
+            if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, $index_3))) == 0 {
+                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
             }
             $index_3 = $index_3 + 1;
-            if ref.is_null(local.tee $moved_3_27(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, $index_3))) == 0 {
-                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
+            if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, $index_3))) == 0 {
+                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
             }
             $index_3 = $index_3 + 1;
-            if ref.is_null(local.tee $moved_3_27(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, $index_3))) == 0 {
-                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
+            if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, $index_3))) == 0 {
+                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
             }
             $index_3 = $index_3 + 1;
             continue l7;
@@ -484,8 +473,8 @@ fn "affine_array_move_beside_user_select.wado/$test_0"() {
     b12: block {
         l13: loop {
             break_if b12 $index_3 >= used_18;
-            if ref.is_null(local.tee $moved_3_27(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">($moved_2, $index_3))) == 0 {
-                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + $moved_3_27.id;
+            if ref.is_null(local.tee value_25(builtin::array_get_value<ref null "affine_array_move_beside_user_select.wado//Tok">(elements, $index_3))) == 0 {
+                global:affine_array_move_beside_user_select.wado::DROPS = global:affine_array_move_beside_user_select.wado::DROPS + value_25.id;
             }
             $index_3 = $index_3 + 1;
             continue l13;
@@ -977,19 +966,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1984,7 +1972,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<affine_array_move_beside_
     } else {
         builtin::array_fill<ref null "affine_array_move_beside_user_select.wado//Tok">($load_0, 0, ref.null none, a);
     }
-    self.repr = ref.as_non_null($arg_4 = new_repr; new_repr = ref.null none; $arg_4);
+    self.repr = ref.as_non_null(new_repr);
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<affine_array_move_beside_user_select.wado/Tok>::remove$unchecked"(self, index) {
@@ -2044,9 +2032,7 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<affine_array_move_beside_
         };
     };
     builtin::array_set<ref null "affine_array_move_beside_user_select.wado//Tok">($load_0, $load_1, ref.null none);
-    $slot_20 = $taken_9;
-    $taken_9 = ref.null none;
-    return $slot_20;
+    return $taken_9;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(self, content) {

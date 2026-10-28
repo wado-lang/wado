@@ -578,12 +578,7 @@ fn "http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[st
     } else {
     }
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    let $cm_handle_2: i32;
-    $cm_handle_2 = headers;
-    headers = 0;
-    headers = trailers;
-    trailers = 0;
-    "wasi/$wasi:http/types@0.3.0#[static]response.new"($cm_handle_2, $contents_disc, $contents_inner0, headers, $outptr);
+    "wasi/$wasi:http/types@0.3.0#[static]response.new"(headers, $contents_disc, $contents_inner0, trailers, $outptr);
     $lifted_result_8 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr) };
     $lifted_result_9 = struct.new "core:prelude//$Resource" { value: builtin::load_i32($outptr + 4) };
     drop("mem/realloc"($outptr, 8, 4, 0));
@@ -602,16 +597,13 @@ fn "http_response_set_status_invalid.wado/$cm_task_entry__handle"(request) {
     let response: ref null "core:prelude//$Resource";
     let _tx_future: ref null "core:prelude//$Resource";
     let ok_result: ref "core:prelude/types.wado//Result<(),()>";
-    let $moved_18: i32;
-    let $moved_20: ref null "core:prelude//$Resource";
     let $cm_pair_193: i64;
     let $pattern_temp_1: ref null "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
     let $sroa_$pattern_temp_0_0_196: i32;
     let $sroa_$pattern_temp_0_1_197: i32;
-    let $sroa_$task_ret_1_199: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
     $sroa_$pattern_temp_0_0_196 = builtin::i32_wrap_i64(local.tee $cm_pair_193("wasi/future-new:val-result<option<own<wasi/http/types.wado#Fields>>,wasi/http/types.wado#ErrorCode>"()));
     $sroa_$pattern_temp_0_1_197 = builtin::i32_wrap_i64($cm_pair_193 >> 32_i64);
-    response = local.tee $pattern_temp_1("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"(local.tee $moved_18("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"()), global:http_response_set_status_invalid.wado::$const_obj_3, $moved_18 = $sroa_$pattern_temp_0_0_196; $sroa_$pattern_temp_0_0_196 = 0; $moved_18)).0;
+    response = local.tee $pattern_temp_1("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[static]response.new"("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[constructor]fields"(), global:http_response_set_status_invalid.wado::$const_obj_3, $sroa_$pattern_temp_0_0_196)).0;
     _tx_future = $pattern_temp_1.1;
     if @unlikely((local.tee ok_result("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code$spec0"(response, 201)).discriminant == 0) == 0) {
         cold_path;
@@ -623,9 +615,9 @@ condition: ok_result matches { Ok(_) }
 ok_result: "), used: 121 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $moved_18("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_0_196("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $moved_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:18
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $sroa_$pattern_temp_0_0_196, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:18
 condition: response.get_status_code() == 201
 response.get_status_code(): "), used: 144 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:18
 condition: response.get_status_code() == 201
@@ -641,9 +633,9 @@ condition: err_result_0 matches { Err(_) }
 err_result_0: "), used: 128 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $moved_18("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_0_196("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $moved_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:24
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $sroa_$pattern_temp_0_0_196, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:24
 condition: response.get_status_code() == 201
 response.get_status_code(): "), used: 144 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:24
 condition: response.get_status_code() == 201
@@ -659,9 +651,9 @@ condition: err_result_max matches { Err(_) }
 err_result_max: "), used: 132 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    if @unlikely(local.tee $moved_18("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
+    if @unlikely(local.tee $sroa_$pattern_temp_0_0_196("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.get-status-code"(response)) != 201) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $moved_18, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:29
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,[wasi:http/types.wado/StatusCode]>"(struct.new "http_response_set_status_invalid.wado//$tmpl$adb1edf8e8d0b122" { h0: $sroa_$pattern_temp_0_0_196, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:29
 condition: response.get_status_code() == 201
 response.get_status_code(): "), used: 144 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_response_set_status_invalid.wado:29
 condition: response.get_status_code() == 201
@@ -669,18 +661,14 @@ response.get_status_code(): "), used: 144 }, s1: struct.new "core:prelude/string
         unreachable;
     }
     drop("http_response_set_status_invalid.wado/$cm_binding__wasi:http/types@0.3.0#[method]response.set-status-code$spec3"(response, 200));
-    $sroa_$task_ret_1_199 = struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: $moved_20 = response; response = ref.null none; $moved_20 };
-    $moved_18 = 0;
-    $moved_18 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"($sroa_$task_ret_1_199).payload_0.value;
-    "wasi/task-return:handle"(0, $moved_18, 0, 0_i64, 0, 0, 0, 0);
-    drop("http_response_set_status_invalid.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($moved_18 = $sroa_$pattern_temp_0_1_197; $sroa_$pattern_temp_0_1_197 = 0; $moved_18, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
+    $sroa_$pattern_temp_0_0_196 = ref.cast "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some"(struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Response>::Some" { discriminant: 1, payload_0: response }).payload_0.value;
+    "wasi/task-return:handle"(0, $sroa_$pattern_temp_0_0_196, 0, 0_i64, 0, 0, 0, 0);
+    drop("http_response_set_status_invalid.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"($sroa_$pattern_temp_0_1_197, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>>" { value: global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:http/types.wado/Fields>$0 } }));
     if ref.is_null(_tx_future) == 0 {
         "wasi/future-drop-readable:transmission-wasi/http/types.wado#ErrorCode"(_tx_future.value);
     }
     if (request == 0) == 0 {
-        $moved_18 = request;
-        request = 0;
-        "wasi/resource-drop:wasi/http/types.wado#Request"($moved_18);
+        "wasi/resource-drop:wasi/http/types.wado#Request"(request);
     }
 }
 
@@ -1225,19 +1213,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -1526,7 +1513,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<http_respon
     capacity_1 = local.tee self_9("http_response_set_status_invalid.wado/http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>";
     multivalue_bind [$mv$$tuple_0$0] = "http_response_set_status_invalid.wado/http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0] = "http_response_set_status_invalid.wado/http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122^core:prelude/traits.wado/ReflectTemplate::members"();
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<http_response_set_status_invalid.wado/$tmpl$adb1edf8e8d0b122,wasi:http/types.wado/StatusCode>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);

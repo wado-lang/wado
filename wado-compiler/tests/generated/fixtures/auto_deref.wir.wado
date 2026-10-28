@@ -175,9 +175,9 @@ global global:core:prelude/primitive.wado::$const_obj_6: ref "core:prelude/strin
 fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
     let sum: i32;
     let ref_val: i32;
-    let $sroa_slot_31: i32;
     let b0: u32;
     let $cm_pair_7: i64;
+    let $sroa_slot_74: i32;
     let $sroa_$iter_0_repr_75: ref Array<i32>;
     let $sroa_$iter_0_index_76: i32;
     let $sroa_$iter_3_repr_80: ref Array<u8>;
@@ -203,40 +203,38 @@ fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
     $sroa_$iter_0_index_76 = 0;
     b3: block {
         l4: loop {
-            $sroa_slot_31 = 0;
             $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6: block {
                 if $sroa_$iter_0_index_76 >= 3 {
-                    $sroa_slot_31 = 0;
+                    ref_val = 0;
                     break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6;
                 }
-                ref_val = 0;
                 $inline_decode_char_at_0: block {
                     if local.tee b0(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76)) <u 128 {
-                        ref_val = 1;
+                        $sroa_slot_74 = 1;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 224 {
                         drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 1));
-                        ref_val = 2;
+                        $sroa_slot_74 = 2;
                         break $inline_decode_char_at_0;
                     }
                     if b0 <u 240 {
                         drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 1));
                         drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 2));
-                        ref_val = 3;
+                        $sroa_slot_74 = 3;
                         break $inline_decode_char_at_0;
                     }
                     drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 1));
                     drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 2));
                     drop(builtin::array_get_value<u8>($sroa_$iter_3_repr_80, $sroa_$iter_0_index_76 + 3));
-                    ref_val = 4;
+                    $sroa_slot_74 = 4;
                     break $inline_decode_char_at_0;
                 };
-                $sroa_$iter_0_index_76 = $sroa_$iter_0_index_76 + ref_val;
-                $sroa_slot_31 = 1;
+                $sroa_$iter_0_index_76 = $sroa_$iter_0_index_76 + $sroa_slot_74;
+                ref_val = 1;
                 break $inline_core_prelude_string_wado_StrCharIter_core_prelude_traits_wado_Iterator__next_sroa_return__6;
             };
-            if $sroa_slot_31 == 1 {
+            if ref_val == 1 {
                 sum = sum + 1;
             } else {
                 break b3;
@@ -250,20 +248,17 @@ fn "auto_deref.wado/auto_deref_for_of"() with Stdout {
         unreachable;
     }
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    b0 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    ref_val = "auto_deref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(ref_val = sum; sum = 0; ref_val);
-    sum = b0;
-    b0 = 0;
+    $sroa_slot_74 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    sum = "auto_deref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
     builtin::array_copy<u8>(local.tee $sroa_$iter_3_repr_80(builtin::array_new<u8>(3)), 0, global:auto_deref.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8($sroa_$iter_3_repr_80, 2, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(sum, $sroa_$iter_3_repr_80);
-    "wasi/stream-drop-writable"(b0 = sum; sum = 0; b0);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(b0 = ref_val; ref_val = 0; b0);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_slot_74, $sroa_$iter_3_repr_80);
+    "wasi/stream-drop-writable"($sroa_slot_74);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum);
 }
 
 fn "auto_deref.wado/auto_deref_method"() with Stdout {
     let byte: u8;
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_1_14: i32;
     let new_repr: ref Array<u8>;
@@ -274,14 +269,12 @@ fn "auto_deref.wado/auto_deref_method"() with Stdout {
     }
     byte = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "auto_deref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = byte; byte = 0; $moved_4);
-    byte = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
+    byte = "auto_deref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(byte);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(28)), 0, global:auto_deref.wado::$const_obj_3, 0, 27);
     builtin::array_set_u8(new_repr, 27, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(byte, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14 = byte; byte = 0; $sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(byte);
 }
 
 fn "auto_deref.wado/$template_segment$auto_deref.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -313,7 +306,7 @@ fn "auto_deref.wado/$template_segment$auto_deref.wado/$tmpl$7a99cb65f6ad01c7"($m
 }
 
 fn "auto_deref.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "auto_deref.wado/$cm_export__run"() {
@@ -468,19 +461,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

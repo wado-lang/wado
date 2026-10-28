@@ -5007,7 +5007,7 @@ fn "core:prelude/fpfmt.wado/fixed_width_out_of_range"(m, e, log10_e63, precision
     precision = (local.tee log10_e63((local.tee p1(select i32(p1 > 18, 18, p1)) - 1) - log10_e63) * 108853) >> 15;
     multivalue_bind [$mv$pm1$hi, $mv$pm1$lo] = "core:prelude/fpfmt.wado/get_pow10"(log10_e63);
     if local.tee $mv$pm1$hi("core:prelude/fpfmt.wado/unrounded_round"(local.tee $mv$pm1$lo("core:prelude/fpfmt.wado/uscale"(m, $mv$pm1$hi, $mv$pm1$lo, 0 - ((e + precision) + 3))))) >=u "core:prelude/fpfmt.wado/pow10"(p1) {
-        return local.tee $mv$pm1$hi("core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm1$lo))), (0 - log10_e63) + 1, p1;
+        return "core:prelude/fpfmt.wado/unrounded_round"("core:prelude/fpfmt.wado/unrounded_div$spec0$dae[d]"($mv$pm1$lo)), (0 - log10_e63) + 1, p1;
     }
     return $mv$pm1$hi, 0 - log10_e63, p1;
 }
@@ -5022,9 +5022,7 @@ fn "core:prelude/fpfmt.wado/short"(f) {
     let $mv$unpack$mantissa: u64;
     let $mv$unpack$exponent: i32;
     multivalue_bind [$mv$unpack$mantissa, $mv$unpack$exponent] = "core:prelude/fpfmt.wado/unpack64"(f);
-    min_m = 0_i64;
     z = 11;
-    p = 0;
     if ($mv$unpack$mantissa == -9223372036854775808_i64) & ($mv$unpack$exponent > -1085) {
         p = 0 - (((($mv$unpack$exponent + 11) * 631305) - 261663) >> 21);
         min_m = $mv$unpack$mantissa - 512_i64;
@@ -5783,19 +5781,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -7213,7 +7210,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     h_6 = local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$5909da28a70f8165^core:prelude/traits.wado/ReflectTemplate::members"()).0;
     capacity_1 = capacity_1 + (local.tee self_27("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$5909da28a70f8165,eq_from_written_cmp.wado/Shortest<i32>>::lit"(h_6, t)).end - self_27.start + 16);
     h_6 = $tuple_0.1;
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_27("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$5909da28a70f8165,eq_from_written_cmp.wado/Shortest<i32>>::lit"(h_6, t)).end - self_27.start + 16)) + (local.tee self_27(block -> ref "core:prelude/string.wado//StrSlice" {
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((((((((capacity_1 + (local.tee self_27("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$5909da28a70f8165,eq_from_written_cmp.wado/Shortest<i32>>::lit"(h_6, t)).end - self_27.start + 16)) + (local.tee self_27(block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$5909da28a70f8165$spec0$dae[index]"(t)).repr, $mv_arg_1.used);
     }).end - self_27.start + 16)) + (local.tee self_27(block -> ref "core:prelude/string.wado//StrSlice" {
@@ -7230,7 +7227,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$5909da28a70f8165$spec6$dae[index]"(t)).repr, $mv_arg_1.used);
     }).end - self_27.start + 16)) + (local.tee self_27(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$5909da28a70f8165$spec7$dae[index]"(t)).repr, $mv_arg_1.used);
-    }).end - self_27.start + 16))), used: 0 };
+    }).end - self_27.start + 16)), used: 0 };
     self_27 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$5909da28a70f8165,eq_from_written_cmp.wado/Shortest<i32>>::lit"(local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$5909da28a70f8165^core:prelude/traits.wado/ReflectTemplate::members"()).0, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_27.repr, self_27.start, self_27.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_5909da28a70f8165_eq_from_written_cmp_wado_Shortest_i32____fmt_14_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
@@ -7311,7 +7308,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     capacity_1 = local.tee self_9("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801,eq_from_written_cmp.wado/Shortest<i32>>";
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801,eq_from_written_cmp.wado/Shortest<i32>>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801,eq_from_written_cmp.wado/Shortest<i32>>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801^core:prelude/traits.wado/ReflectTemplate::members"();
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$acbbe6c6b8586801,eq_from_written_cmp.wado/Shortest<i32>>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
@@ -7332,7 +7329,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     h_6 = local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884^core:prelude/traits.wado/ReflectTemplate::members"()).0;
     capacity_1 = capacity_1 + (local.tee self_25("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884,eq_from_written_cmp.wado/Rounded>::lit"(h_6, t)).end - self_25.start + 16);
     h_6 = $tuple_0.1;
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_25("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884,eq_from_written_cmp.wado/Rounded>::lit"(h_6, t)).end - self_25.start + 16)) + (local.tee self_25(block -> ref "core:prelude/string.wado//StrSlice" {
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((((((((capacity_1 + (local.tee self_25("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884,eq_from_written_cmp.wado/Rounded>::lit"(h_6, t)).end - self_25.start + 16)) + (local.tee self_25(block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884$spec0$dae[index]"(t)).repr, $mv_arg_1.used);
     }).end - self_25.start + 16)) + (local.tee self_25(block -> ref "core:prelude/string.wado//StrSlice" {
@@ -7347,7 +7344,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884$spec5$dae[index]"(t)).repr, $mv_arg_1.used);
     }).end - self_25.start + 16)) + (local.tee self_25(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884$spec6$dae[index]"(t)).repr, $mv_arg_1.used);
-    }).end - self_25.start + 16))), used: 0 };
+    }).end - self_25.start + 16)), used: 0 };
     self_25 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884,eq_from_written_cmp.wado/Rounded>::lit"(local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$02c5f10ceef9f884^core:prelude/traits.wado/ReflectTemplate::members"()).0, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_25.repr, self_25.start, self_25.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_02c5f10ceef9f884_eq_from_written_cmp_wado_Rounded___fmt_13_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
@@ -7421,7 +7418,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     capacity_1 = local.tee self_9("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0,eq_from_written_cmp.wado/Rounded>";
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0,eq_from_written_cmp.wado/Rounded>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0,eq_from_written_cmp.wado/Rounded>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0^core:prelude/traits.wado/ReflectTemplate::members"();
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$e9b6aec01e67a2d0,eq_from_written_cmp.wado/Rounded>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
@@ -7443,14 +7440,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     let $mv$$tuple_0$3: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,core:prelude/string.wado/String>";
     let $mv$$tuple_0$4: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,core:prelude/string.wado/String>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$2, $mv$$tuple_0$3, $mv$$tuple_0$4] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91^core:prelude/traits.wado/ReflectTemplate::members"();
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_17("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, t)).end - self_17.start + 16)) + (local.tee self_17("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,bool>::lit$sroa[self.index]"(1, t)).end - self_17.start + 16)) + (local.tee self_17(block -> ref "core:prelude/string.wado//StrSlice" {
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((((capacity_1 + (local.tee self_17("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, t)).end - self_17.start + 16)) + (local.tee self_17("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,bool>::lit$sroa[self.index]"(1, t)).end - self_17.start + 16)) + (local.tee self_17(block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91$spec0$dae[index]"(t)).repr, $mv_arg_1.used);
     }).end - self_17.start + 16)) + (local.tee self_17(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91"(t, 6)).repr, $mv_arg_1.used);
     }).end - self_17.start + 16)) + (local.tee self_17(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91"(t, 8)).repr, $mv_arg_1.used);
-    }).end - self_17.start + 16))), used: 0 };
+    }).end - self_17.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$4, $mv$$tuple_0$3, $mv$$tuple_0$2] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91^core:prelude/traits.wado/ReflectTemplate::members"();
     self_17 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$ae7a41ce522c3b91,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_17.repr, self_17.start, self_17.end);
@@ -7498,7 +7495,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     h_6 = local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5^core:prelude/traits.wado/ReflectTemplate::members"()).0;
     capacity_1 = capacity_1 + (local.tee self_37("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"(h_6, t)).end - self_37.start + 16);
     h_6 = $tuple_0.1;
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_37("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"(h_6, t)).end - self_37.start + 16)) + (local.tee self_37(block -> ref "core:prelude/string.wado//StrSlice" {
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((((((((((((((capacity_1 + (local.tee self_37("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"(h_6, t)).end - self_37.start + 16)) + (local.tee self_37(block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5"(t, 4)).repr, $mv_arg_1.used);
     }).end - self_37.start + 16)) + (local.tee self_37(block -> ref "core:prelude/string.wado//StrSlice" {
@@ -7525,7 +7522,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5"(t, 26)).repr, $mv_arg_1.used);
     }).end - self_37.start + 16)) + (local.tee self_37(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5"(t, 28)).repr, $mv_arg_1.used);
-    }).end - self_37.start + 16))), used: 0 };
+    }).end - self_37.start + 16)), used: 0 };
     self_37 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5,eq_from_written_cmp.wado/ByHits>::lit"(local.tee $tuple_0("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$a7acc7ebd4dc1bd5^core:prelude/traits.wado/ReflectTemplate::members"()).0, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_37.repr, self_37.start, self_37.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_eq_from_written_cmp_wado__tmpl_a7acc7ebd4dc1bd5_eq_from_written_cmp_wado_ByHits___fmt_19_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
@@ -8739,7 +8736,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     capacity_1 = local.tee self_9("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54,eq_from_written_cmp.wado/ByHits>";
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54^core:prelude/traits.wado/ReflectTemplate::members"();
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$4f05c1a225d18c54,eq_from_written_cmp.wado/ByHits>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);
@@ -8764,14 +8761,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     let $mv$$tuple_0$6: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,core:prelude/string.wado/String>";
     let $mv$$tuple_0$7: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,core:prelude/string.wado/String>";
     multivalue_bind [$mv$$tuple_0$0, $mv$$tuple_0$1, $mv$$tuple_0$2, $mv$$tuple_0$3, $mv$$tuple_0$4, $mv$$tuple_0$5, $mv$$tuple_0$6, $mv$$tuple_0$7] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e^core:prelude/traits.wado/ReflectTemplate::members"();
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(local.tee capacity_1(capacity_1 + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$0, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$1, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$2, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$3, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,bool>::lit$sroa[self.index]"(4, t)).end - self_23.start + 16)) + (local.tee self_23(block -> ref "core:prelude/string.wado//StrSlice" {
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((((((((capacity_1 + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$0, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$1, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$2, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$3, t)).end - self_23.start + 16)) + (local.tee self_23("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,bool>::lit$sroa[self.index]"(4, t)).end - self_23.start + 16)) + (local.tee self_23(block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e"(t, 10)).repr, $mv_arg_1.used);
     }).end - self_23.start + 16)) + (local.tee self_23(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e"(t, 12)).repr, $mv_arg_1.used);
     }).end - self_23.start + 16)) + (local.tee self_23(block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("eq_from_written_cmp.wado/$template_segment$eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e"(t, 14)).repr, $mv_arg_1.used);
-    }).end - self_23.start + 16))), used: 0 };
+    }).end - self_23.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$3, $mv$$tuple_0$2, $mv$$tuple_0$1, $mv$$tuple_0$0, $mv$$tuple_0$4, $mv$$tuple_0$7, $mv$$tuple_0$6, $mv$$tuple_0$5] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e^core:prelude/traits.wado/ReflectTemplate::members"();
     self_23 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$61c0cc08243d549e,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$3, t);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_23.repr, self_23.start, self_23.end);
@@ -8832,7 +8829,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<eq_from_wri
     capacity_1 = local.tee self_9("eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$9b248b5132db344b^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start;
     let $mv$$tuple_0$0: ref "core:prelude/traits.wado//TemplateHole<eq_from_written_cmp.wado/$tmpl$9b248b5132db344b,eq_from_written_cmp.wado/Access>";
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$9b248b5132db344b^core:prelude/traits.wado/ReflectTemplate::members"();
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee capacity_1(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$9b248b5132db344b,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16))), used: 0 };
+    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(capacity_1 + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$9b248b5132db344b,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
     multivalue_bind [$mv$$tuple_0$0] = "eq_from_written_cmp.wado/eq_from_written_cmp.wado/$tmpl$9b248b5132db344b^core:prelude/traits.wado/ReflectTemplate::members"();
     self_9 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<eq_from_written_cmp.wado/$tmpl$9b248b5132db344b,eq_from_written_cmp.wado/Access>::lit"($mv$$tuple_0$0, $load_2, $load_3, $load_4, $load_5);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_9.repr, self_9.start, self_9.end);

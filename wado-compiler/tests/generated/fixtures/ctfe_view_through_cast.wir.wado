@@ -136,15 +136,13 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     message_18 = "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_view_through_cast.wado/$tmpl$a85860b7a9443735,[i32,i32,i32,i32,i32]>"(struct.new "ctfe_view_through_cast.wado//$tmpl$a85860b7a9443735" { h0: $sroa_r_value_17, h1: $sroa_r_value_17, h2: len_before, h3: items.used, h4: global:ctfe_view_through_cast.wado::G.n, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r5: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     len_before = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_r_value_17 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    used = "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used = len_before; len_before = 0; used);
-    len_before = $sroa_r_value_17;
-    $sroa_r_value_17 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(len_before, message_18.repr, message_18.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(len_before = used; used = 0; len_before);
+    len_before = "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(len_before);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_r_value_17, message_18.repr, message_18.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(len_before);
 }
 
 fn "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "ctfe_view_through_cast.wado/$cm_export__run"() {
@@ -259,7 +257,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

@@ -70,11 +70,10 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:c
 fn "stream_cm_stdin_pipe.wado/run"() with Stdout, Stdin {
     let stdin_stream: ref null "core:prelude//$Resource";
     let _done: ref null "core:prelude//$Resource";
-    let $moved_3: ref null "core:prelude//$Resource";
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     stdin_stream = local.tee $pattern_temp_0("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdin@0.3.0#read-via-stream"()).0;
     _done = $pattern_temp_0.1;
-    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3 = stdin_stream; stdin_stream = ref.null none; $moved_3)));
+    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(stdin_stream)));
     if ref.is_null(_done) == 0 {
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(_done.value);
     }

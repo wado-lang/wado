@@ -815,7 +815,6 @@ fn "spec_control_flow_loops.wado/$test_2_while_with_a_let_chain"() {
     let taken: ref "core:prelude//List<i32>";
     let $v1: ref "core:prelude/types.wado//Option<i32>";
     let item_19: i32;
-    let item_40: i32;
     let self_41: ref "core:prelude/types.wado//Option<i32>";
     let $licm_repr_54: ref Array<i32>;
     let $sroa_iter_repr_55: ref Array<i32>;
@@ -890,18 +889,15 @@ condition: taken == [1, 2]
 taken: "), used: 120 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    item_19 = 0;
-    $load_0 = 0;
     $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12: block {
         if $sroa_iter_index_56 >= 4 {
             item_19 = 0;
             $load_0 = 0;
             break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12;
         }
-        item_40 = builtin::array_get_value<i32>($sroa_iter_repr_55, $sroa_iter_index_56);
-        $sroa_iter_index_56 = $sroa_iter_index_56 + 1;
+        $sroa_iter_index_56 = builtin::array_get_value<i32>($sroa_iter_repr_55, $sroa_iter_index_56);
         item_19 = 1;
-        $load_0 = item_40;
+        $load_0 = $sroa_iter_index_56;
         break $inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__12;
     };
     $v1 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 3 };
@@ -1230,9 +1226,9 @@ fn "spec_control_flow_loops.wado/$test_7_for_of"() {
     let sum: i32;
     let $v2: i32;
     let $v3: bool;
+    let $v3_seen: bool;
     let order: ref "core:prelude//List<i32>";
     let item_35: i32;
-    let item_41: i32;
     let $sroa_$iter_0_repr_84: ref Array<i32>;
     let $sroa_$iter_0_index_85: i32;
     sum = 0;
@@ -1257,77 +1253,77 @@ fn "spec_control_flow_loops.wado/$test_7_for_of"() {
     b90: block {
         l91: loop {
             break_if b90 $sroa_$iter_0_index_85 >= 5;
-            item_41 = builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85);
+            item_35 = builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85);
             $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
-            item_35 = local.tee item_35(item_41) * 2;
+            item_35 = item_35 * 2;
             sum = sum + item_35;
             continue l91;
         };
     };
-    item_35 = sum == 45;
-    $sroa_$iter_0_index_85 = 0;
-    item_41 = 0;
-    if @unlikely((if item_35 -> i32 {
-        $v3 = $v2 = 1; $sroa_$iter_0_index_85 = 1; 1 == 1;
-        item_41 = 1;
+    $sroa_$iter_0_index_85 = sum == 45;
+    item_35 = 0;
+    $v3_seen = 0;
+    if @unlikely((if $sroa_$iter_0_index_85 -> i32 {
+        $v3 = $v2 = 1; item_35 = 1; 1 == 1;
+        $v3_seen = 1;
         $v3;
     } else {
         0;
     }) == 0) {
         cold_path;
-        "spec_control_flow_loops.wado/$test_7_for_of$cold0"(sum, item_35, $v2, $sroa_$iter_0_index_85, $v3, item_41);
+        "spec_control_flow_loops.wado/$test_7_for_of$cold0"(sum, $sroa_$iter_0_index_85, $v2, item_35, $v3, $v3_seen);
         unreachable;
     }
-    item_41 = 3;
+    $v3_seen = 3;
     order = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b94: block {
         l95: loop {
-            break_if b94 item_41 == 0;
-            $v3 = local.tee item_41(item_41 - 1) + 1;
-            if @unlikely(local.tee $sroa_$iter_0_index_85(order.used) >= builtin::array_len(order.repr)) {
+            break_if b94 $v3_seen == 0;
+            $v3 = local.tee $v3_seen($v3_seen - 1) + 1;
+            if @unlikely(local.tee item_35(order.used) >= builtin::array_len(order.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(order);
             }
-            builtin::array_set<i32>(order.repr, $sroa_$iter_0_index_85, $v3);
-            order.used = $sroa_$iter_0_index_85 + 1;
+            builtin::array_set<i32>(order.repr, item_35, $v3);
+            order.used = item_35 + 1;
             continue l95;
         };
     };
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__17: block -> bool {
-        if local.tee item_41(order.used) != 3 {
+        if local.tee $v3_seen(order.used) != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
         }
-        $sroa_$iter_0_index_85 = 0;
+        item_35 = 0;
         $sroa_$iter_0_repr_84 = order.repr;
         b99: block {
             l100: loop {
-                break_if b99 ((($sroa_$iter_0_index_85 >= item_41) | (($sroa_$iter_0_index_85 + 1) >= item_41)) | ((($sroa_$iter_0_index_85 + 1) + 1) >= item_41)) | (((($sroa_$iter_0_index_85 + 1) + 1) + 1) >= item_41);
-                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, $sroa_$iter_0_index_85) {
+                break_if b99 (((item_35 >= $v3_seen) | ((item_35 + 1) >= $v3_seen)) | (((item_35 + 1) + 1) >= $v3_seen)) | ((((item_35 + 1) + 1) + 1) >= $v3_seen);
+                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, item_35) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, item_35) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
                 }
-                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
-                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, $sroa_$iter_0_index_85) {
+                item_35 = item_35 + 1;
+                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, item_35) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, item_35) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
                 }
-                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
-                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, $sroa_$iter_0_index_85) {
+                item_35 = item_35 + 1;
+                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, item_35) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, item_35) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
                 }
-                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
-                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, $sroa_$iter_0_index_85) {
+                item_35 = item_35 + 1;
+                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, item_35) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, item_35) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
                 }
-                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
+                item_35 = item_35 + 1;
                 continue l100;
             };
         };
         b105: block {
             l106: loop {
-                break_if b105 $sroa_$iter_0_index_85 >= item_41;
-                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, $sroa_$iter_0_index_85) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, $sroa_$iter_0_index_85) {
+                break_if b105 item_35 >= $v3_seen;
+                if builtin::array_get_value<i32>($sroa_$iter_0_repr_84, item_35) != builtin::array_get_value<i32>(global:spec_control_flow_loops.wado::$const_obj_11, item_35) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__17: 0;
                 }
-                $sroa_$iter_0_index_85 = $sroa_$iter_0_index_85 + 1;
+                item_35 = item_35 + 1;
                 continue l106;
             };
         };
@@ -2867,19 +2863,18 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

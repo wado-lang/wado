@@ -67,7 +67,6 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 fn "bug_select_condition_writes_arm_local.wado/run"() with Stdout {
     let x: i32;
     let message_5: ref "core:prelude/string.wado//String";
-    let $moved_4_9: i32;
     let $cm_pair_7_12: i64;
     let $sroa_$pattern_temp_0_1_14_19: i32;
     x = black_box(1);
@@ -83,27 +82,23 @@ fn "bug_select_condition_writes_arm_local.wado/run"() with Stdout {
     }));
     x = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
-    $moved_4_9 = "bug_select_condition_writes_arm_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_9 = x; x = 0; $moved_4_9);
-    x = $sroa_$pattern_temp_0_1_14_19;
-    $sroa_$pattern_temp_0_1_14_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(x, message_5.repr, message_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x = $moved_4_9; $moved_4_9 = 0; x);
-    message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_select_condition_writes_arm_local.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((if local.tee x(local.tee x(black_box(1)) + 20) > 5 -> i32 {
+    x = "bug_select_condition_writes_arm_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(x);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_19, message_5.repr, message_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x);
+    message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_select_condition_writes_arm_local.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"((if local.tee x(black_box(1) + 20) > 5 -> i32 {
         x;
     } else {
         x + 1;
     }));
     x = builtin::i32_wrap_i64(local.tee $cm_pair_7_12("wasi/stream-new"()));
-    $moved_4_9 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_19 = "bug_select_condition_writes_arm_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_19 = x; x = 0; $sroa_$pattern_temp_0_1_14_19);
-    x = $moved_4_9;
-    $moved_4_9 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(x, message_5.repr, message_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x = $sroa_$pattern_temp_0_1_14_19; $sroa_$pattern_temp_0_1_14_19 = 0; x);
+    $sroa_$pattern_temp_0_1_14_19 = builtin::i32_wrap_i64($cm_pair_7_12 >> 32_i64);
+    x = "bug_select_condition_writes_arm_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(x);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_19, message_5.repr, message_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(x);
 }
 
 fn "bug_select_condition_writes_arm_local.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "bug_select_condition_writes_arm_local.wado/$cm_export__run"() {
@@ -121,7 +116,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

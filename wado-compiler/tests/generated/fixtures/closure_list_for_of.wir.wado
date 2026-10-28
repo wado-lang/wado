@@ -253,15 +253,13 @@ fn "closure_list_for_of.wado/run"() with Stdout {
     message_93 = "core:prelude/string.wado/core:prelude/string.wado/String::format<closure_list_for_of.wado/$tmpl$7ab51489603b688b,[core:prelude/list.wado/List<i32>]>$spec0$spec0$sroa[t.h0]"(seen);
     $sroa_$iter_0_index_109 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     value_29 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    used_21 = "closure_list_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(used_21 = $sroa_$iter_0_index_109; $sroa_$iter_0_index_109 = 0; used_21);
-    $sroa_$iter_0_index_109 = value_29;
-    value_29 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$iter_0_index_109, message_93.repr, message_93.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$iter_0_index_109 = used_21; used_21 = 0; $sroa_$iter_0_index_109);
+    $sroa_$iter_0_index_109 = "closure_list_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_index_109);
+    "core:rt/write_string_to_stream$dae[add_newline]"(value_29, message_93.repr, message_93.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$iter_0_index_109);
 }
 
 fn "closure_list_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "closure_list_for_of.wado/$cm_export__run"() {
@@ -279,7 +277,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {
@@ -427,7 +425,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_21);
                 } else {
                 }
-                start_22 = local.tee $hfs_used_496(self_7.used);
+                start_22 = self_7.used;
                 $hfs_used_496 = new_used_21;
                 builtin::array_copy<u8>(self_7.repr, start_22, global:core:prelude/array.wado::$const_obj_15, 0, 2);
             } else {

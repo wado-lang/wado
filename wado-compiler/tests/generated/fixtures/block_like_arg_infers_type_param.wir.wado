@@ -289,15 +289,13 @@ fn "block_like_arg_infers_type_param.wado/run"() with Stdout {
     out_13 = "core:prelude/string.wado/core:prelude/string.wado/String::format<block_like_arg_infers_type_param.wado/$tmpl$461dfb778830caa2,[i32,core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String,i32,core:prelude/string.wado/String,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<char>,i32,core:prelude/string.wado/String,core:prelude/string.wado/String]>"(struct.new "block_like_arg_infers_type_param.wado//$tmpl$461dfb778830caa2" { h0: t_14, h1: t_15, h2: t_16, h3: t_17, h4: self_19, h5: o_6, h6: t_23, h7: t_24, h8: t_25, h9: t_26, h10: t_28, h11: out_13, s0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r3: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r5: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s6: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r6: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r7: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s8: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r8: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s9: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r9: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s10: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r10: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s11: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, r11: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32), used: 1 }, s12: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, r12: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } });
     t_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     self_19 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    t_14 = "block_like_arg_infers_type_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(t_14 = t_26; t_26 = 0; t_14);
-    t_26 = self_19;
-    self_19 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(t_26, out_13.repr, out_13.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(t_26 = t_14; t_14 = 0; t_26);
+    t_26 = "block_like_arg_infers_type_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(t_26);
+    "core:rt/write_string_to_stream$dae[add_newline]"(self_19, out_13.repr, out_13.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(t_26);
 }
 
 fn "block_like_arg_infers_type_param.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "block_like_arg_infers_type_param.wado/$cm_export__run"() {
@@ -398,7 +396,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

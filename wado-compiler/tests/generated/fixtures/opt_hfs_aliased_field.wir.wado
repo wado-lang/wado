@@ -136,10 +136,10 @@ fn "opt_hfs_aliased_field.wado/through_container"(h, c) {
     b2: block {
         l3: loop {
             break_if b2 i >= 3;
-            $hfs_n_3 = local.tee $hfs_n_3($hfs_n_3 + 1);
+            $hfs_n_3 = $hfs_n_3 + 1;
             c.n = $hfs_n_3;
             "opt_hfs_aliased_field.wado/touch"(h);
-            $hfs_n_3 = local.tee $hfs_n_3(c.n);
+            $hfs_n_3 = c.n;
             i = i + 1;
             c.n = $hfs_n_3;
             continue l3;
@@ -155,11 +155,11 @@ fn "opt_hfs_aliased_field.wado/through_closure"(c, f) {
     b4: block {
         l5: loop {
             break_if b4 i >= 3;
-            $hfs_n_3 = local.tee $hfs_n_3($hfs_n_3 + 1);
+            $hfs_n_3 = $hfs_n_3 + 1;
             c.n = $hfs_n_3;
             let $indirect_call_1: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"(f)).env);
-            $hfs_n_3 = local.tee $hfs_n_3(c.n);
+            $hfs_n_3 = c.n;
             i = i + 1;
             c.n = $hfs_n_3;
             continue l5;
@@ -179,10 +179,10 @@ fn "opt_hfs_aliased_field.wado/through_global"(c) {
     b6: block {
         l7: loop {
             break_if b6 i >= 3;
-            $hfs_n_2 = local.tee $hfs_n_2($hfs_n_2 + 1);
+            $hfs_n_2 = $hfs_n_2 + 1;
             c.n = $hfs_n_2;
             "opt_hfs_aliased_field.wado/poke"();
-            $hfs_n_2 = local.tee $hfs_n_2(c.n);
+            $hfs_n_2 = c.n;
             i = i + 1;
             c.n = $hfs_n_2;
             continue l7;
@@ -194,7 +194,6 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     let a: ref "opt_hfs_aliased_field.wado//C";
     let h: ref "opt_hfs_aliased_field.wado//H";
     let message_7: ref "core:prelude/string.wado//String";
-    let $moved_4_11: i32;
     let $cm_pair_7_14: i64;
     let $sroa_$pattern_temp_0_0_13_20: i32;
     let $sroa_$pattern_temp_0_1_14_21: i32;
@@ -208,48 +207,40 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     message_7 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_aliased_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a.n);
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $moved_4_11 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
-    $sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21;
-    $sroa_$pattern_temp_0_1_14_21 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_0_13_20);
+    $sroa_$pattern_temp_0_0_13_20 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     "opt_hfs_aliased_field.wado/through_container"(local.tee h(struct.new "opt_hfs_aliased_field.wado//H" { inner: struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }, k: 0 }), local.tee a(h.inner));
     message_7 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_aliased_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a.n);
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
-    $moved_4_11 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_21 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_21 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $sroa_$pattern_temp_0_1_14_21);
-    $sroa_$pattern_temp_0_0_13_20 = $moved_4_11;
-    $moved_4_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+    $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_20 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     "opt_hfs_aliased_field.wado/through_closure"(local.tee a(struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }), struct.new "canonical//CanonicalClosure_0" { env: struct.new "opt_hfs_aliased_field.wado//$Closure_0" { $capture_0: a }, func: ref.func "closure/opt_hfs_aliased_field.wado/$closure_wrapper_0" });
     message_7 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_aliased_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a.n);
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $moved_4_11 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
-    $sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21;
-    $sroa_$pattern_temp_0_1_14_21 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_0_13_20);
+    $sroa_$pattern_temp_0_0_13_20 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     "opt_hfs_aliased_field.wado/through_global"(global:opt_hfs_aliased_field.wado::G);
     message_7 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_aliased_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(global:opt_hfs_aliased_field.wado::G.n);
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
-    $moved_4_11 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_21 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_21 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $sroa_$pattern_temp_0_1_14_21);
-    $sroa_$pattern_temp_0_0_13_20 = $moved_4_11;
-    $moved_4_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
+    $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
+    $sroa_$pattern_temp_0_0_13_20 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_20);
     a = local.tee h(struct.new "opt_hfs_aliased_field.wado//H" { inner: struct.new "opt_hfs_aliased_field.wado//C" { n: 0, m: 0 }, k: 0 }).inner;
     $sroa_$pattern_temp_0_0_13_20 = 0;
     $sroa_$pattern_temp_0_1_14_21 = a.n;
     b8: block {
         l9: loop {
             break_if b8 $sroa_$pattern_temp_0_0_13_20 >= 3;
-            $sroa_$pattern_temp_0_1_14_21 = local.tee $sroa_$pattern_temp_0_1_14_21($sroa_$pattern_temp_0_1_14_21 + 1);
+            $sroa_$pattern_temp_0_1_14_21 = $sroa_$pattern_temp_0_1_14_21 + 1;
             a.n = $sroa_$pattern_temp_0_1_14_21;
             "opt_hfs_aliased_field.wado/touch"(h);
-            $sroa_$pattern_temp_0_1_14_21 = local.tee $sroa_$pattern_temp_0_1_14_21(a.n);
+            $sroa_$pattern_temp_0_1_14_21 = a.n;
             $sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_0_13_20 + 1;
             a.n = $sroa_$pattern_temp_0_1_14_21;
             continue l9;
@@ -258,25 +249,21 @@ fn "opt_hfs_aliased_field.wado/run"() with Stdout {
     message_7 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_aliased_field.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(a.n);
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $moved_4_11 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_11 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $moved_4_11);
-    $sroa_$pattern_temp_0_1_14_21 = $sroa_$pattern_temp_0_0_13_20;
-    $sroa_$pattern_temp_0_0_13_20 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_21, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21 = $moved_4_11; $moved_4_11 = 0; $sroa_$pattern_temp_0_1_14_21);
+    $sroa_$pattern_temp_0_1_14_21 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_21);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_20, message_7.repr, message_7.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21);
     $sroa_$pattern_temp_0_1_14_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7_14("wasi/stream-new"()));
-    $moved_4_11 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_20 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_20 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $sroa_$pattern_temp_0_0_13_20);
-    $sroa_$pattern_temp_0_1_14_21 = $moved_4_11;
-    $moved_4_11 = 0;
+    $sroa_$pattern_temp_0_0_13_20 = builtin::i32_wrap_i64($cm_pair_7_14 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_21 = "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_21);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(4)), 0, global:opt_hfs_aliased_field.wado::$const_obj_0, 0, 3);
     builtin::array_set_u8(new_repr, 3, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_21, new_repr);
-    "wasi/stream-drop-writable"($moved_4_11 = $sroa_$pattern_temp_0_1_14_21; $sroa_$pattern_temp_0_1_14_21 = 0; $moved_4_11);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_11 = $sroa_$pattern_temp_0_0_13_20; $sroa_$pattern_temp_0_0_13_20 = 0; $moved_4_11);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_20, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_21);
 }
 
 fn "opt_hfs_aliased_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "opt_hfs_aliased_field.wado/$cm_export__run"() {
@@ -304,7 +291,7 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
         $mv$message$used = $mv$message$used + 1;
         "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {
