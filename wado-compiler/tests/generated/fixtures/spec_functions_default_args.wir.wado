@@ -521,7 +521,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$afdf3efc
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(146)
 
-type "functype//spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>]";  // TypeId(147)
+type "functype//spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>";  // TypeId(147)
 
 type "functype//spec_functions_default_args.wado/spec_functions_default_args.wado/Color^core:prelude/traits.wado/ReflectEnum::members" = fn() -> [ref "core:prelude/traits.wado//EnumCase<spec_functions_default_args.wado/Color>", ref "core:prelude/traits.wado//EnumCase<spec_functions_default_args.wado/Color>"];  // TypeId(148)
 
@@ -2555,16 +2555,25 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<sp
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<spec_functions_default_args.wado/Config,[core:prelude/string.wado/String]>$sroa[v.name]"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_163) {
-        global:core:prelude/traits.wado::$const_obj_163 = "spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_163 = struct.new "tuple//[core:prelude/traits.wado/StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
     }
+<<<<<<< HEAD
     field_6 = global:core:prelude/traits.wado::$const_obj_163.0;
     "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<spec_functions_default_args.wado/Config>$sroa[f.buf]"(f.buf);
+||||||| cb8adfc49
+    field_6 = global:core:prelude/traits.wado::$const_obj_163.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_functions_default_args.wado/Config>$sroa[f.buf]"(f.buf);
+=======
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_163.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<spec_functions_default_args.wado/Config>$sroa[f.buf]"(f.buf);
+>>>>>>> origin/main
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_162);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_10 = field_6.field_name;
+    self_10 = $mv_0_1.field_name;
     $load_2 = f.buf;
     "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self_10, $load_2);
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_156, $load_2);
@@ -2858,7 +2867,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
 }
 
 fn "spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>]" { 0: struct.new "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 97, 109, 101), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "spec_functions_default_args.wado/spec_functions_default_args.wado/Color^core:prelude/traits.wado/ReflectEnum::members"() {
@@ -5597,18 +5606,19 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
 
 fn "core:prelude/traits.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/Inspect::inspect$sroa[self.name]"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>";
     if f.alternate {
         "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<spec_functions_default_args.wado/Config,[core:prelude/string.wado/String]>$sroa[v.name]"(self, f);
         return;
     }
     "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<spec_functions_default_args.wado/Config>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_158) {
-        global:core:prelude/traits.wado::$const_obj_158 = "spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "spec_functions_default_args.wado/spec_functions_default_args.wado/Config^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_158 = struct.new "tuple//[core:prelude/traits.wado/StructField<spec_functions_default_args.wado/Config,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_158.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_158.0;
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_157, $load_1);
-    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(field_6.field_name, $load_1);
+    "core:prelude/string.wado/&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"($mv_0_1.field_name, $load_1);
     "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to$spec0"(global:core:prelude/traits.wado::$const_obj_156, $load_1);
     "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, self);
     self = f.buf;

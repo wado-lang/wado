@@ -193,9 +193,10 @@ pub async fn execute<H: CompilerHost>(
     let probe = ProbeRequest {
         files: files
             .iter()
-            .map(|(path, use_type, _)| ProbeInput {
+            .map(|(path, use_type, pin)| ProbeInput {
                 path: path.as_str().to_string(),
                 use_type: use_type.cloned(),
+                integrity: *pin,
             })
             .collect(),
         options: invocation.options.clone(),

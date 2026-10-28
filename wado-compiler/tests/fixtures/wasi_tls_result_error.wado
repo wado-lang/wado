@@ -1,11 +1,9 @@
 // Test: Result<T, E> where E is a wasi resource (wasi:tls/types#error).
 //
-// Without the codegen fix in `emit_cm_val_type`'s Result branch the validator
-// rejects this with:
+// The validator rejects a `Result` whose E lowers to `wasi:cli/types#error-code`
+// when the Wado-side type parameter is a resource (own/borrow):
 //   `export name '[constructor]connector' is not valid:
 //    resource used in function does not have a name in this context`
-// because `Result`'s E was always lowered to `wasi:cli/types#error-code`,
-// even when the Wado-side type parameter was a resource (own/borrow).
 //
 // `Connector::connect(this, server-name)` is the simplest call that returns
 // `AsyncCall<Result<(), Error>>` in the bindings — `Connector::send` and

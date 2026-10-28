@@ -558,13 +558,16 @@ pub trait CompilerHost: Send + Sync {
     /// `path` opened to be read a range at a time, for a reader that learns how
     /// far to read only by reading, as a Kiln probe does. What is read through
     /// it is no dependency of the compile: the part one depends on is read again
-    /// through [`Self::load_source_prefix`].
+    /// through [`Self::load_file`]. `integrity` is the pin the import site
+    /// wrote, as [`Self::load_file`] takes it, so a host keeping pinned bytes
+    /// serves them rather than fetching the file again.
     ///
     /// The default loads the file whole; a filesystem host overrides it, so a
     /// probe of a checkpoint reads the header rather than the payloads.
     fn open_source(
         &self,
         path: &str,
+        _integrity: Option<Integrity>,
     ) -> impl Future<Output = Result<Arc<dyn SourceReader>, SourceError>> + Send {
         async move {
             let bytes = self.load_source(path).await?;
@@ -630,8 +633,7 @@ pub trait CompilerHost: Send + Sync {
     /// the host's choosing carrying `file_stem`, and answer where they landed.
     /// The default keeps none: a host with no filesystem has nowhere to put
     /// them.
-    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
-        let _ = (file_stem, bytes);
+    fn save_internal_artifact(&self, _file_stem: &str, _bytes: &[u8]) -> Option<String> {
         None
     }
 
@@ -822,6 +824,8 @@ pub struct ProbeInput {
     /// As [`GeneratorInputFile::use_type`], since how far a generator reads a
     /// file depends on what kind of file it is.
     pub use_type: Option<String>,
+    /// The pin the import site wrote, as [`CompilerHost::open_source`] takes it.
+    pub integrity: Option<Integrity>,
 }
 
 /// A file read a range at a time. See [`CompilerHost::open_source`].

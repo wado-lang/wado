@@ -389,7 +389,7 @@ type "functype//core:secure_random/bytes$unchecked$dae[n]" = fn() -> ref "core:p
 
 type "functype//core:secure_random/$template_segment$core:secure_random/$tmpl$f86a99973c5f619d" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(99)
 
-type "functype//core:uuid/from_byte_list" = fn(ref "core:prelude//List<u8>") -> ref "core:uuid//Uuid";  // TypeId(100)
+type "functype//core:uuid/from_byte_list" = fn(ref "core:prelude//List<u8>") -> v128;  // TypeId(100)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(101)
 
@@ -511,7 +511,7 @@ type "functype//core:secure_random/core:secure_random/$tmpl$f86a99973c5f619d^cor
 
 type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from" = fn(ref Array<i32>) -> v128;  // TypeId(160)
 
-type "functype//core:uuid/core:uuid/Uuid::v4" = fn() -> ref "core:uuid//Uuid";  // TypeId(161)
+type "functype//core:uuid/core:uuid/Uuid::v4" = fn() -> v128;  // TypeId(161)
 
 type "functype//spec_effects_install.wado/spec_effects_install.wado/$tmpl$d48748ffcad618c0^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "spec_effects_install.wado//$tmpl$d48748ffcad618c0") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(162)
 
@@ -917,7 +917,6 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let rng: ref "spec_effects_install.wado//Zeros";
     let $local_5: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_7: ref null "core:uuid//Uuid";
-    let self_8: v128;
     let s: ref "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
@@ -926,11 +925,13 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     rng = struct.new "spec_effects_install.wado//Zeros" {  };
     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = struct.new "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_5(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } };
     $local_7 = ref.null none;
-    $local_7 = ref.as_non_null("core:uuid/core:uuid/Uuid::v4"());
+    let $mv_bytes_1: v128;
+    multivalue_bind [$mv_bytes_1] = "core:uuid/core:uuid/Uuid::v4"();
+    $local_7 = struct.new "core:uuid//Uuid" { bytes: $mv_bytes_1 };
     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_5;
-    self_8 = $local_7.bytes;
+    $mv_bytes_1 = $local_7.bytes;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self_8, s);
+    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"($mv_bytes_1, s);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
         a = s.repr;
         a_end = s.used;
@@ -1791,11 +1792,11 @@ fn "core:secure_random/$template_segment$core:secure_random/$tmpl$f86a99973c5f61
 fn "core:uuid/from_byte_list"(b) {
     let $load_0: i32;
     let $load_1: ref Array<u8>;
-    return struct.new "core:uuid//Uuid" { bytes: "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(array.new_fixed<i32>($load_0 = b.used; if @unlikely(15 >= $load_0) {
+    return "core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from"(array.new_fixed<i32>($load_0 = b.used; if @unlikely(15 >= $load_0) {
         cold_path;
         "core:uuid/from_byte_list$cold15$dae[b,$contract_arg_0]"($load_0);
         unreachable;
-    }; builtin::array_get_value<u8>(local.tee $load_1(b.repr), 0), builtin::array_get_value<u8>($load_1, 1), builtin::array_get_value<u8>($load_1, 2), builtin::array_get_value<u8>($load_1, 3), builtin::array_get_value<u8>($load_1, 4), builtin::array_get_value<u8>($load_1, 5), builtin::array_get_value<u8>($load_1, 6), builtin::array_get_value<u8>($load_1, 7), builtin::array_get_value<u8>($load_1, 8), builtin::array_get_value<u8>($load_1, 9), builtin::array_get_value<u8>($load_1, 10), builtin::array_get_value<u8>($load_1, 11), builtin::array_get_value<u8>($load_1, 12), builtin::array_get_value<u8>($load_1, 13), builtin::array_get_value<u8>($load_1, 14), builtin::array_get_value<u8>($load_1, 15))) };
+    }; builtin::array_get_value<u8>(local.tee $load_1(b.repr), 0), builtin::array_get_value<u8>($load_1, 1), builtin::array_get_value<u8>($load_1, 2), builtin::array_get_value<u8>($load_1, 3), builtin::array_get_value<u8>($load_1, 4), builtin::array_get_value<u8>($load_1, 5), builtin::array_get_value<u8>($load_1, 6), builtin::array_get_value<u8>($load_1, 7), builtin::array_get_value<u8>($load_1, 8), builtin::array_get_value<u8>($load_1, 9), builtin::array_get_value<u8>($load_1, 10), builtin::array_get_value<u8>($load_1, 11), builtin::array_get_value<u8>($load_1, 12), builtin::array_get_value<u8>($load_1, 13), builtin::array_get_value<u8>($load_1, 14), builtin::array_get_value<u8>($load_1, 15)));
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, text) {

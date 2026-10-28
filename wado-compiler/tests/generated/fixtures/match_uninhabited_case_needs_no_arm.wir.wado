@@ -674,7 +674,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c
 
 type "functype//match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Stuck^core:prelude/traits.wado/ReflectStruct::members" = fn() -> [ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,match_uninhabited_case_needs_no_arm.wado/Void>", ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Stuck,bool>"];  // TypeId(179)
 
-type "functype//match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>]";  // TypeId(180)
+type "functype//match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>";  // TypeId(180)
 
 type "functype//match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Gone^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<match_uninhabited_case_needs_no_arm.wado/Gone,[!,bool]>", ref "core:prelude/traits.wado//VariantCase<match_uninhabited_case_needs_no_arm.wado/Gone,match_uninhabited_case_needs_no_arm.wado/Stuck>"];  // TypeId(181)
 
@@ -1673,16 +1673,25 @@ fn "core:prelude/tuple.wado/core:prelude/tuple.wado/inspect_tuple_alternate<[boo
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Loop,[match_uninhabited_case_needs_no_arm.wado/Loop]>"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_121) {
-        global:core:prelude/traits.wado::$const_obj_121 = "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>";
+        multivalue_bind [$mv_0_1] = "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_121 = struct.new "tuple//[core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>]" { 0: $mv_0_1 };
     }
+<<<<<<< HEAD
     field_6 = global:core:prelude/traits.wado::$const_obj_121.0;
     "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<match_uninhabited_case_needs_no_arm.wado/Loop>$sroa[f.buf]"(f.buf);
+||||||| cb8adfc49
+    field_6 = global:core:prelude/traits.wado::$const_obj_121.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<match_uninhabited_case_needs_no_arm.wado/Loop>$sroa[f.buf]"(f.buf);
+=======
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_121.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<match_uninhabited_case_needs_no_arm.wado/Loop>$sroa[f.buf]"(f.buf);
+>>>>>>> origin/main
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_120);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_10 = field_6.field_name;
+    self_10 = $mv_0_1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(local.tee $load_2(f.buf), self_10);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_99);
     "core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/Inspect::inspect"(v.again, f);
@@ -2393,7 +2402,7 @@ fn "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm
 }
 
 fn "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>]" { 0: struct.new "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("again"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("again"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Gone^core:prelude/traits.wado/ReflectVariant::members"() {
@@ -3024,7 +3033,6 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Result<i32,match_uninhabited
 
 fn "core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/Inspect::inspect"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<match_uninhabited_case_needs_no_arm.wado/Loop,[match_uninhabited_case_needs_no_arm.wado/Loop]>"(self, f);
@@ -3032,11 +3040,13 @@ fn "core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:
     }
     "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<match_uninhabited_case_needs_no_arm.wado/Loop>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_101) {
-        global:core:prelude/traits.wado::$const_obj_101 = "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>";
+        multivalue_bind [$mv_0_1] = "match_uninhabited_case_needs_no_arm.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_101 = struct.new "tuple//[core:prelude/traits.wado/StructField<match_uninhabited_case_needs_no_arm.wado/Loop,match_uninhabited_case_needs_no_arm.wado/Loop>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_101.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_101.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_100);
-    self_22 = field_6.field_name;
+    self_22 = $mv_0_1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, self_22);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_99);
     "core:prelude/traits.wado/match_uninhabited_case_needs_no_arm.wado/Loop^core:prelude/traits.wado/Inspect::inspect"(self.again, f);

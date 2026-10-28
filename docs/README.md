@@ -266,6 +266,7 @@
 - [ML Inference and WebGPU — Research Reference](./research-ml-inference-webgpu.md)
 - [Operator Precedence Research](./research-operator-precedence.md)
 - [Research: Rust Reference Semantics Edge Cases](./research-rust-reference-semantics.md)
+- [Google TPU Through PJRT — Research Reference](./research-tpu.md)
 - [Research: Variadic Generics / Variadic Templates](./research-variadic-generics.md)
 - [Wasm Component Model Async Primitives — Research Reference](./research-wasm-cm.md)
 - [Wasm Stack Switching — Research Reference](./research-wasm-stack-switching.md)

@@ -7,9 +7,9 @@
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmDeclKind, CmFuturePayload};
 use crate::component_model::{
-    CANONICAL_ERROR_CODE_INTERFACE, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
+    CANONICAL_ERROR_CODE_INTERFACE, CmFunctionInfo, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
 };
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
 use crate::wir_build::component_plan::CmExportType;
@@ -35,7 +35,11 @@ pub fn resolve_import_plan(
     let mut seen: IndexSet<String> = IndexSet::default();
     let mut push = |entries: &mut Vec<ImportEntry>, fq: String, kind: ImportKind| {
         if seen.insert(fq.clone()) {
-            entries.push(ImportEntry { fq, kind });
+            entries.push(ImportEntry {
+                fq,
+                kind,
+                provides: IndexSet::default(),
+            });
         }
     };
 
@@ -73,9 +77,9 @@ pub fn resolve_import_plan(
     // Phase 1: every interface with a function in `used_wasi_functions`, in
     // registry order. Records the resources those signatures touch for Phase 2.
     // An interface whose used signatures reference a resource *defined by another*
-    // interface is categorized `ResourceUsingInterface` (codegen defers it to the
-    // resource-using phase, after the resource-defining interfaces are imported);
-    // otherwise it is a plain `FunctionInterface`.
+    // interface is categorized `ResourceUsingInterface`, imported after the
+    // interfaces defining those resources; otherwise it is a plain
+    // `FunctionInterface`.
     let mut needed_resources: IndexSet<(String, String)> = IndexSet::default();
     for interface_info in registry.interfaces() {
         if interface_info.interface == "run" {
@@ -160,7 +164,7 @@ pub fn resolve_import_plan(
         if !seen_sources.insert(source.clone()) {
             continue;
         }
-        push(&mut entries, source.clone(), ImportKind::ResourceSource);
+        push(&mut entries, source.clone(), ImportKind::TypeSource);
         for info in registry.interfaces().filter(|i| i.path == source) {
             let funcs: Vec<_> = info.functions.iter().collect();
             let more = registry.resources_in_signatures(&funcs);
@@ -198,7 +202,7 @@ pub fn resolve_import_plan(
             push(
                 &mut entries,
                 resource.source.clone(),
-                ImportKind::ResourceSource,
+                ImportKind::TypeSource,
             );
         }
     }
@@ -213,7 +217,220 @@ pub fn resolve_import_plan(
         );
     }
 
-    entries
+    // Phase 5: the interfaces declaring a type another import reaches, each
+    // exporting the types reached and imported before its readers, so a reader
+    // aliases the one type its declaring interface exports, as a WIT `use`
+    // reads.
+    let reached = provide_reached_types(project, &mut entries);
+    emission_order(entries, &reached)
+}
+
+/// Record on each interface the value types other imports reach from it,
+/// adding a `TypeSource` for an interface no entry imports yet. Answers, by
+/// FQ, the interfaces each import reaches a type of. An interface a nested
+/// dependency provides is never imported, so it reaches and provides nothing.
+fn provide_reached_types(
+    project: &NirPackage,
+    entries: &mut Vec<ImportEntry>,
+) -> IndexMap<String, IndexSet<String>> {
+    let registry = &project.cm_interface_registry;
+    let nested_dependencies = project.nested_dependencies();
+    let nested = NirPackage::nested_imports(&nested_dependencies);
+    let mut reached: IndexMap<String, IndexSet<String>> = IndexMap::default();
+    let mut worklist: Vec<(String, Vec<Type>)> = entries
+        .iter()
+        .filter(|entry| !nested.contains(entry.fq.as_str()))
+        .map(|entry| (entry.fq.clone(), instance_types(project, entry)))
+        .collect();
+    loop {
+        while let Some((reader, types)) = worklist.pop() {
+            for (source, name) in registry.foreign_types_in(&reader, &types) {
+                if nested.contains(source.as_str()) {
+                    continue;
+                }
+                reached
+                    .entry(reader.clone())
+                    .or_default()
+                    .insert(source.clone());
+                if registry.value_type_kind(&source, &name).is_some() {
+                    provide(project, entries, &mut worklist, &source, &name);
+                }
+            }
+        }
+        // A nested dependency is handed the program's own import of a
+        // types-only interface it imports too, which must then carry every
+        // type the dependency's import names.
+        let shared: Vec<(String, String)> = nested_dependencies
+            .iter()
+            .flat_map(|dependency| dependency.imports)
+            .filter(|fq| {
+                !registry.declares_functions(fq) && entries.iter().any(|entry| &entry.fq == *fq)
+            })
+            .flat_map(|fq| {
+                registry
+                    .declared_type_names(fq)
+                    .filter(|name| {
+                        registry.value_type_kind(fq, name).is_some()
+                            || registry.newtype(fq, name).is_some()
+                    })
+                    .map(|name| (fq.clone(), name.to_string()))
+            })
+            .collect();
+        for (fq, name) in &shared {
+            provide(project, entries, &mut worklist, fq, name);
+        }
+        if worklist.is_empty() {
+            return reached;
+        }
+    }
+}
+
+/// Have `source` provide its type `name`, adding a `TypeSource` for it where
+/// no entry imports it yet, and queue what that type reaches in turn.
+fn provide(
+    project: &NirPackage,
+    entries: &mut Vec<ImportEntry>,
+    worklist: &mut Vec<(String, Vec<Type>)>,
+    source: &str,
+    name: &str,
+) {
+    let index = entries
+        .iter()
+        .position(|entry| entry.fq == source)
+        .unwrap_or_else(|| {
+            let entry = ImportEntry {
+                fq: source.to_string(),
+                kind: ImportKind::TypeSource,
+                provides: IndexSet::default(),
+            };
+            worklist.push((source.to_string(), instance_types(project, &entry)));
+            entries.push(entry);
+            entries.len() - 1
+        });
+    if entries[index].provides.insert(name.to_string()) {
+        let site = project
+            .cm_interface_registry
+            .declared_type(source, name)
+            .expect("a provided type has a declaration");
+        worklist.push((source.to_string(), vec![site]));
+    }
+}
+
+/// The types `entry`'s instance type spells before any it provides: its
+/// emitted signatures, or a `TypeSource`'s own `error-code`.
+fn instance_types(project: &NirPackage, entry: &ImportEntry) -> Vec<Type> {
+    let registry = &project.cm_interface_registry;
+    let signature_types = |funcs: Vec<&CmFunctionInfo>| -> Vec<Type> {
+        funcs
+            .into_iter()
+            .flat_map(|func| {
+                func.params
+                    .iter()
+                    .map(|(_, _, ty)| ty)
+                    .chain(&func.return_type)
+                    .cloned()
+            })
+            .collect()
+    };
+    let interface = || {
+        registry
+            .interfaces()
+            .find(|interface| interface.path == entry.fq)
+            .unwrap_or_else(|| panic!("`{}` is planned, but not registered", entry.fq))
+    };
+    match entry.kind {
+        ImportKind::FunctionInterface
+        | ImportKind::Component
+        | ImportKind::ResourceUsingInterface
+        | ImportKind::ResourceGetter => {
+            let interface = interface();
+            signature_types(
+                interface
+                    .functions
+                    .iter()
+                    .filter(|func| project.emits_cm_function(func))
+                    .collect(),
+            )
+        }
+        ImportKind::ResourceDefiningInterface => {
+            let interface = interface();
+            signature_types(project.resource_defining_functions(&interface))
+        }
+        ImportKind::TypeSource => registry
+            .declared_type(&entry.fq, ERROR_CODE_WADO_NAME)
+            .into_iter()
+            .collect(),
+        ImportKind::SharedTypes | ImportKind::WorldFunction => Vec::new(),
+    }
+}
+
+/// `entries` in the order codegen emits them: by phase, and each after the
+/// interfaces declaring the types it reaches.
+fn emission_order(
+    mut entries: Vec<ImportEntry>,
+    reached: &IndexMap<String, IndexSet<String>>,
+) -> Vec<ImportEntry> {
+    entries.sort_by_key(|entry| emission_phase(entry.kind));
+    let position: IndexMap<&str, usize> = entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| (entry.fq.as_str(), index))
+        .collect();
+    let mut order: IndexSet<usize> = IndexSet::default();
+    let mut visiting: IndexSet<usize> = IndexSet::default();
+    for index in 0..entries.len() {
+        place(
+            index,
+            &entries,
+            &position,
+            reached,
+            &mut visiting,
+            &mut order,
+        );
+    }
+    let mut slots: Vec<Option<ImportEntry>> = entries.into_iter().map(Some).collect();
+    order
+        .into_iter()
+        .map(|index| slots[index].take().expect("each entry is placed once"))
+        .collect()
+}
+
+fn place(
+    index: usize,
+    entries: &[ImportEntry],
+    position: &IndexMap<&str, usize>,
+    reached: &IndexMap<String, IndexSet<String>>,
+    visiting: &mut IndexSet<usize>,
+    order: &mut IndexSet<usize>,
+) {
+    if order.contains(&index) {
+        return;
+    }
+    assert!(
+        visiting.insert(index),
+        "`{}` reaches its own types through another interface; a WIT `use` graph is acyclic",
+        entries[index].fq
+    );
+    for source in reached.get(&entries[index].fq).into_iter().flatten() {
+        if let Some(&source_index) = position.get(source.as_str()) {
+            place(source_index, entries, position, reached, visiting, order);
+        }
+    }
+    order.insert(index);
+}
+
+/// Where codegen's phases put each kind when no reached type says otherwise:
+/// a resource's interface before the ones handing it out or taking it.
+fn emission_phase(kind: ImportKind) -> u8 {
+    match kind {
+        ImportKind::SharedTypes => 0,
+        ImportKind::FunctionInterface | ImportKind::Component => 1,
+        ImportKind::ResourceDefiningInterface => 2,
+        ImportKind::TypeSource => 3,
+        ImportKind::ResourceGetter => 4,
+        ImportKind::ResourceUsingInterface => 5,
+        ImportKind::WorldFunction => 6,
+    }
 }
 
 /// Collect the CM interface FQs a world export's boundary type references, so a

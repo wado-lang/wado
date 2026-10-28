@@ -2,16 +2,17 @@
 
 Loam compiles an ONNX graph into Wado source through Kiln. Its design is in
 [design.md](./design.md), which names the documents it builds on. The roadmap
-and the known gaps are in [TODO.md](./TODO.md). Further work on Loam changes
-this directory alone.
+and the known gaps are in [TODO.md](./TODO.md).
 
 ## Sources
 
 - Do not read the code of open-source projects: no ML framework, runtime,
   exporter or kernel library. Their licenses do not reach this repository, and
   code written after reading them is a derivative.
-- Published papers may be read, and so may the ONNX specification: the
-  operator definitions and `onnx.proto`.
+- Published papers and specifications may be read: ONNX's operator
+  definitions, the StableHLO specification.
+- An interface may be read, as a specification: any `.proto` file, and
+  `xla/pjrt/c/pjrt_c_api.h`, the PJRT plugin's. The rest of XLA may not.
 - onnxruntime's operator documentation may be read, for the operators it
   defines beyond ONNX, such as `com.microsoft::GroupQueryAttention`
   (`docs/ContribOperators.md`). Its code may not. Where the documentation
