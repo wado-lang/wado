@@ -177,7 +177,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 
 global global:effect_closure_in_tuple_for_of.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(98);
-global global:effect_closure_in_tuple_for_of.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(97);
+global global:effect_closure_in_tuple_for_of.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i32>(1);
+global global:effect_closure_in_tuple_for_of.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(97);
 
 fn "effect_closure_in_tuple_for_of.wado/count_each"() {
     let total: i32;
@@ -221,11 +222,10 @@ fn "effect_closure_in_tuple_for_of.wado/count_each"() {
 }
 
 fn "effect_closure_in_tuple_for_of.wado/shout_each"() with Stdout {
-    let $load_0: ref Array<i32>;
-    let self_15: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let result_22: ref "core:prelude//List<i32>";
     let item_31: i32;
     let used_34: i32;
+    let $sroa_xs_repr_75: ref Array<i32>;
     let $licm_end_81: i32;
     let $licm_repr_82: ref Array<i32>;
     let rx_98: i32;
@@ -238,21 +238,22 @@ fn "effect_closure_in_tuple_for_of.wado/shout_each"() with Stdout {
     let $moved_3_109: i32;
     let $sroa_$pattern_temp_0_0_13_110: i32;
     let $sroa_$pattern_temp_0_1_14_111: i32;
-    let tx_131: i32;
-    let new_repr_134: ref Array<u8>;
-    let $moved_5_135: i32;
-    let $av_163: i32;
-    self_15 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(1), index: 0, end: 1 };
+    let $sroa_self_index_130: i32;
+    let tx_137: i32;
+    let new_repr_140: ref Array<u8>;
+    let $moved_5_141: i32;
+    $sroa_xs_repr_75 = global:effect_closure_in_tuple_for_of.wado::$const_obj_1;
+    $sroa_self_index_130 = 0;
     result_22 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     $licm_end_81 = 1;
-    $licm_repr_82 = local.tee $load_0(self_15.repr);
+    $licm_repr_82 = $sroa_xs_repr_75;
     b6: block {
         l7: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__7: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8 local.tee $av_163(self_15.index) >= $licm_end_81;
-                    item_31 = builtin::array_get_value<i32>($licm_repr_82, $av_163);
-                    self_15.index = $av_163 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8 $sroa_self_index_130 >= $licm_end_81;
+                    item_31 = builtin::array_get_value<i32>($licm_repr_82, $sroa_self_index_130);
+                    $sroa_self_index_130 = $sroa_self_index_130 + 1;
                     $sroa_$pattern_temp_0_0_13_110 = builtin::i32_wrap_i64(local.tee $cm_pair_7_104("wasi/stream-new"()));
                     $sroa_$pattern_temp_0_1_14_111 = builtin::i32_wrap_i64($cm_pair_7_104 >> 32_i64);
                     rx_98 = $sroa_$pattern_temp_0_0_13_110;
@@ -260,14 +261,14 @@ fn "effect_closure_in_tuple_for_of.wado/shout_each"() with Stdout {
                     handle_100 = "effect_closure_in_tuple_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_101 = rx_98; rx_98 = 0; $moved_4_101);
                     $moved_5_102 = tx_99;
                     tx_99 = 0;
-                    tx_131 = local.tee $moved_3_109($moved_5_102);
-                    builtin::array_copy<u8>(local.tee new_repr_134(builtin::array_new<u8>(2)), 0, global:effect_closure_in_tuple_for_of.wado::$const_obj_1, 0, 1);
-                    builtin::array_set_u8(new_repr_134, 1, 10);
-                    drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(tx_131, new_repr_134));
-                    "wasi/stream-drop-writable"($moved_5_135 = tx_131; tx_131 = 0; $moved_5_135);
+                    tx_137 = local.tee $moved_3_109($moved_5_102);
+                    builtin::array_copy<u8>(local.tee new_repr_140(builtin::array_new<u8>(2)), 0, global:effect_closure_in_tuple_for_of.wado::$const_obj_2, 0, 1);
+                    builtin::array_set_u8(new_repr_140, 1, 10);
+                    drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"(tx_137, new_repr_140));
+                    "wasi/stream-drop-writable"($moved_5_141 = tx_137; tx_137 = 0; $moved_5_141);
                     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_103 = handle_100; handle_100 = 0; $moved_6_103);
                     $licm_end_81 = 1;
-                    $licm_repr_82 = $load_0;
+                    $licm_repr_82 = $sroa_xs_repr_75;
                     if @unlikely(local.tee used_34(result_22.used) >= builtin::array_len(result_22.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_22);
@@ -286,38 +287,39 @@ fn "effect_closure_in_tuple_for_of.wado/shout_each"() with Stdout {
         "effect_closure_in_tuple_for_of.wado/shout_each$cold1"(used_34);
         unreachable;
     }
-    self_15 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: array.new_fixed<i32>(1), index: 0, end: 1 };
+    $licm_repr_82 = global:effect_closure_in_tuple_for_of.wado::$const_obj_1;
+    used_34 = 0;
     result_22 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    used_34 = 1;
-    $load_0 = local.tee $licm_repr_82(self_15.repr);
+    $moved_6_103 = 1;
+    $sroa_xs_repr_75 = $licm_repr_82;
     b10: block {
         l11: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__20: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__21: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__21 local.tee $moved_6_103(self_15.index) >= used_34;
-                    $moved_5_135 = builtin::array_get_value<i32>($load_0, $moved_6_103);
-                    self_15.index = $moved_6_103 + 1;
-                    tx_131 = builtin::i32_wrap_i64(local.tee $cm_pair_7_104("wasi/stream-new"()));
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__21 used_34 >= $moved_6_103;
+                    $moved_5_141 = builtin::array_get_value<i32>($sroa_xs_repr_75, used_34);
+                    used_34 = used_34 + 1;
+                    tx_137 = builtin::i32_wrap_i64(local.tee $cm_pair_7_104("wasi/stream-new"()));
                     $moved_3_109 = builtin::i32_wrap_i64($cm_pair_7_104 >> 32_i64);
-                    $moved_5_102 = tx_131;
+                    $moved_5_102 = tx_137;
                     handle_100 = $moved_3_109;
                     tx_99 = "effect_closure_in_tuple_for_of.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_101 = $moved_5_102; $moved_5_102 = 0; $moved_4_101);
                     rx_98 = handle_100;
                     handle_100 = 0;
                     $sroa_$pattern_temp_0_0_13_110 = local.tee $sroa_$pattern_temp_0_1_14_111(rx_98);
-                    builtin::array_copy<u8>(local.tee new_repr_134(builtin::array_new<u8>(2)), 0, global:effect_closure_in_tuple_for_of.wado::$const_obj_0, 0, 1);
-                    builtin::array_set_u8(new_repr_134, 1, 10);
-                    drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($sroa_$pattern_temp_0_0_13_110, new_repr_134));
+                    builtin::array_copy<u8>(local.tee new_repr_140(builtin::array_new<u8>(2)), 0, global:effect_closure_in_tuple_for_of.wado::$const_obj_0, 0, 1);
+                    builtin::array_set_u8(new_repr_140, 1, 10);
+                    drop("core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]"($sroa_$pattern_temp_0_0_13_110, new_repr_140));
                     "wasi/stream-drop-writable"(item_31 = $sroa_$pattern_temp_0_0_13_110; $sroa_$pattern_temp_0_0_13_110 = 0; item_31);
-                    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($av_163 = tx_99; tx_99 = 0; $av_163);
-                    used_34 = 1;
-                    $load_0 = $licm_repr_82;
-                    if @unlikely(local.tee $licm_end_81(result_22.used) >= builtin::array_len(result_22.repr)) {
+                    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($licm_end_81 = tx_99; tx_99 = 0; $licm_end_81);
+                    $moved_6_103 = 1;
+                    $sroa_xs_repr_75 = $licm_repr_82;
+                    if @unlikely(local.tee $sroa_self_index_130(result_22.used) >= builtin::array_len(result_22.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_22);
                     }
-                    builtin::array_set<i32>(result_22.repr, $licm_end_81, $moved_5_135);
-                    result_22.used = $licm_end_81 + 1;
+                    builtin::array_set<i32>(result_22.repr, $sroa_self_index_130, $moved_5_141);
+                    result_22.used = $sroa_self_index_130 + 1;
                     break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__20;
                 };
                 break b10;

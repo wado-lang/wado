@@ -13,7 +13,8 @@
 //
 // If field_forward's alias-group widening misses this, the read of
 // `*r1` (i.e. `r1.value`) folds to 0 (the value at `&mut x`'s
-// inception), and the assert's panic is wrongly eliminated.
+// inception), and the assert panics. `sroa` splits the box and its copies
+// into one shared slot, so both asserts fold to true.
 
 export fn run() {
     let mut x = 0;
@@ -27,7 +28,5 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": [
-        "7"
-    ]
+    "wir_not_expect:O2": ["panic"]
 }

@@ -2124,7 +2124,7 @@ fn "core:prelude/primitive.wado/write_int_exp$dae[upper]$spec0$sroa[f.buf]"(f, i
     let repr_68: ref Array<u8>;
     let repr_99: ref Array<u8>;
     let $sroa_exponent_value_141: i32;
-    let b2_237: u32;
+    let b2_240: u32;
     let b3: u32;
     $sroa_exponent_value_141 = "core:prelude/primitive.wado/count_digits_u64"(abs_value) - 1;
     b236: block {
@@ -2164,13 +2164,13 @@ fn "core:prelude/primitive.wado/write_int_exp$dae[upper]$spec0$sroa[f.buf]"(f, i
         }
         if offset_29 <u 240 {
             is_negative = builtin::array_get_value<u8>(repr_68, 1);
-            b2_237 = builtin::array_get_value<u8>(repr_68, 2);
-            break $inline_decode_char_at_spec0_0: struct.new "tuple//[u32, i32]" { 0: (((offset_29 & 15) << 12) | ((is_negative & 63) << 6)) | (b2_237 & 63), 1: 3 };
+            b2_240 = builtin::array_get_value<u8>(repr_68, 2);
+            break $inline_decode_char_at_spec0_0: struct.new "tuple//[u32, i32]" { 0: (((offset_29 & 15) << 12) | ((is_negative & 63) << 6)) | (b2_240 & 63), 1: 3 };
         }
-        b2_237 = builtin::array_get_value<u8>(repr_68, 1);
+        b2_240 = builtin::array_get_value<u8>(repr_68, 1);
         is_negative = builtin::array_get_value<u8>(repr_68, 2);
         b3 = builtin::array_get_value<u8>(repr_68, 3);
-        break $inline_decode_char_at_spec0_0: struct.new "tuple//[u32, i32]" { 0: ((((offset_29 & 7) << 18) | ((b2_237 & 63) << 12)) | ((is_negative & 63) << 6)) | (b3 & 63), 1: 4 };
+        break $inline_decode_char_at_spec0_0: struct.new "tuple//[u32, i32]" { 0: ((((offset_29 & 7) << 18) | ((b2_240 & 63) << 12)) | ((is_negative & 63) << 6)) | (b3 & 63), 1: 4 };
     }.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(f, b3);
     if digit_count_28 > 0 {
@@ -2189,9 +2189,9 @@ fn "core:prelude/primitive.wado/write_int_exp$dae[upper]$spec0$sroa[f.buf]"(f, i
                 cold_path;
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, b3);
             }
-            b2_237 = f.used;
+            b2_240 = f.used;
             f.used = b3;
-            builtin::array_copy<u8>(f.repr, b2_237, repr_99, 1, is_negative);
+            builtin::array_copy<u8>(f.repr, b2_240, repr_99, 1, is_negative);
         };
         b247: block {
             l248: loop {
@@ -2200,9 +2200,9 @@ fn "core:prelude/primitive.wado/write_int_exp$dae[upper]$spec0$sroa[f.buf]"(f, i
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, is_negative);
                 }
-                b2_237 = f.used;
+                b2_240 = f.used;
                 f.used = is_negative;
-                builtin::array_set_u8(f.repr, b2_237, 48);
+                builtin::array_set_u8(f.repr, b2_240, 48);
                 digit_count_28 = digit_count_28 + 1;
                 continue l248;
             };
@@ -2212,13 +2212,13 @@ fn "core:prelude/primitive.wado/write_int_exp$dae[upper]$spec0$sroa[f.buf]"(f, i
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, digit_count_28);
     }
-    b2_237 = f.used;
+    b2_240 = f.used;
     f.used = digit_count_28;
-    builtin::array_set_u8(f.repr, b2_237, 101);
-    b2_237 = $sroa_exponent_value_141 < 0;
+    builtin::array_set_u8(f.repr, b2_240, 101);
+    b2_240 = $sroa_exponent_value_141 < 0;
     $sroa_exponent_value_141 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_value(abs_value = builtin::i64_extend_i32_s($sroa_exponent_value_141); select i64(abs_value < 0_i64, 0_i64 - abs_value, abs_value)));
-    b2_237 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec1$sroa[self.buf]$dae[alt_prefix]"(f, b2_237, $sroa_exponent_value_141);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, b2_237, abs_value, $sroa_exponent_value_141);
+    b2_240 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec1$sroa[self.buf]$dae[alt_prefix]"(f, b2_240, $sroa_exponent_value_141);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.repr, b2_240, abs_value, $sroa_exponent_value_141);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {

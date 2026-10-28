@@ -4,56 +4,52 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<i32> {  // TypeId(1)
-    mut value: i32,
-}
+array Array<u8> (mut u8);  // TypeId(1)
 
-array Array<u8> (mut u8);  // TypeId(2)
-
-struct core:prelude/string.wado//String {  // TypeId(3)
+struct core:prelude/string.wado//String {  // TypeId(2)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(5)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(6)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(7)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(8)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(9)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(10)
+type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_hfs_closure_captured_write.wado/run" = fn();  // TypeId(11)
+type "functype//opt_hfs_closure_captured_write.wado/run" = fn();  // TypeId(10)
 
-type "functype//opt_hfs_closure_captured_write.wado/$cm_export__run" = fn();  // TypeId(12)
+type "functype//opt_hfs_closure_captured_write.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(13)
+type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_closure_captured_write.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(17)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_closure_captured_write.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//opt_hfs_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
+type "functype//opt_hfs_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -69,33 +65,32 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "opt_hfs_closure_captured_write.wado/run"() with Stdout {
-    let $load_1: i32;
-    let step: ref "core:prelude/types.wado//Box<i32>";
     let sum: i32;
     let i: i32;
     let message_5: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    step = struct.new "core:prelude/types.wado//Box<i32>" { value: black_box(1) };
+    let $sroa_step_value_23: i32;
+    $sroa_step_value_23 = black_box(1);
     sum = 0;
     i = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 3;
-            step.value = step.value + 1;
-            sum = local.tee sum(sum + local.tee $load_1(step.value)) + $load_1;
-            step.value = 100;
+            $sroa_step_value_23 = $sroa_step_value_23 + 1;
+            sum = local.tee sum(sum + $sroa_step_value_23) + $sroa_step_value_23;
+            $sroa_step_value_23 = 100;
             i = i + 1;
             continue l1;
         };
     };
     message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_hfs_closure_captured_write.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(sum);
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $load_1 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    i = "opt_hfs_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = sum; sum = 0; i);
-    sum = $load_1;
-    $load_1 = 0;
+    i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_step_value_23 = "opt_hfs_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_step_value_23 = sum; sum = 0; $sroa_step_value_23);
+    sum = i;
+    i = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_5.repr, message_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = i; i = 0; sum);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = $sroa_step_value_23; $sroa_step_value_23 = 0; sum);
 }
 
 fn "opt_hfs_closure_captured_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

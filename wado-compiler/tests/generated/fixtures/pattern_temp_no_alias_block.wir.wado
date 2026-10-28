@@ -378,17 +378,17 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode f
 global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "pattern_temp_no_alias_block.wado/$test_0_a_match_over_a_labeled_block_of_a_field_binds_a_copy"() {
-    let $load_1: i32;
+    let $load_0: ref Array<i32>;
+    let n: i32;
     let $match_4: ref "core:prelude//List<i32>";
-    let $sroa_w_s_17: ref "core:prelude//List<i32>";
-    $sroa_w_s_17 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
-    $match_4 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = $sroa_w_s_17.repr; $load_1 = $sroa_w_s_17.used; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>($load_1)), 0, $array_clone_src_1, 0, $load_1); $array_clone_dst_2, used: $load_1 };
-    if @unlikely(local.tee $load_1(if @unlikely(local.tee $load_1($sroa_w_s_17.used) >= builtin::array_len($sroa_w_s_17.repr)) {
+    let $sroa_$sroa_w_s_17_items_18: ref "core:prelude//List<i32>";
+    $match_4 = struct.new "core:prelude//List<i32>" { repr: $load_0 = local.tee $sroa_$sroa_w_s_17_items_18(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }).repr; let $array_clone_dst_2: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_2(builtin::array_new<i32>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(local.tee n(if @unlikely(1 >= builtin::array_len($load_0)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_w_s_17);
-    }; builtin::array_set<i32>($sroa_w_s_17.repr, $load_1, 3); $sroa_w_s_17.used = $load_1 + 1; $match_4.used) != 1) {
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_$sroa_w_s_17_items_18);
+    }; builtin::array_set<i32>($sroa_$sroa_w_s_17_items_18.repr, 1, 3); $sroa_$sroa_w_s_17_items_18.used = 2; $match_4.used) != 1) {
         cold_path;
-        "pattern_temp_no_alias_block.wado/$test_0_a_match_over_a_labeled_block_of_a_field_binds_a_copy$cold0"($load_1);
+        "pattern_temp_no_alias_block.wado/$test_0_a_match_over_a_labeled_block_of_a_field_binds_a_copy$cold0"(n);
         unreachable;
     }
 }

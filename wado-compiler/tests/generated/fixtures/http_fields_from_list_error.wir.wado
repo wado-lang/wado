@@ -689,7 +689,7 @@ fn "http_fields_from_list_error.wado/$cm_binding__wasi:http/types@0.3.0#[static]
     let v_44: ref "core:prelude//List<u8>";
     let ptr_48: i32;
     let i_55: i32;
-    let $licm_repr_78: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
+    let $licm_repr_80: ref "Array<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>";
     $entries_len = entries.used;
     if @unlikely(134217727 <u $entries_len) {
         cold_path;
@@ -698,12 +698,12 @@ fn "http_fields_from_list_error.wado/$cm_binding__wasi:http/types@0.3.0#[static]
     }
     $entries_base = "mem/realloc"(0, 0, 4, $entries_len * 16);
     $entries_i = 0;
-    $licm_repr_78 = entries.repr;
+    $licm_repr_80 = entries.repr;
     b5: block {
         l6: loop {
             break_if b5 $entries_i >= $entries_len;
             $entries_addr = $entries_base + ($entries_i * 16);
-            v_43 = local.tee v_35(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_78, $entries_i)).0;
+            v_43 = local.tee v_35(builtin::array_get_value<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">($licm_repr_80, $entries_i)).0;
             let $array_clone_src_3: ref Array<u8>;
             $array_clone_src_3 = v_43.repr;
             $load_4 = v_43.used;
@@ -838,7 +838,7 @@ fn "http_fields_from_list_error.wado/$cm_task_entry__handle"(request) {
     let used_241: i32;
     let $sroa_$pattern_temp_0_1_267: i32;
     let $sroa_$task_ret_1_269: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Response>";
-    let $sroa_slice_repr_271: ref Array<u8>;
+    let $sroa_slice_repr_273: ref Array<u8>;
     if @unlikely(ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Ok"(local.tee valid_result("http_fields_from_list_error.wado/$cm_binding__wasi:http/types@0.3.0#[static]fields.from-list"(struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("x-valid"), used: 7 }, 1: struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("value"), used: 5 } }), used: 1 }))) == 0) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
@@ -849,8 +849,8 @@ condition: valid_result matches { Ok(_) }
 valid_result: "), used: 122 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
         unreachable;
     }
-    $sroa_slice_repr_271 = global:http_fields_from_list_error.wado::$const_obj_4;
-    used_241 = builtin::array_len(local.tee elements_240(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(1)), 0, $sroa_slice_repr_271, 0, 1); out, used: 1 }, 1: struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("value"), used: 5 } })));
+    $sroa_slice_repr_273 = global:http_fields_from_list_error.wado::$const_obj_4;
+    used_241 = builtin::array_len(local.tee elements_240(array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/list.wado/List<u8>]" { 0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_copy<u8>(local.tee out(builtin::array_new<u8>(1)), 0, $sroa_slice_repr_273, 0, 1); out, used: 1 }, 1: struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("value"), used: 5 } })));
     if @unlikely(ref.test "core:prelude/types.wado//Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>::Err"(local.tee invalid_result("http_fields_from_list_error.wado/$cm_binding__wasi:http/types@0.3.0#[static]fields.from-list"(struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/list.wado/List<u8>]>" { repr: elements_240, used: used_241 }))) == 0) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<http_fields_from_list_error.wado/$tmpl$c19cc21e13dfc43c,[core:prelude/types.wado/Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>]>"(struct.new "http_fields_from_list_error.wado//$tmpl$c19cc21e13dfc43c" { h0: struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Result<wasi:http/types.wado/Fields,wasi:http/types.wado/HeaderError>>" { value: invalid_result }, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in handle at http_fields_from_list_error.wado:26

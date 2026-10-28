@@ -436,29 +436,29 @@ global global:core:prelude/primitive.wado::$const_obj_11: ref "core:prelude/stri
 
 fn "spec_traits_combinators.wado/$test_0"() {
     let elements_9: ref Array<i32>;
-    let self_13: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let result_20: ref "core:prelude//List<i32>";
     let item_29: i32;
     let used_32: i32;
     let $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>";
+    let self_51: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let pred_52: ref "spec_traits_combinators.wado//$Closure_1";
     let pred_103: ref "spec_traits_combinators.wado//$Closure_3";
     let $fused_slot_137: i32;
-    let $licm_repr_151: ref Array<i32>;
+    let $sroa_other_repr_142: ref Array<i32>;
     let $licm_repr_152: ref Array<i32>;
     let $sroa_$temp_inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0_f_158: ref struct;
-    let $av_161: i32;
-    self_13 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: local.tee elements_9(array.new_fixed<i32>(1, 2, 3, 4, 5)), index: 0, end: 5 };
+    let $sroa_self_index_162: i32;
+    elements_9 = array.new_fixed<i32>(1, 2, 3, 4, 5);
+    $sroa_self_index_162 = 0;
     $sroa_$temp_inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0_f_158 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_traits_combinators.wado//$Closure_0" {  }, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_0" };
     result_20 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
-    $licm_repr_151 = self_13.repr;
     b0: block {
         l1: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__7: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8 local.tee $av_161(self_13.index) >= 5;
-                    item_29 = builtin::array_get_value<i32>($licm_repr_151, $av_161);
-                    self_13.index = $av_161 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_sroa_return__8 $sroa_self_index_162 >= 5;
+                    item_29 = builtin::array_get_value<i32>(elements_9, $sroa_self_index_162);
+                    $sroa_self_index_162 = $sroa_self_index_162 + 1;
                     $fused_slot_137 = block -> i32 {
                         let $indirect_call_1: ref "canonical//CanonicalClosure_0";
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$temp_inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0_f_158)).env, item_29);
@@ -476,7 +476,7 @@ fn "spec_traits_combinators.wado/$test_0"() {
             continue l1;
         };
     };
-    $licm_repr_151 = global:spec_traits_combinators.wado::$const_obj_5;
+    $sroa_other_repr_142 = global:spec_traits_combinators.wado::$const_obj_5;
     if @unlikely($inline_core_prelude_array_wado_seq_eq_i32__14: block -> bool {
         if local.tee used_32(result_20.used) != 5 {
             break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
@@ -486,7 +486,7 @@ fn "spec_traits_combinators.wado/$test_0"() {
         b6: block {
             l7: loop {
                 break_if b6 $fused_slot_137 >= used_32;
-                if builtin::array_get_value<i32>($licm_repr_152, $fused_slot_137) != builtin::array_get_value<i32>($licm_repr_151, $fused_slot_137) {
+                if builtin::array_get_value<i32>($licm_repr_152, $fused_slot_137) != builtin::array_get_value<i32>($sroa_other_repr_142, $fused_slot_137) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__14: 0;
                 }
                 $fused_slot_137 = $fused_slot_137 + 1;
@@ -504,9 +504,9 @@ condition: doubled == [2, 4, 6, 8, 10]
 doubled: "), used: 110 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    self_13 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_9, index: 0, end: 5 };
+    self_51 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_9, index: 0, end: 5 };
     pred_52 = struct.new "spec_traits_combinators.wado//$Closure_1" {  };
-    $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_13, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_52, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_1" } };
+    $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_51, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_52, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_1" } };
     result_20 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b9: block {
         l10: loop {
@@ -530,11 +530,11 @@ doubled: "), used: 110 }, s1: struct.new "core:prelude/string.wado//String" { re
             break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
         }
         $fused_slot_137 = 0;
-        $licm_repr_151 = result_20.repr;
+        $sroa_other_repr_142 = result_20.repr;
         b15: block {
             l16: loop {
                 break_if b15 $fused_slot_137 >= used_32;
-                if builtin::array_get_value<i32>($licm_repr_151, $fused_slot_137) != builtin::array_get_value<i32>($licm_repr_152, $fused_slot_137) {
+                if builtin::array_get_value<i32>($sroa_other_repr_142, $fused_slot_137) != builtin::array_get_value<i32>($licm_repr_152, $fused_slot_137) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__26: 0;
                 }
                 $fused_slot_137 = $fused_slot_137 + 1;
@@ -551,9 +551,9 @@ condition: evens == [2, 4]
 evens: "), used: 97 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_2.used);
         unreachable;
     }
-    self_13 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_9, index: 0, end: 5 };
+    self_51 = struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: elements_9, index: 0, end: 5 };
     pred_103 = struct.new "spec_traits_combinators.wado//$Closure_3" {  };
-    $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_13, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_103, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_2" } };
+    $temp_inline_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___15_0 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>,fn mut(i32)->bool>" { inner: self_51, pred: struct.new "canonical//CanonicalClosure_1" { env: pred_103, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_2" } };
     $sroa_$temp_inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0_f_158 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_traits_combinators.wado//$Closure_4" {  }, func: ref.func "closure/spec_traits_combinators.wado/$closure_wrapper_3" };
     result_20 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
     b18: block {
@@ -564,12 +564,12 @@ evens: "), used: 97 }, s1: struct.new "core:prelude/string.wado//String" { repr:
                     item_29 = block -> i32 {
                         call_ref "functype/$canonical_closure_fn_0"($indirect_call_1.func, local.tee $indirect_call_1(ref.cast "canonical//CanonicalClosure_0"($sroa_$temp_inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__collect_core_prelude_list_wado_List_i32___1_0_f_158)).env, $fused_slot_137);
                     };
-                    if @unlikely(local.tee $av_161(result_20.used) >= builtin::array_len(result_20.repr)) {
+                    if @unlikely(local.tee $sroa_self_index_162(result_20.used) >= builtin::array_len(result_20.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(result_20);
                     }
-                    builtin::array_set<i32>(result_20.repr, $av_161, item_29);
-                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__39: result_20.used = $av_161 + 1;
+                    builtin::array_set<i32>(result_20.repr, $sroa_self_index_162, item_29);
+                    break $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_traits_wado_IterFilter_core_prelude_slice_wado_SliceValueIter_i32__fn_mut_i32___bool__fn_mut_i32___i32__core_prelude_traits_wado_Iterator__next_sroa_return__39: result_20.used = $sroa_self_index_162 + 1;
                 } else {
                 }
                 break b18;
