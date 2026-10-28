@@ -1677,15 +1677,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b154 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l155;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -1775,7 +1775,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     48 + bits_per_digit;
                 } else {
                     select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l179;
             };
@@ -1838,24 +1838,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -4106,8 +4106,8 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
     let $eq_other_Label_7: ref "core:prelude/string.wado//String";
     let $eq_self_Box_8: ref "tuple//[i32, i32]";
     let $eq_other_Box_9: ref "tuple//[i32, i32]";
-    let a_17: ref Array<u8>;
-    let b_20: ref Array<u8>;
+    let a_41: ref Array<u8>;
+    let b_44: ref Array<u8>;
     let min_len: i32;
     let i: i32;
     let x: u8;
@@ -4143,17 +4143,17 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
         if @likely(ref.test "variant_ord_derived.wado//Shape::Label"(other)) {
             $eq_other_Label_7 = ref.cast "variant_ord_derived.wado//Shape::Label"(other).payload_0;
             return $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-                a_17 = $eq_self_Label_6.repr;
+                a_41 = $eq_self_Label_6.repr;
                 b_3 = $eq_self_Label_6.used;
-                b_20 = $eq_other_Label_7.repr;
+                b_44 = $eq_other_Label_7.repr;
                 $load_0 = $eq_other_Label_7.used;
                 min_len = select i32(b_3 < $load_0, b_3, $load_0);
                 i = 0;
                 b516: block {
                     l517: loop {
                         break_if b516 (((i >= min_len) | ((i + 1) >= min_len)) | (((i + 1) + 1) >= min_len)) | ((((i + 1) + 1) + 1) >= min_len);
-                        x = builtin::array_get_value<u8>(a_17, i);
-                        y = builtin::array_get_value<u8>(b_20, i);
+                        x = builtin::array_get_value<u8>(a_41, i);
+                        y = builtin::array_get_value<u8>(b_44, i);
                         if x <u y {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
@@ -4161,8 +4161,8 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                         }
                         i = i + 1;
-                        x = builtin::array_get_value<u8>(a_17, i);
-                        y = builtin::array_get_value<u8>(b_20, i);
+                        x = builtin::array_get_value<u8>(a_41, i);
+                        y = builtin::array_get_value<u8>(b_44, i);
                         if x <u y {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
@@ -4170,8 +4170,8 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                         }
                         i = i + 1;
-                        x = builtin::array_get_value<u8>(a_17, i);
-                        y = builtin::array_get_value<u8>(b_20, i);
+                        x = builtin::array_get_value<u8>(a_41, i);
+                        y = builtin::array_get_value<u8>(b_44, i);
                         if x <u y {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
@@ -4179,8 +4179,8 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 2;
                         }
                         i = i + 1;
-                        x = builtin::array_get_value<u8>(a_17, i);
-                        y = builtin::array_get_value<u8>(b_20, i);
+                        x = builtin::array_get_value<u8>(a_41, i);
+                        y = builtin::array_get_value<u8>(b_44, i);
                         if x <u y {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
@@ -4194,8 +4194,8 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
                 b526: block {
                     l527: loop {
                         break_if b526 i >= min_len;
-                        x = builtin::array_get_value<u8>(a_17, i);
-                        y = builtin::array_get_value<u8>(b_20, i);
+                        x = builtin::array_get_value<u8>(a_41, i);
+                        y = builtin::array_get_value<u8>(b_44, i);
                         if x <u y {
                             break $inline_core_prelude_array_wado_seq_cmp_u8__0: 0;
                         }
@@ -4221,34 +4221,34 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
         $eq_self_Box_8 = ref.cast "variant_ord_derived.wado//Shape::Box"(self).payload_0;
         if @likely(ref.test "variant_ord_derived.wado//Shape::Box"(other)) {
             $eq_other_Box_9 = ref.cast "variant_ord_derived.wado//Shape::Box"(other).payload_0;
-            return $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: block -> "core:prelude/traits.wado//enum:Ordering" {
+            return $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: block -> "core:prelude/traits.wado//enum:Ordering" {
                 $load_0 = $eq_self_Box_8.0;
                 b_3 = $eq_self_Box_8.1;
                 y = $eq_other_Box_9.0;
                 x = $eq_other_Box_9.1;
-                if local.tee y($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if local.tee y($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: block -> "core:prelude/traits.wado//enum:Ordering" {
                     if $load_0 < y {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 0;
                     }
                     if $load_0 > y {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 2;
                     }
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 1;
+                    break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 1;
                 }) != 1 {
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: y;
+                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: y;
                 }
-                if local.tee x($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if local.tee x($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: block -> "core:prelude/traits.wado//enum:Ordering" {
                     if b_3 < x {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 0;
                     }
                     if b_3 > x {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 2;
                     }
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 1;
+                    break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 1;
                 }) != 1 {
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: x;
+                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: x;
                 }
-                break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: 1;
+                break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: 1;
             };
         } else {
             unreachable;

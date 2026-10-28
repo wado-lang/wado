@@ -86,15 +86,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(32)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
 type "functype//niri_if_arm_meet_preserves_fields.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(33)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -106,9 +104,9 @@ import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdo
 import fn wasi/$wasi:clocks/monotonic-clock@0.3.0#now from "wasi/$wasi:clocks/monotonic-clock@0.3.0#now";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(flag) {
     let x: i32;
@@ -151,6 +149,7 @@ fn "niri_if_arm_meet_preserves_fields.wado/run"() with Stdout, MonotonicClock {
     let d: i32;
     let e: i32;
     let message_7: ref "core:prelude/string.wado//String";
+    let new_repr: ref Array<u8>;
     drop(local.tee now("niri_if_arm_meet_preserves_fields.wado/$cm_binding__wasi:clocks/monotonic-clock@0.3.0#now"()) != now);
     a = "niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(1);
     b = "niri_if_arm_meet_preserves_fields.wado/check_two_arm_meet"(0);
@@ -163,8 +162,15 @@ fn "niri_if_arm_meet_preserves_fields.wado/run"() with Stdout, MonotonicClock {
     c = "niri_if_arm_meet_preserves_fields.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(c = e; e = 0; c);
     e = d;
     d = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(e, message_7.repr, message_7.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(e = c; c = 0; e);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee d(message_7.used) + 1)), 0, message_7.repr, 0, d);
+    builtin::array_set_u8(new_repr, d, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        b = e;
+        d = d + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(b, new_repr, 0, d);
+    });
+    "wasi/stream-drop-writable"(d = e; e = 0; d);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(d = c; c = 0; d);
 }
 
 fn "niri_if_arm_meet_preserves_fields.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -185,20 +191,20 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b3: block {
-        l4: loop {
-            break_if b3 (digit_count - offset) < 2;
+    b4: block {
+        l5: loop {
+            break_if b4 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l4;
+            continue l5;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -261,19 +267,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
         return 19;
     }
     return 20;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {

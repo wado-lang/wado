@@ -1141,6 +1141,18 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 /// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
 pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
+    folds_to_constant(body, op, const_locals, &[])
+}
+
+/// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
+/// given such arguments, which the compile-time engine runs to its value.
+fn folds_to_constant(
+    body: &Body,
+    op: Operand,
+    const_locals: &IndexSet<u32>,
+    ctfe_eligible: &[bool],
+) -> bool {
+    let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
         // `promote_pure_values_early` freezes it.
@@ -1150,19 +1162,17 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
         }
         Operand::Expr(e) => match &body.exprs[e].kind {
             ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
-            ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
-                is_constant_arg(body, *expr, const_locals)
+            ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => recurse(*expr),
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                elements.iter().all(|&e| recurse(e))
             }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-                .iter()
-                .all(|&e| is_constant_arg(body, e, const_locals)),
-            ExprKind::StructLiteral { fields, .. } => fields
-                .iter()
-                .all(|f| is_constant_arg(body, f.value, const_locals)),
-            ExprKind::VariantConstruct { payload, .. } => {
-                payload.is_none_or(|pl| is_constant_arg(body, pl, const_locals))
-            }
+            ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| recurse(f.value)),
+            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
             ExprKind::Local { index, .. } => const_locals.contains(index),
+            ExprKind::Call { func_id, args, .. } => {
+                ctfe_eligible.get(func_id.index()).copied().unwrap_or(false)
+                    && args.iter().all(|a| recurse(a.expr))
+            }
             ExprKind::Dead
             | ExprKind::Binary { .. }
             | ExprKind::FieldAccess { .. }
@@ -1173,7 +1183,6 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
             | ExprKind::Assign { .. }
             | ExprKind::GlobalVarGet { .. }
             | ExprKind::GlobalVarSet { .. }
-            | ExprKind::Call { .. }
             | ExprKind::CmRawCall { .. }
             | ExprKind::IndirectCall { .. }
             | ExprKind::ClosureToCanonical { .. }
@@ -2013,6 +2022,9 @@ struct Candidates<'a> {
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
+    /// Per function, whether the compile-time engine may replace a call to it
+    /// given constant arguments by its value ([`is_ctfe_eligible`]).
+    ctfe_eligible: &'a [bool],
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
@@ -2147,11 +2159,15 @@ pub fn inline_functions(
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
-    let foldable: Vec<bool> = project
+    let ctfe_eligible: Vec<bool> = project
         .functions
         .iter()
+        .map(|f| is_ctfe_eligible(&f.borrow()))
+        .collect();
+    let foldable: Vec<bool> = ctfe_eligible
+        .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
+        .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
 
@@ -2406,6 +2422,7 @@ pub fn inline_functions(
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
+            ctfe_eligible: &ctfe_eligible,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
             rescan_cap: inline_threshold * inline_threshold,
@@ -2430,6 +2447,7 @@ pub fn inline_functions(
             stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
+            glue: func.is_cm_binding || func.is_dispatch_wrapper,
         };
         let mut labels = InlineLabels::default();
         // Calls in this body that mutate no caller-reachable state, taken
@@ -2564,6 +2582,11 @@ struct CallerFrame<'f> {
     /// The arena only appends, so a call below it is one the round's site
     /// counts saw, and one above it came in with a splice.
     original_exprs: usize,
+    /// The caller is synthesized glue, a CM binding or a dispatch wrapper,
+    /// which `cold_outline`, `container_sroa`, `drve`, `niri` and
+    /// `const_object_globalization` leave alone. A body moved into it at its
+    /// only site would leave their reach with it.
+    glue: bool,
 }
 
 impl CallerFrame<'_> {
@@ -3099,11 +3122,22 @@ fn try_inline_call_expr(
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) | (Site::Plain, Reach::SoleOutsideLoops) => {
-            frame.original_site(call_id)
+        (Site::Plain | Site::Loop, Reach::Sole) => !frame.glue && frame.original_site(call_id),
+        // A call the compile-time engine runs to its value is left to it:
+        // spliced, it becomes statements `let_block_flatten` lays into the
+        // caller before the fold reaches them.
+        (Site::Plain, Reach::SoleOutsideLoops) => {
+            !frame.glue
+                && frame.original_site(call_id)
+                && !folds_to_constant(
+                    caller,
+                    Operand::Expr(call_id),
+                    &IndexSet::default(),
+                    candidates.ctfe_eligible,
+                )
         }
         (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
+        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
         (Site::Plain | Site::Loop, Reach::Nowhere) => {
             unreachable!("a candidate is reached somewhere")

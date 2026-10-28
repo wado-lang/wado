@@ -823,7 +823,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             l45: loop {
                 break_if b44 start_15 < leading;
                 index_37 = start_15;
-                value_68 = (48 + (builtin::i32_wrap_i64(v_64 %u 10_i64) & 255)) & 255;
+                value_68 = 48 + builtin::i32_wrap_i64(v_64 %u 10_i64);
                 if @unlikely(index_37 >=u new_used_14) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index_37, new_used_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
@@ -850,7 +850,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             l50: loop {
                 break_if b49 start_15 < new_used_14;
                 value_68 = start_15;
-                index_37 = (48 + (builtin::i32_wrap_i64(v_64 %u 10_i64) & 255)) & 255;
+                index_37 = 48 + builtin::i32_wrap_i64(v_64 %u 10_i64);
                 if @unlikely(value_68 >=u leading) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(value_68, leading, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
@@ -881,7 +881,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
             l54: loop {
                 break_if b53 $av_180 < start_15;
                 leading = $av_180;
-                index_37 = (48 + (builtin::i32_wrap_i64(d %u 10_i64) & 255)) & 255;
+                index_37 = 48 + builtin::i32_wrap_i64(d %u 10_i64);
                 if @unlikely(leading >=u new_used_14) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(leading, new_used_14, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
@@ -931,7 +931,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             l60: loop {
                 break_if b59 new_used_17 < start_18;
                 index_27 = new_used_17;
-                value_28 = (48 + (builtin::i32_wrap_i64(v_24 %u 10_i64) & 255)) & 255;
+                value_28 = 48 + builtin::i32_wrap_i64(v_24 %u 10_i64);
                 if @unlikely(index_27 >=u $licm_used_169) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(index_27, $licm_used_169, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
@@ -966,7 +966,7 @@ fn "core:prelude/fpfmt.wado/write_exp$dae[upper]"(buf, d, p, nd) {
             l65: loop {
                 break_if b64 $av_174 < start_18;
                 $licm_used_169 = $av_174;
-                new_used_17 = (48 + (builtin::i32_wrap_i64(d %u 10_i64) & 255)) & 255;
+                new_used_17 = 48 + builtin::i32_wrap_i64(d %u 10_i64);
                 if @unlikely($licm_used_169 >=u nd) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"($licm_used_169, nd, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
@@ -1087,15 +1087,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b92 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l93;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -2702,24 +2702,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee byte(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, byte, c & 255);
+            builtin::array_set_u8(repr, byte, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, byte, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, byte, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, byte + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, byte, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, byte + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, byte, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, byte + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, byte, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, byte, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, byte + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, byte + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -4304,7 +4304,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
                 break_if b557 val_i64_66 == 0_i64;
                 q = q - 1;
                 start_230 = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
-                builtin::array_set_u8(arr, q, select i32(start_230 < 10, 48 + start_230, (97 + start_230) - 10) & 255);
+                builtin::array_set_u8(arr, q, select i32(start_230 < 10, 48 + start_230, (97 + start_230) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
                 continue l558;
             };

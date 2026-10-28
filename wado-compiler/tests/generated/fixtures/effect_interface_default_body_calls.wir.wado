@@ -85,21 +85,19 @@ type "functype//effect_interface_default_body_calls.wado/effect_interface_defaul
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(32)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(33)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(33)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(34)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(36)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(37)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(38)
+type "functype//effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(38)
 
-type "functype//effect_interface_default_body_calls.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(39)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(40)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(39)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -117,8 +115,8 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_interface_default_body_calls.wado::TRACE: ref null "core:prelude//List<core:prelude/string.wado/String>" = ref.null none;
 global mut global:effect_interface_default_body_calls.wado::$effect_effect_interface_default_body_calls.wado/Calc: ref null "effect_interface_default_body_calls.wado//$Dispatch_effect_interface_default_body_calls.wado/Calc" = ref.null none;
 global mut global:effect_interface_default_body_calls.wado::$modules_initialized: bool = 0;
-global global:core:prelude/string.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
-global global:core:prelude/string.wado::$const_obj_7: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
+global global:effect_interface_default_body_calls.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
+global global:core:prelude/string.wado::$const_obj_8: ref Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
 
 fn "effect_interface_default_body_calls.wado/run"() with Stdout, Calc {
     let f_0: ref "effect_interface_default_body_calls.wado//Fixed";
@@ -414,15 +412,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b24 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l25;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -631,15 +629,34 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
 
 fn "effect_interface_default_body_calls.wado/effect_interface_default_body_calls.wado/$Closure_0::$call"(self, n) {
     let self_2: i32;
-    let tag: ref "core:prelude/string.wado//String";
     let self_5: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let out_15: ref "core:prelude/string.wado//String";
+    let repr_44: ref Array<u8>;
+    let new_used_60: i32;
+    let start_61: i32;
+    let x: i64;
     self_2 = self.$capture_0.answer;
-    tag = "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(n);
+    out_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
+    repr_44 = global:effect_interface_default_body_calls.wado::$const_obj_0;
+    if @unlikely(local.tee new_used_60(0 + 8) > builtin::array_len(out_15.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_15, new_used_60);
+    }
+    start_61 = out_15.used;
+    out_15.used = new_used_60;
+    builtin::array_copy<u8>(out_15.repr, start_61, repr_44, 0, 8);
+    start_61 = n < 0;
+    n = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(n); select i64(x < 0_i64, 0_i64 - x, x)));
+    start_61 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_15, start_61, n);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_15.repr, start_61, x, n);
+    $inline_core_prelude_string_wado_String__format_effect_interface_default_body_calls_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39: block {
+        break $inline_core_prelude_string_wado_String__format_effect_interface_default_body_calls_wado__tmpl_fb51c04d54491732__i32___spec0_spec1_sroa_t_h0__0__$inline_core_prelude_string_wado_String__internal_push_view_39;
+    };
     if @unlikely(local.tee n(local.tee self_5(global:effect_interface_default_body_calls.wado::TRACE).used) >= builtin::array_len(self_5.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_5);
     }
-    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, n, tag);
+    builtin::array_set<ref "core:prelude/string.wado//String">(self_5.repr, n, out_15);
     self_5.used = n + 1;
     return self_2;
 }
@@ -725,31 +742,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     return start_27;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(t) {
-    let out_3: ref "core:prelude/string.wado//String";
-    let repr_32: ref Array<u8>;
-    let new_used_48: i32;
-    let start_49: i32;
-    let x: i64;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_6;
-    if @unlikely(local.tee new_used_48(0 + 8) > builtin::array_len(out_3.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
-    }
-    start_49 = out_3.used;
-    out_3.used = new_used_48;
-    builtin::array_copy<u8>(out_3.repr, start_49, repr_32, 0, 8);
-    start_49 = t < 0;
-    t = "core:prelude/primitive.wado/count_digits_u64"(local.tee x(x = builtin::i64_extend_i32_s(t); select i64(x < 0_i64, 0_i64 - x, x)));
-    start_49 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, start_49, t);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, start_49, x, t);
-    $inline_core_prelude_string_wado_String__internal_push_view_39: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_39;
-    };
-    return out_3;
-}
-
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_interface_default_body_calls.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
     let repr_32: ref Array<u8>;
@@ -757,7 +749,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_inte
     let start_49: i32;
     let x: i64;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_7;
+    repr_32 = global:core:prelude/string.wado::$const_obj_8;
     if @unlikely(local.tee new_used_48(0 + 8) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);

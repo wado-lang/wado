@@ -488,15 +488,15 @@ fn "core:prelude/traits.wado/assoc_default_body_ref_assoc_type_selects_ref_impl.
             break_if b60 (self - start_25) < 2;
             q = x /u 100_i64;
             tens = local.tee new_used_24(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, self - 1, ((48 + new_used_24) - (tens * 10)) & 255);
-            builtin::array_set_u8($load_3, self - 2, (48 + tens) & 255);
+            builtin::array_set_u8($load_3, self - 1, (48 + new_used_24) - (tens * 10));
+            builtin::array_set_u8($load_3, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l61;
         };
     };
     if self > start_25 {
-        builtin::array_set_u8($load_3, start_25, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8($load_3, start_25, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     if @unlikely(local.tee start_25(f.used + 2) > builtin::array_len($load_3)) {
         cold_path;

@@ -91,7 +91,7 @@ import fn wasi/task-return from "wasi/task-return";
 global global:affine_tail_result_discarded.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(101, 110, 100);
 global global:affine_tail_result_discarded.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32, 50);
 global global:affine_tail_result_discarded.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(99, 108, 101, 97, 114, 101, 100);
-global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32);
+global global:core:prelude/string.wado::$const_obj_6: ref Array<u8> = array.new_fixed<u8>(100, 114, 111, 112, 32);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<affine_tail_result_discarded.wado/Tok>$0: ref "core:prelude/types.wado//Option<affine_tail_result_discarded.wado/Tok>" = struct.new "core:prelude/types.wado//Option<affine_tail_result_discarded.wado/Tok>" { 0 };
 
 fn "affine_tail_result_discarded.wado/run"() with Stdout {
@@ -546,7 +546,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_tail
     let q: u64;
     let tens: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
-    repr_32 = global:core:prelude/string.wado::$const_obj_5;
+    repr_32 = global:core:prelude/string.wado::$const_obj_6;
     if @unlikely(local.tee new_used_48(0 + 5) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, new_used_48);
@@ -640,15 +640,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_tail
             break_if b84 (t - start_49) < 2;
             q = x /u 100_i64;
             tens = local.tee new_used_48(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_2, t - 1, ((48 + new_used_48) - (tens * 10)) & 255);
-            builtin::array_set_u8($load_2, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8($load_2, t - 1, (48 + new_used_48) - (tens * 10));
+            builtin::array_set_u8($load_2, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l85;
         };
     };
     if t > start_49 {
-        builtin::array_set_u8($load_2, start_49, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8($load_2, start_49, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

@@ -59,8 +59,6 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
 type "functype//bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(25)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(26)
-
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -95,18 +93,26 @@ fn "bug_const_fold_boxed_ref_writeback.wado/run"() with Stdout {
     $sroa_$pattern_temp_0_0_13_34 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_34 = $sroa_$pattern_temp_0_1_14_35; $sroa_$pattern_temp_0_1_14_35 = 0; $sroa_$pattern_temp_0_0_13_34);
     $sroa_$pattern_temp_0_1_14_35 = $moved_4_25;
     $moved_4_25 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_35, message_6.repr, message_6.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_35 = $sroa_$pattern_temp_0_0_13_34; $sroa_$pattern_temp_0_0_13_34 = 0; $sroa_$pattern_temp_0_1_14_35);
-    $sroa_$pattern_temp_0_1_14_35 = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
+    builtin::array_copy<u8>(local.tee new_repr_54(builtin::array_new<u8>(local.tee $moved_4_25(message_6.used) + 1)), 0, message_6.repr, 0, $moved_4_25);
+    builtin::array_set_u8(new_repr_54, $moved_4_25, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = $sroa_$pattern_temp_0_1_14_35;
+        $moved_4_25 = $moved_4_25 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr_54, 0, $moved_4_25);
+    });
+    "wasi/stream-drop-writable"($moved_4_25 = $sroa_$pattern_temp_0_1_14_35; $sroa_$pattern_temp_0_1_14_35 = 0; $moved_4_25);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_25 = $sroa_$pattern_temp_0_0_13_34; $sroa_$pattern_temp_0_0_13_34 = 0; $moved_4_25);
+    $moved_4_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7_28("wasi/stream-new"()));
     $sroa_$pattern_temp_0_0_13_34 = builtin::i32_wrap_i64($cm_pair_7_28 >> 32_i64);
-    $moved_4_25 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_25 = $sroa_$pattern_temp_0_1_14_35; $sroa_$pattern_temp_0_1_14_35 = 0; $moved_4_25);
-    $sroa_$pattern_temp_0_1_14_35 = $sroa_$pattern_temp_0_0_13_34;
+    $sroa_$pattern_temp_0_1_14_35 = "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_35 = $moved_4_25; $moved_4_25 = 0; $sroa_$pattern_temp_0_1_14_35);
+    $moved_4_25 = $sroa_$pattern_temp_0_0_13_34;
     $sroa_$pattern_temp_0_0_13_34 = 0;
     builtin::array_copy<u8>(local.tee new_repr_54(builtin::array_new<u8>(2)), 0, global:bug_const_fold_boxed_ref_writeback.wado::$const_obj_1, 0, 1);
     builtin::array_set_u8(new_repr_54, 1, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_35, new_repr_54);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_34 = $sroa_$pattern_temp_0_1_14_35; $sroa_$pattern_temp_0_1_14_35 = 0; $sroa_$pattern_temp_0_0_13_34);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_34 = $moved_4_25; $moved_4_25 = 0; $sroa_$pattern_temp_0_0_13_34);
+    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($moved_4_25, new_repr_54);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_13_34 = $moved_4_25; $moved_4_25 = 0; $sroa_$pattern_temp_0_0_13_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_34 = $sroa_$pattern_temp_0_1_14_35; $sroa_$pattern_temp_0_1_14_35 = 0; $sroa_$pattern_temp_0_0_13_34);
 }
 
 fn "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -116,19 +122,6 @@ fn "bug_const_fold_boxed_ref_writeback.wado/$cm_binding__wasi:cli/stdout@0.3.0#w
 fn "bug_const_fold_boxed_ref_writeback.wado/$cm_export__run"() {
     "bug_const_fold_boxed_ref_writeback.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {
@@ -504,15 +497,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_const_f
             break_if b66 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee start_151(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + start_151) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + start_151) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l67;
         };
     };
     if t > is_negative_65 {
-        builtin::array_set_u8(arr, is_negative_65, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, is_negative_65, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

@@ -205,16 +205,16 @@ fn "allocator_freelist_align.wado/run"() with Stdout {
     let $v1: i32;
     let item: i32;
     let $cm_pair_7: i64;
-    let $sroa_$iter_0_repr_35: ref Array<i32>;
-    let $sroa_$iter_0_index_36: i32;
     let new_repr: ref Array<u8>;
-    $sroa_$iter_0_repr_35 = global:allocator_freelist_align.wado::$const_obj_1;
-    $sroa_$iter_0_index_36 = 0;
+    let $sroa_$iter_0_repr_50: ref Array<i32>;
+    let $sroa_$iter_0_index_51: i32;
+    $sroa_$iter_0_repr_50 = global:allocator_freelist_align.wado::$const_obj_1;
+    $sroa_$iter_0_index_51 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_36 >= 7;
-            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_35, $sroa_$iter_0_index_36);
-            $sroa_$iter_0_index_36 = $sroa_$iter_0_index_36 + 1;
+            break_if b0 $sroa_$iter_0_index_51 >= 7;
+            item = builtin::array_get_value<i32>($sroa_$iter_0_repr_50, $sroa_$iter_0_index_51);
+            $sroa_$iter_0_index_51 = $sroa_$iter_0_index_51 + 1;
             if @unlikely((local.tee $v1(local.tee p("mem/realloc"(0, 0, 16, item)) & 15) == 0) == 0) {
                 cold_path;
                 "allocator_freelist_align.wado/run$cold0"(item, p, $v1);
@@ -224,15 +224,15 @@ fn "allocator_freelist_align.wado/run"() with Stdout {
         };
     };
     p = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$iter_0_index_36 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$iter_0_index_51 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $v1 = "allocator_freelist_align.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1 = p; p = 0; $v1);
-    p = $sroa_$iter_0_index_36;
-    $sroa_$iter_0_index_36 = 0;
+    p = $sroa_$iter_0_index_51;
+    $sroa_$iter_0_index_51 = 0;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:allocator_freelist_align.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(p, new_repr);
-    "wasi/stream-drop-writable"($sroa_$iter_0_index_36 = p; p = 0; $sroa_$iter_0_index_36);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$iter_0_index_36 = $v1; $v1 = 0; $sroa_$iter_0_index_36);
+    "wasi/stream-drop-writable"($sroa_$iter_0_index_51 = p; p = 0; $sroa_$iter_0_index_51);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$iter_0_index_51 = $v1; $v1 = 0; $sroa_$iter_0_index_51);
 }
 
 fn "allocator_freelist_align.wado/$template_segment$allocator_freelist_align.wado/$tmpl$59e16269228f9c88"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, $mv$v$s3, $mv$v$r3, index) {
@@ -288,15 +288,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b11 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l12;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -398,24 +398,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

@@ -603,17 +603,15 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::clo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(219)
 
-type "functype//ref_sees_reassigned_place.wado/ref_sees_reassigned_place.wado/$Closure_1::$call$spec0$sroa[self.$capture_0]$dae[v]" = fn(ref "core:prelude//List<ref_sees_reassigned_place.wado/P>");  // TypeId(220)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(220)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(221)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(221)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(222)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(222)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(223)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(223)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(224)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(225)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(224)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -1125,7 +1123,6 @@ fn "ref_sees_reassigned_place.wado/$cm_export__$test_1_an_assignment_in_expressi
     let r_10: ref "ref_sees_reassigned_place.wado//P";
     let $deref_ref_11: ref "ref_sees_reassigned_place.wado//P";
     let $sroa_xs_repr_50: ref "Array<ref_sees_reassigned_place.wado/P>";
-    let xs_52: ref "core:prelude//List<ref_sees_reassigned_place.wado/P>";
     r_10 = builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">(local.tee $sroa_xs_repr_50(array.new_fixed<ref "ref_sees_reassigned_place.wado//P">(struct.new "ref_sees_reassigned_place.wado//P" { a: 1, b: 1 })), 0);
     local.tee $deref_ref_11(builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">($sroa_xs_repr_50, 0)).a = 3;
     $deref_ref_11.b = 3;
@@ -1134,8 +1131,9 @@ fn "ref_sees_reassigned_place.wado/$cm_export__$test_1_an_assignment_in_expressi
         "ref_sees_reassigned_place.wado/$test_1_an_assignment_in_expression_position$cold2"($v0_2);
         unreachable;
     }
-    r_10 = builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">(local.tee xs_52(struct.new "core:prelude//List<ref_sees_reassigned_place.wado/P>" { repr: array.new_fixed<ref "ref_sees_reassigned_place.wado//P">(struct.new "ref_sees_reassigned_place.wado//P" { a: 1, b: 1 }), used: 1 }).repr, 0);
-    "ref_sees_reassigned_place.wado/ref_sees_reassigned_place.wado/$Closure_1::$call$spec0$sroa[self.$capture_0]$dae[v]"(xs_52);
+    r_10 = builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">(local.tee $sroa_xs_repr_50(array.new_fixed<ref "ref_sees_reassigned_place.wado//P">(struct.new "ref_sees_reassigned_place.wado//P" { a: 1, b: 1 })), 0);
+    local.tee $deref_ref_11(builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">($sroa_xs_repr_50, 0)).a = 3;
+    $deref_ref_11.b = 3;
     if @unlikely(local.tee $v0_2(r_10.a + r_10.b) != 6) {
         cold_path;
         "ref_sees_reassigned_place.wado/$test_1_an_assignment_in_expression_position$cold1"($v0_2);
@@ -1483,15 +1481,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b81 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l82;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -1581,7 +1579,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     48 + bits_per_digit;
                 } else {
                     select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l106;
             };
@@ -1644,24 +1642,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -3528,22 +3526,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<cor
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
-}
-
-fn "ref_sees_reassigned_place.wado/ref_sees_reassigned_place.wado/$Closure_1::$call$spec0$sroa[self.$capture_0]$dae[v]"(self) {
-    let $load_0: i32;
-    let $deref_ref_5: ref "ref_sees_reassigned_place.wado//P";
-    if 0 < local.tee $load_0(self.used) {
-        local.tee $deref_ref_5(builtin::array_get_value<ref "ref_sees_reassigned_place.wado//P">(self.repr, 0)).a = 3;
-        $deref_ref_5.b = 3;
-    } else {
-        if @unlikely(0 >= $load_0) {
-            cold_path;
-            "core:prelude/list.wado/core:prelude/list.wado/List<ref_sees_reassigned_place.wado/P>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$dae[self,value]"(0, $load_0);
-            unreachable;
-        }
-        builtin::array_set<ref "ref_sees_reassigned_place.wado//P">(self.repr, 0, struct.new "ref_sees_reassigned_place.wado//P" { a: 3, b: 3 });
-    }
 }
 
 export fn "ref_sees_reassigned_place.wado/$cm_export__$test_0_a_place_below_the_assigned_one" as "$test_0_a_place_below_the_assigned_one"

@@ -507,18 +507,18 @@ a + b: "), used: 8 }, s3: struct.new "core:prelude/string.wado//String" { repr: 
 }
 
 fn "spec_types_wide_int.wado/$cm_export__$test_1_casts"() {
-    let a: ref "core:prelude/int128.wado//u128";
+    let a_0: ref "core:prelude/int128.wado//u128";
     let $v1_5: ref "core:prelude/int128.wado//u128";
-    let $v2: u8;
+    let $v2_6: u8;
     let lo: i64;
     let hi: i64;
-    a = struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 };
+    a_0 = struct.new "core:prelude/int128.wado//u128" { low: 42_i64, high: 0_i64 };
     multivalue_bind [lo, hi] = i64.add128(42_i64, 0_i64, 256_i64, 0_i64);
     $v1_5 = struct.new "core:prelude/int128.wado//u128" { low: lo, high: hi };
-    if @unlikely(local.tee $v2(builtin::i32_wrap_i64(lo) & 255) != 42) {
+    if @unlikely(local.tee $v2_6(builtin::i32_wrap_i64(lo) & 255) != 42) {
         cold_path;
         let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<spec_types_wide_int.wado/$tmpl$0014d24460a1ec38,[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128,u8]>"(struct.new "spec_types_wide_int.wado//$tmpl$0014d24460a1ec38" { h0: a, h1: $v1_5, h2: $v2, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_casts at spec_types_wide_int.wado:19
+        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<spec_types_wide_int.wado/$tmpl$0014d24460a1ec38,[core:prelude/int128.wado/u128,core:prelude/int128.wado/u128,u8]>"(struct.new "spec_types_wide_int.wado//$tmpl$0014d24460a1ec38" { h0: a_0, h1: $v1_5, h2: $v2_6, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_casts at spec_types_wide_int.wado:19
 condition: (a + 256) as u8 == 42
 a: "), used: 101 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_1_casts at spec_types_wide_int.wado:19
 condition: (a + 256) as u8 == 42
@@ -556,15 +556,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b14 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l15;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -684,24 +684,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

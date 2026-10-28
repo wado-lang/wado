@@ -376,17 +376,17 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     let current_28: i32;
     let value_33: f32;
     let used_34: i32;
-    let $sroa_$iter_0_start_61: i32;
     let $cm_pair_7: i64;
+    let $sroa_$iter_0_start_74: i32;
     let new_repr: ref Array<u8>;
     ptr = "mem/realloc"(0, 0, 1, 4194304);
     base = black_box(-1_f32);
     before = struct.new "core:prelude//List<f32>" { repr: array.new_fixed<f32>(), used: 0 };
-    $sroa_$iter_0_start_61 = 0;
+    $sroa_$iter_0_start_74 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_start_61 >= 64;
-            $sroa_$iter_0_start_61 = local.tee current_28($sroa_$iter_0_start_61) + 1;
+            break_if b0 $sroa_$iter_0_start_74 >= 64;
+            $sroa_$iter_0_start_74 = local.tee current_28($sroa_$iter_0_start_74) + 1;
             value_33 = "wasm:core:libm.wat/libm_expf"(base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32));
             if @unlikely(local.tee used_34(before.used) >= builtin::array_len(before.repr)) {
                 cold_path;
@@ -404,10 +404,10 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
             break_if b3 ptr >= 64;
             ptr = local.tee current_28(ptr) + 1;
             value_33 = base - (builtin::f32_convert_i32_s(current_28) * 0.25_f32);
-            $sroa_$iter_0_start_61 = before.used;
-            if @unlikely(current_28 >= $sroa_$iter_0_start_61) {
+            $sroa_$iter_0_start_74 = before.used;
+            if @unlikely(current_28 >= $sroa_$iter_0_start_74) {
                 cold_path;
-                "allocator_asset_memory.wado/run$cold1"(current_28, $sroa_$iter_0_start_61);
+                "allocator_asset_memory.wado/run$cold1"(current_28, $sroa_$iter_0_start_74);
                 unreachable;
             }
             $v3 = builtin::array_get_value<f32>(before.repr, current_28);
@@ -421,14 +421,14 @@ fn "allocator_asset_memory.wado/run"() with Stdout {
     };
     current_28 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     ptr = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$iter_0_start_61 = "allocator_asset_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_61 = current_28; current_28 = 0; $sroa_$iter_0_start_61);
+    $sroa_$iter_0_start_74 = "allocator_asset_memory.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$iter_0_start_74 = current_28; current_28 = 0; $sroa_$iter_0_start_74);
     current_28 = ptr;
     ptr = 0;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:allocator_asset_memory.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(current_28, new_repr);
     "wasi/stream-drop-writable"(ptr = current_28; current_28 = 0; ptr);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr = $sroa_$iter_0_start_61; $sroa_$iter_0_start_61 = 0; ptr);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(ptr = $sroa_$iter_0_start_74; $sroa_$iter_0_start_74 = 0; ptr);
 }
 
 fn "allocator_asset_memory.wado/$template_segment$allocator_asset_memory.wado/$tmpl$eda74d81258d9f98"(v, index) {
@@ -1136,15 +1136,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b120 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l121;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -1254,24 +1254,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -1508,7 +1508,7 @@ fn "core:prelude/fpfmt.wado/write_digits_at$sroa[&mut(buf.repr)]"(buf, offset, v
     b179: block {
         l180: loop {
             break_if b179 nd < offset;
-            builtin::array_set_u8(buf, nd, (48 + (builtin::i32_wrap_i64(val %u 10_i64) & 255)) & 255);
+            builtin::array_set_u8(buf, nd, 48 + builtin::i32_wrap_i64(val %u 10_i64));
             val = val /u 10_i64;
             nd = nd - 1;
             continue l180;

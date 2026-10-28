@@ -270,9 +270,9 @@ fn "opt_value_copy_demote_alias_source.wado/snap"(rows) with Stdout {
     let v: ref "core:prelude//List<core:prelude/string.wado/String>";
     let self_38: ref "core:prelude/string.wado//String";
     let start_73: i32;
+    let $cm_pair_7: i64;
     let a: ref Array<u8>;
     let b: ref Array<u8>;
-    let $cm_pair_7: i64;
     $v1_7 = rows.used;
     if @unlikely(0 >= $v1_7) {
         cold_path;
@@ -363,31 +363,31 @@ fn "opt_value_copy_demote_alias_source.wado/snap"(rows) with Stdout {
     "core:rt/write_string_to_stream$dae[add_newline]"($v1_7, self_38.repr, self_38.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($v1_7 = $array_clone_i_4; $array_clone_i_4 = 0; $v1_7);
     self_38 = builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, 0);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__19: block -> bool {
+    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__21: block -> bool {
         a = self_38.repr;
         $v1_7 = self_38.used;
         b = global:opt_value_copy_demote_alias_source.wado::$const_obj_2;
         if $v1_7 != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
         }
         $array_clone_i_4 = 0;
         b14: block {
             l15: loop {
                 break_if b14 ((($array_clone_i_4 >= $v1_7) | (($array_clone_i_4 + 1) >= $v1_7)) | ((($array_clone_i_4 + 1) + 1) >= $v1_7)) | (((($array_clone_i_4 + 1) + 1) + 1) >= $v1_7);
                 if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l15;
@@ -397,13 +397,13 @@ fn "opt_value_copy_demote_alias_source.wado/snap"(rows) with Stdout {
             l21: loop {
                 break_if b20 $array_clone_i_4 >= $v1_7;
                 if builtin::array_get_value<u8>(a, $array_clone_i_4) != builtin::array_get_value<u8>(b, $array_clone_i_4) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__19: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__21: 0;
                 }
                 $array_clone_i_4 = $array_clone_i_4 + 1;
                 continue l21;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__19: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__21: 1;
     } == 0) {
         cold_path;
         "core:rt/panic"(local.tee self_38("core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_demote_alias_source.wado/$tmpl$d48748ffcad618c0,[core:prelude/string.wado/String]>"(struct.new "opt_value_copy_demote_alias_source.wado//$tmpl$d48748ffcad618c0" { h0: self_38, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in snap at opt_value_copy_demote_alias_source.wado:21
@@ -513,15 +513,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b39 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l40;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -611,7 +611,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     48 + bits_per_digit;
                 } else {
                     select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l64;
             };
@@ -656,24 +656,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

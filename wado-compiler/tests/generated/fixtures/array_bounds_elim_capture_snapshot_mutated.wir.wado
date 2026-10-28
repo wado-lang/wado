@@ -22,31 +22,33 @@ type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//array_bounds_elim_capture_snapshot_mutated.wado/$cm_export__run" = fn();  // TypeId(10)
+type "functype//array_bounds_elim_capture_snapshot_mutated.wado/run" = fn();  // TypeId(10)
 
-type "functype//array_bounds_elim_capture_snapshot_mutated.wado/run$cold0" = fn();  // TypeId(11)
+type "functype//array_bounds_elim_capture_snapshot_mutated.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(12)
+type "functype//array_bounds_elim_capture_snapshot_mutated.wado/run$cold0" = fn();  // TypeId(12)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(13)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(13)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(14)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(14)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(15)
+type "functype//core:rt/unreachable" = fn();  // TypeId(15)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(17)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(20)
 
-type "functype//array_bounds_elim_capture_snapshot_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
+type "functype//array_bounds_elim_capture_snapshot_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
+
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -62,36 +64,40 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
+global global:array_bounds_elim_capture_snapshot_mutated.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(98, 111, 117, 110, 100, 32, 115, 117, 114, 118, 105, 118, 101, 100, 32, 105, 116, 115, 32, 111, 119, 110, 32, 103, 117, 97, 114, 100);
+
+fn "array_bounds_elim_capture_snapshot_mutated.wado/run"() with Stdout {
+    let i: i32;
+    let saved: i32;
+    let $cm_pair_7: i64;
+    let $sroa_w_limit_16: i32;
+    let new_repr: ref Array<u8>;
+    $sroa_w_limit_16 = black_box(3);
+    if local.tee i(black_box(2)) < saved = $sroa_w_limit_16; $sroa_w_limit_16 = black_box(1); saved {
+        if @unlikely(i >= $sroa_w_limit_16) {
+            cold_path;
+            "array_bounds_elim_capture_snapshot_mutated.wado/run$cold0"();
+            unreachable;
+        }
+        $sroa_w_limit_16 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+        i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+        saved = "array_bounds_elim_capture_snapshot_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(saved = $sroa_w_limit_16; $sroa_w_limit_16 = 0; saved);
+        $sroa_w_limit_16 = i;
+        i = 0;
+        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(29)), 0, global:array_bounds_elim_capture_snapshot_mutated.wado::$const_obj_0, 0, 28);
+        builtin::array_set_u8(new_repr, 28, 10);
+        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_w_limit_16, new_repr);
+        "wasi/stream-drop-writable"(i = $sroa_w_limit_16; $sroa_w_limit_16 = 0; i);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = saved; saved = 0; i);
+    }
+}
+
 fn "array_bounds_elim_capture_snapshot_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
     return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
 }
 
 fn "array_bounds_elim_capture_snapshot_mutated.wado/$cm_export__run"() {
-    let i: i32;
-    let saved: i32;
-    let $sroa_w_limit_3: i32;
-    let $cm_pair_7: i64;
-    let new_repr: ref Array<u8>;
-    let $sroa_message_repr_33: ref Array<u8>;
-    $sroa_w_limit_3 = black_box(3);
-    if local.tee i(black_box(2)) < saved = $sroa_w_limit_3; $sroa_w_limit_3 = black_box(1); saved {
-        if @unlikely(i >= $sroa_w_limit_3) {
-            cold_path;
-            "array_bounds_elim_capture_snapshot_mutated.wado/run$cold0"();
-            unreachable;
-        }
-        $sroa_w_limit_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-        i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-        saved = "array_bounds_elim_capture_snapshot_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(saved = $sroa_w_limit_3; $sroa_w_limit_3 = 0; saved);
-        $sroa_w_limit_3 = i;
-        i = 0;
-        $sroa_message_repr_33 = array.new_data<u8>("bound survived its own guard");
-        builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(29)), 0, $sroa_message_repr_33, 0, 28);
-        builtin::array_set_u8(new_repr, 28, 10);
-        "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_w_limit_3, new_repr);
-        "wasi/stream-drop-writable"(i = $sroa_w_limit_3; $sroa_w_limit_3 = 0; i);
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = saved; saved = 0; i);
-    }
+    "array_bounds_elim_capture_snapshot_mutated.wado/run"();
     "wasi/task-return"(0);
 }
 

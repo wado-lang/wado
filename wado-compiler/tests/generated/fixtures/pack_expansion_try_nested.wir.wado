@@ -334,7 +334,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(119)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(120)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec0$sroa[t.h0]" = fn(i32) -> ref "core:prelude/string.wado//String";  // TypeId(120)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(121)
 
@@ -587,7 +587,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_0_nested_in_two_elements"()
             };
             break $inline__test_0_nested_in_two_elements_0__$fused_$inline_pack_expansion_try_nested_wado_build__i32_core_prelude_string_wado_String___i32___sroa_return__0;
         }
-        drop("core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(-5 + cold_path; $qm_e_49 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = ref.as_non_null(local.tee s_2($qm_e_49)); $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
+        drop("core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec0$sroa[t.h0]"(-5 + cold_path; $qm_e_49 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative"), used: 8 }; cold_path; $qm_e_47 = ref.as_non_null(local.tee s_2($qm_e_49)); $inline__test_0_nested_in_two_elements_0__$inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
             b_20 = $qm_e_47.repr;
             i_24 = $qm_e_47.used;
             a_17 = array.new_data<u8>("negative");
@@ -642,7 +642,7 @@ fn "pack_expansion_try_nested.wado/$cm_export__$test_1_nested_in_one_element"() 
     let $sroa_$vr_4_1_33: ref null "tuple//[i32]";
     $sroa_$vr_4_1_33 = struct.new "tuple//[i32]" { 0: 4 };
     if @unlikely((if block -> i32 {
-        ($sroa_$vr_4_1_33.0 == 4) & 1;
+        $sroa_$vr_4_1_33.0 == 4;
     } -> bool {
         drop(ref.as_non_null($sroa_$vr_4_1_33));
         1;
@@ -706,15 +706,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b63 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l64;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -834,24 +834,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -2491,7 +2491,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$
     return struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$self$repr, start: $mv$self$start, end: $mv$self$start + end };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(t) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pack_expansion_try_nested.wado/$tmpl$fb51c04d54491732,[i32]>$spec1$spec0$sroa[t.h0]"(t) {
     let out_3: ref "core:prelude/string.wado//String";
     let is_negative: bool;
     let x: i64;

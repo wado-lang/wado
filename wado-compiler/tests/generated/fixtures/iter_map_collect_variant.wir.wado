@@ -64,15 +64,13 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
 type "functype//iter_map_collect_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,9 +81,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$0: ref "iter_map_collect_variant.wado//Color" = struct.new "iter_map_collect_variant.wado//Color" { 0 };
 global global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$1: ref "iter_map_collect_variant.wado//Color" = struct.new "iter_map_collect_variant.wado//Color" { 1 };
@@ -97,19 +95,20 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     let item_19: ref "core:prelude/string.wado//String";
     let item_27: ref "iter_map_collect_variant.wado//Color";
     let used_30: i32;
-    let $licm_repr_38: ref "Array<iter_map_collect_variant.wado/Color>";
     let $cm_pair_7: i64;
-    let $av_60: i32;
+    let $licm_repr_53: ref "Array<iter_map_collect_variant.wado/Color>";
+    let new_repr: ref Array<u8>;
+    let $av_75: i32;
     self_6 = struct.new "core:prelude/slice.wado//SliceValueIter<iter_map_collect_variant.wado/Color>" { repr: array.new_fixed<ref "iter_map_collect_variant.wado//Color">(global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$0, global:core:builtin::$unit_case$iter_map_collect_variant.wado//Color$1), index: 0, end: 2 };
     result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
-    $licm_repr_38 = self_6.repr;
+    $licm_repr_53 = self_6.repr;
     b0: block {
         l1: loop {
             $fused_$inline_core_prelude_traits_wado_IterMap_core_prelude_slice_wado_SliceValueIter_iter_map_collect_variant_wado_Color__fn_mut_iter_map_collect_variant_wado_Color___core_prelude_string_wado_String__core_prelude_traits_wado_Iterator__next_11: block {
                 $fused_$inline_core_prelude_slice_wado_SliceValueIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_12: block {
-                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_12 local.tee $av_60(self_6.index) >= 2;
-                    item_27 = builtin::array_get_value<ref "iter_map_collect_variant.wado//Color">($licm_repr_38, $av_60);
-                    self_6.index = $av_60 + 1;
+                    break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_iter_map_collect_variant_wado_Color__core_prelude_traits_wado_Iterator__next_12 local.tee $av_75(self_6.index) >= 2;
+                    item_27 = builtin::array_get_value<ref "iter_map_collect_variant.wado//Color">($licm_repr_53, $av_75);
+                    self_6.index = $av_75 + 1;
                     item_19 = (if local.tee $load_2(item_27.discriminant) == 0 -> ref "core:prelude/string.wado//String" {
                         struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 };
                     } else if $load_2 == 1 -> ref "core:prelude/string.wado//String" {
@@ -133,11 +132,19 @@ fn "iter_map_collect_variant.wado/run"() with Stdout {
     item_19 = "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join$spec0$sroa[separator.repr]"(result, array.new_fixed<u8>(44, 32));
     used_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $load_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $av_60 = "iter_map_collect_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_60 = used_30; used_30 = 0; $av_60);
+    $av_75 = "iter_map_collect_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($av_75 = used_30; used_30 = 0; $av_75);
     used_30 = $load_2;
     $load_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(used_30, item_19.repr, item_19.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(used_30 = $av_60; $av_60 = 0; used_30);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $load_2(item_19.used) + 1)), 0, item_19.repr, 0, $load_2);
+    builtin::array_set_u8(new_repr, $load_2, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = used_30;
+        $load_2 = $load_2 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $load_2);
+    });
+    "wasi/stream-drop-writable"($load_2 = used_30; used_30 = 0; $load_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($load_2 = $av_75; $av_75 = 0; $load_2);
 }
 
 fn "iter_map_collect_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -147,19 +154,6 @@ fn "iter_map_collect_variant.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-s
 fn "iter_map_collect_variant.wado/$cm_export__run"() {
     "iter_map_collect_variant.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {

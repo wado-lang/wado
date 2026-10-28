@@ -52,19 +52,15 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(21)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_multi_call_in_expression.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(22)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
-
-type "functype//hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
+type "functype//hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -75,11 +71,11 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global global:hfs_multi_call_in_expression.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
 fn "hfs_multi_call_in_expression.wado/f_inc100"(b) {
     let $load_0: i32;
@@ -96,38 +92,68 @@ fn "hfs_multi_call_in_expression.wado/g_inc1"(b) {
 }
 
 fn "hfs_multi_call_in_expression.wado/run"() with Stdout {
+    let $load_2: ref Array<u8>;
     let b: ref "hfs_multi_call_in_expression.wado//Buf";
     let sum: i32;
     let i: i32;
-    let message_3: ref "core:prelude/string.wado//String";
-    let $cm_pair_7: i64;
-    let $hfs_v_18: i32;
+    let out_36: ref "core:prelude/string.wado//String";
+    let x_107: i64;
+    let repr_126: ref Array<u8>;
+    let $hfs_v_265: i32;
     b = struct.new "hfs_multi_call_in_expression.wado//Buf" { v: 0, pad: 0 };
     sum = 0;
     i = 0;
-    $hfs_v_18 = 0;
+    $hfs_v_265 = 0;
     b0: block {
         l1: loop {
             break_if b0 i >= 2;
-            b.v = $hfs_v_18;
+            b.v = $hfs_v_265;
             sum = (sum + "hfs_multi_call_in_expression.wado/f_inc100"(b)) + "hfs_multi_call_in_expression.wado/g_inc1"(b);
-            $hfs_v_18 = local.tee $hfs_v_18(b.v);
+            $hfs_v_265 = local.tee $hfs_v_265(b.v);
             i = i + 1;
-            b.v = $hfs_v_18;
+            b.v = $hfs_v_265;
             continue l1;
         };
     };
-    message_3 = block -> ref "core:prelude/string.wado//String" {
-        $hfs_v_18 = b.v;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_multi_call_in_expression.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(sum, $hfs_v_18);
+    $hfs_v_265 = b.v;
+    out_36 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
+        break $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    $hfs_v_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    i = "hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $hfs_v_18; $hfs_v_18 = 0; i);
-    $hfs_v_18 = sum;
-    sum = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_18, message_3.repr, message_3.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_18 = i; i = 0; $hfs_v_18);
+    i = sum < 0;
+    sum = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s(sum); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
+    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, i, sum);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_2(out_36.repr), i, x_107, sum);
+    repr_126 = global:hfs_multi_call_in_expression.wado::$const_obj_0;
+    if @unlikely(local.tee sum(out_36.used + 1) > builtin::array_len($load_2)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_36, sum);
+    }
+    i = out_36.used;
+    out_36.used = sum;
+    builtin::array_copy<u8>(out_36.repr, i, repr_126, 0, 1);
+    i = $hfs_v_265 < 0;
+    $hfs_v_265 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_107(x_107 = builtin::i64_extend_i32_s($hfs_v_265); select i64(x_107 < 0_i64, 0_i64 - x_107, x_107)));
+    i = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_36, i, $hfs_v_265);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_36.repr, i, x_107, $hfs_v_265);
+    $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__format_hfs_multi_call_in_expression_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
+    };
+    $hfs_v_265 = builtin::i32_wrap_i64(local.tee x_107("wasi/stream-new"()));
+    i = builtin::i32_wrap_i64(x_107 >> 32_i64);
+    sum = "hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum = $hfs_v_265; $hfs_v_265 = 0; sum);
+    $hfs_v_265 = i;
+    i = 0;
+    builtin::array_copy<u8>(local.tee repr_126(builtin::array_new<u8>(local.tee i(out_36.used) + 1)), 0, out_36.repr, 0, i);
+    builtin::array_set_u8(repr_126, i, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        let $arg_spill_1: i32;
+        $arg_spill_1 = $hfs_v_265;
+        i = i + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, repr_126, 0, i);
+    });
+    "wasi/stream-drop-writable"(i = $hfs_v_265; $hfs_v_265 = 0; i);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(i = sum; sum = 0; i);
 }
 
 fn "hfs_multi_call_in_expression.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -144,20 +170,20 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b3: block {
-        l4: loop {
-            break_if b3 (digit_count - offset) < 2;
+    b4: block {
+        l5: loop {
+            break_if b4 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l4;
+            continue l5;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -220,19 +246,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
         return 19;
     }
     return 20;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
 }
 
 fn "core:rt/unreachable"() {
@@ -369,38 +382,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     start_27 = self.used;
     self.used = digit_count;
     return start_27;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_multi_call_in_expression.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_0: ref Array<u8>;
-    let out_3: ref "core:prelude/string.wado//String";
-    let is_negative_70: bool;
-    let x_74: i64;
-    let repr_93: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_22;
-    };
-    is_negative_70 = $mv$t$h0 < 0;
-    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_70, x_74, $mv$t$h0);
-    repr_93 = global:core:prelude/string.wado::$const_obj_0;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-    }
-    is_negative_70 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_93, 0, 1);
-    is_negative_70 = $mv$t$h1 < 0;
-    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h1);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative_70, x_74, $mv$t$h1);
-    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_70;
-    };
-    return out_3;
 }
 
 export fn "hfs_multi_call_in_expression.wado/$cm_export__run" as "run"

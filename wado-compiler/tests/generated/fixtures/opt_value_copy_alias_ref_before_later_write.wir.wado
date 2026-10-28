@@ -25,33 +25,31 @@ type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
 
 type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(9)
 
-type "functype//opt_value_copy_alias_ref_before_later_write.wado/first" = fn(ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(10)
+type "functype//opt_value_copy_alias_ref_before_later_write.wado/run" = fn();  // TypeId(10)
 
-type "functype//opt_value_copy_alias_ref_before_later_write.wado/run" = fn();  // TypeId(11)
+type "functype//opt_value_copy_alias_ref_before_later_write.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//opt_value_copy_alias_ref_before_later_write.wado/$cm_export__run" = fn();  // TypeId(12)
+type "functype//core:rt/unreachable" = fn();  // TypeId(12)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(13)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(13)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(14)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(14)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0" = fn(ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(16)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0" = fn(ref "core:prelude/string.wado//String", i32) -> ref "core:prelude/string.wado//String";  // TypeId(17)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+type "functype//opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(21)
 
-type "functype//opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(22)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -68,49 +66,50 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:opt_value_copy_alias_ref_before_later_write.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(33);
 
-fn "opt_value_copy_alias_ref_before_later_write.wado/first"(a, b) {
-    return block -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(a, b);
-    };
-}
-
 fn "opt_value_copy_alias_ref_before_later_write.wado/run"() with Stdout {
     let $load_0: ref Array<u8>;
     let u: ref "core:prelude/string.wado//String";
-    let kept: ref "core:prelude/string.wado//String";
-    let start_18: i32;
-    let $moved_4_41: i32;
-    let $cm_pair_7_44: i64;
-    let $sroa_$pattern_temp_0_1_14_51: i32;
-    u = "opt_value_copy_alias_ref_before_later_write.wado/first"(struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee u(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }).repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 }, if @unlikely(2 > builtin::array_len($load_0)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(u, 2);
-    }; start_18 = u.used; u.used = 2; builtin::array_copy<u8>(u.repr, start_18, global:opt_value_copy_alias_ref_before_later_write.wado::$const_obj_1, 0, 1); 0);
-    start_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_44("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_51 = builtin::i32_wrap_i64($cm_pair_7_44 >> 32_i64);
-    $moved_4_41 = "opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_41 = start_18; start_18 = 0; $moved_4_41);
-    start_18 = $sroa_$pattern_temp_0_1_14_51;
-    $sroa_$pattern_temp_0_1_14_51 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_18, u.repr, u.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_18 = $moved_4_41; $moved_4_41 = 0; start_18);
-    kept = struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee u(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
+    let held: ref "core:prelude/string.wado//String";
+    let start_20: i32;
+    let $moved_4_43: i32;
+    let $cm_pair_7_46: i64;
+    let $sroa_$pattern_temp_0_1_14_53: i32;
+    held = struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee u(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }).repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
     if @unlikely(2 > builtin::array_len($load_0)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(u, 2);
     }
-    start_18 = u.used;
+    start_20 = u.used;
     u.used = 2;
-    builtin::array_copy<u8>(u.repr, start_18, global:opt_value_copy_alias_ref_before_later_write.wado::$const_obj_1, 0, 1);
-    kept = block -> ref "core:prelude/string.wado//String" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(kept, 0);
+    builtin::array_copy<u8>(u.repr, start_20, global:opt_value_copy_alias_ref_before_later_write.wado::$const_obj_1, 0, 1);
+    held = block -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(held, 0);
     };
-    start_18 = builtin::i32_wrap_i64(local.tee $cm_pair_7_44("wasi/stream-new"()));
-    $moved_4_41 = builtin::i32_wrap_i64($cm_pair_7_44 >> 32_i64);
-    $sroa_$pattern_temp_0_1_14_51 = "opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_51 = start_18; start_18 = 0; $sroa_$pattern_temp_0_1_14_51);
-    start_18 = $moved_4_41;
-    $moved_4_41 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_18, kept.repr, kept.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_18 = $sroa_$pattern_temp_0_1_14_51; $sroa_$pattern_temp_0_1_14_51 = 0; start_18);
+    start_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_14_53 = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
+    $moved_4_43 = "opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_43 = start_20; start_20 = 0; $moved_4_43);
+    start_20 = $sroa_$pattern_temp_0_1_14_53;
+    $sroa_$pattern_temp_0_1_14_53 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_20, held.repr, held.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_20 = $moved_4_43; $moved_4_43 = 0; start_20);
+    u = struct.new "core:prelude/string.wado//String" { repr: $load_0 = local.tee held(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }).repr; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(1)), 0, $load_0, 0, 1); $array_clone_dst_2, used: 1 };
+    if @unlikely(2 > builtin::array_len($load_0)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(held, 2);
+    }
+    start_20 = held.used;
+    held.used = 2;
+    builtin::array_copy<u8>(held.repr, start_20, global:opt_value_copy_alias_ref_before_later_write.wado::$const_obj_1, 0, 1);
+    u = block -> ref "core:prelude/string.wado//String" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_copy_alias_ref_before_later_write.wado/$tmpl$c0721a21c4b87a16,[core:prelude/string.wado/String,i32]>$spec0$spec0"(u, 0);
+    };
+    start_20 = builtin::i32_wrap_i64(local.tee $cm_pair_7_46("wasi/stream-new"()));
+    $moved_4_43 = builtin::i32_wrap_i64($cm_pair_7_46 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_53 = "opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_53 = start_20; start_20 = 0; $sroa_$pattern_temp_0_1_14_53);
+    start_20 = $moved_4_43;
+    $moved_4_43 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_20, u.repr, u.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_20 = $sroa_$pattern_temp_0_1_14_53; $sroa_$pattern_temp_0_1_14_53 = 0; start_20);
 }
 
 fn "opt_value_copy_alias_ref_before_later_write.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -367,15 +366,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_value_c
             break_if b45 ($mv$t$h1 - n_257) < 2;
             q = x_170 /u 100_i64;
             new_used_261 = local.tee start_262(builtin::i32_wrap_i64(x_170 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, $mv$t$h1 - 1, ((48 + start_262) - (new_used_261 * 10)) & 255);
-            builtin::array_set_u8(arr, $mv$t$h1 - 2, (48 + new_used_261) & 255);
+            builtin::array_set_u8(arr, $mv$t$h1 - 1, (48 + start_262) - (new_used_261 * 10));
+            builtin::array_set_u8(arr, $mv$t$h1 - 2, 48 + new_used_261);
             $mv$t$h1 = $mv$t$h1 - 2;
             x_170 = q;
             continue l46;
         };
     };
     if $mv$t$h1 > n_257 {
-        builtin::array_set_u8(arr, n_257, (48 + builtin::i32_wrap_i64(x_170 %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, n_257, 48 + builtin::i32_wrap_i64(x_170 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_72: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_72;
