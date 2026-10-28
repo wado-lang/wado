@@ -54,8 +54,8 @@ CLAUDE_API_KEY=... wado run -D tools=true package-eddy/tools/baseline.wado -- \
     package-eddy/eval/judged.json package-eddy/eval/agentic.json
 ```
 
-They run `git` and `rg` through `core:process`, which needs no flag: both are
-under `/usr`, and the repository is the directory `wado run` grants. The
+They run `git` and `rg` through `core:process`, which needs no flag: the
+repository is the directory `wado run` grants. `mise install` provides `rg`. The
 agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
 is done.
 
