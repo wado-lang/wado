@@ -150,6 +150,9 @@ impl Workspace {
     }
 
     fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
+        if input.offset < 0 || input.limit < 1 {
+            return Err("offset must be at least 0 and limit at least 1");
+        }
         let path = self.resolve(&input.file_path)?;
         let meta = fs::metadata(&path).map_err(|e| `${e}`)?;
         if meta.type matches { Directory } {
@@ -158,9 +161,6 @@ impl Workspace {
         let text = String::from_utf8_lossy(fs::read(&path).map_err(|e| `${e}`)?);
         if text.is_empty() {
             return Ok(`${input.file_path} is empty.`);
-        }
-        if input.offset < 0 || input.limit < 1 {
-            return Err("offset must be at least 0 and limit at least 1");
         }
         let first = i32::max(input.offset, 1);
         let mut out = "";

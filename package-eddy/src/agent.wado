@@ -36,13 +36,8 @@ struct ToolResult {
     is_error: bool,
 }
 
-struct Results {
-    role: String = "user",
-    content: List<Value>,
-}
-
-struct Reply {
-    role: String = "assistant",
+struct Blocks {
+    role: String,
     content: List<Value>,
 }
 
@@ -97,7 +92,7 @@ pub fn run_agent(
                 &TextBlock { text: "This is your last turn: tools are no longer available. Give your answer now." },
             ));
         }
-        messages.push(message(&Reply { content: turn.content }));
-        messages.push(message(&Results { content: results }));
+        messages.push(message(&Blocks { role: "assistant", content: turn.content }));
+        messages.push(message(&Blocks { role: "user", content: results }));
     }
 }

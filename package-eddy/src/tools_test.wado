@@ -37,11 +37,13 @@ test "an input out of range is an error the model can retry" {
     assert ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "limit": 0}`)).is_err();
 }
 
-test "Read takes a limit past the end as the rest of the file" {
+test "a limit past the end reads the rest" {
     let ws = Workspace { root: "src" };
     let out = ws.call(&"Read", &tool_input(`{"file_path": "tools.wado", "offset": 2, "limit": 2147483647}`)).unwrap();
     assert out.starts_with("     2\t");
-    let rest = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`)).unwrap();
+    let rest = ws.call(&"Grep", &tool_input(
+        `{"pattern": "^pub fn", "glob": "*.wado", "offset": 1, "head_limit": 2147483647}`,
+    )).unwrap();
     assert !rest.is_empty();
 }
 
