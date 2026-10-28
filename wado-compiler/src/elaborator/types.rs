@@ -74,6 +74,15 @@ impl StructClosure {
             self.struct_reach.reach_phrase(),
         )
     }
+
+    /// "widen `f` to `pub`": what opens the struct.
+    pub(crate) fn widen(&self) -> String {
+        format!(
+            "widen `{}` to `{}`",
+            self.field,
+            self.struct_reach.keyword().trim_end()
+        )
+    }
 }
 
 /// What a path read as a value names, when only a call can use it.

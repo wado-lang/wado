@@ -794,8 +794,9 @@ export fn run() {
 A generic body building `T` from its fields must bound `T` with
 `FieldInputs = [..F]`. `FieldTypes` alone also holds of a closed struct.
 
-The derived `Serialize` and `Deserialize` cover open structs only. A closed
-struct guards a field, so its author writes its wire form by hand.
+The derived `Serialize` and `Deserialize` cover open structs only, and a marker
+(`impl Serialize for T;`) on a closed struct is an error. A closed struct guards
+a field, so its author writes its wire form by hand.
 
 ## Secret Fields
 

@@ -15,9 +15,9 @@ use crate::tir::{EffectRef, ResolvedType, TypeId};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
-    TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq, comparison_row,
-    derive, derive_alongside, holds_with_args, instance_candidates, mark_duplicates, owed,
-    pair_comparisons, rank, written_comparison,
+    Source, TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq,
+    comparison_row, derive, derive_alongside, holds_with_args, instance_candidates,
+    mark_duplicates, owed, pair_comparisons, rank, sourced, written_comparison,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -791,125 +791,149 @@ pub(super) fn lower_impls<'a>(
 ) -> Vec<&'a ImplHeader> {
     let mut sources: Vec<&ImplHeader> = Vec::new();
     for (&def, header) in impl_headers {
-        let param = |name: &str| ParamKind::of(&header.type_params, name);
-        let declaring_here = |base: &str, assoc: &str| {
-            if base == "Self" {
-                let implemented: Vec<DefId> = header.trait_def().into_iter().collect();
-                return env
-                    .trait_among_declaring_assoc_type(&implemented, assoc)
-                    .or_else(|| env.impl_trait_binding_assoc(&header.target, assoc));
+        let Some(lowered) = lower_header(lowering, header, env, resolutions) else {
+            continue;
+        };
+        let id = program.push_impl(lowered.def);
+        lowering.impl_defs.insert(id, def);
+        lowering.written_impls.insert(def, id);
+        if let Some(methods) = lowered.methods {
+            program.impl_methods.insert(id, methods);
+            if !lowered.assoc.is_empty() {
+                program.assoc_bindings.insert(id, lowered.assoc);
             }
-            let traits: Vec<DefId> = header
-                .type_params
-                .iter()
-                .filter(|p| p.name == base)
-                .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
-                .collect();
-            env.trait_among_declaring_assoc_type(&traits, assoc)
-        };
-        let mut space = Written {
-            resolutions,
-            param: &param,
-            declaring: &declaring_here,
-            self_type: None,
-        };
-        let Ok(target) = lowering.ast_type(&header.ty, &space) else {
-            continue;
-        };
-        space.self_type = Some(&target);
-        let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
-        let Ok(trait_args) = said(written.iter().map(|arg| lowering.ast_type(arg, &space))) else {
-            continue;
-        };
-        let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
-        let Some(params) = header
+        }
+        sources.push(header);
+    }
+    sources
+}
+
+/// An impl header as the program states it.
+struct LoweredImpl {
+    def: ImplDef,
+    /// The methods its body declares, for a trait impl.
+    methods: Option<Vec<MethodId>>,
+    assoc: Vec<(AssocId, SolverType)>,
+}
+
+/// `header` lowered, or `None` where its target, its trait's arguments or a
+/// bound cannot be said.
+fn lower_header(
+    lowering: &mut Lowering,
+    header: &ImplHeader,
+    env: &TraitEnv,
+    resolutions: &Resolutions,
+) -> Option<LoweredImpl> {
+    let param = |name: &str| ParamKind::of(&header.type_params, name);
+    let declaring_here = |base: &str, assoc: &str| {
+        if base == "Self" {
+            let implemented: Vec<DefId> = header.trait_def().into_iter().collect();
+            return env
+                .trait_among_declaring_assoc_type(&implemented, assoc)
+                .or_else(|| env.impl_trait_binding_assoc(&header.target, assoc));
+        }
+        let traits: Vec<DefId> = header
             .type_params
             .iter()
-            .map(|p| {
-                let mut def = ParamDef {
-                    copyable: !p.is_affine,
-                    ..ParamDef::default()
+            .filter(|p| p.name == base)
+            .flat_map(|p| p.bounds.iter().filter_map(|b| resolutions.bound_decl(b)))
+            .collect();
+        env.trait_among_declaring_assoc_type(&traits, assoc)
+    };
+    let mut space = Written {
+        resolutions,
+        param: &param,
+        declaring: &declaring_here,
+        self_type: None,
+    };
+    let target = lowering.ast_type(&header.ty, &space).ok()?;
+    space.self_type = Some(&target);
+    let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
+    let trait_args = said(written.iter().map(|arg| lowering.ast_type(arg, &space))).ok()?;
+    let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
+    let params = header
+        .type_params
+        .iter()
+        .map(|p| {
+            let mut def = ParamDef {
+                copyable: !p.is_affine,
+                ..ParamDef::default()
+            };
+            for b in &p.bounds {
+                let Some(bound) = resolutions.bound_decl(b) else {
+                    continue;
                 };
-                for b in &p.bounds {
-                    let Some(bound) = resolutions.bound_decl(b) else {
+                let bound = lowering.trait_decl(bound);
+                // A bound the lowering cannot spell drops the header: any
+                // other reading says more or less than it writes.
+                let args =
+                    said(b.type_args.iter().map(|arg| lowering.ast_type(arg, &space))).ok()?;
+                def.bounds.push(ParamBound {
+                    trait_: bound,
+                    args,
+                });
+                // A pin the lowering cannot spell is dropped, as the
+                // compiler's own check drops one to anything but the
+                // receiver.
+                for constraint in &b.assoc_types {
+                    let Ok(ty) = lowering.ast_type(&constraint.ty, &space) else {
                         continue;
                     };
-                    let bound = lowering.trait_decl(bound);
-                    // A bound the lowering cannot spell drops the header: any
-                    // other reading says more or less than it writes.
-                    let args =
-                        said(b.type_args.iter().map(|arg| lowering.ast_type(arg, &space))).ok()?;
-                    def.bounds.push(ParamBound {
+                    def.pins.push(Pin {
                         trait_: bound,
-                        args,
+                        assoc: lowering.assoc(bound, &constraint.name),
+                        ty,
                     });
-                    // A pin the lowering cannot spell is dropped, as the
-                    // compiler's own check drops one to anything but the
-                    // receiver.
-                    for constraint in &b.assoc_types {
-                        let Ok(ty) = lowering.ast_type(&constraint.ty, &space) else {
-                            continue;
-                        };
-                        def.pins.push(Pin {
-                            trait_: bound,
-                            assoc: lowering.assoc(bound, &constraint.name),
-                            ty,
-                        });
-                    }
                 }
-                Some(def)
-            })
-            .collect::<Option<Vec<_>>>()
-        else {
-            continue;
-        };
-        let id = program.push_impl(ImplDef {
+            }
+            Some(def)
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let mut methods = None;
+    let mut assoc = Vec::new();
+    if let Some(implemented) = implemented {
+        methods = Some(
+            header
+                .methods
+                .iter()
+                .map(|m| lowering.method(&m.name))
+                .collect(),
+        );
+        let past = u32::try_from(header.type_params.len()).expect("fewer than 2^32 params");
+        for binding in &header.associated_types {
+            // A family's own parameters follow the impl's, as
+            // `Program::assoc_bindings` spells them.
+            let in_family = |name: &str| match ParamKind::of(&binding.type_params, name) {
+                Some(ParamKind::Type(j)) => Some(ParamKind::Type(past + j)),
+                Some(ParamKind::Pack(j)) => Some(ParamKind::Pack(past + j)),
+                Some(signature @ ParamKind::Signature(_)) => Some(signature),
+                None => param(name),
+            };
+            let family = Written {
+                param: &in_family,
+                ..space
+            };
+            let Ok(ty) = lowering.ast_type(&binding.ty, &family) else {
+                continue;
+            };
+            assoc.push((lowering.assoc(implemented, &binding.name), ty));
+        }
+    }
+    Some(LoweredImpl {
+        def: ImplDef {
             trait_: implemented,
             trait_args,
-            target: target.clone(),
+            target,
             params,
             origin: if header.is_synthesize_request {
                 ImplOrigin::Marker
             } else {
                 ImplOrigin::Written
             },
-        });
-        lowering.impl_defs.insert(id, def);
-        lowering.written_impls.insert(def, id);
-        if let Some(implemented) = implemented {
-            let own = header
-                .methods
-                .iter()
-                .map(|m| lowering.method(&m.name))
-                .collect();
-            program.impl_methods.insert(id, own);
-            let past = u32::try_from(header.type_params.len()).expect("fewer than 2^32 params");
-            for binding in &header.associated_types {
-                // A family's own parameters follow the impl's, as
-                // `Program::assoc_bindings` spells them.
-                let in_family = |name: &str| match ParamKind::of(&binding.type_params, name) {
-                    Some(ParamKind::Type(j)) => Some(ParamKind::Type(past + j)),
-                    Some(ParamKind::Pack(j)) => Some(ParamKind::Pack(past + j)),
-                    Some(signature @ ParamKind::Signature(_)) => Some(signature),
-                    None => param(name),
-                };
-                let family = Written {
-                    param: &in_family,
-                    ..space
-                };
-                let Ok(ty) = lowering.ast_type(&binding.ty, &family) else {
-                    continue;
-                };
-                program
-                    .assoc_bindings
-                    .entry(id)
-                    .or_default()
-                    .push((lowering.assoc(implemented, &binding.name), ty));
-            }
-        }
-        sources.push(header);
-    }
-    sources
+        },
+        methods,
+        assoc,
+    })
 }
 
 /// A type standing for a lowered head, for what the compiler reads off a type
@@ -1033,9 +1057,17 @@ impl SolverBridge {
         program.never = Some(lowering.builtin(NEVER_TYPE_NAME));
         let derivation_sources = Self::derivation_sources(tysys);
         for (&def, &kind) in &derivation_sources {
-            if let Some(trait_) = tysys.trait_env.impl_headers[&def].trait_def() {
+            let header = &tysys.trait_env.impl_headers[&def];
+            if let Some(trait_) = header.trait_def() {
                 let trait_ = lowering.trait_decl(trait_);
                 lowering.derivation_source.insert((trait_, kind), def);
+                let kind = tysys
+                    .compiler_trait_def(kind)
+                    .map(|def| lowering.trait_decl(def))
+                    .expect("a source's kind is the trait it bounds on");
+                if let Some(source) = Self::source(tysys, &mut lowering, header, kind) {
+                    program.sources.entry(trait_).or_default().push(source);
+                }
             }
         }
         lower_impls(
@@ -1195,9 +1227,10 @@ impl SolverBridge {
             .collect();
         members.extend(shapes.into_iter().map(|(shape, _)| shape));
         stated.extend(members.iter().chain(&handles).map(|decl| decl.id));
+        // Before the derivations, whose sources ask them.
+        Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::derive_all(tysys, data, table, lowering, program, members, handles);
         Self::name_derived_impls(data, lowering, program, named_from);
-        Self::state_reflect_facts(tysys, data, &shape_kinds, table, lowering, program);
         Self::state_type_facts(tysys, data, table, lowering, program);
         stated
     }
@@ -1230,6 +1263,37 @@ impl SolverBridge {
                 Some((blanket.def, kind))
             })
             .collect()
+    }
+
+    /// What the derivation source `header` asks of its receiver: its bound on
+    /// `kind`, with that bound's pins. Its other bounds are the derivation's
+    /// own: those on the members are [`derive`]'s fixpoint, and one on the
+    /// receiver (`+ FieldSchema`, `+ Eq`) is derived alongside or withheld by
+    /// the comparison table. `None` where the header cannot be said, which
+    /// [`lower_impls`] drops too.
+    fn source(
+        tysys: &TypeSystem,
+        lowering: &mut Lowering,
+        header: &ImplHeader,
+        kind: TraitDeclId,
+    ) -> Option<Source> {
+        let def = lower_header(lowering, header, &tysys.trait_env, &tysys.resolutions)?;
+        let SolverType::Param(receiver) = def.def.target else {
+            unreachable!("a derivation source is a value blanket");
+        };
+        let ParamDef { bounds, pins, .. } = &def.def.params[receiver as usize];
+        Some(Source {
+            receiver: ParamDef {
+                bounds: bounds
+                    .iter()
+                    .filter(|b| b.trait_ == kind)
+                    .cloned()
+                    .collect(),
+                pins: pins.iter().filter(|p| p.trait_ == kind).cloned().collect(),
+                copyable: false,
+            },
+            params: def.def.params.len(),
+        })
     }
 
     /// Name each derived impl, and each marker demanding one, to the blanket
@@ -1586,8 +1650,9 @@ impl SolverBridge {
         }
     }
 
-    /// The impls the declarations derive. A handle derives `Eq` alone, so the
-    /// handles come last and every other trait stops before them. `Eq`
+    /// The impls the declarations derive, each only where a source of its
+    /// trait holds ([`Program::sources`]). A handle derives `Eq` alone, so the
+    /// handles come last and `Ord`, which has no source, stops before them. `Eq`
     /// and `Ord` derive from each other before from the members, by the impls
     /// `pair_comparisons` stated: a written `cmp` gives `Eq`, and a written
     /// `eq` gives no `Ord` (spec-traits.md §Derivation Policy).
@@ -1617,24 +1682,16 @@ impl SolverBridge {
             .into_iter()
             .filter_map(|item| Some((item, Self::derived_trait(tysys, lowering, item)?)))
             .collect();
-        // A closed struct guards a field, so its author writes its wire form:
-        // the serde blankets pin `FieldInputs = [..F]`, which it binds to `!`.
-        let open: Vec<Declaration> = declarations[..handles_from]
-            .iter()
-            .filter(|decl| {
-                !matches!(
-                    lowering.decl_key(decl.id),
-                    DeclKey::Def(def) if data.struct_fields.get(def).is_some_and(|info| info.closure().is_some())
-                )
-            })
-            .cloned()
-            .collect();
         let first = program.next_impl_id();
         for &(item, trait_) in &traits {
+            // A handle has no reflection kind, so no source of the other
+            // traits holds of one.
             let eligible = match item {
-                CompilerItem::Eq => &declarations[..],
-                CompilerItem::Ord | CompilerItem::Hash => &declarations[..handles_from],
-                CompilerItem::Serialize | CompilerItem::Deserialize => &open[..],
+                CompilerItem::Ord => &declarations[..handles_from],
+                CompilerItem::Eq
+                | CompilerItem::Hash
+                | CompilerItem::Serialize
+                | CompilerItem::Deserialize => &declarations[..],
                 other => unreachable!("{other:?} is not derived"),
             };
             derive(program, trait_, eligible);
@@ -2087,6 +2144,23 @@ impl SolverBridge {
             trait_,
             args,
         })
+    }
+
+    /// Whether a source of `trait_` holds of `decl`, as [`derive`] asks before
+    /// deriving it there. A marker on a declaration none holds of asks for a
+    /// body that cannot be built. A declaration or trait the program does not
+    /// derive over has no source to ask.
+    pub(super) fn sourced(&self, decl: DefId, trait_: DefId) -> bool {
+        let (Some(head), Some(trait_)) = (
+            self.lowering.known_type(&DeclKey::Def(decl)),
+            self.lowering.known_trait(trait_),
+        ) else {
+            return true;
+        };
+        self.program
+            .declarations
+            .get(&head)
+            .is_none_or(|declaration| sourced(&self.program, trait_, declaration))
     }
 
     /// Whether `type_id` satisfies `asked`, with the bodies the answer owes,

@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ParamBound, Program, RefRule,
-    SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ParamBound, Pin, Program,
+    RefRule, SolverType, Source, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -434,26 +434,14 @@ impl Query<'_> {
                         .collect();
                     self.member_next = through_member;
                     let answer = self.holds(element, bound.trait_, &args)?;
-                    // An impl binding the pinned assoc otherwise is refuted;
-                    // one binding nothing is not. A pin naming a parameter
-                    // still unbound binds it from what the answer binds.
-                    for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
-                            continue;
-                        };
-                        let actual = self.normalized(&actual);
-                        match self.at_bindings(&pin.ty, &bindings) {
-                            Some(expected) if expected != actual => return None,
-                            Some(_) => {}
-                            None => {
-                                let from = deferred.len();
-                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred)
-                                    || self.projections_refuted(&deferred[from..], &bindings)
-                                {
-                                    return None;
-                                }
-                            }
-                        }
+                    if !self.meets_pins(
+                        &param.pins,
+                        bound.trait_,
+                        &answer,
+                        &mut bindings,
+                        &mut deferred,
+                    ) {
+                        return None;
                     }
                     requests.extend(answer.requests);
                 }
@@ -492,6 +480,39 @@ impl Query<'_> {
                 })
                 .collect(),
         })
+    }
+
+    /// Whether `answer`, to a bound on `trait_`, meets each of `pins` on it. An
+    /// answer binding the pinned assoc otherwise is refuted; one binding
+    /// nothing is not. A pin naming a parameter still unbound binds it from
+    /// what the answer binds.
+    fn meets_pins(
+        &mut self,
+        pins: &[Pin],
+        trait_: TraitDeclId,
+        answer: &Holds,
+        bindings: &mut [Option<Binding>],
+        deferred: &mut Vec<(SolverType, SolverType)>,
+    ) -> bool {
+        for pin in pins.iter().filter(|pin| pin.trait_ == trait_) {
+            let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
+                continue;
+            };
+            let actual = self.normalized(&actual);
+            match self.at_bindings(&pin.ty, bindings) {
+                Some(expected) if expected != actual => return false,
+                Some(_) => {}
+                None => {
+                    let from = deferred.len();
+                    if !match_target(&pin.ty, &actual, bindings, deferred)
+                        || self.projections_refuted(&deferred[from..], bindings)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 
     /// Whether a projection a match met, readable at `bindings` already, holds
@@ -746,6 +767,34 @@ pub(super) fn impl_applies(
         .impl_answers(id, def, ty)?
         .trait_args,
     )
+}
+
+/// Whether `source`'s receiver bounds hold of `ty`, its pins met by one binding
+/// of the source's parameters.
+#[must_use]
+pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverType) -> bool {
+    let mut query = Query {
+        program,
+        env,
+        asking: Vec::new(),
+        member_next: false,
+        at_itself: None,
+    };
+    let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
+    let mut deferred = Vec::new();
+    source.receiver.bounds.iter().all(|bound| {
+        query
+            .holds(ty, bound.trait_, &bound.args)
+            .is_some_and(|answer| {
+                query.meets_pins(
+                    &source.receiver.pins,
+                    bound.trait_,
+                    &answer,
+                    &mut bindings,
+                    &mut deferred,
+                )
+            })
+    }) && query.projections_met(&deferred, &bindings)
 }
 
 /// What a target parameter matched: a pack takes every element past the

@@ -498,7 +498,11 @@ trait solving is one uniform search over impls:
 - A `Reflect*`-bounded blanket of a structural trait
   (`impl<S: ReflectStruct<…>, ..F: Serialize> Serialize for S`) is the derived
   body's source, not a candidate. The lowering leaves it out, and `derive`
-  answers per declaration.
+  answers per declaration. A derived impl stands for its source, so `derive`
+  admits only a declaration whose reflection fact meets the source's bound on
+  its kind, pins included (`Program::sources`). A marker on a declaration no
+  source admits is reported the same way: serde's `FieldInputs = [..F]` keeps a
+  closed struct out of both.
 - `holds` reports the derived and marker impls its answer passed through. The
   caller records the bodies to emit; the solver never records one itself.
 

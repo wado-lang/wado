@@ -1113,6 +1113,7 @@ impl TypeSystem {
         else {
             return chain;
         };
+        let trait_def = trait_;
         let trait_ = FqTraitName::declared(self.resolutions.defs(), trait_);
         let mut type_id = type_id;
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
@@ -1127,10 +1128,9 @@ impl TypeSystem {
                         self.type_id_to_string(type_id)
                     ))
                 }
-                OnBoundTrait::Serialize | OnBoundTrait::Deserialize => {
-                    self.closed_struct_note(scope, type_id, trait_name)
-                }
-                _ => self.comparison_withheld_note(tr, type_id),
+                _ => self
+                    .comparison_withheld_note(tr, type_id)
+                    .or_else(|| self.unsourced_note(scope, type_id, trait_def)),
             };
             if let Some(why) = written_instead {
                 chain.push(why);
@@ -1154,24 +1154,35 @@ impl TypeSystem {
         chain
     }
 
-    /// Why a closed struct derives no `trait_name` (`Serialize` or
-    /// `Deserialize`), and what to write instead.
-    fn closed_struct_note(
+    /// Why `type_id` derives no `trait_`: no source of it holds of the type
+    /// ([`SolverBridge::sourced`]). `None` where one does.
+    pub(super) fn unsourced_note(
         &self,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_name: &str,
+        trait_: DefId,
     ) -> Option<String> {
-        let info = match self.type_table.borrow().get(type_id) {
-            ResolvedType::Struct { def, .. } => scope.struct_fields_of_head(*def),
-            ResolvedType::GenericInstance { def, .. } => scope.struct_fields_of(*def),
-            _ => None,
-        }?;
+        let decl = self.represented_decl(type_id)?;
+        if self.solver().sourced(decl, trait_) {
+            return None;
+        }
         let owner = self.type_id_to_string(type_id);
-        Some(format!(
-            "{}, so it derives no `{trait_name}`\n  hint: write `impl {trait_name} for {owner}`",
-            info.closure()?.explain(&owner),
-        ))
+        Some(
+            match scope
+                .struct_fields_of(decl)
+                .and_then(StructFieldInfo::closure)
+            {
+                Some(closure) => format!(
+                    "{}\n  hint: {}, or write the impl",
+                    closure.explain(&owner),
+                    closure.widen()
+                ),
+                None => format!(
+                    "`{owner}` does not meet the reflection bound the derivation of `{}` states",
+                    self.resolutions.defs().name(trait_)
+                ),
+            },
+        )
     }
 
     /// Which [`OnBoundTrait`] `trait_` is, by identity.
@@ -1260,9 +1271,10 @@ impl TypeSystem {
         type_id: TypeId,
         tr: OnBoundTrait,
     ) -> bool {
-        let Some(trait_) = self.compiler_trait(tr.compiler_item()) else {
+        let Some(trait_def) = self.compiler_trait_def(tr.compiler_item()) else {
             return false;
         };
+        let trait_ = FqTraitName::declared(self.resolutions.defs(), trait_def);
         if tr.is_total() {
             return true;
         }
@@ -1285,6 +1297,7 @@ impl TypeSystem {
                 self.type_implements_trait(ctx, *base_type, &trait_)
             }
             ResolvedType::Flags { .. } => self.type_implements_trait(ctx, TypeTable::U32, &trait_),
+            _ if self.unsourced_note(scope, type_id, trait_def).is_some() => false,
             nominal => {
                 // A marker on a generic declaration (`impl<T> Eq for Pair<T>;`)
                 // asks whether the *declaration* derives, and its body is

@@ -347,8 +347,11 @@ reads only the declaration, so it gives the same answer in every module.
 
 A generic body that builds `T` bounds it with `FieldInputs = [..F]`. Serde's
 derivations take only open structs, and so does Jade's `JsonSchema`: a closed
-struct's author decides what its fields mean on the wire. The diagnostic for
-either names the field that closes the struct.
+struct's author decides what its fields mean on the wire. The pin is the whole
+rule. The structural derivation admits a declaration only where its source's
+bound on the kind holds, pins included, so a marker on a closed struct is
+refused where it is written rather than reaching the closed `from_fields` at
+run time. The diagnostic names the field that closes the struct.
 
 The rule costs one case: a `pub` struct with an `internal` field is closed even
 inside its own package, where the field is visible.

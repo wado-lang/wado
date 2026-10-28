@@ -11,30 +11,30 @@
 use { Serialize, Deserialize } from "core:serde";
 
 pub struct Properties {
-    name: String,
+    pub name: String,
 }
 impl Serialize for Properties;
 impl Deserialize for Properties;
 
 pub struct Geometry {
-    type: String,
-    coordinates: List<List<List<f64>>>,
+    pub type: String,
+    pub coordinates: List<List<List<f64>>>,
 }
 impl Serialize for Geometry;
 impl Deserialize for Geometry;
 
 pub struct Feature {
-    type: String,
-    properties: Properties,
-    geometry: Geometry,
+    pub type: String,
+    pub properties: Properties,
+    pub geometry: Geometry,
 }
 impl Serialize for Feature;
 impl Deserialize for Feature;
 
 pub struct FeatureCollection {
     #[wire(name = "type")]
-    collection_type: String,
-    features: List<Feature>,
+    pub collection_type: String,
+    pub features: List<Feature>,
 }
 impl Serialize for FeatureCollection;
 impl Deserialize for FeatureCollection;

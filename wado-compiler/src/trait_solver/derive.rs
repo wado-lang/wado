@@ -1,7 +1,7 @@
 //! Derivation as impl generation: a declaration whose members all satisfy a
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
-use super::holds::{at_defaults, at_self, holds};
+use super::holds::{admits, at_defaults, at_self, holds};
 use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
@@ -17,7 +17,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
     for decl in declarations {
         program.declarations.insert(decl.id, decl.clone());
-        if has_impl.contains(&decl.id) {
+        if has_impl.contains(&decl.id) || !sourced(program, trait_, decl) {
             continue;
         }
         let bounds = derived_bounds(trait_, decl, program.copyable == Some(trait_));
@@ -100,6 +100,18 @@ fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId>
             | SolverType::AnyRow => None,
         })
         .collect()
+}
+
+/// Whether a source of `trait_` holds of `decl` at its own parameters, which
+/// the impl derived for it stands for. A trait with no sources needs none.
+#[must_use]
+pub fn sourced(program: &Program, trait_: TraitDeclId, decl: &Declaration) -> bool {
+    let ty = SolverType::Decl(decl.id, decl_params(decl));
+    program.sources.get(&trait_).is_none_or(|sources| {
+        sources
+            .iter()
+            .any(|source| admits(program, &Env::default(), source, &ty))
+    })
 }
 
 /// The declaration's own parameters, as its derived impl's target spells them.
@@ -189,7 +201,7 @@ fn derived_bounds(
 #[cfg(test)]
 mod tests {
     use super::super::holds::owed;
-    use super::super::program::{ArgDefault, TypeDef};
+    use super::super::program::{ArgDefault, AssocId, Fact, Pin, Source, TypeDef};
     use super::super::testing::{Builder, bounded, concrete, decl};
     use super::*;
 
@@ -254,6 +266,49 @@ mod tests {
     fn a_struct_with_a_member_that_is_not_eq_does_not_derive() {
         let d = derived(prelude(), &[declaration(POINT, 0, vec![decl(OPAQUE)])]);
         assert_eq!(d, vec![]);
+    }
+
+    /// A derived impl stands for its source, so only a declaration whose fact
+    /// meets the source's pins derives: `KIND<Types = [..F], Inputs = [..F]>`
+    /// refuses one binding `Inputs` to `!`, and one with no fact at all.
+    #[test]
+    fn only_a_declaration_a_source_holds_of_derives() {
+        const KIND: TraitDeclId = TraitDeclId(1);
+        const NEVER: TypeDeclId = TypeDeclId(7);
+        let [types, inputs] = [AssocId(0), AssocId(1)];
+        let fact = |input: SolverType| Fact {
+            assoc: vec![(types, SolverType::Tuple(vec![decl(I32)])), (inputs, input)],
+        };
+        let pin = |assoc| Pin {
+            trait_: KIND,
+            assoc,
+            ty: SolverType::Tuple(vec![SolverType::Pack(1)]),
+        };
+        let mut p = Builder::default()
+            .concrete(EQ, decl(I32))
+            .fact(POINT, KIND, fact(SolverType::Tuple(vec![decl(I32)])))
+            .fact(OPAQUE, KIND, fact(decl(NEVER)))
+            .build();
+        p.sources.insert(
+            EQ,
+            vec![Source {
+                receiver: ParamDef {
+                    bounds: vec![ParamBound::bare(KIND)],
+                    pins: vec![pin(types), pin(inputs)],
+                    copyable: false,
+                },
+                params: 2,
+            }],
+        );
+        let d = derived(
+            p,
+            &[
+                declaration(POINT, 0, vec![decl(I32)]),
+                declaration(OPAQUE, 0, vec![decl(I32)]),
+                declaration(WRAPPER, 0, vec![decl(I32)]),
+            ],
+        );
+        assert_eq!(targets(&d), vec![decl(POINT)]);
     }
 
     /// A plain `enum` or `flags` has no members and derives unconditionally.

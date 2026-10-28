@@ -199,6 +199,15 @@ impl ParamDef {
     }
 }
 
+/// What a blanket a derived impl stands for asks of its receiver: the bound on
+/// a reflection kind, with the pins it writes, in the blanket's space of
+/// `params` parameters.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Source {
+    pub receiver: ParamDef,
+    pub params: usize,
+}
+
 /// An `impl` block, reduced to what the rules read.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ImplDef {
@@ -439,6 +448,11 @@ pub struct Program {
     pub tuple: Option<TypeDeclId>,
     /// Each declaration's members, which a structural body owes the bodies of.
     pub declarations: IndexMap<TypeDeclId, Declaration>,
+    /// The sources of each structural trait's derived bodies, one per
+    /// reflection kind. A derived impl stands for its source, so
+    /// [`super::derive`] admits only a declaration one of them holds of
+    /// ([`super::sourced`]); the member bounds are its own fixpoint.
+    pub sources: IndexMap<TraitDeclId, Vec<Source>>,
     /// `Eq` and `Ord`, the pair the comparison table relates. Set by
     /// [`super::pair_comparisons`].
     pub comparisons: Option<(TraitDeclId, TraitDeclId)>,
