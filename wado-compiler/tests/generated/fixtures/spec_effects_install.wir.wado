@@ -511,13 +511,7 @@ type "functype//core:secure_random/core:secure_random/$tmpl$f86a99973c5f619d^cor
 
 type "functype//core:simd/core:simd/u8x16^core:prelude/traits.wado/From<Array<i32>>::from" = fn(ref Array<i32>) -> v128;  // TypeId(160)
 
-<<<<<<< HEAD
 type "functype//spec_effects_install.wado/spec_effects_install.wado/$tmpl$d48748ffcad618c0^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "spec_effects_install.wado//$tmpl$d48748ffcad618c0") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(161)
-||||||| cb8adfc4999
-type "functype//core:uuid/core:uuid/Uuid::v4" = fn() -> ref "core:uuid//Uuid";  // TypeId(161)
-=======
-type "functype//core:uuid/core:uuid/Uuid::v4" = fn() -> v128;  // TypeId(161)
->>>>>>> origin/main
 
 type "functype//spec_effects_install.wado/spec_effects_install.wado/$tmpl$2e4b604754e48185^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "spec_effects_install.wado//$tmpl$2e4b604754e48185") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(162)
 
@@ -922,65 +916,37 @@ fn "spec_effects_install.wado/$test_1_a__with__is_an_expression"() {
     let rng: ref "spec_effects_install.wado//Zeros";
     let $local_5: ref null "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random";
     let $local_7: ref null "core:uuid//Uuid";
-<<<<<<< HEAD
     let v: ref "core:prelude//List<u8>";
     let value_28: u8;
-    let self_61: v128;
-||||||| cb8adfc4999
-    let self_8: v128;
-=======
->>>>>>> origin/main
     let s: ref "core:prelude/string.wado//String";
     rng = struct.new "spec_effects_install.wado//Zeros" {  };
     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = struct.new "spec_effects_install.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $local_5(global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "spec_effects_install.wado//$Closure_3" { $capture_0: rng }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_3" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "spec_effects_install.wado//$Closure_4" {  }, func: ref.func "closure/spec_effects_install.wado/$closure_wrapper_4" } };
     $local_7 = ref.null none;
-<<<<<<< HEAD
-    $local_7 = ref.as_non_null(v = "core:secure_random/bytes$unchecked$dae[n]"(); let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; $load_1 = v.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1); value_28 = (if @unlikely(8 >= $load_1) {
+    v = "core:secure_random/bytes$unchecked$dae[n]"();
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = v.repr;
+    $load_1 = v.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($load_1)), 0, $array_clone_src_1, 0, $load_1);
+    value_28 = (if @unlikely(8 >= $load_1) {
         cold_path;
         "core:uuid/core:uuid/Uuid::v4$cold1$dae[$contract_arg_1]"($load_1);
         unreachable;
-    }; builtin::array_get_value<u8>($array_clone_dst_2, 6) & 15) | 64; builtin::array_set_u8($array_clone_dst_2, 6, value_28); value_28 = builtin::array_get_value<u8>($array_clone_dst_2, 8); builtin::array_set_u8($array_clone_dst_2, 8, (value_28 & 63) | 128); "core:uuid/from_byte_list"(struct.new "core:prelude//List<u8>" { repr: $array_clone_dst_2, used: $load_1 }));
-||||||| cb8adfc4999
-    $local_7 = ref.as_non_null("core:uuid/core:uuid/Uuid::v4"());
-=======
-    let $mv_bytes_1: v128;
-    multivalue_bind [$mv_bytes_1] = "core:uuid/core:uuid/Uuid::v4"();
-    $local_7 = struct.new "core:uuid//Uuid" { bytes: $mv_bytes_1 };
->>>>>>> origin/main
+    }; builtin::array_get_value<u8>($array_clone_dst_2, 6) & 15) | 64;
+    builtin::array_set_u8($array_clone_dst_2, 6, value_28);
+    value_28 = builtin::array_get_value<u8>($array_clone_dst_2, 8);
+    builtin::array_set_u8($array_clone_dst_2, 8, (value_28 & 63) | 128);
+    $local_7 = let $mv_bytes_4: v128; multivalue_bind [$mv_bytes_4] = "core:uuid/from_byte_list"(struct.new "core:prelude//List<u8>" { repr: $array_clone_dst_2, used: $load_1 }); struct.new "core:uuid//Uuid" { bytes: $mv_bytes_4 };
     global:spec_effects_install.wado::$effect_wasi:random/random.wado/Random = $local_5;
-<<<<<<< HEAD
-    self_61 = $local_7.bytes;
-||||||| cb8adfc4999
-    self_8 = $local_7.bytes;
-=======
-    $mv_bytes_1 = $local_7.bytes;
->>>>>>> origin/main
+    $mv_bytes_4 = $local_7.bytes;
     s = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
-<<<<<<< HEAD
-    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self_61, s);
+    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"($mv_bytes_4, s);
     if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__14: block -> bool {
         $array_clone_dst_2 = s.repr;
         $load_1 = s.used;
         $array_clone_src_1 = global:spec_effects_install.wado::$const_obj_9;
         if $load_1 != 36 {
             break $inline_core_prelude_array_wado_seq_eq_u8__14: 0;
-||||||| cb8adfc4999
-    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"(self_8, s);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        a = s.repr;
-        a_end = s.used;
-        b = global:spec_effects_install.wado::$const_obj_9;
-        if a_end != 36 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
-=======
-    "core:uuid/core:uuid/Uuid::write_to$sroa[self.bytes]"($mv_bytes_1, s);
-    if @unlikely($inline_core_prelude_array_wado_seq_eq_u8__3: block -> bool {
-        a = s.repr;
-        a_end = s.used;
-        b = global:spec_effects_install.wado::$const_obj_9;
-        if a_end != 36 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__3: 0;
->>>>>>> origin/main
         }
         value_28 = 0;
         b42: block {
