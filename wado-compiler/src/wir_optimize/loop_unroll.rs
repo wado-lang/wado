@@ -7,9 +7,10 @@
 //!
 //! gains a copy in front of it that leaves once any of the next `n` tests
 //! would, `EXIT | EXIT[v := STEP] | …`, and otherwise runs its body `n` times.
-//! The step may sit anywhere in the body: a `for` over an iterator the
-//! optimizer took apart reads the element, steps, and only then runs the body. The original loop then runs what is left, so every iteration runs
-//! as it did: the sums keep their order, and a float result its bits.
+//! The original loop then runs what is left, so every iteration runs as it
+//! did: the sums keep their order, and a float result its bits. The step may
+//! sit anywhere in the body: a `for` over an iterator the optimizer took apart
+//! reads the element, steps, and only then runs the body.
 //!
 //! wasmtime checks each `array.get` against its array's length and shares part
 //! of that check only between gets in one basic block, so iterations in one
@@ -19,8 +20,9 @@
 //!
 //! The tests ahead are computed before the first `WORK` runs, so the pass needs
 //! `EXIT` and `STEP` to read only locals `WORK` and `REST` never write, and to
-//! compute nothing that traps. `WORK` may not branch to the loop or its block, which
-//! would leave the copy into the original loop rather than past both.
+//! compute nothing that traps. The body may not branch to the loop or its
+//! block, which would leave the copy into the original loop rather than past
+//! both.
 
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;

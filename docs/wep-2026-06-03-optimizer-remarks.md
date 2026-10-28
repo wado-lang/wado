@@ -114,10 +114,9 @@ NIR is both span-accurate and faithful. Even so the synthesized copy nodes
 (`array_clone`, demoted spine copies) carry synthetic spans, as do the inner
 statements of the blocks that SROA reconstruction wraps them in, so the remark
 anchors to the innermost statement written in source — the `let mut b = a;` that
-performs the copy. The
-reference escape hatch (`&T` / `&mut T`) is the only construct that shares rather
-than copies (`spec-memory.md`); naming it as a suggestion is deferred to the
-read-only-vs-required classification below.
+performs the copy. The reference escape hatch (`&T` / `&mut T`) is the only
+construct that shares rather than copies (`spec-memory.md`); naming it as a
+suggestion is deferred to the read-only-vs-required classification below.
 
 ### Surviving aggregate allocations (failed SROA)
 

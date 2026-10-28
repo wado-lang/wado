@@ -107,15 +107,14 @@ Allocation and aggregates:
   `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
   and a cold call site opts out, as does every site in a function only cold
   sites reach, unless the body is no bigger than the call. A callee that
-  reaches no safepoint (no call,
-  no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop. A loop-free
-  callee that does reach one is admitted at the same price at its only call
-  site outside a loop, since the call it replaces was a safepoint already. If
-  the compile-time engine may fold that call to its value, the splice waits
-  until the loop converges. Only sites in a
-  function an entry reaches count. A function only
-  loops reach runs once per iteration, so its body counts as a loop's. A call
+  reaches no safepoint (no call, no allocation) is admitted at four times the
+  threshold where the splice pays back: at its only call site, or at its only
+  site in a loop. A loop-free callee that does reach one is admitted at the
+  same price at its only call site outside a loop, since the call it replaces
+  was a safepoint already. If the compile-time engine may fold that call to its
+  value, the splice waits until the loop converges. Only sites in a function an
+  entry reaches count. A function only loops reach runs once per iteration, so
+  its body counts as a loop's. A call
   is tried before its arguments, and a spliced body, arguments included, is
   scanned again for calls to splice, wherever the call it replaced sat.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
