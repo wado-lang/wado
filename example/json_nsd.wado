@@ -103,7 +103,7 @@ impl SerializeMap for NsdMapSerializer {
 }
 
 impl SerializeStruct for NsdStructSerializer {
-    fn field<T: Serialize, S: AsStrSlice>(&mut self, _name: S, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.buf.push_str(",");
         }
@@ -221,7 +221,7 @@ impl Serializer for NsdSerializer {
         return Result::Ok(());
     }
 
-    fn begin_seq(&mut self, _len: i32) -> Result<NsdSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> {
         self.buf.push_str("[");
         return Result::Ok(NsdSeqSerializer {
             buf: self.buf,
@@ -229,7 +229,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_map(&mut self, _len: i32) -> Result<NsdMapSerializer, SerializeError> {
+    fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> {
         self.buf.push_str("{");
         return Result::Ok(NsdMapSerializer {
             buf: self.buf,
@@ -237,7 +237,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_struct<S: AsStrSlice>(&mut self, _name: S, _fields: i32) -> Result<NsdStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NsdStructSerializer, SerializeError> {
         // NSD: struct as array
         self.buf.push_str("[");
         return Result::Ok(NsdStructSerializer {
@@ -248,8 +248,8 @@ impl Serializer for NsdSerializer {
 
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        _type_name: S,
-        _variant_name: S1,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         // NSD: discriminant integer
@@ -259,8 +259,8 @@ impl Serializer for NsdSerializer {
 
     fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        _type_name: S,
-        _variant_name: S1,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<NsdVariantSerializer, SerializeError> {
         // NSD: [disc, payload]
@@ -519,7 +519,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct<S: AsStrSlice>(&mut self, _name: S, _num_fields: i32) -> Result<NsdStructAccess, DeserializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> {
         // NSD: struct encoded as array
         self.de.expect_char(b'[')?;
         let depth = inner_depth(self.de)?;
@@ -533,8 +533,8 @@ impl Deserializer for NsdDeserializer {
 
     fn begin_variant<S: AsStrSlice>(
         &mut self,
-        _type_name: S,
-        _num_cases: i32,
+        type_name: S,
+        num_cases: i32,
     ) -> Result<NsdVariantAccess, DeserializeError> {
         let b = self.de.peek_after_whitespace();
         if b < 0 {

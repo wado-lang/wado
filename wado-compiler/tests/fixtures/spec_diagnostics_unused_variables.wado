@@ -4,6 +4,16 @@ fn first(a: i32, b: i32) -> i32 {   // warns: `b` is never used
     return a;
 }
 
+trait Shape {
+    fn scaled(&self, by: i32) -> i32;
+}
+
+impl Shape for Point {
+    fn scaled(&self, by: i32) -> i32 {  // no warning: `Shape` names `by`
+        return self.x;
+    }
+}
+
 test {
     let unread = 1;                       // warns: never used
     let mut total = 0;                    // warns: assigned to, but never read
@@ -11,6 +21,7 @@ test {
     let _kept = 2;                        // starts with `_`: no warning
     let { x, y } = Point { x: 1, y: 2 };  // warns: write `y: _`
     assert x == 1;
+    assert Point { x: 3, y: 4 }.scaled(2) == 3;
 }
 
 __DATA__
@@ -22,5 +33,5 @@ __DATA__
         "variable `total` is assigned to, but never read",
         "variable `y` is never used; write `y: _`"
     ],
-    "warnings_not_contains": ["`a`", "`_kept`", "`x`"]
+    "warnings_not_contains": ["`a`", "`_kept`", "`x`", "`by`"]
 }

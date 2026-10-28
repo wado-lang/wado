@@ -344,6 +344,12 @@ parameter, and a pattern binding. A parameter of a function without a body,
 such as a trait method's requirement, is not reported, since nothing could read
 it.
 
+A trait or an interface names the parameters of every implementation, so a
+method it declares is not reported for a parameter either. That covers its
+default body, a method of an `impl` of it, and an effect handler's operation.
+Their locals and closures are reported as anywhere else, and so is a method of
+an inherent `impl`, whose signature is its own.
+
 A name used only as the target of an assignment is not read. That covers `=`, a
 destructuring assignment, and a compound assignment such as `+=`, whether they
 write the name itself or a field or element of the value it holds (`p.x = 1`,
@@ -360,6 +366,16 @@ fn first(a: i32, b: i32) -> i32 {   // warns: `b` is never used
     return a;
 }
 
+trait Shape {
+    fn scaled(&self, by: i32) -> i32;
+}
+
+impl Shape for Point {
+    fn scaled(&self, by: i32) -> i32 {  // no warning: `Shape` names `by`
+        return self.x;
+    }
+}
+
 test {
     let unread = 1;                       // warns: never used
     let mut total = 0;                    // warns: assigned to, but never read
@@ -367,6 +383,7 @@ test {
     let _kept = 2;                        // starts with `_`: no warning
     let { x, y } = Point { x: 1, y: 2 };  // warns: write `y: _`
     assert x == 1;
+    assert Point { x: 3, y: 4 }.scaled(2) == 3;
 }
 ```
 

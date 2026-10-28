@@ -61,11 +61,11 @@ struct Inputs {
 }
 
 impl Stream<u8> for Inputs {
-    fn begin_read(&mut self, _this: &Stream<u8>, _max: i32, _into: ReadInto) -> StartedRead<u8> {
+    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
         resume StartedRead::settled(StreamChunk { items: self.content as List<u8>, result: CopyResult::Dropped });
     }
 
-    fn drop(&mut self, _this: &Stream<u8>) {
+    fn drop(&mut self, this: &Stream<u8>) {
         resume ();
     }
 
@@ -76,7 +76,7 @@ struct Host {
 }
 
 impl KilnHost for Host {
-    fn emit_diagnostic(&mut self, _diagnostic: KilnDiagnostic) {
+    fn emit_diagnostic(&mut self, diagnostic: KilnDiagnostic) {
         resume ();
     }
 }

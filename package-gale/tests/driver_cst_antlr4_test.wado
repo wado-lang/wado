@@ -35,7 +35,7 @@ fn is_token_ref_name(view: &LexerView) -> bool {
 }
 
 impl LexerAdaptor for Antlr4Base {
-    fn emit(&mut self, view: LexerView, ty: i32, _channel: i32) -> i32 {
+    fn emit(&mut self, view: LexerView, ty: i32, channel: i32) -> i32 {
         if ty == TK_SEMI {
             self.current_rule_type = -1;
             resume ty;
@@ -50,7 +50,7 @@ impl LexerAdaptor for Antlr4Base {
         resume retyped;
     }
 
-    fn handle_begin_argument(&mut self, _view: LexerView, lx: &mut Lexer) {
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.begins += 1;
         // Inside a lexer rule a `[` opens a char set, not an argument list.
         if self.current_rule_type == TK_TOKEN_REF {
@@ -62,7 +62,7 @@ impl LexerAdaptor for Antlr4Base {
         resume ();
     }
 
-    fn handle_end_argument(&mut self, _view: LexerView, lx: &mut Lexer) {
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.ends += 1;
         lx.pop_mode();
         // A nested `[` pushed another Argument mode, so the closing bracket of
@@ -79,14 +79,14 @@ struct DoublePushBase {
 }
 
 impl LexerAdaptor for DoublePushBase {
-    fn handle_begin_argument(&mut self, _view: LexerView, lx: &mut Lexer) {
+    fn handle_begin_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         self.hits += 1;
         lx.push_mode(MODE_Argument);
         lx.push_mode(MODE_Argument);
         resume ();
     }
 
-    fn handle_end_argument(&mut self, _view: LexerView, _lx: &mut Lexer) {
+    fn handle_end_argument(&mut self, view: LexerView, lx: &mut Lexer) {
         resume ();
     }
 }

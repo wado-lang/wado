@@ -95,9 +95,44 @@ impl Counter {
     }
 }
 
+// A trait or an interface names the parameters of every implementation, so
+// one implementation leaving one unread is no defect. Its locals still are.
+trait Step {
+    fn step(&mut self, by: i32, unread_default_param: i32) {
+        self.advance(by);
+    }
+    fn advance(&mut self, by: i32);
+}
+
+impl Step for Counter {
+    fn advance(&mut self, unread_impl_param: i32) {
+        let unread_impl_local = 1;
+        self.n += 1;
+    }
+}
+
+interface Ask {
+    fn ask(question: i32, unread_operation_param: i32) -> i32 {
+        return question;
+    }
+}
+
+struct Answer {}
+
+impl Ask for Answer {
+    fn ask(&mut self, unread_handler_param: i32, unread_handler_other: i32) -> i32 {
+        resume 1
+    }
+}
+
 export fn run() with Stdout {
     let mut c = Counter { n: 0 };
     c.bump(1);
+    c.step(1, 0);
+    let mut answer = Answer {};
+    with Ask => &mut answer do {
+        c.n += Ask::ask(0, 0);
+    }
     projections(&mut c);
     allowed_fn(0);
     let total = params(1, 2, 3) + locals() + writes()
@@ -123,7 +158,8 @@ __DATA__
         "variable `or_unread` is never used",
         "variable `unread_elem` is never used",
         "parameter `unread_closure_param` is never used",
-        "parameter `unread_method_param` is never used"
+        "parameter `unread_method_param` is never used",
+        "variable `unread_impl_local` is never used"
     ],
     "warnings_not_contains": [
         "`read_param`",
@@ -147,6 +183,11 @@ __DATA__
         "`made`",
         "`text`",
         "`capture`",
-        "`self`"
+        "`self`",
+        "`unread_default_param`",
+        "`unread_impl_param`",
+        "`unread_operation_param`",
+        "`unread_handler_param`",
+        "`unread_handler_other`"
     ]
 }

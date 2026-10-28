@@ -4,8 +4,8 @@
 
 use crate::Lints;
 use crate::ast::{
-    AstId, AstVisitor, Attribute, Expr, Function, Pattern, SelfKind, attrs_allow,
-    inner_attrs_allow, lint, walk_expr, walk_function, walk_pattern,
+    AstId, AstVisitor, Attribute, Expr, Function, Item, Pattern, SelfKind, attrs_allow,
+    inner_attrs_allow, lint, walk_expr, walk_function, walk_item, walk_pattern,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
@@ -24,6 +24,7 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
             sem,
             module: src,
             waived: inner_attrs_allow(&module.inner_attributes, lint::UNUSED_VARIABLES),
+            signatures_imposed: false,
             found: Vec::new(),
             shorthand: IndexSet::default(),
             writes: IndexSet::default(),
@@ -119,6 +120,10 @@ struct Binders<'a> {
     sem: &'a Semantics,
     module: &'a ModuleSource,
     waived: bool,
+    /// Inside a trait, an interface, or an implementation of one. Each names
+    /// the parameters of every implementation, so one leaving a parameter
+    /// unread is no defect.
+    signatures_imposed: bool,
     found: Vec<Binder<'a>>,
     /// The pattern ids a struct pattern binds by its field's own name.
     shorthand: IndexSet<AstId>,
@@ -168,9 +173,33 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
         self.waived = saved;
     }
 
+    fn visit_item(&mut self, item: &'a Item) {
+        let saved = self.signatures_imposed;
+        self.signatures_imposed = match item {
+            Item::Impl(i) => i.trait_type.is_some(),
+            Item::Trait(_) | Item::Interface(_) => true,
+            Item::Use(_)
+            | Item::Function(_)
+            | Item::Struct(_)
+            | Item::Enum(_)
+            | Item::Variant(_)
+            | Item::Flags(_)
+            | Item::Newtype(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Resource(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => false,
+        };
+        walk_item(self, item);
+        self.signatures_imposed = saved;
+    }
+
     /// A parameter of a function without a body has nothing to read it.
     fn visit_function(&mut self, func: &'a Function) {
-        if func.body.is_some() {
+        if func.body.is_some() && !self.signatures_imposed {
             for param in &func.params {
                 if param.self_kind == SelfKind::None {
                     self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);

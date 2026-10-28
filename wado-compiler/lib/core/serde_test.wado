@@ -199,26 +199,26 @@ impl Serializer for MockSerializer {
         return Result::Ok(());
     }
 
-    fn begin_seq(&mut self, _len: i32) -> Result<MockSeqSerializer, SerializeError> {
+    fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> {
         self.w.buf.push_str("[");
         return Result::Ok(MockSeqSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_map(&mut self, _len: i32) -> Result<MockMapSerializer, SerializeError> {
+    fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> {
         self.w.buf.push_str("{");
         return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_struct<S: AsStrSlice>(&mut self, _name: S, _fields: i32) -> Result<MockStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<MockStructSerializer, SerializeError> {
         self.w.buf.push_str("{");
         return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
 
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        _type_name: S,
+        type_name: S,
         variant_name: S1,
-        _disc: i32,
+        disc: i32,
     ) -> Result<(), SerializeError> {
         self.w.buf.push_str(`"${variant_name}"`);
         return Result::Ok(());
@@ -226,9 +226,9 @@ impl Serializer for MockSerializer {
 
     fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        _type_name: S,
+        type_name: S,
         variant_name: S1,
-        _disc: i32,
+        disc: i32,
     ) -> Result<MockVariantSerializer, SerializeError> {
         self.w.buf.push_str(`{"${variant_name}":`);
         return Result::Ok(MockVariantSerializer { w: self.w });

@@ -290,6 +290,12 @@ name.
 walk collects each binder with its kind: a parameter of a function with a
 body or of a closure is a parameter, and a pattern's name is a variable. It
 skips a name starting with `_` and one an `#[allow(unused_variables)]` waives.
+It skips the parameters of a method inside a trait, an interface, or an `impl`
+with a trait (`ImplBlock::trait_type`), effect handlers included: the
+declaration names them for every implementation, and one implementation leaving
+one unread is no defect. Under rustc's rule each such implementation renamed
+its parameters `_view`, `_gen` and the like, and the renames hid none of the
+real defects the lint found elsewhere.
 It also collects the names an assignment writes (`Expr::assigned_places`): a
 place on the left of `=`, of a destructuring assignment, or of a compound
 assignment. A place writes a name directly, or through the fields and indexes

@@ -15,17 +15,17 @@ struct SaBaseImpl {
 }
 
 impl SaBase for SaBaseImpl {
-    fn mark(&mut self, view: LexerView, _lx: &mut Lexer) {
+    fn mark(&mut self, view: LexerView, lx: &mut Lexer) {
         self.log.push(`mark@${view.pos()}`);
         resume ();
     }
 
-    fn done(&mut self, view: LexerView, _lx: &mut Lexer) {
+    fn done(&mut self, view: LexerView, lx: &mut Lexer) {
         self.log.push(`done@${view.pos()}:${view.text()}`);
         resume ();
     }
 
-    fn enabled(&self, _view: LexerView) -> bool {
+    fn enabled(&self, view: LexerView) -> bool {
         resume self.on;
     }
 }
