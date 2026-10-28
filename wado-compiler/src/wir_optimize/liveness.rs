@@ -1,11 +1,12 @@
-//! Backward liveness over a WIR body, following Wasm's branches: which
-//! `LocalSet` / `LocalTee` stores no read can see, because every path from the
-//! store overwrites the local or leaves the function first.
+//! Backward liveness over a WIR body, following Wasm's branches. An
+//! [`Observer`] sees each store with what is live right after it, which
+//! answers both which stores no read can see ([`dead_stores`]) and which
+//! locals hold values at once (`local_coalesce`).
 //!
 //! A forward walk flattens the tree into events, numbering each node in
-//! pre-order as `WirMutVisitor` reaches it, so the rewrite finds a dead store
-//! by that number. The backward pass then runs over the events: a branch takes
-//! the liveness of its target, the end of a block or an `if`, or the head of a
+//! pre-order as `WirMutVisitor` reaches it, so a rewrite finds a store by that
+//! number. The backward pass then runs over the events: a branch takes the
+//! liveness of its target, the end of a block or an `if`, or the head of a
 //! loop, which iterates to its fixed point.
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -14,50 +15,120 @@ use crate::wir_visitor::WirRefVisitor;
 
 use super::util::Bits;
 
-/// The pre-order numbers of the dead stores in `body`.
+/// The pre-order numbers of the stores in `body` no read can see, because
+/// every path from the store overwrites the local or leaves the function first.
 pub(super) fn dead_stores(body: &[WirInstr]) -> IndexSet<u32> {
-    let mut flat = Flatten::default();
-    flat.walk_body(body);
-    let events = flat.events;
-    let mut start_of = vec![0; events.len()];
-    let mut else_of = vec![None; events.len()];
-    let mut open: Vec<usize> = Vec::new();
-    for (at, event) in events.iter().enumerate() {
-        match event {
-            Event::BlockStart | Event::LoopStart | Event::IfStart => open.push(at),
-            Event::Else => else_of[*open.last().expect("an `else` is inside its `if`")] = Some(at),
-            Event::BlockEnd | Event::LoopEnd | Event::IfEnd => {
-                start_of[at] = open.pop().expect("an end closes a start");
-            }
-            Event::Read(_)
-            | Event::Write(..)
-            | Event::Kill(_)
-            | Event::Br(_)
-            | Event::BrIf(_)
-            | Event::BrTable(_)
-            | Event::Exit => {}
+    let mut dead = DeadStores::default();
+    Flow::of(body).run(&mut dead);
+    dead.0
+}
+
+#[derive(Default)]
+struct DeadStores(IndexSet<u32>);
+
+impl Observer for DeadStores {
+    fn store(&mut self, store: &Store, live_after: &Bits) {
+        if let Store::One { local, id, .. } = store
+            && !live_after.contains(*local)
+        {
+            self.0.insert(*id);
         }
     }
-    let width = flat.locals.len();
-    let mut backward = Backward {
-        events: &events,
-        start_of: &start_of,
-        else_of: &else_of,
-        width,
-        labels: Vec::new(),
-        loop_heads: IndexMap::default(),
-        dead: IndexSet::default(),
-    };
-    backward.region(0, events.len(), Bits::new(width));
-    backward.dead
+
+    fn mark(&self) -> usize {
+        self.0.len()
+    }
+
+    fn rollback(&mut self, mark: usize) {
+        self.0.truncate(mark);
+    }
+}
+
+/// What sees the stores of a [`Flow`].
+pub(super) trait Observer {
+    fn store(&mut self, store: &Store, live_after: &Bits);
+
+    /// Where to roll back to, should what follows be observed under liveness
+    /// short of final: a loop pass whose head then moves.
+    fn mark(&self) -> usize;
+
+    fn rollback(&mut self, mark: usize);
+}
+
+/// A write of locals, by the index [`Flow::locals`] gives each.
+pub(super) enum Store {
+    /// A `LocalSet` or `LocalTee` by the node of pre-order number `id`;
+    /// `copy_of` is the local its value merely reads.
+    One {
+        local: usize,
+        id: u32,
+        copy_of: Option<usize>,
+    },
+    /// A multi-value bind, writing its targets at once.
+    Bind(Vec<usize>),
+}
+
+/// A body flattened for liveness.
+pub(super) struct Flow {
+    events: Vec<Event>,
+    /// The matching start of each end.
+    start_of: Vec<usize>,
+    /// The `else` of each `if` start that has one.
+    else_of: Vec<Option<usize>>,
+    /// Every local the body accesses, in the order it first does.
+    pub(super) locals: IndexSet<String>,
+}
+
+impl Flow {
+    pub(super) fn of(body: &[WirInstr]) -> Self {
+        let mut flat = Flatten::default();
+        flat.walk_body(body);
+        let events = flat.events;
+        let mut start_of = vec![0; events.len()];
+        let mut else_of = vec![None; events.len()];
+        let mut open: Vec<usize> = Vec::new();
+        for (at, event) in events.iter().enumerate() {
+            match event {
+                Event::BlockStart | Event::LoopStart | Event::IfStart => open.push(at),
+                Event::Else => {
+                    else_of[*open.last().expect("an `else` is inside its `if`")] = Some(at);
+                }
+                Event::BlockEnd | Event::LoopEnd | Event::IfEnd => {
+                    start_of[at] = open.pop().expect("an end closes a start");
+                }
+                Event::Read(_)
+                | Event::Store(_)
+                | Event::Br(_)
+                | Event::BrIf(_)
+                | Event::BrTable(_)
+                | Event::Exit => {}
+            }
+        }
+        Self {
+            events,
+            start_of,
+            else_of,
+            locals: flat.locals,
+        }
+    }
+
+    /// Show `observer` every store, and answer what is live at the entry.
+    pub(super) fn run(&self, observer: &mut impl Observer) -> Bits {
+        let width = self.locals.len();
+        let mut backward = Backward {
+            flow: self,
+            width,
+            observer,
+            labels: Vec::new(),
+            loop_heads: IndexMap::default(),
+        };
+        backward.region(0, self.events.len(), Bits::new(width))
+    }
 }
 
 enum Event {
     Read(usize),
-    /// A store of the local by the node of that pre-order number.
-    Write(usize, u32),
-    /// A write by a multi-value bind, which is never removed.
-    Kill(usize),
+    Store(Store),
     BlockStart,
     BlockEnd,
     LoopStart,
@@ -139,10 +210,12 @@ impl WirRefVisitor for Flatten {
                 self.walk_instr(instr);
                 self.events.push(Event::Exit);
             }
-            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+            WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
                 self.walk_instr(instr);
+                let copy_of = value.local_read().map(|source| self.local(source));
                 let local = self.local(name);
-                self.events.push(Event::Write(local, id));
+                self.events
+                    .push(Event::Store(Store::One { local, id, copy_of }));
             }
             _ => {
                 self.walk_instr(instr);
@@ -150,22 +223,19 @@ impl WirRefVisitor for Flatten {
                     let local = self.local(name);
                     self.events.push(Event::Read(local));
                 }
-                for name in instr.local_writes() {
-                    let local = self.local(name);
-                    self.events.push(Event::Kill(local));
+                let bound: Vec<usize> = instr.local_writes().map(|name| self.local(name)).collect();
+                if !bound.is_empty() {
+                    self.events.push(Event::Store(Store::Bind(bound)));
                 }
             }
         }
     }
 }
 
-struct Backward<'a> {
-    events: &'a [Event],
-    /// The matching start of each end.
-    start_of: &'a [usize],
-    /// The `else` of each `if` start that has one.
-    else_of: &'a [Option<usize>],
+struct Backward<'a, O> {
+    flow: &'a Flow,
     width: usize,
+    observer: &'a mut O,
     /// What is live where a branch to each enclosing label lands, innermost
     /// last: after a block or an `if`, at the head of a loop.
     labels: Vec<Bits>,
@@ -173,34 +243,33 @@ struct Backward<'a> {
     /// enclosing loop. Liveness only grows from pass to pass, so the head
     /// found last is a sound start for the next fixed point.
     loop_heads: IndexMap<usize, Bits>,
-    dead: IndexSet<u32>,
 }
 
-impl Backward<'_> {
-    /// What is live at `start`, given `live` at `end`, recording the stores
-    /// it finds dead.
+impl<O: Observer> Backward<'_, O> {
+    /// What is live at `start`, given `live` at `end`.
     fn region(&mut self, start: usize, end: usize, mut live: Bits) -> Bits {
+        let flow = self.flow;
         let mut at = end;
         while at > start {
             at -= 1;
-            match &self.events[at] {
+            match &flow.events[at] {
                 Event::Read(local) => live.insert(*local),
-                Event::Write(local, id) => {
-                    if !live.contains(*local) {
-                        self.dead.insert(*id);
+                Event::Store(store) => {
+                    self.observer.store(store, &live);
+                    match store {
+                        Store::One { local, .. } => live.remove(*local),
+                        Store::Bind(locals) => locals.iter().for_each(|&local| live.remove(local)),
                     }
-                    live.remove(*local);
                 }
-                Event::Kill(local) => live.remove(*local),
                 Event::BlockEnd => {
-                    let open = self.start_of[at];
+                    let open = flow.start_of[at];
                     live = self.labeled(live.clone(), open + 1, at, live);
                     at = open;
                 }
                 Event::IfEnd => {
-                    let open = self.start_of[at];
+                    let open = flow.start_of[at];
                     let after = live;
-                    let split = self.else_of[open];
+                    let split = flow.else_of[open];
                     // An `if` without an `else` falls through on false.
                     let else_live = match split {
                         Some(split) => self.labeled(after.clone(), split + 1, at, after.clone()),
@@ -211,7 +280,7 @@ impl Backward<'_> {
                     at = open;
                 }
                 Event::LoopEnd => {
-                    let open = self.start_of[at];
+                    let open = flow.start_of[at];
                     live = self.looped(open, at, live);
                     at = open;
                 }
@@ -251,8 +320,8 @@ impl Backward<'_> {
     }
 
     /// The loop's head at its fixed point, from the liveness after it. A pass
-    /// whose head moves records under a head short of final, so its records
-    /// go; the loop's stores are recorded by no pass before its first.
+    /// whose head moves observed under a head short of final, so the observer
+    /// rolls it back.
     fn looped(&mut self, open: usize, close: usize, after: Bits) -> Bits {
         let mut head = self
             .loop_heads
@@ -260,13 +329,13 @@ impl Backward<'_> {
             .cloned()
             .unwrap_or_else(|| Bits::new(self.width));
         loop {
-            let recorded = self.dead.len();
+            let mark = self.observer.mark();
             let mut next = self.labeled(head.clone(), open + 1, close, after.clone());
             next.union(&head);
             if next == head {
                 break;
             }
-            self.dead.truncate(recorded);
+            self.observer.rollback(mark);
             head = next;
         }
         self.loop_heads.insert(open, head.clone());

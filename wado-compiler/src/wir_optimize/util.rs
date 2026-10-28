@@ -26,16 +26,24 @@ impl Bits {
         self.0[i / 64] & (1 << (i % 64)) != 0
     }
 
-    pub(super) fn intersect(&mut self, other: &Self) {
-        for (word, other) in self.0.iter_mut().zip(&other.0) {
-            *word &= other;
-        }
-    }
-
     pub(super) fn union(&mut self, other: &Self) {
         for (word, other) in self.0.iter_mut().zip(&other.0) {
             *word |= other;
         }
+    }
+
+    /// The indices in the set, ascending.
+    pub(super) fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        self.0.iter().enumerate().flat_map(|(at, &word)| {
+            let mut rest = word;
+            std::iter::from_fn(move || {
+                (rest != 0).then(|| {
+                    let bit = rest.trailing_zeros() as usize;
+                    rest &= rest - 1;
+                    at * 64 + bit
+                })
+            })
+        })
     }
 }
 
