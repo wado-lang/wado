@@ -45,11 +45,11 @@ type "functype//stream_cm_stdin_pipe.wado/$cm_export__run" = fn();  // TypeId(14
 
 type "functype//stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>" = fn(i32) -> ref null "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>";  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32, i32) -> i32;  // TypeId(18)
+type "functype//wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32, i32) -> i32;  // TypeId(18)
 
 type "functype//stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(ref null "core:prelude//$Resource") -> i32;  // TypeId(19)
 
@@ -61,9 +61,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdin@0.3.0#read-via-stream from "wasi/$wasi:cli/stdin@0.3.0#read-via-stream";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0: ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" { 0 };
 
@@ -76,7 +76,7 @@ fn "stream_cm_stdin_pipe.wado/run"() with Stdout, Stdin {
     _done = $pattern_temp_0.1;
     drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3 = stdin_stream; stdin_stream = ref.null none; $moved_3)));
     if ref.is_null(_done) == 0 {
-        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(_done.value);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(_done.value);
     }
 }
 
@@ -108,7 +108,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     let status_14: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
     status_14 = $inline_cm_await_blocked_0: block -> i32 {
-        if local.tee packed("wasi/future-read:transmission-wasi/cli/types.wado#ErrorCode"(handle, ptr)) != -1 {
+        if local.tee packed("wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode"(handle, ptr)) != -1 {
             break $inline_cm_await_blocked_0: packed;
         }
         packed = "wasi/waitable-set-new"();
@@ -137,7 +137,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
         });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle);
     return result;
 }
 
