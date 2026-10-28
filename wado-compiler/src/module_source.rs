@@ -12,8 +12,8 @@ use crate::intern::{InternedStr, StringInterner};
 use crate::loader::strip_kiln_scheme;
 use crate::name::{DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir};
 use crate::path::{normalize, relative_path};
-use crate::remote::is_remote;
 use crate::primitive::PrimitiveType;
+use crate::remote::is_remote;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
 use std::sync::{Arc, LazyLock};
@@ -1210,7 +1210,7 @@ impl ModuleSource {
     ///
     /// Examples:
     /// - `ModuleSource::prelude().qualify_name("Option")` → `"core:prelude//Option"`
-    /// - `ModuleSource::local("./geometry.wado").qualify_name("Point")` → `"./geometry.wado//Point"`
+    /// - `interner.local("./geometry.wado").qualify_name("Point")` → `"geometry.wado//Point"`
     /// - `interner.entry_point("main.wado").qualify_name("Foo")` → `"main.wado//Foo"`
     #[must_use]
     pub fn qualify_name(&self, name: &str) -> String {
@@ -1452,7 +1452,10 @@ mod tests {
         assert_eq!(ModuleSource::prelude().to_string(), "core:prelude");
         assert_eq!(ModuleSource::cli().to_string(), "core:cli");
         assert_eq!(interner.wasi("cli").to_string(), "wasi:cli");
-        assert_eq!(interner.local("./geometry.wado").to_string(), "geometry.wado");
+        assert_eq!(
+            interner.local("./geometry.wado").to_string(),
+            "geometry.wado"
+        );
         assert_eq!(interner.entry_point("hello.wado").to_string(), "hello.wado");
     }
 
@@ -1473,7 +1476,9 @@ mod tests {
             ];
             let package = packages.iter().find_map(|&(root, coordinate)| {
                 let inside = dir.strip_prefix(root)?;
-                let inside = inside.strip_prefix('/').or(inside.is_empty().then_some(""))?;
+                let inside = inside
+                    .strip_prefix('/')
+                    .or(inside.is_empty().then_some(""))?;
                 Some(PackageDir {
                     root: root.to_string(),
                     coordinate: coordinate.map(str::to_string),
@@ -1503,8 +1508,14 @@ mod tests {
         let named = |interner: &mut ModuleSourceInterner, path: &str| {
             interner.place(path, &host).to_string()
         };
-        assert_eq!(named(&mut interner, "../lib/u.wado"), "acme:app@0.1.0/lib/u.wado");
-        assert_eq!(named(&mut interner, "../../loose/x.wado"), "../loose/x.wado");
+        assert_eq!(
+            named(&mut interner, "../lib/u.wado"),
+            "acme:app@0.1.0/lib/u.wado"
+        );
+        assert_eq!(
+            named(&mut interner, "../../loose/x.wado"),
+            "../loose/x.wado"
+        );
         assert_eq!(named(&mut interner, "../../bare/b.wado"), "../bare/b.wado");
 
         let dep = interner.dependency("../../dep/src/lib.wado");
@@ -1524,7 +1535,10 @@ mod tests {
         };
         assert_eq!(named(&mut interner, "./sub/y.wado"), "sub/y.wado");
         assert_eq!(named(&mut interner, "../shared/z.wado"), "../shared/z.wado");
-        assert_eq!(named(&mut interner, "../app/lib/u.wado"), "acme:app@0.1.0/lib/u.wado");
+        assert_eq!(
+            named(&mut interner, "../app/lib/u.wado"),
+            "acme:app@0.1.0/lib/u.wado"
+        );
     }
 
     #[test]

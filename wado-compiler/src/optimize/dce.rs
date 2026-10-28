@@ -2796,7 +2796,10 @@ mod tests {
     use crate::token::Span;
 
     fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {
-        FunctionId::Free(FreeFunctionName::new(interner.local("test"), name.to_string()))
+        FunctionId::Free(FreeFunctionName::new(
+            interner.local("test"),
+            name.to_string(),
+        ))
     }
 
     /// The graph where the function at position `i` is named `names[i]` and

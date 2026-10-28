@@ -2590,10 +2590,8 @@ mod resolve_include_path_tests {
     #[test]
     fn cross_package_dependency_include_resolves_in_the_dependency_dir() {
         // A `#include_str` in a dependency module must resolve next to that
-        // module, not under the consumer's `base_path`. `source_path` now hands
-        // the dependency its real base-relative path (`../dep/…`, not
-        // `dep:../dep/…`), so the dir prefix is kept and `base_path.join`
-        // lands in the dependency's directory.
+        // module, not under the consumer's `base_path`: `source_path` is the
+        // dependency's base-relative path, not its name.
         let entry = "./src/main.wado";
         let dep_module = "../dep/src/highlight/facade.wado";
         let resolved = resolve(Some(entry), dep_module, "./themes/gale-light.css");

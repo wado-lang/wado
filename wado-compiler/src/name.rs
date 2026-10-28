@@ -238,9 +238,7 @@ pub fn diagnostic_function_name(
         declared.method_name = as_declared(&method.method_name);
         return declared.to_display_name();
     }
-    let local = name
-        .strip_prefix(&format!("{module}/"))
-        .unwrap_or(name);
+    let local = name.strip_prefix(&format!("{module}/")).unwrap_or(name);
     as_declared(local)
 }
 
@@ -991,7 +989,7 @@ pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 /// Format: `{module_source}/{name}`
 ///
 /// Examples:
-/// - `./geometry.wado/helper`
+/// - `geometry.wado/helper`
 /// - `core:rt/log_stdout`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FreeFunctionName {
@@ -1031,8 +1029,8 @@ impl fmt::Display for FreeFunctionName {
 /// - With trait: `{struct_name}^{trait_name}::{method_name}`
 ///
 /// Examples:
-/// - `./geometry.wado/Point::sum`
-/// - `./geometry.wado/Point^Display::fmt`
+/// - `geometry.wado/Point::sum`
+/// - `geometry.wado/Point^Display::fmt`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MethodName {
     /// The module source where the method is defined
@@ -1810,7 +1808,7 @@ impl From<MethodName> for FunctionId {
 }
 
 /// A qualified struct type name, `{module}/{name}` — e.g.
-/// `./geometry.wado/Point`, `core:rt/SomeType`.
+/// `geometry.wado/Point`, `core:rt/SomeType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructName {
     /// The module where the struct is defined

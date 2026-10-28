@@ -371,8 +371,8 @@ A `module` line names a module the same way on any machine and from any entry:
 - A file of a package whose `wado.toml` has a `[package]`, the recording
   package's own or a dependency's, is the package's `namespace:name@version`,
   then the file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
-- Any other file is relative to the package's root, or for a program in no
-  package, to the program's directory.
+- Any other file is relative to the recording package's root, or for a program
+  in no package, to the program's directory.
 - A `core:` module is its import path, and a remote module its URL.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers

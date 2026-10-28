@@ -686,7 +686,7 @@ pub trait CompilerHost: Send + Sync {
     /// left either to a default would place every module outside its package.
     fn module_dir(&self, path: &str) -> ModuleDir;
 
-    /// The index of the package rooted at `root`, as [`Self::package_root`]
+    /// The index of the package rooted at `root`, as [`PackageDir::root`]
     /// names it, built as [`Self::dependency_index`] builds the entry's. Asked
     /// for a package a module lies in that no manifest declares, once per
     /// package.

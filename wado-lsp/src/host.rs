@@ -13,8 +13,8 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use wado_compiler::{
-    CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, ModuleDir, PackageDir,
-    Severity, SourceError, SourceReader,
+    CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, ModuleDir, PackageDir, Severity,
+    SourceError, SourceReader,
 };
 
 pub mod discovery;

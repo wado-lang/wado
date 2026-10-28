@@ -11,9 +11,7 @@ use std::collections::BTreeMap;
 use std::fmt::{self, Write as _};
 
 use crate::ast::{self, AstId};
-use crate::coverage::{
-    Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module,
-};
+use crate::coverage::{Coverage, Marker, PlannedModule, ProbeSite, RegionKind, plan_module};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::stdlib::core_module_file;
