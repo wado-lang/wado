@@ -298,15 +298,12 @@ impl ModuleSourceInterner {
             && !self.libs_by_path.contains_key(&interned)
         {
             let file = self.host_file(path, host);
-            match self.lib_files.get(&file).cloned() {
-                Some(lib) => {
-                    let lib = self.intern(&lib);
-                    self.libs_by_path.insert(interned, lib);
-                }
-                None => {
-                    let root = self.root_of(path, host);
-                    self.place_local(path, root, host);
-                }
+            if let Some(lib) = self.lib_files.get(&file).cloned() {
+                let lib = self.intern(&lib);
+                self.libs_by_path.insert(interned, lib);
+            } else {
+                let root = self.root_of(path, host);
+                self.place_local(path, root, host);
             }
         }
         self.local(path)

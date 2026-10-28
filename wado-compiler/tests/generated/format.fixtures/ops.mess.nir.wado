@@ -8,7 +8,7 @@
 global mut heap_offset: u32 = 8;
 
 fn memory_bytes() -> u64 {
-    return (core::builtin::memory_size() as u64 * 65536);
+    return ("core:builtin::memory_size"() as u64 * 65536);
 }
 
 fn pages(bytes: u64) -> i32 {
@@ -16,18 +16,18 @@ fn pages(bytes: u64) -> i32 {
 }
 
 fn grow_memory(end: u64) {
-    let current_bytes: u64 = core::allocator::memory_bytes();
+    let current_bytes: u64 = "core:allocator::memory_bytes"();
     let deficit: u64 = (end - current_bytes);
-    let normal_grow: u64 = core::builtin::select::<u64>((current_bytes < 16777216), current_bytes, 16777216);
+    let normal_grow: u64 = "core:builtin::select"::<u64>((current_bytes < 16777216), current_bytes, 16777216);
     let grow_bytes: u64 = if (deficit > normal_grow) {
-        (1 << (64 - core::builtin::i64_clz((deficit - 1) as i64)) as u64);
+        (1 << (64 - "core:builtin::i64_clz"((deficit - 1) as i64)) as u64);
     } else {
         normal_grow;
     };
-    if (core::builtin::memory_grow(core::allocator::pages(grow_bytes)) < 0) {
-        if (core::builtin::memory_grow(core::allocator::pages(deficit)) < 0) {
-            core::builtin::cold_path();
-            core::builtin::unreachable();
+    if ("core:builtin::memory_grow"("core:allocator::pages"(grow_bytes)) < 0) {
+        if ("core:builtin::memory_grow"("core:allocator::pages"(deficit)) < 0) {
+            "core:builtin::cold_path"();
+            "core:builtin::unreachable"();
         }
     }
 }
@@ -36,216 +36,216 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
     if (newsize == 0) {
         if (oldptr != 0) {
             let tag: u32 = (oldptr as u32 - 4);
-            if (core::builtin::i32_load(tag as i32) as u32 != 2703027456) {
-                core::builtin::cold_path();
-                core::builtin::unreachable();
+            if ("core:builtin::i32_load"(tag as i32) as u32 != 2703027456) {
+                "core:builtin::cold_path"();
+                "core:builtin::unreachable"();
             }
-            core::builtin::i32_store(tag as i32, -1);
+            "core:builtin::i32_store"(tag as i32, -1);
             if (oldsize != 0) {
-                core::builtin::memory_fill(oldptr, 255, oldsize);
+                "core:builtin::memory_fill"(oldptr, 255, oldsize);
             }
         }
         return 0;
     }
-    let gap: u32 = core::builtin::select::<u32>((align < 4), 4, align as u32);
+    let gap: u32 = "core:builtin::select"::<u32>((align < 4), 4, align as u32);
     let block: u32 = ($unbroken_11: {
         let align: u32 = align as u32;
         let size: u64 = (gap as u64 + newsize as u32 as u64);
         let mask: u64 = (align as u64 - 1);
-        let start: u64 = ((core::allocator::heap_offset as u64 + mask) & ~mask);
+        let start: u64 = ((core:allocator::heap_offset as u64 + mask) & ~mask);
         let end: u64 = (start + size);
         if (end > 4294967295) {
-            core::builtin::cold_path();
-            core::builtin::unreachable();
+            "core:builtin::cold_path"();
+            "core:builtin::unreachable"();
         }
-        if (end > (core::builtin::memory_size() as u64 * 65536)) {
-            core::builtin::cold_path();
-            core::allocator::grow_memory(end);
+        if (end > ("core:builtin::memory_size"() as u64 * 65536)) {
+            "core:builtin::cold_path"();
+            "core:allocator::grow_memory"(end);
         }
-        core::allocator::heap_offset = end as u32;
+        core:allocator::heap_offset = end as u32;
         start as u32;
     } + gap);
-    core::builtin::i32_store((block - 4) as i32, -1591939840);
+    "core:builtin::i32_store"((block - 4) as i32, -1591939840);
     return block as i32;
 }
 
 fn fl_unlink(block: u32) {
-    let next: u32 = core::builtin::i32_load((block + 8) as i32) as u32;
-    let prev: u32 = core::builtin::i32_load((block + 12) as i32) as u32;
+    let next: u32 = "core:builtin::i32_load"((block + 8) as i32) as u32;
+    let prev: u32 = "core:builtin::i32_load"((block + 12) as i32) as u32;
     if (prev == 0) {
-        let tag: u32 = core::builtin::i32_load(block as i32) as u32;
+        let tag: u32 = "core:builtin::i32_load"(block as i32) as u32;
         let k: u32 = (((tag & 4294967288) - 32) >> 4);
-        core::builtin::i32_store((8 + (core::builtin::select::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
+        "core:builtin::i32_store"((8 + ("core:builtin::select"::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
     } else {
-        core::builtin::i32_store((prev + 8) as i32, next as i32);
+        "core:builtin::i32_store"((prev + 8) as i32, next as i32);
     }
     if (next != 0) {
-        core::builtin::i32_store((next + 12) as i32, prev as i32);
+        "core:builtin::i32_store"((next + 12) as i32, prev as i32);
     }
 }
 
 pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize: i32) -> i32 {
-    if (core::allocator::heap_offset < 152) {
-        core::allocator::heap_offset = 152;
+    if (core:allocator::heap_offset < 152) {
+        core:allocator::heap_offset = 152;
     }
     if (newsize == 0) {
         if (oldptr == 0) {
             return 0;
         }
         let mut block: u32 = (oldptr as u32 - 8);
-        let header: u32 = core::builtin::i32_load(block as i32) as u32;
+        let header: u32 = "core:builtin::i32_load"(block as i32) as u32;
         if ((header & 1) == 0) {
-            core::builtin::cold_path();
-            core::builtin::unreachable();
+            "core:builtin::cold_path"();
+            "core:builtin::unreachable"();
         }
         let mut size: u32 = (header & 4294967288);
         let next: u32 = (block + size);
-        if (next < core::allocator::heap_offset) {
-            let next_header: u32 = core::builtin::i32_load(next as i32) as u32;
+        if (next < core:allocator::heap_offset) {
+            let next_header: u32 = "core:builtin::i32_load"(next as i32) as u32;
             if ((next_header & 1) == 0) {
-                core::allocator::fl_unlink(next);
+                "core:allocator::fl_unlink"(next);
                 size = (size + (next_header & 4294967288));
             }
         }
         if (block > 152) {
-            let prev_footer: u32 = core::builtin::i32_load((block - 8) as i32) as u32;
+            let prev_footer: u32 = "core:builtin::i32_load"((block - 8) as i32) as u32;
             if ((prev_footer & 1) == 0) {
                 let prev_size: u32 = (prev_footer & 4294967288);
                 let prev: u32 = (block - prev_size);
-                core::allocator::fl_unlink(prev);
+                "core:allocator::fl_unlink"(prev);
                 block = prev;
                 size = (size + prev_size);
             }
         }
-        core::builtin::i32_store(block as i32, size as i32);
-        core::builtin::i32_store(((block + size) - 8) as i32, size as i32);
+        "core:builtin::i32_store"(block as i32, size as i32);
+        "core:builtin::i32_store"(((block + size) - 8) as i32, size as i32);
         let k: u32 = ((size - 32) >> 4);
-        let k: u32 = core::builtin::select::<u32>((k < 32), k, 32);
-        let head: u32 = core::builtin::i32_load((8 + (k * 4)) as i32) as u32;
-        core::builtin::i32_store((block + 8) as i32, head as i32);
-        core::builtin::i32_store((block + 12) as i32, 0);
+        let k: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
+        let head: u32 = "core:builtin::i32_load"((8 + (k * 4)) as i32) as u32;
+        "core:builtin::i32_store"((block + 8) as i32, head as i32);
+        "core:builtin::i32_store"((block + 12) as i32, 0);
         if (head != 0) {
-            core::builtin::i32_store((head + 12) as i32, block as i32);
+            "core:builtin::i32_store"((head + 12) as i32, block as i32);
         }
-        core::builtin::i32_store((8 + (k * 4)) as i32, block as i32);
+        "core:builtin::i32_store"((8 + (k * 4)) as i32, block as i32);
         return 0;
     }
     let wide_size: u64 = (((newsize as u32 as u64 + 15) & 18446744073709551600) + 16);
     if (wide_size > 4294967295) {
-        core::builtin::cold_path();
-        core::builtin::unreachable();
+        "core:builtin::cold_path"();
+        "core:builtin::unreachable"();
     }
     let size: u32 = wide_size as u32;
     let k: u32 = ((size - 32) >> 4);
-    let mut j: u32 = core::builtin::select::<u32>((k < 32), k, 32);
+    let mut j: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
     let $licm_arith_223: i32 = (size + 1) as i32;
     loop {
         if !(j < 32) {
             break;
         }
-        let b: u32 = core::builtin::i32_load((8 + (j * 4)) as i32) as u32;
+        let b: u32 = "core:builtin::i32_load"((8 + (j * 4)) as i32) as u32;
         let $cse_224: i32 = b as i32;
         if (b != 0) {
-            let tag: u32 = core::builtin::i32_load($cse_224) as u32;
+            let tag: u32 = "core:builtin::i32_load"($cse_224) as u32;
             let block_size: u32 = (tag & 4294967288);
-            let next: u32 = core::builtin::i32_load((b + 8) as i32) as u32;
-            let prev: u32 = core::builtin::i32_load((b + 12) as i32) as u32;
+            let next: u32 = "core:builtin::i32_load"((b + 8) as i32) as u32;
+            let prev: u32 = "core:builtin::i32_load"((b + 12) as i32) as u32;
             if (prev == 0) {
-                let tag: u32 = core::builtin::i32_load($cse_224) as u32;
+                let tag: u32 = "core:builtin::i32_load"($cse_224) as u32;
                 let k: u32 = (((tag & 4294967288) - 32) >> 4);
-                core::builtin::i32_store((8 + (core::builtin::select::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
+                "core:builtin::i32_store"((8 + ("core:builtin::select"::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
             } else {
-                core::builtin::i32_store((prev + 8) as i32, next as i32);
+                "core:builtin::i32_store"((prev + 8) as i32, next as i32);
             }
             if (next != 0) {
-                core::builtin::i32_store((next + 12) as i32, prev as i32);
+                "core:builtin::i32_store"((next + 12) as i32, prev as i32);
             }
             let remainder: u32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store($cse_224, $licm_arith_223);
-                core::builtin::i32_store(((b + size) - 8) as i32, $licm_arith_223);
+                "core:builtin::i32_store"($cse_224, $licm_arith_223);
+                "core:builtin::i32_store"(((b + size) - 8) as i32, $licm_arith_223);
                 let rest: u32 = (b + size);
-                core::builtin::i32_store(rest as i32, remainder as i32);
-                core::builtin::i32_store(((rest + remainder) - 8) as i32, remainder as i32);
+                "core:builtin::i32_store"(rest as i32, remainder as i32);
+                "core:builtin::i32_store"(((rest + remainder) - 8) as i32, remainder as i32);
                 let k: u32 = ((remainder - 32) >> 4);
-                let k: u32 = core::builtin::select::<u32>((k < 32), k, 32);
-                let head: u32 = core::builtin::i32_load((8 + (k * 4)) as i32) as u32;
-                core::builtin::i32_store((rest + 8) as i32, head as i32);
-                core::builtin::i32_store((rest + 12) as i32, 0);
+                let k: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
+                let head: u32 = "core:builtin::i32_load"((8 + (k * 4)) as i32) as u32;
+                "core:builtin::i32_store"((rest + 8) as i32, head as i32);
+                "core:builtin::i32_store"((rest + 12) as i32, 0);
                 if (head != 0) {
-                    core::builtin::i32_store((head + 12) as i32, rest as i32);
+                    "core:builtin::i32_store"((head + 12) as i32, rest as i32);
                 }
-                core::builtin::i32_store((8 + (k * 4)) as i32, rest as i32);
+                "core:builtin::i32_store"((8 + (k * 4)) as i32, rest as i32);
             } else {
                 let tag: u32 = (block_size + 1);
-                core::builtin::i32_store($cse_224, tag as i32);
-                core::builtin::i32_store(((b + block_size) - 8) as i32, tag as i32);
+                "core:builtin::i32_store"($cse_224, tag as i32);
+                "core:builtin::i32_store"(((b + block_size) - 8) as i32, tag as i32);
             }
             return (b + 8) as i32;
         }
         j = (j + 1);
     }
-    let mut curr: u32 = core::builtin::i32_load(136) as u32;
+    let mut curr: u32 = "core:builtin::i32_load"(136) as u32;
     let $licm_arith_225: i32 = (size + 1) as i32;
     loop {
         if !(curr != 0) {
             break;
         }
-        let tag: u32 = core::builtin::i32_load(curr as i32) as u32;
+        let tag: u32 = "core:builtin::i32_load"(curr as i32) as u32;
         let block_size: u32 = (tag & 4294967288);
         if (block_size >= size) {
-            let next: u32 = core::builtin::i32_load((curr + 8) as i32) as u32;
-            let prev: u32 = core::builtin::i32_load((curr + 12) as i32) as u32;
+            let next: u32 = "core:builtin::i32_load"((curr + 8) as i32) as u32;
+            let prev: u32 = "core:builtin::i32_load"((curr + 12) as i32) as u32;
             if (prev == 0) {
-                let tag: u32 = core::builtin::i32_load(curr as i32) as u32;
+                let tag: u32 = "core:builtin::i32_load"(curr as i32) as u32;
                 let k: u32 = (((tag & 4294967288) - 32) >> 4);
-                core::builtin::i32_store((8 + (core::builtin::select::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
+                "core:builtin::i32_store"((8 + ("core:builtin::select"::<u32>((k < 32), k, 32) * 4)) as i32, next as i32);
             } else {
-                core::builtin::i32_store((prev + 8) as i32, next as i32);
+                "core:builtin::i32_store"((prev + 8) as i32, next as i32);
             }
             if (next != 0) {
-                core::builtin::i32_store((next + 12) as i32, prev as i32);
+                "core:builtin::i32_store"((next + 12) as i32, prev as i32);
             }
             let remainder: u32 = (block_size - size);
             if (remainder >= 32) {
-                core::builtin::i32_store(curr as i32, $licm_arith_225);
-                core::builtin::i32_store(((curr + size) - 8) as i32, $licm_arith_225);
+                "core:builtin::i32_store"(curr as i32, $licm_arith_225);
+                "core:builtin::i32_store"(((curr + size) - 8) as i32, $licm_arith_225);
                 let rest: u32 = (curr + size);
-                core::builtin::i32_store(rest as i32, remainder as i32);
-                core::builtin::i32_store(((rest + remainder) - 8) as i32, remainder as i32);
+                "core:builtin::i32_store"(rest as i32, remainder as i32);
+                "core:builtin::i32_store"(((rest + remainder) - 8) as i32, remainder as i32);
                 let k: u32 = ((remainder - 32) >> 4);
-                let k: u32 = core::builtin::select::<u32>((k < 32), k, 32);
-                let head: u32 = core::builtin::i32_load((8 + (k * 4)) as i32) as u32;
-                core::builtin::i32_store((rest + 8) as i32, head as i32);
-                core::builtin::i32_store((rest + 12) as i32, 0);
+                let k: u32 = "core:builtin::select"::<u32>((k < 32), k, 32);
+                let head: u32 = "core:builtin::i32_load"((8 + (k * 4)) as i32) as u32;
+                "core:builtin::i32_store"((rest + 8) as i32, head as i32);
+                "core:builtin::i32_store"((rest + 12) as i32, 0);
                 if (head != 0) {
-                    core::builtin::i32_store((head + 12) as i32, rest as i32);
+                    "core:builtin::i32_store"((head + 12) as i32, rest as i32);
                 }
-                core::builtin::i32_store((8 + (k * 4)) as i32, rest as i32);
+                "core:builtin::i32_store"((8 + (k * 4)) as i32, rest as i32);
             } else {
                 let tag: u32 = (block_size + 1);
-                core::builtin::i32_store(curr as i32, tag as i32);
-                core::builtin::i32_store(((curr + block_size) - 8) as i32, tag as i32);
+                "core:builtin::i32_store"(curr as i32, tag as i32);
+                "core:builtin::i32_store"(((curr + block_size) - 8) as i32, tag as i32);
             }
             return (curr + 8) as i32;
         }
-        curr = core::builtin::i32_load((curr + 8) as i32) as u32;
+        curr = "core:builtin::i32_load"((curr + 8) as i32) as u32;
     }
-    let start: u64 = (core::allocator::heap_offset as u64 & 18446744073709551615);
+    let start: u64 = (core:allocator::heap_offset as u64 & 18446744073709551615);
     let end: u64 = (start + wide_size);
     if (end > 4294967295) {
-        core::builtin::cold_path();
-        core::builtin::unreachable();
+        "core:builtin::cold_path"();
+        "core:builtin::unreachable"();
     }
-    if (end > (core::builtin::memory_size() as u64 * 65536)) {
-        core::builtin::cold_path();
-        core::allocator::grow_memory(end);
+    if (end > ("core:builtin::memory_size"() as u64 * 65536)) {
+        "core:builtin::cold_path"();
+        "core:allocator::grow_memory"(end);
     }
-    core::allocator::heap_offset = end as u32;
+    core:allocator::heap_offset = end as u32;
     let block: u32 = start as u32;
     let tag: u32 = (size + 1);
-    core::builtin::i32_store(block as i32, tag as i32);
-    core::builtin::i32_store(((block + size) - 8) as i32, tag as i32);
+    "core:builtin::i32_store"(block as i32, tag as i32);
+    "core:builtin::i32_store"(((block + size) - 8) as i32, tag as i32);
     return (block + 8) as i32;
 }
 
