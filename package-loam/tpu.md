@@ -1,7 +1,9 @@
 # Loam on TPU
 
-This is the proposed design of a PJRT backend, which runs `forward` on TPUs and
-on native GPUs. It is not adopted yet.
+This is the design of a PJRT backend, which runs `forward` on TPUs and on native
+GPUs. The roadmap item "The PJRT backend" in [TODO.md](./TODO.md) builds it
+on XLA's CPU plugin first. Only a backend that really runs through PJRT shows the architecture
+right, and a TPU run waits until it does.
 
 ## Context
 
@@ -38,12 +40,14 @@ A PJRT backend that ran each kernel as its own program would pay a launch per
 kernel and leave XLA nothing to fuse. A backend over XLA needs a whole
 `forward` as one program.
 
-### Not decided here
-
-The name and home of the Wado binding to PJRT, and of the host that serves it,
-are open. `wasi:` is reserved for WASI, and PJRT is no WASI proposal.
-
 ## Decision
+
+### `wado:pjrt`, served by `wado-run-pjrt`
+
+The Wado binding to PJRT is `wado:pjrt`. `wasi:` is reserved for WASI, and PJRT
+is no WASI proposal. The host that serves it is the crate `wado-run-pjrt`, a
+workspace of its own as `wado-run-webgpu` is, since it loads a vendor's plugin
+the rest of the toolchain never needs.
 
 ### The `Backend` trait stays
 
@@ -82,8 +86,9 @@ and what outlives it.
 ### The seam carries what a compiled program cannot learn at run time
 
 XLA refuses a dimension of unknown extent, and `libtpu.so` aborts the process
-on one ([research §6](../docs/research-tpu.md#6-shapes-must-be-static)). So every extent that varies between calls reaches the
-trait as a capacity fixed per program, with what is valid within it as a value:
+on one ([research §6](../docs/research-tpu.md#6-shapes-must-be-static)). So
+every extent that varies between calls reaches the trait as a capacity fixed
+per program, with what is valid within it as a value:
 
 - An attention cache has a capacity and a valid length. The length is a scalar
   input, not an extent, so a decoder does not compile once per token.
@@ -110,10 +115,12 @@ them:
 
 ## Plan
 
-1. [ ] A host that serves PJRT to a Wado program. Finished when a Wado program
-   compiles a StableHLO module and runs it on the CPU plugin under that host,
-   in CI, and CI compiles the same module for a TPU topology through
-   `libtpu.so`.
+The steps of "The PJRT backend", in order:
+
+1. [ ] `wado-run-pjrt`, serving `wado:pjrt`. Finished when a Wado program
+   compiles a StableHLO module and runs it on the CPU plugin under
+   `wado run-pjrt`, in CI, and CI compiles the same module for a TPU topology
+   through `libtpu.so`.
 2. [ ] The PJRT backend, tracing and replaying. Finished when the tiny GPT-2
    runs on the CPU plugin within the tolerance of `Cpu`, one compile per
    extent set, and the cost of a replayed pass beside the executed program is
@@ -128,12 +135,8 @@ them:
    program's device memory, as `PJRT_Executable_GetCompiledMemoryStats`
    reports it, holds Gemma 3's weights at half their f32 size and no second
    copy of the cache.
-6. [ ] Gemma 3 on a TPU. Finished when it picks onnxruntime's tokens on a TPU
-   VM, and its time a token is recorded beside the compiler's
-   `optimal_seconds` for the same program.
-7. [ ] Many requests at once. Finished when the tokens a second at several
-   numbers of concurrent requests are recorded on a TPU and on `WebGpuBackend`,
-   each request's tokens unchanged from its run alone.
+
+A TPU run and many requests at once are later items of the roadmap.
 
 ## Known gaps
 
