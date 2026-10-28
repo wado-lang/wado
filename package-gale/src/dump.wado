@@ -20,7 +20,6 @@ use {
     LoweredGrammar,
     DiagnosticKind,
     Rule,
-    SimpleRule,
     MultiAltRule,
     LeftRecursiveRule,
     AltBody,
@@ -87,7 +86,7 @@ fn render_rule(out: &mut String, rule: &Rule, grammar: &Grammar, lowered: &Lower
     out.push('\n');
 
     match rule {
-        Simple(s) => render_simple(out, s),
+        Simple(_) => render_simple(out),
         MultiAlt(m) => render_multi_alt(out, m, &ctx.analysis),
         LeftRecursive(l) => render_left_recursive(out, l, &ctx.analysis),
     }
@@ -109,7 +108,7 @@ fn rule_shape_label(rule: &Rule) -> String {
     };
 }
 
-fn render_simple(out: &mut String, s: &SimpleRule) {
+fn render_simple(out: &mut String) {
     // Simple rules carry a single body; the per-alt breakdown is
     // covered by the repeats section below. Nothing alt-shaped to list.
     out.push_str("  single alternative\n");

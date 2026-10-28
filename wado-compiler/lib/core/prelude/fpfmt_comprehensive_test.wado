@@ -60,7 +60,7 @@ fn format_exp_padded(d: u64, p: i32, nd: i32) -> String {
     return buf;
 }
 
-fn f64_to_string_exp(f: f64, upper: bool) -> String {
+fn f64_to_string_exp(f: f64) -> String {
     let [is_special, is_neg, kind] = check_special(f);
     if is_special {
         if kind matches { Zero } {
@@ -96,7 +96,7 @@ fn run_batch(bits: &List<u64>, expected: &List<String>, batch_name: String) -> i
 
     for let mut i = 0; i < n; i += 1 {
         let f = f64::from_bits(bits[i]);
-        let actual = f64_to_string_exp(f, false);
+        let actual = f64_to_string_exp(f);
         let exp = expected[i];
 
         if actual != exp {

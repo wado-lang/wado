@@ -572,7 +572,7 @@ fn gen_scan_function(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule,
         // places, and one that skipped the restore would leave the gate holding
         // a value the parse never does.
         let inner = `${name}__scoped`;
-        gen_scan_gate_scope_wrapper(w, rule, ctx, &name, &inner, &scope);
+        gen_scan_gate_scope_wrapper(w, ctx, &name, &inner, &scope);
         gen_scan_function_named(w, rule, lowered_rule, ctx, &inner);
         return;
     }
@@ -607,7 +607,6 @@ fn scan_gate_scope(rule: &ParserRule, lowered_rule: &Rule, ctx: &EmitContext) ->
 
 fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
     w: &mut CodeWriter,
-    rule: &ParserRule,
     ctx: &mut EmitContext,
     name: S,
     inner: S1,
@@ -4349,7 +4348,7 @@ fn repeat_is_scan_guarded(r: &RepeatOp, ctx: &mut EmitContext) -> bool {
         || sets_overlap(&body_first, &r.caller_follow_first)
         || ctx.loop_exit_admits_any(r.atn_decision, &body_first);
     let body_scans_to_decide = match &r.body {
-        Group(g) => op_group_alt_decision(g, ctx) matches { Some(branches) && branches.iter_ref().any(
+        Group(g) => op_group_alt_decision(g) matches { Some(branches) && branches.iter_ref().any(
             |b| b.alts.len() > 1,
         ) },
         _ => false,
@@ -4394,7 +4393,7 @@ fn gen_repeat_body(w: &mut CodeWriter, r: &RepeatOp, ctx: &mut EmitContext, nc: 
         if let Group(g) = &r.body {
             // Where the body has alternatives its own decision is the guard:
             // finding none ends the loop, and the dispatch commits to a find.
-            if let Some(branches) = op_group_alt_decision(g, ctx) {
+            if let Some(branches) = op_group_alt_decision(g) {
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, false);
                 w.line(`if ${best} <= p.pos { break; }`);
                 gen_iteration_duties(w, &r.duties, &r.body_admits, &best, &Refusable::Always, false, ctx, nc);
@@ -4478,7 +4477,7 @@ fn gen_op_optional(
     }
     if r.strategy matches { OptionalScanGuard } {
         if let Group(g) = &r.body {
-            if let Some(branches) = op_group_alt_decision(g, ctx) {
+            if let Some(branches) = op_group_alt_decision(g) {
                 // One answer, one set of scans: the scan deciding entry is the
                 // scan the dispatch decides on, wrapped by the yield gate.
                 let [winner, best] = gen_group_decide(w, &branches, &g.scan_group.alts, ctx, nc, follow_gate);
@@ -5655,8 +5654,8 @@ fn gen_op_repeat_optional_greedy(
     follow: &List<i32>,
 ) {
     return match rep_op.body_shape {
-        LeafRuleCall => gen_op_repeat_optional_rulecall(w, rep, rep_op, ctx, name_counts, follow),
-        LeafOther => gen_op_repeat_optional_leaf(w, rep, rep_op, ctx, name_counts),
+        LeafRuleCall => gen_op_repeat_optional_rulecall(w, rep_op, ctx, name_counts, follow),
+        LeafOther => gen_op_repeat_optional_leaf(w, rep_op, ctx, name_counts),
         StorableGroup | TransparentGroup => gen_op_repeat_optional_group(w, rep, rep_op, ctx, name_counts),
     };
 }
@@ -5673,7 +5672,6 @@ fn gen_op_repeat_optional_greedy(
 /// inside `optionalParameter`).
 fn gen_op_repeat_optional_rulecall(
     w: &mut CodeWriter,
-    rep: &RepeatElement,
     rep_op: &RepeatOp,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
@@ -5861,7 +5859,6 @@ fn gen_optional_present<S: AsStrSlice, S1: AsStrSlice>(
 /// loop guard is the plain `body_admits` check.
 fn gen_op_repeat_optional_leaf(
     w: &mut CodeWriter,
-    rep: &RepeatElement,
     rep_op: &RepeatOp,
     ctx: &mut EmitContext,
     name_counts: &mut List<[String, i32]>,
@@ -7096,7 +7093,7 @@ fn group_dispatches(g_op: &GroupOp) -> bool {
 /// `group_alt_decision` for the op-only walker, off the dispatch lower baked
 /// rather than the surface alternatives (invariant 9). Its callers commit and
 /// never report, so no expected set comes with it.
-fn op_group_alt_decision(g: &GroupOp, ctx: &mut EmitContext) -> Option<List<DecisionBranch>> {
+fn op_group_alt_decision(g: &GroupOp) -> Option<List<DecisionBranch>> {
     if g.alts.len() < 2 || group_token_only_kinds(&g.alts) matches { Some(_) } {
         return null;
     }
@@ -7274,7 +7271,7 @@ fn gen_group_scan_dispatch(
         open_winner_arm(w, &winner_var, sorted_group, k);
         match kind {
             RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
-            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx, name_counts),
+            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx),
         }
     }
     w.end();
@@ -7499,7 +7496,6 @@ fn gen_group_branch_body(
                 &g_op_alts[alt_index],
                 alt_index,
                 ctx,
-                name_counts,
                 proven,
             ),
         }
@@ -7642,7 +7638,6 @@ fn gen_general_alt_parse_and_store(
     body: &AltBody,
     alt_index: i32,
     ctx: &mut EmitContext,
-    name_counts: &mut List<[String, i32]>,
     proven: &List<i32> = &NO_KINDS,
 ) {
     let alt = &alts[alt_index];

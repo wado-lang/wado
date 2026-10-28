@@ -1126,7 +1126,7 @@ fn extract_fn_body<S: AsStrSlice, S1: AsStrSlice>(output: S, header: S1) -> Stri
 fn assert_in_order<S: AsStrSlice, S1: AsStrSlice, W: AsStrSlice>(body: &String, first: S, then: S1, why: W) {
     let first_at = body.find(&first).expect(`no \`${first.as_str_slice()}\`: ${body}`);
     let then_at = body.find(&then).expect(`no \`${then.as_str_slice()}\`: ${body}`);
-    assert first_at < then_at;
+    assert first_at < then_at, why.to_string();
 }
 
 test "lexer rule caseInsensitive=false overrides grammar-level true" {

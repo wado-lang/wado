@@ -231,7 +231,7 @@ test "record, follows_from and close reach the subscriber" {
 test "span attributes carry name, level and fields" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        let s = span(Level::Warn, `job`, { id: 3 });
+        let _s = span(Level::Warn, `job`, { id: 3 });
     };
     let attrs = sink.spans[0];
     assert attrs.meta.name == "job";

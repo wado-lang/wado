@@ -126,6 +126,65 @@ fn a_package_check_reports_a_shared_module_kiln_warning_once() {
         }));
 }
 
+/// Compiling a generator to run it lints nothing: the generator's own package
+/// check is where its lints belong, and reports them once. `generate` is an
+/// `export`, so the component boundary names its parameter and leaving it
+/// unread is no defect.
+#[test]
+fn compiling_a_generator_lints_none_of_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let generator = GREETING_GENERATOR.replace(
+        "    return Result::Ok(",
+        "    let unread_local = 1;\n    return Result::Ok(",
+    );
+    write_kiln_project(root, "pkg", &generator, b"schema\n");
+
+    wado_in(root)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("[kiln generator compile]").not())
+        .stderr(predicate::str::contains("parameter `req`").not())
+        .stderr(predicate::function(|stderr: &str| {
+            stderr
+                .matches("variable `unread_local` is never used")
+                .count()
+                == 1
+        }));
+}
+
+/// A member in a subdirectory reaches a sibling directory's module through
+/// `../`, and the package pass places that module in the package as the
+/// member's own check does, so their clauses on one schema are one invocation.
+#[test]
+fn a_member_reaches_a_sibling_directory_within_the_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    write_kiln_project(root, "pkg", GREETING_GENERATOR, b"schema\n");
+    std::fs::write(root.join("src/main.wado"), "export fn run() {}\n").unwrap();
+    for dir in ["tools", "tests"] {
+        std::fs::create_dir_all(root.join(dir)).unwrap();
+    }
+    std::fs::write(
+        root.join("tools/shared.wado"),
+        "use g from \"../src/schema.bin\"\n    \
+         with { generator: { module: \"../src/gen.wado\", output_dir: \"../generated\" } };\n\n\
+         pub fn shared() -> i32 { return g::hello(); }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        root.join("tests/shared_test.wado"),
+        "use g from \"../src/schema.bin\"\n    \
+         with { generator: { module: \"../src/gen.wado\", output_dir: \"../generated\" } };\n\
+         use { shared } from \"../tools/shared.wado\";\n\n\
+         test { assert shared() == g::hello(); }\n",
+    )
+    .unwrap();
+
+    wado_in(root).arg("check").assert().success();
+}
+
 /// Output a generator writes inside the package is the importing module's, not
 /// a member of its own, so the package pass loads it once.
 #[test]

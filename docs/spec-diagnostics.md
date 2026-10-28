@@ -34,6 +34,7 @@ The lints are:
 | [`undecided_effects`](#the-undecided_effects-lint)         | a trait head that writes no `with` clause                                       |
 | [`dead_code`](#the-dead_code-lint)                         | an unused or test-only free function or global                                  |
 | [`unused_imports`](#the-unused_imports-lint)               | a `use` bringing in a name its module never refers to                           |
+| [`unused_variables`](#the-unused_variables-lint)           | a variable or parameter nothing reads                                           |
 
 ## The `shadowed_name` Lint
 
@@ -332,6 +333,76 @@ written. Beyond that:
 
 A `pub` or `internal` `use` re-exports what it names, and an `export use`
 publishes it, so neither is reported: its users are the modules that import it.
+
+Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
+
+## The `unused_variables` Lint
+
+The `unused_variables` lint warns about a variable or parameter that nothing
+reads. Every binder of a value counts: a `let`, a function or closure
+parameter, and a pattern binding.
+
+Some parameters are not reported, because their names are not the function's
+own to choose, or nothing could read them:
+
+- A parameter of a method that a trait or an interface declares. The
+  declaration names the parameters of every implementation. That covers the
+  trait's default body, a method of an `impl` of it, and an effect handler's
+  operation.
+- A parameter of an `export` function. The component boundary names it, often
+  through a world, such as `handle` in `wasi:http/service`.
+- A parameter of a function without a body.
+
+The locals and closures of these functions are reported as anywhere else, and
+so is a method of an inherent `impl`, whose signature is its own.
+
+A name used only as the target of an assignment is not read. That covers `=`, a
+destructuring assignment, and a compound assignment such as `+=`, whether they
+write the name itself or a field of the value it holds (`p.x = 1`). Such a
+variable warns that it is assigned to, but never read.
+
+Some writes read the name as well:
+
+- An index assignment (`xs[0] = 1`) calls `index_assign`, which reads the value
+  it indexes: a bounds check, or whatever an `impl IndexAssign` does.
+- A write through a reference (`r.x = 1`) reads the reference to find where it
+  lands.
+- A write to an affine value is read by its drop.
+
+<!-- {"fixture":"spec_diagnostics_unused_variables.wado"} -->
+
+```wado
+fn first(a: i32, b: i32) -> i32 {   // warns: `b` is never used
+    return a;
+}
+
+trait Shape {
+    fn scaled(&self, by: i32) -> i32;
+}
+
+impl Shape for Point {
+    fn scaled(&self, by: i32) -> i32 {  // no warning: `Shape` names `by`
+        return self.x;
+    }
+}
+
+test {
+    let unread = 1;                       // warns: never used
+    let mut total = 0;                    // warns: assigned to, but never read
+    total += first(1, 2);
+    let _kept = 2;                        // starts with `_`: no warning
+    let { x, y } = Point { x: 1, y: 2 };  // warns: write `y: _`
+    assert x == 1;
+    assert Point { x: 3, y: 4 }.scaled(2) == 3;
+}
+```
+
+A name that starts with `_` is never reported, which is how to keep a binding
+on purpose. A struct pattern's `{ y }` binds the field's own name, so `_y` would
+name another field. Write `y: _` there instead, or leave the field to `..`.
+
+The alternatives of an or-pattern bind one variable, so `A(n) | B(n)` is read
+when either `n` is.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 

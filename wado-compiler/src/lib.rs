@@ -111,6 +111,7 @@ pub mod type_table;
 pub mod unparse;
 pub mod unresolved_types;
 pub mod unused_import;
+pub mod unused_variable;
 pub mod wasm_module_calls;
 pub mod wir;
 pub mod wir_build;
@@ -577,7 +578,8 @@ pub async fn compile_with_host<H: CompilerHost>(
 /// Build unused-item warnings from the liveness classification: `DeadFunction`
 /// / `DeadGlobal` (reached by neither production nor tests) and
 /// `TestOnlyFunction` / `TestOnlyGlobal` (reached only by `test` blocks), then
-/// `UnusedImport`, in the modules `lints` names. Pure over `Semantics`;
+/// `UnusedImport` and `UnusedVariable` / `UnusedParameter`, in the modules
+/// `lints` names. Pure over `Semantics`;
 /// `is_test_world` suppresses the `TestOnly*` warnings.
 fn unused_diagnostics(
     sem: &semantics::Semantics,
@@ -642,6 +644,7 @@ fn unused_diagnostics(
     }
 
     out.extend(unused_import::unused_import_diagnostics(sem, lints));
+    out.extend(unused_variable::unused_variable_diagnostics(sem, lints));
     out
 }
 
