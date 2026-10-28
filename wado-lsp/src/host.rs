@@ -12,6 +12,7 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use wado_compiler::remote::Integrity;
 use wado_compiler::{
     CompilerHost, DependencyIndex, DependencyManifest, Diagnostic, Severity, SourceError,
     SourceReader,
@@ -132,14 +133,19 @@ impl FilesystemCompilerHost {
 }
 
 /// A file on disk, read a range at a time.
-struct FileReader {
+pub struct FileReader {
     file: Mutex<File>,
     len: u64,
     path: PathBuf,
 }
 
 impl FileReader {
-    fn open(path: PathBuf) -> Result<Self, SourceError> {
+    /// Open `path`, learning its length.
+    ///
+    /// # Errors
+    ///
+    /// The file cannot be opened or its length read.
+    pub fn open(path: PathBuf) -> Result<Self, SourceError> {
         let file = File::open(&path).map_err(|e| io_error(&path, &e))?;
         let len = file.metadata().map_err(|e| io_error(&path, &e))?.len();
         Ok(Self {
@@ -219,7 +225,12 @@ impl CompilerHost for FilesystemCompilerHost {
         self.load_source_prefix(path, None).await
     }
 
-    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+    /// No pin applies: only a remote file carries one.
+    async fn open_source(
+        &self,
+        path: &str,
+        _: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
         Ok(Arc::new(FileReader::open(self.base_path.join(path))?))
     }
 
