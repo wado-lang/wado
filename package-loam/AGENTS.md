@@ -12,6 +12,8 @@ this directory alone.
   code written after reading them is a derivative.
 - Published papers may be read, and so may the ONNX specification: the
   operator definitions and `onnx.proto`.
+- `xla/pjrt/c/pjrt_c_api.h` from openxla/xla may be read. It is the PJRT
+  plugin's interface, read as an API specification. The rest of XLA may not.
 - onnxruntime's operator documentation may be read, for the operators it
   defines beyond ONNX, such as `com.microsoft::GroupQueryAttention`
   (`docs/ContribOperators.md`). Its code may not. Where the documentation
