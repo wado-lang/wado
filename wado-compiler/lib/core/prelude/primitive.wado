@@ -51,7 +51,6 @@ use {
     write_decimal_prec,
     write_exp_prec,
     u64_bit_len,
-    write_decimal_digits,
     BINARY32,
     BINARY64,
 } from "core:prelude/fpfmt.wado";
@@ -140,6 +139,27 @@ use {
 
 // These write formatted values directly to a Formatter's buffer,
 // avoiding intermediate GC String allocations in the common case.
+
+/// Write `digit_count` decimal digits of `val` into `arr` at `offset`, padded
+/// with leading zeros — a decimal chunk below the leading one carries them.
+/// Two digits per divide: each divide waits on the one before, so the chain
+/// is the cost, and dividing by 100 halves it.
+internal fn write_decimal_digits(arr: &mut Array<u8>, offset: i32, val: u64, digit_count: i32) {
+    let mut pos = offset + digit_count;
+    let mut t = val;
+    while pos - offset >= 2 {
+        let q = t / 100;
+        let pair = (t - q * 100) as i32;
+        let tens = pair / 10;
+        builtin::array_set_u8(arr, pos - 1, ('0' as i32 + pair - tens * 10) as u8);
+        builtin::array_set_u8(arr, pos - 2, ('0' as i32 + tens) as u8);
+        pos -= 2;
+        t = q;
+    }
+    if pos > offset {
+        builtin::array_set_u8(arr, offset, ('0' as i32 + (t % 10) as i32) as u8);
+    }
+}
 
 /// Count decimal digits of a u64 value, by a binary search over the powers of
 /// ten. Dividing by ten per digit would be a serial chain; no compare here waits.
