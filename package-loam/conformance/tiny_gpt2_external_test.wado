@@ -1,0 +1,58 @@
+//! The tiny GPT-2 decoder of `tiny_gpt2.wado` as an exporter writes a large
+//! model, its weights in an external data file the graph places each in by
+//! offset, read there in place against the logits onnxruntime computes.
+
+use { Cpu, Tensor } from "lib:loam";
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
+use { BatchSize, Prepared, SequenceLength, forward } from "../tests/models/tiny-gpt2/external/model.onnx"
+    with {
+        type: "onnx",
+        generator: {
+            module: "lib:loam",
+            options: {
+                dims: { batch_size: 1 },
+                outputs: ["logits"],
+            },
+        },
+    };
+
+fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
+    let [ids, ids_extents] = ints_of(input_ids);
+    let [mask, mask_extents] = ints_of(attention_mask);
+    let [want, want_extents] = tensor_of(logits);
+
+    let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+    let weights = Prepared::load(&mut Cpu {}, &data).unwrap();
+    let got = forward(
+        &mut Cpu {},
+        &Tensor::<i64, [BatchSize, SequenceLength]> { data: ids, extents: ids_extents },
+        &Tensor::<i64, [BatchSize, SequenceLength]> { data: mask, extents: mask_extents },
+        &weights,
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "weights read in place from external data reproduce the logits for four tokens" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_0/output_0.pb"),
+    );
+}
+
+test "and for seven" {
+    reproduces(
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_0.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/input_1.pb"),
+        #include_bytes("../tests/models/tiny-gpt2/test_data_set_1/output_0.pb"),
+    );
+}
+
+test "a file shorter than the build found the weights in names the tensor it cuts off" {
+    let data = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+    let cut = data[0..<data.len() - 1].to_list() as ByteList;
+    let e = Prepared::load(&mut Cpu {}, &cut).unwrap_err();
+    assert `${e}`.ends_with(`: the payload ends at byte ${data.len()}, past the ${data.len() - 1} given`);
+}

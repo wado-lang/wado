@@ -13,6 +13,7 @@ use {
     Model,
     Options,
     check,
+    check_in_place,
     generate_model,
     generate_tokenizer,
     read_header,
@@ -153,7 +154,10 @@ fn checked_model(
         },
         None => Options {},
     };
-    return check(path, spelling, read_file(path)?, &options);
+    if options.embed {
+        return check(path, spelling, read_file(path)?, &options);
+    }
+    return read_stream(path, |content| check_in_place(path, spelling, content, &options))?;
 }
 
 fn read_file(path: &String) -> Result<ByteList, String> with Preopens {
@@ -163,6 +167,12 @@ fn read_file(path: &String) -> Result<ByteList, String> with Preopens {
 /// A checkpoint's header, read without its payloads, as the Kiln generator
 /// reads one.
 fn read_file_header(path: &String) -> Result<ByteList, String> with Preopens {
+    return read_stream(path, read_header);
+}
+
+/// What `read` makes of the file at `path` as a stream, as the Kiln generator
+/// is handed one.
+fn read_stream<T>(path: &String, read: fn(Stream<u8>) -> T) -> Result<T, String> with Preopens {
     let root = fs::root().map_err(|e| `loam: ${e}`)?;
     let file = match root.open_at(PathFlags::none(), *path, OpenFlags::none(), DescriptorFlags::Read).wait() {
         Ok(file) => file,
@@ -174,7 +184,7 @@ fn read_file_header(path: &String) -> Result<ByteList, String> with Preopens {
         },
     };
     let [content, done] = file.read_via_stream(0 as Filesize);
-    let header = read_header(content);
+    let read_out = read(content);
     done.drop();
-    return Result::Ok(header);
+    return Result::Ok(read_out);
 }

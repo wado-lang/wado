@@ -11,13 +11,11 @@ version = "0.0.0"
 "lib:loam" = { path = "..", package = "wado-lang:loam", version = "^0.0.28" }
 
 [test]
-# Gemma's tokenizer and checkpoint are too large to commit; `fetch.sh` puts them
-# in its `build/`. Name its test files to run them. GPT-2's checkpoint is too
-# large as well, and the build reads its header, so the files naming the model
-# compile only once its `fetch.sh` has run; its tokenizer's test needs none.
+# Building GPT-2 or Gemma downloads the model, and running one reads the weights
+# its `fetch.sh` downloads. Name a test file to run it. GPT-2's tokenizer is
+# committed, so its test needs neither.
 exclude = [
     "build/**",
-    "gpt2-124m/build/**",
     "gpt2-124m/generate_test.wado",
     "gpt2-124m/gpt2.wado",
     "gpt2-124m/model.wado",

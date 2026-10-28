@@ -226,7 +226,7 @@ has none:
 So a use site that must work with both writes every field that is not an
 `Option`, a `List`, or a `TreeMap`.
 
-Loam's options hold two maps, a list of strings, and a flag.
+Loam's options hold two maps, a list of strings, and two flags.
 They are declared in `compile.wado`, which the `loam` command reads too, and
 the entry module re-exports them:
 
@@ -247,13 +247,19 @@ export struct Options {
     /// Off, every kernel writes its output, which is what a fused module is
     /// compared against.
     pub fuse: bool = true,
+    /// Whether the weights a `type: "onnx"` file carries are compiled into the
+    /// module. Off, the build reads past them, and `Prepared::load` reads them
+    /// out of that file where the build found them, so a model too large to
+    /// compile in still builds.
+    pub embed: bool = true,
 }
 ```
 
-Only `fuse`'s default changes what a use site of the source generator may leave
-out; the list and map fields may be left out without one. The rest are for the
-`loam` command, which reads the struct from JSON through `core:serde`, where a
-field without a default is required. From a prebuilt Loam, `fuse` is required.
+Only the flags' defaults change what a use site of the source generator may
+leave out; the list and map fields may be left out without one. The rest are
+for the `loam` command, which reads the struct from JSON through `core:serde`,
+where a field without a default is required. From a prebuilt Loam, `fuse` and
+`embed` are required.
 
 The `dims` map is written as an object:
 

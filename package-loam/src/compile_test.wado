@@ -1,0 +1,46 @@
+use { TreeMap } from "core:collections";
+use { Model, Spelling, Weights, check, generate_model } from "./compile.wado";
+use { InPlace } from "./graph.wado";
+
+global GRAPH: String = "<ir_version: 8, opset_import: [ \"\" : 13 ]>
+g (float[N, 2] X) => (float[N, 3] Y)
+<float[2, 3] W, float[3] B>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+}
+";
+
+/// The graph, its weights left in place in `w.bin` at `ranges`.
+fn in_place(ranges: TreeMap<String, [i32, i32]>) -> Model {
+    let path = "g.onnxtext";
+    let model = check(&path, Spelling::Text, GRAPH.bytes().collect(), &{}).unwrap();
+    return Model {
+        ..model,
+        graph: { ..model.graph, in_place: Option::Some(InPlace { file: "w.bin", ranges }) },
+    };
+}
+
+fn refused(ranges: TreeMap<String, [i32, i32]>) -> String {
+    return generate_model(&in_place(ranges), &"g.onnx", Weights::Unchecked, &"lib:loam").unwrap_err();
+}
+
+test "a weight with no data beside weights left in place names itself" {
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    ranges["W"] = [0, 24];
+    assert refused(ranges) == "loam: 'g.onnx': B: no data, and the weights left in place are in w.bin";
+}
+
+test "a weight left in place holds the elements its shape does" {
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    ranges["W"] = [0, 20];
+    ranges["B"] = [20, 32];
+    assert refused(ranges) == "loam: 'g.onnx': W: 5 elements for a shape of 6";
+}
+
+test "a weight left in place is whole elements" {
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    ranges["W"] = [0, 24];
+    ranges["B"] = [24, 34];
+    assert refused(ranges) == "loam: 'g.onnx': B: 10 raw bytes is not whole float elements";
+}

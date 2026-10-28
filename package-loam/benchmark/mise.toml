@@ -2,8 +2,8 @@
 # `=== Impl ===` header per arm and a throughput line `benchmark/logs.ts`
 # reads, so `benchmark/pick.ts` and `benchmark/ab.ts` work on its logs.
 #
-# The models are not in the repository: each example's `fetch.sh` writes its
-# checkpoint and graph. onnxruntime and llama.cpp are their own releases, which
+# The models are not in the repository: each example's `fetch.sh` downloads the
+# file its weights load from, and the model onnxruntime runs. onnxruntime and llama.cpp are their own releases, which
 # `fetch_onnxruntime.sh` and `fetch_llama_cpp.sh` download on first use.
 #
 # `WADO_BIN` and `WADO_BENCH_FLAGS` mean what they do in `benchmark/`.
@@ -64,7 +64,7 @@ run = """
 #!/usr/bin/env bash
 set -e
 model=../example/gpt2-124m
-if [ ! -f $model/gpt2.safetensors ] || [ ! -f $model/model.onnx ]; then
+if [ ! -f $model/model.onnx ]; then
     echo "SKIP: run $model/fetch.sh first"
     exit 0
 fi
@@ -90,7 +90,7 @@ run = """
 #!/usr/bin/env bash
 set -e
 model=../example/gemma3-270m
-if [ ! -f $model/build/gemma3.safetensors ] || [ ! -f $model/build/model.onnx ]; then
+if [ ! -f $model/build/model.onnx_data ] || [ ! -f $model/build/model.onnx ]; then
     echo "SKIP: run $model/fetch.sh first"
     exit 0
 fi

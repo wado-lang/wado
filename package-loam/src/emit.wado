@@ -21,6 +21,7 @@ use {
     Elements,
     GROUP_QUERY_ATTENTION,
     Graph,
+    InPlace,
     KERNEL_ELEMENT,
     Node,
     case_named,
@@ -128,12 +129,13 @@ impl Error for NameCollision {
 impl Error for EmitError {
 }
 
-/// Where the checkpoint `Prepared::load` reads holds the weights the graph
-/// leaves to it: in one file, or each in the shard named beside it, as an
-/// index places it.
+/// Where `Prepared::load` reads the weights the graph leaves to it: a
+/// checkpoint in one file, each in the shard an index places it in, or one
+/// file at the byte ranges the build found them at.
 pub variant Placement {
     File,
     Shards(HashMap<String, String>),
+    InPlace(InPlace),
 }
 
 /// The generated module's source, importing the runtime from the package spec
@@ -150,6 +152,11 @@ pub fn emit(
     if let Shards(placed) = &placement {
         for let vi of &graph.initializers {
             assert vi.data matches { Some(_) } || placed.contains_key(vi.name), "a sharded placement must place every weight the graph leaves to the checkpoint";
+        }
+    }
+    if let InPlace(in_place) = &placement {
+        for let vi of &graph.initializers {
+            assert vi.data matches { Some(_) } || in_place.ranges.contains_key(vi.name), "weights left in place must each have a range";
         }
     }
     if graph.outputs.is_empty() {
@@ -695,22 +702,38 @@ fn emit_constructor(
     block.add_generic(BACKEND_BOUND);
     block.emit_begin(w);
     if loads {
-        let [doc, param, ty, read] = match *placement {
-            File => ["a safetensors checkpoint", "checkpoint", `&${CHECKPOINT_PARAM}`, "read_checkpoint"],
+        // What `load` checks of its file before reading a weight out of it.
+        let [doc, param, ty, first]: [String, String, String, Option<String>] = match *placement {
+            File => [
+                "a safetensors checkpoint",
+                "checkpoint",
+                `&${CHECKPOINT_PARAM}`,
+                Option::Some("let header = read_checkpoint(checkpoint)?;"),
+            ],
             Shards(_) => [
-                "the shards of a safetensors checkpoint, by the file name its index gives each", "shards",
-                `&${MAP}<String, ByteList>`, "read_shards",
+                "the shards of a safetensors checkpoint, by the file name its index gives each",
+                "shards",
+                `&${MAP}<String, ByteList>`,
+                Option::Some("let header = read_shards(shards)?;"),
+            ],
+            InPlace(in_place) => [
+                `${in_place.file} where the build found them`,
+                "checkpoint",
+                `&${CHECKPOINT_PARAM}`,
+                in_place.len.map(|len: i32| `expect_len(checkpoint, ${len})?;`),
             ],
         };
         w.line(`/// The weights, those the graph does not carry read from ${doc}.`);
         let mut load = FnSpec::new("load", Vis::Pub);
-        if *placement matches { File } {
+        if !placement matches { Shards(_) } {
             load.add_generic(`affine ${CHECKPOINT_PARAM}: CheckpointBytes`);
         }
         load.add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
             `Result<${PREPARED_TYPE}, LoadError>`,
         ).add_effect("_").emit_begin(w);
-        w.line(`let header = ${read}(${param})?;`);
+        if let Some(line) = first {
+            w.line(line);
+        }
         emit_kept_binding(w, kept);
         w.begin(`return Result::Ok(${PREPARED}`);
     } else {
@@ -746,6 +769,10 @@ fn checkpoint_payload(e: &Expected, primitive: &String, placement: &Placement) -
     let [types, within] = match *placement {
         File => [`${*primitive}, ${CHECKPOINT_PARAM}`, "checkpoint"],
         Shards(placed) => [*primitive, wado`shards, "${placed[e.tensor]}"`],
+        InPlace(in_place) => {
+            let [start, end] = in_place.ranges[e.tensor];
+            return wado`payload_at::<${*primitive}, ${CHECKPOINT_PARAM}>(checkpoint, "${e.tensor}", ${start}, ${end})?`;
+        },
     };
     return wado`header.payload::<${types}>(${within}, &Expected { tensor: "${e.tensor}", dtype: "${e.dtype}", axes: [${axes.join(
         ", ",

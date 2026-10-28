@@ -5,7 +5,7 @@ use onnx from "./onnx.proto"
     };
 use { HashMap } from "core:collections";
 use { Elements, Graph, Known, ReadError } from "./graph.wado";
-use { external_locations, read, read_tensor, read_with_external } from "./onnx_proto.wado";
+use { external_locations, externalize, read, read_tensor, read_with_external } from "./onnx_proto.wado";
 
 /// A `data_type` or `elem_type` field naming `t`.
 fn typed(t: onnx::TensorProtoDataType) -> Option<i32> {
@@ -358,16 +358,127 @@ test "external data without an offset or length is the whole file" {
     assert g.initializers[0].data == Option::Some(b"\x00\x00\x80\x3f\x00\x00\x00\x40");
 }
 
-test "external data the reader was not given names its location" {
-    let e = read(grog::encode(&onnx::ModelProto {
+test "externalizing moves each weight's raw data out, back to back, and keeps a constant's" {
+    let weight = |name: String, raw: ByteList| onnx::TensorProto {
+        dims: [2],
+        data_type: typed(Float),
+        name: Option::Some(name),
+        raw_data: Option::Some(raw),
+    };
+    let shape = onnx::TensorProto {
+        dims: [1],
+        data_type: typed(Int64),
+        name: Option::Some("S"),
+        raw_data: Option::Some(b"\x02\x00\x00\x00\x00\x00\x00\x00"),
+    };
+    let model = grog::encode(&onnx::ModelProto {
         graph: Option::Some(onnx::GraphProto {
             initializer: [
-                external_weight([
-                    ["location", "w.bin"],
-                ]),
+                weight("V", b"\x00\x00\x80\x3f\x00\x00\x00\x40"),
+                shape,
+                weight("W", b"\x00\x00\x40\x40\x00\x00\x80\x40"),
             ],
         }),
-    })).unwrap_err().reason;
+    });
+    let [external, data] = externalize(&model, "m.onnx_data").unwrap();
+
+    assert data == b"\x00\x00\x80\x3f\x00\x00\x00\x40\x00\x00\x40\x40\x00\x00\x80\x40";
+    let left = read(&external).unwrap();
+    assert left.initializers[0].data matches { None } && left.initializers[1].data matches { None };
+    assert left.in_place.unwrap().ranges["W"] == [8, 16];
+    assert left.constants.contains_key("S");
+    let mut files = HashMap::<String, ByteList>::new();
+    files["m.onnx_data"] = data;
+    let read_back = read_with_external(&external, &files).unwrap();
+    assert read_back.initializers[1].data == read(&model).unwrap().initializers[1].data;
+}
+
+test "the committed external tiny GPT-2 is what externalizing its model writes" {
+    let [external, data] = externalize(#include_bytes("../tests/models/tiny-gpt2/model.onnx"), "model.onnx_data").unwrap();
+
+    assert external == #include_bytes("../tests/models/tiny-gpt2/external/model.onnx");
+    assert data == #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+}
+
+test "a model whose weights are external already is not externalized again" {
+    let external = #include_bytes("../tests/models/tiny-gpt2/external/model.onnx");
+    let e = externalize(&external, "model.onnx_data").unwrap_err();
+
+    assert e.reason.ends_with(": external data already");
+}
+
+fn read_unread(weights: List<onnx::TensorProto>) -> Result<Graph, ReadError> {
+    return read(grog::encode(&onnx::ModelProto {
+        graph: Option::Some(onnx::GraphProto { initializer: weights }),
+    }));
+}
+
+test "a weight's external data the reader is not given stays in place, at its byte range" {
+    let g = read_unread([
+        external_weight([
+            ["location", "w.bin"],
+            ["offset", "4"],
+            ["length", "8"],
+        ]),
+    ]).unwrap();
+
+    assert g.initializers[0].data matches { None };
+    let in_place = g.in_place.unwrap();
+    assert in_place.file == "w.bin";
+    assert in_place.ranges.len() == 1 && in_place.ranges["W"] == [4, 12];
+}
+
+test "a weight left in place states its length" {
+    let e = read_unread([
+        external_weight([
+            ["location", "w.bin"],
+        ]),
+    ]).unwrap_err().reason;
+
+    assert e == "W: external data in w.bin with no length, which a weight left in place states";
+}
+
+test "a weight left in place past what a module can address names its range" {
+    let e = read_unread([
+        external_weight([
+            ["location", "w.bin"],
+            ["offset", "2147483644"],
+            ["length", "8"],
+        ]),
+    ]).unwrap_err().reason;
+
+    assert e == "W: external data at 2147483644 for 8 bytes, past what a module can address";
+}
+
+test "weights are left in place in one file" {
+    let other = onnx::TensorProto {
+        ..external_weight([
+            ["location", "b.bin"],
+            ["length", "8"],
+        ]),
+        name: Option::Some("V"),
+    };
+    let e = read_unread([
+        external_weight([
+            ["location", "a.bin"],
+            ["length", "8"],
+        ]),
+        other,
+    ]).unwrap_err().reason;
+
+    assert e == "V: external data in b.bin, and W's in a.bin; the weights left in place are in one file";
+}
+
+test "a constant's external data the reader was not given names its location" {
+    let e = read_unread([
+        onnx::TensorProto {
+            ..external_weight([
+                ["location", "w.bin"],
+                ["length", "16"],
+            ]),
+            data_type: typed(Int64),
+        },
+    ]).unwrap_err().reason;
 
     assert e == "W: external data in w.bin, which the reader was not given";
 }

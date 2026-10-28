@@ -31,7 +31,8 @@ watch record such an input as the prefix it is. The protocol is in
 
 What a build reads of each checkpoint, counted with
 `strace -f -y -e trace=read,pread64` over `wado check [--no-cache] <model.wado>`
-in `example/`, summing the reads of the `.safetensors` file:
+in `example/`, summing the reads of the `.safetensors` file, when the examples
+named the checkpoint `tools/onnx_split.wado` writes:
 
 | Checkpoint     | File size     | Build that runs the generator | Build that hits the cache |
 | -------------- | ------------- | ----------------------------- | ------------------------- |
@@ -43,17 +44,15 @@ the header.
 
 ### The examples
 
-`example/gpt2-124m/` and `example/gemma3-270m/` name the checkpoint `fetch.sh`
-writes, and no longer carry a header file of their own. The checkpoint is too
-large to commit, so a file naming the model compiles only once `fetch.sh` has
-run, and `wado test` leaves those files out. GPT-2's tokenizer test takes its
-`Tokenizer` from `tokenizer.json` directly, so it still runs without the
-download.
-
-`hf2loam.mjs` read its layout from the header file. It now reads the
-initializers `gpt2.onnxtext` declares without values, in the order the graph
-lists them, which is the order `tools/onnx_split.wado` writes the checkpoint
-in. Its output is byte for byte the checkpoint `fetch.sh` writes.
+`example/gpt2-124m/` and `example/gemma3-270m/` import the model Hugging Face
+publishes by its URL, pinned by its SHA-256, and read its weights in place as
+[Weights read in place](#weights-read-in-place) says. Nothing is split or
+committed. A program reaches no file its build read, so each `fetch.sh`
+downloads the file the weights load from.
+[Runtime Assets](./remote-import.md) is the design that lets a program read
+it from the cache instead. Building a model downloads it, so
+`wado test` leaves the files naming one out. GPT-2's tokenizer test takes its
+`Tokenizer` from the committed `tokenizer.json`, so it runs without a download.
 
 ## Inferred Axis Names
 
@@ -122,3 +121,42 @@ the shard. A single file's use site and loader are unchanged.
 It fills each shard in the graph's order up to `n` payload bytes, and a tensor
 larger than that goes alone. `conformance/tiny_gpt2_sharded_test.wado` loads
 the tiny GPT-2 from three shards and reproduces the logits of its single file.
+
+### Weights read in place
+
+An exporter writes a model past protobuf's 2 GiB as a graph whose initializers
+name an external data file, each weight at an offset and a length in it. Hugging
+Face publishes such a model as it is, so reading the file in place spares a
+consumer the split into a checkpoint. The graph alone is the use site's file:
+
+```wado
+use { Prepared, forward } from "./model.onnx" with {
+    type: "onnx",
+    generator: { module: "lib:loam" },
+};
+```
+
+The build reads no byte of the data file. It takes each weight's range from
+the graph, checked against the weight's shape, so the generated module carries
+the ranges and the loader is handed the data file:
+
+```wado
+Prepared::load(backend: &mut Bk, checkpoint: &Ck) -> Result<Prepared<Bk>, LoadError>
+```
+
+A file shorter than a range is a `LoadError` naming the tensor. A build
+refuses a weight with no length, a range past what a module can address,
+weights in two files, and a checkpoint given beside them.
+`tools/onnx_split.wado --external-data` writes a model this way, and
+`conformance/tiny_gpt2_external_test.wado` reproduces the tiny GPT-2's logits
+from one.
+
+A model under 2 GiB is published with its weights in the protobuf, each in a
+`raw_data` field. `embed: false` in the options leaves them there: the build
+copies the model field by field off its stream, records where each weight's
+`raw_data` sits, and lets the payload stream past unheld. The loader is handed
+the model file itself, and checks its length against the one the build read
+before reading a weight. A constant's `raw_data` is copied, since the build
+reads it, and so is any whose `data_type` comes after it, since the walk cannot
+know it is a weight's until then. `conformance/tiny_gpt2_in_place_test.wado`
+reproduces the tiny GPT-2's logits from its own `model.onnx` this way.
