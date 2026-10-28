@@ -179,14 +179,13 @@ impl Walk<'_> {
                 let condition = condition
                     .as_expr()
                     .map_or(Some(Reach::Clean), |c| self.scan(engine, NodeRef::Expr(c)))?;
-                if condition == Reach::Clean {
-                    for arm in std::iter::once(*then_block).chain(*else_block) {
-                        let arm_stmts = body.blocks[arm].stmts.clone();
-                        self.stmts(engine, arm, &arm_stmts)?;
-                    }
-                    return Some(());
+                for arm in std::iter::once(*then_block).chain(*else_block) {
+                    let arm_stmts = body.blocks[arm].stmts.clone();
+                    self.stmts(engine, arm, &arm_stmts)?;
                 }
-                self.scan(engine, NodeRef::Stmt(s))?
+                // A condition that may lower the bound runs before either arm,
+                // so the re-test follows the whole `if`.
+                condition
             }
             StmtKind::LabeledBlock { block: inner, .. } => {
                 let inner_stmts = body.blocks[*inner].stmts.clone();
