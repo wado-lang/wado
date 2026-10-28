@@ -549,16 +549,14 @@ Renderings still compared against a declaration's own name:
 
 The Component Model boundary, permanent for the reason §9 gives:
 
-- `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
+- `cm_decl_in`, which resolves a WIT name to its declaration.
 - `cm_decl_in_interface`, the same step taking the interface rather than the
-  module: it asks the registry which module declares that interface, so a caller
-  holding an interface FQ supplies no vantage of its own. A bundled `wasi:` /
-  `core:` interface records no module in the registry, so it is addressed by its
-  module path through `cm_decl_in_module_named`.
-- `find_named_type_by_source`, which answers the `TypeId` that `cm_decl_in`'s
-  declaration was interned under.
-- `find_named_type_by_module_name`, which scans the interned types for a head of
-  that name in that module.
+  module, and the only caller of `cm_decl_in`: it asks the registry which module
+  declares that interface, so a caller holding an interface FQ supplies no
+  vantage of its own. A bundled `wasi:` / `core:` interface records no module in
+  the registry, so it is addressed by its module path through
+  `cm_decl_in_module_named`. Its callers name a type the boundary knows by its
+  WIT name, such as an interface's `error-code`.
 - `cm_decl_def`, codegen's entry to `cm_decl_in_interface`.
 
 ## The frame derivation
@@ -861,6 +859,18 @@ reaches the declaration through that one step. A producer that reaches none has 
 missing import, which is a diagnostic. Trying a second key instead is the shape
 "What a derivation may not be" forbids.
 
+### A CM type site is bound to its declaration
+
+`CmTypeDecls` binds every type site in a CM-signing module to the declaration it
+names, a resource method's `Self` included. A type the binding synthesis builds
+is minted bound to the declaration it was built from (§7), never spelled for a
+walk to resolve. The registry records which interface registered each
+declaration, so a site's interface is its declaration's, and nothing searches
+the interfaces for a name.
+
+A type's identity past this step is its interface and its name together: one
+interface declares a name once.
+
 ### A canonical intrinsic's payload is a declaration
 
 A payload is a type, so a nominal payload is its declaration. The CM name the ABI
@@ -899,39 +909,6 @@ nothing today.
 Which declarations a component reaches this way is not established, nor whether
 any of them is spelled such that the step could answer.
 
-## Known gap: a CM name still reaches a declaration by search
-
-A reference the Component Model boundary synthesizes carries the interface its
-own declaring module registers, so §9's step answers it. Where a reference
-arrives without one, the registry searches for the name instead, one kind of
-declaration at a time, over the one fixed order of the six kinds.
-
-That is all three shapes "What a derivation may not be" forbids at once. The
-search spans every interface in reach; each kind's map answers in registration
-order; and a kind that declines because two interfaces spell the name hands the
-question to the next kind. `ErrorCode` is the instance: a variant in four
-`wasi:` interfaces and an enum in `wasi:cli/types`, so the variants decline and
-the enum answers. That holds for any module's `ErrorCode`, including one a user
-wrote.
-
-Two kinds answering with different interfaces is a disagreement, and what it
-yields depends on which search asked. A search scoped to a namespace prefix
-takes the first kind that answers, so the order is a silent tiebreak. A search
-over every kind at once refuses instead, so the name resolves to nothing. Which
-of the two a reference meets follows from where it arrived, not from anything it
-says.
-
-A reference arrives without a declaring interface in three positions:
-
-- A world body names an export type that no import resolves. Only the world's
-  own namespace scopes such a name, and that namespace does not reach a type
-  another package declares.
-- A lib-local type is registered under its package's default interface, which no
-  CM namespace covers, so only a program-wide unique match reaches it.
-- A reference synthesized while emitting a CM instance carries at most the
-  interface being emitted, which need not be the one that declares it. That is
-  where `ErrorCode` arrives.
-
 ## Known gap: an abstract qualifier argument is not compared
 
 Where either side of a pattern qualifier leaves a position abstract, that
@@ -942,14 +919,6 @@ names no instantiation, so the scrutinee's argument has nothing to disagree with
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
-
-## Known gap: a synthesized type carries only a spelling
-
-A synthesized bound carries its referent (§7); a synthesized type carries only
-its spelling. The Component Model binding synthesis builds types such as
-`Fields`, `Response` and `WaitableSet` at nodes no walk visited, so the frame
-derivation resolves them. What it admits is a synthesized type whose spelling
-the frame resolves to a declaration other than the one synthesis meant.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 

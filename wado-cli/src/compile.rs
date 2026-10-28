@@ -142,9 +142,9 @@ const BUILD_DIR: &str = "build";
 pub struct CompileFlags {
     pub knobs: CompileKnobs,
     pub target_world: Option<String>,
-    /// `--test-name` substring filters for the test world (empty elsewhere).
-    /// Forwarded to `CompilerOptions::test_name_filters`.
-    pub test_name_filters: Vec<String>,
+    /// The tests the test world keeps. Forwarded to
+    /// `CompilerOptions::test_selection`.
+    pub test_selection: wado_compiler::TestSelection,
     /// Library world FQ for `--lib`. Forwarded to `CompilerOptions::lib_world`.
     pub lib_world: Option<String>,
     /// Retain the WIR module in the result. `wado compile` sets it when
@@ -154,7 +154,8 @@ pub struct CompileFlags {
     /// (`CompileResult::wit_emit_snapshot`) for encoding the `component-type`
     /// section (issue #1654). Set by `wado compile` when embedding.
     pub embed_wit_contract: Option<wado_compiler::wit_emit::WitContract>,
-    /// `wado test --coverage`. Forwarded to `CompilerOptions::coverage`.
+    /// `wado test --coverage` or `--pgo`. Forwarded to
+    /// `CompilerOptions::coverage`.
     pub coverage: Option<wado_compiler::coverage::CoverageScope>,
 }
 
@@ -399,7 +400,7 @@ pub async fn try_compile_with_run_cache(
         params: knobs.params.clone(),
         target_world: flags.target_world.clone(),
         invocations: pipeline_outcome.invocations,
-        test_name_filters: flags.test_name_filters.clone(),
+        test_selection: flags.test_selection.clone(),
         lib_world: flags.lib_world.clone(),
         retain_wir: flags.retain_wir,
         embed_wit_contract: flags.embed_wit_contract.clone(),

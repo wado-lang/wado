@@ -18,7 +18,7 @@ use wado_manifest::LOCK_FILENAME;
 use crate::args::DEFAULT_LOG_LEVEL;
 use crate::dep_component::Acquisition;
 use crate::manifest::{package_root, resolution_inputs};
-use crate::remote::{self, RemoteReader};
+use crate::remote;
 use crate::rss::RssSample;
 use crate::run_cache::RunCache;
 use wado_host::kiln::driver::KilnSpan;
@@ -289,19 +289,22 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     /// Nothing read through the reader is recorded: the part of the file a
-    /// compile depends on is read again through [`Self::load_source_prefix`].
-    /// A file that fails to open is recorded, as one that fails to load is.
-    async fn open_source(&self, path: &str) -> Result<Arc<dyn SourceReader>, SourceError> {
+    /// compile depends on is read again through [`Self::load_file`]. A file
+    /// that fails to open is recorded, as one that fails to load is.
+    async fn open_source(
+        &self,
+        path: &str,
+        integrity: Option<Integrity>,
+    ) -> Result<Arc<dyn SourceReader>, SourceError> {
         if is_remote(path) {
-            return match Box::pin(RemoteReader::open(path)).await {
-                Ok(reader) => Ok(Arc::new(reader)),
-                Err(e) => {
-                    self.run.observe_untracked();
-                    Err(e)
-                }
-            };
+            let lock_root = package_root(self.base_path());
+            let opened = Box::pin(remote::open(path, integrity, lock_root.as_deref())).await;
+            if opened.is_err() {
+                self.run.observe_untracked();
+            }
+            return opened;
         }
-        let opened = self.inner.open_source(path).await;
+        let opened = self.inner.open_source(path, integrity).await;
         if let Err(e) = &opened {
             self.observe_failure(path, e);
         }

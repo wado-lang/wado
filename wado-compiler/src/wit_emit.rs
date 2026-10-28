@@ -22,7 +22,7 @@ use crate::component_model::{
 };
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
-use crate::module_source::{ModuleSource, is_bundled_specifier};
+use crate::module_source::ModuleSource;
 use crate::name::to_cm_name;
 use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
@@ -821,7 +821,7 @@ impl<'a> Emitter<'a> {
                 }
                 if let Some(base) = self
                     .cm_interface_registry
-                    .and_then(|registry| registry.prelude_newtype_base(named))
+                    .and_then(|registry| registry.type_decls().newtype_base(named))
                 {
                     return self.map_ast_type(base, current_fq, uses);
                 }
@@ -1289,7 +1289,7 @@ fn primitive_by_name(name: &str) -> Option<Type> {
 
 /// Collect the source-interface FQs of every CM-defined named type referenced
 /// by `ty` (recursing through generics, tuples, references, and function
-/// types). Only `wasi:` / `core:` sources are CM interfaces worth importing.
+/// types). A user module's own source is not a CM interface and is left out.
 fn collect_named_type_sources(
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
@@ -1298,7 +1298,7 @@ fn collect_named_type_sources(
     match ty {
         AstType::Named(named) => {
             if let Some(src) = registry.source_interface(named)
-                && is_bundled_specifier(&src)
+                && registry.is_cm_source(&src)
             {
                 out.push(src);
             }

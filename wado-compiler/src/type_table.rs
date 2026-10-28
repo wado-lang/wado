@@ -2238,8 +2238,18 @@ impl TypeTable {
         self.make_struct(StructDef::Decl(def))
     }
 
+    pub fn make_arg_buffer(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ArgBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
     pub fn make_copy_buffer(&mut self) -> TypeId {
         let def = self.require_compiler_item_def(CompilerItem::CopyBuffer);
+        self.make_struct(StructDef::Decl(def))
+    }
+
+    pub fn make_read_into(&mut self) -> TypeId {
+        let def = self.require_compiler_item_def(CompilerItem::ReadInto);
         self.make_struct(StructDef::Decl(def))
     }
 
@@ -2705,15 +2715,32 @@ impl TypeTable {
     /// A type whose members are not registered may hold anything, so it does.
     #[must_use]
     pub fn reaches_mut_ref(&self, ty: TypeId) -> bool {
-        self.reaches_mut_ref_in(ty, &[], &mut IndexSet::default())
+        self.reaches_in(ty, Reach::MutRef, &[], &mut IndexSet::default())
     }
 
-    /// [`Self::reaches_mut_ref`] of `ty` as written inside a template
-    /// instantiated with `args`. `walked` holds what the walk is already
-    /// inside, which adds nothing.
-    fn reaches_mut_ref_in(
+    /// The kind of GC object a place of `ty` reads its fields or elements
+    /// from: a reference names its referent's object, a `Box<T>` its payload's,
+    /// and a newtype its base's. Two places of different kinds are two objects.
+    #[must_use]
+    pub fn object_kind(&self, ty: TypeId) -> TypeKey {
+        self.type_key(self.representation_head(self.peel_refs_and_box(ty)))
+    }
+
+    /// Whether a value of `ty` is, holds or references, at any depth, an object
+    /// of `kind` (an [`Self::object_kind`]): what a callee handed one may write.
+    /// A type whose members are not registered may hold anything, so it does.
+    #[must_use]
+    pub fn reaches_object(&self, ty: TypeId, kind: TypeKey) -> bool {
+        self.reaches_in(ty, Reach::Object(kind), &[], &mut IndexSet::default())
+    }
+
+    /// Whether `ty`, as written inside a template instantiated with `args`,
+    /// reaches `target`. `walked` holds what the walk is already inside, which
+    /// adds nothing.
+    fn reaches_in(
         &self,
         ty: TypeId,
+        target: Reach,
         args: &[TypeId],
         walked: &mut IndexSet<(TypeKey, Vec<TypeKey>)>,
     ) -> bool {
@@ -2725,11 +2752,28 @@ impl TypeTable {
             return true;
         };
         let ty = self.representation_head(ty);
+        if let Reach::Object(kind) = target
+            && self.object_kind(ty) == kind
+        {
+            return true;
+        }
         if !walked.insert((self.type_key(ty), self.type_keys(args))) {
             return false;
         }
+        if let Reach::Object(_) = target
+            && let Some(payload) = self.box_payload_of(ty)
+        {
+            return self.reaches_in(payload, target, args, walked);
+        }
+        // `List` is the compiler's, so no struct registers its fields: it is
+        // its backing array and the elements.
         if let Some(elem) = self.list_element(ty) {
-            return self.reaches_mut_ref_in(elem, args, walked);
+            let backs = |kind: TypeKey| {
+                matches!(self.get(kind.0), ResolvedType::BuiltinArray(array_elem)
+                    if self.type_key(*array_elem) == self.type_key(elem))
+            };
+            return matches!(target, Reach::Object(kind) if backs(kind))
+                || self.reaches_in(elem, target, args, walked);
         }
         let (template_args, members): (Vec<TypeId>, Vec<TypeId>) = match self.get(ty) {
             ResolvedType::Primitive(_)
@@ -2737,8 +2781,11 @@ impl TypeTable {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. } => return false,
-            ResolvedType::Ref(inner) | ResolvedType::BuiltinArray(inner) => {
-                return self.reaches_mut_ref_in(*inner, args, walked);
+            ResolvedType::MutRef(_) if target == Reach::MutRef => return true,
+            ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::BuiltinArray(inner) => {
+                return self.reaches_in(*inner, target, args, walked);
             }
             ResolvedType::Struct {
                 def: StructDef::Anon(shape),
@@ -2780,10 +2827,9 @@ impl TypeTable {
                 None => return true,
             },
             ResolvedType::Newtype { base_type, .. } => {
-                return self.reaches_mut_ref_in(*base_type, args, walked);
+                return self.reaches_in(*base_type, target, args, walked);
             }
-            ResolvedType::MutRef(_)
-            | ResolvedType::Function { .. }
+            ResolvedType::Function { .. }
             | ResolvedType::Resource { .. }
             | ResolvedType::GenericResource { .. }
             | ResolvedType::TypeParam { .. }
@@ -2797,7 +2843,7 @@ impl TypeTable {
         };
         members
             .into_iter()
-            .any(|member| self.reaches_mut_ref_in(member, &template_args, walked))
+            .any(|member| self.reaches_in(member, target, &template_args, walked))
     }
 
     /// Find a variant type by (name, `module_source`) pair via `intern_map` (O(1)).
@@ -2836,8 +2882,7 @@ impl TypeTable {
     /// generated module and `name` the single declaration in it. A name that
     /// declares nothing answers `None`.
     ///
-    /// Only the Component Model boundary may ask it: `synthesis::cm_binding`
-    /// and [`crate::component_model::cm_decl_in_interface`]. A Wado name
+    /// Only [`crate::component_model::cm_decl_in_interface`] may ask it. A Wado name
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].
     #[must_use]
@@ -2847,16 +2892,6 @@ impl TypeTable {
             .copied()
     }
 
-    /// The interned type the CM declaration `module` names `name` was
-    /// registered under, whichever nominal shape it is.
-    pub fn find_named_type_by_source(
-        &self,
-        name: &str,
-        module_source: &ModuleSource,
-    ) -> Option<TypeId> {
-        self.find_named_type_by_def(self.cm_decl_in(name, module_source)?)
-    }
-
     /// The type `def` declares, of any kind a Component Model interface names.
     pub fn find_named_type_by_def(&self, def: DefId) -> Option<TypeId> {
         self.find_struct_type(StructDef::Decl(def))
@@ -2864,6 +2899,16 @@ impl TypeTable {
             .or_else(|| self.find_enum_type(def))
             .or_else(|| self.find_flags_type(def))
             .or_else(|| self.find_resource_type(def))
+            .or_else(|| self.find_newtype_type(def))
+    }
+
+    /// The non-generic newtype `def` declares, once interned. Its base is part
+    /// of the intern key, so the declaration alone is no key into it.
+    fn find_newtype_type(&self, def: DefId) -> Option<TypeId> {
+        self.all_types().find_map(|(id, ty)| {
+            matches!(ty, ResolvedType::Newtype { def: d, type_args, .. } if *d == def && type_args.is_empty())
+                .then_some(id)
+        })
     }
 
     /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
@@ -2879,85 +2924,6 @@ impl TypeTable {
         self.cm_decl_index
             .get(&(name.to_string(), namespace, module_name.to_string()))
             .copied()
-    }
-
-    /// Find any decl-backed named type scoped to a single CM *interface*,
-    /// addressed by the namespace that owns it and the module it maps to (e.g.
-    /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a
-    /// `core:` module, which carries none.
-    ///
-    /// [`Self::find_named_type_by_cm_package`] scopes to the package, which
-    /// holds several interfaces — two can declare the same name, and that scan
-    /// returns whichever registered first.
-    #[must_use]
-    pub fn find_named_type_by_module_name(
-        &self,
-        name: &str,
-        module_name: &str,
-        namespace: Option<CmNamespace>,
-    ) -> Option<TypeId> {
-        for (type_id, _) in self.all_types() {
-            let Some((n, ms)) = self.nominal_head(type_id) else {
-                continue;
-            };
-            if n != name {
-                continue;
-            }
-            let matches = match ms {
-                ModuleSource::Binding {
-                    namespace: ns,
-                    interface,
-                } => namespace == Some(ns) && interface.as_str() == module_name,
-                ModuleSource::Core { name: cm_name } => {
-                    namespace.is_none() && cm_name.as_str() == module_name
-                }
-                _ => false,
-            };
-            if matches {
-                return Some(type_id);
-            }
-        }
-        None
-    }
-
-    /// Find a decl-backed named type scoped to a CM package: any
-    /// `module_source` under the `{cm_package}/` prefix, restricted to
-    /// `namespace` when the caller knows it and searching every bundled one
-    /// when it does not. `cm_package` is the bare segment (`"http"`, `"kiln"`),
-    /// not a fully-qualified source; same-named types in distinct packages stay
-    /// distinct because `module_source` is part of the intern key.
-    pub fn find_named_type_by_cm_package(
-        &self,
-        name: &str,
-        cm_package: &str,
-        namespace: Option<CmNamespace>,
-    ) -> Option<TypeId> {
-        let prefix = format!("{cm_package}/");
-        for (type_id, _) in self.all_types() {
-            let Some((n, ms)) = self.nominal_head(type_id) else {
-                continue;
-            };
-            if n != name {
-                continue;
-            }
-            match ms {
-                ModuleSource::Binding {
-                    namespace: ns,
-                    interface,
-                } if namespace.is_none_or(|want| want == ns) && interface.starts_with(&prefix) => {
-                    return Some(type_id);
-                }
-                // Core-packaged CM types (e.g. `core:kiln/types.wado`) are
-                // registered under `ModuleSource::Core`; match them by the
-                // same package-prefix contract so generator bindings reach
-                // their stdlib types through this lookup.
-                ModuleSource::Core { name: cm_name } if cm_name.starts_with(&prefix) => {
-                    return Some(type_id);
-                }
-                _ => {}
-            }
-        }
-        None
     }
 
     /// The interned instance of `def` at `type_args`, if one exists.
@@ -3666,8 +3632,40 @@ impl TypeTable {
         {
             return Some(resolved);
         }
+        // A newtype inherits its immediate base's impls, a link at a time as
+        // `inheriting` reads them, a generic impl among them: `ByteList`
+        // answers `List<u8>`'s `AsSlice::Elem`.
+        let mut receiver = concrete;
+        loop {
+            if let Some(resolved) =
+                self.receiver_projection_family(receiver, owning_trait, trait_args, assoc_name)
+            {
+                return Some(resolved);
+            }
+            // A scalar primitive's arithmetic is compiler-supplied, so nothing
+            // registered its `Output`: it is the receiver itself, a newtype
+            // over one included. `v128` is not one — only a lane type's own
+            // impl names its output.
+            if assoc_name == "Output" && self.is_scalar_primitive_like(receiver) {
+                return Some(receiver);
+            }
+            let ResolvedType::Newtype { base_type, .. } = self.get_unerased(receiver) else {
+                return None;
+            };
+            receiver = *base_type;
+        }
+    }
+
+    /// [`Self::projection_family`] answered by an impl on `receiver` itself.
+    fn receiver_projection_family(
+        &mut self,
+        receiver: TypeId,
+        owning_trait: &DefId,
+        trait_args: Option<&[TypeId]>,
+        assoc_name: &str,
+    ) -> Option<TypeId> {
         if let Some(resolved) =
-            self.resolve_assoc_type_of_trait_at(concrete, owning_trait, trait_args, assoc_name)
+            self.resolve_assoc_type_of_trait_at(receiver, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
@@ -3676,7 +3674,7 @@ impl TypeTable {
         // name on one implementor stay apart (WEP-2026-08-12). The name-keyed
         // forms below give up on that case rather than choosing.
         if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
-            concrete,
+            receiver,
             owning_trait,
             trait_args,
             assoc_name,
@@ -3684,18 +3682,11 @@ impl TypeTable {
             return Some(resolved);
         }
         if let Some(resolved) =
-            self.resolve_assoc_type_qualified(concrete, owning_trait, trait_args, assoc_name)
+            self.resolve_assoc_type_qualified(receiver, owning_trait, trait_args, assoc_name)
         {
             return Some(resolved);
         }
-        if let Some(resolved) = self.resolve_generic_assoc_type_mono(concrete, assoc_name) {
-            return Some(resolved);
-        }
-        // A scalar primitive's arithmetic is compiler-supplied, so nothing
-        // registered its `Output`: it is the receiver itself, a newtype over
-        // one included. `v128` is not one — only a lane type's own impl names
-        // its output.
-        (assoc_name == "Output" && self.is_scalar_primitive_like(concrete)).then_some(concrete)
+        self.resolve_generic_assoc_type_mono(receiver, assoc_name)
     }
 
     /// Register `<concrete_id as trait_ref>::assoc_name` → `resolved_id`: for
@@ -4999,6 +4990,30 @@ impl TypeTable {
             .compiler_item_def(CompilerItem::List)
             .expect("the List declaration is a registered compiler item");
         self.make_generic_instance(def, vec![element])
+    }
+
+    /// Create a `core:linear::ListView<T>` type.
+    pub fn make_list_view(&mut self, element: TypeId) -> TypeId {
+        let def = self
+            .compiler_item_def(CompilerItem::ListView)
+            .expect("a `&ListView<T>` parameter's module imports `core:linear`");
+        self.make_generic_instance(def, vec![element])
+    }
+
+    /// The `T` of a `&ListView<T>`, the parameter type a `ListArg<T>` argument
+    /// converts to, or `None` for any other type.
+    pub fn list_view_ref_element(&self, id: TypeId) -> Option<TypeId> {
+        let ResolvedType::Ref(view) = *self.get(id) else {
+            return None;
+        };
+        if !self.is_compiler_item_type(view, CompilerItem::ListView) {
+            return None;
+        }
+        let args = self.declared_type_args(view)?;
+        let [element] = args[..] else {
+            unreachable!("`ListView` declares one type parameter");
+        };
+        Some(element)
     }
 
     /// Create a `TreeMap<K, V>` type — the Wado spelling of CM `map<K, V>`.
@@ -7519,6 +7534,14 @@ impl Leaves<'_> {
         }
         out
     }
+}
+
+/// What [`TypeTable::reaches_in`] looks for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    MutRef,
+    /// An object of this [`TypeTable::object_kind`].
+    Object(TypeKey),
 }
 
 /// What a [`TypeId`] resolves to, as a value to compare or key a map by.

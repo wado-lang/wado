@@ -25,6 +25,7 @@ use {
     StreamWritable,
     ReadyEvent,
     CopyBuffer,
+    ReadInto,
     StartedRead,
     StartedWrite,
     WaitEvent,
@@ -39,10 +40,33 @@ use {
 /// Copies bytes from linear memory to a new GC array.
 internal fn memory_to_gc_array(ptr: i32, len: i32) -> Array<u8> {
     let mut arr: Array<u8> = builtin::array_new(len);
-    for let mut i = 0; i < len; i += 1 {
-        builtin::array_set_u8(&mut arr, i, builtin::i32_load8_u(ptr + i) as u8);
-    }
+    memory_into_gc_array(&mut arr, 0, ptr, len);
     return arr;
+}
+
+/// Copies `len` bytes from linear memory at `ptr` into `arr[at..<at + len]`.
+///
+/// Wasm has no copy from linear memory into a GC array, so each byte is its
+/// own `array.set`. One load feeding eight of them halves the guest's cost per
+/// byte, which every lift of bytes or a string pays.
+internal fn memory_into_gc_array(arr: &mut Array<u8>, at: i32, ptr: i32, len: i32) {
+    let mut i = 0;
+    while i <= len - 8 {
+        let w = builtin::i64_load(ptr + i);
+        let to = at + i;
+        builtin::array_set_u8(arr, to, w as u8);
+        builtin::array_set_u8(arr, to + 1, (w >> 8) as u8);
+        builtin::array_set_u8(arr, to + 2, (w >> 16) as u8);
+        builtin::array_set_u8(arr, to + 3, (w >> 24) as u8);
+        builtin::array_set_u8(arr, to + 4, (w >> 32) as u8);
+        builtin::array_set_u8(arr, to + 5, (w >> 40) as u8);
+        builtin::array_set_u8(arr, to + 6, (w >> 48) as u8);
+        builtin::array_set_u8(arr, to + 7, (w >> 56) as u8);
+        i += 8;
+    }
+    for ; i < len; i += 1 {
+        builtin::array_set_u8(arr, at + i, builtin::i32_load8_u(ptr + i));
+    }
 }
 
 /// Copies bytes from linear memory to a new GC String.
@@ -53,8 +77,28 @@ internal fn memory_to_gc_string(ptr: i32, len: i32) -> String {
 }
 
 /// Copies `arr[src_start..<src_start + len]` from a GC array to linear memory.
+///
+/// `array.get`s in one block share part of their bounds checks, and one store
+/// writes the eight bytes they read, which every lower of bytes or a string
+/// pays. Four per store measures the same.
 internal fn gc_array_to_memory(arr: &Array<u8>, src_start: i32, ptr: i32, len: i32) {
-    for let mut i = 0; i < len; i += 1 {
+    let mut i = 0;
+    while i <= len - 8 {
+        let at = src_start + i;
+        let w = builtin::array_get_value_u8(arr, at) as i64 | builtin::array_get_value_u8(arr, at + 1) as i64 << 8 | builtin::array_get_value_u8(
+            arr,
+            at + 2,
+        ) as i64 << 16 | builtin::array_get_value_u8(arr, at + 3) as i64 << 24 | builtin::array_get_value_u8(
+            arr,
+            at + 4,
+        ) as i64 << 32 | builtin::array_get_value_u8(arr, at + 5) as i64 << 40 | builtin::array_get_value_u8(
+            arr,
+            at + 6,
+        ) as i64 << 48 | builtin::array_get_value_u8(arr, at + 7) as i64 << 56;
+        builtin::i64_store(ptr + i, w);
+        i += 8;
+    }
+    for ; i < len; i += 1 {
         builtin::i32_store8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
     }
 }
@@ -169,12 +213,13 @@ internal fn i64_mul_wide_s_soft(a: i64, b: i64) -> [i64, i64] {
 
 use { CoverageHost } from "core:coverage/coverage_host.wado";
 
-/// Whether this instance has reported each coverage region, one byte per id.
-global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
+/// How often each coverage region has run in this instance, by id.
+global mut COVERAGE_COUNTS: Array<i64> = builtin::array_new::<i64>(0);
 
-/// The probe `wado test --coverage` puts at the start of every region: tells
-/// the host the first time region `id` runs in this instance. The host hears a
-/// hit as it happens, since a test that traps cannot be entered again.
+/// The probe `wado test --coverage` and `--pgo` put at the start of every
+/// region: counts a run of region `id`, and tells the host the first time it
+/// runs in this instance. The host hears a hit as it happens, since a test
+/// that traps cannot be entered again.
 // Kept a call: inlined into every region, its fast path doubles what the
 // optimizer walks under `--coverage-include=stdlib`, to speed a test run that
 // spends a fraction of the compile.
@@ -183,18 +228,40 @@ global mut COVERAGE_SEEN: Array<u8> = builtin::array_new::<u8>(0);
 #[benign(CoverageHost)]
 #[inline(never)]
 internal fn coverage_probe(id: i32) {
-    let len = builtin::array_len(&COVERAGE_SEEN);
-    if id < len && builtin::array_get_value_u8(&COVERAGE_SEEN, id) != 0 {
-        return;
+    let len = builtin::array_len(&COVERAGE_COUNTS);
+    if id < len {
+        let count = builtin::array_get_value(&COVERAGE_COUNTS, id);
+        if count != 0 {
+            builtin::array_set(&mut COVERAGE_COUNTS, id, count + 1);
+            return;
+        }
     }
     builtin::cold_path();
     if id >= len {
-        let mut grown = builtin::array_new::<u8>(if id < len * 2 { len * 2 } else { id + 1 });
-        builtin::array_copy(&mut grown, 0, &COVERAGE_SEEN, 0, len);
-        COVERAGE_SEEN = grown;
+        let mut grown = builtin::array_new::<i64>(if id < len * 2 { len * 2 } else { id + 1 });
+        builtin::array_copy(&mut grown, 0, &COVERAGE_COUNTS, 0, len);
+        COVERAGE_COUNTS = grown;
     }
-    builtin::array_set_u8(&mut COVERAGE_SEEN, id, 1);
+    builtin::array_set(&mut COVERAGE_COUNTS, id, 1);
     CoverageHost::hit(id as u32);
+}
+
+/// Reports each region that ran more than once, with its runs; the first-hit
+/// report already counts one. A test under `wado test --coverage` or `--pgo`
+/// calls it once its body returns.
+// Reads the array with builtins alone: a measured prelude call made here would
+// run after its region's count was read.
+#[compiler_item("coverage_report")]
+#[coverage(off)]
+#[benign(CoverageHost)]
+internal fn coverage_report() {
+    let len = builtin::array_len(&COVERAGE_COUNTS);
+    for let mut id = 0; id < len; id += 1 {
+        let runs = builtin::array_get_value(&COVERAGE_COUNTS, id);
+        if runs > 1 {
+            CoverageHost::count(id as u32, runs);
+        }
+    }
 }
 
 /// Traps unconditionally, marking code no run reaches: no input, not even one
@@ -346,14 +413,13 @@ internal fn cm_buffer_bytes(count: i32, elem_size: i32) -> i32 {
     return count * elem_size;
 }
 
-/// CM adapter for stream.read(max) on Stream<u8>: one copy, started.
+/// CM adapter for stream.read(max, into) on Stream<u8>: one copy, started.
 #[compiler_item("cm_stream_read_u8")]
-internal fn cm_stream_read_u8(handle: i32, max: i32) -> StartedRead<u8> {
-    let room = cm_buffer_bytes(cm_copy_count(max), 1);
-    let ptr = builtin::realloc(0, 0, 1, room);
-    let packed = builtin::stream_read(handle, ptr, room);
+internal fn cm_stream_read_u8(handle: i32, max: i32, into: ReadInto) -> StartedRead<u8> {
+    let [ptr, count, size] = into.landing(cm_buffer_bytes(cm_copy_count(max), 1));
+    let packed = builtin::stream_read(handle, ptr, count);
     return StartedRead {
-        buffer: CopyBuffer { handle, packed, ptr, size: room, align: 1 },
+        buffer: CopyBuffer { handle, packed, ptr, size, align: 1 },
         items: [],
     };
 }
@@ -451,16 +517,15 @@ internal fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 }
 
 /// The event of `code` whose handle and payload the host wrote at `out_ptr`,
-/// which this frees. A set holds subtasks and stream ends only, so no future
-/// event arrives, and `waitable-set.wait` is lowered with `cancellable = 0`, so
-/// no `TASK_CANCELLED` does.
+/// which this frees. `waitable-set.wait` is lowered with `cancellable = 0`, so
+/// no `TASK_CANCELLED` arrives.
 fn cm_wait_event(code: i32, out_ptr: i32) -> WaitEvent {
     let handle = builtin::i32_load(out_ptr);
     let payload = builtin::i32_load(out_ptr + 4);
     let freed = builtin::realloc(out_ptr, 8, 4, 0);
     let event = match code {
         1 => ReadyEvent::Call(call_state(payload as u32)),
-        2 | 3 => ReadyEvent::Copied(copy_result(payload)),
+        2 | 3 | 4 | 5 => ReadyEvent::Copied(copy_result(payload)),
         _ => unreachable(),
     };
     return WaitEvent { handle, event, payload };

@@ -8,11 +8,10 @@
 //! padding scheme exhaustively — the classic location for SHA bugs.
 
 use crate::common::{
-    TestHttpCtx, WasiState, cli_engine, cli_linker, compile_file, install_default_crypto_provider,
-    limit_store, report_fuel_used, runtime,
+    TestHttpCtx, TestReport, WasiState, cli_engine, cli_linker, compile_file,
+    install_default_crypto_provider, limit_store, report_fuel_used, runtime,
 };
 use sha2::{Digest, Sha256};
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::OnceLock;
 use wasmtime::Store;
@@ -60,7 +59,7 @@ fn run_component(stdin: &[u8]) -> String {
             http_ctx: wasmtime_wasi_http::WasiHttpCtx::new(),
             http_hooks: TestHttpCtx::new(),
             tls_ctx: wasmtime_wasi_tls::WasiTlsCtxBuilder::new().build(),
-            coverage_hits: BTreeSet::default(),
+            coverage: TestReport::default(),
         };
         let mut store = Store::new(engine, state);
         // Hashing large inputs does far more guest work than a normal test.

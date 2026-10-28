@@ -1,0 +1,31 @@
+// A type with a byte pattern that is no value of it is not `AnyBits`, and
+// `builtin::load` refuses it: `bool`, `char` and an `enum` leave patterns out,
+// a struct may hold a GC reference, an `i128` is a GC object, and `()` has no
+// width.
+
+enum Color {
+    Red,
+    Green,
+}
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+export fn run() {
+    let p = builtin::realloc(0, 0, 16, 16);
+    let b = builtin::load::<bool>(p);
+    let c = builtin::load::<char>(p);
+    let e = builtin::load::<Color>(p);
+    let s = builtin::load::<Pair>(p);
+    let w = builtin::load::<i128>(p);
+    let u = builtin::load::<()>(p);
+}
+
+__DATA__
+{
+  "compile_error": "does not implement trait 'AnyBits' required by bound on 'T'",
+  "compile_error_count": 6,
+  "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

@@ -166,7 +166,7 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.set-label")]` `#[cm_params("self", "label")]`
 
-##### `fn get_mapped_range_set_with_copy(&self, data: ByteList, offset: Option<GpuSize64>, size: Option<GpuSize64>) -> Result<(), GetMappedRangeError>`
+##### `fn get_mapped_range_set_with_copy(&self, data: &ListView<u8>, offset: Option<GpuSize64>, size: Option<GpuSize64>) -> Result<(), GetMappedRangeError>`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.get-mapped-range-set-with-copy")]` `#[cm_params("self", "data", "offset", "size")]`
 
@@ -366,7 +366,7 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-bind-group")]` `#[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]`
 
-##### `fn set_immediates(&self, range_offset: GpuSize32, data: ByteList, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
+##### `fn set_immediates(&self, range_offset: GpuSize32, data: &ListView<u8>, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-immediates")]` `#[cm_params("self", "range-offset", "data", "data-offset", "data-size")]`
 
@@ -590,11 +590,11 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.on-submitted-work-done")]` `#[cm_params("self")]`
 
-##### `fn write_buffer_with_copy(&self, buffer: &GpuBuffer, buffer_offset: GpuSize64, data: ByteList, data_offset: Option<GpuSize64>, size: Option<GpuSize64>) -> Result<(), WriteBufferError>`
+##### `fn write_buffer_with_copy(&self, buffer: &GpuBuffer, buffer_offset: GpuSize64, data: &ListView<u8>, data_offset: Option<GpuSize64>, size: Option<GpuSize64>) -> Result<(), WriteBufferError>`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-buffer-with-copy")]` `#[cm_params("self", "buffer", "buffer-offset", "data", "data-offset", "size")]`
 
-##### `fn write_texture_with_copy(&self, destination: GpuTexelCopyTextureInfo, data: ByteList, data_layout: GpuTexelCopyBufferLayout, size: GpuExtent3D)`
+##### `fn write_texture_with_copy(&self, destination: GpuTexelCopyTextureInfo, data: &ListView<u8>, data_layout: GpuTexelCopyBufferLayout, size: GpuExtent3D)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-texture-with-copy")]` `#[cm_params("self", "destination", "data", "data-layout", "size")]`
 
@@ -658,7 +658,7 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-bind-group")]` `#[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]`
 
-##### `fn set_immediates(&self, range_offset: GpuSize32, data: ByteList, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
+##### `fn set_immediates(&self, range_offset: GpuSize32, data: &ListView<u8>, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-immediates")]` `#[cm_params("self", "range-offset", "data", "data-offset", "data-size")]`
 
@@ -754,7 +754,7 @@ Drop the resource. Scope exit drops one that nothing moved.
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-bind-group")]` `#[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]`
 
-##### `fn set_immediates(&self, range_offset: GpuSize32, data: ByteList, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
+##### `fn set_immediates(&self, range_offset: GpuSize32, data: &ListView<u8>, data_offset: Option<GpuSize64>, data_size: Option<GpuSize64>)`
 
 `#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-immediates")]` `#[cm_params("self", "range-offset", "data", "data-offset", "data-size")]`
 

@@ -778,6 +778,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_expr(arg, ctx, None);
         };
         let expected = self.apply_infer_holes(param.checked);
+        let element = self
+            .tysys
+            .type_table
+            .borrow()
+            .list_view_ref_element(expected);
+        if let Some(element) = element {
+            return self.resolve_list_view_arg(arg, ctx, expected, element);
+        }
         let checked_against = self.context_literal_expected(arg, expected, hints);
         let resolved = self.resolve_expr(arg, ctx, Some(checked_against));
         if !answers_last(Some(arg)) {
@@ -786,6 +794,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.solve_own_infer_holes_against(declared, resolved, &answerable);
         }
         resolved
+    }
+
+    /// An argument meeting a `&ListView<T>` parameter. A view passes as it is;
+    /// any other argument implementing `ListArg<T>` converts, a sequence
+    /// literal read as a `List<T>` first. Anything else is left for the
+    /// argument check to report.
+    fn resolve_list_view_arg(
+        &mut self,
+        arg: &ast::Expr,
+        ctx: &mut FunctionContext,
+        view: TypeId,
+        element: TypeId,
+    ) -> TypeId {
+        let literal_list = matches!(arg, Expr::TupleLiteral(_))
+            .then(|| self.tysys.type_table.borrow_mut().make_list(element));
+        let resolved = self.resolve_expr(arg, ctx, literal_list);
+        if !self.converts_to_list_view(view, resolved) {
+            return resolved;
+        }
+        self.sem.types.list_view_conversions.insert(arg.id(), view);
+        view
+    }
+
+    /// Whether an `arg` argument converts to the parameter `param` through
+    /// `ListArg<T>`, `param` being a `&ListView<T>` and `arg` not already one.
+    /// A `T` still being inferred names no trait to ask, and the argument says
+    /// nothing of it: the call names it.
+    pub(super) fn converts_to_list_view(&self, param: TypeId, arg: TypeId) -> bool {
+        let list_arg = {
+            let tt = self.tysys.type_table.borrow();
+            let Some(element) = tt.list_view_ref_element(param) else {
+                return false;
+            };
+            if tt.is_compiler_item_type(arg, CompilerItem::ListView)
+                || tt.contains_infer_var(element)
+            {
+                return false;
+            }
+            tt.compiler_trait_fq(CompilerItem::ListArg)
+                .with_args(vec![tt.fq_type_name(element)])
+        };
+        self.tysys
+            .type_implements_trait(&self.annotate_ctx, &self.type_lookup(), arg, &list_arg)
     }
 }
 
@@ -3842,10 +3893,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
+        self.resolve_assoc_bounds_in(params, 0, &names, args);
+    }
+
+    /// [`Self::resolve_assoc_bound_args`] where the bounds' owners `params`
+    /// fill `args` from `offset` on, and a target may name any slot of `names`:
+    /// a static method's bound settles its block's slot as well as its own.
+    fn resolve_assoc_bounds_in(
+        &mut self,
+        params: &[ast::GenericParam],
+        offset: usize,
+        names: &[String],
+        args: &mut [TypeId],
+    ) {
+        assert_eq!(names.len(), args.len(), "every slot is named");
+        assert!(offset + params.len() <= args.len(), "the owners are slots");
         let scope_params = self.scope_type_param_ids();
         loop {
             let mut progressed = false;
-            for (owner_idx, param) in params.iter().enumerate() {
+            for (own_idx, param) in params.iter().enumerate() {
+                let owner_idx = offset + own_idx;
                 let owner_ty = args[owner_idx];
                 let forwarded = scope_params.contains(&owner_ty);
                 if !forwarded && self.tysys.is_unbound_type_param(owner_ty) {
@@ -3860,7 +3927,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .filter_map(|assoc| {
                             let target_name = assoc_bound_target_param(&assoc.ty)?;
-                            let target_idx = params.iter().position(|p| p.name == target_name)?;
+                            let target_idx = names.iter().position(|n| *n == target_name)?;
                             self.tysys
                                 .is_unbound_type_param(args[target_idx])
                                 .then_some((target_idx, assoc))
@@ -3871,22 +3938,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     let trait_ = self.tysys.resolutions.bound_decl(bound);
                     let BoundArgsAtCall::Read(trait_args) =
-                        self.bound_args_at_call(bound, trait_, owner_ty, &names, args)
+                        self.bound_args_at_call(bound, trait_, owner_ty, names, args)
                     else {
                         continue;
                     };
                     for (target_idx, assoc) in targets {
                         let resolved = if forwarded {
-                            trait_
-                                .filter(|_| !params[target_idx].is_pack)
-                                .map(|trait_| {
-                                    self.forwarded_projection(
-                                        owner_ty,
-                                        trait_,
-                                        trait_args.clone(),
-                                        &assoc.name,
-                                    )
-                                })
+                            // A block's slot carries no declaration here; its
+                            // open value is a pack where the slot is one.
+                            let is_pack = match target_idx.checked_sub(offset) {
+                                Some(own) if own < params.len() => params[own].is_pack,
+                                _ => self
+                                    .tysys
+                                    .type_table
+                                    .borrow()
+                                    .contains_type_pack(args[target_idx]),
+                            };
+                            trait_.filter(|_| !is_pack).map(|trait_| {
+                                self.forwarded_projection(
+                                    owner_ty,
+                                    trait_,
+                                    trait_args.clone(),
+                                    &assoc.name,
+                                )
+                            })
                         } else {
                             self.settled_projection(
                                 owner_ty,
@@ -4429,6 +4504,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !defaulted && !all_param_ids.iter().any(|p| bindings.contains_key(p)) {
             return (vec![], vec![]);
         }
+        // A slot the arguments reach only through a bound's associated type
+        // (`impl<T> W<T> { fn of<S: AsSlice<Elem = T>>(s: &S) }`) is projected
+        // off the owner the arguments did settle.
+        let names: Vec<String> = sig
+            .decl
+            .type_params
+            .iter()
+            .map(|(n, _)| n.clone())
+            .collect();
+        self.resolve_assoc_bounds_in(&sig.own_params, split, &names, &mut inferred);
         (
             self.declaring_slot_values(&sig, &inferred[..split]),
             inferred[split..].to_vec(),

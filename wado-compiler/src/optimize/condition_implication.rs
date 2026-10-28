@@ -26,7 +26,7 @@ use crate::optimize::arena_query::{
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::optimize::value_copy::mutation::{MutationOracle, Witness, expr_witnesses};
 use crate::tir::{BuiltinDeclaration, TypeId};
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 use crate::{hashmap, nir_arena};
 
 /// Run condition implication at the body root on an existing engine session.
@@ -171,11 +171,10 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             &first_param_types,
             &call_immutability,
         );
-        let param_locals: Vec<u32> = params.iter().map(|p| p.local_index).collect();
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(type_table);
-        engine.set_param_locals(param_locals);
+        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
@@ -246,7 +245,8 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
         reassigned,
         tick: 0,
         last_write: hashmap::IndexMap::default(),
-        last_aliased: 0,
+        aliased_writes: Vec::new(),
+        reached: hashmap::IndexMap::default(),
         last_call: 0,
         pending: hashmap::IndexMap::default(),
         stale: hashmap::IndexSet::default(),
@@ -265,7 +265,13 @@ struct PendingBind {
     value: Operand,
     since: u64,
     deps: Vec<u32>,
+    /// The kinds of object the value reads through, where it names them all:
+    /// an aliased store changes it only through one of these.
+    reads: Option<Vec<TypeKey>>,
     aliased: bool,
+    /// The tick up to which the aliased stores were tested against this bind,
+    /// so each is tested once however often the bind is read.
+    aliased_checked: u64,
     escaped: bool,
 }
 
@@ -278,7 +284,9 @@ struct BindWalk<'e, 'a> {
     reassigned: hashmap::IndexSet<u32>,
     tick: u64,
     last_write: hashmap::IndexMap<u32, u64>,
-    last_aliased: u64,
+    aliased_writes: Vec<(u64, Stored)>,
+    /// Whether a type reaches an object kind, by both their keys.
+    reached: hashmap::IndexMap<(TypeKey, TypeKey), bool>,
     last_call: u64,
     pending: hashmap::IndexMap<u32, PendingBind>,
     stale: hashmap::IndexSet<u32>,
@@ -343,9 +351,16 @@ impl BindWalk<'_, '_> {
         let reads = operand_read_locals(body, value);
         let mut deps: hashmap::IndexSet<u32> = reads.iter().copied().collect();
         deps.insert(t);
+        // A read of `t` stands for `value`, and through it for each bind it
+        // reads, so it goes stale as they would.
+        let mut kinds = read_kinds(self.engine, value);
         for r in &reads {
             if let Some(p) = self.pending.get(r) {
                 deps.extend(p.deps.iter().copied());
+                kinds = kinds.zip(p.reads.as_ref()).map(|(mut own, theirs)| {
+                    own.extend(theirs);
+                    own
+                });
             }
         }
         let aliased = deps.iter().any(|&d| reachable_elsewhere(self.engine, d));
@@ -356,23 +371,40 @@ impl BindWalk<'_, '_> {
                 value,
                 since: self.tick,
                 deps: deps.into_iter().collect(),
+                reads: kinds,
                 aliased,
+                aliased_checked: self.tick,
                 escaped,
             },
         );
     }
 
     fn read(&mut self, t: u32) {
-        let Some(p) = self.pending.get(&t) else {
+        // A stale bind stays stale, so a read of one tests nothing.
+        if self.stale.contains(&t) {
+            return;
+        }
+        let Some(p) = self.pending.get_mut(&t) else {
             return;
         };
-        let written_since = |at: u64| at > p.since;
+        let since = p.since;
+        let checked = std::mem::replace(&mut p.aliased_checked, self.tick);
         let stale = p
             .deps
             .iter()
-            .any(|d| self.last_write.get(d).is_some_and(|&at| written_since(at)))
-            || (p.aliased && written_since(self.last_aliased))
-            || (p.escaped && written_since(self.last_call));
+            .any(|d| self.last_write.get(d).is_some_and(|&at| at > since))
+            || (p.aliased
+                && self
+                    .aliased_writes
+                    .iter()
+                    .rev()
+                    .take_while(|&&(at, _)| at > checked)
+                    .any(|&(_, stored)| {
+                        p.reads.as_ref().is_none_or(|kinds| {
+                            stored.may_change(self.engine, kinds, &mut self.reached)
+                        })
+                    }))
+            || (p.escaped && self.last_call > since);
         if stale {
             self.stale.insert(t);
         }
@@ -384,7 +416,7 @@ impl BindWalk<'_, '_> {
             Write::Root(r) => {
                 self.last_write.insert(r, self.tick);
             }
-            Write::Aliased => self.last_aliased = self.tick,
+            Write::Aliased(stored) => self.aliased_writes.push((self.tick, stored)),
             Write::Call => self.last_call = self.tick,
         }
     }
@@ -1081,10 +1113,154 @@ pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: Bou
 enum Write {
     /// The slot or storage of this local.
     Root(u32),
-    /// Storage another handle may reach: every aliased local's.
-    Aliased,
+    /// Storage another handle may reach: every aliased local's, as far as
+    /// what was stored can change it.
+    Aliased(Stored),
     /// What a call may do unseen: write every local escaped by `&mut`.
     Call,
+}
+
+/// What a store through an aliased handle can change, by the kinds of object
+/// it writes ([`TypeTable::object_kind`]). A `&T` is the handle of `T`'s
+/// object, so a store changes a read only through an object of a kind the read
+/// passes.
+#[derive(Clone, Copy)]
+enum Stored {
+    /// A field or element of a `container`, and, where `value` is of an
+    /// in-place type, the leaves of the object the slot held.
+    Slot {
+        container: TypeId,
+        value: TypeId,
+    },
+    /// Anything a value of this type reaches: a whole-value store, or a callee
+    /// handed it.
+    Reaching(TypeId),
+    Unknown,
+}
+
+impl Stored {
+    /// Whether this store may change a read through objects of `kinds`, which
+    /// [`read_kinds`] named. `reached` remembers each type walk, which every
+    /// read of a bind would otherwise repeat for each store since it.
+    fn may_change(
+        self,
+        engine: &Engine,
+        kinds: &[TypeKey],
+        reached: &mut hashmap::IndexMap<(TypeKey, TypeKey), bool>,
+    ) -> bool {
+        let types = engine
+            .value_graph_type_table()
+            .expect("kinds are read off the type table");
+        let mut reaches = |ty: TypeId| {
+            kinds.iter().any(|&k| {
+                *reached
+                    .entry((types.type_key(ty), k))
+                    .or_insert_with(|| types.reaches_object(ty, k))
+            })
+        };
+        match self {
+            Stored::Slot { container, value } => {
+                kinds.contains(&types.object_kind(container)) || reaches(value)
+            }
+            Stored::Reaching(ty) => reaches(ty),
+            Stored::Unknown => true,
+        }
+    }
+
+    /// What a store into `place` writes.
+    fn into_place(body: &nir_arena::Body, place: ExprId) -> Stored {
+        match &body.exprs[place].kind {
+            ExprKind::FieldAccess {
+                expr: container, ..
+            }
+            | ExprKind::Index {
+                expr: container, ..
+            } => Stored::Slot {
+                container: body.operand_type(*container),
+                value: body.exprs[place].type_id,
+            },
+            ExprKind::Cast { expr: inner, .. } => inner
+                .as_expr()
+                .map_or(Stored::Unknown, |e| Stored::into_place(body, e)),
+            ExprKind::Local { .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                ..
+            } => Stored::Reaching(body.exprs[place].type_id),
+            _ => Stored::Unknown,
+        }
+    }
+}
+
+/// The kinds of object `op` reads a field, an element or a box of, by
+/// [`TypeTable::object_kind`]; `None` where it reads what this cannot name.
+fn read_kinds(engine: &Engine, op: Operand) -> Option<Vec<TypeKey>> {
+    let types = engine.value_graph_type_table()?;
+    let mut kinds = Vec::new();
+    collect_read_kinds(engine, types, op, &mut kinds).then_some(kinds)
+}
+
+fn collect_read_kinds(
+    engine: &Engine,
+    types: &TypeTable,
+    op: Operand,
+    kinds: &mut Vec<TypeKey>,
+) -> bool {
+    let body = &*engine.body;
+    let read_of = |container: Operand, kinds: &mut Vec<TypeKey>| {
+        kinds.push(types.object_kind(body.operand_type(container)));
+        collect_read_kinds(engine, types, container, kinds)
+    };
+    let local = |l: u32, kinds: &mut Vec<TypeKey>| {
+        if engine.aliased().contains(&l) {
+            kinds.push(types.object_kind(engine.locals()[l as usize].type_id));
+        }
+        true
+    };
+    match op {
+        Operand::Value(v) => match body.values.kind(v) {
+            k if k.is_constant() => true,
+            ValueKind::Opaque(_) => opaque_local(engine, v).is_some_and(|l| local(l, kinds)),
+            ValueKind::Binary { lhs, rhs, .. } => {
+                collect_read_kinds(engine, types, Operand::Value(*lhs), kinds)
+                    && collect_read_kinds(engine, types, Operand::Value(*rhs), kinds)
+            }
+            ValueKind::Unary {
+                op: NirUnaryOp::Deref,
+                operand,
+                ..
+            }
+            | ValueKind::FieldAccess {
+                receiver: operand, ..
+            } => read_of(Operand::Value(*operand), kinds),
+            ValueKind::Unary { operand, .. } | ValueKind::Cast { operand, .. } => {
+                collect_read_kinds(engine, types, Operand::Value(*operand), kinds)
+            }
+            _ => false,
+        },
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => local(*index, kinds),
+            ExprKind::Unary {
+                op: NirUnaryOp::Deref,
+                expr: container,
+            }
+            | ExprKind::FieldAccess {
+                expr: container, ..
+            } => read_of(*container, kinds),
+            ExprKind::Index {
+                expr: container,
+                index,
+            } => read_of(*container, kinds) && collect_read_kinds(engine, types, *index, kinds),
+            ExprKind::Binary { left, right, .. } => {
+                collect_read_kinds(engine, types, *left, kinds)
+                    && collect_read_kinds(engine, types, *right, kinds)
+            }
+            ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
+                collect_read_kinds(engine, types, *inner, kinds)
+            }
+            _ => false,
+        },
+    }
 }
 
 /// Every write the expression node `e` itself may perform. A receiver counts as
@@ -1093,6 +1269,7 @@ fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
     let body = &*engine.body;
     let no_signatures = hashmap::IndexMap::default();
     let oracle = MutationOracle::new(&no_signatures);
+    let handed = |arg: ExprId| Stored::Reaching(body.exprs[arg].type_id);
     expr_witnesses(body, e, &oracle, &mut |w| match w {
         Witness::Rebind(l) => sink(Write::Root(l)),
         Witness::MutRef(place) => {
@@ -1102,7 +1279,7 @@ fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
         }
         Witness::Write(inner) => {
             if let Some(place) = inner.as_expr() {
-                write_through(engine, place, sink);
+                write_through(engine, place, Stored::into_place(body, place), sink);
             }
         }
         Witness::CalleeArg {
@@ -1111,11 +1288,11 @@ fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
             is_mut,
         } => {
             if verdict.unwrap_or(is_mut) {
-                write_through(engine, expr, sink);
+                write_through(engine, expr, handed(expr), sink);
             }
         }
         Witness::Receiver { expr, .. } | Witness::IndirectArg(expr) => {
-            write_through(engine, expr, sink);
+            write_through(engine, expr, handed(expr), sink);
         }
     });
     match &body.exprs[e].kind {
@@ -1131,7 +1308,7 @@ fn for_each_write(engine: &Engine, e: ExprId, sink: &mut impl FnMut(Write)) {
 
 /// A store into `place`: its root's storage, and every aliased local's when the
 /// root is aliased or the chain crosses a reference to storage it does not own.
-fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
+fn write_through(engine: &Engine, place: ExprId, stored: Stored, sink: &mut impl FnMut(Write)) {
     match write_root(engine.body, place, false) {
         WriteRoot::Local(root) => {
             sink(Write::Root(root));
@@ -1140,10 +1317,10 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
                     .body
                     .place_crosses_reference(place, engine.value_graph_type_table())
             {
-                sink(Write::Aliased);
+                sink(Write::Aliased(stored));
             }
         }
-        WriteRoot::Aliased => sink(Write::Aliased),
+        WriteRoot::Aliased => sink(Write::Aliased(stored)),
         WriteRoot::Temp => {}
     }
 }
@@ -1153,7 +1330,7 @@ fn write_through(engine: &Engine, place: ExprId, sink: &mut impl FnMut(Write)) {
 fn write_hits(engine: &Engine, w: Write, root: u32) -> bool {
     match w {
         Write::Root(r) => r == root,
-        Write::Aliased => reachable_elsewhere(engine, root),
+        Write::Aliased(_) => reachable_elsewhere(engine, root),
         Write::Call => engine.mut_escaped().contains(&root) || is_reference(engine, root),
     }
 }

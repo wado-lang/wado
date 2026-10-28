@@ -1,0 +1,119 @@
+// An argument implementing `ListArg<T>` converts to a `&ListView<T>`
+// parameter: a `List<T>` is copied for the call, a `&LinearArray<T>` lends its
+// own block, and a view passes on as it is.
+use { LinearArray, ListArg, ListView } from "core:linear";
+
+fn sum(data: &ListView<u8>) -> i32 {
+    let mut total = 0;
+    for let i of 0..<data.len() {
+        total += data[i] as i32;
+    }
+    return total;
+}
+
+test "a List, a ByteList, a LinearArray and a list literal convert" {
+    let list: List<u8> = [1, 2, 3];
+    let bytes: ByteList = b"\x01\x02";
+    let mut linear = LinearArray::<u8>::filled(4, 2);
+    assert sum(list) == 6;
+    assert sum(bytes) == 3;
+    assert sum(&linear) == 8;
+    linear[0] = 10;
+    assert sum(&linear) == 16;
+    assert sum([4, 5]) == 9;
+}
+
+fn pass_on(data: &ListView<u8>) -> i32 {
+    return sum(data);
+}
+
+fn sum_floats(data: &ListView<f32>) -> f32 {
+    let mut total: f32 = 0.0;
+    for let i of 0..<data.len() {
+        total += data[i];
+    }
+    return total;
+}
+
+test "a list literal is a List first, at each element type" {
+    assert sum_floats([0.5, 1.5]) == 2.0;
+}
+
+test "a view passes on unconverted" {
+    let linear = LinearArray::<u8>::filled(3, 7);
+    assert pass_on(&linear) == 21;
+    assert pass_on([1, 1]) == 2;
+}
+
+struct Summer {}
+
+impl Summer {
+    fn sum(&self, data: &ListView<u8>) -> i32 {
+        return sum(data);
+    }
+}
+
+test "a method's argument converts" {
+    let summer = Summer {};
+    let bytes: ByteList = b"\x03\x04";
+    assert summer.sum(bytes) == 7;
+    assert summer.sum(&LinearArray::<u8>::filled(2, 1)) == 2;
+}
+
+struct Keeper {
+    view: Option<&ListView<u8>>,
+}
+
+fn keep(keeper: &mut Keeper, data: &ListView<u8>) -> i32 {
+    keeper.view = Some(data);
+    return data[0] as i32;
+}
+
+#[expect_trap]
+test "a view kept past its statement traps on a read" {
+    let mut keeper = Keeper { view: null };
+    assert keep(&mut keeper, [1, 2]) == 1;
+    let _ = keeper.view.unwrap()[0];
+}
+
+type Meters = f32;
+
+fn total(data: &ListView<Meters>) -> f32 {
+    let mut sum: f32 = 0.0;
+    for let i of 0..<data.len() {
+        sum += data[i] as f32;
+    }
+    return sum;
+}
+
+test "a list of any plain element converts" {
+    let distances: List<Meters> = [1.5, 2.5];
+    let halves: List<f16> = [0.5, 1.0, 2.0];
+    assert total(distances) == 4.0;
+    assert count::<f16>(halves) == 3;
+}
+
+fn count<T: AnyBits>(data: &ListView<T>) -> i32 {
+    return data.len();
+}
+
+test "a generic view parameter converts at an element the call names" {
+    let floats: List<f32> = [1.0, 2.0];
+    assert count::<u8>(&LinearArray::<u8>::filled(3, 0)) == 3;
+    assert count::<f32>(floats) == 2;
+}
+
+test "a view pins a generic view parameter's element" {
+    let floats: List<f32> = [1.0, 2.0, 3.0];
+    let view = floats.lowered();
+    assert count(&view) == 3;
+}
+
+test "a temporary array lives through the call" {
+    // The debug allocator poisons a freed block with 0xFF, so a block freed
+    // before the call reads as 765.
+    assert sum(&LinearArray::<u8>::filled(3, 1)) == 3;
+}
+
+__DATA__
+{"test": {}}

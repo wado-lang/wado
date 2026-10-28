@@ -68,16 +68,6 @@ impl CmDecl {
     pub fn name_suffix(&self) -> String {
         format!("{}#{}", self.module.to_path_string(), self.name)
     }
-
-    /// The CM package the declaring interface sits in (`"http"`, `"cli"`, …),
-    /// for a consumer scoping a name resolution to it.
-    #[must_use]
-    pub fn cm_package(&self) -> Option<&str> {
-        match &self.module {
-            ModuleSource::Binding { interface, .. } => interface.split('/').next(),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -319,10 +309,11 @@ impl CanonicalIntrinsic {
 
     /// Whether the canonical returns a value the declaring signature discards:
     /// a future's cancel answers with the `u32` its copy ended on, and
-    /// `Future::cancel_read(&self)` states no result. The caller drops it.
+    /// `FutureWritable::cancel_write(&self)` states no result. The caller drops
+    /// it.
     #[must_use]
     pub fn returns_discarded_result(&self) -> bool {
-        matches!(self, Self::FutureCancelRead(_) | Self::FutureCancelWrite(_))
+        matches!(self, Self::FutureCancelWrite(_))
     }
 
     /// Whether the intrinsic creates both ends of a stream or future, packed in

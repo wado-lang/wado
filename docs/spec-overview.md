@@ -87,7 +87,7 @@ Each chapter builds on the ones before it.
 6. [Control Flow](./spec-control-flow.md): branches, loops, labeled blocks and error handling.
 7. [Assertions](./spec-assertions.md): the `assert` statement and its failure message.
 8. [Functions](./spec-functions.md): declarations, methods, generics, closures and default arguments.
-9. [Memory Model](./spec-memory.md): value semantics and references.
+9. [Memory Model](./spec-memory.md): value semantics, references, and linear memory.
 10. [Traits](./spec-traits.md): declaring, implementing and bounding traits.
 11. [Standard Traits](./spec-standard-traits.md): the traits behind `for-of`, comparison, operators and indexing.
 12. [Affine Types](./spec-affine.md): move-only values, their drops, and references into them.

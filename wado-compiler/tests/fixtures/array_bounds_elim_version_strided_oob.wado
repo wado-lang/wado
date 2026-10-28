@@ -1,0 +1,26 @@
+// Loop-versioned BCE over a strided check, slow path: the last row's index
+// `3 * 3 + 2` runs past the list, so the residual fails and the checked loop
+// panics at that index, with the standard message.
+
+use { Stdout } from "core:cli";
+
+fn column(m: &mut List<i32>, rows: i32, cols: i32, c: i32) {
+    for let mut k = 0; k < rows; k += 1 {
+        m[k * cols + c] += 1;
+    }
+}
+
+export fn run() with Stdout {
+    let mut m = List::<i32>::filled(10, 0);
+    column(&mut m, builtin::black_box(4), builtin::black_box(3), builtin::black_box(2));
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Contract of List::index_value failed at array_bounds_elim_version_strided_oob.wado:9",
+        "index: 11",
+        "self.len(): 10"
+    ],
+    "trapped": true
+}

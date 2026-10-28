@@ -43,7 +43,7 @@ fn continued(model: &mut Model<Cpu>, ids: &List<i32>) -> [List<i32>, f64, f64] w
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
-    let checkpoint = match fs::read("build/gemma3.safetensors") {
+    let checkpoint = match fs::read_linear("build/gemma3.safetensors") {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
@@ -57,6 +57,8 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
             return;
         },
     };
+    // The model holds its weights packed apart from the file's bytes.
+    builtin::drop(checkpoint);
     let prompt = args().join(" ");
     if !prompt.is_empty() {
         let ids = Tokenizer::encode(&prompt);

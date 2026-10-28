@@ -115,9 +115,14 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
             applied: Cell::new(false),
         };
         let changed = {
-            let FuncParts { body, locals, .. } = func.parts();
+            let FuncParts {
+                body,
+                locals,
+                params,
+                ..
+            } = func.parts();
             let body = body.expect("checked above");
-            let mut engine = Engine::new(body, buffers, locals);
+            let mut engine = Engine::new(body, buffers, locals, params);
             engine.run(&[&rule])
         };
         let newly = rule.newly_aliased.into_inner();

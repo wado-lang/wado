@@ -1290,6 +1290,54 @@ pub struct ClosureFunctor {
     pub canonical_return: TypeId,
 }
 
+/// What a call through a closure's canonical signature hands one live
+/// `$call` parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CallParamSource {
+    /// The functor itself, `$call`'s `self`.
+    Env,
+    /// The argument at this index of `canonical_user_params`.
+    User(usize),
+}
+
+impl ClosureFunctor {
+    /// The source of each parameter `$call` still has, in order. `dae` may
+    /// have dropped any of them, `self` included.
+    ///
+    /// The env is the one at position 0 named `self` with the functor's ref
+    /// type: a user-declared `self` (the trait-method dispatch closures
+    /// `effect_dispatch` synthesises) has the user's resource ref type. Every
+    /// other parameter matches a `canonical_user_params` entry by name, which
+    /// the closure planner keeps distinct.
+    pub fn call_param_sources(&self) -> Vec<CallParamSource> {
+        let names: IndexSet<&String> = self.canonical_user_params.iter().map(|(n, _)| n).collect();
+        assert_eq!(
+            names.len(),
+            self.canonical_user_params.len(),
+            "closure {}::$call repeats a param name",
+            self.struct_name,
+        );
+        let call = self.call_method.borrow();
+        call.params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                if i == 0 && p.name == "self" && p.type_id == self.ref_type_id {
+                    return CallParamSource::Env;
+                }
+                let idx = names.get_index_of(&p.name).unwrap_or_else(|| {
+                    panic!(
+                        "closure {}::$call param `{}` has no matching canonical user param \
+                         (canonical: {names:?})",
+                        self.struct_name, p.name,
+                    )
+                });
+                CallParamSource::User(idx)
+            })
+            .collect()
+    }
+}
+
 /// External function import from Component Model canonical builtins.
 /// These are functions that need to be imported at the Wasm level.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

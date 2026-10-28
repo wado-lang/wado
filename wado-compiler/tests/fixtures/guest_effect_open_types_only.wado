@@ -1,0 +1,21 @@
+// A program leaves a dependency's guest effect open, and that effect takes a
+// type from a types-only interface. The program re-imports the effect for the
+// host to answer, and imports the types-only interface ahead of it: the
+// effect's instance type aliases `level` from there, as a WIT `use` reads,
+// rather than spelling a copy of its own.
+use { println, Stdout } from "core:cli";
+use { Tag, Types } from "./sub/wasm_import_cm_guest_effect_types.wat" with { type: "wat" };
+
+export fn run() with (Stdout, Tag) {
+    println(`${Tag::tag(Types::Level::High)}`);
+}
+
+__DATA__
+{
+    "compile_only": true,
+    "wat_lines": [
+        {"contains": ["(import \"test:lvl/types@0.1.0\""]},
+        {"contains": ["(alias export ", "\"level\" (type"], "count": 1},
+        {"contains": ["(enum \"low\" \"high\")"], "count": 1}
+    ]
+}

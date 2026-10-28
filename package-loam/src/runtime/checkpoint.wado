@@ -1,6 +1,45 @@
 use json from "core:json";
 use { HashMap } from "core:collections";
+use { LinearArray } from "core:linear";
 use { Deserialize, DeserializeError, Deserializer, IgnoredAny, report_duplicate_field } from "core:serde";
+
+/// The bytes a checkpoint is read from: in the GC heap, or in linear memory as
+/// `fs::read_linear` reads a file, where no collection traces them.
+pub affine trait CheckpointBytes with () {
+    fn byte_len(&self) -> i32;
+    /// The bytes from `start` to `end`, read as little-endian `U`s.
+    fn decoded<U: FromLeBytes + AnyBits>(&self, start: i32, end: i32) -> List<U>;
+}
+
+impl CheckpointBytes for ByteSlice {
+    fn byte_len(&self) -> i32 {
+        return self.len();
+    }
+
+    fn decoded<U: FromLeBytes + AnyBits>(&self, start: i32, end: i32) -> List<U> {
+        return List::<U>::from_le_bytes(self.slice(start, end));
+    }
+}
+
+impl CheckpointBytes for ByteList {
+    fn byte_len(&self) -> i32 {
+        return self.len();
+    }
+
+    fn decoded<U: FromLeBytes + AnyBits>(&self, start: i32, end: i32) -> List<U> {
+        return self.as_byte_slice().decoded::<U>(start, end);
+    }
+}
+
+impl CheckpointBytes for LinearArray<u8> {
+    fn byte_len(&self) -> i32 {
+        return self.len();
+    }
+
+    fn decoded<U: FromLeBytes + AnyBits>(&self, start: i32, end: i32) -> List<U> {
+        return self.to_list_of::<U>(start, end);
+    }
+}
 
 /// A checkpoint that disagrees with the graph, or is not a safetensors file.
 pub struct LoadError {
@@ -61,14 +100,14 @@ pub struct Checkpoint {
 }
 
 /// Where the header ends, which the bytes must reach.
-pub fn header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
-    let view = bytes.as_byte_slice();
-    if view.len() < 8 {
-        return Result::Err(LoadError { reason: `the header is 8 bytes, past the ${view.len()} given` });
+pub fn header_end<affine B: CheckpointBytes>(bytes: &B) -> Result<i32, LoadError> {
+    let len = bytes.byte_len();
+    if len < 8 {
+        return Result::Err(LoadError { reason: `the header is 8 bytes, past the ${len} given` });
     }
-    let end = declared_header_end(view)?;
-    if end > view.len() {
-        return Result::Err(LoadError { reason: `the header is ${end - 8} bytes, past the ${view.len() - 8} given` });
+    let end = declared_header_end(bytes.decoded::<u8>(0, 8) as ByteList)?;
+    if end > len {
+        return Result::Err(LoadError { reason: `the header is ${end - 8} bytes, past the ${len - 8} given` });
     }
     return Result::Ok(end);
 }
@@ -86,10 +125,9 @@ pub fn declared_header_end<B: AsByteSlice>(bytes: B) -> Result<i32, LoadError> {
 }
 
 /// The header of the checkpoint `bytes` begins with; the payloads may be absent.
-pub fn read_checkpoint<B: AsByteSlice>(bytes: B) -> Result<Checkpoint, LoadError> {
-    let view = bytes.as_byte_slice();
-    let data_start = header_end(view)?;
-    let header = match json::from_bytes::<Header>(view.slice(8, data_start)) {
+pub fn read_checkpoint<affine B: CheckpointBytes>(bytes: &B) -> Result<Checkpoint, LoadError> {
+    let data_start = header_end(bytes)?;
+    let header = match json::from_bytes::<Header>(bytes.decoded::<u8>(8, data_start) as ByteList) {
         Ok(header) => header,
         Err(e) => {
             return Result::Err(LoadError { reason: `the header is not JSON: ${e}` });
@@ -147,16 +185,23 @@ impl Checkpoint {
         return Result::Ok([self.data_start + offsets[0] as i32, self.data_start + offsets[1] as i32]);
     }
 
-    /// `e`'s bytes within `bytes`, the whole checkpoint this header was read from.
-    pub fn payload<B: AsByteSlice>(&self, bytes: B, e: &Expected) -> Result<ByteSlice, LoadError> {
-        let view = bytes.as_byte_slice();
+    /// `e`'s elements within `bytes`, the whole checkpoint this header was
+    /// read from. `U` is what `e.dtype` names, `e.width` bytes wide.
+    pub fn payload<U: FromLeBytes + AnyBits, affine B: CheckpointBytes>(
+        &self,
+        bytes: &B,
+        e: &Expected,
+    ) -> Result<List<U>, LoadError> {
+        assert e.width == builtin::size_of::<U>();
         let [start, end] = self.range(e)?;
-        if end > view.len() {
+        if end > bytes.byte_len() {
             return Result::Err(
-                LoadError { reason: `${e.tensor}: the payload ends at byte ${end}, past the ${view.len()} given` },
+                LoadError {
+                    reason: `${e.tensor}: the payload ends at byte ${end}, past the ${bytes.byte_len()} given`,
+                },
             );
         }
-        return Result::Ok(view.slice(start, end));
+        return Result::Ok(bytes.decoded::<U>(start, end));
     }
 }
 
@@ -178,16 +223,16 @@ pub fn read_shards(shards: &HashMap<String, ByteList>) -> Result<Shards, LoadErr
 }
 
 impl Shards {
-    /// `e`'s bytes within the shard named `shard`, of `shards`, which these
+    /// `e`'s elements within the shard named `shard`, of `shards`, which these
     /// headers were read from.
-    pub fn payload(
+    pub fn payload<U: FromLeBytes + AnyBits>(
         &self,
         shards: &HashMap<String, ByteList>,
         shard: String,
         e: &Expected,
-    ) -> Result<ByteSlice, LoadError> {
+    ) -> Result<List<U>, LoadError> {
         if let Some(header) = self.headers.get_ref_str(&shard) && let Some(bytes) = shards.get_ref_str(&shard) {
-            return header.payload(bytes, e).map_err(|err| LoadError { reason: `${shard}: ${err}` });
+            return header.payload::<U, ByteList>(bytes, e).map_err(|err| LoadError { reason: `${shard}: ${err}` });
         }
         return Result::Err(shard_not_given(&e.tensor, &shard));
     }

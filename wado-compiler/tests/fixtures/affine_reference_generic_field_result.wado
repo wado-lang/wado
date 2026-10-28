@@ -1,0 +1,34 @@
+// A call's result carries the borrow it was handed where a field of the
+// result's generic declaration may point into the borrowed type: `&Owned<T>`
+// points into an `Owned<i32>` once `T` is bound, though no field of `Owned`
+// holds a `T` to say so.
+affine struct Tok {
+    id: i32,
+}
+
+impl Drop for Tok {
+    fn drop(self) {
+    }
+}
+
+affine struct Owned<T> {
+    tok: Tok,
+}
+
+struct Held<T> {
+    at: Option<&Owned<T>>,
+}
+
+fn hold(owned: &Owned<i32>) -> Held<i32> {
+    return Held { at: Option::Some(owned) };
+}
+
+test {
+    let owned = Owned::<i32> { tok: Tok { id: 1 } };
+    let held = hold(&owned);
+    builtin::drop(owned);
+    assert held.at.unwrap().tok.id == 1;
+}
+
+__DATA__
+{"compile_error": ":30:12: analysis error: `held` refers into `owned`, which moved at 29:19"}

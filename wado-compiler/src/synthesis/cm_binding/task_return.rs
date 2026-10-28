@@ -36,11 +36,10 @@ use crate::synthesis::common::{
     synth_span, unreachable_call,
 };
 
-use super::cm_free::{CmShapeContext, FlatSlot, synthesize_free_cm_flat};
+use super::cm_free::{FlatSlot, synthesize_free_cm_flat};
 use super::export_adapter::{synthesize_lower_to_flat, synthesize_variant_lower_to_flat};
 use super::types::{
-    CmStdlibNames, LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id,
-    variant_decl_of,
+    LiftContext, cm_val_type_to_type_id, cm_zero, flat_types_from_type_id, variant_decl_of,
 };
 
 /// Expand `TaskReturn` stmts in an `export async fn` user function into inline CM calls.
@@ -56,7 +55,6 @@ pub(super) fn expand_task_returns_in_func(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) {
     let mut func = user_func.borrow_mut();
@@ -73,7 +71,6 @@ pub(super) fn expand_task_returns_in_func(
         tir_modules,
         type_table,
         cm_interface_registry,
-        cm_package,
         interner,
     };
     expander.visit_block(&mut body);
@@ -192,7 +189,6 @@ struct TaskReturnExpander<'a> {
     tir_modules: &'a IndexMap<ModuleSource, TirModule>,
     type_table: &'a Rc<RefCell<TypeTable>>,
     cm_interface_registry: &'a CmInterfaceRegistry,
-    cm_package: &'a str,
     interner: &'a RefCell<ModuleSourceInterner>,
 }
 
@@ -212,7 +208,6 @@ impl TirOptVisitor for TaskReturnExpander<'_> {
                     self.tir_modules,
                     self.type_table,
                     self.cm_interface_registry,
-                    self.cm_package,
                     self.interner,
                 )),
                 None => new_stmts.push(stmt),
@@ -425,7 +420,6 @@ fn generate_inline_task_return(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     type_table: &Rc<RefCell<TypeTable>>,
     cm_interface_registry: &CmInterfaceRegistry,
-    cm_package: &str,
     interner: &RefCell<ModuleSourceInterner>,
 ) -> Vec<TirStmt> {
     assert!(
@@ -435,13 +429,7 @@ fn generate_inline_task_return(
     let lift_ctx = LiftContext {
         cm_interface_registry,
         type_table,
-        cm_package,
         interner,
-    };
-    let names = CmStdlibNames::from_type_table(&type_table.borrow());
-    let shape_ctx = CmShapeContext {
-        cm_interface_registry,
-        names: &names,
     };
     let mut stmts: Vec<TirStmt> = Vec::new();
     let value_type_id = value.type_id;
@@ -676,7 +664,7 @@ fn generate_inline_task_return(
         stmts.extend(synthesize_free_cm_flat(
             declared_result(return_type),
             &FlatSlot::joined(&flat_locals, flat_return_types),
-            &shape_ctx,
+            cm_interface_registry,
             next_local,
             locals,
         ));
@@ -729,7 +717,7 @@ fn generate_inline_task_return(
             stmts.extend(synthesize_free_cm_flat(
                 declared_result(return_type),
                 &FlatSlot::lowered(&lowered),
-                &shape_ctx,
+                cm_interface_registry,
                 next_local,
                 locals,
             ));

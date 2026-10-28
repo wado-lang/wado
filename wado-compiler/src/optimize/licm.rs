@@ -267,10 +267,10 @@ pub fn apply_licm(
             &first_param_types,
             &call_immutability,
         );
-        let mut engine = Engine::new(body, buffers, locals);
+        let mut engine = Engine::new(body, buffers, locals, params);
         engine.set_alias_sets(alias);
         engine.set_value_graph_type_table(type_table);
-        engine.set_param_locals(params.iter().map(|p| p.local_index).collect());
+        engine.seed_params();
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_quiet_callee_ids(&quiet_callee_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);

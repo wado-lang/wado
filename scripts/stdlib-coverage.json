@@ -14,16 +14,21 @@
     "finish": [
       "then 1"
     ],
+    "open_read": [
+      "arm 5",
+      "arm 6",
+      "arm 9"
+    ],
     "open_temp": [
       "arm 11"
     ],
     "read": [
-      "arm 5",
-      "arm 6",
-      "arm 9",
-      "try 10"
+      "try 3"
     ],
     "read_dir": [
+      "try 3"
+    ],
+    "read_linear": [
       "try 3"
     ],
     "write": [
@@ -33,6 +38,16 @@
   "wado-compiler/lib/core/fuel.wado": {
     "measure": [
       "rest 2"
+    ]
+  },
+  "wado-compiler/lib/core/linear.wado": {
+    "LinearArray::internal_read_stream": [
+      "then 7",
+      "else 12"
+    ],
+    "grown": [
+      "then 1",
+      "then 3"
     ]
   },
   "wado-compiler/lib/core/log.wado": {
@@ -814,6 +829,9 @@
     "u8::div_ceil": [
       "else 2"
     ],
+    "u8::eq": [
+      "fn 0"
+    ],
     "u8::fmt": [
       "fn 0"
     ],
@@ -1025,6 +1043,9 @@
     ]
   },
   "wado-compiler/lib/core/prelude/traits.wado": {
+    "E::inspect": [
+      "fn 0"
+    ],
     "EnumCase::inspect": [
       "fn 0"
     ],
@@ -1155,12 +1176,11 @@
     "AsyncCall::drop": [
       "then 6"
     ],
-    "AsyncCall::wait": [
-      "else 4",
-      "rest 5"
-    ],
     "AsyncCall::wait_on": [
       "arm 2"
+    ],
+    "FutureReadCopy::finish": [
+      "then 1"
     ],
     "Option::default": [
       "fn 0"
@@ -1170,10 +1190,13 @@
       "rest 8"
     ],
     "WaitableSet::poll": [
-      "rest 5"
+      "else 6"
     ],
     "WaitableSet::take_reported": [
-      "else 3"
+      "then 2"
+    ],
+    "WaitableSet::wait": [
+      "else 6"
     ],
     "call_state": [
       "arm 1",
@@ -1182,15 +1205,17 @@
     ]
   },
   "wado-compiler/lib/core/process.wado": {
-    "Child::wait": [
+    "Child::status": [
       "arm 2"
+    ],
+    "Child::stop": [
+      "try 1"
+    ],
+    "Child::wait_timeout": [
+      "try 6"
     ],
     "Command::output": [
       "try 3"
-    ],
-    "error_kind": [
-      "arm 2",
-      "arm 3"
     ]
   },
   "wado-compiler/lib/core/rt.wado": {
@@ -1206,15 +1231,8 @@
     "cm_error_context_new": [
       "fn 0"
     ],
-    "cm_future_write_result": [
-      "arm 4"
-    ],
     "cm_lower_array_u8": [
       "fn 0"
-    ],
-    "cm_waitable_set_poll": [
-      "else 2",
-      "rest 3"
     ],
     "handle_class": [
       "fn 0"

@@ -83,6 +83,18 @@ workload twice gives the same file.
 A workload that traps, or fails an assertion, fails the recording. Its counts
 would stop at the trap, and a profile from a broken workload would mislead.
 
+A run that leaves out part of a package's workloads is an error, since it would
+overwrite the package's profile with part of them. `--filter`, `--test-name`
+and `--exclude` are therefore errors with `--pgo`. For the same reason, so is a
+path argument naming part of a package.
+
+A run that records no workload is an error as well, and the existing profile is
+kept. An empty profile would read as code no workload ran.
+
+A run that records some workloads removes the profile of each package it holds
+no workload of. Such a profile carries counts from workloads that are gone, and
+its hashes still match every function that did not change.
+
 ### Coverage counts too
 
 The probe that coverage inserts counts every run, in every coverage build. The
@@ -90,6 +102,12 @@ first run of a region still calls the host at once, so a test that traps keeps
 its hits. A test that returns hands its counts to the runner when it ends. A
 test that traps contributes only its hits, which count as one run each. LCOV's
 `DA` and `BRDA` lines carry the counts.
+
+The hand-over runs no measured code. It walks the counters with builtins and
+reports only the regions that ran more than once, since a hit already counts
+one. Passing the counters as a `list` would lower it through `List`'s prelude
+methods, which `--coverage-include=stdlib` measures, so the hand-over would
+count runs of its own after reading theirs.
 
 A count is an `i64`. One probe and one counter serve both `--coverage` and
 `--pgo`.
@@ -104,9 +122,11 @@ call, the length load, the bounds check and the load on every run.
 
 ### The profile is committed
 
-The profile is a text file, so the repository holds no binary for it. A file
-under `build/` would not reach CI or a release build, so their output would
-differ from the author's.
+The profile is a text file, so the repository holds no binary for it. It holds
+one record per line, so a merge conflicts only where the counts moved. Its
+format is in the [specification](./spec-testing.md#profiles). A file under
+`build/` would not reach CI or a release build, so their output would differ
+from the author's.
 
 A package keeps one profile, `pgo/default.pgo` under its root, merged from all
 of its workloads. A single-file program without a manifest keeps
@@ -131,8 +151,11 @@ Every name in a profile resolves the same on any machine and from any entry:
 
 - A module of the package is a file relative to the package root, or for a
   program without a manifest, relative to the program's directory.
-- A dependency's module is the dependency's package name and the file relative
-  to its root, never the cache path it was fetched to.
+- A dependency's module is the dependency's package name and version and the
+  file relative to its root, never the cache path it was fetched to. Two
+  versions of one package can be two packages in one build, so the version
+  keeps their names apart. After an upgrade the profile holds no counts for the
+  dependency until the workloads are recorded again.
 - A `core:` module is its import path.
 
 Coverage names a module relative to the entry module's directory instead, which
@@ -209,6 +232,10 @@ A test checks what a program computes, which a profile never changes, so the
 test world has no use for one by default. `-f pgo` turns it on there, mainly for
 fuzzing the application of profiles.
 
+A build that finds no profile compiles as one with `-f no-pgo`. Under an
+explicit `-f pgo` it also says so at `--log-level info`, since the author asked
+for a profile that is not there.
+
 `-f no-cold-paths` drops every marker before any pass reads one: the author's,
 the profile's, and the compiler's, ahead of a trap, past a global's once-guard,
 and in the default arm `match_to_switch` writes. A build with it shows what the
@@ -239,12 +266,12 @@ level.
 
 ## Roadmap
 
-1. [ ] Counting probes. The probe counts, the runner reads the counts when a
+1. [x] Counting probes. The probe counts, the runner reads the counts when a
    test returns, and LCOV carries them. `mise run test-stdlib-coverage`, before
    and after, in a table with the command beside it, shows what counting costs.
-2. [ ] `#[workload]`. The attribute runs as a test, is an error beside
+2. [x] `#[workload]`. The attribute runs as a test, is an error beside
    `#[expect_trap]` or `#[TODO]`, and e2e fixtures state both.
-3. [ ] `wado test --pgo`. It records the workloads into `pgo/`, with the
+3. [x] `wado test --pgo`. It records the workloads into `pgo/`, with the
    per-function hash.
 4. [ ] Applying the profile. Reify marks the regions that never ran, a function
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
@@ -267,6 +294,9 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
+- [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
+  a module is pending, so the workload fails the recording if it traps, and is
+  reported as unexpectedly passing if it returns.
 - [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
   an arm `match_to_switch` turns into a `br_table` target reaches no hint the
   engine reads.

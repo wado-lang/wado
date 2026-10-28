@@ -1,0 +1,38 @@
+// Loop-versioned BCE over checks that scale the guard variable: `m[k * cols +
+// c]` walks one column of a row-major matrix, by an invariant local stride and
+// by a constant one. The residual compares the last index in `i64`, where the
+// `i32` product cannot wrap, and the fast arm carries no check at all.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn columns(m: &List<i32>, rows: i32, cols: i32, c: i32, quads: i32) -> [i32, i32] {
+    let mut by_local = 0;
+    for let mut k = 0; k < rows; k += 1 {
+        by_local += m[k * cols + c];
+    }
+    let mut by_const = 0;
+    for let mut k = 0; k < quads; k += 1 {
+        by_const += m[4 * k + 1];
+    }
+    return [by_local, by_const];
+}
+
+export fn run() with Stdout {
+    let mut m: List<i32> = [];
+    for let i of 0..<builtin::black_box(12) {
+        m.push(i);
+    }
+    let [by_local, by_const] = columns(&m, builtin::black_box(4), builtin::black_box(3), builtin::black_box(2), builtin::black_box(3));
+    println(`${by_local} ${by_const}`);
+}
+
+__DATA__
+{
+    "stdout": "26 15\n",
+    "wir_scope": ".wado/columns",
+    "wir_expect:O2": [
+        "(((builtin::i64_extend_i32_s(rows) + -1_i64) * builtin::i64_extend_i32_s(cols)) + builtin::i64_extend_i32_s(c)) < builtin::i64_extend_i32_s($licm_used_{})",
+        "(((builtin::i64_extend_i32_s(quads) + -1_i64) * 4_i64) + 1_i64) < "
+    ]
+}

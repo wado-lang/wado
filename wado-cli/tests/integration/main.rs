@@ -32,6 +32,7 @@ mod kiln_pipeline;
 mod kiln_probe;
 mod lsp;
 mod manifest_integration;
+mod pgo;
 mod remote;
 mod run_inprocess;
 // Spawns the binary, drives a real TCP socket, and sends Unix signals.

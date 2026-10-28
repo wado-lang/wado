@@ -1,6 +1,7 @@
-//! `wado test --coverage`: the `core:coverage` host each test store records its
-//! hits through, and the run-wide report those hits and the components' plans
-//! make. See WEP 2026-09-28 (Test Coverage).
+//! `wado test --coverage` and `--pgo`: the `core:coverage` host each test store
+//! reports its runs through, and the run-wide reports those runs and the
+//! components' plans make. See WEP 2026-09-28 (Test Coverage) and WEP
+//! 2026-10-25 (Profile-Guided Optimization).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -8,15 +9,20 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use wado_compiler::coverage::{
-    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Region, Registered,
+    self, Coverage, CoverageScope, DecodedPlans, FileCoverage, PlanMismatch, Registered, TestReport,
 };
+use wado_compiler::pgo;
 #[cfg(debug_assertions)]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 use wado_compiler::stdlib::core_module_file;
+use wado_manifest::Manifest;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
 use crate::compile::build_dir;
+use crate::kiln_provider::relative_to;
+use crate::manifest::{manifest_in, package_root};
+use crate::test::PackageTotals;
 use crate::test_report::TestReporter;
 use wado_host::sync::lock;
 
@@ -28,27 +34,27 @@ wasmtime::component::bindgen!({
 
 use self::core::coverage::coverage_host;
 
-/// The regions one test store reported, by global id.
-#[derive(Debug, Default)]
-pub struct CoverageHits(pub BTreeSet<u32>);
-
-impl coverage_host::Host for CoverageHits {
+impl coverage_host::Host for TestReport {
     fn hit(&mut self, id: u32) {
-        self.0.insert(id);
+        TestReport::hit(self, id);
+    }
+
+    fn count(&mut self, id: u32, runs: i64) {
+        TestReport::count(self, id, runs);
     }
 }
 
-/// Link `core:coverage` into a test linker, reaching each store's hits through
-/// `hits`.
+/// Link `core:coverage` into a test linker, reaching each store's report
+/// through `report`.
 ///
 /// # Errors
 ///
 /// Returns an error if the linker already defines the interface.
 pub fn add_to_linker<T: Send + 'static>(
     linker: &mut Linker<T>,
-    hits: fn(&mut T) -> &mut CoverageHits,
+    report: fn(&mut T) -> &mut TestReport,
 ) -> wasmtime::Result<()> {
-    coverage_host::add_to_linker::<T, HasSelf<CoverageHits>>(linker, hits)
+    coverage_host::add_to_linker::<T, HasSelf<TestReport>>(linker, report)
 }
 
 /// The reports `--coverage` writes to `build/coverage/`.
@@ -128,50 +134,127 @@ pub struct CoverageOptions {
     pub baseline: Option<PathBuf>,
 }
 
+/// What a run counts its probes for.
+#[derive(Debug, Clone)]
+pub enum Measurement {
+    Coverage(CoverageOptions),
+    /// `--pgo`: each workload's package, or its program where it has none,
+    /// records into its own profile. `profiles` are those of every test file
+    /// the run holds, whether or not it has a workload.
+    Pgo {
+        profiles: BTreeSet<PathBuf>,
+    },
+}
+
+impl Measurement {
+    /// The modules a compile probes. A workload's hot path runs through the
+    /// package, its dependencies and `core:` alike.
+    #[must_use]
+    pub fn scope(&self) -> CoverageScope {
+        match self {
+            Self::Coverage(options) => options.scope,
+            Self::Pgo { .. } => CoverageScope {
+                include_deps: true,
+                stdlib: true,
+            },
+        }
+    }
+}
+
+/// Where a component's hits land: the report they count toward, and the
+/// plans in it.
+pub struct Registration {
+    report: PathBuf,
+    registered: Vec<Registered>,
+}
+
 /// The plans and hits a run has seen so far.
 pub struct CoverageRun {
-    options: CoverageOptions,
+    measurement: Measurement,
     /// Report paths are relative to this directory, the current one.
     root: PathBuf,
-    coverage: Mutex<Result<Coverage, PlanMismatch>>,
+    /// Each report, by the path it is written to.
+    reports: Mutex<Result<BTreeMap<PathBuf, Coverage>, PlanMismatch>>,
 }
 
 impl CoverageRun {
     /// # Errors
     ///
     /// Returns an error when the current directory cannot be read.
-    pub fn new(options: CoverageOptions) -> Result<Self, CliExit> {
+    pub fn new(measurement: Measurement) -> Result<Self, CliExit> {
         let root = std::env::current_dir()
             .and_then(|dir| dir.canonicalize())
             .map_err(|e| CliExit::error(format!("reading the current directory: {e}")))?;
         Ok(Self {
-            options,
+            measurement,
             root,
-            coverage: Mutex::new(Ok(Coverage::default())),
+            reports: Mutex::new(Ok(BTreeMap::new())),
         })
     }
 
-    /// Add the plans of the component compiled from `entry`: where the hits
-    /// of each land, or none once plans have disagreed.
-    pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Vec<Registered> {
-        let base = Path::new(entry).parent().unwrap_or(Path::new(""));
-        let mut guard = lock(&self.coverage);
-        let Ok(coverage) = guard.as_mut() else {
-            return Vec::new();
-        };
-        coverage
-            .register(plans, |path| self.report_path(base, path))
-            .unwrap_or_else(|mismatch| {
-                *guard = Err(mismatch);
-                Vec::new()
-            })
+    /// Whether a component exporting `tests` tests is measured. A profile
+    /// holds only what a workload ran through, while coverage reports a
+    /// module no test reached as well.
+    pub fn measures(&self, tests: usize) -> bool {
+        match self.measurement {
+            Measurement::Coverage(_) => true,
+            Measurement::Pgo { .. } => tests > 0,
+        }
     }
 
-    /// Record what `test` hit in the plans `registered` names.
-    pub fn record(&self, registered: &[Registered], hits: &BTreeSet<u32>, test: &str) {
-        if let Ok(coverage) = lock(&self.coverage).as_mut() {
-            coverage.record(registered, hits, Some(test));
+    /// Add the plans of the component compiled from `entry`: where the hits
+    /// of each land, or nowhere once plans have disagreed. `None` once `entry`
+    /// is gone, a change the run reports at its end.
+    pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Option<Registration> {
+        let base = Path::new(entry).parent().unwrap_or(Path::new(""));
+        let paths = plans.iter().map(|(plan, _)| plan.path.as_str());
+        // Naming reads the filesystem, so it is done before taking the lock
+        // every load worker shares.
+        let (report, names): (PathBuf, BTreeMap<&str, String>) = match &self.measurement {
+            Measurement::Coverage(_) => (
+                self.coverage_dir(),
+                paths
+                    .map(|path| (path, self.report_path(base, path)))
+                    .collect(),
+            ),
+            Measurement::Pgo { .. } => {
+                let profile = Profile::of(Path::new(entry))?;
+                let names = paths
+                    .map(|path| (path, profile.module_name(base, path)))
+                    .collect();
+                (profile.file, names)
+            }
+        };
+        let mut guard = lock(&self.reports);
+        let registered = match guard.as_mut() {
+            Ok(reports) => reports
+                .entry(report.clone())
+                .or_default()
+                .register(plans, |path| names[path].clone())
+                .unwrap_or_else(|mismatch| {
+                    *guard = Err(mismatch);
+                    Vec::new()
+                }),
+            Err(_) => Vec::new(),
+        };
+        Some(Registration { report, registered })
+    }
+
+    /// Record what `test` ran in the plans `registration` names.
+    pub fn record(&self, registration: &Registration, report: &TestReport, test: &str) {
+        let counts = report.counts();
+        // A profile names no test.
+        let test = matches!(self.measurement, Measurement::Coverage(_)).then_some(test);
+        if let Ok(reports) = lock(&self.reports).as_mut() {
+            reports
+                .get_mut(&registration.report)
+                .expect("`register` added the report")
+                .record(&registration.registered, &counts, test);
         }
+    }
+
+    fn coverage_dir(&self) -> PathBuf {
+        build_dir(&self.root).join("coverage")
     }
 
     /// The path a module's source is reported under: relative to the run's
@@ -195,45 +278,186 @@ impl CoverageRun {
             .to_string()
     }
 
-    /// Report the summary through `reporter` and write the report files.
+    /// Report through `reporter` and write the reports, given the run's
+    /// `totals`.
     ///
     /// # Errors
     ///
-    /// Returns an error when plans for one path disagree, or a report cannot
-    /// be written.
-    pub(crate) fn finish(self, reporter: &dyn TestReporter) -> Result<(), CliExit> {
-        let options = &self.options;
-        let out_dir = &build_dir(&self.root).join("coverage");
-        let coverage = self
-            .coverage
+    /// Returns an error when plans for one path disagree, a report cannot be
+    /// written, or a profile has nothing sound to record.
+    pub(crate) fn finish(
+        self,
+        reporter: &dyn TestReporter,
+        totals: &PackageTotals,
+    ) -> Result<(), CliExit> {
+        let label = match self.measurement {
+            Measurement::Coverage(_) => "coverage",
+            Measurement::Pgo { .. } => "pgo",
+        };
+        let out_dir = self.coverage_dir();
+        let mut reports = self
+            .reports
             .into_inner()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .map_err(|mismatch| {
                 CliExit::error(format!(
-                    "coverage: {} changed during the run; its plans disagree",
+                    "{label}: {} changed during the run; its plans disagree",
                     mismatch.path
                 ))
             })?;
-        reporter.on_coverage(&summary(&coverage));
-        let write = |name: &str, text: String| -> Result<(), CliExit> {
-            std::fs::create_dir_all(out_dir)
-                .and_then(|()| std::fs::write(out_dir.join(name), text))
-                .map_err(|e| CliExit::error(format!("coverage: writing {name}: {e}")))
+        match &self.measurement {
+            Measurement::Coverage(options) => {
+                let coverage = reports.remove(&out_dir).unwrap_or_default();
+                write_coverage(&coverage, options, &out_dir, reporter)
+            }
+            Measurement::Pgo { profiles } => {
+                write_profiles(&reports, profiles, totals, &self.root, reporter)
+            }
+        }
+    }
+}
+
+/// `--pgo`'s profiles, each only once every workload has passed: a trap stops
+/// the counts short, and a profile from a broken workload would mislead. Each
+/// of `owned`, the run's profiles, that no workload recorded into is removed:
+/// its counts came from workloads that are gone.
+fn write_profiles(
+    profiles: &BTreeMap<PathBuf, Coverage>,
+    owned: &BTreeSet<PathBuf>,
+    totals: &PackageTotals,
+    root: &Path,
+    reporter: &dyn TestReporter,
+) -> Result<(), CliExit> {
+    if totals.failed() {
+        return Err(CliExit::error(
+            "pgo: the run failed, so no profile was written",
+        ));
+    }
+    if totals.todo_pending > 0 {
+        return Err(CliExit::error(
+            "pgo: a `#[TODO]` workload or file is pending, so no profile was written",
+        ));
+    }
+    if profiles.is_empty() {
+        return Err(CliExit::error(
+            "pgo: no `#[workload]` test ran, so no profile was written",
+        ));
+    }
+    let mut written = String::new();
+    for (file, coverage) in profiles {
+        let shown = file.strip_prefix(root).unwrap_or(file).display();
+        std::fs::create_dir_all(file.parent().expect("a profile lies in `pgo/`"))
+            .and_then(|()| std::fs::write(file, pgo::to_text(coverage)))
+            .map_err(|e| CliExit::error(format!("pgo: writing {shown}: {e}")))?;
+        let _ = writeln!(written, "pgo: wrote {shown}");
+    }
+    for file in owned.iter().filter(|file| !profiles.contains_key(*file)) {
+        let shown = file.strip_prefix(root).unwrap_or(file).display();
+        match std::fs::remove_file(file) {
+            Ok(()) => {
+                let _ = writeln!(written, "pgo: removed {shown}");
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(CliExit::error(format!("pgo: removing {shown}: {e}"))),
+        }
+    }
+    reporter.on_measured(&written);
+    Ok(())
+}
+
+/// The profile `--pgo` records `entry`'s workloads into, or `None` once
+/// `entry` is gone.
+pub fn profile_file(entry: &Path) -> Option<PathBuf> {
+    Profile::of(entry).map(|profile| profile.file)
+}
+
+/// The profile `--pgo` records an entry's workloads into, and the directory it
+/// names modules from: the entry's package's root, or for a program in no
+/// package, the program's directory. Several such programs may share it, so
+/// each keeps a profile of its own.
+struct Profile {
+    file: PathBuf,
+    root: PathBuf,
+}
+
+impl Profile {
+    fn of(entry: &Path) -> Option<Self> {
+        let entry = entry.canonicalize().ok()?;
+        let dir = entry.parent().expect("an entry is a file");
+        if let Some(root) = package_root(dir) {
+            return Some(Self {
+                file: root.join("pgo").join("default.pgo"),
+                root,
+            });
+        }
+        let stem = entry
+            .file_stem()
+            .expect("an entry is a file")
+            .to_string_lossy();
+        Some(Self {
+            file: dir.join("pgo").join(format!("{stem}.pgo")),
+            root: dir.to_path_buf(),
+        })
+    }
+
+    /// How the profile names the module a plan, made for an entry in `base`,
+    /// names `path`. The name is the same on any machine: a `core:` module is
+    /// its import path, another package's module is the package's name and
+    /// the file relative to its root, any other file is relative to this
+    /// profile's root, and a module that is no file, such as a remote one, is
+    /// its plan's path.
+    fn module_name(&self, base: &Path, path: &str) -> String {
+        if core_module_file(path).is_some() {
+            return path.to_string();
+        }
+        let Ok(file) = base.join(path).canonicalize() else {
+            return path.to_string();
         };
-        if options.formats.lcov {
-            write("lcov.info", coverage::to_lcov(&coverage))?;
+        let dir = file.parent().expect("a module is a file");
+        if let Some(root) = package_root(dir).filter(|root| *root != self.root)
+            && let Ok(Some(Manifest {
+                package: Some(package),
+                ..
+            })) = manifest_in(&root)
+        {
+            let rel = relative_to(&root, &file).expect("a module lies under its package's root");
+            let version = &package.version;
+            return match package.namespace {
+                Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
+                None => format!("{}@{version}/{rel}", package.name),
+            };
         }
-        if options.formats.json {
-            write("coverage.json", to_json(&coverage))?;
-        }
-        let uncovered = uncovered_regions(&coverage);
-        if options.formats.baseline {
-            write("baseline.json", baseline_json(&uncovered))?;
-        }
-        match &options.baseline {
-            Some(path) => check_baseline(&uncovered, path),
-            None => Ok(()),
-        }
+        relative_to(&self.root, &file).expect("both paths are absolute")
+    }
+}
+
+/// `--coverage`'s summary, then the report files `options` asks for into
+/// `out_dir`.
+fn write_coverage(
+    coverage: &Coverage,
+    options: &CoverageOptions,
+    out_dir: &Path,
+    reporter: &dyn TestReporter,
+) -> Result<(), CliExit> {
+    reporter.on_measured(&summary(coverage));
+    let write = |name: &str, text: String| -> Result<(), CliExit> {
+        std::fs::create_dir_all(out_dir)
+            .and_then(|()| std::fs::write(out_dir.join(name), text))
+            .map_err(|e| CliExit::error(format!("coverage: writing {name}: {e}")))
+    };
+    if options.formats.lcov {
+        write("lcov.info", coverage::to_lcov(coverage))?;
+    }
+    if options.formats.json {
+        write("coverage.json", to_json(coverage))?;
+    }
+    let uncovered = uncovered_regions(coverage);
+    if options.formats.baseline {
+        write("baseline.json", baseline_json(&uncovered))?;
+    }
+    match &options.baseline {
+        Some(path) => check_baseline(&uncovered, path),
+        None => Ok(()),
     }
 }
 
@@ -259,10 +483,7 @@ type Uncovered = BTreeMap<String, BTreeMap<String, Vec<String>>>;
 fn uncovered_regions(coverage: &Coverage) -> Uncovered {
     let mut out = Uncovered::new();
     for (path, file) in &coverage.files {
-        let mut by_function: Vec<Vec<(u32, &Region)>> = vec![Vec::new(); file.plan.functions.len()];
-        for (id, region) in file.plan.regions.iter().enumerate() {
-            by_function[region.function as usize].push((id as u32, region));
-        }
+        let by_function = file.plan.regions_by_function();
         let mut seen: BTreeMap<&str, u32> = BTreeMap::new();
         for (function, regions) in file.plan.functions.iter().zip(&by_function) {
             let count = seen.entry(&function.name).or_default();
@@ -271,18 +492,12 @@ fn uncovered_regions(coverage: &Coverage) -> Uncovered {
                 1 => function.name.clone(),
                 n => format!("{}#{n}", function.name),
             };
-            let (body, _) = regions[0];
-            assert_eq!(
-                body, function.region,
-                "a function's body is its first region"
-            );
-            let ran = regions.iter().enumerate().map(|(n, (id, region))| {
-                (
-                    format!("{} {n}", region.kind.label()),
-                    file.hit.contains(id),
-                )
+            let body = function.region;
+            let ran = regions.iter().enumerate().map(|(n, &id)| {
+                let kind = file.plan.regions[id as usize].kind;
+                (format!("{} {n}", kind.label()), file.ran(id))
             });
-            let missed: Vec<String> = if file.hit.contains(&body) {
+            let missed: Vec<String> = if file.ran(body) {
                 ran.filter(|(_, hit)| !hit)
                     .map(|(label, _)| label)
                     .collect()
@@ -360,10 +575,16 @@ fn totals(file: &FileCoverage) -> Totals {
     let branches = file.branches();
     let functions = file.functions();
     Totals {
-        lines: (lines.values().filter(|ran| **ran).count(), lines.len()),
-        branches: (branches.iter().filter(|b| b.taken).count(), branches.len()),
+        lines: (
+            lines.values().filter(|count| **count > 0).count(),
+            lines.len(),
+        ),
+        branches: (
+            branches.iter().filter(|b| b.taken()).count(),
+            branches.len(),
+        ),
         functions: (
-            functions.iter().filter(|(_, ran)| *ran).count(),
+            functions.iter().filter(|(_, count)| *count > 0).count(),
             functions.len(),
         ),
     }
@@ -439,7 +660,8 @@ fn to_json(coverage: &Coverage) -> String {
                         "function": file.plan.functions[region.function as usize].name,
                         "start": [region.start.line, region.start.column],
                         "end": [region.end.line, region.end.column],
-                        "covered": file.hit.contains(&index),
+                        "covered": file.ran(index),
+                        "count": file.count(index),
                         "tests": tests,
                     })
                 })

@@ -32,6 +32,7 @@ use crate::name::{contract_holder_name, namespaced_name, repeat_pack_name};
 use crate::syntax::statement_keyword_name_message;
 use crate::token::{Position, Span, TemplateTokenPart, Token, TokenKind, TokenKind as T};
 use crate::{ast, format_spec, hashmap};
+use std::sync::Arc;
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -47,6 +48,8 @@ pub struct Parser {
     /// if/while/match conditions), preventing ambiguity between struct literals
     /// and blocks.
     restrict_struct_literals: bool,
+    /// The text lexed, passed from the lexer.
+    source: Arc<str>,
     /// Shebang line, passed from the lexer.
     shebang: Option<String>,
     /// Content of the __DATA__ section, passed from the lexer.
@@ -243,7 +246,14 @@ impl Parser {
     /// interpolation re-parser continues its parent's space through
     /// [`Parser::build`] rather than minting one here.
     pub fn new(tokens: Vec<Token>) -> Self {
-        Self::build(AstIdSpace::next(), tokens, None, None, Vec::new())
+        Self::build(
+            AstIdSpace::next(),
+            Arc::from(""),
+            tokens,
+            None,
+            None,
+            Vec::new(),
+        )
     }
 
     /// Parse a complete [`crate::lexer::LexResult`], keeping the comment
@@ -255,6 +265,7 @@ impl Parser {
     pub fn from_lex(lex: LexResult) -> Self {
         Self::build(
             lex.space,
+            lex.source,
             lex.tokens,
             lex.shebang,
             lex.data_section,
@@ -269,6 +280,7 @@ impl Parser {
     pub fn from_lex_no_trivia(lex: LexResult) -> Self {
         Self::build(
             lex.space,
+            lex.source,
             lex.tokens,
             lex.shebang,
             lex.data_section,
@@ -278,6 +290,7 @@ impl Parser {
 
     fn build(
         ast_id_space: AstIdSpace,
+        source: Arc<str>,
         tokens: Vec<Token>,
         shebang: Option<String>,
         data_section: Option<String>,
@@ -298,6 +311,7 @@ impl Parser {
             pending_gt: None,
             consumed_gt: None,
             restrict_struct_literals: false,
+            source,
             shebang,
             data_section,
             include_paths: hashmap::IndexMap::default(),
@@ -599,6 +613,7 @@ impl Parser {
 
         let has_syntax_errors = !self.errors.is_empty();
         Module::with_metadata(
+            Arc::clone(&self.source),
             items,
             inner_attributes,
             self.shebang.take(),
@@ -7242,8 +7257,14 @@ impl Parser {
         // with unique locals (one module tree = one space). Building directly
         // in the parent's space avoids minting — and wasting — a fresh space
         // per interpolation.
-        let mut parser =
-            Parser::build(self.ast_id_space, lex_result.tokens, None, None, Vec::new());
+        let mut parser = Parser::build(
+            self.ast_id_space,
+            Arc::clone(&self.source),
+            lex_result.tokens,
+            None,
+            None,
+            Vec::new(),
+        );
         parser.next_ast_id = self.next_ast_id;
         let expr = parser.parse_expr()?;
         self.next_ast_id = parser.next_ast_id;
