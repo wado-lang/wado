@@ -1,0 +1,344 @@
+//! The tools a reviewer reads a repository with: Read, Grep and Glob, shaped
+//! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.
+
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { Command, Process } from "core:process";
+use { from_string } from "core:json";
+use { Deserialize } from "core:serde";
+use { Value, from_value } from "core:value";
+use { Tool } from "./anthropic.wado";
+
+/// The most a tool returns, in bytes. A model asking for more gets the head
+/// and is told to narrow the request.
+global OUTPUT_LIMIT: i32 = 100_000;
+
+/// A line of Read longer than this is cut, as Claude Code cuts one.
+global LINE_LIMIT: i32 = 2000;
+
+global GLOB_LIMIT: i32 = 100;
+
+global PATHS: String = "Paths are relative to the repository root; a leading `/` names the root.";
+
+/// A checked-out tree, its root a directory `wado run` grants. Every path a
+/// tool takes resolves inside it.
+pub struct Workspace {
+    pub root: String,
+}
+
+struct ReadInput {
+    file_path: String,
+    offset: i32 = 1,
+    limit: i32 = 2000,
+}
+
+struct GrepInput {
+    pattern: String,
+    path: String = "",
+    glob: String = "",
+    output_mode: String = "files_with_matches",
+    #[wire(name = "-A")]
+    after: i32 = 0,
+    #[wire(name = "-B")]
+    before: i32 = 0,
+    #[wire(name = "-C")]
+    context: i32 = 0,
+    #[wire(name = "-i")]
+    ignore_case: bool = false,
+    #[wire(name = "-n")]
+    line_numbers: bool = true,
+    #[wire(name = "type")]
+    file_type: String = "",
+    head_limit: i32 = 250,
+    offset: i32 = 0,
+    multiline: bool = false,
+}
+
+struct GlobInput {
+    pattern: String,
+    path: String = "",
+}
+
+/// The tools, declared for the API.
+pub fn tools() -> List<Tool> {
+    return [
+        tool(
+            "Read",
+            `Reads a file of the repository. ${PATHS}
+- Reads up to 2000 lines from the start by default; offset and limit read another range.
+- Results are returned in cat -n format, with line numbers starting at 1. A line longer than ${LINE_LIMIT} characters is cut.
+- Reading a directory is an error; use Glob to list one.`,
+            `{
+  "type": "object",
+  "properties": {
+    "file_path": {"type": "string", "description": "The path of the file to read"},
+    "offset": {"type": "integer", "minimum": 1, "description": "The line number to start reading from. Only provide if the file is too large to read at once"},
+    "limit": {"type": "integer", "exclusiveMinimum": 0, "description": "The number of lines to read. Only provide if the file is too large to read at once."}
+  },
+  "required": ["file_path"],
+  "additionalProperties": false
+}`,
+        ),
+        tool(
+            "Grep",
+            `Content search built on ripgrep. ${PATHS}
+- Full regex syntax (e.g. "log.*Error", "function\\s+\\w+"). Ripgrep, not grep: escape literal braces (\`interface\\{\\}\`).
+- Filter with glob (e.g. "**/*.rs") or type (e.g. "rust", "js").
+- output_mode: "content" (matching lines), "files_with_matches" (paths only, default), or "count".
+- multiline: true for patterns that span lines.`,
+            `{
+  "type": "object",
+  "properties": {
+    "pattern": {"type": "string", "description": "The regular expression pattern to search for in file contents"},
+    "path": {"type": "string", "description": "File or directory to search in. Defaults to the repository root."},
+    "glob": {"type": "string", "description": "Glob pattern to filter files (e.g. \\"*.js\\", \\"*.{ts,tsx}\\") - maps to rg --glob"},
+    "output_mode": {"type": "string", "enum": ["content", "files_with_matches", "count"], "description": "Output mode: \\"content\\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \\"files_with_matches\\" shows file paths (supports head_limit), \\"count\\" shows match counts (supports head_limit). Defaults to \\"files_with_matches\\"."},
+    "-A": {"type": "number", "description": "Number of lines to show after each match (rg -A). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-B": {"type": "number", "description": "Number of lines to show before each match (rg -B). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-C": {"type": "number", "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \\"content\\", ignored otherwise."},
+    "-i": {"type": "boolean", "description": "Case insensitive search (rg -i)"},
+    "-n": {"type": "boolean", "description": "Show line numbers in output (rg -n). Requires output_mode: \\"content\\", ignored otherwise. Defaults to true."},
+    "type": {"type": "string", "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types."},
+    "head_limit": {"type": "number", "description": "Limit output to first N lines/entries, equivalent to \\"| head -N\\". Works across all output modes. Defaults to 250 when unspecified. Pass 0 for unlimited."},
+    "offset": {"type": "number", "description": "Skip first N lines/entries before applying head_limit, equivalent to \\"| tail -n +N | head -N\\". Works across all output modes. Defaults to 0."},
+    "multiline": {"type": "boolean", "description": "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false."}
+  },
+  "required": ["pattern"],
+  "additionalProperties": false
+}`,
+        ),
+        tool("Glob", `Fast file pattern matching. ${PATHS}
+- Supports glob patterns like "**/*.js" or "src/**/*.ts".
+- Returns matching file paths sorted by path, at most ${GLOB_LIMIT}.`, `{
+  "type": "object",
+  "properties": {
+    "pattern": {"type": "string", "description": "The glob pattern to match files against"},
+    "path": {"type": "string", "description": "The directory to search in. Defaults to the repository root."}
+  },
+  "required": ["pattern"],
+  "additionalProperties": false
+}`),
+    ];
+}
+
+fn tool(name: String, description: String, schema: String) -> Tool {
+    return Tool { name, description, input_schema: from_string::<Value, String>(schema).unwrap() };
+}
+
+impl Workspace {
+    /// What tool `name` returns for `input`, or the error to report to the
+    /// model, which may then try again.
+    pub fn call(&self, name: &String, input: &Value) -> Result<String, String> with (Preopens, Process) {
+        let out = match name.as_str_slice() {
+            "Read" => self.read(&input_of::<ReadInput>(input)?)?,
+            "Grep" => self.grep(&input_of::<GrepInput>(input)?)?,
+            "Glob" => self.glob(&input_of::<GlobInput>(input)?)?,
+            _ => {
+                return Err(`no tool named ${*name}`);
+            },
+        };
+        return Ok(clip(out));
+    }
+
+    fn read(&self, input: &ReadInput) -> Result<String, String> with Preopens {
+        let path = self.resolve(&input.file_path)?;
+        let meta = fs::metadata(&path).map_err(|e| `${e}`)?;
+        if meta.type matches { Directory } {
+            return Err(`${input.file_path} is a directory; use Glob to list it`);
+        }
+        let text = String::from_utf8_lossy(fs::read(&path).map_err(|e| `${e}`)?);
+        if text.is_empty() {
+            return Ok(`${input.file_path} is empty.`);
+        }
+        let first = i32::max(input.offset, 1);
+        let mut out = "";
+        let mut n = 0;
+        for let line of text.lines() {
+            n += 1;
+            if n < first {
+                continue;
+            }
+            if n >= first + input.limit {
+                break;
+            }
+            let cut = line.slice(0, line.floor_char_boundary(LINE_LIMIT));
+            out.push_str(`${n:>6}\t${cut}\n`);
+        }
+        if out.is_empty() {
+            return Ok(`${input.file_path} has ${n} lines; offset ${input.offset} is past the end.`);
+        }
+        return Ok(out);
+    }
+
+    fn grep(&self, input: &GrepInput) -> Result<String, String> with Process {
+        let mut args = ["--hidden", "--glob", "!.git", "--sort", "path", "--color", "never"] as List<String>;
+        match input.output_mode.as_str_slice() {
+            "files_with_matches" => args.push("--files-with-matches"),
+            "count" => args.push("--count"),
+            "content" => {
+                args.push("--no-heading");
+                if input.line_numbers {
+                    args.push("--line-number");
+                }
+                for let [flag, n] of [
+                    ["-A", input.after],
+                    ["-B", input.before],
+                    ["-C", input.context],
+                ] {
+                    if n > 0 {
+                        args.extend(&[flag, `${n}`]);
+                    }
+                }
+            },
+            _ => {
+                return Err(`unknown output_mode ${input.output_mode}`);
+            },
+        }
+        if input.ignore_case {
+            args.push("--ignore-case");
+        }
+        if input.multiline {
+            args.extend(&["--multiline", "--multiline-dotall"]);
+        }
+        if !input.file_type.is_empty() {
+            args.extend(&["--type", input.file_type]);
+        }
+        if !input.glob.is_empty() {
+            args.extend(&["--glob", self.anchor(&input.glob)]);
+        }
+        args.extend(&["--regexp", input.pattern, self.resolve(&input.path)?]);
+        let found = self.rg(args)?;
+        if found.is_empty() {
+            return Ok("No matches found");
+        }
+        return Ok(page(&found, input.offset, input.head_limit));
+    }
+
+    fn glob(&self, input: &GlobInput) -> Result<String, String> with Process {
+        let found = self.rg([
+            "--files",
+            "--hidden",
+            "--glob",
+            "!.git",
+            "--sort",
+            "path",
+            "--glob",
+            self.anchor(&input.pattern),
+            self.resolve(&input.path)?,
+        ])?;
+        if found.is_empty() {
+            return Ok("No files found");
+        }
+        let mut out = page(&found, 0, GLOB_LIMIT);
+        if found.len() > GLOB_LIMIT {
+            out.push_str(`(${found.len() - GLOB_LIMIT} more; use a more specific path or pattern)\n`);
+        }
+        return Ok(out);
+    }
+
+    /// ripgrep's output lines, paths relative to the root. Exit 1 is no match.
+    fn rg(&self, args: List<String>) -> Result<List<String>, String> with Process {
+        let out = Command::new("rg").args(args).capture_limit(i32::MAX).output().map_err(|e| `${e}`)?;
+        let mut lines: List<String> = [];
+        match out.status {
+            Exited(0) => {
+            },
+            Exited(1) => {
+                return Ok(lines);
+            },
+            _ => {
+                return Err(String::from_utf8_lossy(out.stderr).trim().to_string());
+            },
+        }
+        let prefix = `${self.root}/`;
+        for let line of String::from_utf8_lossy(out.stdout).lines() {
+            lines.push(match line.strip_prefix(&prefix) {
+                Some(rest) => rest.to_string(),
+                None => line.to_string(),
+            });
+        }
+        return Ok(lines);
+    }
+
+    /// `path` inside the root, or an error when it leaves the root.
+    fn resolve(&self, path: &String) -> Result<String, String> {
+        let full = fs::normalize(fs::join(self.root, unrooted(path))).map_err(|e| `${e}`)?;
+        if full != self.root && !full.starts_with(`${self.root}/`) {
+            return Err(`${*path} is outside the repository`);
+        }
+        return Ok(full);
+    }
+
+    /// ripgrep matches a glob with a `/` against the path from the current
+    /// directory, so such a glob is put under the root. One without matches
+    /// a file name anywhere.
+    fn anchor(&self, glob: &String) -> String {
+        let [negated, body] = if glob.starts_with("!") {
+            [true, glob.slice(1, glob.len()).to_string()];
+        } else {
+            [false, *glob];
+        };
+        let rooted = if body.contains("/") { `${self.root}/${unrooted(&body)}` } else { body };
+        return if negated { `!${rooted}` } else { rooted };
+    }
+}
+
+/// `path` without the leading `/` that names the root.
+fn unrooted(path: &String) -> String {
+    let mut rest = path.as_str_slice();
+    while let Some(r) = rest.strip_prefix("/") {
+        rest = r;
+    }
+    return rest.to_string();
+}
+
+fn input_of<T: Deserialize>(input: &Value) -> Result<T, String> {
+    return from_value::<T>(input).map_err(|e| `invalid input: ${e}`);
+}
+
+fn page(lines: &List<String>, offset: i32, limit: i32) -> String {
+    let mut out = "";
+    let end = if limit == 0 { lines.len() } else { i32::min(lines.len(), offset + limit) };
+    for let i of offset..<end {
+        out.push_str(&lines[i]);
+        out.push_str("\n");
+    }
+    return out;
+}
+
+fn clip(out: String) -> String {
+    if out.len() <= OUTPUT_LIMIT {
+        return out;
+    }
+    let mut head = out.substr_bytes(0, out.floor_char_boundary(OUTPUT_LIMIT));
+    head.push_str(`\n(output cut at ${OUTPUT_LIMIT} bytes; narrow the request)\n`);
+    return head;
+}
+
+test "Read numbers the lines of the range it reads" {
+    let ws = Workspace { root: "src" };
+    let out = ws.call(&"Read", &tool_input(`{"file_path": "/tools.wado", "offset": 2, "limit": 2}`)).unwrap();
+    assert out == "     2\t//! as Claude Code's, over one checked-out tree. Grep and Glob run ripgrep.\n     3\t\n";
+    assert ws.call(&"Read", &tool_input(`{"file_path": "."}`)).unwrap_err().contains("is a directory");
+}
+
+test "a path that leaves the root is refused" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Read", &tool_input(`{"file_path": "../wado.toml"}`)).unwrap_err().contains(
+        "outside the repository",
+    );
+}
+
+test "Grep and Glob answer with paths from the root" {
+    let ws = Workspace { root: "src" };
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent", "glob": "*.wado"}`)).unwrap() == "agent.wado\n";
+    let hit = ws.call(&"Grep", &tool_input(`{"pattern": "^pub fn run_agent\\\\(", "output_mode": "content"}`)).unwrap();
+    assert hit.starts_with("agent.wado:") && hit.contains(":pub fn run_agent(");
+    assert ws.call(&"Grep", &tool_input(`{"pattern": "no such[ ]text", "path": "/"}`)).unwrap() == "No matches found";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "/a*.wado"}`)).unwrap() == "agent.wado\nanthropic.wado\n";
+    assert ws.call(&"Glob", &tool_input(`{"pattern": "**/agent.wado"}`)).unwrap() == "agent.wado\n";
+}
+
+fn tool_input(json: String) -> Value {
+    return from_string::<Value, String>(json).unwrap();
+}
