@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793222607511,
+  "lastUpdate": 1793223404705,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72173,6 +72173,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/12b1c54a2757d224007b420ae5bb69b253f87527"
         },
         "date": 1793222606537,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295573,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6e60f839c13a451039dd633f23f6adfbfd3d9d51",
+          "message": "Merge pull request #2491 from wado-lang/dependabot/npm_and_yarn/cloudflare-worker/npm_and_yarn-ff6aa81fbd\n\nchore(deps): Bump undici from 7.29.1 to 7.30.1 in /cloudflare-worker in the npm_and_yarn group across 1 directory",
+          "timestamp": "2026-10-29T06:12:06+09:00",
+          "tree_id": "e0928a9d86543256a5a2a7a7398f1fe3a390367b",
+          "url": "https://github.com/wado-lang/wado/commit/6e60f839c13a451039dd633f23f6adfbfd3d9d51"
+        },
+        "date": 1793223403611,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
