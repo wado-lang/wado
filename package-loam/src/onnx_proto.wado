@@ -171,12 +171,12 @@ fn is_external(t: &onnx::TensorProto) -> bool {
     return !t.external_data.is_empty() || t.data_location matches { Some(External) };
 }
 
-/// The `external_data` entry `key` of `t` as a number, or `absent`.
-fn external_number(t: &onnx::TensorProto, name: &String, key: String, absent: i64) -> Result<i64, String> {
+/// The `external_data` entry `key` of `t` as a number, where `t` has one.
+fn external_number(t: &onnx::TensorProto, name: &String, key: String) -> Result<Option<i64>, String> {
     let Some(text) = external_entry(t, key) else {
-        return Result::Ok(absent);
+        return Result::Ok(null);
     };
-    return i64::from_str(&text).map_err(|_| `${*name}: external data ${key} ${text}`);
+    return Result::Ok(Option::Some(i64::from_str(&text).map_err(|_| `${*name}: external data ${key} ${text}`)?));
 }
 
 fn external_location(t: &onnx::TensorProto, name: &String) -> Result<String, String> {
@@ -189,8 +189,8 @@ fn external_bytes(t: &onnx::TensorProto, name: &String, files: &HashMap<String, 
     let Some(file) = files.get_ref_str(&location) else {
         return Result::Err(`${*name}: external data in ${location}, which the reader was not given`);
     };
-    let offset = external_number(t, name, "offset", 0)?;
-    let length = external_number(t, name, "length", file.len() as i64 - offset)?;
+    let offset = external_number(t, name, "offset")?.unwrap_or(0);
+    let length = external_number(t, name, "length")?.unwrap_or(file.len() as i64 - offset);
     if offset < 0 || length < 0 || length > file.len() as i64 - offset {
         return Result::Err(
             `${*name}: external data at ${offset} for ${length} bytes, past the end of ${location}'s ${file.len()}`,
@@ -237,11 +237,10 @@ fn leave_in_place(
     let Some(element) = element_of(dtype) else {
         return Result::Err(`${*name}: external ${*dtype} data`);
     };
-    let length = external_number(t, name, "length", -1)?;
-    if length == -1 {
+    let Some(length) = external_number(t, name, "length")? else {
         return Result::Err(`${*name}: external data in ${location} with no length, which a weight left in place states`);
-    }
-    let offset = external_number(t, name, "offset", 0)?;
+    };
+    let offset = external_number(t, name, "offset")?.unwrap_or(0);
     if offset < 0 || length < 0 || length > i32::MAX as i64 - offset {
         return Result::Err(`${*name}: external data at ${offset} for ${length} bytes, past what a module can address`);
     }
@@ -250,11 +249,12 @@ fn leave_in_place(
         return Result::Err(`${*name}: ${length} raw bytes is not whole ${*dtype} elements`);
     }
     check_element_count(name, (length / width as i64) as i32, extents)?;
-    if in_place matches { None } {
-        *in_place = Option::Some(InPlace { file: location, ranges: TreeMap::new() });
-    }
+    let range = [offset as i32, (offset + length) as i32];
     let Some(held) = in_place else {
-        unreachable();
+        let mut ranges = TreeMap::<String, [i32, i32]>::new();
+        ranges[*name] = range;
+        *in_place = Option::Some(InPlace { file: location, ranges });
+        return Result::Ok(());
     };
     if held.file != location {
         let [first, _] = held.ranges.entries().next().unwrap();
@@ -262,7 +262,7 @@ fn leave_in_place(
             `${*name}: external data in ${location}, and ${first}'s in ${held.file}; the weights left in place are in one file`,
         );
     }
-    held.ranges[*name] = [offset as i32, (offset + length) as i32];
+    held.ranges[*name] = range;
     return Result::Ok(());
 }
 
