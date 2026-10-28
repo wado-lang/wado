@@ -222,7 +222,8 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
         self.signatures_imposed = saved;
     }
 
-    /// A parameter of a function without a body has nothing to read it.
+    /// A parameter of a function without a body has nothing to read it, and
+    /// an `export`'s parameters are named by the component boundary.
     fn visit_function(&mut self, func: &'a Function) {
         let saved = self.affine_params;
         if func.body.is_some() {
@@ -230,7 +231,7 @@ impl<'a> AstVisitor<'a> for Binders<'a> {
                 .sem
                 .affine_params(func.id)
                 .expect("complete semantics walk every body");
-            if !self.signatures_imposed {
+            if !self.signatures_imposed && !func.is_export {
                 for param in &func.params {
                     if param.self_kind == SelfKind::None {
                         self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);

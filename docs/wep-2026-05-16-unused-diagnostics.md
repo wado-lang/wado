@@ -292,7 +292,10 @@ skips a name starting with `_` and one an `#[allow(unused_variables)]` waives.
 It skips the parameters of a method inside a trait, an interface, or an `impl`
 with a trait (`ImplBlock::trait_type`), effect handlers included: the
 declaration names them for every implementation, and one implementation leaving
-one unread is no defect. Under rustc's rule each such implementation renamed
+one unread is no defect. It skips an `export` function's parameters for the same
+reason (`Function::is_export`): the component boundary names them, and a world
+such as `wasi:http/service` or `core:kiln/generator` often does. Under rustc's
+rule each such implementation renamed
 its parameters `_view`, `_gen` and the like, and the renames hid none of the
 real defects the lint found elsewhere.
 It also collects the names an assignment writes (`Expr::assigned_places`): a

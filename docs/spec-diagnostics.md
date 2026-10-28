@@ -347,6 +347,8 @@ it.
 A trait or an interface names the parameters of every implementation, so a
 method it declares is not reported for a parameter either. That covers its
 default body, a method of an `impl` of it, and an effect handler's operation.
+An `export` function's parameters are not reported either: its signature is the
+component boundary's, often a world's, such as `handle` in `wasi:http/service`.
 Their locals and closures are reported as anywhere else, and so is a method of
 an inherent `impl`, whose signature is its own.
 

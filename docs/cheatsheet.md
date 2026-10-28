@@ -206,8 +206,9 @@ if let Some(x) = y { }                            // warns: derives from y
 match x { Some(x) => ... }                        // warns: x means two things here
 
 // A variable or parameter nothing reads warns (`unused_variables`), and so
-// does one only ever assigned to. A leading `_` keeps it on purpose. A trait
-// or interface method's parameters are exempt: the declaration names them.
+// does one only ever assigned to. A leading `_` keeps it on purpose. The
+// parameters of a trait or interface method, or of an `export fn`, are exempt:
+// the declaration or the component boundary names them.
 let unread = 1;                                   // warns: never used
 let _kept = 1;                                    // no warning
 ```

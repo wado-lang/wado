@@ -6,7 +6,7 @@ use predicates::prelude::*;
 
 const GREETING_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
-export fn generate(_req: Request) -> Result<Response, Error> {
+export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "hello.wado",
@@ -127,14 +127,15 @@ fn a_package_check_reports_a_shared_module_kiln_warning_once() {
 }
 
 /// Compiling a generator to run it lints nothing: the generator's own package
-/// check is where its lints belong, and reports them once.
+/// check is where its lints belong, and reports them once. The world names
+/// `generate`'s parameter, so leaving it unread is no defect.
 #[test]
 fn compiling_a_generator_lints_none_of_it() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
     let generator = GREETING_GENERATOR.replace(
-        "export fn generate(_req: Request)",
-        "export fn generate(unread_request: Request)",
+        "    return Result::Ok(",
+        "    let unread_local = 1;\n    return Result::Ok(",
     );
     write_kiln_project(root, "pkg", &generator, b"schema\n");
 
@@ -143,9 +144,10 @@ fn compiling_a_generator_lints_none_of_it() {
         .assert()
         .success()
         .stderr(predicate::str::contains("[kiln generator compile]").not())
+        .stderr(predicate::str::contains("parameter `req`").not())
         .stderr(predicate::function(|stderr: &str| {
             stderr
-                .matches("parameter `unread_request` is never used")
+                .matches("variable `unread_local` is never used")
                 .count()
                 == 1
         }));
