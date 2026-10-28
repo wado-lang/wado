@@ -5,7 +5,6 @@
 
 use { TreeMap } from "core:collections";
 use grog from "lib:grog";
-use { WireType } from "lib:grog";
 use { is_build_time } from "./graph.wado";
 use { dtype_name } from "./onnx_proto.wado";
 
@@ -21,11 +20,11 @@ pub struct Slim {
 global READ_CHUNK: i32 = 65536;
 
 // The tags the walk looks into, by the field numbers `onnx.proto` gives.
-global MODEL_GRAPH: u64 = grog::tag_of(7, WireType::Len);
-global GRAPH_INITIALIZER: u64 = grog::tag_of(5, WireType::Len);
-global TENSOR_DATA_TYPE: u64 = grog::tag_of(2, WireType::Varint);
-global TENSOR_NAME: u64 = grog::tag_of(8, WireType::Len);
-global TENSOR_RAW_DATA: u64 = grog::tag_of(9, WireType::Len);
+global MODEL_GRAPH: u64 = grog::tag_of(7, grog::WireType::Len);
+global GRAPH_INITIALIZER: u64 = grog::tag_of(5, grog::WireType::Len);
+global TENSOR_DATA_TYPE: u64 = grog::tag_of(2, grog::WireType::Varint);
+global TENSOR_NAME: u64 = grog::tag_of(8, grog::WireType::Len);
+global TENSOR_RAW_DATA: u64 = grog::tag_of(9, grog::WireType::Len);
 
 /// The model `content` holds, its weights' payloads left in the file. Drops
 /// `content`.
@@ -171,14 +170,9 @@ impl Cursor {
     fn varint(&mut self) -> Result<u64, String> {
         let mut decoder = grog::VarintDecoder::new();
         loop {
-            match decoder.feed(self.next(1)?[0]) {
-                Ok(Some(value)) => {
-                    return Result::Ok(value);
-                },
-                Ok(None) => {},
-                Err(reason) => {
-                    return Result::Err(`${reason} at byte ${self.pos()}`);
-                },
+            if let Some(read) = decoder.feed(self.next(1)?[0]) {
+                let pos = self.pos();
+                return read.map_err(|reason| `${reason} at byte ${pos}`);
             }
         }
     }

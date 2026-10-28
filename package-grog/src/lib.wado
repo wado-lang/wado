@@ -207,19 +207,19 @@ impl VarintDecoder {
         return VarintDecoder { value: 0, shift: 0 };
     }
 
-    /// The value once `byte` ends the varint, or `null` while more bytes follow.
-    /// An error is the reason the varint is refused.
-    pub fn feed(&mut self, byte: u8) -> Result<Option<u64>, String> {
+    /// `null` while more bytes follow `byte`, and then the value, or the reason
+    /// the varint is refused.
+    pub fn feed(&mut self, byte: u8) -> Option<Result<u64, String>> {
         // 64 = 9 * 7 + 1: a tenth byte holds one bit.
         if self.shift == 63 && byte > 1 {
-            return Result::Err("a varint overflows 64 bits");
+            return Option::Some(Result::Err("a varint overflows 64 bits"));
         }
         self.value |= (byte & 0x7f) as u64 << self.shift;
         if byte < 128 {
-            return Result::Ok(Option::Some(self.value));
+            return Option::Some(Result::Ok(self.value));
         }
         self.shift += 7;
-        return Result::Ok(null);
+        return null;
     }
 }
 
@@ -523,14 +523,9 @@ impl Reader {
         while self.pos < self.end {
             let fed = decoder.feed(self.input[self.pos]);
             self.pos += 1;
-            match fed {
-                Ok(Some(value)) => {
-                    return Result::Ok(value);
-                },
-                Ok(None) => {},
-                Err(reason) => {
-                    return self.fail(reason);
-                },
+            if let Some(read) = fed {
+                let offset = self.pos;
+                return read.map_err(|reason| DecodeError { offset, reason });
             }
         }
         return self.fail("the input ends inside a varint");
