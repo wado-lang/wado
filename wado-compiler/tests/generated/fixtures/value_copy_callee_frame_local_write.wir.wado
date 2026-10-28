@@ -379,11 +379,29 @@ fn "value_copy_callee_frame_local_write.wado/value_copy_callee_frame_local_write
     $sroa_$iter_0_index_17 = 0;
     b47: block {
         l48: loop {
-            break_if b47 $sroa_$iter_0_index_17 >= end;
+            break_if b47 ((($sroa_$iter_0_index_17 >= end) | (($sroa_$iter_0_index_17 + 1) >= end)) | ((($sroa_$iter_0_index_17 + 1) + 1) >= end)) | (((($sroa_$iter_0_index_17 + 1) + 1) + 1) >= end);
+            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            sum = sum + item;
+            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            sum = sum + item;
+            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            sum = sum + item;
             item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
             $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
             sum = sum + item;
             continue l48;
+        };
+    };
+    b49: block {
+        l50: loop {
+            break_if b49 $sroa_$iter_0_index_17 >= end;
+            item = builtin::array_get_value<i64>($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            sum = sum + item;
+            continue l50;
         };
     };
     return sum + builtin::i64_extend_i32_u(builtin::array_get_value_u8(raw, 0));

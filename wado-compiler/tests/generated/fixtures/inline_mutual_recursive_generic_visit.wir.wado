@@ -460,7 +460,34 @@ fn "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_v
     $sroa_$iter_0_index_21 = 0;
     b27: block {
         l28: loop {
-            break_if b27 $sroa_$iter_0_index_21 >= end;
+            break_if b27 ((($sroa_$iter_0_index_21 >= end) | (($sroa_$iter_0_index_21 + 1) >= end)) | ((($sroa_$iter_0_index_21 + 1) + 1) >= end)) | (((($sroa_$iter_0_index_21 + 1) + 1) + 1) >= end);
+            ref_val = builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">($sroa_$iter_0_repr_20, $sroa_$iter_0_index_21);
+            $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
+            if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val) {
+                l = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val).payload_0;
+                v.total = v.total + l.value;
+            } else {
+                b = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Branch"(ref_val).payload_0;
+                "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b);
+            }
+            ref_val = builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">($sroa_$iter_0_repr_20, $sroa_$iter_0_index_21);
+            $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
+            if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val) {
+                l = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val).payload_0;
+                v.total = v.total + l.value;
+            } else {
+                b = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Branch"(ref_val).payload_0;
+                "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b);
+            }
+            ref_val = builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">($sroa_$iter_0_repr_20, $sroa_$iter_0_index_21);
+            $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
+            if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val) {
+                l = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val).payload_0;
+                v.total = v.total + l.value;
+            } else {
+                b = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Branch"(ref_val).payload_0;
+                "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b);
+            }
             ref_val = builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">($sroa_$iter_0_repr_20, $sroa_$iter_0_index_21);
             $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
             if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val) {
@@ -471,6 +498,21 @@ fn "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_v
                 "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b);
             }
             continue l28;
+        };
+    };
+    b33: block {
+        l34: loop {
+            break_if b33 $sroa_$iter_0_index_21 >= end;
+            ref_val = builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">($sroa_$iter_0_repr_20, $sroa_$iter_0_index_21);
+            $sroa_$iter_0_index_21 = $sroa_$iter_0_index_21 + 1;
+            if ref.test "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val) {
+                l = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Leaf"(ref_val).payload_0;
+                v.total = v.total + l.value;
+            } else {
+                b = ref.cast "inline_mutual_recursive_generic_visit.wado//Node::Branch"(ref_val).payload_0;
+                "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/walk_branch<inline_mutual_recursive_generic_visit.wado/Sum>"(v, b);
+            }
+            continue l34;
         };
     };
 }
@@ -551,52 +593,52 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b34: block {
-        l35: loop {
-            break_if b34 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            continue l35;
-        };
-    }; b36: block {
-        l37: loop {
-            break_if b36 i > $licm_arith_7;
-            at = $mv$data$start + i;
-            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
-            builtin::store_i64(ptr_13 + i, w);
-            i = i + 8;
-            continue l37;
-        };
-    }; b38: block {
-        l39: loop {
-            break_if b38 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
-            i = i + 1;
-            continue l39;
-        };
-    }; b40: block {
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b40: block {
         l41: loop {
-            break_if b40 i >= $mv$data$end;
+            break_if b40 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l41;
+        };
+    }; b42: block {
+        l43: loop {
+            break_if b42 i > $licm_arith_7;
+            at = $mv$data$start + i;
+            w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
+            builtin::store_i64(ptr_13 + i, w);
+            i = i + 8;
+            continue l43;
+        };
+    }; b44: block {
+        l45: loop {
+            break_if b44 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l41;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l45;
+        };
+    }; b46: block {
+        l47: loop {
+            break_if b46 i >= $mv$data$end;
+            builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
+            i = i + 1;
+            continue l47;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l43: loop {
+        l49: loop {
             ptr_19 = ptr_13 + i;
             count_20 = $mv$data$end - i;
             count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
@@ -628,7 +670,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_19;
             }
-            continue l43;
+            continue l49;
         };
     };
 }
@@ -638,36 +680,36 @@ fn "core:prelude/array.wado/core/prelude/array.wado/seq_eq<inline_mutual_recursi
         return 0;
     }
     b_end = 0;
-    b50: block {
-        l51: loop {
-            break_if b50 (((b_end >= a_end) | ((b_end + 1) >= a_end)) | (((b_end + 1) + 1) >= a_end)) | ((((b_end + 1) + 1) + 1) >= a_end);
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
-                return 0;
-            }
-            b_end = b_end + 1;
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
-                return 0;
-            }
-            b_end = b_end + 1;
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
-                return 0;
-            }
-            b_end = b_end + 1;
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
-                return 0;
-            }
-            b_end = b_end + 1;
-            continue l51;
-        };
-    };
     b56: block {
         l57: loop {
-            break_if b56 b_end >= a_end;
+            break_if b56 (((b_end >= a_end) | ((b_end + 1) >= a_end)) | (((b_end + 1) + 1) >= a_end)) | ((((b_end + 1) + 1) + 1) >= a_end);
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
+                return 0;
+            }
+            b_end = b_end + 1;
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
+                return 0;
+            }
+            b_end = b_end + 1;
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
+                return 0;
+            }
+            b_end = b_end + 1;
             if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
                 return 0;
             }
             b_end = b_end + 1;
             continue l57;
+        };
+    };
+    b62: block {
+        l63: loop {
+            break_if b62 b_end >= a_end;
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, b_end) }, struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, b_end) }) == 0 {
+                return 0;
+            }
+            b_end = b_end + 1;
+            continue l63;
         };
     };
     return 1;
@@ -724,12 +766,12 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mut
     truncated = 0;
     i = 0;
     $licm_arith_31 = limit >= 0;
-    b62: block {
-        l63: loop {
-            break_if b62 i >= end;
+    b68: block {
+        l69: loop {
+            break_if b68 i >= end;
             if select i32($licm_arith_31, shown >= limit, 0) {
                 truncated = 1;
-                break b62;
+                break b68;
             }
             if shown > 0 {
                 "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/array.wado::$const_obj_41);
@@ -737,7 +779,7 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<inline_mut
             "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i), f);
             shown = shown + 1;
             i = i + 1;
-            continue l63;
+            continue l69;
         };
     };
     if truncated {
@@ -764,19 +806,19 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<inline
     truncated = 0;
     i = 0;
     $licm_arith_23 = limit >= 0;
-    b69: block {
-        l70: loop {
-            break_if b69 i >= end;
+    b75: block {
+        l76: loop {
+            break_if b75 i >= end;
             if select i32($licm_arith_23, shown >= limit, 0) {
                 truncated = 1;
-                break b69;
+                break b75;
             }
             "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
             "core:prelude/traits.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(repr, i), f);
             "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f.buf, 44);
             shown = shown + 1;
             i = i + 1;
-            continue l70;
+            continue l76;
         };
     };
     if truncated {
@@ -843,12 +885,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_indent"(s
     i = 0;
     $licm_indent_8 = self.indent;
     $licm_buf_9 = self.buf;
-    b75: block {
-        l76: loop {
-            break_if b75 i >= $licm_indent_8;
+    b81: block {
+        l82: loop {
+            break_if b81 i >= $licm_indent_8;
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($licm_buf_9, global:core:prelude/format.wado::$const_obj_0);
             i = i + 1;
-            continue l76;
+            continue l82;
         };
     };
 }
@@ -1156,16 +1198,16 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, is_negative, self);
     arr = f.buf.repr;
     self = is_negative + self;
-    b117: block {
-        l118: loop {
-            break_if b117 (self - is_negative) < 2;
+    b123: block {
+        l124: loop {
+            break_if b123 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
-            continue l118;
+            continue l124;
         };
     };
     if self > is_negative {
@@ -1279,9 +1321,9 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         self_21 = self.buf;
         $load_2 = 0;
-        b136: block {
-            l137: loop {
-                break_if b136 $load_2 >= sign_len;
+        b142: block {
+            l143: loop {
+                break_if b142 $load_2 >= sign_len;
                 if @unlikely(local.tee start_27(self_21.used + 1) > builtin::array_len(self_21.repr)) {
                     cold_path;
                     "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_21, start_27);
@@ -1290,7 +1332,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
                 self_21.used = start_27;
                 builtin::array_set_u8(self_21.repr, new_used_26, 48);
                 $load_2 = $load_2 + 1;
-                continue l137;
+                continue l143;
             };
         };
         if @unlikely(local.tee $load_2(local.tee self_21(self.buf).used + digit_count) > builtin::array_len(self_21.repr)) {
@@ -1333,12 +1375,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         $load_2 = self.fill;
         i_221 = 0;
-        b147: block {
-            l148: loop {
-                break_if b147 i_221 >= sign_len;
+        b153: block {
+            l154: loop {
+                break_if b153 i_221 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, $load_2);
                 i_221 = i_221 + 1;
-                continue l148;
+                continue l154;
             };
         };
         return start_27;
@@ -1348,12 +1390,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         i_221 = self.fill;
         $load_2 = 0;
-        b150: block {
-            l151: loop {
-                break_if b150 $load_2 >= new_used_26;
+        b156: block {
+            l157: loop {
+                break_if b156 $load_2 >= new_used_26;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
                 $load_2 = $load_2 + 1;
-                continue l151;
+                continue l157;
             };
         };
         if is_negative {
@@ -1387,12 +1429,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         i_221 = self.fill;
         $load_2 = 0;
-        b158: block {
-            l159: loop {
-                break_if b158 $load_2 >= start_27;
+        b164: block {
+            l165: loop {
+                break_if b164 $load_2 >= start_27;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, i_221);
                 $load_2 = $load_2 + 1;
-                continue l159;
+                continue l165;
             };
         };
         return new_used_26;
@@ -1400,12 +1442,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         self_21 = self.buf;
         new_used_26 = self.fill;
         i_221 = 0;
-        b160: block {
-            l161: loop {
-                break_if b160 i_221 >= sign_len;
+        b166: block {
+            l167: loop {
+                break_if b166 i_221 >= sign_len;
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"(self_21, new_used_26);
                 i_221 = i_221 + 1;
-                continue l161;
+                continue l167;
             };
         };
         if is_negative {

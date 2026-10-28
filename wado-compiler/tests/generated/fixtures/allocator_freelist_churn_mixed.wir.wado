@@ -243,8 +243,8 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
     let $load_8: i32;
     let primed: ref "core:prelude//List<i32>";
     let item_40: i32;
+    let value_42: i32;
     let used_43: i32;
-    let value_72: i32;
     let used_73: i32;
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
@@ -256,119 +256,203 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
     $sroa_$iter_0_index_136 = 0;
     b0: block {
         l1: loop {
-            break_if b0 $sroa_$iter_0_index_136 >= 8;
+            break_if b0 ((($sroa_$iter_0_index_136 >= 8) | (($sroa_$iter_0_index_136 + 1) >= 8)) | ((($sroa_$iter_0_index_136 + 1) + 1) >= 8)) | (((($sroa_$iter_0_index_136 + 1) + 1) + 1) >= 8);
             item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136);
             $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-            item_40 = "mem/realloc"(0, 0, 8, item_40);
+            value_42 = "mem/realloc"(0, 0, 8, item_40);
             if @unlikely(local.tee used_43(primed.used) >= builtin::array_len(primed.repr)) {
                 cold_path;
                 "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
             }
-            builtin::array_set<i32>(primed.repr, used_43, item_40);
+            builtin::array_set<i32>(primed.repr, used_43, value_42);
+            primed.used = used_43 + 1;
+            item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136);
+            $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
+            value_42 = "mem/realloc"(0, 0, 8, item_40);
+            if @unlikely(local.tee used_43(primed.used) >= builtin::array_len(primed.repr)) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+            }
+            builtin::array_set<i32>(primed.repr, used_43, value_42);
+            primed.used = used_43 + 1;
+            item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136);
+            $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
+            value_42 = "mem/realloc"(0, 0, 8, item_40);
+            if @unlikely(local.tee used_43(primed.used) >= builtin::array_len(primed.repr)) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+            }
+            builtin::array_set<i32>(primed.repr, used_43, value_42);
+            primed.used = used_43 + 1;
+            item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136);
+            $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
+            value_42 = "mem/realloc"(0, 0, 8, item_40);
+            if @unlikely(local.tee used_43(primed.used) >= builtin::array_len(primed.repr)) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+            }
+            builtin::array_set<i32>(primed.repr, used_43, value_42);
             primed.used = used_43 + 1;
             continue l1;
         };
     };
-    $sroa_$iter_0_index_136 = 0;
-    used_43 = primed.used;
+    b6: block {
+        l7: loop {
+            break_if b6 $sroa_$iter_0_index_136 >= 8;
+            item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136);
+            $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
+            value_42 = "mem/realloc"(0, 0, 8, item_40);
+            if @unlikely(local.tee used_43(primed.used) >= builtin::array_len(primed.repr)) {
+                cold_path;
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+            }
+            builtin::array_set<i32>(primed.repr, used_43, value_42);
+            primed.used = used_43 + 1;
+            continue l7;
+        };
+    };
+    used_43 = 0;
+    value_42 = primed.used;
     $sroa_$iter_0_repr_135 = primed.repr;
-    if 8 <= used_43 {
-        b4: block {
-            l5: loop {
-                break_if b4 ((($sroa_$iter_0_index_136 >= 8) | (($sroa_$iter_0_index_136 + 1) >= 8)) | ((($sroa_$iter_0_index_136 + 1) + 1) >= 8)) | (((($sroa_$iter_0_index_136 + 1) + 1) + 1) >= 8);
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                continue l5;
+    if 8 <= value_42 {
+        b10: block {
+            l11: loop {
+                break_if b10 (((used_43 >= 8) | ((used_43 + 1) >= 8)) | (((used_43 + 1) + 1) >= 8)) | ((((used_43 + 1) + 1) + 1) >= 8);
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                continue l11;
             };
         };
-        b6: block {
-            l7: loop {
-                break_if b6 $sroa_$iter_0_index_136 >= 8;
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                continue l7;
+        b12: block {
+            l13: loop {
+                break_if b12 used_43 >= 8;
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                continue l13;
             };
         };
     } else {
-        b8: block {
-            l9: loop {
-                break_if b8 ((($sroa_$iter_0_index_136 >= 8) | (($sroa_$iter_0_index_136 + 1) >= 8)) | ((($sroa_$iter_0_index_136 + 1) + 1) >= 8)) | (((($sroa_$iter_0_index_136 + 1) + 1) + 1) >= 8);
-                if @unlikely($sroa_$iter_0_index_136 >= used_43) {
-                    cold_path;
-                    "allocator_freelist_churn_mixed.wado/run$cold4"($sroa_$iter_0_index_136, used_43);
-                    unreachable;
-                }
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                if @unlikely(local.tee $sroa_$iter_0_index_136($sroa_$iter_0_index_136 + 1) >= used_43) {
-                    cold_path;
-                    "allocator_freelist_churn_mixed.wado/run$cold4"($sroa_$iter_0_index_136, used_43);
-                    unreachable;
-                }
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                if @unlikely(local.tee $sroa_$iter_0_index_136($sroa_$iter_0_index_136 + 1) >= used_43) {
-                    cold_path;
-                    "allocator_freelist_churn_mixed.wado/run$cold4"($sroa_$iter_0_index_136, used_43);
-                    unreachable;
-                }
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                if @unlikely(local.tee $sroa_$iter_0_index_136($sroa_$iter_0_index_136 + 1) >= used_43) {
-                    cold_path;
-                    "allocator_freelist_churn_mixed.wado/run$cold4"($sroa_$iter_0_index_136, used_43);
-                    unreachable;
-                }
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-                continue l9;
-            };
-        };
         b14: block {
             l15: loop {
-                break_if b14 $sroa_$iter_0_index_136 >= 8;
-                if @unlikely($sroa_$iter_0_index_136 >= used_43) {
+                break_if b14 (((used_43 >= 8) | ((used_43 + 1) >= 8)) | (((used_43 + 1) + 1) >= 8)) | ((((used_43 + 1) + 1) + 1) >= 8);
+                if @unlikely(used_43 >= value_42) {
                     cold_path;
-                    "allocator_freelist_churn_mixed.wado/run$cold4"($sroa_$iter_0_index_136, used_43);
+                    "allocator_freelist_churn_mixed.wado/run$cold4"(used_43, value_42);
                     unreachable;
                 }
-                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_0_index_136), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_0_index_136), 8, 0));
-                $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                if @unlikely(local.tee used_43(used_43 + 1) >= value_42) {
+                    cold_path;
+                    "allocator_freelist_churn_mixed.wado/run$cold4"(used_43, value_42);
+                    unreachable;
+                }
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                if @unlikely(local.tee used_43(used_43 + 1) >= value_42) {
+                    cold_path;
+                    "allocator_freelist_churn_mixed.wado/run$cold4"(used_43, value_42);
+                    unreachable;
+                }
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                if @unlikely(local.tee used_43(used_43 + 1) >= value_42) {
+                    cold_path;
+                    "allocator_freelist_churn_mixed.wado/run$cold4"(used_43, value_42);
+                    unreachable;
+                }
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
                 continue l15;
+            };
+        };
+        b20: block {
+            l21: loop {
+                break_if b20 used_43 >= 8;
+                if @unlikely(used_43 >= value_42) {
+                    cold_path;
+                    "allocator_freelist_churn_mixed.wado/run$cold4"(used_43, value_42);
+                    unreachable;
+                }
+                drop("mem/realloc"(builtin::array_get_value<i32>($sroa_$iter_0_repr_135, used_43), builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, used_43), 8, 0));
+                used_43 = used_43 + 1;
+                continue l21;
             };
         };
     }
     drop("mem/realloc"(local.tee used_43("mem/realloc"(0, 0, 8, 1024)), 1024, 8, 0));
-    $sroa_$iter_0_index_136 = 0;
-    b17: block {
-        l18: loop {
-            break_if b17 $sroa_$iter_0_index_136 >= 1000;
+    value_42 = 0;
+    b23: block {
+        l24: loop {
+            break_if b23 value_42 >= 1000;
             primed = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 };
             $sroa_$iter_0_repr_135 = global:allocator_freelist_churn_mixed.wado::$const_obj_1;
             $sroa_$iter_3_index_139 = 0;
-            b19: block {
-                l20: loop {
-                    break_if b19 $sroa_$iter_3_index_139 >= 8;
+            b25: block {
+                l26: loop {
+                    break_if b25 ((($sroa_$iter_3_index_139 >= 8) | (($sroa_$iter_3_index_139 + 1) >= 8)) | ((($sroa_$iter_3_index_139 + 1) + 1) >= 8)) | (((($sroa_$iter_3_index_139 + 1) + 1) + 1) >= 8);
                     item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_3_index_139);
                     $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 + 1;
-                    value_72 = "mem/realloc"(0, 0, 8, item_40);
+                    $sroa_$iter_0_index_136 = "mem/realloc"(0, 0, 8, item_40);
                     if @unlikely(local.tee used_73(primed.used) >= builtin::array_len(primed.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
                     }
-                    builtin::array_set<i32>(primed.repr, used_73, value_72);
+                    builtin::array_set<i32>(primed.repr, used_73, $sroa_$iter_0_index_136);
                     primed.used = used_73 + 1;
-                    continue l20;
+                    item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_3_index_139);
+                    $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 + 1;
+                    $sroa_$iter_0_index_136 = "mem/realloc"(0, 0, 8, item_40);
+                    if @unlikely(local.tee used_73(primed.used) >= builtin::array_len(primed.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+                    }
+                    builtin::array_set<i32>(primed.repr, used_73, $sroa_$iter_0_index_136);
+                    primed.used = used_73 + 1;
+                    item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_3_index_139);
+                    $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 + 1;
+                    $sroa_$iter_0_index_136 = "mem/realloc"(0, 0, 8, item_40);
+                    if @unlikely(local.tee used_73(primed.used) >= builtin::array_len(primed.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+                    }
+                    builtin::array_set<i32>(primed.repr, used_73, $sroa_$iter_0_index_136);
+                    primed.used = used_73 + 1;
+                    item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_3_index_139);
+                    $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 + 1;
+                    $sroa_$iter_0_index_136 = "mem/realloc"(0, 0, 8, item_40);
+                    if @unlikely(local.tee used_73(primed.used) >= builtin::array_len(primed.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+                    }
+                    builtin::array_set<i32>(primed.repr, used_73, $sroa_$iter_0_index_136);
+                    primed.used = used_73 + 1;
+                    continue l26;
+                };
+            };
+            b31: block {
+                l32: loop {
+                    break_if b31 $sroa_$iter_3_index_139 >= 8;
+                    item_40 = builtin::array_get_value<i32>($sroa_$iter_0_repr_135, $sroa_$iter_3_index_139);
+                    $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 + 1;
+                    $sroa_$iter_0_index_136 = "mem/realloc"(0, 0, 8, item_40);
+                    if @unlikely(local.tee used_73(primed.used) >= builtin::array_len(primed.repr)) {
+                        cold_path;
+                        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(primed);
+                    }
+                    builtin::array_set<i32>(primed.repr, used_73, $sroa_$iter_0_index_136);
+                    primed.used = used_73 + 1;
+                    continue l32;
                 };
             };
             $sroa_$iter_3_index_139 = local.tee $load_8(primed.used) - 1;
             $sroa_$iter_0_repr_135 = primed.repr;
-            b22: block {
-                l23: loop {
-                    break_if b22 ((($sroa_$iter_3_index_139 < 0) | (($sroa_$iter_3_index_139 - 1) < 0)) | ((($sroa_$iter_3_index_139 - 1) - 1) < 0)) | (((($sroa_$iter_3_index_139 - 1) - 1) - 1) < 0);
+            b34: block {
+                l35: loop {
+                    break_if b34 ((($sroa_$iter_3_index_139 < 0) | (($sroa_$iter_3_index_139 - 1) < 0)) | ((($sroa_$iter_3_index_139 - 1) - 1) < 0)) | (((($sroa_$iter_3_index_139 - 1) - 1) - 1) < 0);
                     if @unlikely($sroa_$iter_3_index_139 >= $load_8) {
                         cold_path;
                         "allocator_freelist_churn_mixed.wado/run$cold2"($sroa_$iter_3_index_139, $load_8);
@@ -410,12 +494,12 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
                         unreachable;
                     }; builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_3_index_139), 8, 0));
                     $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 - 1;
-                    continue l23;
+                    continue l35;
                 };
             };
-            b32: block {
-                l33: loop {
-                    break_if b32 $sroa_$iter_3_index_139 < 0;
+            b44: block {
+                l45: loop {
+                    break_if b44 $sroa_$iter_3_index_139 < 0;
                     if @unlikely($sroa_$iter_3_index_139 >= $load_8) {
                         cold_path;
                         "allocator_freelist_churn_mixed.wado/run$cold2"($sroa_$iter_3_index_139, $load_8);
@@ -427,11 +511,11 @@ fn "allocator_freelist_churn_mixed.wado/run"() with Stdout {
                         unreachable;
                     }; builtin::array_get_value<i32>(global:allocator_freelist_churn_mixed.wado::$const_obj_1, $sroa_$iter_3_index_139), 8, 0));
                     $sroa_$iter_3_index_139 = $sroa_$iter_3_index_139 - 1;
-                    continue l33;
+                    continue l45;
                 };
             };
-            $sroa_$iter_0_index_136 = $sroa_$iter_0_index_136 + 1;
-            continue l18;
+            value_42 = value_42 + 1;
+            continue l24;
         };
     };
     if @unlikely(local.tee $load_8("mem/realloc"(0, 0, 8, 1024)) != used_43) {
@@ -537,16 +621,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b53: block {
-        l54: loop {
-            break_if b53 (digit_count - offset) < 2;
+    b65: block {
+        l66: loop {
+            break_if b65 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l54;
+            continue l66;
         };
     };
     if digit_count > offset {
@@ -678,12 +762,12 @@ fn "core:prelude/string.wado/utf8_prefix_end"(repr, start, len, char_count) {
     let seen: i32;
     end = 0;
     seen = 0;
-    b84: block {
-        l85: loop {
-            break_if b84 ((end < len) & (seen < char_count)) == 0;
+    b96: block {
+        l97: loop {
+            break_if b96 ((end < len) & (seen < char_count)) == 0;
             end = end + "core:prelude/string.wado/utf8_seq_len"(builtin::array_get_value<u8>(repr, start + end));
             seen = seen + 1;
-            continue l85;
+            continue l97;
         };
     };
     if end > len {
@@ -741,9 +825,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b89: block {
-        l90: loop {
-            break_if b89 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b101: block {
+        l102: loop {
+            break_if b101 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -752,20 +836,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l90;
+            continue l102;
         };
-    }; b91: block {
-        l92: loop {
-            break_if b91 i > $licm_arith_7;
+    }; b103: block {
+        l104: loop {
+            break_if b103 i > $licm_arith_7;
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l92;
+            continue l104;
         };
-    }; b93: block {
-        l94: loop {
-            break_if b93 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+    }; b105: block {
+        l106: loop {
+            break_if b105 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -774,19 +858,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l94;
+            continue l106;
         };
-    }; b95: block {
-        l96: loop {
-            break_if b95 i >= $mv$data$end;
+    }; b107: block {
+        l108: loop {
+            break_if b107 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l96;
+            continue l108;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l98: loop {
+        l110: loop {
             ptr_19 = ptr_13 + i;
             count_20 = $mv$data$end - i;
             count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
@@ -818,7 +902,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_19;
             }
-            continue l98;
+            continue l110;
         };
     };
 }
@@ -876,18 +960,18 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
     let i: i32;
     let at: i32;
     let w: i64;
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 3); i = 0; b108: block {
-        l109: loop {
-            break_if b108 i > -5;
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, 3); i = 0; b120: block {
+        l121: loop {
+            break_if b120 i > -5;
             at = i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(data, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l109;
+            continue l121;
         };
-    }; b110: block {
-        l111: loop {
-            break_if b110 (((i >= 3) | ((i + 1) >= 3)) | (((i + 1) + 1) >= 3)) | ((((i + 1) + 1) + 1) >= 3);
+    }; b122: block {
+        l123: loop {
+            break_if b122 (((i >= 3) | ((i + 1) >= 3)) | (((i + 1) + 1) >= 3)) | ((((i + 1) + 1) + 1) >= 3);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
@@ -896,19 +980,19 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
-            continue l111;
+            continue l123;
         };
-    }; b112: block {
-        l113: loop {
-            break_if b112 i >= 3;
+    }; b124: block {
+        l125: loop {
+            break_if b124 i >= 3;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8(data, i));
             i = i + 1;
-            continue l113;
+            continue l125;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | 12884901888_i64);
     i = 0;
     block {
-        l115: loop {
+        l127: loop {
             ptr_19 = ptr_13 + i;
             count_20 = 3 - i;
             count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
@@ -940,7 +1024,7 @@ fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle
                 drop("mem/realloc"(ptr_13, 3, 1, 0));
                 return;
             }
-            continue l115;
+            continue l127;
         };
     };
 }
@@ -997,17 +1081,17 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/t
 fn "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(self) {
     let n: i32;
     n = 0;
-    b127: block {
-        l128: loop {
+    b139: block {
+        l140: loop {
             let $mv$$match_2$0: i32;
             let $mv$$match_2$1: char;
             multivalue_bind [$mv$$match_2$0, $mv$$match_2$1] = "core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next$sroa[return]"(self);
             if $mv$$match_2$0 == 1 {
                 n = n + 1;
             } else {
-                break b127;
+                break b139;
             }
-            continue l128;
+            continue l140;
         };
     };
     return n;
@@ -1364,12 +1448,12 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<allocator_fre
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b169: block {
-        l170: loop {
-            break_if b169 i >= n;
+    b181: block {
+        l182: loop {
+            break_if b181 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l170;
+            continue l182;
         };
     };
 }

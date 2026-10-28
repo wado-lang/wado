@@ -204,6 +204,7 @@ fn "match_or_pattern_compound_guard.wado/shape"(s) {
 }
 
 fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
+    let item_15: ref "match_or_pattern_compound_guard.wado//Shape";
     let v_16: ref "match_or_pattern_compound_guard.wado//Shape";
     let $vc_payload_0: i32;
     let $vc_payload_1: i32;
@@ -214,10 +215,14 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
     let $local_12_61: ref "core:prelude/types.wado//Option<i32>";
     let $local_14: ref "core:prelude/types.wado//Option<i32>";
     let message_73: ref "core:prelude/string.wado//String";
+    let rx_74: i32;
+    let tx_75: i32;
+    let handle_76: i32;
     let $moved_4_77: i32;
     let $moved_5_78: i32;
     let $moved_6_79: i32;
     let $cm_pair_7_80: i64;
+    let tx_82: i32;
     let $moved_3_85: i32;
     let $sroa_$pattern_temp_0_0_13_86: i32;
     let $sroa_$pattern_temp_0_1_14_87: i32;
@@ -228,8 +233,8 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
     $sroa_$iter_0_index_150 = 0;
     b16: block {
         l17: loop {
-            break_if b16 $sroa_$iter_0_index_150 >= 6;
-            v_16 = (if ref.test "match_or_pattern_compound_guard.wado//Shape::Circle"(local.tee v_16(builtin::array_get_value<ref "match_or_pattern_compound_guard.wado//Shape">($sroa_$iter_0_repr_149, $sroa_$iter_0_index_150))) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+            break_if b16 ($sroa_$iter_0_index_150 >= 6) | (($sroa_$iter_0_index_150 + 1) >= 6);
+            item_15 = (if ref.test "match_or_pattern_compound_guard.wado//Shape::Circle"(local.tee v_16(builtin::array_get_value<ref "match_or_pattern_compound_guard.wado//Shape">($sroa_$iter_0_repr_149, $sroa_$iter_0_index_150))) -> ref "match_or_pattern_compound_guard.wado//Shape" {
                 $vc_payload_0 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Circle"(v_16).payload_0;
                 struct.new "match_or_pattern_compound_guard.wado//Shape::Circle" { discriminant: 0, payload_0: $vc_payload_0 };
             } else if ref.test "match_or_pattern_compound_guard.wado//Shape::Square"(v_16) -> ref "match_or_pattern_compound_guard.wado//Shape" {
@@ -242,15 +247,69 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
                 v_16;
             });
             $sroa_$iter_0_index_150 = $sroa_$iter_0_index_150 + 1;
-            message_73 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("match_or_pattern_compound_guard.wado/shape"(black_box(v_16)));
+            message_73 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("match_or_pattern_compound_guard.wado/shape"(black_box(item_15)));
             $sroa_$pattern_temp_0_0_13_86 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
             $sroa_$pattern_temp_0_1_14_87 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
-            $sroa_$pattern_temp_0_0_13_86 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = $sroa_$pattern_temp_0_0_13_86; $sroa_$pattern_temp_0_0_13_86 = 0; $moved_4_77);
-            $moved_5_78 = $sroa_$pattern_temp_0_1_14_87;
-            $sroa_$pattern_temp_0_1_14_87 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_3_85($moved_5_78), message_73.repr, message_73.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_79 = $sroa_$pattern_temp_0_0_13_86; $sroa_$pattern_temp_0_0_13_86 = 0; $moved_6_79);
+            rx_74 = $sroa_$pattern_temp_0_0_13_86;
+            tx_75 = $sroa_$pattern_temp_0_1_14_87;
+            handle_76 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = rx_74; rx_74 = 0; $moved_4_77);
+            $moved_5_78 = tx_75;
+            tx_75 = 0;
+            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_85 = local.tee tx_82($moved_5_78); tx_82 = 0; $moved_3_85, message_73.repr, message_73.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_79 = handle_76; handle_76 = 0; $moved_6_79);
+            item_15 = (if ref.test "match_or_pattern_compound_guard.wado//Shape::Circle"(local.tee v_16(builtin::array_get_value<ref "match_or_pattern_compound_guard.wado//Shape">($sroa_$iter_0_repr_149, $sroa_$iter_0_index_150))) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_0 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Circle"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Circle" { discriminant: 0, payload_0: $vc_payload_0 };
+            } else if ref.test "match_or_pattern_compound_guard.wado//Shape::Square"(v_16) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_1 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Square"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Square" { discriminant: 1, payload_0: $vc_payload_1 };
+            } else if ref.test "match_or_pattern_compound_guard.wado//Shape::Line"(v_16) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_2 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Line"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Line" { discriminant: 2, payload_0: struct.new "tuple//[i32, i32]" { 0: $vc_payload_2.0, 1: $vc_payload_2.1 } };
+            } else {
+                v_16;
+            });
+            $sroa_$iter_0_index_150 = $sroa_$iter_0_index_150 + 1;
+            message_73 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("match_or_pattern_compound_guard.wado/shape"(black_box(item_15)));
+            $sroa_$pattern_temp_0_0_13_86 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_14_87 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
+            rx_74 = $sroa_$pattern_temp_0_0_13_86;
+            tx_75 = $sroa_$pattern_temp_0_1_14_87;
+            handle_76 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = rx_74; rx_74 = 0; $moved_4_77);
+            $moved_5_78 = tx_75;
+            tx_75 = 0;
+            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_85 = local.tee tx_82($moved_5_78); tx_82 = 0; $moved_3_85, message_73.repr, message_73.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_79 = handle_76; handle_76 = 0; $moved_6_79);
             continue l17;
+        };
+    };
+    b24: block {
+        l25: loop {
+            break_if b24 $sroa_$iter_0_index_150 >= 6;
+            item_15 = (if ref.test "match_or_pattern_compound_guard.wado//Shape::Circle"(local.tee v_16(builtin::array_get_value<ref "match_or_pattern_compound_guard.wado//Shape">($sroa_$iter_0_repr_149, $sroa_$iter_0_index_150))) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_0 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Circle"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Circle" { discriminant: 0, payload_0: $vc_payload_0 };
+            } else if ref.test "match_or_pattern_compound_guard.wado//Shape::Square"(v_16) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_1 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Square"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Square" { discriminant: 1, payload_0: $vc_payload_1 };
+            } else if ref.test "match_or_pattern_compound_guard.wado//Shape::Line"(v_16) -> ref "match_or_pattern_compound_guard.wado//Shape" {
+                $vc_payload_2 = ref.cast "match_or_pattern_compound_guard.wado//Shape::Line"(v_16).payload_0;
+                struct.new "match_or_pattern_compound_guard.wado//Shape::Line" { discriminant: 2, payload_0: struct.new "tuple//[i32, i32]" { 0: $vc_payload_2.0, 1: $vc_payload_2.1 } };
+            } else {
+                v_16;
+            });
+            $sroa_$iter_0_index_150 = $sroa_$iter_0_index_150 + 1;
+            message_73 = "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"("match_or_pattern_compound_guard.wado/shape"(black_box(item_15)));
+            $sroa_$pattern_temp_0_0_13_86 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
+            $sroa_$pattern_temp_0_1_14_87 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
+            rx_74 = $sroa_$pattern_temp_0_0_13_86;
+            tx_75 = $sroa_$pattern_temp_0_1_14_87;
+            handle_76 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = rx_74; rx_74 = 0; $moved_4_77);
+            $moved_5_78 = tx_75;
+            tx_75 = 0;
+            "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_85 = local.tee tx_82($moved_5_78); tx_82 = 0; $moved_3_85, message_73.repr, message_73.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_79 = handle_76; handle_76 = 0; $moved_6_79);
+            continue l25;
         };
     };
     message_73 = block -> ref "core:prelude/string.wado//String" {
@@ -260,43 +319,43 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
         } else {
             select i32(($moved_3_85 == 0) | ($vc_payload_2.1 == 0), 2, 3);
         });
-        $moved_4_77 = "match_or_pattern_compound_guard.wado/pair$spec0$dae[limit]"(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_3));
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($moved_6_79, $moved_3_85, $moved_4_77);
+        tx_82 = "match_or_pattern_compound_guard.wado/pair$spec0$dae[limit]"(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_3));
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"($moved_6_79, $moved_3_85, tx_82);
     };
-    $moved_4_77 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
+    tx_82 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
     $moved_3_85 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
-    $moved_6_79 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_6_79 = $moved_4_77; $moved_4_77 = 0; $moved_6_79);
-    $moved_4_77 = $moved_3_85;
+    $moved_6_79 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_6_79 = tx_82; tx_82 = 0; $moved_6_79);
+    tx_82 = $moved_3_85;
     $moved_3_85 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_77, message_73.repr, message_73.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_77 = $moved_6_79; $moved_6_79 = 0; $moved_4_77);
+    "core:rt/write_string_to_stream$dae[add_newline]"(tx_82, message_73.repr, message_73.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(tx_82 = $moved_6_79; $moved_6_79 = 0; tx_82);
     message_73 = block -> ref "core:prelude/string.wado//String" {
-        $moved_6_79 = (if (local.tee $moved_4_77(local.tee s_21(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_2)).w) == 0) | (s_21.h == 0) -> i32 {
+        $moved_6_79 = (if (local.tee tx_82(local.tee s_21(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_2)).w) == 0) | (s_21.h == 0) -> i32 {
             0;
         } else {
             $moved_6_79 = s_21.h;
-            $moved_4_77 * $moved_6_79;
+            tx_82 * $moved_6_79;
         });
-        $moved_3_85 = (if (local.tee $moved_4_77(local.tee s_21(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_1)).w) == 0) | (s_21.h == 0) -> i32 {
+        $moved_3_85 = (if (local.tee tx_82(local.tee s_21(black_box(global:match_or_pattern_compound_guard.wado::$const_obj_1)).w) == 0) | (s_21.h == 0) -> i32 {
             0;
         } else {
             $moved_3_85 = s_21.h;
-            $moved_4_77 * $moved_3_85;
+            tx_82 * $moved_3_85;
         });
         "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pattern_compound_guard.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($moved_6_79, $moved_3_85);
     };
     $moved_3_85 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
     $moved_6_79 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
-    $moved_4_77 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = $moved_3_85; $moved_3_85 = 0; $moved_4_77);
+    tx_82 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_82 = $moved_3_85; $moved_3_85 = 0; tx_82);
     $moved_3_85 = $moved_6_79;
     $moved_6_79 = 0;
     "core:rt/write_string_to_stream$dae[add_newline]"($moved_3_85, message_73.repr, message_73.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_3_85 = $moved_4_77; $moved_4_77 = 0; $moved_3_85);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_3_85 = tx_82; tx_82 = 0; $moved_3_85);
     $sroa_$iter_4_repr_160 = global:match_or_pattern_compound_guard.wado::$const_obj_0;
     $moved_3_85 = 0;
-    b26: block {
-        l27: loop {
-            break_if b26 $moved_3_85 >= 5;
+    b34: block {
+        l35: loop {
+            break_if b34 $moved_3_85 >= 5;
             item_48 = builtin::array_get_value<ref null "core:prelude/types.wado//Option<i32>">($sroa_$iter_4_repr_160, $moved_3_85);
             $moved_3_85 = $moved_3_85 + 1;
             item_48 = black_box(item_48);
@@ -342,14 +401,14 @@ fn "match_or_pattern_compound_guard.wado/run"() with Stdout {
             } else {
                 unreachable;
             }));
-            $vc_payload_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
-            $sroa_$iter_0_index_150 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
-            $vc_payload_0 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_77 = $vc_payload_0; $vc_payload_0 = 0; $moved_4_77);
-            $sroa_$pattern_temp_0_0_13_86 = $sroa_$iter_0_index_150;
-            $sroa_$iter_0_index_150 = 0;
-            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_6_79($sroa_$pattern_temp_0_0_13_86), message_73.repr, message_73.used);
-            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($vc_payload_1 = $vc_payload_0; $vc_payload_0 = 0; $vc_payload_1);
-            continue l27;
+            handle_76 = builtin::i32_wrap_i64(local.tee $cm_pair_7_80("wasi/stream-new"()));
+            $moved_4_77 = builtin::i32_wrap_i64($cm_pair_7_80 >> 32_i64);
+            handle_76 = "match_or_pattern_compound_guard.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(tx_82 = handle_76; handle_76 = 0; tx_82);
+            tx_75 = $moved_4_77;
+            $moved_4_77 = 0;
+            "core:rt/write_string_to_stream$dae[add_newline]"(local.tee $moved_6_79(tx_75), message_73.repr, message_73.used);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_5_78 = handle_76; handle_76 = 0; $moved_5_78);
+            continue l35;
         };
     };
 }
@@ -385,16 +444,16 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b42: block {
-        l43: loop {
-            break_if b42 (digit_count - offset) < 2;
+    b50: block {
+        l51: loop {
+            break_if b50 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l43;
+            continue l51;
         };
     };
     if digit_count > offset {
@@ -494,9 +553,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b66: block {
-        l67: loop {
-            break_if b66 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b74: block {
+        l75: loop {
+            break_if b74 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -505,20 +564,20 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l67;
+            continue l75;
         };
-    }; b68: block {
-        l69: loop {
-            break_if b68 i > $licm_arith_7;
+    }; b76: block {
+        l77: loop {
+            break_if b76 i > $licm_arith_7;
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
             i = i + 8;
-            continue l69;
+            continue l77;
         };
-    }; b70: block {
-        l71: loop {
-            break_if b70 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
+    }; b78: block {
+        l79: loop {
+            break_if b78 (((i >= $mv$data$end) | ((i + 1) >= $mv$data$end)) | (((i + 1) + 1) >= $mv$data$end)) | ((((i + 1) + 1) + 1) >= $mv$data$end);
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
@@ -527,19 +586,19 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             i = i + 1;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l71;
+            continue l79;
         };
-    }; b72: block {
-        l73: loop {
-            break_if b72 i >= $mv$data$end;
+    }; b80: block {
+        l81: loop {
+            break_if b80 i >= $mv$data$end;
             builtin::store_u8(ptr_13 + i, builtin::array_get_value_u8($mv$data$repr, $mv$data$start + i));
             i = i + 1;
-            continue l73;
+            continue l81;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     i = 0;
     block {
-        l75: loop {
+        l83: loop {
             ptr_19 = ptr_13 + i;
             count_20 = $mv$data$end - i;
             count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
@@ -571,7 +630,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
                 return ptr_19;
             }
-            continue l75;
+            continue l83;
         };
     };
 }
@@ -706,16 +765,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pa
     out_3.used = start_153;
     $load_0 = out_3.repr;
     t = is_negative_65 + t;
-    b107: block {
-        l108: loop {
-            break_if b107 (t - is_negative_65) < 2;
+    b115: block {
+        l116: loop {
+            break_if b115 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee start_153(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_0, t - 1, (48 + start_153) - (tens * 10));
             builtin::array_set_u8($load_0, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l108;
+            continue l116;
         };
     };
     if t > is_negative_65 {
@@ -821,16 +880,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<match_or_pa
     out_3.used = start_153;
     $load_0 = out_3.repr;
     t = is_negative_65 + t;
-    b132: block {
-        l133: loop {
-            break_if b132 (t - is_negative_65) < 2;
+    b140: block {
+        l141: loop {
+            break_if b140 (t - is_negative_65) < 2;
             q = x /u 100_i64;
             tens = local.tee start_153(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8($load_0, t - 1, (48 + start_153) - (tens * 10));
             builtin::array_set_u8($load_0, t - 2, 48 + tens);
             t = t - 2;
             x = q;
-            continue l133;
+            continue l141;
         };
     };
     if t > is_negative_65 {

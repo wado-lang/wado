@@ -7148,7 +7148,46 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
     $sroa_$iter_0_index_88 = 0;
     b909: block {
         l910: loop {
-            break_if b909 $sroa_$iter_0_index_88 >= new_used_25;
+            break_if b909 ((($sroa_$iter_0_index_88 >= new_used_25) | (($sroa_$iter_0_index_88 + 1) >= new_used_25)) | ((($sroa_$iter_0_index_88 + 1) + 1) >= new_used_25)) | (((($sroa_$iter_0_index_88 + 1) + 1) + 1) >= new_used_25);
+            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_87, $sroa_$iter_0_index_88);
+            $sroa_$iter_0_index_88 = $sroa_$iter_0_index_88 + 1;
+            if start_26 > 0 {
+                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
+                }
+                start_49 = s.used;
+                s.used = new_used_48;
+                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_343, 0, 1);
+            }
+            "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
+            start_26 = start_26 + 1;
+            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_87, $sroa_$iter_0_index_88);
+            $sroa_$iter_0_index_88 = $sroa_$iter_0_index_88 + 1;
+            if start_26 > 0 {
+                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
+                }
+                start_49 = s.used;
+                s.used = new_used_48;
+                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_343, 0, 1);
+            }
+            "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
+            start_26 = start_26 + 1;
+            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_87, $sroa_$iter_0_index_88);
+            $sroa_$iter_0_index_88 = $sroa_$iter_0_index_88 + 1;
+            if start_26 > 0 {
+                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
+                }
+                start_49 = s.used;
+                s.used = new_used_48;
+                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_343, 0, 1);
+            }
+            "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
+            start_26 = start_26 + 1;
             ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_87, $sroa_$iter_0_index_88);
             $sroa_$iter_0_index_88 = $sroa_$iter_0_index_88 + 1;
             if start_26 > 0 {
@@ -7163,6 +7202,25 @@ fn "core:serde/core:prelude/list.wado/List<core:prelude/string.wado/String>^core
             "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
             start_26 = start_26 + 1;
             continue l910;
+        };
+    };
+    b919: block {
+        l920: loop {
+            break_if b919 $sroa_$iter_0_index_88 >= new_used_25;
+            ref_val = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_87, $sroa_$iter_0_index_88);
+            $sroa_$iter_0_index_88 = $sroa_$iter_0_index_88 + 1;
+            if start_26 > 0 {
+                if @unlikely(local.tee new_used_48(s.used + 1) > builtin::array_len(s.repr)) {
+                    cold_path;
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_48);
+                }
+                start_49 = s.used;
+                s.used = new_used_48;
+                builtin::array_copy<u8>(s.repr, start_49, global:core:serde::$const_obj_343, 0, 1);
+            }
+            "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, ref_val);
+            start_26 = start_26 + 1;
+            continue l920;
         };
     };
     if @unlikely(local.tee start_49(s.used + 1) > builtin::array_len(s.repr)) {
@@ -7282,14 +7340,14 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     if val_i64_66 == 0_i64 {
         builtin::array_set_u8(arr, start_218, 48);
     } else {
-        b922: block {
-            l923: loop {
-                break_if b922 val_i64_66 == 0_i64;
+        b932: block {
+            l933: loop {
+                break_if b932 val_i64_66 == 0_i64;
                 q = q - 1;
                 start_218 = builtin::i32_wrap_i64(val_i64_66 & 15_i64);
                 builtin::array_set_u8(arr, q, select i32(start_218 < 10, 48 + start_218, (97 + start_218) - 10));
                 val_i64_66 = val_i64_66 >>u 4_i64;
-                continue l923;
+                continue l933;
             };
         };
     }

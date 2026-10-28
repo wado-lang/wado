@@ -6153,7 +6153,31 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         is_neg_642 = 0;
         b780: block {
             l781: loop {
-                break_if b780 is_neg_642 >= $sroa_slot_54;
+                break_if b780 (((is_neg_642 >= $sroa_slot_54) | ((is_neg_642 + 1) >= $sroa_slot_54)) | (((is_neg_642 + 1) + 1) >= $sroa_slot_54)) | ((((is_neg_642 + 1) + 1) + 1) >= $sroa_slot_54);
+                ref_val = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_752, is_neg_642);
+                is_neg_642 = is_neg_642 + 1;
+                if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, ref_val)))) {
+                } else {
+                    $qm_e_17 = ref.as_non_null($local_30);
+                    cold_path;
+                    return $qm_e_17;
+                }
+                ref_val = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_752, is_neg_642);
+                is_neg_642 = is_neg_642 + 1;
+                if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, ref_val)))) {
+                } else {
+                    $qm_e_17 = ref.as_non_null($local_30);
+                    cold_path;
+                    return $qm_e_17;
+                }
+                ref_val = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_752, is_neg_642);
+                is_neg_642 = is_neg_642 + 1;
+                if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, ref_val)))) {
+                } else {
+                    $qm_e_17 = ref.as_non_null($local_30);
+                    cold_path;
+                    return $qm_e_17;
+                }
                 ref_val = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_752, is_neg_642);
                 is_neg_642 = is_neg_642 + 1;
                 if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, ref_val)))) {
@@ -6163,6 +6187,20 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
                     return $qm_e_17;
                 }
                 continue l781;
+            };
+        };
+        b786: block {
+            l787: loop {
+                break_if b786 is_neg_642 >= $sroa_slot_54;
+                ref_val = builtin::array_get_value<ref "core:value//Value">($sroa_$iter_0_repr_752, is_neg_642);
+                is_neg_642 = is_neg_642 + 1;
+                if @likely(ref.is_null(local.tee $local_30("core:json/core:json/JsonSeqSerializer^core:serde/SerializeSeq::element<core:value/Value>$sroa[value.value]"(seq, ref_val)))) {
+                } else {
+                    $qm_e_17 = ref.as_non_null($local_30);
+                    cold_path;
+                    return $qm_e_17;
+                }
+                continue l787;
             };
         };
         if @unlikely(local.tee is_neg_642(local.tee $mv_arg_5(seq.buf).used + 1) > builtin::array_len($mv_arg_5.repr)) {
@@ -6184,8 +6222,8 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
         builtin::array_copy<u8>(s.repr, $sroa_slot_54, global:core:value::$const_obj_84, 0, 1);
         $sroa_slot_54 = 0;
         $iter_1 = struct.new "core:collections/entries.wado//MapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>" { log: map.log, index: 0 };
-        b786: block {
-            l787: loop {
+        b792: block {
+            l793: loop {
                 if ref.is_null(local.tee $local_31("core:collections/entries.wado/core:collections/entries.wado/MapEntriesRefIter<core:prelude/string.wado/String,core:value/Value>^core:prelude/traits.wado/Iterator::next"($iter_1))) == 0 {
                     let $variant_payload_1: ref "tuple//[&core:prelude/string.wado/String, core:prelude/types.wado/Box<core:value/Value>]";
                     $mv_arg_5 = local.tee $variant_payload_1(ref.as_non_null($local_31)).0;
@@ -6216,9 +6254,9 @@ fn "core:value/core:value/Value^core:serde/Serialize::serialize<core:json/JsonSe
                         return $qm_e_17;
                     }
                 } else {
-                    break b786;
+                    break b792;
                 }
-                continue l787;
+                continue l793;
             };
         };
         if @unlikely(local.tee is_neg_642(s.used + 1) > builtin::array_len(s.repr)) {
@@ -6258,12 +6296,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     }) == 1 {
         fill_byte = c & 255;
         j_6 = 0;
-        b799: block {
-            l800: loop {
-                break_if b799 j_6 >= n;
+        b805: block {
+            l806: loop {
+                break_if b805 j_6 >= n;
                 builtin::array_set_u8(self, at + j_6, fill_byte);
                 j_6 = j_6 + 1;
-                continue l800;
+                continue l806;
             };
         };
         return;
@@ -6271,14 +6309,14 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
     "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
     c = 0;
     $licm_repr_48 = encoded.repr;
-    b801: block {
-        l802: loop {
-            break_if b801 c >= n;
+    b807: block {
+        l808: loop {
+            break_if b807 c >= n;
             k = 0;
             $licm_arith_50 = at + (c * fill_len);
-            b803: block {
-                l804: loop {
-                    break_if b803 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
+            b809: block {
+                l810: loop {
+                    break_if b809 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
                     j_6 = $licm_arith_50 + k;
                     fill_byte = builtin::array_get_value<u8>($licm_repr_48, k);
                     builtin::array_set_u8(self, j_6, fill_byte);
@@ -6295,21 +6333,21 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
                     fill_byte = builtin::array_get_value<u8>($licm_repr_48, k);
                     builtin::array_set_u8(self, j_6, fill_byte);
                     k = k + 1;
-                    continue l804;
+                    continue l810;
                 };
             };
-            b805: block {
-                l806: loop {
-                    break_if b805 k >= fill_len;
+            b811: block {
+                l812: loop {
+                    break_if b811 k >= fill_len;
                     j_6 = $licm_arith_50 + k;
                     fill_byte = builtin::array_get_value<u8>($licm_repr_48, k);
                     builtin::array_set_u8(self, j_6, fill_byte);
                     k = k + 1;
-                    continue l806;
+                    continue l812;
                 };
             };
             c = c + 1;
-            continue l802;
+            continue l808;
         };
     };
 }
