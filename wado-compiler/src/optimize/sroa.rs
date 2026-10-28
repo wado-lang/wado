@@ -480,9 +480,8 @@ fn collect_candidates(body: &Body) -> Vec<SroaCandidate> {
     let repointed = whole_assigned_locals(body);
     candidates.retain(|c| {
         !rebound.contains(&c.local_index)
-            && c.copy_of.is_none_or(|src| {
-                !repointed.contains(&c.local_index) && !repointed.contains(&src)
-            })
+            && c.copy_of
+                .is_none_or(|src| !repointed.contains(&c.local_index) && !repointed.contains(&src))
     });
     candidates
 }
@@ -920,13 +919,13 @@ struct UseWalk<'a> {
 impl UseWalk<'_> {
     fn node(&self, body: &Body, node: NodeRef, out: &mut CandidateUses) {
         // An alias binds `&candidate`, the reference the read it stands for
-        // needs. That reference is the read's, not an escape.
+        // needs. That reference is the read's, not an escape. A copy shares its
+        // source's slots, so its `let` moves nothing.
         if let NodeRef::Stmt(s) = node
             && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && (self.aliases.contains_key(local_index) || self.whole.copies.contains(local_index))
         {
-            if self.aliases.contains_key(local_index) || self.whole.copies.contains(local_index) {
-                return;
-            }
+            return;
         }
         if let NodeRef::Expr(id) = node {
             self.expr(body, id, out);

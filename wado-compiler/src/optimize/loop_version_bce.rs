@@ -28,6 +28,7 @@ use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::parallel::Executor;
+use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -679,21 +680,9 @@ fn analyze_loop(
     }
     let reload = match reload {
         Some(root) => {
-            // The fast loop ends by its guard alone, `var < $lim` with `$lim`
-            // dropped below every value to end it: the original loop resumes
-            // after it, which another exit would skip.
-            if guard_le || subtree_redefines(engine, loop_body, &[root]) {
-                return None;
-            }
-            let mut exits = 0;
-            engine.body.for_each_node_under(NodeRef::Block(loop_body), |n| {
-                if let NodeRef::Stmt(s) = n
-                    && matches!(engine.body.stmts[s].kind, StmtKind::Break { label: None, .. })
-                {
-                    exits += 1;
-                }
-            });
-            if exits != 1 {
+            // `$lim` drops below every value to end the fast loop, which `<=`
+            // would not compare past.
+            if guard_le {
                 return None;
             }
             let holders: Vec<NodeRef> = checks.iter().map(|c| c.holder).collect();
@@ -837,7 +826,7 @@ fn apply_version(
         } else {
             let bits = type_table
                 .primitive_head(var_ty)
-                .and_then(|p| p.int_max())
+                .and_then(PrimitiveType::int_max)
                 .expect("the guard variable is an integer");
             !u64::try_from(bits).expect("a scalar integer maximum fits u64")
         };
@@ -872,15 +861,7 @@ fn apply_version(
             },
             span,
         );
-        let exit_block = engine.alloc_block(vec![exit], span);
-        let guard = engine.alloc_stmt(
-            StmtKind::If {
-                condition: done,
-                then_block: exit_block,
-                else_block: None,
-            },
-            span,
-        );
+        let guard = alloc_if_then(engine, done, exit, span);
         let mut stmts = engine.body.blocks[fast_body].stmts.clone();
         stmts[plan.guard_idx] = guard;
         engine.set_block_stmts(fast_body, stmts);
@@ -904,35 +885,24 @@ fn apply_version(
         .iter()
         .position(|&s| s == plan.loop_stmt)
         .expect("versioned loop stmt must be in its parent block");
-    let if_stmt = match &reload {
-        Some((lim, _)) => {
-            let h = bound_read(engine, plan, plan.bound, span);
-            let init = alloc_local_set(engine, *lim, h, span);
-            let if_stmt = engine.alloc_stmt(
-                StmtKind::If {
-                    condition: residual,
-                    then_block,
-                    else_block: None,
-                },
-                span,
-            );
-            stmts.splice(pos..=pos, [init, if_stmt, slow_stmt]);
-            if_stmt
-        }
-        None => {
-            let else_block = engine.alloc_block(vec![slow_stmt], span);
-            let if_stmt = engine.alloc_stmt(
-                StmtKind::If {
-                    condition: residual,
-                    then_block,
-                    else_block: Some(else_block),
-                },
-                span,
-            );
-            stmts[pos] = if_stmt;
-            if_stmt
-        }
-    };
+    let else_block = reload
+        .is_none()
+        .then(|| engine.alloc_block(vec![slow_stmt], span));
+    let if_stmt = engine.alloc_stmt(
+        StmtKind::If {
+            condition: residual,
+            then_block,
+            else_block,
+        },
+        span,
+    );
+    if let Some((lim, _)) = &reload {
+        let h = bound_read(engine, plan, plan.bound, span);
+        let init = alloc_local_set(engine, *lim, h, span);
+        stmts.splice(pos..=pos, [init, if_stmt, slow_stmt]);
+    } else {
+        stmts[pos] = if_stmt;
+    }
     engine.set_block_stmts(plan.parent, stmts);
 
     FastArm {
@@ -981,11 +951,16 @@ fn alloc_retest(engine: &mut Engine, plan: &Plan, lim: u32, floor: u64, span: Sp
     let ty = engine.locals()[lim as usize].type_id;
     let floor = engine.const_operand(ValueKind::Int(floor, ty), ty);
     let end = alloc_local_set(engine, lim, floor, span);
-    let end_block = engine.alloc_block(vec![end], span);
+    alloc_if_then(engine, Operand::Expr(failed), end, span)
+}
+
+/// `if condition { stmt }`.
+fn alloc_if_then(engine: &mut Engine, condition: Operand, stmt: StmtId, span: Span) -> StmtId {
+    let then_block = engine.alloc_block(vec![stmt], span);
     engine.alloc_stmt(
         StmtKind::If {
-            condition: Operand::Expr(failed),
-            then_block: end_block,
+            condition,
+            then_block,
             else_block: None,
         },
         span,

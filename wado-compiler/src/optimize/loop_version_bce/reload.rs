@@ -22,6 +22,8 @@ use crate::optimize::condition_implication::{
 };
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame, LazyHeapFrame};
 use crate::tir::TypeId;
+
+use super::subtree_redefines;
 use crate::type_table::{TypeKey, TypeTable};
 
 /// What a subtree does to the reloaded bound.
@@ -53,7 +55,9 @@ struct Walk<'w> {
 
 /// The statements of `loop_body`, past the guard at `guard_idx`, after which
 /// the fast loop re-tests the bound `root.used`, each with its block. `None`
-/// when a check follows one, or `root` is written other than by a reload.
+/// when a check follows one, `root` is written other than by a reload, or the
+/// loop has an exit besides its guard: the original loop resumes after the
+/// fast one, which another exit would skip.
 pub(super) fn points(
     engine: &Engine,
     binds: &Binds,
@@ -65,7 +69,25 @@ pub(super) fn points(
     checks: &[NodeRef],
 ) -> Option<Vec<(BlockId, StmtId)>> {
     let root_ty = engine.locals().get(root as usize)?.type_id;
-    if !types.is_seq_container(types.peel_refs(root_ty)) {
+    if !types.is_seq_container(types.peel_refs(root_ty))
+        || subtree_redefines(engine, loop_body, &[root])
+    {
+        return None;
+    }
+    let mut exits = 0;
+    engine
+        .body
+        .for_each_node_under(NodeRef::Block(loop_body), |n| {
+            if let NodeRef::Stmt(s) = n
+                && matches!(
+                    engine.body.stmts[s].kind,
+                    StmtKind::Break { label: None, .. }
+                )
+            {
+                exits += 1;
+            }
+        });
+    if exits != 1 {
         return None;
     }
     let mut walk = Walk {
