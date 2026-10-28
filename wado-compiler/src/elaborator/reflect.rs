@@ -1571,10 +1571,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     REFLECT_FIELD_TYPES_ASSOC => {
                         Some(self.tysys.type_table.borrow_mut().make_tuple(members))
                     }
-                    REFLECT_FIELD_INPUTS_ASSOC => Some(match self.reflect_struct_closure(subject) {
-                        Some(_) => TypeTable::NEVER,
-                        None => self.tysys.type_table.borrow_mut().make_tuple(members),
-                    }),
+                    REFLECT_FIELD_INPUTS_ASSOC => {
+                        Some(match self.reflect_struct_closure(subject) {
+                            Some(_) => TypeTable::NEVER,
+                            None => self.tysys.type_table.borrow_mut().make_tuple(members),
+                        })
+                    }
                     REFLECT_FIELD_SLOTS_ASSOC => {
                         let mut tt = self.tysys.type_table.borrow_mut();
                         let slots: Vec<TypeId> =
