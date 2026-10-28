@@ -16,7 +16,9 @@
 //! structurally once every field or case of `T` implements the trait — how
 //! an anonymous struct, which has no name for a marker, becomes serializable.
 //! Write the marker to force the impl with no bound present, or alongside
-//! `#[wire(...)]` customization.
+//! `#[wire(...)]` customization. A closed struct, one with a field narrower
+//! than the struct, derives neither, and a marker on one is an error: its
+//! author writes the impl.
 //!
 //! ```wado
 //! struct Point { x: i32, y: i32 }               // no marker needed
@@ -1672,8 +1674,10 @@ impl FieldSchema for NoFields {
 // ── Derivations over the reflection API (WEP 2026-06-13) ──
 
 /// Struct serialization derived over `ReflectStruct`: walk the field members,
-/// writing each field under its resolved wire name.
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
+/// writing each field under its resolved wire name. Only an open struct
+/// (`FieldInputs = [..F]`) derives it, as only an open one derives
+/// `Deserialize`: a struct guarding a field writes its own wire form.
+impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Serialize> Serialize for T {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();
@@ -1800,8 +1804,9 @@ fn unknown_case_error(key: &CaseKey) -> DeserializeError {
 
 /// Struct deserialization derived over `ReflectStruct`. Slots start empty and
 /// are written at the index the format reports; an empty one takes the field's
-/// declared default, or names the field as missing.
-impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
+/// declared default, or names the field as missing. Only an open struct
+/// (`FieldInputs = [..F]`) can be built from its fields.
+impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]> + FieldSchema, ..F: Deserialize> Deserialize for T {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<T, DeserializeError> {
         let members = ReflectStruct::<T>::members();
         let policy = Reflect::<T>::wire_name_policy();

@@ -56,7 +56,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
@@ -75,7 +75,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -103,9 +103,23 @@ fn "array_bounds_elim_range_guard_wir.wado/run"() with Stdout {
     };
     $mv_field_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $mv_field_1 = "array_bounds_elim_range_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1);
     "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_2, message_3.repr, message_3.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_1);
+||||||| 1e7e11efa
+    $mv_field_1 = "array_bounds_elim_range_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1 = $mv_field_3; $mv_field_3 = 0; $mv_field_1);
+    $mv_field_3 = $mv_field_2;
+    $mv_field_2 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, message_3.repr, message_3.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $mv_field_1; $mv_field_1 = 0; $mv_field_3);
+=======
+    $mv_field_1 = "array_bounds_elim_range_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1 = $mv_field_3; $mv_field_3 = 0; $mv_field_1);
+    $mv_field_3 = $mv_field_2;
+    $mv_field_2 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, message_3.repr, message_3.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_3 = $mv_field_1; $mv_field_1 = 0; $mv_field_3);
+>>>>>>> origin/main
 }
 
 fn "array_bounds_elim_range_guard_wir.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

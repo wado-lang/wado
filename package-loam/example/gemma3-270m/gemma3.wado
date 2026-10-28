@@ -43,7 +43,7 @@ fn continued(model: &mut Model<Cpu>, ids: &List<i32>) -> [List<i32>, f64, f64] w
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
-    let checkpoint = match fs::read_linear("build/gemma3.safetensors") {
+    let checkpoint = match fs::read_linear("build/model.onnx_data") {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);
@@ -53,7 +53,7 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, MonotonicClock) {
     let mut model = match Model::load(Cpu {}, &checkpoint) {
         Ok(model) => model,
         Err(e) => {
-            eprintln(`build/gemma3.safetensors: ${e}`);
+            eprintln(`build/model.onnx_data: ${e}`);
             return;
         },
     };

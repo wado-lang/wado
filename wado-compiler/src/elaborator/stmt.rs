@@ -2633,17 +2633,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let walkable = [CompilerItem::IntoIterator, CompilerItem::ForOf];
             let implements_into_iter = walkable.into_iter().any(|item| {
                 self.tysys.compiler_trait(item).is_some_and(|trait_| {
-                    self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        iterable_type_id,
-                        &trait_,
-                    ) || self.tysys.type_implements_trait(
-                        &self.annotate_ctx,
-                        &self.type_lookup(),
-                        inner_type_id,
-                        &trait_,
-                    )
+                    self.tysys
+                        .type_implements_trait(&self.annotate_ctx, iterable_type_id, &trait_)
+                        || self.tysys.type_implements_trait(
+                            &self.annotate_ctx,
+                            inner_type_id,
+                            &trait_,
+                        )
                 })
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
@@ -2872,7 +2868,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |trait_| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
-                    &self.type_lookup(),
                     into_iter_receiver_type,
                     &trait_,
                 )
@@ -2916,12 +2911,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !walks_value
             && !iterator.is_some_and(|trait_| {
-                self.tysys.type_implements_trait(
-                    &self.annotate_ctx,
-                    &self.type_lookup(),
-                    iter_type,
-                    &trait_,
-                )
+                self.tysys
+                    .type_implements_trait(&self.annotate_ctx, iter_type, &trait_)
             })
             && !matches!(
                 self.tysys.type_table.borrow().get(iter_type),

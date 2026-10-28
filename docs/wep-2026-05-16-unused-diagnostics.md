@@ -87,16 +87,6 @@ optimize-time and silent.
 | `TestOnlyFunction` | Liveness  | `TestOnlyFunction` |
 | `TestOnlyGlobal`   | Liveness  | `TestOnlyGlobal`   |
 
-### What is out of scope (deferred to follow-up WEPs / PRs)
-
-- `unused_mut`, `unused_type_param`, `unused_assignment`
-- `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
-- The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
-  item- and module-level, is implemented — see Suppression)
-- Workspace-aware multi-package root computation
-- Preserving `pub`-only items in `optimize/dce.rs` for the not-yet-implemented
-  provider-metadata standalone-`.wasm` publish path (see Reachability roots)
-
 ### Reachability roots (package-external boundary)
 
 The pass runs two independent reachability closures over the same call graph:
@@ -227,6 +217,10 @@ emitted file.
   side effects.
 - `#[allow(unused_imports)]` on a `use`, or `#![allow(unused_imports)]`
   on the module, waives `UnusedImport`.
+- `#[allow(unused_variables)]` waives `UnusedVariable` and
+  `UnusedParameter` for every binder inside what it is written on: a `let`,
+  a parameter, a function, an `impl`, or the module as
+  `#![allow(unused_variables)]`.
 - `#[allow(dead_code)]` on a function or global waives its
   `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
   lint — for unavoidable unused items (e.g. a library module being built
@@ -235,24 +229,22 @@ emitted file.
   attribute waives the lint for every item in the file — the idiom for
   test-helper files whose functions exist only to back `test` blocks. The
   liveness pass still records the item's call-graph edges; only its
-  candidacy for the lint is dropped. The broader `unused` lint group (and
-  `#[deny(...)]`) is deferred to the follow-up that lands the reference
-  pass.
+  candidacy for the lint is dropped.
 
 ## Implementation
 
 ### Source files
 
-| File                                              | Description                                                                                                                                                                               |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).     |
-| `wado-compiler/src/elaborator/liveness/unused.rs` | This WEP's contribution: walks the `Liveness` output plus `ModuleSemantics.bindings` and emits the five diagnostics. Stdlib exclusion, underscore suppression, and root policy live here. |
-| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                |
-| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                              |
-| `wado-compiler/src/lib.rs`                        | Adds `CompilerOptions::unused_diagnostics`. Invokes the diagnostic emitter once the elaborator has produced `Semantics` and its `Liveness`.                                               |
-| `wado-compiler/src/ast_index.rs`                  | Adds `is_param(id)` predicate (1-bit table) so the reference pass can distinguish `UnusedVariable` from `UnusedParameter`.                                                                |
-| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                             |
-| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.             |
+| File                                              | Description                                                                                                                                                                                                                                                                          |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wado-compiler/src/elaborator/liveness.rs`        | Owned by the elaborator rearchitecture. Computes source-level reachability and returns a `Liveness` value (live `SymbolKey` set, plus per-module unused-item / unused-binding lists).                                                                                                |
+| `wado-compiler/src/lib.rs` (`unused_diagnostics`) | Adds `CompilerOptions::unused_diagnostics`. Once the elaborator has produced `Semantics` and its `Liveness`, walks the `Liveness` output and emits `DeadFunction` / `DeadGlobal` / `TestOnly*`, then the reference-pass emitters below. `Lints::reports_in` is the stdlib exclusion. |
+| `wado-compiler/src/unused_import.rs`              | The import emitter: `UnusedImport`.                                                                                                                                                                                                                                                  |
+| `wado-compiler/src/compiler_host.rs`              | Adds `Code::UnusedImport`, `UnusedVariable`, `UnusedParameter`, `DeadFunction`, `DeadGlobal` and their `Display` mappings.                                                                                                                                                           |
+| `wado-compiler/src/logger.rs`                     | Adds `Logger::warn_at(code, message, span, file)` for span-bearing warnings.                                                                                                                                                                                                         |
+| `wado-compiler/src/unused_variable.rs`            | The locals and params emitter: walks the AST for binders and assignment targets, and emits `UnusedVariable` / `UnusedParameter`.                                                                                                                                                     |
+| `wado-cli`                                        | Adds `--no-lint`, which turns every lint off, these included.                                                                                                                                                                                                                        |
+| `wado-lsp`                                        | Invokes the diagnostic emitter from `Engine::diagnostics`. Renders `UnusedImport` / `UnusedVariable` / `UnusedParameter` as `Hint`-severity unused-token decorations as well.                                                                                                        |
 
 ### Algorithms
 
@@ -293,23 +285,45 @@ name.
 
 #### Unused variables and parameters
 
-Build a single inverted index from `Semantics::iter_references()`:
+`unused_variable.rs` walks the AST of every module a lint reports in. The
+walk collects each binder with its kind: a parameter of a function with a
+body or of a closure is a parameter, and a pattern's name is a variable. It
+skips a name starting with `_` and one an `#[allow(unused_variables)]` waives.
 
-```
-use_count: IndexMap<SymbolKey, usize>
-for (_use_key, def_key) in annotated.iter_references():
-    *use_count.entry(def_key).or_insert(0) += 1
-```
+It skips the parameters whose names the function does not choose. One kind is a
+method inside a trait, an interface, or an `impl` with a trait
+(`ImplBlock::trait_type`), effect handlers included: the declaration names them
+for every implementation. The other is an `export` function
+(`Function::is_export`): the component boundary names them, often through a
+world such as `wasi:http/service` or `core:kiln/generator`. Under rustc's rule
+each such implementation renamed its parameters `_view`, `_gen` and the like,
+and the renames hid none of the real defects the lint found elsewhere.
 
-Walk `Semantics::locals`. For each `(key, sym)` whose kind is
-`Variable`:
+It also collects the names an assignment writes (`Expr::assigned_places`): a
+place on the left of `=`, of a destructuring assignment, or of a compound
+assignment. A place writes a name directly, or through the fields and indexes
+of a value the name holds (`Semantics::write_target`, which the `contract`
+clause check reads too). A projection stops at a reference, since the write
+lands in what the reference points to. A write counts as a read where something
+besides the name reads it. An index step calls `index_assign`, which reads the
+value it indexes, for a bounds check or whatever an `impl IndexAssign` does. An
+affine name (`Semantics::is_affine`) is read by its drop, which may run a `Drop`
+impl or a resource's destructor on what was written. A field step only stores
+into the value.
 
-- Skip if `sym.name` starts with `_`.
-- Skip if `use_count.get(&key) > 0`.
-- Determine `is_param` via `AstIndex::is_param(key.ast_id)` on the
-  module's index. Emit `UnusedParameter` or `UnusedVariable` at
-  `sym.span` (which is the `name_span` recorded by
-  `record_local_symbol`).
+The elaborator records a use→def edge for every name that reaches a local
+(`Semantics::iter_references`). Only edges reaching a candidate binder are
+kept. An edge from a write site marks its binder written, and any other edge
+marks it read, so `n = n + 1` reads `n`. A binder the elaborator did not
+bind as a local (`SymbolKind::Variable`) is a case or a constant the pattern
+tests against, and is dropped. Each remaining binder that nothing reads is
+reported at its name: "never used" when nothing writes it either, "assigned
+to, but never read" otherwise.
+
+An or-pattern binds a name once per alternative, but the elaborator resolves
+every use to the first alternative's binder. The walk merges the binders of
+one name across the alternatives, and the merged binder is read when any of
+them is.
 
 #### Dead functions and globals
 
@@ -385,14 +399,14 @@ land with stage 6 of the rearchitecture (see
   reference pass.)
 - [x] Add `Logger::warn_at(code, message, span)`.
 - [x] Add `CompilerOptions::unused_diagnostics` (default `true`).
-- [ ] Add `AstIndex::is_param(id)` and tests (reference pass).
 
 #### Phase 2 — reference pass
 
 - [x] Record each module's used import entries in the resolver.
 - [x] Implement the import emitter (`unused_import.rs`), wired through
   `unused_diagnostics`, with `unused_import.wado`.
-- [ ] Implement the locals and params emitter.
+- [x] Implement the locals and params emitter (`unused_variable.rs`), with
+  `unused_variable.wado`.
 
 #### Phase 3 — liveness pass and DeadFunction / DeadGlobal
 
@@ -583,7 +597,7 @@ the ref-parameter detection (`ResolvedType::Ref` / `MutRef` over
 - [x] `wado-cli`: `--no-lint`, `--lint` and `--lint-generated` on every
   compiling subcommand, in place of an unused-only `--no-unused`.
 - [x] Reference pass: `UnusedImport`.
-- [ ] Reference pass: `UnusedVariable` / `UnusedParameter`.
+- [x] Reference pass: `UnusedVariable` / `UnusedParameter`.
 - [ ] Method-level dead detection (the dispatch edges; stop seeding every method live).
 
 ### Test plan
@@ -664,3 +678,12 @@ through the diagnostics path.
 - Package mode elaborates every member on one thread, and runs every member's
   Kiln pipeline one at a time. On Gale it takes under twice as long as
   checking the declared entries alone.
+- No `unused_mut`, `unused_type_param`, `dead_type`, `dead_trait_impl`,
+  `unreachable_pattern` or `dead_closure_functor` lint exists.
+- No `unused_assignments` lint reports a value overwritten before anything
+  reads it. A read that only feeds the variable's own next value still reads
+  it, so `n = n + 1` keeps `n` from `UnusedVariable`, where `n += 1` does not.
+- There is no `unused` lint group, and no `#[deny(...)]`.
+- Roots are computed per package, never across a workspace.
+- `optimize/dce.rs` drops `pub`-only items, which a standalone `.wasm`
+  published with provider metadata would need (see Reachability roots).

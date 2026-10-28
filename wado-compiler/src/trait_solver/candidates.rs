@@ -7,7 +7,7 @@ use super::holds::{
     withheld_at, written_only_at,
 };
 use super::program::{
-    Asker, Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
+    Env, ImplId, ImplOrigin, MethodId, ModuleId, Program, SolverType, TraitDeclId,
 };
 use super::rank::{Candidate, Generality};
 
@@ -39,8 +39,7 @@ pub fn candidates(
         .get(&scope)
         .map_or(&[], |module| &module.traits_in_scope);
     let decl = |trait_: TraitDeclId| program.traits.get(&trait_);
-    let asker = Asker::Module(scope);
-    let answered = collect(program, env, receiver, asker, in_scope, |trait_, own| {
+    let answered = collect(program, env, receiver, in_scope, |trait_, own| {
         decl(trait_).is_some_and(|d| d.methods.contains(&method)) || own.contains(&method)
     });
     if !answered.in_scope.is_empty() {
@@ -48,7 +47,7 @@ pub fn candidates(
     }
     // A method the call site cannot name answers nothing, so an imported
     // reservation speaks before the "not imported" hint does.
-    let reserved = collect(program, env, receiver, asker, in_scope, |trait_, _| {
+    let reserved = collect(program, env, receiver, in_scope, |trait_, _| {
         decl(trait_).is_some_and(|d| d.reserved.contains(&method))
     });
     if !reserved.in_scope.is_empty() || answered.out_of_scope.is_empty() {
@@ -65,34 +64,30 @@ pub fn bound_candidates(
     env: &Env,
     ty: &SolverType,
     trait_: TraitDeclId,
-    scope: ModuleId,
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(program, env, ty, Asker::Module(scope), &[trait_], |t, _| {
-        t == trait_
-    })
-    .in_scope
-    .into_iter()
-    .filter(|c| {
-        let level = &levels[c.depth as usize];
-        answers_args(
-            program,
-            &program.impls()[&c.impl_],
-            level,
-            Some(ty),
-            &c.trait_args,
-            args,
-        )
-    })
-    .collect()
+    collect(program, env, ty, &[trait_], |t, _| t == trait_)
+        .in_scope
+        .into_iter()
+        .filter(|c| {
+            let level = &levels[c.depth as usize];
+            answers_args(
+                program,
+                &program.impls()[&c.impl_],
+                level,
+                Some(ty),
+                &c.trait_args,
+                args,
+            )
+        })
+        .collect()
 }
 
 /// The impls of `trait_` that could answer on `ty` for an instance of a generic
 /// body, a call there naming `args`, for [`rank`](super::rank) to order. A
-/// parameter in `args` is a binder the call's own frame leaves open. The
-/// instance asks, so every member is visible to it, and an instance needs no
-/// import.
+/// parameter in `args` is a binder the call's own frame leaves open. An
+/// instance needs no import.
 #[must_use]
 pub fn instance_candidates(
     program: &Program,
@@ -101,27 +96,20 @@ pub fn instance_candidates(
     args: &[SolverType],
 ) -> Vec<Candidate> {
     let levels = chain(program, ty);
-    collect(
-        program,
-        &Env::default(),
-        ty,
-        Asker::Instance,
-        &[trait_],
-        |t, _| t == trait_,
-    )
-    .in_scope
-    .into_iter()
-    .filter(|c| {
-        answers_named_args(
-            program,
-            &program.impls()[&c.impl_],
-            &levels[c.depth as usize],
-            ty,
-            &c.trait_args,
-            args,
-        )
-    })
-    .collect()
+    collect(program, &Env::default(), ty, &[trait_], |t, _| t == trait_)
+        .in_scope
+        .into_iter()
+        .filter(|c| {
+            answers_named_args(
+                program,
+                &program.impls()[&c.impl_],
+                &levels[c.depth as usize],
+                ty,
+                &c.trait_args,
+                args,
+            )
+        })
+        .collect()
 }
 
 /// The written `Ord` impl whose `cmp` the `==` that `c` answers on `receiver`
@@ -143,7 +131,6 @@ fn collect(
     program: &Program,
     env: &Env,
     receiver: &SolverType,
-    asker: Asker,
     in_scope: &[TraitDeclId],
     declares: impl Fn(TraitDeclId, &[MethodId]) -> bool,
 ) -> Candidates {
@@ -176,7 +163,7 @@ fn collect(
             if withheld.contains(&trait_) || !declares(trait_, own) {
                 continue;
             }
-            let Some(trait_args) = impl_applies(program, env, asker, impl_, def, ty) else {
+            let Some(trait_args) = impl_applies(program, env, impl_, def, ty) else {
                 continue;
             };
             let candidate = Candidate {

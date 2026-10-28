@@ -189,14 +189,14 @@ type "functype//core:rt/gc_array_to_memory$dae[src_start]" = fn(ref Array<u8>, i
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(32)
 
-type "functype//wasi/resource-drop:wasi/http/types.wado#Request" = fn(i32);  // TypeId(33)
+type "functype//wasi/resource-drop:wasi:http/types.wado#Request" = fn(i32);  // TypeId(33)
 
 type "functype//http_error_code_variants.wado/$cm_task_entry__handle" = fn(i32);  // TypeId(34)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
-import fn wasi/resource-drop:wasi/http/types.wado#Request from "wasi/resource-drop:wasi/http/types.wado#Request";
+import fn wasi/resource-drop:wasi:http/types.wado#Request from "wasi/resource-drop:wasi:http/types.wado#Request";
 
 global global:core:builtin::$unit_case$wasi:http/types.wado//ErrorCode$2: ref "wasi:http/types.wado//ErrorCode" = struct.new "wasi:http/types.wado//ErrorCode" { 2 };
 
@@ -536,7 +536,17 @@ fn "http_error_code_variants.wado/$cm_task_entry__handle"(request) {
     } else {
     }
     if (request == 0) == 0 {
+<<<<<<< HEAD
         "wasi/resource-drop:wasi/http/types.wado#Request"(request);
+||||||| 1e7e11efa
+        $tv_4 = request;
+        request = 0;
+        "wasi/resource-drop:wasi/http/types.wado#Request"($tv_4);
+=======
+        $tv_4 = request;
+        request = 0;
+        "wasi/resource-drop:wasi:http/types.wado#Request"($tv_4);
+>>>>>>> origin/main
     }
 }
 

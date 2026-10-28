@@ -14,11 +14,11 @@ pub use candidates::{
     Candidates, bound_candidates, candidates, cmp_giving_eq, instance_candidates,
 };
 pub use coherence::{CoherenceError, coherence_errors, mark_duplicates};
-pub use derive::{derive, derive_alongside, pair_comparisons};
+pub use derive::{derive, derive_alongside, pair_comparisons, sourced};
 pub use holds::{Holds, comparison_row, holds, holds_with_args, owed, written_comparison};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
     MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,
-    TraitDeclId, TraitDef, TypeDeclId, TypeDef, args_per_param,
+    Source, TraitDeclId, TraitDef, TypeDeclId, TypeDef, args_per_param,
 };
 pub use rank::{Candidate, Generality, Selection, rank};

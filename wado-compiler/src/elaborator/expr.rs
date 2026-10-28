@@ -4713,6 +4713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // closest thing to a declaration site and is unique per site,
             // which is what matters here.
             defined_at,
+            visibility: Visibility::Public,
             fields: fields
                 .iter()
                 .map(|(fname, fty)| (fname.clone(), *fty, Visibility::Public))
@@ -5405,12 +5406,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 tt.compiler_trait_fq(CompilerItem::From)
                     .with_args(vec![tt.fq_type_name(inner_err_type)])
             };
-            if self.tysys.type_implements_trait(
-                &self.annotate_ctx,
-                &self.type_lookup(),
-                outer_err_type,
-                &from,
-            ) {
+            if self
+                .tysys
+                .type_implements_trait(&self.annotate_ctx, outer_err_type, &from)
+            {
                 self.resolve_from_call(outer_err_type, inner_err_type, &from, qm_id);
             } else {
                 let (outer, inner) = {
@@ -5523,13 +5522,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         target_type: TypeId,
         from: &FqTraitName,
     ) -> (Option<DefId>, ModuleSource) {
-        let keys = self.tysys.solver().bound_impls(
-            &self.tysys,
-            &self.annotate_ctx,
-            &self.type_lookup(),
-            target_type,
-            from,
-        );
+        let keys =
+            self.tysys
+                .solver()
+                .bound_impls(&self.tysys, &self.annotate_ctx, target_type, from);
         // The current module wins a tie.
         let defs = self.tysys.resolutions.defs();
         keys.iter()

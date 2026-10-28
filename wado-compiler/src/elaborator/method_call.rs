@@ -2761,7 +2761,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     bound.trait_.as_ref().is_some_and(|bound_trait| {
                         self.tysys.type_implements_trait(
                             &self.annotate_ctx,
-                            &self.type_lookup(),
                             receiver_type_id,
                             bound_trait,
                         )

@@ -53,7 +53,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
@@ -72,7 +72,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -104,9 +104,23 @@ fn "const_object_globalization_ref_passthrough.wado/run"() with Stdout {
     };
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     k = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     sum = "const_object_globalization_ref_passthrough.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
     "core:rt/write_string_to_stream$dae[add_newline]"(k, buf.repr, buf.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum);
+||||||| 1e7e11efa
+    $moved_4 = "const_object_globalization_ref_passthrough.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = sum; sum = 0; $moved_4);
+    sum = k;
+    k = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, buf.repr, buf.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = $moved_4; $moved_4 = 0; sum);
+=======
+    $moved_4 = "const_object_globalization_ref_passthrough.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = sum; sum = 0; $moved_4);
+    sum = k;
+    k = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, buf.repr, buf.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum = $moved_4; $moved_4 = 0; sum);
+>>>>>>> origin/main
 }
 
 fn "const_object_globalization_ref_passthrough.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

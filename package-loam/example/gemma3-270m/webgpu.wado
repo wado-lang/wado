@@ -42,7 +42,7 @@ struct Oracle {
 }
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let checkpoint = match fs::read_linear("build/gemma3.safetensors") {
+    let checkpoint = match fs::read_linear("build/model.onnx_data") {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);

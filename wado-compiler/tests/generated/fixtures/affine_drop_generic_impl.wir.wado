@@ -165,7 +165,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(52)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(53)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(53)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(54)
 
@@ -184,7 +184,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/task-return from "wasi/task-return";
@@ -227,10 +227,26 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
+<<<<<<< HEAD
     tx_25 = $local_2_37.1;
     handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_25, message_23.repr, message_23.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle_26);
+||||||| 1e7e11efa
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_27 = rx_24; rx_24 = ref.null none; $moved_4_27);
+    $moved_4_27 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_27, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+=======
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_27 = rx_24; rx_24 = ref.null none; $moved_4_27);
+    $moved_4_27 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_27, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+>>>>>>> origin/main
     global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS + 7;
     message_23 = "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_generic_impl.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec1$sroa[t.h0]"(global:affine_drop_generic_impl.wado::DROPS);
     rx_24 = local.tee $local_2_37($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_4: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
@@ -247,9 +263,23 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         unreachable;
     }).0;
     tx_25 = $local_2_37.1;
+<<<<<<< HEAD
     handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_25, message_23.repr, message_23.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle_26);
+||||||| 1e7e11efa
+    $moved_6_29 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24 = $moved_4_27; $moved_4_27 = ref.null none; rx_24);
+    rx_24 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"(rx_24, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle_26 = $moved_6_29; $moved_6_29 = 0; handle_26);
+=======
+    $moved_6_29 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24 = $moved_4_27; $moved_4_27 = ref.null none; rx_24);
+    rx_24 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"(rx_24, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(handle_26 = $moved_6_29; $moved_6_29 = 0; handle_26);
+>>>>>>> origin/main
     self_18 = struct.new "affine_drop_generic_impl.wado//Wrap<affine_drop_generic_impl.wado/Wrap<core:prelude/string.wado/String>>" { value: struct.new "affine_drop_generic_impl.wado//Wrap<core:prelude/string.wado/String>" { value: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116), used: 1 }, id: 1000 }, id: 0 };
     global:affine_drop_generic_impl.wado::DROPS = global:affine_drop_generic_impl.wado::DROPS;
     if ref.is_null(local.tee $load_16(self_18.value)) == 0 {
@@ -270,10 +300,26 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
+<<<<<<< HEAD
     tx_25 = $local_2_37.1;
     handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_25, message_23.repr, message_23.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle_26);
+||||||| 1e7e11efa
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_27 = rx_24; rx_24 = ref.null none; $moved_4_27);
+    $moved_4_27 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_27, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+=======
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_27 = rx_24; rx_24 = ref.null none; $moved_4_27);
+    $moved_4_27 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"($moved_4_27, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+>>>>>>> origin/main
     global:affine_drop_generic_impl.wado::DROPS = 12;
     rx_24 = local.tee $local_2_37($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_7: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_35(global:affine_drop_generic_impl.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -327,10 +373,26 @@ fn "affine_drop_generic_impl.wado/run"() with Stdout {
         }
         unreachable;
     }).0;
+<<<<<<< HEAD
     tx_25 = $local_2_37.1;
     handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24);
     "core:rt/write_string_to_stream$dae[add_newline]"(tx_25, message_23.repr, message_23.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(handle_26);
+||||||| 1e7e11efa
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24 = $moved_4_27; $moved_4_27 = ref.null none; rx_24);
+    rx_24 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"(rx_24, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+=======
+    tx_25 = $moved_3_38.1;
+    handle_26 = "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(rx_24 = $moved_4_27; $moved_4_27 = ref.null none; rx_24);
+    rx_24 = tx_25;
+    tx_25 = ref.null none;
+    "core:rt/write_string_to_stream$dae[add_newline]"(rx_24, message_23.repr, message_23.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($moved_6_29 = handle_26; handle_26 = 0; $moved_6_29);
+>>>>>>> origin/main
 }
 
 fn "affine_drop_generic_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

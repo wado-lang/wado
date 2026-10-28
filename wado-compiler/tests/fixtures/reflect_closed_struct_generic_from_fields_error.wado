@@ -1,0 +1,16 @@
+// A closed struct's `FieldInputs` is `!`, which `[..F]` does not match, so a
+// generic body pinning it cannot reach the closed `from_fields` either.
+pub struct Closed {
+    a: i32,
+}
+
+fn make<T: ReflectStruct<FieldInputs = [..F]>, ..F: Default>() -> T {
+    return ReflectStruct::<T>::from_fields([..F::default()]);
+}
+
+export fn run() {
+    let _ = make::<Closed>();
+}
+
+__DATA__
+{"compile_error": ":12:13: analysis error: type 'Closed' does not satisfy the associated type 'ReflectStruct::FieldInputs = []': it is '!'"}

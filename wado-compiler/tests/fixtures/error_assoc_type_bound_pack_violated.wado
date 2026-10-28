@@ -1,0 +1,40 @@
+// An associated-type constraint naming a pack is checked against the type
+// argument like any other. `[..F]` takes a tuple's elements and nothing else,
+// so a `Parts` that is no tuple leaves `F` empty, and the pin refutes it.
+trait Shape with () {
+    type Parts;
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Shape for Point {
+    type Parts = [i32, i32];
+}
+
+struct Unit {
+    x: i32,
+}
+
+impl Shape for Unit {
+    type Parts = i32;
+}
+
+fn count<T: Shape<Parts = [..F]>, ..F: Default>() -> i32 {
+    return [..F::default()].len();
+}
+
+export fn run() {
+    assert count::<Point, [i32]>() == 1;
+    assert count::<Unit>() == 1;
+}
+
+__DATA__
+{
+    "compile_error": ":30:12: analysis error: type 'Point' does not satisfy the associated type 'Shape::Parts = [i32]': it is '[i32, i32]'",
+    "compile_errors_contains": [
+        "type 'Unit' does not satisfy the associated type 'Shape::Parts = []': it is 'i32'"
+    ]
+}

@@ -4,19 +4,21 @@
 
 use { Backend, CheckpointBytes, LoadError, Tensor } from "lib:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
-pub use { Tokenizer } from "./build/tokenizer.json"
+pub use {
+    Tokenizer,
+} from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/tokenizer.json"
     with {
         type: "hf-tokenizer",
+        integrity: "sha256:55da1312bdf1d7d8fe8d9d1b3eed04086261149e6034e0ac3f8c633b67f5aac8",
         generator: { module: "lib:loam" },
     };
-use gemma from "./gemma3.onnxtext"
+/// The graph alone: its weights are external data in `model.onnx_data`.
+use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/onnx/model.onnx"
     with {
-        type: "onnxtext",
+        type: "onnx",
+        integrity: "sha256:56adf096be205ed53d9a1c59180ab2bdd47649a385705c7ab6a64f12d93e06b4",
         generator: {
             module: "lib:loam",
-            inputs: [
-                { path: "./build/gemma3.safetensors", type: "safetensors" },
-            ],
             options: {
                 dims: { batch_size: 1 },
                 // Only the last position ranks the next token.
@@ -44,11 +46,11 @@ pub struct Model<affine Bk: Backend> {
 type Stored = [gemma::BatchSize, gemma::PastKeyValues0Key1, gemma::PastSequenceLength, gemma::PastKeyValues0Key3];
 
 impl<affine Bk: Backend> Model<Bk> {
-    /// Loads the weights onto `backend` from a safetensors checkpoint laid out
-    /// as `build/gemma3.safetensors`, whose header the build checked.
-    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, checkpoint: &Ck) -> Result<Model<Bk>, LoadError> with _ {
+    /// Loads the weights onto `backend` from `data`, the bytes of the
+    /// `model.onnx_data` beside the `model.onnx` the build read.
+    pub fn load<affine Ck: CheckpointBytes>(backend: Bk, data: &Ck) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
-        let weights = gemma::Prepared::load(&mut on, checkpoint)?;
+        let weights = gemma::Prepared::load(&mut on, data)?;
         let mut model = Model { backend: on, weights, seen: [], caches: [] };
         model.forget();
         return Ok(model);

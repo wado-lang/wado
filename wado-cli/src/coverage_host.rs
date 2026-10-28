@@ -15,13 +15,11 @@ use wado_compiler::pgo;
 #[cfg(debug_assertions)]
 use wado_compiler::stdlib::DEV_STDLIB_ROOT;
 use wado_compiler::stdlib::core_module_file;
-use wado_manifest::Manifest;
 use wasmtime::component::{HasSelf, Linker};
 
 use crate::args::CliExit;
 use crate::compile::build_dir;
-use crate::kiln_provider::relative_to;
-use crate::manifest::{manifest_in, package_root};
+use crate::manifest::package_root;
 use crate::test::PackageTotals;
 use crate::test_report::TestReporter;
 use wado_host::sync::lock;
@@ -207,30 +205,30 @@ impl CoverageRun {
     /// is gone, a change the run reports at its end.
     pub fn register(&self, entry: &str, plans: &DecodedPlans) -> Option<Registration> {
         let base = Path::new(entry).parent().unwrap_or(Path::new(""));
-        let paths = plans.iter().map(|(plan, _)| plan.path.as_str());
-        // Naming reads the filesystem, so it is done before taking the lock
-        // every load worker shares.
+        // A report path reads the filesystem, so it is found before taking
+        // the lock every load worker shares.
         let (report, names): (PathBuf, BTreeMap<&str, String>) = match &self.measurement {
             Measurement::Coverage(_) => (
                 self.coverage_dir(),
-                paths
-                    .map(|path| (path, self.report_path(base, path)))
+                plans
+                    .iter()
+                    .map(|(plan, _)| (plan.path.as_str(), self.report_path(base, &plan.path)))
                     .collect(),
             ),
-            Measurement::Pgo { .. } => {
-                let profile = Profile::of(Path::new(entry))?;
-                let names = paths
-                    .map(|path| (path, profile.module_name(base, path)))
-                    .collect();
-                (profile.file, names)
-            }
+            Measurement::Pgo { .. } => (
+                profile_file(Path::new(entry))?,
+                plans
+                    .iter()
+                    .map(|(plan, _)| (plan.path.as_str(), plan.name.clone()))
+                    .collect(),
+            ),
         };
         let mut guard = lock(&self.reports);
         let registered = match guard.as_mut() {
             Ok(reports) => reports
                 .entry(report.clone())
                 .or_default()
-                .register(plans, |path| names[path].clone())
+                .register(plans, |plan| names[plan.path.as_str()].clone())
                 .unwrap_or_else(|mismatch| {
                     *guard = Err(mismatch);
                     Vec::new()
@@ -368,67 +366,18 @@ fn write_profiles(
 /// The profile `--pgo` records `entry`'s workloads into, or `None` once
 /// `entry` is gone.
 pub fn profile_file(entry: &Path) -> Option<PathBuf> {
-    Profile::of(entry).map(|profile| profile.file)
-}
-
-/// The profile `--pgo` records an entry's workloads into, and the directory it
-/// names modules from: the entry's package's root, or for a program in no
-/// package, the program's directory. Several such programs may share it, so
-/// each keeps a profile of its own.
-struct Profile {
-    file: PathBuf,
-    root: PathBuf,
-}
-
-impl Profile {
-    fn of(entry: &Path) -> Option<Self> {
-        let entry = entry.canonicalize().ok()?;
-        let dir = entry.parent().expect("an entry is a file");
-        if let Some(root) = package_root(dir) {
-            return Some(Self {
-                file: root.join("pgo").join("default.pgo"),
-                root,
-            });
-        }
-        let stem = entry
-            .file_stem()
-            .expect("an entry is a file")
-            .to_string_lossy();
-        Some(Self {
-            file: dir.join("pgo").join(format!("{stem}.pgo")),
-            root: dir.to_path_buf(),
-        })
+    let entry = entry.canonicalize().ok()?;
+    let dir = entry.parent().expect("an entry is a file");
+    if let Some(root) = package_root(dir) {
+        return Some(root.join("pgo").join("default.pgo"));
     }
-
-    /// How the profile names the module a plan, made for an entry in `base`,
-    /// names `path`. The name is the same on any machine: a `core:` module is
-    /// its import path, another package's module is the package's name and
-    /// the file relative to its root, any other file is relative to this
-    /// profile's root, and a module that is no file, such as a remote one, is
-    /// its plan's path.
-    fn module_name(&self, base: &Path, path: &str) -> String {
-        if core_module_file(path).is_some() {
-            return path.to_string();
-        }
-        let Ok(file) = base.join(path).canonicalize() else {
-            return path.to_string();
-        };
-        let dir = file.parent().expect("a module is a file");
-        if let Some(root) = package_root(dir).filter(|root| *root != self.root)
-            && let Ok(Some(Manifest {
-                package: Some(package),
-                ..
-            })) = manifest_in(&root)
-        {
-            let rel = relative_to(&root, &file);
-            let version = &package.version;
-            return match package.namespace {
-                Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
-                None => format!("{}@{version}/{rel}", package.name),
-            };
-        }
-        relative_to(&self.root, &file)
-    }
+    // Several programs in no package may share a directory, so each keeps a
+    // profile of its own.
+    let stem = entry
+        .file_stem()
+        .expect("an entry is a file")
+        .to_string_lossy();
+    Some(dir.join("pgo").join(format!("{stem}.pgo")))
 }
 
 /// `--coverage`'s summary, then the report files `options` asks for into

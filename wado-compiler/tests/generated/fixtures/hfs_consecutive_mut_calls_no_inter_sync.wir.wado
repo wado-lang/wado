@@ -58,7 +58,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
@@ -77,7 +77,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -129,11 +129,29 @@ fn "hfs_consecutive_mut_calls_no_inter_sync.wado/run"() with Stdout {
         i = b.v;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_consecutive_mut_calls_no_inter_sync.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(sum, i);
     };
+<<<<<<< HEAD
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     sum = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
     "core:rt/write_string_to_stream$dae[add_newline]"(i, message_6.repr, message_6.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum);
+||||||| 1e7e11efa
+    $hfs_v_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    i = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $hfs_v_21; $hfs_v_21 = 0; i);
+    $hfs_v_21 = sum;
+    sum = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_21, message_6.repr, message_6.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hfs_v_21 = i; i = 0; $hfs_v_21);
+=======
+    $hfs_v_21 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    sum = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    i = "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i = $hfs_v_21; $hfs_v_21 = 0; i);
+    $hfs_v_21 = sum;
+    sum = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($hfs_v_21, message_6.repr, message_6.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($hfs_v_21 = i; i = 0; $hfs_v_21);
+>>>>>>> origin/main
 }
 
 fn "hfs_consecutive_mut_calls_no_inter_sync.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

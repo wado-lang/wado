@@ -41,7 +41,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -57,7 +57,7 @@ import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdo
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:core:prelude/string.wado::$const_obj_13: ref Array<u8> = array.new_fixed<u8>(48, 120);
@@ -91,8 +91,16 @@ fn "tagged_template_format_loop_site.wado/$cm_export__run"() {
         builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, $sroa_message_repr_48, 0, 2);
         builtin::array_set_u8(new_repr, 2, 10);
         "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(sum, new_repr);
+<<<<<<< HEAD
         "wasi/stream-drop-writable"(sum);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(n);
+||||||| 1e7e11efa
+        "wasi/stream-drop-writable"(current = sum; sum = 0; current);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(current = $sroa_$iter_0_start_17; $sroa_$iter_0_start_17 = 0; current);
+=======
+        "wasi/stream-drop-writable"(current = sum; sum = 0; current);
+        "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(current = $sroa_$iter_0_start_17; $sroa_$iter_0_start_17 = 0; current);
+>>>>>>> origin/main
     }
     "wasi/task-return"(0);
 }

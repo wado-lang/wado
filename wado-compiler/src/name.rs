@@ -238,17 +238,24 @@ pub fn diagnostic_function_name(
         declared.method_name = as_declared(&method.method_name);
         return declared.to_display_name();
     }
-    let local = name
-        .strip_prefix(&format!("{}/", module.to_path_string()))
-        .unwrap_or(name);
+    let local = name.strip_prefix(&format!("{module}/")).unwrap_or(name);
     as_declared(local)
+}
+
+/// The name of the module whose file is `path` inside the package whose
+/// coordinate is `coordinate` (`acme:app@1.0.0+build.5`).
+#[must_use]
+pub fn packaged_module_name(coordinate: &str, path: &str) -> String {
+    format!("{coordinate}/{path}")
 }
 
 /// `name` with the module paths in its type arguments dropped and its clone
 /// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
 /// own first character rather than a suffix marker; so may a type argument.
 fn as_declared(name: &str) -> String {
-    let is_module_path = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
+    // What a path and a [`packaged_module_name`]'s semver coordinate spell.
+    let is_module_path =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-' | '@' | '+');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
     for c in name.chars() {
@@ -1071,8 +1078,8 @@ pub const INLINE_REF_EAGER_MAX_BYTES: usize = 64;
 /// Format: `{module_source}/{name}`
 ///
 /// Examples:
-/// - `./geometry.wado/helper`
-/// - `core/rt/log_stdout`
+/// - `geometry.wado/helper`
+/// - `core:rt/log_stdout`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FreeFunctionName {
     /// The module where the function is defined
@@ -1089,33 +1096,6 @@ impl FreeFunctionName {
         }
     }
 
-    /// Create a `FreeFunctionName` from a module path and name.
-    /// This is a convenience method for code that still uses `Vec<String>` paths.
-    pub fn from_path_and_name(
-        interner: &mut ModuleSourceInterner,
-        module_path: &[String],
-        name: &str,
-    ) -> Self {
-        Self {
-            module_source: interner.from_path(module_path),
-            name: name.to_string(),
-        }
-    }
-
-    /// Create a `FreeFunctionName` from string literal slices.
-    /// Convenience method for when you have &[&str] instead of &[String].
-    pub fn from_strs(
-        interner: &mut ModuleSourceInterner,
-        module_path: &[&str],
-        name: &str,
-    ) -> Self {
-        let path: Vec<String> = module_path.iter().map(|s| (*s).to_string()).collect();
-        Self {
-            module_source: interner.from_path(&path),
-            name: name.to_string(),
-        }
-    }
-
     /// Create a `FreeFunctionName` from `ModuleSource` and name.
     pub fn from_module_source(module_source: &ModuleSource, name: &str) -> Self {
         Self {
@@ -1127,9 +1107,7 @@ impl FreeFunctionName {
 
 impl fmt::Display for FreeFunctionName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Every module is qualified the same way through its portable path;
-        // the entry point contributes its base name like any other module.
-        write!(f, "{}/{}", self.module_source.to_path_string(), self.name)
+        write!(f, "{}/{}", self.module_source, self.name)
     }
 }
 
@@ -1140,8 +1118,8 @@ impl fmt::Display for FreeFunctionName {
 /// - With trait: `{struct_name}^{trait_name}::{method_name}`
 ///
 /// Examples:
-/// - `./geometry.wado/Point::sum`
-/// - `./geometry.wado/Point^Display::fmt`
+/// - `geometry.wado/Point::sum`
+/// - `geometry.wado/Point^Display::fmt`
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MethodName {
     /// The module source where the method is defined
@@ -1918,8 +1896,8 @@ impl From<MethodName> for FunctionId {
     }
 }
 
-/// A qualified struct type name, `{module_path}/{name}` — e.g.
-/// `./geometry.wado/Point`, `core/rt/SomeType`.
+/// A qualified struct type name, `{module}/{name}` — e.g.
+/// `geometry.wado/Point`, `core:rt/SomeType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StructName {
     /// The module where the struct is defined
@@ -1936,35 +1914,6 @@ impl StructName {
             name,
         }
     }
-
-    /// Create a `StructName` from a module path and name.
-    /// This is a convenience method for code that still uses `Vec<String>` paths.
-    #[must_use]
-    pub fn from_path_and_name(
-        interner: &mut ModuleSourceInterner,
-        module_path: &[String],
-        name: &str,
-    ) -> Self {
-        Self {
-            module_source: interner.from_path(module_path),
-            name: name.to_string(),
-        }
-    }
-
-    /// Create a `StructName` from string slices.
-    /// This is a convenience method for tests and initialization.
-    #[must_use]
-    pub fn from_strs(
-        interner: &mut ModuleSourceInterner,
-        module_path: &[&str],
-        name: &str,
-    ) -> Self {
-        let path: Vec<String> = module_path.iter().map(|&s| s.to_string()).collect();
-        Self {
-            module_source: interner.from_path(&path),
-            name: name.to_string(),
-        }
-    }
 }
 
 impl fmt::Display for StructName {
@@ -1973,13 +1922,9 @@ impl fmt::Display for StructName {
     }
 }
 
-/// Build a core/rt function name.
-///
-/// Format: `core/rt/{name}`
-///
-/// Example: `core/rt/log_stdout`
+/// The `core:rt` function `name`, as `core:rt/{name}`.
 pub fn build_core_rt_name(interner: &mut ModuleSourceInterner, name: &str) -> FreeFunctionName {
-    FreeFunctionName::from_strs(interner, &["core", "rt"], name)
+    FreeFunctionName::new(interner.core("rt"), name.to_string())
 }
 
 /// Validate that a string can name a module.
@@ -2231,7 +2176,7 @@ pub fn resolve_import_with_entry(
     // A relative import inherits the importer's package root.
     if relative {
         match from_module {
-            ModuleSource::Dependency { pkg, path } => {
+            ModuleSource::Dependency { pkg, path, .. } => {
                 let resolved = resolve_module_path(path, import_source);
                 let pkg = pkg.to_string();
                 return interner.dependency_module(&pkg, &resolved);
@@ -3080,6 +3025,21 @@ mod tests {
         let f1 = interner.entry_point("f1.wado");
         assert_eq!(named(&f1, "id<&f1.wado/P>"), "id<&P>");
         assert_eq!(named(&f1, "id<[f1.wado/P,i32]>"), "id<[P,i32]>");
+        // A packaged module is named by its package's coordinate.
+        assert_eq!(
+            named(&f1, "id<acme:dep@0.2.0/src/lib.wado/P,../x.wado/Q>"),
+            "id<P,Q>"
+        );
+        assert_eq!(
+            named(
+                &f1,
+                &format!(
+                    "id<{}/P>",
+                    packaged_module_name("dep@1.0.0+b.5", "lib.wado")
+                )
+            ),
+            "id<P>"
+        );
         assert_eq!(
             named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),
             "id<fn(P)->i32with($e263)>"
@@ -3172,32 +3132,10 @@ mod tests {
     }
 
     #[test]
-    fn test_free_function_name_to_string() {
+    fn a_function_is_qualified_by_its_module_name() {
         let mut interner = ModuleSourceInterner::new();
-        let func = FreeFunctionName::from_path_and_name(
-            &mut interner,
-            &["core".to_string(), "cli".to_string()],
-            "println",
-        );
-        assert_eq!(func.to_string(), "core/cli/println");
-    }
-
-    #[test]
-    fn test_free_function_name_from_strs() {
-        let mut interner = ModuleSourceInterner::new();
-        let func = FreeFunctionName::from_strs(&mut interner, &["core", "rt"], "log_stdout");
-        assert_eq!(func.to_string(), "core/rt/log_stdout");
-    }
-
-    #[test]
-    fn test_free_function_name_entry_is_qualified() {
-        // The entry point is qualified by its portable base name like any other
-        // module — no bare-name special case. The synthetic empty path renders
-        // its `<entry>` placeholder; a real entry contributes its base name,
-        // dropping the compile directory.
-        let mut interner = ModuleSourceInterner::new();
-        let synthetic = FreeFunctionName::from_strs(&mut interner, &[], "main");
-        assert_eq!(synthetic.to_string(), "<entry>/main");
+        let func = FreeFunctionName::new(interner.core("cli"), "println".to_string());
+        assert_eq!(func.to_string(), "core:cli/println");
 
         let entry = FreeFunctionName::from_module_source(
             &interner.entry_point("/abs/pkg/src/main.wado"),
@@ -3209,43 +3147,17 @@ mod tests {
     #[test]
     fn test_struct_name_to_string() {
         let mut interner = ModuleSourceInterner::new();
-        let struct_name = StructName::from_path_and_name(
-            &mut interner,
-            &["./geometry.wado".to_string()],
-            "Point",
-        );
-        assert_eq!(struct_name.to_string(), "./geometry.wado/Point");
-    }
-
-    #[test]
-    fn test_struct_name_from_strs() {
-        let mut interner = ModuleSourceInterner::new();
-        let struct_name = StructName::from_strs(&mut interner, &["core", "rt"], "SomeType");
-        assert_eq!(struct_name.to_string(), "core:rt/SomeType");
-    }
-
-    #[test]
-    fn test_struct_name_empty_path() {
-        let mut interner = ModuleSourceInterner::new();
-        let struct_name = StructName::from_path_and_name(&mut interner, &[], "Point");
-        assert_eq!(struct_name.to_string(), "<entry>/Point");
+        let struct_name = StructName::new(interner.local("./geometry.wado"), "Point".to_string());
+        assert_eq!(struct_name.to_string(), "geometry.wado/Point");
     }
 
     #[test]
     fn test_struct_name_hash_eq() {
         let mut interner = ModuleSourceInterner::new();
-        let s1 = StructName::from_path_and_name(
-            &mut interner,
-            &["./geometry.wado".to_string()],
-            "Point",
-        );
-        let s2 = StructName::from_path_and_name(
-            &mut interner,
-            &["./geometry.wado".to_string()],
-            "Point",
-        );
-        let s3 =
-            StructName::from_path_and_name(&mut interner, &["./other.wado".to_string()], "Point");
+        let mut point_in = |path: &str| StructName::new(interner.local(path), "Point".to_string());
+        let s1 = point_in("./geometry.wado");
+        let s2 = point_in("./geometry.wado");
+        let s3 = point_in("./other.wado");
 
         let mut set = IndexSet::default();
         set.insert(s1);
@@ -3257,7 +3169,7 @@ mod tests {
     fn test_build_core_rt_name() {
         let mut interner = ModuleSourceInterner::new();
         let name = build_core_rt_name(&mut interner, "log_stdout");
-        assert_eq!(name.to_string(), "core/rt/log_stdout");
+        assert_eq!(name.to_string(), "core:rt/log_stdout");
         assert_eq!(name.module_source, ModuleSource::rt());
         assert_eq!(name.name, "log_stdout");
     }

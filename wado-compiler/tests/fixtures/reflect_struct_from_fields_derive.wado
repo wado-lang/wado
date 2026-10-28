@@ -25,7 +25,7 @@ impl Zero for String {
     }
 }
 
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Zero> Zero for T {
+impl<T: ReflectStruct<FieldInputs = [..F]>, ..F: Zero> Zero for T {
     fn zero() -> T {
         return ReflectStruct::<T>::from_fields([..F::zero()]);
     }

@@ -4,23 +4,23 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-array Array<u8> (mut u8);  // TypeId(1)
+struct sub/effect_handler_xmod_shadowed_handler.wado//Ctx {  // TypeId(1)
+    mut seen: i32,
+}
 
-struct core:prelude/string.wado//String {  // TypeId(2)
+array Array<u8> (mut u8);  // TypeId(2)
+
+struct core:prelude/string.wado//String {  // TypeId(3)
     mut repr: ref Array<u8>,
     mut used: i32,
 }
 
-struct ./sub/effect_handler_xmod_shadowed_handler.wado//Ctx {  // TypeId(3)
-    mut seen: i32,
-}
-
 struct effect_handler_xmod_shadowed_type.wado//$Closure_0 {  // TypeId(4)
-    mut $capture_0: ref "./sub/effect_handler_xmod_shadowed_handler.wado//Ctx",
+    mut $capture_0: ref "sub/effect_handler_xmod_shadowed_handler.wado//Ctx",
 }
 
-struct effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log {  // TypeId(5)
-    mut outer: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log",
+struct effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log {  // TypeId(5)
+    mut outer: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log",
     mut op_emit: ref struct,
 }
 
@@ -77,7 +77,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(31)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
@@ -97,11 +97,11 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log" = ref.null none;
+global mut global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log" = ref.null none;
 global global:effect_handler_xmod_shadowed_type.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 76, 111, 103, 58, 58, 101, 109, 105, 116, 96), used: 36 };
 global global:effect_handler_xmod_shadowed_type.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(108, 111, 99, 97, 108), used: 5 };
 global global:core:prelude/string.wado::$const_obj_3: ref Array<u8> = array.new_fixed<u8>(115, 101, 101, 110, 61);
@@ -109,24 +109,24 @@ global global:core:prelude/string.wado::$const_obj_4: ref Array<u8> = array.new_
 global global:core:prelude/string.wado::$const_obj_5: ref Array<u8> = array.new_fixed<u8>(110, 61);
 
 fn "effect_handler_xmod_shadowed_type.wado/run"() with Stdout {
-    let h: ref "./sub/effect_handler_xmod_shadowed_handler.wado//Ctx";
-    let $save_./sub/effect_handler_xmod_shadowed_handler.wado/Log: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log";
-    let $local_0: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log";
-    let $local_1: ref "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log";
+    let h: ref "sub/effect_handler_xmod_shadowed_handler.wado//Ctx";
+    let $save_sub/effect_handler_xmod_shadowed_handler.wado/Log: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log";
+    let $local_0: ref null "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log";
+    let $local_1: ref "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log";
     let $local_2: i32;
     let $cm_pair_7_17: i64;
     let $sroa_$pattern_temp_0_1_14_24: i32;
-    h = struct.new "./sub/effect_handler_xmod_shadowed_handler.wado//Ctx" { seen: 0 };
-    global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log = struct.new "effect_handler_xmod_shadowed_type.wado//$Dispatch_./sub/effect_handler_xmod_shadowed_handler.wado/Log" { outer: local.tee $save_./sub/effect_handler_xmod_shadowed_handler.wado/Log(global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_xmod_shadowed_type.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_handler_xmod_shadowed_type.wado/$closure_wrapper_0" } };
-    $local_2 = $inline__effect_dispatch____sub_effect_handler_xmod_shadowed_handler_wado_Log__emit_1: block -> i32 {
-        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log)) == 0) {
-            global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log = local.tee $local_1(ref.as_non_null($local_0)).outer;
+    h = struct.new "sub/effect_handler_xmod_shadowed_handler.wado//Ctx" { seen: 0 };
+    global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log = struct.new "effect_handler_xmod_shadowed_type.wado//$Dispatch_sub/effect_handler_xmod_shadowed_handler.wado/Log" { outer: local.tee $save_sub/effect_handler_xmod_shadowed_handler.wado/Log(global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log), op_emit: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_xmod_shadowed_type.wado//$Closure_0" { $capture_0: h }, func: ref.func "closure/effect_handler_xmod_shadowed_type.wado/$closure_wrapper_0" } };
+    $local_2 = $inline__effect_dispatch__sub_effect_handler_xmod_shadowed_handler_wado_Log__emit_1: block -> i32 {
+        if @likely(ref.is_null(local.tee $local_0(global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log)) == 0) {
+            global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log = local.tee $local_1(ref.as_non_null($local_0)).outer;
             $local_2 = block -> i32 {
                 let $indirect_call_2: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_2.func, local.tee $indirect_call_2(ref.cast "canonical//CanonicalClosure_0"($local_1.op_emit)).env);
             };
-            global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log = $local_0;
-            break $inline__effect_dispatch____sub_effect_handler_xmod_shadowed_handler_wado_Log__emit_1: $local_2;
+            global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log = $local_0;
+            break $inline__effect_dispatch__sub_effect_handler_xmod_shadowed_handler_wado_Log__emit_1: $local_2;
         } else {
             let $mv_arg_1: ref "core:prelude/string.wado//String";
             "core:rt/panic"(local.tee $mv_arg_1(global:effect_handler_xmod_shadowed_type.wado::$const_obj_0).repr, $mv_arg_1.used);
@@ -140,16 +140,48 @@ fn "effect_handler_xmod_shadowed_type.wado/run"() with Stdout {
     };
     $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
+<<<<<<< HEAD
     $local_2 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_24, $mv_arg_1.repr, $mv_arg_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2);
     global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log = $save_./sub/effect_handler_xmod_shadowed_handler.wado/Log;
+||||||| 1e7e11efa
+    $moved_4_14 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_14 = $local_2; $local_2 = 0; $moved_4_14);
+    $local_2 = $sroa_$pattern_temp_0_1_14_24;
+    $sroa_$pattern_temp_0_1_14_24 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2 = $moved_4_14; $moved_4_14 = 0; $local_2);
+    global:effect_handler_xmod_shadowed_type.wado::$effect_./sub/effect_handler_xmod_shadowed_handler.wado/Log = $save_./sub/effect_handler_xmod_shadowed_handler.wado/Log;
+=======
+    $moved_4_14 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_14 = $local_2; $local_2 = 0; $moved_4_14);
+    $local_2 = $sroa_$pattern_temp_0_1_14_24;
+    $sroa_$pattern_temp_0_1_14_24 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2 = $moved_4_14; $moved_4_14 = 0; $local_2);
+    global:effect_handler_xmod_shadowed_type.wado::$effect_sub/effect_handler_xmod_shadowed_handler.wado/Log = $save_sub/effect_handler_xmod_shadowed_handler.wado/Log;
+>>>>>>> origin/main
     $mv_arg_1 = "core:prelude/string.wado/core:prelude/string.wado/String::format<effect_handler_xmod_shadowed_type.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(h.seen);
     $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7_17("wasi/stream-new"()));
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_14_24 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
     $local_2 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($local_2);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_24, $mv_arg_1.repr, $mv_arg_1.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2);
+||||||| 1e7e11efa
+    $moved_4_14 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_24 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_24 = $local_2; $local_2 = 0; $sroa_$pattern_temp_0_1_14_24);
+    $local_2 = $moved_4_14;
+    $moved_4_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $local_2);
+=======
+    $moved_4_14 = builtin::i32_wrap_i64($cm_pair_7_17 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_24 = "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_24 = $local_2; $local_2 = 0; $sroa_$pattern_temp_0_1_14_24);
+    $local_2 = $moved_4_14;
+    $moved_4_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_1.repr, $mv_arg_1.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2 = $sroa_$pattern_temp_0_1_14_24; $sroa_$pattern_temp_0_1_14_24 = 0; $local_2);
+>>>>>>> origin/main
 }
 
 fn "effect_handler_xmod_shadowed_type.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -261,9 +293,19 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+=======
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+>>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -385,7 +427,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 }
 
 fn "effect_handler_xmod_shadowed_type.wado/effect_handler_xmod_shadowed_type.wado/$Closure_0::$call"(self) {
-    let self_1: ref "./sub/effect_handler_xmod_shadowed_handler.wado//Ctx";
+    let self_1: ref "sub/effect_handler_xmod_shadowed_handler.wado//Ctx";
     local.tee self_1(self.$capture_0).seen = self_1.seen + 1;
     return self_1.seen;
 }

@@ -49,7 +49,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
@@ -68,7 +68,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -116,9 +116,23 @@ fn "inline_folded_cost_mut_arg.wado/run"() with Stdout {
     message_5 = "core:prelude/string.wado/core:prelude/string.wado/String::format<inline_folded_cost_mut_arg.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(("inline_folded_cost_mut_arg.wado/pick"(a, seed) + "inline_folded_cost_mut_arg.wado/pick"(b, seed + 1)) + "inline_folded_cost_mut_arg.wado/pick"(c, seed + 2));
     seed = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     seed = "inline_folded_cost_mut_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(seed);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_5.repr, message_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(seed);
+||||||| 1e7e11efa
+    $moved_4 = "inline_folded_cost_mut_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = seed; seed = 0; $moved_4);
+    seed = $sroa_$pattern_temp_0_1_14;
+    $sroa_$pattern_temp_0_1_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(seed, message_5.repr, message_5.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(seed = $moved_4; $moved_4 = 0; seed);
+=======
+    $moved_4 = "inline_folded_cost_mut_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = seed; seed = 0; $moved_4);
+    seed = $sroa_$pattern_temp_0_1_14;
+    $sroa_$pattern_temp_0_1_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(seed, message_5.repr, message_5.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(seed = $moved_4; $moved_4 = 0; seed);
+>>>>>>> origin/main
 }
 
 fn "inline_folded_cost_mut_arg.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

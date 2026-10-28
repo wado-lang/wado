@@ -69,23 +69,23 @@ type "functype//core:rt/unreachable" = fn();  // TypeId(21)
 
 type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(22)
 
-type "functype//wasi/future-new:val-option<own<wasi/tls/types.wado#Error>>" = fn() -> i64;  // TypeId(23)
+type "functype//wasi/future-new:val-option<own<wasi:tls/types.wado#Error>>" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/resource-drop:wasi/tls/types.wado#Error" = fn(i32);  // TypeId(24)
+type "functype//wasi/resource-drop:wasi:tls/types.wado#Error" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#Error>>" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:val-option<own<wasi:tls/types.wado#Error>>" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
-type "functype//wasi/future-write:val-option<own<wasi/tls/types.wado#Error>>" = fn(i32, i32) -> i32;  // TypeId(30)
+type "functype//wasi/future-write:val-option<own<wasi:tls/types.wado#Error>>" = fn(i32, i32) -> i32;  // TypeId(30)
 
-type "functype//wasi/future-drop-writable:val-option<own<wasi/tls/types.wado#Error>>" = fn(i32);  // TypeId(31)
+type "functype//wasi/future-drop-writable:val-option<own<wasi:tls/types.wado#Error>>" = fn(i32);  // TypeId(31)
 
 type "functype//wasi_tls_bare_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(32)
 
@@ -97,15 +97,15 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/future-new:val-option<own<wasi/tls/types.wado#Error>> from "wasi/future-new:val-option<own<wasi/tls/types.wado#Error>>";
-import fn wasi/resource-drop:wasi/tls/types.wado#Error from "wasi/resource-drop:wasi/tls/types.wado#Error";
-import fn wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#Error>> from "wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#Error>>";
+import fn wasi/future-new:val-option<own<wasi:tls/types.wado#Error>> from "wasi/future-new:val-option<own<wasi:tls/types.wado#Error>>";
+import fn wasi/resource-drop:wasi:tls/types.wado#Error from "wasi/resource-drop:wasi:tls/types.wado#Error";
+import fn wasi/future-drop-readable:val-option<own<wasi:tls/types.wado#Error>> from "wasi/future-drop-readable:val-option<own<wasi:tls/types.wado#Error>>";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-write:val-option<own<wasi/tls/types.wado#Error>> from "wasi/future-write:val-option<own<wasi/tls/types.wado#Error>>";
-import fn wasi/future-drop-writable:val-option<own<wasi/tls/types.wado#Error>> from "wasi/future-drop-writable:val-option<own<wasi/tls/types.wado#Error>>";
+import fn wasi/future-write:val-option<own<wasi:tls/types.wado#Error>> from "wasi/future-write:val-option<own<wasi:tls/types.wado#Error>>";
+import fn wasi/future-drop-writable:val-option<own<wasi:tls/types.wado#Error>> from "wasi/future-drop-writable:val-option<own<wasi:tls/types.wado#Error>>";
 
 global global:wasi_tls_bare_resource_future.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(114, 101, 115, 111, 117, 114, 99, 101, 32, 102, 117, 116, 117, 114, 101, 32, 119, 114, 105, 116, 116, 101, 110);
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0: ref "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>" = struct.new "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>" { 0 };
@@ -120,8 +120,16 @@ fn "wasi_tls_bare_resource_future.wado/run"() with Stdout, Connector, Error {
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     let new_repr: ref Array<u8>;
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/future-new:val-option<own<wasi/tls/types.wado#Error>>"()));
     if ref.is_null((if ref.is_null(local.tee $load_0(local.tee $discarded_3("wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>"(builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64), global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0)).rest)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wasi:tls/types.wado/Error>>" {
+||||||| 1e7e11efa
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/future-new:val-option<own<wasi/tls/types.wado#Error>>"()));
+    if ref.is_null((if ref.is_null(local.tee $load_0(local.tee $discarded_3("wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>"(local.tee $sroa_$pattern_temp_0_1_10(builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64)), global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0)).rest)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wasi:tls/types.wado/Error>>" {
+=======
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/future-new:val-option<own<wasi:tls/types.wado#Error>>"()));
+    if ref.is_null((if ref.is_null(local.tee $load_0(local.tee $discarded_3("wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/Option<wasi:tls/types.wado/Error>"(local.tee $sroa_$pattern_temp_0_1_10(builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64)), global:core:builtin::$unit_case$core:prelude/types.wado//Option<wasi:tls/types.wado/Error>$0)).rest)) -> ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Option<wasi:tls/types.wado/Error>>" {
+>>>>>>> origin/main
         ref.null none;
     } else {
         $load_0.value;
@@ -142,7 +150,7 @@ fn "wasi_tls_bare_resource_future.wado/run"() with Stdout, Connector, Error {
             } else {
                 $sroa_$pattern_temp_0_1_10 = local.tee $drop_v_5(ref.cast "core:prelude/types.wado//Option<wasi:tls/types.wado/Error>::Some"($drop_v_4).payload_0).value;
                 $drop_v_5.value = 0;
-                "wasi/resource-drop:wasi/tls/types.wado#Error"($sroa_$pattern_temp_0_1_10);
+                "wasi/resource-drop:wasi:tls/types.wado#Error"($sroa_$pattern_temp_0_1_10);
             }
         }
     }
@@ -152,15 +160,39 @@ fn "wasi_tls_bare_resource_future.wado/run"() with Stdout, Connector, Error {
     } else {
         $load_0.value = $match_scrut_0;
     }
+<<<<<<< HEAD
     "wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#Error>>"($sroa_$pattern_temp_0_0_9);
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
     $sroa_$pattern_temp_0_0_9 = "wasi_tls_bare_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    "wasi/future-drop-readable:val-option<own<wasi/tls/types.wado#Error>>"($sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $sroa_$pattern_temp_0_1_10);
+    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    $moved_4 = "wasi_tls_bare_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $moved_4);
+    $sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9;
+    $sroa_$pattern_temp_0_0_9 = 0;
+=======
+    "wasi/future-drop-readable:val-option<own<wasi:tls/types.wado#Error>>"($sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $sroa_$pattern_temp_0_1_10);
+    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    $moved_4 = "wasi_tls_bare_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $moved_4);
+    $sroa_$pattern_temp_0_1_10 = $sroa_$pattern_temp_0_0_9;
+    $sroa_$pattern_temp_0_0_9 = 0;
+>>>>>>> origin/main
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(24)), 0, global:wasi_tls_bare_resource_future.wado::$const_obj_0, 0, 23);
     builtin::array_set_u8(new_repr, 23, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_10, new_repr);
+<<<<<<< HEAD
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_9);
+=======
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_9);
+>>>>>>> origin/main
 }
 
 fn "wasi_tls_bare_resource_future.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -183,10 +215,10 @@ fn "wasi_tls_bare_resource_future.wado/$cm_future_write_core:prelude/types.wado/
         builtin::store_i32(ptr + 4, $local_4.value);
     } else {
     }
-    if local.tee $written("wasi/future-write:val-option<own<wasi/tls/types.wado#Error>>"(handle, ptr)) == -1 {
+    if local.tee $written("wasi/future-write:val-option<own<wasi:tls/types.wado#Error>>"(handle, ptr)) == -1 {
     } else {
         drop("mem/realloc"(ptr, 8, 4, 0));
-        "wasi/future-drop-writable:val-option<own<wasi/tls/types.wado#Error>>"(handle);
+        "wasi/future-drop-writable:val-option<own<wasi:tls/types.wado#Error>>"(handle);
     }
     $rest = global:core:builtin::$unit_case$core:prelude/types.wado//Option<core:prelude/types.wado/Option<wasi:tls/types.wado/Error>>$0;
     if ($written & 15) == 1 {

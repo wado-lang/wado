@@ -1,12 +1,15 @@
-//! Anthropic's Messages API: one request, one text reply.
+//! Anthropic's Messages API: one text reply, or one turn of a conversation
+//! that uses tools.
 
 use { Request, Response, ErrorCode, Headers, FieldName, FieldValue, Method, Scheme, Trailers } from "wasi:http";
 use { Client } from "wasi:http";
 use { to_bytes, from_bytes } from "core:json";
+use { Serialize, Deserialize } from "core:serde";
+use { Value, to_value, from_value } from "core:value";
 
-struct Message {
-    role: String,
-    content: String,
+pub struct Message {
+    pub role: String,
+    pub content: String,
 }
 
 struct MessagesRequest {
@@ -16,13 +19,95 @@ struct MessagesRequest {
     messages: List<Message>,
 }
 
-// Only a `text` block carries `text`; a `thinking` block, say, does not.
-struct ContentBlock {
-    text: Option<String> = null,
+/// One block of a reply. Only the fields of the block's `type` are present.
+pub struct ContentBlock {
+    #[wire(name = "type")]
+    pub kind: String,
+    pub text: Option<String> = null,
+    pub id: Option<String> = null,
+    pub name: Option<String> = null,
+    pub input: Value = Value::Null,
 }
 
 struct MessagesResponse {
     content: List<ContentBlock>,
+}
+
+pub struct Usage {
+    pub input_tokens: i32 = 0,
+    pub output_tokens: i32 = 0,
+    pub cache_creation_input_tokens: i32 = 0,
+    pub cache_read_input_tokens: i32 = 0,
+}
+
+impl Usage {
+    pub fn add(&mut self, other: &Usage) {
+        self.input_tokens += other.input_tokens;
+        self.output_tokens += other.output_tokens;
+        self.cache_creation_input_tokens += other.cache_creation_input_tokens;
+        self.cache_read_input_tokens += other.cache_read_input_tokens;
+    }
+}
+
+/// A tool the model may call, as the API declares one.
+pub struct Tool {
+    pub name: String,
+    pub description: String,
+    pub input_schema: Value,
+}
+
+struct Kind {
+    #[wire(name = "type")]
+    kind: String,
+}
+
+struct ConverseRequest {
+    model: String,
+    max_tokens: i32,
+    system: String,
+    tools: List<Tool>,
+    tool_choice: Kind,
+    messages: List<Value>,
+    // The whole conversation is resent each turn; caching its prefix keeps
+    // the diff at the head from being billed in full again.
+    cache_control: Kind,
+}
+
+/// One reply in a conversation. `content` is kept as the API wrote it: a
+/// thinking block must go back unchanged in the next request.
+pub struct Turn {
+    pub content: List<Value>,
+    pub stop_reason: String,
+    pub usage: Usage,
+}
+
+impl Turn {
+    pub fn blocks(&self) -> List<ContentBlock> {
+        let mut blocks: List<ContentBlock> = [];
+        for let v of &self.content {
+            blocks.push(from_value::<ContentBlock>(v).unwrap());
+        }
+        return blocks;
+    }
+
+    pub fn text(&self) -> String {
+        return text_of(&self.blocks());
+    }
+}
+
+fn text_of(blocks: &List<ContentBlock>) -> String {
+    let mut text = "";
+    for let b of blocks {
+        if let Some(t) = &b.text {
+            text.push_str(t);
+        }
+    }
+    return text;
+}
+
+/// `value` as a message in a conversation.
+pub fn message<T: Serialize>(value: &T) -> Value {
+    return to_value(value).unwrap();
 }
 
 /// The text of `model`'s reply to `user` under `system`, or the error the API
@@ -42,29 +127,48 @@ pub fn ask(
             Message { role: "user", content: user },
         ],
     };
+    let parsed = post::<MessagesResponse>(api_key, to_bytes(&request).unwrap())?;
+    return Ok(text_of(&parsed.content));
+}
+
+/// `model`'s next turn in `messages`. With `use_tools` false the model must
+/// answer in text, though the conversation may hold earlier tool calls.
+pub fn converse(
+    api_key: String,
+    model: String,
+    system: String,
+    tools: &List<Tool>,
+    use_tools: bool,
+    messages: &List<Value>,
+    max_tokens: i32,
+) -> Result<Turn, String> with Client {
+    let request = ConverseRequest {
+        model,
+        max_tokens,
+        system,
+        tools: *tools,
+        tool_choice: Kind { kind: if use_tools { "auto" } else { "none" } },
+        messages: *messages,
+        cache_control: Kind { kind: "ephemeral" },
+    };
+    return post::<Turn>(api_key, to_bytes(&request).unwrap());
+}
+
+fn post<T: Deserialize>(api_key: String, request: ByteSlice) -> Result<T, String> with Client {
     let resp = send("api.anthropic.com", "/v1/messages", [
         ["x-api-key", api_key],
         ["anthropic-version", "2023-06-01"],
         ["content-type", "application/json"],
-    ], to_bytes(&request).unwrap())?;
+    ], request)?;
     let status = resp.get_status_code() as i32;
     let body = read_body(resp)?;
     if status != 200 {
         return Err(`HTTP ${status}: ${String::from_utf8_lossy(body)}`);
     }
-    let parsed = match from_bytes::<MessagesResponse, ByteList>(body) {
-        Ok(r) => r,
-        Err(e) => {
-            return Err(`unparsed response: ${e:?}`);
-        },
+    return match from_bytes::<T, ByteList>(body) {
+        Ok(r) => Ok(r),
+        Err(e) => Err(`unparsed response: ${e:?}`),
     };
-    let mut text = "";
-    for let block of parsed.content {
-        if let Some(t) = block.text {
-            text.push_str(t);
-        }
-    }
-    return Ok(text);
 }
 
 fn send<B: AsByteSlice>(

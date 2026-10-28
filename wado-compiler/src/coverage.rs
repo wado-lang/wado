@@ -180,8 +180,12 @@ pub struct PlannedFunction {
 /// The regions a module's source implies, numbered from zero.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModulePlan {
-    /// The module's source path: relative to the entry module's directory
-    /// for a file, as the loader reads it, or the import path (`core:json`).
+    /// The module's name, the same on any machine and from any entry of one
+    /// package.
+    pub name: String,
+    /// Where the host reads the module, relative to the entry module's
+    /// directory ([`ModuleSource::file`]); for a module that is no file, its
+    /// name.
     pub path: String,
     pub functions: Vec<PlannedFunction>,
     pub regions: Vec<Region>,
@@ -240,13 +244,21 @@ impl CoverageMap {
             if seeded.contains(source) {
                 continue;
             }
-            let (plan, sites, for_of_bodies) = plan_module(source, module, rt_unreachable_calls);
+            let PlannedModule {
+                plan,
+                sites,
+                for_of_bodies,
+                ..
+            } = plan_module(source, module, rt_unreachable_calls);
             let base = next;
             next += plan.regions.len() as u32;
             let first_function = map.function_probes.len();
             map.function_probes
                 .resize(first_function + plan.functions.len(), Vec::new());
-            for (site, id, region) in sites {
+            let probed = sites
+                .into_iter()
+                .filter(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
+            for (site, id, region) in probed {
                 let global = base + region;
                 let function = first_function + plan.regions[region as usize].function as usize;
                 map.probes.insert((site, id), global);
@@ -335,6 +347,7 @@ impl CoverageMap {
         let mut w = Writer::default();
         w.u32(self.modules.len() as u32);
         for (plan, &base) in self.modules.iter().zip(&self.bases) {
+            w.str(&plan.name);
             w.str(&plan.path);
             w.u32(base);
             w.u32(plan.functions.len() as u32);
@@ -383,9 +396,11 @@ pub fn decode(data: &[u8]) -> Option<DecodedPlans> {
     let count = r.u32()?;
     let mut out = Vec::new();
     for _ in 0..count {
+        let name = r.str()?;
         let path = r.str()?;
         let base = r.u32()?;
         let mut plan = ModulePlan {
+            name,
             path,
             ..ModulePlan::default()
         };
@@ -508,18 +523,32 @@ impl Reader<'_> {
 
 type Sites = Vec<(ProbeSite, AstId, u32)>;
 
-/// The path a plan names its module by. The loader reads a local module
-/// relative to the entry module's directory, so the entry is named by its file
-/// name alone to share that base.
-fn plan_path(source: &ModuleSource) -> String {
-    match source {
-        ModuleSource::EntryPoint { .. } => source.to_path_string(),
-        _ => source.source_path(),
-    }
-}
-
 /// The regions each `for-of` body holds, by the loop's node.
 type ForOfBodies = Vec<(AstId, Range<u32>)>;
+
+/// A cold marker the source states, which a profile can contradict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Marker {
+    /// The author's `builtin::cold_path()`.
+    ColdPath,
+    /// The one reify puts on the failure path of a `?`.
+    Try,
+}
+
+/// One module planned, and where its regions lie in the source.
+pub(crate) struct PlannedModule {
+    pub plan: ModulePlan,
+    /// The site of each region, derived or not.
+    pub sites: Sites,
+    pub for_of_bodies: ForOfBodies,
+    /// The region each region runs inside, `None` for a function's body: a
+    /// region runs only while its parent does.
+    pub parents: Vec<Option<u32>>,
+    /// Where each function's name, or a closure, is written.
+    pub names: Vec<Span>,
+    /// Each cold marker, with the region whose runs reach it.
+    pub markers: Vec<(Marker, Span, u32)>,
+}
 
 /// Plan one module: its regions, the site each region's probe goes at, and
 /// the regions of each `for-of` body. `rt_unreachable_calls` holds the callee
@@ -529,14 +558,18 @@ pub(crate) fn plan_module(
     source: &ModuleSource,
     module: &ast::Module,
     rt_unreachable_calls: &IndexSet<AstId>,
-) -> (ModulePlan, Sites, ForOfBodies) {
+) -> PlannedModule {
     let mut planner = Planner {
         plan: ModulePlan {
-            path: plan_path(source),
+            name: source.to_string(),
+            path: source.file().unwrap_or_else(|| source.to_string()),
             ..ModulePlan::default()
         },
         rt_unreachable_calls,
         sites: Vec::new(),
+        parents: Vec::new(),
+        names: Vec::new(),
+        markers: Vec::new(),
         function: 0,
         region: None,
         owner: None,
@@ -553,7 +586,10 @@ pub(crate) fn plan_module(
     planner.plan.lines.dedup();
     let Planner {
         mut plan,
-        mut sites,
+        sites,
+        parents,
+        names,
+        markers,
         for_of_bodies,
         texts,
         ..
@@ -562,14 +598,23 @@ pub(crate) fn plan_module(
         let regions = ids.iter().map(|&id| &plan.regions[id as usize]);
         plan.functions[index].hash = function_hash(module.source(), &texts[index], regions);
     }
-    sites.retain(|&(_, _, region)| plan.regions[region as usize].derived.is_empty());
-    (plan, sites, for_of_bodies)
+    PlannedModule {
+        plan,
+        sites,
+        for_of_bodies,
+        parents,
+        names,
+        markers,
+    }
 }
 
 struct Planner<'a> {
     plan: ModulePlan,
     rt_unreachable_calls: &'a IndexSet<AstId>,
     sites: Sites,
+    parents: Vec<Option<u32>>,
+    names: Vec<Span>,
+    markers: Vec<(Marker, Span, u32)>,
     function: u32,
     /// The innermost region the walk is in, `None` outside a function.
     region: Option<u32>,
@@ -670,7 +715,10 @@ impl Planner<'_> {
             bytes: at.start..body.end,
             start: Pos::start(at),
         });
-        self.new_region(kind, Pos::start(body), Pos::end(body), None)
+        self.names.push(at);
+        let region = self.new_region(kind, Pos::start(body), Pos::end(body), None);
+        self.parents[region as usize] = None;
+        region
     }
 
     fn new_region(
@@ -689,6 +737,7 @@ impl Planner<'_> {
             choice,
             derived: Vec::new(),
         });
+        self.parents.push(self.region);
         region
     }
 
@@ -1040,6 +1089,12 @@ impl AstVisitor<'_> for Planner<'_> {
                     Some((Pos::end(t.span), 0)),
                 );
                 self.sites.push((ProbeSite::TryExit, t.id, region));
+                self.markers.push((Marker::Try, t.span, region));
+            }
+            Expr::Call(call) if is_builtin_call(call, "cold_path") => {
+                if let Some(region) = self.region {
+                    self.markers.push((Marker::ColdPath, call.span, region));
+                }
             }
             _ => walk_expr(self, expr),
         }
@@ -1164,18 +1219,18 @@ pub struct Registered {
 }
 
 impl Coverage {
-    /// Add one compile's plans under `rename(path)`, each counting every
+    /// Add one compile's plans, each under `key(plan)` and counting every
     /// region whether any test runs it.
     pub fn register(
         &mut self,
         plans: &DecodedPlans,
-        mut rename: impl FnMut(&str) -> String,
+        mut key: impl FnMut(&ModulePlan) -> String,
     ) -> Result<Vec<Registered>, PlanMismatch> {
         plans
             .iter()
             .map(|(plan, base)| {
                 let plan = ModulePlan {
-                    path: rename(&plan.path),
+                    path: key(plan),
                     ..plan.clone()
                 };
                 let ids = *base..base + plan.regions.len() as u32;
@@ -1483,7 +1538,8 @@ mod tests {
     /// `fn f` whose body derives from an `if` and its omitted `else`.
     fn plan() -> ModulePlan {
         ModulePlan {
-            path: "a.wado".to_string(),
+            name: "a.wado".to_string(),
+            path: "./a.wado".to_string(),
             functions: vec![PlannedFunction {
                 name: "f".to_string(),
                 line: 1,
@@ -1553,7 +1609,7 @@ mod tests {
         let plan = plan();
         let mut coverage = Coverage::default();
         let registered = coverage
-            .register(&vec![(plan, 0)], str::to_string)
+            .register(&vec![(plan, 0)], |plan| plan.name.clone())
             .expect("one plan");
         coverage.record(&registered, &BTreeMap::from([(1, 3)]), None);
         let mut trapped = TestReport::default();
@@ -1588,7 +1644,7 @@ mod tests {
     /// Each function's hash in `source`, by name.
     fn hashes(source: &str) -> BTreeMap<String, u64> {
         let module = parse(source);
-        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default());
+        let plan = plan_module(&ModuleSource::builtin(), &module, &IndexSet::default()).plan;
         plan.functions
             .into_iter()
             .map(|f| (f.name, f.hash))
@@ -1629,7 +1685,7 @@ mod tests {
         for item in &module.items {
             spelled.visit_item(item);
         }
-        let (plan, _, _) = plan_module(&ModuleSource::builtin(), &module, &spelled.0);
+        let plan = plan_module(&ModuleSource::builtin(), &module, &spelled.0).plan;
         plan.regions.iter().map(|r| r.kind).collect()
     }
 

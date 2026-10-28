@@ -192,19 +192,19 @@ type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // Ty
 
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(51)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>" = fn(ref "value_copy_write_through_reference.wado//Holder", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>" = fn(ref "value_copy_write_through_reference.wado//Holder", ref "core:prelude/format.wado//Formatter");  // TypeId(52)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>" = fn(ref "value_copy_write_through_reference.wado//MutHolder", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>" = fn(ref "value_copy_write_through_reference.wado//MutHolder", ref "core:prelude/format.wado//Formatter");  // TypeId(53)
 
 type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(54)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(55)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(55)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(56)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(56)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(57)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]" = fn(ref "core:prelude/string.wado//String");  // TypeId(57)
 
-type "functype//core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(58)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(59)
 
@@ -304,7 +304,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(106)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(107)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(108)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(108)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(109)
 
@@ -319,7 +319,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 
 global global:core:prelude/format.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 32), used: 2 };
 global global:core:prelude/traits.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(32, 125), used: 2 };
@@ -720,9 +720,19 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+=======
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+>>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -777,7 +787,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     };
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>"(v, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>"(v, f) {
     let $load_0: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_28) {
@@ -786,7 +796,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
         global:core:prelude/traits.wado::$const_obj_28 = struct.new "tuple//[core:prelude/traits.wado/StructField<value_copy_write_through_reference.wado/Holder,&value_copy_write_through_reference.wado/Point>]" { 0: $mv_0_1 };
     }
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_28.0;
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(local.tee $load_0(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(local.tee $load_0(f.buf));
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_27);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     self_10 = $mv_0_1.field_name;
@@ -798,7 +808,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
     return;
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>"(v, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>"(v, f) {
     let $load_0: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_36) {
@@ -807,7 +817,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
         global:core:prelude/traits.wado::$const_obj_36 = struct.new "tuple//[core:prelude/traits.wado/StructField<value_copy_write_through_reference.wado/MutHolder,&mut value_copy_write_through_reference.wado/Point>]" { 0: $mv_0_1 };
     }
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_36.0;
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(local.tee $load_0(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(local.tee $load_0(f.buf));
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_27);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     self_10 = $mv_0_1.field_name;
@@ -824,22 +834,22 @@ fn "core:rt/panic$cold0"($mv$message$repr, $mv$message$used) {
     unreachable;
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(f) {
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec3"(f, global:core:prelude/traits.wado::$const_obj_39);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_38);
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(f) {
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_41);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_38);
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(f) {
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec4"(f, global:core:prelude/traits.wado::$const_obj_43);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_38);
 }
 
-fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]"(v, f) {
+fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]"(v, f) {
     let $load_0: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_52) {
@@ -848,7 +858,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
         global:core:prelude/traits.wado::$const_obj_52 = struct.new "tuple//[core:prelude/traits.wado/StructField<value_copy_write_through_reference.wado/Point,i32>]" { 0: $mv_0_1 };
     }
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_52.0;
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(local.tee $load_0(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(local.tee $load_0(f.buf));
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_27);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
     self_10 = $mv_0_1.field_name;
@@ -1010,10 +1020,10 @@ fn "core:prelude/traits.wado/value_copy_write_through_reference.wado/MutHolder^c
     let $load_1: ref "core:prelude/string.wado//String";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>"(self, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/MutHolder,[&mut value_copy_write_through_reference.wado/Point]>"(self, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(local.tee $load_1(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/MutHolder>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_5) {
         let $mv_0_1: ref "core:prelude/traits.wado//StructField<value_copy_write_through_reference.wado/MutHolder,&mut value_copy_write_through_reference.wado/Point>";
         multivalue_bind [$mv_0_1] = "value_copy_write_through_reference.wado/value_copy_write_through_reference.wado/MutHolder^core:prelude/traits.wado/ReflectStruct::members"();
@@ -1032,10 +1042,10 @@ fn "core:prelude/traits.wado/value_copy_write_through_reference.wado/Holder^core
     let $load_1: ref "core:prelude/string.wado//String";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>"(self, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Holder,[&value_copy_write_through_reference.wado/Point]>"(self, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(local.tee $load_1(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Holder>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_9) {
         let $mv_0_1: ref "core:prelude/traits.wado//StructField<value_copy_write_through_reference.wado/Holder,&value_copy_write_through_reference.wado/Point>";
         multivalue_bind [$mv_0_1] = "value_copy_write_through_reference.wado/value_copy_write_through_reference.wado/Holder^core:prelude/traits.wado/ReflectStruct::members"();
@@ -1338,10 +1348,10 @@ fn "core:prelude/traits.wado/value_copy_write_through_reference.wado/Point^core:
     let $load_1: ref "core:prelude/string.wado//String";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
-        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]"(self, f);
+        "core:prelude/traits.wado/core:prelude/traits.wado/inspect_struct_alternate<value_copy_write_through_reference.wado/Point,[i32]>$sroa[v.x]"(self, f);
         return;
     }
-    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(local.tee $load_1(f.buf));
+    "core:prelude/traits.wado/core:prelude/traits.wado/write_struct_head<value_copy_write_through_reference.wado/Point>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_47) {
         let $mv_0_1: ref "core:prelude/traits.wado//StructField<value_copy_write_through_reference.wado/Point,i32>";
         multivalue_bind [$mv_0_1] = "value_copy_write_through_reference.wado/value_copy_write_through_reference.wado/Point^core:prelude/traits.wado/ReflectStruct::members"();

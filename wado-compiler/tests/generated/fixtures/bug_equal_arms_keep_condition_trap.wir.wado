@@ -41,7 +41,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -60,7 +60,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -73,9 +73,23 @@ fn "bug_equal_arms_keep_condition_trap.wado/run"() with Stdout {
     message_2 = "core:prelude/string.wado/core:prelude/string.wado/String::format<bug_equal_arms_keep_condition_trap.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(select i32((10 / z) > 0, 7, 7) * 2);
     z = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     z = "bug_equal_arms_keep_condition_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(z);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_2.repr, message_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(z);
+||||||| 1e7e11efa
+    $moved_4 = "bug_equal_arms_keep_condition_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = z; z = 0; $moved_4);
+    z = $sroa_$pattern_temp_0_1_14;
+    $sroa_$pattern_temp_0_1_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(z, message_2.repr, message_2.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(z = $moved_4; $moved_4 = 0; z);
+=======
+    $moved_4 = "bug_equal_arms_keep_condition_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = z; z = 0; $moved_4);
+    z = $sroa_$pattern_temp_0_1_14;
+    $sroa_$pattern_temp_0_1_14 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(z, message_2.repr, message_2.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(z = $moved_4; $moved_4 = 0; z);
+>>>>>>> origin/main
 }
 
 fn "bug_equal_arms_keep_condition_trap.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

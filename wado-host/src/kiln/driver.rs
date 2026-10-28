@@ -43,7 +43,7 @@ use wado_compiler::kiln::{
     hex_digest, validate_options,
 };
 use wado_compiler::remote::{Integrity, is_remote};
-use wado_compiler::{Code, CompilerOptions, Diagnostic, OptLevel, Severity};
+use wado_compiler::{Code, CompilerOptions, Diagnostic, Lints, OptLevel, Severity};
 
 use super::metadata::{
     self as kiln_metadata, FileHash as MetaFileHash, METADATA_VERSION, Metadata,
@@ -1086,6 +1086,9 @@ pub fn generator_compile_options(invocations: InvocationIndex) -> CompilerOption
         opt_level: OptLevel::O1,
         target_world: Some(GENERATOR_WORLD_FQ.to_string()),
         invocations,
+        // A generator is compiled to run, not to be checked: its lints belong
+        // to its own package's check, not to a build that depends on it.
+        lints: Lints::Off,
         ..CompilerOptions::default()
     }
 }
@@ -1543,7 +1546,8 @@ mod tests {
         use std::assert_matches;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
-            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, SourceReader,
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, ModuleDir,
+            SourceReader,
         };
 
         struct MockHost {
@@ -1583,8 +1587,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -1851,8 +1855,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -1926,7 +1930,7 @@ mod tests {
         use indexmap::IndexMap;
         use std::sync::Mutex;
         use wado_compiler::compiler_host::{
-            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError,
+            Diagnostic, GeneratorOutputFile, GeneratorResponse, GeneratorRunnerError, ModuleDir,
         };
 
         struct HashOnlyHost {
@@ -1958,8 +1962,8 @@ mod tests {
 
             fn stdlib_module_read(&self, _import_path: &str) {}
 
-            fn package_root(&self, _path: &str) -> Option<String> {
-                None
+            fn module_dir(&self, path: &str) -> ModuleDir {
+                ModuleDir::unpackaged(path)
             }
 
             fn package_index(&self, root: &str) -> DependencyIndex {
@@ -2018,8 +2022,8 @@ mod tests {
                 }
                 fn emit_diagnostic(&self, _d: Diagnostic) {}
                 fn stdlib_module_read(&self, _import_path: &str) {}
-                fn package_root(&self, _path: &str) -> Option<String> {
-                    None
+                fn module_dir(&self, path: &str) -> ModuleDir {
+                    ModuleDir::unpackaged(path)
                 }
                 fn package_index(&self, root: &str) -> DependencyIndex {
                     unreachable!("no module lies in a package: {root}")

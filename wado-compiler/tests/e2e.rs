@@ -281,6 +281,11 @@ struct TestSpec {
     #[serde(default)]
     remarks: indexmap::IndexMap<String, Vec<TextMatch>>,
 
+    /// Every region the fixture's `profile` marks cold, as
+    /// `"file:line:col kind"`.
+    #[serde(default)]
+    cold_regions: Option<Vec<String>>,
+
     /// Lines the emitted component's WAT must carry. A CM import's shape —
     /// which names an instance type exports, which functions are aliased out of
     /// it — is visible here and nowhere a run reaches.
@@ -949,6 +954,7 @@ fn run_with_allocator(
         codegen_flags: spec.compile.codegen_flags.clone(),
         params: spec.compile.param_inputs(),
         coverage: spec.compile.coverage_scope(),
+        profile: spec.compile.profile(fixture_path.parent().unwrap()),
         // More than one, so every fixture runs the optimizer's parallel path
         // against expectations no thread count may change.
         parallelism: 2,
@@ -961,6 +967,7 @@ fn run_with_allocator(
         warnings,
         errors,
         remarks,
+        cold_regions,
     } = common::compile_fixture_on_worker(
         fixture_path.to_path_buf(),
         source.to_string(),
@@ -1086,6 +1093,13 @@ fn run_with_allocator(
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
+    if let Some(expected) = &spec.cold_regions {
+        assert!(
+            spec.compile.profile.is_some(),
+            "[{test_id}] `cold_regions` states what a `profile` marks"
+        );
+        assert_eq!(&cold_regions, expected, "[{test_id}] cold regions");
+    }
 
     if spec.compile_only {
         return;
@@ -1165,7 +1179,7 @@ fn assert_coverage(
         .unwrap_or_else(|| panic!("[{test_id}] the component carries no coverage section"));
     let mut coverage = Coverage::default();
     let registered = coverage
-        .register(&plans, str::to_string)
+        .register(&plans, |plan| plan.name.clone())
         .unwrap_or_else(|mismatch| panic!("[{test_id}] plans disagree on {}", mismatch.path));
     for counts in per_test {
         coverage.record(&registered, counts, None);

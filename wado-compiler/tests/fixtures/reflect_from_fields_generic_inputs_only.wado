@@ -1,0 +1,18 @@
+// `FieldInputs = [..F]` alone settles `F` from a concrete open struct, as
+// `FieldTypes` does: the call names only `T`.
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn make<T: ReflectStruct<FieldInputs = [..F]>, ..F: Default>() -> T {
+    return ReflectStruct::<T>::from_fields([..F::default()]);
+}
+
+test "the pin on FieldInputs settles the pack" {
+    let p = make::<Point>();
+    assert p.x == 0 && p.y == 0;
+}
+
+__DATA__
+{"test": {}}

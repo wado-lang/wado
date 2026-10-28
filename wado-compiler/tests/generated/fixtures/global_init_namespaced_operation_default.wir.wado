@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper {  // TypeId(3)
-    mut outer: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper",
+struct global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper {  // TypeId(3)
+    mut outer: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper",
     mut op_step: ref struct,
 }
 
@@ -53,7 +53,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//global_init_namespaced_operation_default.wado/run" = fn();  // TypeId(17)
 
-type "functype//global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step" = fn(i32) -> i32;  // TypeId(18)
+type "functype//global_init_namespaced_operation_default.wado/$effect_dispatch__sub/ns_stepper.wado/Stepper__step" = fn(i32) -> i32;  // TypeId(18)
 
 type "functype//global_init_namespaced_operation_default.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -87,7 +87,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
@@ -107,12 +107,12 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:global_init_namespaced_operation_default.wado::STEPPED: i32 = 0;
-global mut global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" = ref.null none;
+global mut global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper" = ref.null none;
 global mut global:global_init_namespaced_operation_default.wado::$modules_initialized: bool = 0;
 global global:global_init_namespaced_operation_default.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 83, 116, 101, 112, 112, 101, 114, 58, 58, 115, 116, 101, 112, 96), used: 40 };
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
@@ -120,9 +120,9 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     let acc: ref "global_init_namespaced_operation_default.wado//Acc";
     let $hole_0_0: i32;
-    let $save_./sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    let $local_1: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    let $local_2: ref "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
+    let $save_sub/ns_stepper.wado/Stepper: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
+    let $local_1: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
+    let $local_2: ref "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
     let $local_3: i32;
     let $cm_pair_7: i64;
     $inline__initialize_modules_0: block {
@@ -131,18 +131,18 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
         "global_init_namespaced_operation_default.wado/$initialize_modules$cold0"();
     };
     acc = struct.new "global_init_namespaced_operation_default.wado//Acc" { value: 100 };
-    global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" { outer: local.tee $save_./sub/ns_stepper.wado/Stepper(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_0" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_0" } };
+    global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper" { outer: local.tee $save_sub/ns_stepper.wado/Stepper(global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_0" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_0" } };
     $hole_0_0 = global:global_init_namespaced_operation_default.wado::STEPPED;
     $mv_arg_2 = block -> ref "core:prelude/string.wado//String" {
-        $local_3 = $inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_1: block -> i32 {
-            if @likely(ref.is_null(local.tee $local_1(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper)) == 0) {
-                global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = local.tee $local_2(ref.as_non_null($local_1)).outer;
+        $local_3 = $inline__effect_dispatch__sub_ns_stepper_wado_Stepper__step_1: block -> i32 {
+            if @likely(ref.is_null(local.tee $local_1(global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper)) == 0) {
+                global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = local.tee $local_2(ref.as_non_null($local_1)).outer;
                 $local_3 = block -> i32 {
                     let $indirect_call_3: ref "canonical//CanonicalClosure_0";
                     call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_step)).env, 1);
                 };
-                global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $local_1;
-                break $inline__effect_dispatch____sub_ns_stepper_wado_Stepper__step_1: $local_3;
+                global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = $local_1;
+                break $inline__effect_dispatch__sub_ns_stepper_wado_Stepper__step_1: $local_3;
             } else {
                 let $mv_arg_2: ref "core:prelude/string.wado//String";
                 "core:rt/panic"(local.tee $mv_arg_2(global:global_init_namespaced_operation_default.wado::$const_obj_0).repr, $mv_arg_2.used);
@@ -156,20 +156,28 @@ fn "global_init_namespaced_operation_default.wado/run"() with Stdout {
     $local_3 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $hole_0_0 = "global_init_namespaced_operation_default.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hole_0_0);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_3, $mv_arg_2.repr, $mv_arg_2.used);
+<<<<<<< HEAD
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hole_0_0);
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $save_./sub/ns_stepper.wado/Stepper;
+||||||| 1e7e11efa
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_3 = $moved_4; $moved_4 = 0; $local_3);
+    global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $save_./sub/ns_stepper.wado/Stepper;
+=======
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_3 = $moved_4; $moved_4 = 0; $local_3);
+    global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = $save_sub/ns_stepper.wado/Stepper;
+>>>>>>> origin/main
 }
 
-fn "global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step"(by) {
-    let $saved: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    let $local_2: ref "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
-    if @likely(ref.is_null(local.tee $saved(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper)) == 0) {
-        global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = local.tee $local_2(ref.as_non_null($saved)).outer;
+fn "global_init_namespaced_operation_default.wado/$effect_dispatch__sub/ns_stepper.wado/Stepper__step"(by) {
+    let $saved: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
+    let $local_2: ref "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
+    if @likely(ref.is_null(local.tee $saved(global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper)) == 0) {
+        global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = local.tee $local_2(ref.as_non_null($saved)).outer;
         by = block -> i32 {
             let $indirect_call_3: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_2.op_step)).env, by);
         };
-        global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $saved;
+        global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = $saved;
         return by;
     } else {
         "core:rt/panic"(array.new_data<u8>("no handler installed for `Stepper::step`"), 40);
@@ -193,15 +201,27 @@ fn "global_init_namespaced_operation_default.wado/$cm_export__run"() {
 
 fn "global_init_namespaced_operation_default.wado/$initialize_module"() {
     let acc: ref "global_init_namespaced_operation_default.wado//Acc";
-    let $local_2: ref null "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper";
+    let $local_2: ref null "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper";
     let $sroa_$exit_4_1_6: i32;
     cold_path;
     cold_path;
     acc = struct.new "global_init_namespaced_operation_default.wado//Acc" { value: 0 };
     cold_path;
+<<<<<<< HEAD
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" { outer: local.tee $local_2(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_1" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_1" } };
     $sroa_$exit_4_1_6 = "global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step"(1) + "global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step"(10);
     global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $local_2;
+||||||| 1e7e11efa
+    global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_./sub/ns_stepper.wado/Stepper" { outer: local.tee $local_2(global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_1" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_1" } };
+    $sroa_$exit_4_1_6 = 0;
+    $sroa_$exit_4_1_6 = "global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step"(1) + "global_init_namespaced_operation_default.wado/$effect_dispatch__./sub/ns_stepper.wado/Stepper__step"(10);
+    global:global_init_namespaced_operation_default.wado::$effect_./sub/ns_stepper.wado/Stepper = $local_2;
+=======
+    global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = struct.new "global_init_namespaced_operation_default.wado//$Dispatch_sub/ns_stepper.wado/Stepper" { outer: local.tee $local_2(global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper), op_step: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation_default.wado//$Closure_1" { $capture_0: acc }, func: ref.func "closure/global_init_namespaced_operation_default.wado/$closure_wrapper_1" } };
+    $sroa_$exit_4_1_6 = 0;
+    $sroa_$exit_4_1_6 = "global_init_namespaced_operation_default.wado/$effect_dispatch__sub/ns_stepper.wado/Stepper__step"(1) + "global_init_namespaced_operation_default.wado/$effect_dispatch__sub/ns_stepper.wado/Stepper__step"(10);
+    global:global_init_namespaced_operation_default.wado::$effect_sub/ns_stepper.wado/Stepper = $local_2;
+>>>>>>> origin/main
     global:global_init_namespaced_operation_default.wado::STEPPED = $sroa_$exit_4_1_6;
 }
 
@@ -310,9 +330,19 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+=======
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+>>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

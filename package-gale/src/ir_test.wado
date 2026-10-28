@@ -483,6 +483,18 @@ test "Element variants" {
         panic("expected RuleRef");
     }
 
+    if let TokenRef(t) = token_ref {
+        assert t.name == "INT";
+    } else {
+        panic("expected TokenRef");
+    }
+
+    if let Literal(l) = literal {
+        assert l.text == "+";
+    } else {
+        panic("expected Literal");
+    }
+
     if let Repeat(r) = repeat {
         if let TokenRef(t) = r.element {
             assert t.name == "INT";
@@ -491,6 +503,13 @@ test "Element variants" {
         }
     } else {
         panic("expected Repeat");
+    }
+
+    if let Label(l) = label {
+        assert l.name == "op";
+        assert !l.list;
+    } else {
+        panic("expected Label");
     }
 }
 

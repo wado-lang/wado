@@ -39,7 +39,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -80,11 +80,29 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
     builtin::array_copy<u8>($sroa_ser_buf_121.repr, start_22, global:serde_serialize_enum.wado::$const_obj_1, 0, 5);
     start_22 = builtin::i32_wrap_i64(local.tee $cm_pair_7_129("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_136 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
+<<<<<<< HEAD
     start_22 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_22);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_136, $sroa_ser_buf_121.repr, $sroa_ser_buf_121.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_22);
     $sroa_ser_buf_121 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if @unlikely(6 > builtin::array_len($sroa_ser_buf_121.repr)) {
+||||||| 1e7e11efa
+    $moved_4_126 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_126 = start_22; start_22 = 0; $moved_4_126);
+    start_22 = $sroa_$pattern_temp_0_1_14_136;
+    $sroa_$pattern_temp_0_1_14_136 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, s_4.repr, s_4.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_22 = $moved_4_126; $moved_4_126 = 0; start_22);
+    s_4 = local.tee $sroa_ser_buf_121(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    if @unlikely(6 > builtin::array_len(s_4.repr)) {
+=======
+    $moved_4_126 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_126 = start_22; start_22 = 0; $moved_4_126);
+    start_22 = $sroa_$pattern_temp_0_1_14_136;
+    $sroa_$pattern_temp_0_1_14_136 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, s_4.repr, s_4.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_22 = $moved_4_126; $moved_4_126 = 0; start_22);
+    s_4 = local.tee $sroa_ser_buf_121(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 });
+    if @unlikely(6 > builtin::array_len(s_4.repr)) {
+>>>>>>> origin/main
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_ser_buf_121, 6);
     }
@@ -92,10 +110,26 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
     $sroa_ser_buf_121.used = 6;
     builtin::array_copy<u8>($sroa_ser_buf_121.repr, start_22, global:serde_serialize_enum.wado::$const_obj_0, 0, 6);
     start_22 = builtin::i32_wrap_i64(local.tee $cm_pair_7_129("wasi/stream-new"()));
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_14_136 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
     start_22 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_22);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_136, $sroa_ser_buf_121.repr, $sroa_ser_buf_121.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_22);
+||||||| 1e7e11efa
+    $moved_4_126 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_136 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_136 = start_22; start_22 = 0; $sroa_$pattern_temp_0_1_14_136);
+    start_22 = $moved_4_126;
+    $moved_4_126 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $sroa_ser_buf_121.repr, $sroa_ser_buf_121.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_22 = $sroa_$pattern_temp_0_1_14_136; $sroa_$pattern_temp_0_1_14_136 = 0; start_22);
+=======
+    $moved_4_126 = builtin::i32_wrap_i64($cm_pair_7_129 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_136 = "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_136 = start_22; start_22 = 0; $sroa_$pattern_temp_0_1_14_136);
+    start_22 = $moved_4_126;
+    $moved_4_126 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(start_22, $sroa_ser_buf_121.repr, $sroa_ser_buf_121.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_22 = $sroa_$pattern_temp_0_1_14_136; $sroa_$pattern_temp_0_1_14_136 = 0; start_22);
+>>>>>>> origin/main
 }
 
 fn "serde_serialize_enum.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

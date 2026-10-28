@@ -61,7 +61,7 @@ fn continued<affine Bk: Backend>(
 }
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let checkpoint = match fs::read("gpt2.safetensors") {
+    let checkpoint = match fs::read_linear("model.onnx") {
         Ok(bytes) => bytes,
         Err(e) => {
             eprintln(`${e}; run fetch.sh first`);

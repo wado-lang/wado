@@ -1,0 +1,47 @@
+// An author's `cold_path()` on a path the profile ran stays, and a remark
+// names it with the count. So does the cold path a `?` takes on a failure,
+// a guess as the author's is. The workload ran each of them once.
+use { println, Stdout } from "core:cli";
+
+fn parse_digit(c: char) -> Result<i32, String> {
+    if c < '0' || c > '9' {
+        builtin::cold_path();
+        return Err("not a digit");
+    }
+    return Ok(c as i32 - '0' as i32);
+}
+
+fn sum_digits(s: String) -> Result<i32, String> {
+    let mut total = 0;
+    for let c of s.chars() {
+        total += parse_digit(c)?;
+    }
+    return Ok(total);
+}
+
+export fn run() with Stdout {
+    println(`${sum_digits("12").unwrap()} ${sum_digits("1x").is_err()}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_cold_path_conflict.pgo",
+  "cold_regions": [],
+  "remarks": {
+    "O2": [
+      {
+        "contains": [
+          "pgo_cold_path_conflict.wado:8:9 remark: `cold_path()` marks a path the profile ran once; the marker stays"
+        ],
+        "count": 1
+      },
+      {
+        "contains": [
+          "pgo_cold_path_conflict.wado:17:18 remark: `?` marks its failure path cold, and the profile ran it once; the marker stays"
+        ],
+        "count": 1
+      }
+    ]
+  },
+  "stdout": "3 true\n"
+}

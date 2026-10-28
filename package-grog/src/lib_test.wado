@@ -67,3 +67,13 @@ test "a map entry's repeated key is read as its last" {
     assert dropped.m.len() == 0;
     assert encode(&dropped) == input;
 }
+
+test "a varint whose tenth byte holds more than one bit is refused" {
+    let e = decode::<Keyed, ByteList>(b"\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02").unwrap_err();
+    assert `${e}` == "a varint overflows 64 bits at byte 10";
+}
+
+test "an input ending inside a varint is refused" {
+    let e = decode::<Keyed, ByteList>(b"\xff").unwrap_err();
+    assert `${e}` == "the input ends inside a varint at byte 1";
+}

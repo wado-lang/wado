@@ -3,6 +3,8 @@
 //! the program the tests run.
 
 use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
 
 use indexmap::IndexMap;
 use serde::de::Error as _;
@@ -10,6 +12,7 @@ use serde::{Deserialize, Deserializer};
 use wado_compiler::OptLevel;
 use wado_compiler::coverage::CoverageScope;
 use wado_compiler::param_resolution::{ParamInputs, ParamPolicy, ParamPolicyLevel};
+use wado_compiler::pgo::{self, Profile};
 
 use crate::HostStubs;
 
@@ -163,6 +166,10 @@ pub struct CompileInputs {
     /// `wado test --coverage` does, and state what they left unrun.
     #[serde(default)]
     pub coverage: Option<CoverageSpec>,
+    /// A profile to apply, relative to the fixture directory. It names the
+    /// fixture by its file name, and `core:` modules by import path.
+    #[serde(default)]
+    pub profile: Option<String>,
 }
 
 /// What a fixture's tests leave unrun in the fixture itself. Each list is the
@@ -279,6 +286,20 @@ impl CompileInputs {
     #[must_use]
     pub fn coverage_scope(&self) -> Option<CoverageScope> {
         self.coverage.as_ref().map(|_| CoverageScope::default())
+    }
+
+    /// The profile the compile applies, read from `fixture_dir`.
+    ///
+    /// # Panics
+    ///
+    /// If the profile cannot be read or does not parse.
+    #[must_use]
+    pub fn profile(&self, fixture_dir: &Path) -> Option<Arc<Profile>> {
+        let path = fixture_dir.join(self.profile.as_ref()?);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+        let profile = pgo::parse(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        Some(Arc::new(profile))
     }
 }
 

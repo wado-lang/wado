@@ -34,7 +34,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
@@ -51,7 +51,7 @@ import fn wasi/$wasi:random/random@0.3.0#get-random-u64 from "wasi/$wasi:random/
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_shared_operation_one_name_used.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"() with Entropy {
@@ -75,9 +75,19 @@ fn "cm_shared_operation_one_name_used.wado/$cm_export__run"() {
     $sroa_message_repr_29 = array.new_data<u8>("drawn");
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(6)), 0, $sroa_message_repr_29, 0, 5);
     builtin::array_set_u8(new_repr, 5, 10);
+<<<<<<< HEAD
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
+||||||| 1e7e11efa
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+=======
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $sroa_$pattern_temp_0_1_14);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
+>>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

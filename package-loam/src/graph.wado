@@ -1,7 +1,7 @@
 //! The ONNX graph Loam reads, in the shape the rest of the package consumes.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-use { HashMap, HashSet } from "core:collections";
+use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Enumeration } from "lib:grog";
 use onnx from "./onnx.proto"
     with {
@@ -172,6 +172,21 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
         return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
     }
     return Result::Ok(());
+}
+
+/// Whether `bytes` bytes of `dtype` elements, each `width` wide, are whole
+/// elements, as many as `extents` declare.
+pub fn check_payload_len(
+    tensor: &String,
+    dtype: &String,
+    width: i32,
+    bytes: i32,
+    extents: &List<i32>,
+) -> Result<(), String> {
+    if bytes % width != 0 {
+        return Result::Err(`${*tensor}: ${bytes} raw bytes is not whole ${*dtype} elements`);
+    }
+    return check_element_count(tensor, bytes / width, extents);
 }
 
 /// A tensor whose elements the build reads: a `Constant`, an initializer no
@@ -486,6 +501,21 @@ pub struct Graph {
     /// The default domain's opset, which fixes what an operator means. `None`
     /// where the graph names none, read as the current one.
     pub opset: Option<i64> = null,
+    /// The weights `Prepared::load` reads out of a file where the build found
+    /// them, rather than under a checkpoint header naming each.
+    pub in_place: Option<InPlace> = null,
+}
+
+/// Weights left in one file at the byte ranges the build found them at.
+pub struct InPlace {
+    /// The file as the model names it: an external data file's location, or
+    /// the model file's own name.
+    pub file: String,
+    /// Each weight's first byte and the byte past its last, by its name.
+    pub ranges: TreeMap<String, [i32, i32]>,
+    /// The file's length, where the build read the whole of it, which the file
+    /// `Prepared::load` is handed must have.
+    pub len: Option<i32> = null,
 }
 
 impl Graph {

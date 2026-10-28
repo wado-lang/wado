@@ -94,6 +94,14 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     out
 }
 
+/// A relative `path` with `/` between its segments on every OS, as a module's
+/// name spells it.
+#[must_use]
+pub fn slash_separated(path: &Path) -> String {
+    let segments: Vec<_> = path.iter().map(|s| s.to_string_lossy()).collect();
+    segments.join("/")
+}
+
 /// `path` made absolute, each `..` taken as the filesystem takes it: past a
 /// symlink, not lexically. What follows the last `..` stays as written.
 fn resolve_parent_dirs(path: &Path) -> PathBuf {

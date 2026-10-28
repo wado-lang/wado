@@ -11,8 +11,8 @@ struct core:prelude/string.wado//String {  // TypeId(2)
     mut used: i32,
 }
 
-struct global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter {  // TypeId(3)
-    mut outer: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter",
+struct global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter {  // TypeId(3)
+    mut outer: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter",
     mut op_next: ref struct,
 }
 
@@ -53,7 +53,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//global_init_namespaced_operation.wado/run" = fn();  // TypeId(17)
 
-type "functype//global_init_namespaced_operation.wado/$effect_dispatch__./sub/ns_counter.wado/Counter__next" = fn() -> i32;  // TypeId(18)
+type "functype//global_init_namespaced_operation.wado/$effect_dispatch__sub/ns_counter.wado/Counter__next" = fn() -> i32;  // TypeId(18)
 
 type "functype//global_init_namespaced_operation.wado/$cm_export__run" = fn();  // TypeId(19)
 
@@ -87,7 +87,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(36)
 
@@ -107,12 +107,12 @@ import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stde
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:global_init_namespaced_operation.wado::COUNTED: i32 = 0;
-global mut global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter" = ref.null none;
+global mut global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter" = ref.null none;
 global mut global:global_init_namespaced_operation.wado::$modules_initialized: bool = 0;
 global global:global_init_namespaced_operation.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 32, 104, 97, 110, 100, 108, 101, 114, 32, 105, 110, 115, 116, 97, 108, 108, 101, 100, 32, 102, 111, 114, 32, 96, 67, 111, 117, 110, 116, 101, 114, 58, 58, 110, 101, 120, 116, 96), used: 40 };
 global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(32);
@@ -120,9 +120,9 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 fn "global_init_namespaced_operation.wado/run"() with Stdout {
     let tally: ref "global_init_namespaced_operation.wado//Tally";
     let $hole_0_0: i32;
-    let $save_./sub/ns_counter.wado/Counter: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
-    let $local_0: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
-    let $local_1: ref "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
+    let $save_sub/ns_counter.wado/Counter: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
+    let $local_0: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
+    let $local_1: ref "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
     let $local_2: i32;
     let $cm_pair_7: i64;
     $inline__initialize_modules_0: block {
@@ -131,18 +131,18 @@ fn "global_init_namespaced_operation.wado/run"() with Stdout {
         "global_init_namespaced_operation.wado/$initialize_modules$cold0"();
     };
     tally = struct.new "global_init_namespaced_operation.wado//Tally" { value: 10 };
-    global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = struct.new "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter" { outer: local.tee $save_./sub/ns_counter.wado/Counter(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_0" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_0" } };
+    global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = struct.new "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter" { outer: local.tee $save_sub/ns_counter.wado/Counter(global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_0" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_0" } };
     $hole_0_0 = global:global_init_namespaced_operation.wado::COUNTED;
     $mv_arg_2 = block -> ref "core:prelude/string.wado//String" {
-        $local_2 = $inline__effect_dispatch____sub_ns_counter_wado_Counter__next_1: block -> i32 {
-            if @likely(ref.is_null(local.tee $local_0(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter)) == 0) {
-                global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = local.tee $local_1(ref.as_non_null($local_0)).outer;
+        $local_2 = $inline__effect_dispatch__sub_ns_counter_wado_Counter__next_1: block -> i32 {
+            if @likely(ref.is_null(local.tee $local_0(global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter)) == 0) {
+                global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = local.tee $local_1(ref.as_non_null($local_0)).outer;
                 $local_2 = block -> i32 {
                     let $indirect_call_3: ref "canonical//CanonicalClosure_0";
                     call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_1.op_next)).env);
                 };
-                global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $local_0;
-                break $inline__effect_dispatch____sub_ns_counter_wado_Counter__next_1: $local_2;
+                global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = $local_0;
+                break $inline__effect_dispatch__sub_ns_counter_wado_Counter__next_1: $local_2;
             } else {
                 let $mv_arg_2: ref "core:prelude/string.wado//String";
                 "core:rt/panic"(local.tee $mv_arg_2(global:global_init_namespaced_operation.wado::$const_obj_0).repr, $mv_arg_2.used);
@@ -156,21 +156,29 @@ fn "global_init_namespaced_operation.wado/run"() with Stdout {
     $local_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $hole_0_0 = "global_init_namespaced_operation.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($hole_0_0);
     "core:rt/write_string_to_stream$dae[add_newline]"($local_2, $mv_arg_2.repr, $mv_arg_2.used);
+<<<<<<< HEAD
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($hole_0_0);
     global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $save_./sub/ns_counter.wado/Counter;
+||||||| 1e7e11efa
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($local_2 = $moved_4; $moved_4 = 0; $local_2);
+    global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $save_./sub/ns_counter.wado/Counter;
+=======
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($local_2 = $moved_4; $moved_4 = 0; $local_2);
+    global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = $save_sub/ns_counter.wado/Counter;
+>>>>>>> origin/main
 }
 
-fn "global_init_namespaced_operation.wado/$effect_dispatch__./sub/ns_counter.wado/Counter__next"() {
-    let $saved: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
-    let $local_1: ref "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
+fn "global_init_namespaced_operation.wado/$effect_dispatch__sub/ns_counter.wado/Counter__next"() {
+    let $saved: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
+    let $local_1: ref "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
     let $local_2: i32;
-    if @likely(ref.is_null(local.tee $saved(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter)) == 0) {
-        global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = local.tee $local_1(ref.as_non_null($saved)).outer;
+    if @likely(ref.is_null(local.tee $saved(global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter)) == 0) {
+        global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = local.tee $local_1(ref.as_non_null($saved)).outer;
         $local_2 = block -> i32 {
             let $indirect_call_3: ref "canonical//CanonicalClosure_0";
             call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_1.op_next)).env);
         };
-        global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $saved;
+        global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = $saved;
         return $local_2;
     } else {
         "core:rt/panic"(array.new_data<u8>("no handler installed for `Counter::next`"), 40);
@@ -194,15 +202,27 @@ fn "global_init_namespaced_operation.wado/$cm_export__run"() {
 
 fn "global_init_namespaced_operation.wado/$initialize_module"() {
     let tally: ref "global_init_namespaced_operation.wado//Tally";
-    let $local_2: ref null "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter";
+    let $local_2: ref null "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter";
     let $sroa_$exit_4_1_6: i32;
     cold_path;
     cold_path;
     tally = struct.new "global_init_namespaced_operation.wado//Tally" { value: 40 };
     cold_path;
+<<<<<<< HEAD
     global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = struct.new "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter" { outer: local.tee $local_2(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_1" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_1" } };
     $sroa_$exit_4_1_6 = "global_init_namespaced_operation.wado/$effect_dispatch__./sub/ns_counter.wado/Counter__next"();
     global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $local_2;
+||||||| 1e7e11efa
+    global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = struct.new "global_init_namespaced_operation.wado//$Dispatch_./sub/ns_counter.wado/Counter" { outer: local.tee $local_2(global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_1" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_1" } };
+    $sroa_$exit_4_1_6 = 0;
+    $sroa_$exit_4_1_6 = "global_init_namespaced_operation.wado/$effect_dispatch__./sub/ns_counter.wado/Counter__next"();
+    global:global_init_namespaced_operation.wado::$effect_./sub/ns_counter.wado/Counter = $local_2;
+=======
+    global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = struct.new "global_init_namespaced_operation.wado//$Dispatch_sub/ns_counter.wado/Counter" { outer: local.tee $local_2(global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter), op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "global_init_namespaced_operation.wado//$Closure_1" { $capture_0: tally }, func: ref.func "closure/global_init_namespaced_operation.wado/$closure_wrapper_1" } };
+    $sroa_$exit_4_1_6 = 0;
+    $sroa_$exit_4_1_6 = "global_init_namespaced_operation.wado/$effect_dispatch__sub/ns_counter.wado/Counter__next"();
+    global:global_init_namespaced_operation.wado::$effect_sub/ns_counter.wado/Counter = $local_2;
+>>>>>>> origin/main
     global:global_init_namespaced_operation.wado::COUNTED = $sroa_$exit_4_1_6;
 }
 
@@ -311,9 +331,19 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+=======
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+>>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {

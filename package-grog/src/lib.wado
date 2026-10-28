@@ -21,7 +21,8 @@ pub enum WireType {
     I32,
 }
 
-fn wire_type_of(bits: u64) -> Option<WireType> {
+/// The wire type a tag's low three bits name, if any.
+pub fn wire_type_of(bits: u64) -> Option<WireType> {
     return match bits {
         0 => Option::Some(WireType::Varint),
         1 => Option::Some(WireType::I64),
@@ -186,7 +187,7 @@ fn varint_len(value: u64) -> i64 {
     return len;
 }
 
-fn push_varint(buf: &mut ByteList, value: u64) {
+pub fn push_varint(buf: &mut ByteList, value: u64) {
     let mut rest = value;
     while rest >= 128 {
         buf.push((rest & 0x7f | 0x80) as u8);
@@ -195,7 +196,34 @@ fn push_varint(buf: &mut ByteList, value: u64) {
     buf.push(rest as u8);
 }
 
-fn tag_of(number: i32, wire_type: WireType) -> u64 {
+/// A varint read a byte at a time, for input that does not sit in one slice.
+pub struct VarintDecoder {
+    value: u64,
+    shift: u64,
+}
+
+impl VarintDecoder {
+    pub fn new() -> VarintDecoder {
+        return VarintDecoder { value: 0, shift: 0 };
+    }
+
+    /// `null` while more bytes follow `byte`, and then the value, or the reason
+    /// the varint is refused.
+    pub fn feed(&mut self, byte: u8) -> Option<Result<u64, String>> {
+        // 64 = 9 * 7 + 1: a tenth byte holds one bit.
+        if self.shift == 63 && byte > 1 {
+            return Option::Some(Result::Err("a varint overflows 64 bits"));
+        }
+        self.value |= (byte & 0x7f) as u64 << self.shift;
+        if byte < 128 {
+            return Option::Some(Result::Ok(self.value));
+        }
+        self.shift += 7;
+        return null;
+    }
+}
+
+pub fn tag_of(number: i32, wire_type: WireType) -> u64 {
     return number as u64 << 3 | bits_of(wire_type);
 }
 
@@ -491,20 +519,14 @@ impl Reader {
     }
 
     fn varint(&mut self) -> Result<u64, DecodeError> {
-        let mut value: u64 = 0;
-        let mut shift: u64 = 0;
+        let mut decoder = VarintDecoder::new();
         while self.pos < self.end {
-            let byte = self.input[self.pos];
+            let fed = decoder.feed(self.input[self.pos]);
             self.pos += 1;
-            // 64 = 9 * 7 + 1: a tenth byte holds one bit.
-            if shift == 63 && byte > 1 {
-                return self.fail("a varint overflows 64 bits");
+            if let Some(read) = fed {
+                let offset = self.pos;
+                return read.map_err(|reason| DecodeError { offset, reason });
             }
-            value |= (byte & 0x7f) as u64 << shift;
-            if byte < 128 {
-                return Result::Ok(value);
-            }
-            shift += 7;
         }
         return self.fail("the input ends inside a varint");
     }

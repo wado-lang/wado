@@ -21,7 +21,9 @@ compiler fills it in) is optional: a `T: Serialize` bound is satisfied
 structurally once every field or case of `T` implements the trait — how
 an anonymous struct, which has no name for a marker, becomes serializable.
 Write the marker to force the impl with no bound present, or alongside
-`#[wire(...)]` customization.
+`#[wire(...)]` customization. A closed struct, one with a field narrower
+than the struct, derives neither, and a marker on one is an error: its
+author writes the impl.
 
 ```wado
 struct Point { x: i32, y: i32 }               // no marker needed

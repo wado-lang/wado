@@ -41,7 +41,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -60,7 +60,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -82,9 +82,23 @@ fn "opt_licm_immut_ref_multi.wado/run"() with Stdout {
     message_10 = "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_licm_immut_ref_multi.wado/$tmpl$fb51c04d54491732,[i32]>$spec0$spec0$sroa[t.h0]"(sum);
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     sum = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
     "core:rt/write_string_to_stream$dae[add_newline]"(i, message_10.repr, message_10.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum);
+||||||| 1e7e11efa
+    $moved_4 = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = sum; sum = 0; $moved_4);
+    sum = i;
+    i = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_10.repr, message_10.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(sum = $moved_4; $moved_4 = 0; sum);
+=======
+    $moved_4 = "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = sum; sum = 0; $moved_4);
+    sum = i;
+    i = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"(sum, message_10.repr, message_10.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum = $moved_4; $moved_4 = 0; sum);
+>>>>>>> origin/main
 }
 
 fn "opt_licm_immut_ref_multi.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

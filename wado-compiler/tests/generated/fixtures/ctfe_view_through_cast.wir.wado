@@ -85,7 +85,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(27)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
@@ -104,7 +104,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -138,7 +138,13 @@ fn "ctfe_view_through_cast.wado/run"() with Stdout {
     len_before = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_r_value_17 = "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_r_value_17);
     "core:rt/write_string_to_stream$dae[add_newline]"(len_before, message_18.repr, message_18.used);
+<<<<<<< HEAD
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_r_value_17);
+||||||| 1e7e11efa
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(len_before = used; used = 0; len_before);
+=======
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(len_before = used; used = 0; len_before);
+>>>>>>> origin/main
 }
 
 fn "ctfe_view_through_cast.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

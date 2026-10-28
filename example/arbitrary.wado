@@ -121,7 +121,7 @@ impl Arbitrary for () {
 
 /// A struct is its field values in declaration order — exactly what
 /// `from_fields` takes, so the pack map is the whole implementation.
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Arbitrary> Arbitrary for S {
+impl<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Arbitrary> Arbitrary for S {
     fn arbitrary(g: &mut Gen) -> S {
         let fields = g.nested(|inner: &mut Gen| [..F::arbitrary(inner)]);
         return ReflectStruct::<S>::from_fields(fields);
@@ -274,7 +274,7 @@ impl<..T: Shrink> Shrink for [..T] {
 
 /// A struct shrinks one field at a time: read the field values back through
 /// the members, replace the one slot, rebuild.
-impl<S: ReflectStruct<FieldTypes = [..F]>, ..F: Shrink> Shrink for S {
+impl<S: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Shrink> Shrink for S {
     fn shrink(&self) -> List<S> {
         let members = ReflectStruct::<S>::members();
         let mut out = List::<S>::with_capacity(4);

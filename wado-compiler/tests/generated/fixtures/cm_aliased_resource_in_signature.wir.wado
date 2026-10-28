@@ -10,7 +10,7 @@ type "functype//wasi/$wasi:demo/maker@0.1.0#get-device" = fn() -> i32;  // TypeI
 
 type "functype//cm_aliased_resource_in_signature.wado/$cm_export__run" = fn();  // TypeId(3)
 
-type "functype//wasi/resource-drop:./sub/cm_aliased_resource_dep.wado#Device" = fn(i32);  // TypeId(4)
+type "functype//wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device" = fn(i32);  // TypeId(4)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
@@ -22,7 +22,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/$wasi:demo/gfx@0.1.0#[method]device.id from "wasi/$wasi:demo/gfx@0.1.0#[method]device.id";
 import fn wasi/$wasi:demo/maker@0.1.0#get-device from "wasi/$wasi:demo/maker@0.1.0#get-device";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:./sub/cm_aliased_resource_dep.wado#Device from "wasi/resource-drop:./sub/cm_aliased_resource_dep.wado#Device";
+import fn wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device from "wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(self) with Device {
@@ -37,7 +37,19 @@ fn "cm_aliased_resource_in_signature.wado/$cm_export__run"() {
     let $temp_0: i32;
     drop("cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(local.tee $temp_0("cm_aliased_resource_in_signature.wado/$cm_binding__wasi:demo/maker@0.1.0#get-device"())));
     if ($temp_0 == 0) == 0 {
+<<<<<<< HEAD
         "wasi/resource-drop:./sub/cm_aliased_resource_dep.wado#Device"($temp_0);
+||||||| 1e7e11efa
+        let $cm_handle_2: i32;
+        $cm_handle_2 = $temp_0;
+        $temp_0 = 0;
+        "wasi/resource-drop:./sub/cm_aliased_resource_dep.wado#Device"($cm_handle_2);
+=======
+        let $cm_handle_2: i32;
+        $cm_handle_2 = $temp_0;
+        $temp_0 = 0;
+        "wasi/resource-drop:sub/cm_aliased_resource_dep.wado#Device"($cm_handle_2);
+>>>>>>> origin/main
     }
     "wasi/task-return"(0);
 }

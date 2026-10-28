@@ -1,16 +1,20 @@
-// The member-visibility gate applies to the kind traits alone. Identity and
-// the impls derived at the declaration reach a type whose fields are private.
+// Every kind trait holds of a closed struct, so reading it reaches its private
+// fields; only building it from them is withheld.
 
 use { make_opaque, Opaque } from "./sub/reflect_visibility_dep.wado";
 
-fn name_of<T: Reflect>(v: &T) -> String {
-    return Reflect::<T>::type_name();
+fn field_names<T: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &T) -> String {
+    let mut out = "";
+    for let f of ReflectStruct::<T>::members() {
+        out.push_str(`${f.name()} `);
+    }
+    return out;
 }
 
-test "a type with private fields still names itself" {
-    let o = make_opaque();              // `Opaque { root: i32, size: i32 }`, both private
-    assert name_of(&o) == "Opaque";
+test "a closed struct still reads through reflection" {
+    let o = make_opaque();              // `pub struct Opaque { root: i32, size: i32 }`
     assert Reflect::<Opaque>::type_name() == "Opaque";
+    assert field_names(&o) == "root size ";
     assert `${o:?}` == "Opaque { root: 0, size: 0 }";
 }
 

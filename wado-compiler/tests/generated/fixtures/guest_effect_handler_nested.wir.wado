@@ -13,7 +13,11 @@ struct core:prelude/string.wado//String {  // TypeId(3)
     mut used: i32,
 }
 
-struct core:prelude/format.wado//Formatter {  // TypeId(4)
+struct sub/hlc.wasm//Wrapped {  // TypeId(4)
+    mut text: ref "core:prelude/string.wado//String",
+}
+
+struct core:prelude/format.wado//Formatter {  // TypeId(5)
     mut fill: char,
     mut align: "core:prelude/format.wado//enum:Alignment",
     mut sign_plus: bool,
@@ -25,12 +29,8 @@ struct core:prelude/format.wado//Formatter {  // TypeId(4)
     mut buf: ref "core:prelude/string.wado//String",
 }
 
-struct ./sub/hlc.wasm//Wrapped {  // TypeId(5)
-    mut text: ref "core:prelude/string.wado//String",
-}
-
-struct guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight {  // TypeId(6)
-    mut outer: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight",
+struct guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight {  // TypeId(6)
+    mut outer: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight",
     mut op_highlight: ref struct,
 }
 
@@ -75,7 +75,7 @@ type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(19)
 
 type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(20)
 
-type "functype//wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap" = fn(i32, i32, i32, i32, i32);  // TypeId(21)
+type "functype//wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap" = fn(i32, i32, i32, i32, i32);  // TypeId(21)
 
 type "functype//wasi/$wasi:cli/stderr@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
@@ -83,7 +83,7 @@ type "functype//wasi/$wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32; 
 
 type "functype//guest_effect_handler_nested.wado/run" = fn();  // TypeId(24)
 
-type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "./sub/hlc.wasm//Wrapped";  // TypeId(25)
+type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "sub/hlc.wasm//Wrapped";  // TypeId(25)
 
 type "functype//guest_effect_handler_nested.wado/$cm_export__run" = fn();  // TypeId(26)
 
@@ -91,11 +91,11 @@ type "functype//guest_effect_handler_nested.wado/$cm_export__test:hlc/highlight@
 
 type "functype//guest_effect_handler_nested.wado/$cm_post_return__test:hlc/highlight@0.1.0#highlight" = fn(i32);  // TypeId(28)
 
-type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "./sub/hlc.wasm//Wrapped";  // TypeId(29)
+type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "sub/hlc.wasm//Wrapped";  // TypeId(29)
 
-type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "./sub/hlc.wasm//Wrapped";  // TypeId(30)
+type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "sub/hlc.wasm//Wrapped";  // TypeId(30)
 
-type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "./sub/hlc.wasm//Wrapped";  // TypeId(31)
+type "functype//guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec2" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "sub/hlc.wasm//Wrapped";  // TypeId(31)
 
 type "functype//core:rt/memory_into_gc_array$dae[at]" = fn(ref Array<u8>, i32, i32);  // TypeId(32)
 
@@ -115,7 +115,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(40)
 
-type "functype//guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^./sub/hlc.wasm/Highlight::highlight" = fn(ref "guest_effect_handler_nested.wado//Tag", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(41)
+type "functype//guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^sub/hlc.wasm/Highlight::highlight" = fn(ref "guest_effect_handler_nested.wado//Tag", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(41)
 
 type "functype//guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_0::$call" = fn(ref "guest_effect_handler_nested.wado//$Closure_0", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(42)
 
@@ -131,7 +131,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(49)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(49)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
 
@@ -147,16 +147,16 @@ import fn wasi/waitable-join from "wasi/waitable-join";
 import fn wasi/waitable-set-drop from "wasi/waitable-set-drop";
 import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
-import fn wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap from "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap";
+import fn wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap from "wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" = ref.null none;
+global mut global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" = ref.null none;
 global global:guest_effect_handler_nested.wado::$const_obj_0: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119), used: 1 };
 global global:guest_effect_handler_nested.wado::$const_obj_1: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
 global global:guest_effect_handler_nested.wado::$const_obj_2: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(122), used: 1 };
@@ -171,58 +171,130 @@ fn "guest_effect_handler_nested.wado/run"() with Stdout {
     let a: ref "guest_effect_handler_nested.wado//Tag";
     let b: ref "guest_effect_handler_nested.wado//Tag";
     let r: ref "guest_effect_handler_nested.wado//Reentrant";
-    let $save_./sub/hlc.wasm/Highlight_4: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
-    let $save_./sub/hlc.wasm/Highlight_7: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
+    let $save_sub/hlc.wasm/Highlight_4: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight";
+    let $save_sub/hlc.wasm/Highlight_7: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight";
     let message_12: ref "core:prelude/string.wado//String";
     let $cm_pair_7_19: i64;
     let $sroa_$pattern_temp_0_0_13_25: i32;
     let $sroa_$pattern_temp_0_1_14_26: i32;
     a = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 47), used: 2 } };
     b = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 47), used: 2 } };
-    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $save_./sub/hlc.wasm/Highlight_7(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_1" { $capture_0: a }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_1" } };
-    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec0"(global:guest_effect_handler_nested.wado::$const_obj_6, global:guest_effect_handler_nested.wado::$const_obj_7).text;
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" { outer: local.tee $save_sub/hlc.wasm/Highlight_7(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_1" { $capture_0: a }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_1" } };
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec0"(global:guest_effect_handler_nested.wado::$const_obj_6, global:guest_effect_handler_nested.wado::$const_obj_7).text;
     $sroa_$pattern_temp_0_0_13_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7_19("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_26 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_13_25 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_25);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_26, message_12.repr, message_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25);
     global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $save_./sub/hlc.wasm/Highlight_4(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_2" { $capture_0: b }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_2" } };
     message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec0"(global:guest_effect_handler_nested.wado::$const_obj_4, global:guest_effect_handler_nested.wado::$const_obj_5).text;
+||||||| 1e7e11efa
+    $moved_4_16 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_16 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $moved_4_16);
+    $sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26;
+    $sroa_$pattern_temp_0_1_14_26 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $moved_4_16; $moved_4_16 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $save_./sub/hlc.wasm/Highlight_4(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_2" { $capture_0: b }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_2" } };
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec0"(global:guest_effect_handler_nested.wado::$const_obj_4, global:guest_effect_handler_nested.wado::$const_obj_5).text;
+=======
+    $moved_4_16 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_16 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $moved_4_16);
+    $sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26;
+    $sroa_$pattern_temp_0_1_14_26 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $moved_4_16; $moved_4_16 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" { outer: local.tee $save_sub/hlc.wasm/Highlight_4(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_2" { $capture_0: b }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_2" } };
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec0"(global:guest_effect_handler_nested.wado::$const_obj_4, global:guest_effect_handler_nested.wado::$const_obj_5).text;
+>>>>>>> origin/main
     $sroa_$pattern_temp_0_0_13_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7_19("wasi/stream-new"()));
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_14_26 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_25 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_25);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_26, message_12.repr, message_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25);
     global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_4;
     message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec1"(global:guest_effect_handler_nested.wado::$const_obj_2, global:guest_effect_handler_nested.wado::$const_obj_3).text;
+||||||| 1e7e11efa
+    $moved_4_16 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_26 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_26 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $sroa_$pattern_temp_0_1_14_26);
+    $sroa_$pattern_temp_0_0_13_25 = $moved_4_16;
+    $moved_4_16 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26; $sroa_$pattern_temp_0_1_14_26 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_4;
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec1"(global:guest_effect_handler_nested.wado::$const_obj_2, global:guest_effect_handler_nested.wado::$const_obj_3).text;
+=======
+    $moved_4_16 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_26 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_26 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $sroa_$pattern_temp_0_1_14_26);
+    $sroa_$pattern_temp_0_0_13_25 = $moved_4_16;
+    $moved_4_16 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26; $sroa_$pattern_temp_0_1_14_26 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $save_sub/hlc.wasm/Highlight_4;
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec1"(global:guest_effect_handler_nested.wado::$const_obj_2, global:guest_effect_handler_nested.wado::$const_obj_3).text;
+>>>>>>> origin/main
     $sroa_$pattern_temp_0_0_13_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7_19("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_26 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_13_25 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_25);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_26, message_12.repr, message_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25);
     global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_7;
+||||||| 1e7e11efa
+    $moved_4_16 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_16 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $moved_4_16);
+    $sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26;
+    $sroa_$pattern_temp_0_1_14_26 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $moved_4_16; $moved_4_16 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_7;
+=======
+    $moved_4_16 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_16 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $moved_4_16);
+    $sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26;
+    $sroa_$pattern_temp_0_1_14_26 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $moved_4_16; $moved_4_16 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $save_sub/hlc.wasm/Highlight_7;
+>>>>>>> origin/main
     r = struct.new "guest_effect_handler_nested.wado//Reentrant" {  };
-    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $save_./sub/hlc.wasm/Highlight_7(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_3" { $capture_0: r }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_3" } };
-    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec2"(global:guest_effect_handler_nested.wado::$const_obj_0, global:guest_effect_handler_nested.wado::$const_obj_1).text;
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" { outer: local.tee $save_sub/hlc.wasm/Highlight_7(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_3" { $capture_0: r }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_3" } };
+    message_12 = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec2"(global:guest_effect_handler_nested.wado::$const_obj_0, global:guest_effect_handler_nested.wado::$const_obj_1).text;
     $sroa_$pattern_temp_0_0_13_25 = builtin::i32_wrap_i64(local.tee $cm_pair_7_19("wasi/stream-new"()));
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_14_26 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_25 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_25);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_26, message_12.repr, message_12.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25);
     global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_7;
+||||||| 1e7e11efa
+    $moved_4_16 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_26 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_26 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $sroa_$pattern_temp_0_1_14_26);
+    $sroa_$pattern_temp_0_0_13_25 = $moved_4_16;
+    $moved_4_16 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26; $sroa_$pattern_temp_0_1_14_26 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $save_./sub/hlc.wasm/Highlight_7;
+=======
+    $moved_4_16 = builtin::i32_wrap_i64($cm_pair_7_19 >> 32_i64);
+    $sroa_$pattern_temp_0_1_14_26 = "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_1_14_26 = $sroa_$pattern_temp_0_0_13_25; $sroa_$pattern_temp_0_0_13_25 = 0; $sroa_$pattern_temp_0_1_14_26);
+    $sroa_$pattern_temp_0_0_13_25 = $moved_4_16;
+    $moved_4_16 = 0;
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13_25, message_12.repr, message_12.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_25 = $sroa_$pattern_temp_0_1_14_26; $sroa_$pattern_temp_0_1_14_26 = 0; $sroa_$pattern_temp_0_0_13_25);
+    global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $save_sub/hlc.wasm/Highlight_7;
+>>>>>>> origin/main
 }
 
 fn "guest_effect_handler_nested.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
     return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
-fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(code, lang) with Hlc {
+fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(code, lang) with Hlc {
     let $code_packed: i64;
     let $lang_packed: i64;
     let $lang_flat0: i32;
     let $lang_flat1: i32;
     let $outptr: i32;
-    let $struct_result: ref "./sub/hlc.wasm//Wrapped";
+    let $struct_result: ref "sub/hlc.wasm//Wrapped";
     let bytes_19: ref Array<u8>;
     let ptr_20: i32;
     let self_21: i32;
@@ -241,7 +313,7 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     $lang_flat0 = builtin::i32_wrap_i64($lang_packed);
     $lang_flat1 = builtin::i32_wrap_i64($lang_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(self_21, ptr_20, $lang_flat0, $lang_flat1, $outptr);
+    "wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(self_21, ptr_20, $lang_flat0, $lang_flat1, $outptr);
     if ptr_20 > 0 {
         drop("mem/realloc"(self_21, ptr_20, 1, 0));
     }
@@ -254,7 +326,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     if ptr_20 > 0 {
         drop("mem/realloc"(self_21, ptr_20, 1, 0));
     }
+<<<<<<< HEAD
     $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: code };
+||||||| 1e7e11efa
+    $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: lang };
+=======
+    $struct_result = struct.new "sub/hlc.wasm//Wrapped" { text: lang };
+>>>>>>> origin/main
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $struct_result;
 }
@@ -269,8 +347,8 @@ fn "guest_effect_handler_nested.wado/$cm_export__test:hlc/highlight@0.1.0#highli
     let $lifted_string_5: ref "core:prelude/string.wado//String";
     let $packed: i64;
     let arr_14: ref Array<u8>;
-    let $local_2: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
-    let $local_3: ref "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
+    let $local_2: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight";
+    let $local_3: ref "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight";
     "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_14(builtin::array_new<u8>($p1)), $p0, $p1);
     $lifted_string_4 = struct.new "core:prelude/string.wado//String" { repr: arr_14, used: $p1 };
     if $p1 > 0 {
@@ -281,15 +359,35 @@ fn "guest_effect_handler_nested.wado/$cm_export__test:hlc/highlight@0.1.0#highli
     if $p3 > 0 {
         drop("mem/realloc"($p2, $p3, 1, 0));
     }
+<<<<<<< HEAD
     arr_14 = local.tee $lifted_string_4($inline__effect_dispatch____sub_hlc_wasm_Highlight__highlight_8: block -> ref "core:prelude/string.wado//String" {
         if @likely(ref.is_null(local.tee $local_2(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight)) == 0) {
             global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = local.tee $local_3(ref.as_non_null($local_2)).outer;
             $lifted_string_4 = block -> ref "core:prelude/string.wado//String" {
+||||||| 1e7e11efa
+    arr_14 = local.tee $lifted_string_5($inline__effect_dispatch____sub_hlc_wasm_Highlight__highlight_8: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_2(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight)) == 0) {
+            global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = local.tee $local_3(ref.as_non_null($local_2)).outer;
+            $lifted_string_5 = block -> ref "core:prelude/string.wado//String" {
+=======
+    arr_14 = local.tee $lifted_string_5($inline__effect_dispatch__sub_hlc_wasm_Highlight__highlight_8: block -> ref "core:prelude/string.wado//String" {
+        if @likely(ref.is_null(local.tee $local_2(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight)) == 0) {
+            global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = local.tee $local_3(ref.as_non_null($local_2)).outer;
+            $lifted_string_5 = block -> ref "core:prelude/string.wado//String" {
+>>>>>>> origin/main
                 let $indirect_call_3: ref "canonical//CanonicalClosure_0";
                 call_ref "functype/$canonical_closure_fn_0"($indirect_call_3.func, local.tee $indirect_call_3(ref.cast "canonical//CanonicalClosure_0"($local_3.op_highlight)).env, $lifted_string_4, $lifted_string_5);
             };
+<<<<<<< HEAD
             global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $local_2;
             break $inline__effect_dispatch____sub_hlc_wasm_Highlight__highlight_8: $lifted_string_4;
+||||||| 1e7e11efa
+            global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $local_2;
+            break $inline__effect_dispatch____sub_hlc_wasm_Highlight__highlight_8: $lifted_string_5;
+=======
+            global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $local_2;
+            break $inline__effect_dispatch__sub_hlc_wasm_Highlight__highlight_8: $lifted_string_5;
+>>>>>>> origin/main
         } else {
             "core:rt/panic"(array.new_data<u8>("no handler installed for `Highlight::highlight`"), 47);
             unreachable;
@@ -318,12 +416,12 @@ fn "guest_effect_handler_nested.wado/$cm_post_return__test:hlc/highlight@0.1.0#h
     drop("mem/realloc"($ret_ptr, 8, 4, 0));
 }
 
-fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec0"(code, lang) with Hlc {
+fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec0"(code, lang) with Hlc {
     let $code_packed: i64;
     let $lang_flat0: i32;
     let $lang_flat1: i32;
     let $outptr: i32;
-    let $struct_result: ref "./sub/hlc.wasm//Wrapped";
+    let $struct_result: ref "sub/hlc.wasm//Wrapped";
     let bytes_19: ref Array<u8>;
     let ptr_20: i32;
     let i: i32;
@@ -372,7 +470,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     $lang_flat0 = builtin::i32_wrap_i64(w);
     $lang_flat1 = builtin::i32_wrap_i64(w >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
+<<<<<<< HEAD
     "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(ptr_20, i, $lang_flat0, $lang_flat1, $outptr);
+||||||| 1e7e11efa
+    "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(ptr_20, i, at, $lang_flat1, $outptr);
+=======
+    "wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(ptr_20, i, at, $lang_flat1, $outptr);
+>>>>>>> origin/main
     if i > 0 {
         drop("mem/realloc"(ptr_20, i, 1, 0));
     }
@@ -385,17 +489,23 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     if i > 0 {
         drop("mem/realloc"(ptr_20, i, 1, 0));
     }
+<<<<<<< HEAD
     $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: code };
+||||||| 1e7e11efa
+    $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: lang };
+=======
+    $struct_result = struct.new "sub/hlc.wasm//Wrapped" { text: lang };
+>>>>>>> origin/main
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $struct_result;
 }
 
-fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec1"(code, lang) with Hlc {
+fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec1"(code, lang) with Hlc {
     let $code_packed: i64;
     let $lang_flat0: i32;
     let $lang_flat1: i32;
     let $outptr: i32;
-    let $struct_result: ref "./sub/hlc.wasm//Wrapped";
+    let $struct_result: ref "sub/hlc.wasm//Wrapped";
     let bytes_19: ref Array<u8>;
     let ptr_20: i32;
     let i: i32;
@@ -444,7 +554,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     $lang_flat0 = builtin::i32_wrap_i64(w);
     $lang_flat1 = builtin::i32_wrap_i64(w >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
+<<<<<<< HEAD
     "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(ptr_20, i, $lang_flat0, $lang_flat1, $outptr);
+||||||| 1e7e11efa
+    "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(ptr_20, i, at, $lang_flat1, $outptr);
+=======
+    "wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(ptr_20, i, at, $lang_flat1, $outptr);
+>>>>>>> origin/main
     if i > 0 {
         drop("mem/realloc"(ptr_20, i, 1, 0));
     }
@@ -457,19 +573,25 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     if i > 0 {
         drop("mem/realloc"(ptr_20, i, 1, 0));
     }
+<<<<<<< HEAD
     $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: code };
+||||||| 1e7e11efa
+    $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: lang };
+=======
+    $struct_result = struct.new "sub/hlc.wasm//Wrapped" { text: lang };
+>>>>>>> origin/main
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $struct_result;
 }
 
-fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap$spec2"(code, lang) with Hlc {
+fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap$spec2"(code, lang) with Hlc {
     let $code_packed: i64;
     let $lang_packed: i64;
     let $code_flat1: i32;
     let $lang_flat0: i32;
     let $lang_flat1: i32;
     let $outptr: i32;
-    let $struct_result: ref "./sub/hlc.wasm//Wrapped";
+    let $struct_result: ref "sub/hlc.wasm//Wrapped";
     let bytes_19: ref Array<u8>;
     let ptr_20: i32;
     bytes_19 = code.repr;
@@ -485,7 +607,7 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     $lang_flat0 = builtin::i32_wrap_i64($lang_packed);
     $lang_flat1 = builtin::i32_wrap_i64($lang_packed >> 32_i64);
     $outptr = "mem/realloc"(0, 0, 4, 8);
-    "wasi/$test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(ptr_20, $code_flat1, $lang_flat0, $lang_flat1, $outptr);
+    "wasi/$test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(ptr_20, $code_flat1, $lang_flat0, $lang_flat1, $outptr);
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }
@@ -498,7 +620,13 @@ fn "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b43
     if $code_flat1 > 0 {
         drop("mem/realloc"(ptr_20, $code_flat1, 1, 0));
     }
+<<<<<<< HEAD
     $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: code };
+||||||| 1e7e11efa
+    $struct_result = struct.new "./sub/hlc.wasm//Wrapped" { text: lang };
+=======
+    $struct_result = struct.new "sub/hlc.wasm//Wrapped" { text: lang };
+>>>>>>> origin/main
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $struct_result;
 }
@@ -552,9 +680,19 @@ fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+<<<<<<< HEAD
     $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
     "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+||||||| 1e7e11efa
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+=======
+    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+>>>>>>> origin/main
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -763,28 +901,38 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^./sub/hlc.wasm/Highlight::highlight"(self, code, lang) {
+fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^sub/hlc.wasm/Highlight::highlight"(self, code, lang) {
     return block -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/core:prelude/string.wado/String::format<guest_effect_handler_nested.wado/$tmpl$ace5d8bd7289ac71,[core:prelude/string.wado/String,core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(self.prefix, lang, code);
     };
 }
 
 fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_0::$call"(self, code, lang) {
-    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^./sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
+    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
 }
 
 fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_1::$call"(self, code, lang) {
-    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^./sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
+    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
 }
 
 fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_2::$call"(self, code, lang) {
-    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^./sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
+    return "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/Tag^sub/hlc.wasm/Highlight::highlight"(self.$capture_0, code, lang);
 }
 
 fn "guest_effect_handler_nested.wado/guest_effect_handler_nested.wado/$Closure_3::$call$dae[self]"(code, lang) {
     let inner: ref "guest_effect_handler_nested.wado//Tag";
+<<<<<<< HEAD
     let $local_6: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
     return inner = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 47), used: 3 } }, global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $local_6(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_0" } }, code = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(code, lang).text, global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $local_6, code;
+||||||| 1e7e11efa
+    let text: ref "core:prelude/string.wado//String";
+    let $local_6: ref null "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight";
+    return inner = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 47), used: 3 } }, text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_./sub/hlc.wasm/Highlight" { outer: local.tee $local_6(global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_0" } }, text = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency3a5e9dc4b439805e/hlc@0.1.0#wrap"(code, lang).text, global:guest_effect_handler_nested.wado::$effect_./sub/hlc.wasm/Highlight = $local_6, text;
+=======
+    let text: ref "core:prelude/string.wado//String";
+    let $local_6: ref null "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight";
+    return inner = struct.new "guest_effect_handler_nested.wado//Tag" { prefix: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 47), used: 3 } }, text = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = struct.new "guest_effect_handler_nested.wado//$Dispatch_sub/hlc.wasm/Highlight" { outer: local.tee $local_6(global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight), op_highlight: struct.new "canonical//CanonicalClosure_0" { env: struct.new "guest_effect_handler_nested.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/guest_effect_handler_nested.wado/$closure_wrapper_0" } }, text = "guest_effect_handler_nested.wado/$cm_binding__test:hlc-dependency11730810bdafac14/hlc@0.1.0#wrap"(code, lang).text, global:guest_effect_handler_nested.wado::$effect_sub/hlc.wasm/Highlight = $local_6, text;
+>>>>>>> origin/main
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$sroa[self.buf]"(self, $mv$content$repr, $mv$content$used) {

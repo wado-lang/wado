@@ -1,0 +1,18 @@
+// A newtype inherits its base's structure, closure included, so its
+// `FieldInputs` is `!` as the closed struct's is.
+pub struct Closed {
+    a: i32,
+}
+
+pub type Wrapped = Closed;
+
+fn make<T: ReflectStruct<FieldInputs = [..F]>, ..F: Default>() -> T {
+    return ReflectStruct::<T>::from_fields([..F::default()]);
+}
+
+export fn run() {
+    let _ = make::<Wrapped>();
+}
+
+__DATA__
+{"compile_error": ":14:13: analysis error: type 'Wrapped' does not satisfy the associated type 'ReflectStruct::FieldInputs = []': it is '!'"}
