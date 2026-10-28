@@ -779,7 +779,8 @@ ladder file-private < `internal` < `pub`. Otherwise it is closed:
 | `internal` | open             | open                | closed               |
 | private    | open             | open                | open                 |
 
-An anonymous struct is open. A closed struct's `FieldInputs` is `!`, so no
+An anonymous struct is open. A newtype over a struct is open or closed as that
+struct is, since it inherits the structure. A closed struct's `FieldInputs` is `!`, so no
 argument reaches `from_fields`, and code outside the struct's module cannot
 forge one:
 
