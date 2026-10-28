@@ -91,14 +91,18 @@ impl Turn {
     }
 
     pub fn text(&self) -> String {
-        let mut text = "";
-        for let b of self.blocks() {
-            if let Some(t) = b.text {
-                text.push_str(t);
-            }
-        }
-        return text;
+        return text_of(&self.blocks());
     }
+}
+
+fn text_of(blocks: &List<ContentBlock>) -> String {
+    let mut text = "";
+    for let b of blocks {
+        if let Some(t) = &b.text {
+            text.push_str(t);
+        }
+    }
+    return text;
 }
 
 /// `value` as a message in a conversation.
@@ -124,13 +128,7 @@ pub fn ask(
         ],
     };
     let parsed = post::<MessagesResponse>(api_key, to_bytes(&request).unwrap())?;
-    let mut text = "";
-    for let block of parsed.content {
-        if let Some(t) = block.text {
-            text.push_str(t);
-        }
-    }
-    return Ok(text);
+    return Ok(text_of(&parsed.content));
 }
 
 /// `model`'s next turn in `messages`. With `use_tools` false the model must

@@ -171,7 +171,7 @@ impl Workspace {
     }
 
     fn grep(&self, input: &GrepInput) -> Result<String, String> with Process {
-        let mut args = ["--hidden", "--glob", "!.git", "--sort", "path", "--color", "never"] as List<String>;
+        let mut args: List<String> = [];
         match input.output_mode.as_str_slice() {
             "files_with_matches" => args.push("--files-with-matches"),
             "count" => args.push("--count"),
@@ -217,11 +217,6 @@ impl Workspace {
     fn glob(&self, input: &GlobInput) -> Result<String, String> with Process {
         let found = self.rg([
             "--files",
-            "--hidden",
-            "--glob",
-            "!.git",
-            "--sort",
-            "path",
             "--glob",
             self.anchor(&input.pattern),
             self.resolve(&input.path)?,
@@ -237,8 +232,11 @@ impl Workspace {
     }
 
     /// ripgrep's output lines, paths relative to the root. Exit 1 is no match.
+    /// Sorting by path keeps a rerun's output the same.
     fn rg(&self, args: List<String>) -> Result<List<String>, String> with Process {
-        let out = Command::new("rg").args(args).capture_limit(i32::MAX).output().map_err(|e| `${e}`)?;
+        let mut full = ["--hidden", "--glob", "!.git", "--sort", "path"] as List<String>;
+        full.extend(&args);
+        let out = Command::new("rg").args(full).capture_limit(i32::MAX).output().map_err(|e| `${e}`)?;
         let mut lines: List<String> = [];
         match out.status {
             Exited(0) => {
@@ -273,13 +271,12 @@ impl Workspace {
     /// directory, so such a glob is put under the root. One without matches
     /// a file name anywhere.
     fn anchor(&self, glob: &String) -> String {
-        let [negated, body] = if glob.starts_with("!") {
-            [true, glob.slice(1, glob.len()).to_string()];
-        } else {
-            [false, *glob];
+        let [negation, body] = match glob.strip_prefix("!") {
+            Some(rest) => ["!", rest.to_string()],
+            None => ["", *glob],
         };
         let rooted = if body.contains("/") { `${self.root}/${unrooted(&body)}` } else { body };
-        return if negated { `!${rooted}` } else { rooted };
+        return `${negation}${rooted}`;
     }
 }
 
