@@ -36,7 +36,8 @@ pub struct Remark {
     /// The remark text, without the `remark:` prefix the logger adds.
     pub message: String,
     /// The module whose text the span indexes, which names the file where the
-    /// logger cannot: a synthetic entry (`<stdin>`) has no path.
+    /// span's parse cannot: a synthetic span, or a synthetic entry (`<stdin>`)
+    /// with no path.
     pub module: ModuleSource,
     /// Where the cost survives, in the original source.
     pub span: Span,
