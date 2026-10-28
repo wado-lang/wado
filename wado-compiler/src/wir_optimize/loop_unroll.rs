@@ -1,13 +1,14 @@
 //! Run several iterations of a small loop that reads GC arrays per test of its
-//! condition. A loop that ends each iteration by stepping its variable,
+//! condition. A loop that steps its variable once per iteration,
 //!
 //! ```text
-//! block { loop { br_if 1 EXIT; WORK; v = STEP; br 0 } }
+//! block { loop { br_if 1 EXIT; WORK; v = STEP; REST; br 0 } }
 //! ```
 //!
 //! gains a copy in front of it that leaves once any of the next `n` tests
-//! would, `EXIT | EXIT[v := STEP] | …`, and otherwise runs `WORK; v = STEP`
-//! `n` times. The original loop then runs what is left, so every iteration runs
+//! would, `EXIT | EXIT[v := STEP] | …`, and otherwise runs its body `n` times.
+//! The step may sit anywhere in the body: a `for` over an iterator the
+//! optimizer took apart reads the element, steps, and only then runs the body. The original loop then runs what is left, so every iteration runs
 //! as it did: the sums keep their order, and a float result its bits.
 //!
 //! wasmtime checks each `array.get` against its array's length and shares part
@@ -17,8 +18,8 @@
 //! Gemma 3's next token came +30% sooner.
 //!
 //! The tests ahead are computed before the first `WORK` runs, so the pass needs
-//! `EXIT` and `STEP` to read only locals `WORK` never writes, and to compute
-//! nothing that traps. `WORK` may not branch to the loop or its block, which
+//! `EXIT` and `STEP` to read only locals `WORK` and `REST` never write, and to
+//! compute nothing that traps. `WORK` may not branch to the loop or its block, which
 //! would leave the copy into the original loop rather than past both.
 
 use crate::wir::{WirInstr, WirPackage};
@@ -87,26 +88,26 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
             condition: exit,
         },
         work @ ..,
-        WirInstr::LocalSet {
-            name: var,
-            value: step,
-        },
         WirInstr::Br { depth: 0 },
     ] = body.as_slice()
     else {
         return None;
     };
-    if !is_local_arith(exit, null) || !is_local_arith(step, null) {
+    if !is_local_arith(exit, null) {
         return None;
     }
-    let factor = unroll_factor(work)?;
-    let written = Footprint::writes_all(work, None);
-    if written.has_local(var)
-        || written.overlaps(&Footprint::reads(exit))
-        || written.overlaps(&Footprint::reads(step))
-    {
-        return None;
-    }
+    let (at, var, step) = (0..work.len()).rev().find_map(|at| {
+        let WirInstr::LocalSet { name, value } = &work[at] else {
+            return None;
+        };
+        let read = [Footprint::reads(exit), Footprint::reads(value)];
+        let rest_keeps_them = [&work[..at], &work[at + 1..]].into_iter().all(|rest| {
+            let written = Footprint::writes_all(rest, None);
+            !written.has_local(name) && !read.iter().any(|r| written.overlaps(r))
+        });
+        (is_local_arith(value, null) && rest_keeps_them).then_some((at, name, value))
+    })?;
+    let factor = unroll_factor(work[..at].iter().chain(&work[at + 1..]))?;
     let mut leave = exit.as_ref().clone();
     let mut ahead = step.as_ref().clone();
     for _ in 1..factor {
@@ -124,17 +125,13 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
     {
         return None;
     }
-    let mut looped = Vec::with_capacity(factor * (work.len() + 1) + 2);
+    let mut looped = Vec::with_capacity(factor * work.len() + 2);
     looped.push(WirInstr::BrIf {
         depth: 1,
         condition: Box::new(leave),
     });
     for _ in 0..factor {
         looped.extend(work.iter().cloned());
-        looped.push(WirInstr::LocalSet {
-            name: var.clone(),
-            value: step.clone(),
-        });
     }
     looped.push(WirInstr::Br { depth: 0 });
     Some(WirInstr::Block {
@@ -150,7 +147,7 @@ fn unrolled(instr: &WirInstr, before: Option<&WirInstr>, null: &Nullability) -> 
 /// How many iterations the copy of `work` runs, when it is a loop body the copy
 /// pays for: small, reading a GC array, holding no loop of its own, declaring
 /// no local, and never branching to the loop (depth 0) or its block (depth 1).
-fn unroll_factor(work: &[WirInstr]) -> Option<usize> {
+fn unroll_factor<'a>(work: impl IntoIterator<Item = &'a WirInstr>) -> Option<usize> {
     let mut nodes = 0;
     let mut reads_array = false;
     let mut refused = false;
