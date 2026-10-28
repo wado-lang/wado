@@ -28,7 +28,6 @@ across four WEPs, with one recorded in none of them:
 | Variadic overlap is a definition-time error | WEP 2026-03-14 |
 | A newtype's own impls select for it first   | WEP 2026-06-25 |
 | Two traits, one method name, is ambiguous   | WEP 2026-07-31 |
-| A `Reflect*` bound needs visible members    | WEP 2026-06-13 |
 | Locality — a local impl beats a foreign one | nowhere        |
 
 This WEP drops locality from the order.
@@ -382,11 +381,8 @@ its body is emitted per instantiation, so a member that is one of the
 declaration's own parameters is that instantiation's to satisfy
 (WEP 2026-06-25, `eq_ord_explicit_request.wado`).
 
-Two further gates decide candidacy. They are not ranking rules:
+A further gate decides candidacy. It is not a ranking rule:
 
-- A `Reflect*` bound holds only where every member of the receiver is visible at
-  the use site (WEP 2026-06-13). This keeps `TreeMap` out of a downstream
-  `T: ReflectStruct` without naming it.
 - A newtype inherits its base's impls for dispatch. So a blanket keyed by a bound
   only the base carries is still a candidate for the newtype. Rank 1 places it at
   depth 1 rather than excluding it.
@@ -446,10 +442,10 @@ This is rustc's `ParamEnv`. It is a parameter from the start because the
 annotate-time `Scope` it replaces is mutable state threaded through the
 elaborator, which is hard to retrofit.
 
-A query also carries the asking module. A `Reflect*` bound holds only where the
-receiver's members are visible at the use site, and scope gates candidates by
-what that module imported, so `Program` carries member visibility and no query is
-a function of types alone.
+A query also carries the asking module, since scope gates candidates by what that
+module imported. No query is a function of types alone. A `Reflect*` fact is the
+exception that asks no module: it answers the same everywhere (WEP 2026-06-13,
+Visibility).
 
 #### Derivation is impl generation
 
@@ -522,9 +518,10 @@ The remaining ways are read off a type, and each goes where it belongs:
 - How a reference answers is a flag on the trait: `Eq` of itself, `Ord` never,
   and the rest by auto-deref to the pointee unless a receiverless method names
   `Self`.
-- A reflection kind is a fact stated of a declaration. It depends on the asking
-  module's view of the members and on no member's trait, so the fact names the
-  modules the members are visible from and answers for every instance.
+- A reflection kind is a fact stated of a declaration. It depends on no member's
+  trait and on no module, so it answers for every instance from everywhere. It
+  states the kind's member channel and, for a struct, `FieldInputs`, which a
+  derivation source's pins read.
 - So are the three the compiler reads off a type's shape, each holding from
   everywhere: a plain `enum`'s `Display`; `Default` for a struct whose every
   field has a default, which a generic one does not get, since a default is
@@ -709,8 +706,8 @@ specialization soundness question, which a rank would decide by accident.
 Reflection is the first pattern to pay for it. A derivation written over the
 kind traits has no last-resort arm: an `impl<T: Reflect>` meant to catch
 everything else reports at every struct, beside the `impl<T: ReflectStruct>`.
-So a receiver the kinds do not admit (members not visible here, or a kind the
-set does not cover) produces no candidate rather than falling through, and rank
+So a receiver the kinds do not admit (a kind the set does not cover, or a closed
+struct under a `FieldInputs` pin) produces no candidate rather than falling through, and rank
 2's escape, an impl written for the receiver, cannot serve a derivation whose
 subject is unknown by construction.
 

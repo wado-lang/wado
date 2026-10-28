@@ -235,14 +235,6 @@ pub(super) fn assoc_const_owner_of_path(
     }
 }
 
-/// Whether `ty` spells one of the declaration's own type packs
-/// (`Trait<Assoc = [..P]>`). Such a binding names a parameter to project into,
-/// not an expectation to enforce — and `..P` belongs to the declaration's
-/// scope, so resolving it at a use site would not find it.
-fn mentions_type_pack(ty: &ast::Type) -> bool {
-    ty.any(&mut |ty| matches!(ty, ast::Type::TypePackSpread(..)))
-}
-
 /// A bound as the asking site states it: its arguments are spelled in the
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
@@ -3005,7 +2997,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // here; `enforce_impl_assoc_type_bounds` owns those.
             let mentions_self = constraint.ty.mentions("Self");
             let binding = self_binding.filter(|_| mentions_self);
-            if (binding.is_none() && mentions_self) || mentions_type_pack(&constraint.ty) {
+            if binding.is_none() && mentions_self {
                 continue;
             }
             let Some(trait_) = self.tysys.resolutions.bound_decl(bound) else {

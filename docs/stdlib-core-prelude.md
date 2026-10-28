@@ -146,7 +146,7 @@ See WEP 2026-06-13.
 
 Returns the per-field members.
 
-#### `fn from_fields(fields: Self::FieldTypes) -> Self`
+#### `fn from_fields(fields: Self::FieldInputs) -> Self`
 
 `#[compiler_item("reflect_struct_from_fields")]`
 

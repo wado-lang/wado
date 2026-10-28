@@ -84,10 +84,11 @@ pub trait Reflect {                              // identity — every nameable 
 
 pub trait ReflectStruct: Reflect {               // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
+    type FieldInputs;                            // FieldTypes if open, ! if closed
     type FieldSlots;                             // [Option<F_0>, …]
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
-    fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
+    fn from_fields(fields: Self::FieldInputs) -> Self; // assemble from field values
     fn default_slot(index: i32) -> Self::FieldSlots;  // field `index`'s `f: T = expr`
     fn empty_slots() -> Self::FieldSlots;        // every slot `None`
 }
@@ -160,8 +161,9 @@ through the blanket needs the turbofish.
 
 Every kind spells its build direction `from_<channel>`. `from_discriminant` /
 `from_bits` return `Option` because an unknown raw input is a normal deserialize
-error, not a bug; `from_fields` is total, since a field-value tuple is already
-typed. `discriminant` / `bits` read the live tag off a value.
+error, not a bug; `from_fields` is total on an open struct, since a field-value
+tuple is already typed, and takes no argument at all on a closed one
+([Visibility](#visibility)). `discriminant` / `bits` read the live tag off a value.
 
 `FieldSlots` is the value-level companion of `FieldTypes`: the same pack under
 `Option`. `default_slot(i)` fills slot `i` with field `i`'s declared default
@@ -291,7 +293,7 @@ so the derivation holds the values: a slot tuple `[..Option<F>]` that starts
 empty, is written by the wire loop at the index the format reports, and is read
 back in declaration order.
 
-The blanket binds `T: ReflectStruct<FieldTypes = [..F]> + FieldSchema` and
+The blanket binds `T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]> + FieldSchema` and
 `..F: Deserialize`, and the walk needs three things the language grew for it: a
 variadic `for-of` that binds the element index, that index as a tuple subscript
 so the wire loop can write one slot, and the comprehension that reads the slots

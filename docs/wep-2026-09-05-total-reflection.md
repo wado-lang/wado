@@ -194,8 +194,9 @@ not the free option it looks like.
 
 `String`, `i128` and `u128` read as primitives to a programmer and are none.
 Each is a prelude struct with private fields — `i128` and `u128` are
-`#[compiler_item]` structs of two 64-bit limbs — so they classify as `Struct`
-and, having no visible members downstream, cannot be opened there either.
+`#[compiler_item]` structs of two 64-bit limbs — so they classify as `Struct`.
+This WEP sends them to `opaque` downstream; whether it still should is a known
+gap ([A struct with private fields opens everywhere](#a-struct-with-private-fields-opens-everywhere)).
 
 That they land in `opaque` rather than beside `i32` leaves nothing unanswered.
 The coarser question, leaf or aggregate, is computed from these cases and never
@@ -373,9 +374,9 @@ than an inconsistency to remove:
 
 - `type_info()` — what the type is. A fact about the declaration, the same from
   everywhere it is asked.
-- `match type` — what the type may be opened as. Gated on visibility and on the
-  member seal, so a struct whose members are private elsewhere, and a member
-  handle anywhere, reach no `struct` arm.
+- `match type` — what the type may be opened as. Gated on the member seal, so a
+  member handle reaches no `struct` arm anywhere. What else it withholds is a
+  known gap ([A struct with private fields opens everywhere](#a-struct-with-private-fields-opens-everywhere)).
 
 A consumer composes the two: in the fallback arm `type_info()` still answers
 `Struct`, so "a struct this module may not enumerate" is expressible. Neither

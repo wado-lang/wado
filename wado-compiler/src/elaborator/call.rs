@@ -3972,8 +3972,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         };
                         // A forwarded owner may answer with one of the
                         // caller's parameters, which still reads as open.
+                        // `[..F]` takes a tuple's elements; anything else
+                        // leaves the pack open, for the pin's check to refute.
                         if let Some(resolved) = resolved
                             && resolved != args[target_idx]
+                            && (!matches!(assoc.ty, Type::Tuple(_))
+                                || self.tysys.type_table.borrow().is_tuple(resolved))
                         {
                             args[target_idx] = resolved;
                             progressed = true;
