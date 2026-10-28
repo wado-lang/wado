@@ -137,6 +137,20 @@ pub fn generated(rev: &String, paths: &List<String>) -> List<String> with Proces
     return marked;
 }
 
+/// A checkout of `sha` for a reviewer to read, and its directory. It holds
+/// the tree alone: no history, so nothing after `sha` is in reach.
+pub fn snapshot(sha: &String) -> String with Process {
+    let root = `scratchpad/eddy-trees/${*sha}`;
+    if try_git(["-C", root, "rev-parse", "HEAD"]) != Some(`${*sha}\n`) {
+        git(["worktree", "add", "--force", "--detach", root, *sha]);
+    }
+    return root;
+}
+
+pub fn drop_snapshot(root: &String) with Process {
+    git(["worktree", "remove", "--force", *root]);
+}
+
 /// The paths merge `sha` changed.
 pub fn changed_paths(sha: &String) -> List<String> with Process {
     let mut paths: List<String> = [];

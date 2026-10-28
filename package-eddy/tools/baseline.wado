@@ -1,7 +1,12 @@
-//! Measures a plain one-pass review on the evaluation set: a model reviews each
-//! culprit pull request's whole diff, and a grader asks whether any finding
-//! names the defect the fix pull request later corrected. Each entry is
-//! reviewed `RUNS` times, since one review is not repeatable.
+//! Measures a review on the evaluation set: a model reviews each culprit pull
+//! request's whole diff, and a grader asks whether any finding names the defect
+//! the fix pull request later corrected. Each entry is reviewed `RUNS` times,
+//! since one review is not repeatable.
+//!
+//! With `-D tools=true` the reviewer also reads the repository as it stood
+//! once the culprit merged, through Read, Grep and Glob, for up to
+//! `max_turns` turns. The tree is a `git worktree` under `scratchpad/`, so
+//! nothing the reviewer reads postdates the merge.
 //!
 //! Run it from the repository root. The reviewer is a build input:
 //! `CLAUDE_MODEL` in the environment, or `-D CLAUDE_MODEL=...`.
@@ -19,7 +24,22 @@ use { Process } from "core:process";
 use { Client } from "wasi:http";
 use { to_bytes_pretty, to_string, from_string } from "core:json";
 use { TreeMap } from "core:collections";
-use { changed_paths, source_diff, ask_json, merge_title, Census, Checked, FixResult, Judged } from "./eval.wado";
+use {
+    changed_paths,
+    source_diff,
+    ask_json,
+    json_object,
+    merge_title,
+    snapshot,
+    drop_snapshot,
+    Census,
+    Checked,
+    FixResult,
+    Judged,
+} from "./eval.wado";
+use { Usage } from "../src/anthropic.wado";
+use { run_agent, Call } from "../src/agent.wado";
+use { Workspace } from "../src/tools.wado";
 
 #[param(from_env = "CLAUDE_MODEL")]
 global CLAUDE_MODEL: String = "claude-opus-5-5";
@@ -33,11 +53,19 @@ global RUNS: i32 = 3;
 #[param(name = "diff_limit")]
 global LIMIT: i32 = 2_000_000;
 
+#[param(name = "tools")]
+global TOOLS: bool = false;
+
+#[param(name = "max_turns")]
+global MAX_TURNS: i32 = 40;
+
 global REVIEW: String = "You review a pull request to wado-lang/wado, the toolchain of the Wado programming language: a compiler written in Rust that targets WebAssembly, its standard library and packages written in Wado (a language with Rust-like syntax), and their tooling.
 Report the defects the change introduces: wrong behaviour such as a crash, a wrong result, a missed diagnostic, a hang, lost data or a security hole. Do not report style, naming or missing documentation.
 Answer with one JSON object and nothing else:
 {\"findings\": [{\"file\": \"<path>\", \"summary\": \"<one sentence>\", \"detail\": \"<why it is wrong, and when it goes wrong>\"}]}
 Report at most 10 findings, the most severe first. An empty list is a valid answer.";
+
+global READING: String = "You can read the repository as it stood once this pull request merged, with the tools Read, Grep and Glob. Before you report, read what the diff alone does not show: the callers of what changed, the definitions it relies on, the rest of a file. Your final reply is the JSON object.";
 
 global GRADE: String = "You grade a code review against one known defect.
 The KNOWN DEFECT is what a later pull request had to fix in the reviewed change. The FINDINGS are what the reviewer reported on the change.
@@ -63,6 +91,9 @@ struct Grade {
 
 struct Run {
     findings: List<Finding> = [],
+    turns: i32 = 0,
+    calls: List<Call> = [],
+    usage: Option<Usage> = null,
     grade: Option<Grade> = null,
     error: Option<String> = null,
 }
@@ -77,6 +108,7 @@ struct Entry {
 struct Baseline {
     reviewer: String,
     grader: String,
+    tools: bool = false,
     entries: List<Entry>,
 }
 
@@ -92,7 +124,7 @@ export fn run() with (Stderr, Environment, Preopens, Process, Client) {
     let out_path = arguments[3];
     let earlier = earlier_runs(&out_path);
 
-    let mut out = Baseline { reviewer: CLAUDE_MODEL, grader: GRADER, entries: [] };
+    let mut out = Baseline { reviewer: CLAUDE_MODEL, grader: GRADER, tools: TOOLS, entries: [] };
     for let c of &checked.pairs {
         if !c.usable() {
             continue;
@@ -125,11 +157,18 @@ ${fix_diff}
         }
         out.entries.push(entry);
         let last = out.entries.len() - 1;
+        if out.entries[last].runs.len() >= RUNS {
+            continue;
+        }
+        let ws: Option<Workspace> = if TOOLS { Some(Workspace { root: snapshot(&culprit.sha) }) } else { null };
         while out.entries[last].runs.len() < RUNS {
-            out.entries[last].runs.push(review_once(&api_key, &review_prompt, &known));
+            out.entries[last].runs.push(review_once(&api_key, &review_prompt, &known, &ws));
             // Written after every run, so a run that dies keeps what it paid for.
             fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
             eprintln(`#${c.fix} run ${out.entries[last].runs.len()}`);
+        }
+        if let Some(w) = &ws {
+            drop_snapshot(&w.root);
         }
     }
     fs::write(&out_path, &to_bytes_pretty(&out).unwrap()).unwrap();
@@ -156,10 +195,14 @@ fn judged_defect(judged: &Judged, fix: i32) -> String {
 }
 
 /// One review of the culprit, graded against the known defect.
-fn review_once(api_key: &String, review_prompt: &String, known: &String) -> Run with Client {
-    // Thinking spends from the same budget as the answer.
-    let findings = match ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000) {
-        Ok(r) => r.findings,
+fn review_once(
+    api_key: &String,
+    review_prompt: &String,
+    known: &String,
+    ws: &Option<Workspace>,
+) -> Run with (Client, Preopens, Process) {
+    let mut reviewed = match review(api_key, review_prompt, ws) {
+        Ok(r) => r,
         Err(e) => {
             return Run { error: Some(e) };
         },
@@ -167,15 +210,35 @@ fn review_once(api_key: &String, review_prompt: &String, known: &String) -> Run 
     let grade_prompt = `${*known}
 
 <findings>
-${to_string(&findings).unwrap()}
+${to_string(&reviewed.findings).unwrap()}
 </findings>`;
-    return match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
-        Ok(g) => Run { findings, grade: Some(g) },
-        Err(e) => Run { findings, error: Some(e) },
-    };
+    match ask_json::<Grade>(api_key, GRADER, GRADE, grade_prompt, 16_000) {
+        Ok(g) => reviewed.grade = Some(g),
+        Err(e) => reviewed.error = Some(e),
+    }
+    return reviewed;
 }
 
-/// The graded runs an earlier run of this reviewer and grader left at `path`,
+/// The findings of one review, in one call, or by an agent reading `ws`.
+fn review(
+    api_key: &String,
+    review_prompt: &String,
+    ws: &Option<Workspace>,
+) -> Result<Run, String> with (Client, Preopens, Process) {
+    // Thinking spends from the same budget as the answer.
+    let Some(w) = ws else {
+        return Ok(Run { findings: ask_json::<Review>(api_key, CLAUDE_MODEL, REVIEW, *review_prompt, 32_000)?.findings });
+    };
+    let agent = run_agent(api_key, CLAUDE_MODEL, `${REVIEW}\n${READING}`, *review_prompt, w, MAX_TURNS, 32_000)?;
+    return Ok(Run {
+        findings: json_object::<Review>(&agent.answer)?.findings,
+        turns: agent.turns,
+        calls: agent.calls,
+        usage: Some(agent.usage),
+    });
+}
+
+/// The graded runs an earlier run of this reviewer, grader and tool use left at `path`,
 /// by fix. A rerun only tops each entry up to `RUNS`.
 fn earlier_runs(path: &String) -> TreeMap<i32, List<Run>> with Preopens {
     let mut by_fix = TreeMap::<i32, List<Run>>::new();
@@ -183,7 +246,7 @@ fn earlier_runs(path: &String) -> TreeMap<i32, List<Run>> with Preopens {
         return by_fix;
     };
     let earlier = from_string::<Baseline, String>(text).unwrap();
-    if earlier.reviewer != CLAUDE_MODEL || earlier.grader != GRADER {
+    if earlier.reviewer != CLAUDE_MODEL || earlier.grader != GRADER || earlier.tools != TOOLS {
         return by_fix;
     }
     for let e of earlier.entries {

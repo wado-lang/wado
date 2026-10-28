@@ -10,8 +10,15 @@ use { tools, Workspace } from "./tools.wado";
 pub struct AgentRun {
     pub answer: String,
     pub turns: i32,
-    pub tool_calls: i32,
+    pub calls: List<Call>,
     pub usage: Usage,
+}
+
+/// A tool call the model made, kept to see how it read.
+pub struct Call {
+    pub name: String,
+    pub input: Value,
+    pub is_error: bool,
 }
 
 struct TextBlock {
@@ -52,7 +59,7 @@ pub fn run_agent(
     assert max_turns >= 1;
     let declared = tools();
     let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
-    let mut run = AgentRun { answer: "", turns: 0, tool_calls: 0, usage: Usage {} };
+    let mut run = AgentRun { answer: "", turns: 0, calls: [], usage: Usage {} };
     loop {
         run.turns += 1;
         let last = run.turns == max_turns;
@@ -70,11 +77,12 @@ pub fn run_agent(
             if b.kind != "tool_use" {
                 continue;
             }
-            run.tool_calls += 1;
-            let [content, is_error] = match ws.call(&b.name.unwrap(), &b.input) {
+            let name = b.name.unwrap();
+            let [content, is_error] = match ws.call(&name, &b.input) {
                 Ok(out) => [out, false],
                 Err(e) => [e, true],
             };
+            run.calls.push(Call { name, input: b.input, is_error });
             results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
         }
         if run.turns + 1 == max_turns {
