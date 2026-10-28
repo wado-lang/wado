@@ -18,6 +18,7 @@
 //! body worth more copied than called past the budget destroys it, one-way.
 
 use std::cell::{Cell, RefCell};
+use std::sync::Mutex;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{COLD_PATH_INTRINSIC, inline_block_label, inline_temp_name};
@@ -37,6 +38,7 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::{self, ColdRuns, stmt_diverges, unreached_through};
 use super::body_memo::BodyMemo;
+use super::cold_outline::is_splittable;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_trace;
 use crate::nir::FuncId;
@@ -44,7 +46,7 @@ use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
-use crate::parallel::Executor;
+use crate::parallel::{Executor, lock};
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -1875,9 +1877,14 @@ pub(super) struct InlineBudget {
 /// A hold bets on constants a later round brings. A loop that converged with
 /// the hold still in place brings none, so [`Self::release`] settles the bet
 /// and lets the function receive inlining like any other.
+///
+/// A call the compile-time engine may still fold to its value is the same bet,
+/// placed on one call rather than a whole function: `deferred` holds the
+/// callers that left one in place, and the release splices what survived.
 #[derive(Default)]
 pub(super) struct InlineHolds {
     held: IndexSet<FuncId>,
+    deferred: IndexSet<FuncId>,
     released: bool,
 }
 
@@ -1898,14 +1905,27 @@ impl InlineHolds {
     /// drain and the [`Self::settle`] guard leave the set empty for good, so
     /// the call after the reopened run converges is the loop's exit.
     pub(super) fn release(&mut self, gate: &mut FunctionGate) -> bool {
-        if self.held.is_empty() {
+        if self.held.is_empty() && self.deferred.is_empty() {
             return false;
         }
         self.released = true;
-        for id in self.held.drain(..) {
+        for id in self.held.drain(..).chain(self.deferred.drain(..)) {
             gate.mark_changed(id);
         }
         true
+    }
+
+    /// Record whether this round's visit to `caller` left a call to the
+    /// compile-time engine.
+    fn settle_deferral(&mut self, caller: FuncId, deferred: bool) {
+        // A deferral after the release would reopen the loop on every
+        // convergence.
+        assert!(!(deferred && self.released), "a released loop defers no call");
+        if deferred {
+            self.deferred.insert(caller);
+        } else {
+            self.deferred.swap_remove(&caller);
+        }
     }
 
     pub(super) fn still_held(&self) -> usize {
@@ -2025,6 +2045,9 @@ struct Candidates<'a> {
     /// Per function, whether the compile-time engine may replace a call to it
     /// given constant arguments by its value ([`is_ctfe_eligible`]).
     ctfe_eligible: &'a [bool],
+    /// Whether a call the engine may fold is still left to it: until the loop
+    /// first converges ([`InlineHolds::release`]).
+    fold_pending: bool,
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
@@ -2388,6 +2411,8 @@ pub fn inline_functions(
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
+    let fold_pending = !holds.released;
+    let deferrals: Mutex<Vec<(FuncId, bool)>> = Mutex::new(Vec::new());
 
     let now: Vec<SweepRead> = (0..functions.len())
         .map(|i| {
@@ -2423,6 +2448,7 @@ pub fn inline_functions(
             net_price: &net_price,
             shrinking: &shrinking,
             ctfe_eligible: &ctfe_eligible,
+            fold_pending,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
             rescan_cap: inline_threshold * inline_threshold,
@@ -2439,6 +2465,7 @@ pub fn inline_functions(
         // Splice-point re-valuation records (Method A): one per inlined block.
         let mut reval: Vec<InlineRevalInfo> = Vec::new();
         let local_count = func.local_count();
+        let splittable = is_splittable(&func);
         let func = &mut *func;
         let mut frame = CallerFrame {
             local_count,
@@ -2447,7 +2474,8 @@ pub fn inline_functions(
             stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
-            glue: func.is_cm_binding || func.is_dispatch_wrapper,
+            splittable,
+            deferred: false,
         };
         let mut labels = InlineLabels::default();
         // Calls in this body that mutate no caller-reachable state, taken
@@ -2490,6 +2518,7 @@ pub fn inline_functions(
         }
         func.address_taken_locals = frame.address_taken;
         func.stores_aliased_locals = frame.stores_aliased;
+        lock(&deferrals).push((fid, frame.deferred));
         if inlined_funcs.is_empty() {
             return None;
         }
@@ -2518,6 +2547,12 @@ pub fn inline_functions(
     });
     drop(inline_call_immutability);
     drop(inline_type_table);
+    // The sweep pushes in thread order; settle in caller order.
+    let mut deferrals = std::mem::take(&mut *lock(&deferrals));
+    deferrals.sort_unstable_by_key(|&(caller, _)| caller);
+    for (caller, deferred) in deferrals {
+        holds.settle_deferral(caller, deferred);
+    }
 
     // Every caller's new strings, for one pass over `string_literals` rather
     // than one per caller.
@@ -2582,11 +2617,13 @@ struct CallerFrame<'f> {
     /// The arena only appends, so a call below it is one the round's site
     /// counts saw, and one above it came in with a splice.
     original_exprs: usize,
-    /// The caller is synthesized glue, a CM binding or a dispatch wrapper,
-    /// which `cold_outline`, `container_sroa`, `drve`, `niri` and
-    /// `const_object_globalization` leave alone. A body moved into it at its
-    /// only site would leave their reach with it.
-    glue: bool,
+    /// Whether `cold_outline` may split the caller. A body moved into one it
+    /// may not (an ABI bridge, an effect dispatcher, an async frame) keeps
+    /// inline the cold regions it would have outlined, and `container_sroa`
+    /// and `const_object_globalization` skip the bridges too.
+    splittable: bool,
+    /// A call was left to the compile-time engine this visit.
+    deferred: bool,
 }
 
 impl CallerFrame<'_> {
@@ -3122,22 +3159,30 @@ fn try_inline_call_expr(
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) => !frame.glue && frame.original_site(call_id),
-        // A call the compile-time engine runs to its value is left to it:
-        // spliced, it becomes statements `let_block_flatten` lays into the
-        // caller before the fold reaches them.
+        (Site::Plain | Site::Loop, Reach::Sole) => frame.splittable && frame.original_site(call_id),
+        // A call the compile-time engine may run to its value is left to it
+        // until the loop converges: spliced, it becomes statements
+        // `let_block_flatten` lays into the caller before the fold reaches
+        // them. One still standing then is one the engine could not fold.
         (Site::Plain, Reach::SoleOutsideLoops) => {
-            !frame.glue
-                && frame.original_site(call_id)
-                && !folds_to_constant(
+            if !frame.splittable || !frame.original_site(call_id) {
+                false
+            } else if candidates.fold_pending
+                && folds_to_constant(
                     caller,
                     Operand::Expr(call_id),
                     &IndexSet::default(),
                     candidates.ctfe_eligible,
                 )
+            {
+                frame.deferred = true;
+                false
+            } else {
+                true
+            }
         }
         (Site::Loop, Reach::SoleOutsideLoops) => false,
-        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
+        (Site::Loop, Reach::Loops) => frame.splittable && frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
         (Site::Plain | Site::Loop, Reach::Nowhere) => {
             unreachable!("a candidate is reached somewhere")

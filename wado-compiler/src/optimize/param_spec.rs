@@ -383,7 +383,9 @@ impl ParamSpecState {
     }
 
     fn budget_exhausted(&self) -> bool {
-        self.clones.len() >= self.limit
+        // `specs`, not `clones`: a clone minted beside a cached key whose
+        // signature has moved is in `specs` alone.
+        self.specs.len() >= self.limit
     }
 
     /// Record that the limit kept `callee` from a clone a call asked for.
@@ -396,7 +398,7 @@ impl ParamSpecState {
             let body = func.body.as_ref().expect("a specialization candidate has a body");
             SpecializationCapHit {
                 limit: self.limit,
-                callee: func.name.clone(),
+                callee: func.diagnostic_name(),
                 module: func.module_source.clone(),
                 span: body.blocks[body.root()].span,
                 turned_down: 0,

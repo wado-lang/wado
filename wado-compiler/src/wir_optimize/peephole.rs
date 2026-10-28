@@ -1226,10 +1226,12 @@ fn try_drop_mask(instr: &mut WirInstr) -> bool {
 /// bits, so the mask cannot change what is stored.
 fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
     let (storage, value) = match instr {
-        WirInstr::ArraySet { type_id, value, .. } => match &types[type_id.index() as usize] {
-            WirTypeDef::Array(arr) => (&arr.element_type, value),
-            _ => return false,
-        },
+        WirInstr::ArraySet { type_id, value, .. } => {
+            let WirTypeDef::Array(arr) = &types[type_id.index() as usize] else {
+                panic!("array.set names a non-array type");
+            };
+            (&arr.element_type, value)
+        }
         WirInstr::StructSet {
             type_id,
             field_name,
@@ -1237,11 +1239,13 @@ fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
             ..
         } => {
             let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
-                return false;
+                panic!("struct.set names a non-struct type");
             };
-            let Some(field) = def.fields.iter().find(|f| f.name == *field_name) else {
-                return false;
-            };
+            let field = def
+                .fields
+                .iter()
+                .find(|f| f.name == *field_name)
+                .expect("struct.set names a field of its struct");
             (&field.ty, value)
         }
         _ => return false,

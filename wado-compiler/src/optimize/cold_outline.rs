@@ -103,7 +103,7 @@ struct Region {
 /// Whether a function's calling convention is an ordinary call. An ABI bridge,
 /// an effect dispatcher and an async frame are not: `task return` leaves
 /// through the frame the region would no longer be in.
-fn is_splittable(func: &NirFunction) -> bool {
+pub(super) fn is_splittable(func: &NirFunction) -> bool {
     !func.is_cm_binding && !func.is_dispatch_wrapper && !func.is_cm_export && !func.is_async
 }
 

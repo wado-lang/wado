@@ -26,12 +26,12 @@ and `wasmtime_builtin_memory_fill` plus `memset` took 3.6% of a perf profile.
 Emitting a constant-length packed `array.new_default` as `array.new_fixed` of
 that many zeros skips the libcall.
 
-It measured slower, three alternating pairs:
+It measured slower, three alternating pairs of `mise run benchmark-fts`:
 
-| `array.new_default` 16 bytes  | fts ms/iter         |
-| ----------------------------- | ------------------- |
-| as is (libcall)               | 41.55, 41.56, 41.57 |
-| `array.new_fixed` of 16 zeros | 42.95, 42.87, 42.96 |
+| `array.new_default` 16 bytes  | fts       |
+| ----------------------------- | --------- |
+| as is (libcall)               | baseline  |
+| `array.new_fixed` of 16 zeros | **−3.2%** |
 
 wasmtime initializes `array.new_fixed` one element at a time, each through its
 own element address. Sixteen byte stores cost more than one libcall.
