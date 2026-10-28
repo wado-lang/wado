@@ -1496,10 +1496,10 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
     let $licm_arith_80: bool;
     let new_used_84: i32;
     let start_85: i32;
-    let new_used_167: i32;
-    let start_168: i32;
-    let self_185: i32;
-    let start_235: i32;
+    let new_used_166: i32;
+    let start_167: i32;
+    let self_184: i32;
+    let start_234: i32;
     let $hfs_used_595: i32;
     if @unlikely(local.tee new_used_84(local.tee self_7(f.buf).used + 1) > builtin::array_len(self_7.repr)) {
         cold_path;
@@ -1601,21 +1601,21 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
                 break $inline_count_digits_u64_11: 20;
             };
             if is_negative_30 {
-                if @unlikely(local.tee new_used_167($hfs_used_595 + 1) > builtin::array_len(self_7.repr)) {
+                if @unlikely(local.tee new_used_166($hfs_used_595 + 1) > builtin::array_len(self_7.repr)) {
                     cold_path;
                     self_7.used = $hfs_used_595;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_167);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, new_used_166);
                     $hfs_used_595 = self_7.used;
                 }
-                start_168 = $hfs_used_595;
-                self_185 = local.tee $hfs_used_595(new_used_167);
-                if @unlikely(((0 <= start_168) & (start_168 < self_185)) == 0) {
+                start_167 = $hfs_used_595;
+                self_184 = local.tee $hfs_used_595(new_used_166);
+                if @unlikely(((0 <= start_167) & (start_167 < self_184)) == 0) {
                     cold_path;
                     self_7.used = $hfs_used_595;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_168, self_185, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
+                    "core:prelude/string.wado/core:prelude/string.wado/String::set_byte_at$contract_report0"(start_167, self_184, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("core:prelude/string.wado:571"), used: 28 });
                     unreachable;
                 }
-                builtin::array_set_u8(self_7.repr, start_168, 45);
+                builtin::array_set_u8(self_7.repr, start_167, 45);
             } else {
             }
             if @unlikely(local.tee is_negative_30($hfs_used_595 + digit_count_32) > builtin::array_len(self_7.repr)) {
@@ -1624,13 +1624,13 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_7, is_negative_30);
                 $hfs_used_595 = self_7.used;
             }
-            start_235 = $hfs_used_595;
+            start_234 = $hfs_used_595;
             $hfs_used_595 = is_negative_30;
             arr = self_7.repr;
-            digit_count_32 = start_235 + digit_count_32;
+            digit_count_32 = start_234 + digit_count_32;
             b226: block {
                 l227: loop {
-                    break_if b226 (digit_count_32 - start_235) < 2;
+                    break_if b226 (digit_count_32 - start_234) < 2;
                     q = x /u 100_i64;
                     tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
                     builtin::array_set_u8(arr, digit_count_32 - 1, ((48 + pair) - (tens * 10)) & 255);
@@ -1640,8 +1640,8 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$dae[s
                     continue l227;
                 };
             };
-            if digit_count_32 > start_235 {
-                builtin::array_set_u8(arr, start_235, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+            if digit_count_32 > start_234 {
+                builtin::array_set_u8(arr, start_234, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
             }
             start_85 = start_85 + 1;
             i_6 = i_6 + 1;

@@ -196,7 +196,6 @@ pub(super) fn version_loops(
             params,
             address_taken_locals,
             stores_aliased_locals,
-            params,
             ..
         } = func.parts();
         let frame = LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
@@ -321,7 +320,7 @@ fn parse_loop_guard(
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
     let (var, off, h, op) = break_guard_cmp(engine, binds, cond)?;
     let h = match h {
-        BoundKey::Field(..) => guard_bound_local(engine, binds, cond)?,
+        BoundKey::Field(..) => guard_bound_local(engine, binds, loop_body, cond)?,
         BoundKey::Local(_) | BoundKey::Const(_) => h,
     };
     if off < 0 || (off > 0 && op != NirBinaryOp::Lt) {
@@ -354,10 +353,15 @@ fn parse_loop_guard(
 /// The local a guard compares against, as written. [`break_guard_cmp`] reads a
 /// `let` of a field (`let per_row = b.per_row`) as the field, which the
 /// residual cannot re-read, where the guard reads the local.
-fn guard_bound_local(engine: &Engine, binds: &Binds, cond: Operand) -> Option<BoundKey> {
+fn guard_bound_local(
+    engine: &Engine,
+    binds: &Binds,
+    loop_body: BlockId,
+    cond: Operand,
+) -> Option<BoundKey> {
     let cmp = negated_operand(engine, binds, cond).unwrap_or(cond);
     let (_, _, right) = binary_parts(engine.body, resolve(engine, binds, cmp))?;
-    match parse_check_bound(engine, binds, right)? {
+    match parse_check_bound(engine, binds, loop_body, right)? {
         (bound @ BoundKey::Local(_), 0) => Some(bound),
         _ => None,
     }
@@ -415,19 +419,7 @@ fn parse_versionable_check(
                 if limit.is_some() {
                     return None;
                 }
-<<<<<<< HEAD
-                limit = Some(Limit {
-                    shift: parse_shift(engine, binds, left, var)?,
-                    bound: parse_check_bound(engine, binds, loop_body, right)?,
-                });
-||||||| 0fe5443fa
-                limit = Some(Limit {
-                    shift: parse_shift(engine, binds, left, var)?,
-                    bound: parse_check_bound(engine, binds, right)?,
-                });
-=======
-                limit = Some(parse_limit(engine, binds, left, right, var)?);
->>>>>>> origin/main
+                limit = Some(parse_limit(engine, binds, loop_body, left, right, var)?);
             }
             Conjunct::AtLeast(fvar, foff, f) => {
                 floors.push((local_shift(engine, binds, fvar, var)?.plus(foff)?, f));
@@ -618,41 +610,30 @@ const MAX_LIMITS: usize = 8;
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
 ///
-<<<<<<< HEAD
 /// A local the loop binds anew each iteration to the length of a list or
 /// string local is read through, as that length: a [`reload`] bound.
+///
+/// A local less a non-negative constant, `B - c`, reads as `B` with the `c`
+/// it takes away: the form `condition_implication` leaves where it merged
+/// `i < B` and `i + c < B` into one check.
 fn parse_check_bound(
     engine: &Engine,
     binds: &Binds,
     loop_body: BlockId,
     op: Operand,
-) -> Option<BoundKey> {
-||||||| 0fe5443fa
-fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<BoundKey> {
-=======
-/// A local less a non-negative constant, `B - c`, reads as `B` with the `c`
-/// it takes away: the form `condition_implication` leaves where it merged
-/// `i < B` and `i + c < B` into one check.
-fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<(BoundKey, i64)> {
->>>>>>> origin/main
+) -> Option<(BoundKey, i64)> {
     let op = peel_capture_block(engine, binds, op);
     if let Some(c) = parse_const_i64(engine, binds, op) {
         return Some((BoundKey::Const(c), 0));
     }
-<<<<<<< HEAD
-    let l = operand_local(engine.body, op)?;
-    if subtree_redefines(engine, loop_body, &[l])
-        && let Some(&read) = binds.get(&l)
-        && is_seq_length(engine, binds, read)
-        && let Some(field @ BoundKey::Field(..)) = parse_bound(engine, binds, read)
-    {
-        return Some(field);
-    }
-    Some(BoundKey::Local(l))
-||||||| 0fe5443fa
-    operand_local(engine.body, op).map(BoundKey::Local)
-=======
     if let Some(l) = operand_local(engine.body, op) {
+        if subtree_redefines(engine, loop_body, &[l])
+            && let Some(&read) = binds.get(&l)
+            && is_seq_length(engine, binds, read)
+            && let Some(field @ BoundKey::Field(..)) = parse_bound(engine, binds, read)
+        {
+            return Some((field, 0));
+        }
         return Some((BoundKey::Local(l), 0));
     }
     let (minuend, NirBinaryOp::Sub, less) = binary_parts(engine.body, op)? else {
@@ -669,17 +650,17 @@ fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Bou
 fn parse_limit(
     engine: &Engine,
     binds: &Binds,
+    loop_body: BlockId,
     left: Operand,
     right: Operand,
     var: u32,
 ) -> Option<Limit> {
     let shift = parse_shift(engine, binds, left, var)?;
-    let (bound, less) = parse_check_bound(engine, binds, right)?;
+    let (bound, less) = parse_check_bound(engine, binds, loop_body, right)?;
     Some(Limit {
         shift: shift.plus(less)?,
         bound,
     })
->>>>>>> origin/main
 }
 
 /// Analyze one loop for versioning. See the module docs for the conditions.
@@ -994,9 +975,14 @@ fn apply_version(
             stmts.retain(|&s| s != retest);
             engine.set_block_stmts(block, stmts);
         }
-        let var_read = local_read(engine, plan.var, span);
+        // The original guard with `$lim` for its bound: `var + g >= $lim`.
+        let mut guarded = local_read(engine, plan.var, span);
+        if plan.guard_offset != 0 {
+            let g = engine.const_operand(ValueKind::Int(plan.guard_offset as u64, var_ty), var_ty);
+            guarded = alloc_binary(engine, guarded, NirBinaryOp::Add, g, var_ty, span);
+        }
         let lim_read = local_read(engine, *lim, span);
-        let done = alloc_pred(engine, var_read, NirBinaryOp::GtEq, lim_read, span);
+        let done = alloc_pred(engine, guarded, NirBinaryOp::GtEq, lim_read, span);
         let exit = engine.alloc_stmt(
             StmtKind::Break {
                 label: None,
@@ -1390,17 +1376,8 @@ fn is_check_comparison(
         NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
     );
     let is_limit = limit.is_some_and(|limit| {
-<<<<<<< HEAD
         op == NirBinaryOp::Lt
-            && parse_shift(engine, binds, left, var) == Some(limit.shift)
-            && parse_check_bound(engine, binds, loop_body, right) == Some(limit.bound)
-||||||| 0fe5443fa
-        op == NirBinaryOp::Lt
-            && parse_shift(engine, binds, left, var) == Some(limit.shift)
-            && parse_check_bound(engine, binds, right) == Some(limit.bound)
-=======
-        op == NirBinaryOp::Lt && parse_limit(engine, binds, left, right, var) == Some(limit)
->>>>>>> origin/main
+            && parse_limit(engine, binds, loop_body, left, right, var) == Some(limit)
     });
     (relational && (reads_var(left) || reads_var(right))) || is_limit
 }

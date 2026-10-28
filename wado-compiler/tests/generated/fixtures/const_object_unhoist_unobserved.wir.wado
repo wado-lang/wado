@@ -788,22 +788,10 @@ fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/Stri
     builtin::array_set_u8(buf.repr, start_13, 34);
     start_13 = s.used;
     new_used_12 = 0;
-<<<<<<< HEAD
     $licm_repr_110 = s.repr;
-    b57: block {
-        l58: loop {
-            break_if b57 @likely(first >= start_13);
-||||||| 0fe5443fa
-    $licm_repr_107 = s.repr;
-    b57: block {
-        l58: loop {
-            break_if b57 @likely(first >= start_13);
-=======
-    $licm_repr_107 = s.repr;
     b63: block {
         l64: loop {
             break_if b63 ((@likely(first >= start_13) | @likely((first + 1) >= start_13)) | @likely(((first + 1) + 1) >= start_13)) | @likely((((first + 1) + 1) + 1) >= start_13);
->>>>>>> origin/main
             $for_0_body: block {
                 break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_110, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
                 cold_path;
@@ -813,26 +801,26 @@ fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/Stri
             };
             first = first + 1;
             $for_0_body: block {
-                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_107, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
+                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_110, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
                 cold_path;
                 "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, new_used_12, first, b_6);
-                $licm_repr_107 = s.repr;
+                $licm_repr_110 = s.repr;
                 new_used_12 = first + 1;
             };
             first = first + 1;
             $for_0_body: block {
-                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_107, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
+                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_110, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
                 cold_path;
                 "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, new_used_12, first, b_6);
-                $licm_repr_107 = s.repr;
+                $licm_repr_110 = s.repr;
                 new_used_12 = first + 1;
             };
             first = first + 1;
             $for_0_body: block {
-                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_107, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
+                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_110, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
                 cold_path;
                 "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, new_used_12, first, b_6);
-                $licm_repr_107 = s.repr;
+                $licm_repr_110 = s.repr;
                 new_used_12 = first + 1;
             };
             first = first + 1;
@@ -843,10 +831,10 @@ fn "core:json/core/json/write_escaped_string_from<&core:prelude/string.wado/Stri
         l66: loop {
             break_if b65 @likely(first >= start_13);
             $for_0_body: block {
-                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_107, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
+                break_if $for_0_body @likely(((local.tee b_6(builtin::array_get_value<u8>($licm_repr_110, first)) >=u 32) & (b_6 != 34)) & (b_6 != 92));
                 cold_path;
                 "core:json/core/json/flush_run_and_escape<&core:prelude/string.wado/String>"(buf, s, new_used_12, first, b_6);
-                $licm_repr_107 = s.repr;
+                $licm_repr_110 = s.repr;
                 new_used_12 = first + 1;
             };
             first = first + 1;
@@ -968,7 +956,7 @@ fn "core:json/core/json/serialize_into<i32>$sroa[value.value]"(buf, value) {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_75: i32;
+    let start_66: i32;
     return is_negative_20 = value < 0, x = builtin::i64_extend_i32_s(value), x = select i64(x < 0_i64, 0_i64 - x, x), value = $inline_count_digits_u64_0: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
@@ -1033,19 +1021,19 @@ fn "core:json/core/json/serialize_into<i32>$sroa[value.value]"(buf, value) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, is_negative_20);
         }
-        start_75 = buf.used;
+        start_66 = buf.used;
         buf.used = is_negative_20;
-        builtin::array_set_u8(buf.repr, start_75, 45);
+        builtin::array_set_u8(buf.repr, start_66, 45);
     } else {
-    }, if @unlikely(local.tee start_75(buf.used + value) > builtin::array_len(buf.repr)) {
+    }, if @unlikely(local.tee start_66(buf.used + value) > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_75);
-    }, is_negative_20 = buf.used, buf.used = start_75, arr = buf.repr, value = is_negative_20 + value, b108: block {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_66);
+    }, is_negative_20 = buf.used, buf.used = start_66, arr = buf.repr, value = is_negative_20 + value, b108: block {
         l109: loop {
             break_if b108 (value - is_negative_20) < 2;
             q = x /u 100_i64;
-            tens = local.tee start_75(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, ((48 + start_75) - (tens * 10)) & 255);
+            tens = local.tee start_66(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, value - 1, ((48 + start_66) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
             value = value - 2;
             x = q;
@@ -1963,37 +1951,17 @@ fn "core:serde/const_object_unhoist_unobserved.wado/Pair^core:serde/Serialize::s
     }
     start_33 = s.used;
     s.used = new_used_32;
-<<<<<<< HEAD
-    builtin::array_copy<u8>(s.repr, start_33, global:core:serde::$const_obj_44, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_43, 0);
-    if @likely(ref.is_null(local.tee r_75("core:json/core/json/serialize_into<i32>$sroa[value.value]"(s, 1)))) {
-||||||| 0fe5443fa
-    builtin::array_copy<u8>(s.repr, start_33, global:core:serde::$const_obj_44, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_43, 0);
-    if @likely(ref.is_null(local.tee r_73("core:json/core/json/serialize_into<i32>$sroa[value.value]"(s, 1)))) {
-=======
     builtin::array_copy<u8>(s.repr, start_33, global:core:serde::$const_obj_49, 0, 1);
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_48, 0);
-    if @likely(ref.is_null(local.tee r_73("core:json/core/json/serialize_into<i32>$sroa[value.value]"(s, 1)))) {
->>>>>>> origin/main
+    if @likely(ref.is_null(local.tee r_75("core:json/core/json/serialize_into<i32>$sroa[value.value]"(s, 1)))) {
     } else {
         $qm_e_9 = ref.as_non_null(r_75);
         cold_path;
         return $qm_e_9;
     }
-<<<<<<< HEAD
     value_78 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_42, 1);
-    "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, value_78);
-||||||| 0fe5443fa
-    value_76 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_42, 1);
-    "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, value_76);
-=======
-    value_76 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
     "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec1"(s, global:core:serde::$const_obj_47, 1);
-    "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, value_76);
->>>>>>> origin/main
+    "core:json/core/json/write_escaped_string<&core:prelude/string.wado/String>"(s, value_78);
     if @unlikely(local.tee start_33(s.used + 1) > builtin::array_len(s.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, start_33);
