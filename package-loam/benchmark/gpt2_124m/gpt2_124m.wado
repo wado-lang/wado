@@ -12,8 +12,8 @@ use { Model } from "../../example/gpt2-124m/model.wado";
 use { timed } from "./generate.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock) {
-    let Ok(checkpoint) = fs::read("gpt2.safetensors") else {
-        eprintln("gpt2.safetensors is missing; run package-loam/example/gpt2-124m/fetch.sh");
+    let Ok(checkpoint) = fs::read("model.onnx") else {
+        eprintln("model.onnx is missing; run package-loam/example/gpt2-124m/fetch.sh");
         return;
     };
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();

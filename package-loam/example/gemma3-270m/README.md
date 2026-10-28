@@ -1,7 +1,7 @@
 # Gemma 3 (270M)
 
 `gemma3.wado` continues a prompt with Gemma 3's 270M-parameter
-instruction-tuned model, whose weights load from a safetensors checkpoint at run
+instruction-tuned model, whose weights load from the model's data file at run
 time:
 
     package-loam/example/gemma3-270m/fetch.sh
@@ -31,17 +31,16 @@ of Google's `google/gemma-3-270m-it` under the
 onnxruntime's `com.microsoft` operators: `GroupQueryAttention` for attention,
 and the `Gelu` and `SimplifiedLayerNormalization` functions.
 
-`fetch.sh` downloads the model and its tokenizer into `build/`, which Git
-ignores, and splits the model into the graph and the checkpoint:
+`model.wado` imports `tokenizer.json` and `onnx/model.onnx` by their URLs,
+pinned by their SHA-256. The build downloads them once into Wado's cache. The
+graph names its weights in `onnx/model.onnx_data`, at an offset and a length
+each, and the build reads none of that file. `Prepared::load` reads the weights
+from it at run time. A program reaches no file the build read, so `fetch.sh`
+downloads the data file into `build/`, which Git ignores, with the model and
+the tokenizer files the oracle scripts read.
 
-- `gemma3.onnxtext` is `onnx/model.onnx` with its weights left out, as
-  `tools/onnx_split.wado` writes it.
-- `build/gemma3.safetensors` is the checkpoint that tool writes. The build
-  checks the graph against its header and reads none of the weights behind it.
-
-`build/tokenizer.json` and the checkpoint are too large to commit, so
-`wado test` skips this directory. Name a test file to run it once `fetch.sh`
-has.
+`wado test` skips this directory, since building the model downloads it. Name
+a test file to run it once `fetch.sh` has.
 
 - `tokenize.json` is the oracle for the tokenizer: the ids Hugging Face's
   tokenizer gives each of a set of texts. `tokenize.mjs` writes it with

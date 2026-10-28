@@ -1,6 +1,6 @@
 //! GPT-2 (124M) through Loam picks the tokens onnxruntime picks greedily after
-//! each prompt `generate.json` records. It reads the checkpoint `fetch.sh`
-//! writes, so `wado test` leaves it out; name the file to run it.
+//! each prompt `generate.json` records. It reads the weights from the model
+//! `fetch.sh` downloads, so `wado test` leaves it out; name the file to run it.
 
 use fs from "core:fs";
 use { from_string } from "core:json";
@@ -20,7 +20,7 @@ struct Oracle {
 
 #[timeout_ms(600000)]
 test "each prompt continues with the tokens onnxruntime picks greedily" {
-    let checkpoint = fs::read("gpt2-124m/gpt2.safetensors").unwrap();
+    let checkpoint = fs::read("gpt2-124m/model.onnx").unwrap();
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
     for let case of from_string::<Oracle>(#include_str("./generate.json")).unwrap().generate {
         let mut ids = case.ids;

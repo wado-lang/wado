@@ -31,7 +31,8 @@ watch record such an input as the prefix it is. The protocol is in
 
 What a build reads of each checkpoint, counted with
 `strace -f -y -e trace=read,pread64` over `wado check [--no-cache] <model.wado>`
-in `example/`, summing the reads of the `.safetensors` file:
+in `example/`, summing the reads of the `.safetensors` file, when the examples
+named the checkpoint `tools/onnx_split.wado` writes:
 
 | Checkpoint     | File size     | Build that runs the generator | Build that hits the cache |
 | -------------- | ------------- | ----------------------------- | ------------------------- |
@@ -43,17 +44,13 @@ the header.
 
 ### The examples
 
-`example/gpt2-124m/` and `example/gemma3-270m/` name the checkpoint `fetch.sh`
-writes, and no longer carry a header file of their own. The checkpoint is too
-large to commit, so a file naming the model compiles only once `fetch.sh` has
-run, and `wado test` leaves those files out. GPT-2's tokenizer test takes its
-`Tokenizer` from `tokenizer.json` directly, so it still runs without the
-download.
-
-`hf2loam.mjs` read its layout from the header file. It now reads the
-initializers `gpt2.onnxtext` declares without values, in the order the graph
-lists them, which is the order `tools/onnx_split.wado` writes the checkpoint
-in. Its output is byte for byte the checkpoint `fetch.sh` writes.
+`example/gpt2-124m/` and `example/gemma3-270m/` import the model Hugging Face
+publishes by its URL, pinned by its SHA-256, and read its weights in place as
+[Weights read in place](#weights-read-in-place) says. Nothing is split or
+committed. A program reaches no file its build read, so each `fetch.sh`
+downloads the file the weights load from. Building a model downloads it, so
+`wado test` leaves the files naming one out. GPT-2's tokenizer test takes its
+`Tokenizer` from the committed `tokenizer.json`, so it runs without a download.
 
 ## Inferred Axis Names
 

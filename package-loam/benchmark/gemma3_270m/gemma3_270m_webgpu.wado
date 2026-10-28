@@ -29,8 +29,8 @@ use { Model } from "../../example/gemma3-270m/model.wado";
 use { timed } from "./generate.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
-    let Ok(checkpoint) = fs::read("build/gemma3.safetensors") else {
-        eprintln("build/gemma3.safetensors is missing; run package-loam/example/gemma3-270m/fetch.sh");
+    let Ok(checkpoint) = fs::read("build/model.onnx_data") else {
+        eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
         return;
     };
     let Some(gpu) = WebGpuBackend::new() else {
