@@ -365,7 +365,8 @@ Some writes read the name as well:
 
 - An index assignment (`xs[0] = 1`) calls `index_assign`, which reads the value
   it indexes: a bounds check, or whatever an `impl IndexAssign` does.
-- A write through a reference lands in what the reference points to.
+- A write through a reference (`r.x = 1`) reads the reference to find where it
+  lands.
 - A write to an affine value is read by its drop.
 
 <!-- {"fixture":"spec_diagnostics_unused_variables.wado"} -->
