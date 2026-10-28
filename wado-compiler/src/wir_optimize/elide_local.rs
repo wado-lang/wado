@@ -1,12 +1,12 @@
-//! Write-only local elimination for the locals `wir_build` synthesises, whose
-//! names do not exist at TIR for `optimize::elide_local` to see. A store no read
-//! can see ([`dead_stores`]) loses it: a `LocalSet(x, v)` becomes nothing when
-//! `v` is side-effect-free, else a bare `Drop(v)`, and a `LocalTee(x, v)`
-//! becomes `v`. So does a `LocalSet` of an `x` read only by its own values,
-//! which liveness keeps live around a loop that feeds `x` to itself. Runs to a
-//! fixed point, since eliding one write can strand another.
+//! Dead-store elimination over every local, the ones `wir_build` synthesises
+//! included, whose names do not exist at TIR for `optimize::elide_local` to
+//! see. A store no read can see ([`dead_stores`]) loses it: a `LocalSet(x, v)`
+//! becomes nothing when `v` is side-effect-free, else a bare `Drop(v)`, and a
+//! `LocalTee(x, v)` becomes `v`. So does a `LocalSet` of an `x` read only by its
+//! own values, which liveness keeps live around a loop that feeds `x` to
+//! itself. Runs to a fixed point, since eliding one write can strand another.
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirPackage};
 use crate::wir_visitor::WirMutVisitor;
 
@@ -14,19 +14,19 @@ use super::liveness::dead_stores;
 use super::nullability::Nullability;
 use super::util::{count_local_gets, is_side_effect_free, may_trap_in};
 
-pub(super) fn elide_write_only_locals(module: &mut WirPackage) {
+pub(super) fn elide_dead_stores(module: &mut WirPackage) {
     for func in &mut module.functions {
         // Declared locals are stable across the sweep (elision only nops stores;
         // `DeclareLocal`s go later in `cleanup`), so read the SSoT once.
         let locals = func.declared_locals();
         if let Some(body) = &mut func.body {
             let null = Nullability::new(&locals);
-            while elide_write_only_locals_in_body(body, &null) {}
+            while elide_dead_stores_in_body(body, &null) {}
         }
     }
 }
 
-fn elide_write_only_locals_in_body(body: &mut [WirInstr], null: &Nullability) -> bool {
+fn elide_dead_stores_in_body(body: &mut [WirInstr], null: &Nullability) -> bool {
     let dead = dead_stores(body);
     if !dead.is_empty() {
         let mut stores = ElideDeadStores {
@@ -56,7 +56,7 @@ fn elide_write_only_locals_in_body(body: &mut [WirInstr], null: &Nullability) ->
 
 /// Removes the stores [`dead_stores`] found, numbering nodes as it does.
 struct ElideDeadStores<'a> {
-    dead: &'a IndexMap<u32, String>,
+    dead: &'a IndexSet<u32>,
     null: &'a Nullability<'a>,
     preorder: u32,
 }
@@ -66,15 +66,13 @@ impl WirMutVisitor for ElideDeadStores<'_> {
         let id = self.preorder;
         self.preorder += 1;
         self.walk_instr(instr);
-        let Some(local) = self.dead.get(&id) else {
+        if !self.dead.contains(&id) {
             return;
-        };
+        }
         *instr = match instr {
-            WirInstr::LocalSet { name, value } if name == local => discard(value, self.null),
-            WirInstr::LocalTee { name, value } if name == local => {
-                std::mem::replace(value.as_mut(), WirInstr::Nop)
-            }
-            other => unreachable!("dead store #{id} of `{local}` numbered {other:?}"),
+            WirInstr::LocalSet { value, .. } => discard(value, self.null),
+            WirInstr::LocalTee { value, .. } => std::mem::replace(value.as_mut(), WirInstr::Nop),
+            other => unreachable!("dead store #{id} numbered {other:?}"),
         };
     }
 }
@@ -227,7 +225,7 @@ mod tests {
         matches!(instr, WirInstr::LocalSet { name, .. } if name == local)
     }
     fn elide(body: &mut [WirInstr]) {
-        while elide_write_only_locals_in_body(body, &Nullability::new(&WirLocals::default())) {}
+        while elide_dead_stores_in_body(body, &Nullability::new(&WirLocals::default())) {}
     }
 
     /// `x = x + 1` in a loop, with no other reads of `x`, is a dead store,
@@ -277,7 +275,7 @@ mod tests {
             type_id: WirTypeId::new(0, Rc::from("pair")),
             fields: vec![WirInstr::I32WrapI64(Box::new(call())), lget("x")],
         }))];
-        assert!(elide_write_only_locals_in_body(
+        assert!(elide_dead_stores_in_body(
             &mut body,
             &Nullability::new(&WirLocals::default())
         ));
@@ -304,7 +302,7 @@ mod tests {
                 value: Some(Box::new(lget("y"))),
             },
         ];
-        assert!(elide_write_only_locals_in_body(
+        assert!(elide_dead_stores_in_body(
             &mut body,
             &Nullability::new(&WirLocals::default())
         ));
@@ -336,7 +334,7 @@ mod tests {
                 )),
             }],
         }];
-        elide_write_only_locals_in_body(&mut body, &Nullability::new(&WirLocals::default()));
+        elide_dead_stores_in_body(&mut body, &Nullability::new(&WirLocals::default()));
         let WirInstr::Loop { body, .. } = &body[0] else {
             panic!("expected the loop to survive");
         };
@@ -411,6 +409,124 @@ mod tests {
             panic!("expected the loop to survive");
         };
         assert!(is_store_of(&inner[1], "x"));
+    }
+
+    /// A store in an inner loop that only the outer back edge carries to a
+    /// read is live, though the outer loop's first pass, under an empty head,
+    /// finds it dead.
+    #[test]
+    fn a_store_the_outer_back_edge_reads_is_kept() {
+        let br_if_c = || WirInstr::BrIf {
+            depth: 0,
+            condition: Box::new(lget("c")),
+        };
+        let mut body = vec![
+            WirInstr::Loop {
+                label: None,
+                body: vec![
+                    lset("y", lget("x")),
+                    WirInstr::Loop {
+                        label: None,
+                        body: vec![lset("x", WirInstr::I32Const(1)), br_if_c()],
+                    },
+                    br_if_c(),
+                ],
+            },
+            ret("y"),
+        ];
+        elide(&mut body);
+        let WirInstr::Loop { body: outer, .. } = &body[0] else {
+            panic!("expected the outer loop to survive");
+        };
+        let WirInstr::Loop { body: inner, .. } = &outer[1] else {
+            panic!("expected the inner loop to survive");
+        };
+        assert!(is_store_of(&inner[0], "x"));
+    }
+
+    /// A `br_table` carries what any of its targets reads.
+    #[test]
+    fn a_br_table_joins_its_targets() {
+        let body_with = |targets: Vec<u32>| {
+            vec![
+                WirInstr::Block {
+                    label: None,
+                    result: None,
+                    body: vec![
+                        WirInstr::Block {
+                            label: None,
+                            result: None,
+                            body: vec![
+                                lset("x", WirInstr::I32Const(1)),
+                                WirInstr::BrTable {
+                                    index: Box::new(lget("c")),
+                                    targets,
+                                    default: 1,
+                                },
+                            ],
+                        },
+                        ret("x"),
+                    ],
+                },
+                lset("x", WirInstr::I32Const(2)),
+                ret("x"),
+            ]
+        };
+        let first_store = |body: &[WirInstr]| {
+            let WirInstr::Block { body: outer, .. } = &body[0] else {
+                panic!("expected the outer block to survive");
+            };
+            let WirInstr::Block { body: inner, .. } = &outer[0] else {
+                panic!("expected the inner block to survive");
+            };
+            is_store_of(&inner[0], "x")
+        };
+        let mut body = body_with(vec![0]);
+        elide(&mut body);
+        assert!(first_store(&body), "target 0 reads x = 1");
+        let mut body = body_with(vec![1]);
+        elide(&mut body);
+        assert!(!first_store(&body), "every target overwrites x");
+    }
+
+    /// A multi-value bind overwrites its targets, and is itself kept.
+    #[test]
+    fn a_multi_value_bind_overwrites_its_targets() {
+        let mut body = vec![
+            lset("x", WirInstr::I32Const(1)),
+            WirInstr::MultiValueLocalBind {
+                instr: Box::new(call()),
+                locals: vec![Some("x".to_string()), None],
+            },
+            ret("x"),
+        ];
+        elide(&mut body);
+        assert_matches!(body[0], WirInstr::Nop);
+        assert_matches!(body[1], WirInstr::MultiValueLocalBind { .. });
+    }
+
+    /// An overwritten tee becomes the value it stores.
+    #[test]
+    fn an_overwritten_tee_becomes_its_value() {
+        let tee = WirInstr::LocalTee {
+            name: "x".to_string(),
+            value: Box::new(WirInstr::I32Const(1)),
+        };
+        let mut body = vec![
+            lset("y", tee),
+            lset("x", WirInstr::I32Const(2)),
+            WirInstr::Return {
+                value: Some(Box::new(WirInstr::I32Add(
+                    Box::new(lget("x")),
+                    Box::new(lget("y")),
+                ))),
+            },
+        ];
+        elide(&mut body);
+        let WirInstr::LocalSet { value, .. } = &body[0] else {
+            panic!("y is read by the return and must survive");
+        };
+        assert_matches!(value.as_ref(), WirInstr::I32Const(1));
     }
 
     /// A store a branch carries to a read is live; one whose branch skips
@@ -512,7 +628,7 @@ mod tests {
                 value: Some(Box::new(lget("z"))),
             },
         ];
-        assert!(elide_write_only_locals_in_body(
+        assert!(elide_dead_stores_in_body(
             &mut body,
             &Nullability::new(&WirLocals::default())
         ));

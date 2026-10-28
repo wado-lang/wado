@@ -14,43 +14,42 @@ use crate::wir_visitor::WirRefVisitor;
 
 use super::util::Bits;
 
-/// The pre-order number of each dead store in `body`, mapped to the local it
-/// writes.
-pub(super) fn dead_stores(body: &[WirInstr]) -> IndexMap<u32, String> {
+/// The pre-order numbers of the dead stores in `body`.
+pub(super) fn dead_stores(body: &[WirInstr]) -> IndexSet<u32> {
     let mut flat = Flatten::default();
     flat.walk_body(body);
     let events = flat.events;
-    let locals = flat.locals;
     let mut start_of = vec![0; events.len()];
-    let mut else_of = IndexMap::default();
+    let mut else_of = vec![None; events.len()];
     let mut open: Vec<usize> = Vec::new();
     for (at, event) in events.iter().enumerate() {
         match event {
             Event::BlockStart | Event::LoopStart | Event::IfStart => open.push(at),
-            Event::Else => {
-                else_of.insert(*open.last().expect("an `else` is inside its `if`"), at);
-            }
+            Event::Else => else_of[*open.last().expect("an `else` is inside its `if`")] = Some(at),
             Event::BlockEnd | Event::LoopEnd | Event::IfEnd => {
                 start_of[at] = open.pop().expect("an end closes a start");
             }
-            _ => {}
+            Event::Read(_)
+            | Event::Write(..)
+            | Event::Kill(_)
+            | Event::Br(_)
+            | Event::BrIf(_)
+            | Event::BrTable(_)
+            | Event::Exit => {}
         }
     }
+    let width = flat.locals.len();
     let mut backward = Backward {
         events: &events,
         start_of: &start_of,
         else_of: &else_of,
-        width: locals.len(),
+        width,
         labels: Vec::new(),
         loop_heads: IndexMap::default(),
-        dead: IndexMap::default(),
+        dead: IndexSet::default(),
     };
-    backward.region(0, events.len(), Bits::new(locals.len()), true);
-    backward
-        .dead
-        .into_iter()
-        .map(|(id, local)| (id, locals[local].clone()))
-        .collect()
+    backward.region(0, events.len(), Bits::new(width));
+    backward.dead
 }
 
 enum Event {
@@ -104,7 +103,7 @@ impl WirRefVisitor for Flatten {
         self.preorder += 1;
         match instr {
             WirInstr::Block { body, .. } => {
-                self.bracketed(Event::BlockStart, body, Event::BlockEnd)
+                self.bracketed(Event::BlockStart, body, Event::BlockEnd);
             }
             WirInstr::Loop { body, .. } => self.bracketed(Event::LoopStart, body, Event::LoopEnd),
             WirInstr::If {
@@ -165,7 +164,7 @@ struct Backward<'a> {
     /// The matching start of each end.
     start_of: &'a [usize],
     /// The `else` of each `if` start that has one.
-    else_of: &'a IndexMap<usize, usize>,
+    else_of: &'a [Option<usize>],
     width: usize,
     /// What is live where a branch to each enclosing label lands, innermost
     /// last: after a block or an `if`, at the head of a loop.
@@ -174,59 +173,64 @@ struct Backward<'a> {
     /// enclosing loop. Liveness only grows from pass to pass, so the head
     /// found last is a sound start for the next fixed point.
     loop_heads: IndexMap<usize, Bits>,
-    dead: IndexMap<u32, usize>,
+    dead: IndexSet<u32>,
 }
 
 impl Backward<'_> {
-    /// What is live at `start`, given `live` at `end`. Records the dead stores
-    /// where `record` says the labels hold their final liveness.
-    fn region(&mut self, start: usize, end: usize, mut live: Bits, record: bool) -> Bits {
+    /// What is live at `start`, given `live` at `end`, recording the stores
+    /// it finds dead.
+    fn region(&mut self, start: usize, end: usize, mut live: Bits) -> Bits {
         let mut at = end;
         while at > start {
             at -= 1;
             match &self.events[at] {
                 Event::Read(local) => live.insert(*local),
                 Event::Write(local, id) => {
-                    if record && !live.contains(*local) {
-                        self.dead.insert(*id, *local);
+                    if !live.contains(*local) {
+                        self.dead.insert(*id);
                     }
                     live.remove(*local);
                 }
                 Event::Kill(local) => live.remove(*local),
                 Event::BlockEnd => {
                     let open = self.start_of[at];
-                    live = self.labeled(live.clone(), open + 1, at, live, record);
+                    live = self.labeled(live.clone(), open + 1, at, live);
                     at = open;
                 }
                 Event::IfEnd => {
                     let open = self.start_of[at];
                     let after = live;
-                    let split = self.else_of.get(&open).copied();
+                    let split = self.else_of[open];
                     // An `if` without an `else` falls through on false.
                     let else_live = match split {
-                        Some(split) => {
-                            self.labeled(after.clone(), split + 1, at, after.clone(), record)
-                        }
+                        Some(split) => self.labeled(after.clone(), split + 1, at, after.clone()),
                         None => after.clone(),
                     };
-                    live =
-                        self.labeled(after.clone(), open + 1, split.unwrap_or(at), after, record);
+                    live = self.labeled(after.clone(), open + 1, split.unwrap_or(at), after);
                     live.union(&else_live);
                     at = open;
                 }
                 Event::LoopEnd => {
                     let open = self.start_of[at];
-                    live = self.looped(open, at, live, record);
+                    live = self.looped(open, at, live);
                     at = open;
                 }
-                Event::Br(depth) => live = self.target(*depth),
-                Event::BrIf(depth) => live.union(&self.target(*depth)),
-                Event::BrTable(depths) => {
-                    let mut union = Bits::new(self.width);
-                    for depth in depths {
-                        union.union(&self.target(*depth));
+                Event::Br(depth) => {
+                    live = match self.target(*depth) {
+                        Some(target) => target.clone(),
+                        None => Bits::new(self.width),
                     }
-                    live = union;
+                }
+                Event::BrIf(depth) => {
+                    if let Some(target) = self.target(*depth) {
+                        live.union(target);
+                    }
+                }
+                Event::BrTable(depths) => {
+                    live = Bits::new(self.width);
+                    for target in depths.iter().filter_map(|&depth| self.target(depth)) {
+                        live.union(target);
+                    }
                 }
                 Event::Exit => live = Bits::new(self.width),
                 Event::BlockStart | Event::LoopStart | Event::IfStart | Event::Else => {
@@ -239,16 +243,9 @@ impl Backward<'_> {
 
     /// What is live at `start`, given `live` at `end`, under a label where
     /// what is `landing` is live.
-    fn labeled(
-        &mut self,
-        landing: Bits,
-        start: usize,
-        end: usize,
-        live: Bits,
-        record: bool,
-    ) -> Bits {
+    fn labeled(&mut self, landing: Bits, start: usize, end: usize, live: Bits) -> Bits {
         self.labels.push(landing);
-        let live = self.region(start, end, live, record);
+        let live = self.region(start, end, live);
         self.labels.pop();
         live
     }
@@ -256,7 +253,7 @@ impl Backward<'_> {
     /// The loop's head at its fixed point, from the liveness after it. A pass
     /// whose head moves records under a head short of final, so its records
     /// go; the loop's stores are recorded by no pass before its first.
-    fn looped(&mut self, open: usize, close: usize, after: Bits, record: bool) -> Bits {
+    fn looped(&mut self, open: usize, close: usize, after: Bits) -> Bits {
         let mut head = self
             .loop_heads
             .get(&open)
@@ -264,7 +261,7 @@ impl Backward<'_> {
             .unwrap_or_else(|| Bits::new(self.width));
         loop {
             let recorded = self.dead.len();
-            let mut next = self.labeled(head.clone(), open + 1, close, after.clone(), record);
+            let mut next = self.labeled(head.clone(), open + 1, close, after.clone());
             next.union(&head);
             if next == head {
                 break;
@@ -276,12 +273,10 @@ impl Backward<'_> {
         head
     }
 
-    /// What is live where a branch of `depth` lands: nothing past the
-    /// function body, which a branch out of returns.
-    fn target(&self, depth: u32) -> Bits {
-        match self.labels.len().checked_sub(depth as usize + 1) {
-            Some(at) => self.labels[at].clone(),
-            None => Bits::new(self.width),
-        }
+    /// What is live where a branch of `depth` lands, `None` past the function
+    /// body: a branch out of it returns, and nothing is live.
+    fn target(&self, depth: u32) -> Option<&Bits> {
+        let at = self.labels.len().checked_sub(depth as usize + 1)?;
+        Some(&self.labels[at])
     }
 }

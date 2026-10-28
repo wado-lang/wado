@@ -44,7 +44,7 @@ use cleanup::{cleanup, cleanup_global_inits};
 use const_forward::forward_struct_field_constants;
 use const_global::promote_const_global_inits;
 use dedupe_const_globals::dedupe_const_globals;
-use elide_local::elide_write_only_locals;
+use elide_local::elide_dead_stores;
 use elide_struct::{elide_adjacent_box_locals, flatten_seq_assignments, unwrap_box_locals};
 use empty_work::elide_empty_work;
 use local_coalesce::coalesce_locals;
@@ -231,11 +231,11 @@ fn optimize_scoped(
         });
     });
 
-    // Phase 6: strip write-only WIR-synthesised locals (`$match_scrut_N`,
-    // multi-value temps, `$pair_temp_N`) that no TIR pass can reach, so codegen
-    // doesn't emit dead locals.
-    wir_pass(scope, "elide_write_only_locals", module, profiler, |m| {
-        elide_write_only_locals(m);
+    // Phase 6: strip the stores no read sees, of the WIR-synthesised locals
+    // (`$match_scrut_N`, multi-value temps, `$pair_temp_N`) that no TIR pass
+    // can reach among them, so codegen doesn't emit dead locals.
+    wir_pass(scope, "elide_dead_stores", module, profiler, |m| {
+        elide_dead_stores(m);
     });
 
     // Phase 7: global cleanup, then final body cleanup (Nops, dead
@@ -302,10 +302,10 @@ fn optimize_scoped(
     // Coalescing turns a copy between two merged locals into a self-copy it
     // drops, and leaves set-then-get pairs across them. Tee fusion comes late:
     // a tee hides the copy it replaces from every pass before it. A set fused into its local's only read leaves a tee
-    // nothing reads, which the write-only sweep takes back to its value.
+    // nothing reads, which dead-store elimination takes back to its value.
     wir_pass(scope, "forward_once_read_locals", module, profiler, |m| {
         peephole::fuse_once_read_local_tees(m);
-        elide_write_only_locals(m);
+        elide_dead_stores(m);
     });
     wir_pass(scope, "coalesce_locals", module, profiler, |m| {
         coalesce_locals(m);
@@ -319,7 +319,7 @@ fn optimize_scoped(
         module,
         profiler,
         |m| {
-            elide_write_only_locals(m);
+            elide_dead_stores(m);
             cleanup(m);
         },
     );
