@@ -160,14 +160,6 @@ impl WirRefVisitor for Flatten {
     }
 }
 
-/// Where a branch to an enclosing label goes.
-enum Label {
-    /// The end of a block or an `if`: what is live after it.
-    End(Bits),
-    /// The start of a loop: what is live at its head.
-    LoopHead(Bits),
-}
-
 struct Backward<'a> {
     events: &'a [Event],
     /// The matching start of each end.
@@ -175,8 +167,9 @@ struct Backward<'a> {
     /// The `else` of each `if` start that has one.
     else_of: &'a IndexMap<usize, usize>,
     width: usize,
-    /// One per enclosing label, innermost last.
-    labels: Vec<Label>,
+    /// What is live where a branch to each enclosing label lands, innermost
+    /// last: after a block or an `if`, at the head of a loop.
+    labels: Vec<Bits>,
     /// Each loop's head, by its start event, kept across the passes of an
     /// enclosing loop. Liveness only grows from pass to pass, so the head
     /// found last is a sound start for the next fixed point.
@@ -186,7 +179,7 @@ struct Backward<'a> {
 
 impl Backward<'_> {
     /// What is live at `start`, given `live` at `end`. Records the dead stores
-    /// on a pass whose liveness is final, which `record` says.
+    /// where `record` says the labels hold their final liveness.
     fn region(&mut self, start: usize, end: usize, mut live: Bits, record: bool) -> Bits {
         let mut at = end;
         while at > start {
@@ -202,25 +195,22 @@ impl Backward<'_> {
                 Event::Kill(local) => live.remove(*local),
                 Event::BlockEnd => {
                     let open = self.start_of[at];
-                    live = self.labeled(Label::End(live.clone()), open + 1, at, live, record);
+                    live = self.labeled(live.clone(), open + 1, at, live, record);
                     at = open;
                 }
                 Event::IfEnd => {
                     let open = self.start_of[at];
                     let after = live;
+                    let split = self.else_of.get(&open).copied();
                     // An `if` without an `else` falls through on false.
-                    let (then_end, else_live) = match self.else_of.get(&open) {
-                        Some(&split) => {
-                            let label = Label::End(after.clone());
-                            (
-                                split,
-                                self.labeled(label, split + 1, at, after.clone(), record),
-                            )
+                    let else_live = match split {
+                        Some(split) => {
+                            self.labeled(after.clone(), split + 1, at, after.clone(), record)
                         }
-                        None => (at, after.clone()),
+                        None => after.clone(),
                     };
                     live =
-                        self.labeled(Label::End(after.clone()), open + 1, then_end, after, record);
+                        self.labeled(after.clone(), open + 1, split.unwrap_or(at), after, record);
                     live.union(&else_live);
                     at = open;
                 }
@@ -247,21 +237,25 @@ impl Backward<'_> {
         live
     }
 
+    /// What is live at `start`, given `live` at `end`, under a label where
+    /// what is `landing` is live.
     fn labeled(
         &mut self,
-        label: Label,
+        landing: Bits,
         start: usize,
         end: usize,
         live: Bits,
         record: bool,
     ) -> Bits {
-        self.labels.push(label);
+        self.labels.push(landing);
         let live = self.region(start, end, live, record);
         self.labels.pop();
         live
     }
 
-    /// The loop's head at its fixed point, from the liveness after it.
+    /// The loop's head at its fixed point, from the liveness after it. A pass
+    /// whose head moves records under a head short of final, so its records
+    /// go; the loop's stores are recorded by no pass before its first.
     fn looped(&mut self, open: usize, close: usize, after: Bits, record: bool) -> Bits {
         let mut head = self
             .loop_heads
@@ -269,21 +263,14 @@ impl Backward<'_> {
             .cloned()
             .unwrap_or_else(|| Bits::new(self.width));
         loop {
-            let mut next = self.labeled(
-                Label::LoopHead(head.clone()),
-                open + 1,
-                close,
-                after.clone(),
-                false,
-            );
+            let recorded = self.dead.len();
+            let mut next = self.labeled(head.clone(), open + 1, close, after.clone(), record);
             next.union(&head);
             if next == head {
                 break;
             }
+            self.dead.truncate(recorded);
             head = next;
-        }
-        if record {
-            self.labeled(Label::LoopHead(head.clone()), open + 1, close, after, true);
         }
         self.loop_heads.insert(open, head.clone());
         head
@@ -292,11 +279,9 @@ impl Backward<'_> {
     /// What is live where a branch of `depth` lands: nothing past the
     /// function body, which a branch out of returns.
     fn target(&self, depth: u32) -> Bits {
-        let Some(at) = self.labels.len().checked_sub(depth as usize + 1) else {
-            return Bits::new(self.width);
-        };
-        match &self.labels[at] {
-            Label::End(live) | Label::LoopHead(live) => live.clone(),
+        match self.labels.len().checked_sub(depth as usize + 1) {
+            Some(at) => self.labels[at].clone(),
+            None => Bits::new(self.width),
         }
     }
 }

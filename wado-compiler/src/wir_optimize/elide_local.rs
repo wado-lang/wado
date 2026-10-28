@@ -1,9 +1,10 @@
 //! Write-only local elimination for the locals `wir_build` synthesises, whose
-//! names do not exist at TIR for `optimize::elide_local` to see. A
-//! `LocalSet(x, v)` whose `x` is never read elsewhere loses its store: the whole
-//! statement when `v` is side-effect-free, else a bare `Drop(v)`, and a
-//! `LocalTee(x, v)` becomes `v`. Runs to a fixed point, since eliding one write
-//! can strand another.
+//! names do not exist at TIR for `optimize::elide_local` to see. A store no read
+//! can see ([`dead_stores`]) loses it: a `LocalSet(x, v)` becomes nothing when
+//! `v` is side-effect-free, else a bare `Drop(v)`, and a `LocalTee(x, v)`
+//! becomes `v`. So does a `LocalSet` of an `x` read only by its own values,
+//! which liveness keeps live around a loop that feeds `x` to itself. Runs to a
+//! fixed point, since eliding one write can strand another.
 
 use crate::hashmap::IndexMap;
 use crate::wir::{WirInstr, WirPackage};
@@ -123,17 +124,6 @@ impl WirMutVisitor for ElideWriteOnly<'_> {
             self.changed = true;
             return;
         }
-        // A tee of a local nothing reads is the value it stores. Unlike a
-        // set's, a tee's own value counts: what a read there sees flows out
-        // through the tee's result.
-        if let WirInstr::LocalTee { name, value } = instr
-            && !self.read_counts.contains_key(name.as_str())
-        {
-            *instr = std::mem::replace(value.as_mut(), WirInstr::Nop);
-            self.changed = true;
-            self.visit_instr(instr);
-            return;
-        }
         // `drop(side_effect_free_expr)` is dead — the value is discarded by
         // definition. Catches the statement-position `Expr(struct.new …)` /
         // `Expr(self.field)` shapes the TIR pass leaves alone, not knowing what
@@ -222,16 +212,42 @@ mod tests {
             WirInstr::I32Add(Box::new(lget(name)), Box::new(WirInstr::I32Const(1))),
         )
     }
+    fn ret(name: &str) -> WirInstr {
+        WirInstr::Return {
+            value: Some(Box::new(lget(name))),
+        }
+    }
+    fn call() -> WirInstr {
+        WirInstr::Call {
+            func_id: WirFuncId::new(0, Rc::from("f")),
+            args: vec![],
+        }
+    }
+    fn is_store_of(instr: &WirInstr, local: &str) -> bool {
+        matches!(instr, WirInstr::LocalSet { name, .. } if name == local)
+    }
+    fn elide(body: &mut [WirInstr]) {
+        while elide_write_only_locals_in_body(body, &Nullability::new(&WirLocals::default())) {}
+    }
 
-    /// `x = x + 1` with no other reads of `x` is a dead store even though its
-    /// own RHS reads `x`.
+    /// `x = x + 1` in a loop, with no other reads of `x`, is a dead store,
+    /// though the back edge carries `x` to its own RHS.
     #[test]
     fn self_referencing_dead_store_elides() {
-        let mut body = vec![increment("x")];
-        assert!(elide_write_only_locals_in_body(
-            &mut body,
-            &Nullability::new(&WirLocals::default())
-        ));
+        let mut body = vec![WirInstr::Loop {
+            label: None,
+            body: vec![
+                increment("x"),
+                WirInstr::BrIf {
+                    depth: 0,
+                    condition: Box::new(lget("c")),
+                },
+            ],
+        }];
+        elide(&mut body);
+        let WirInstr::Loop { body, .. } = &body[0] else {
+            panic!("expected the loop to survive");
+        };
         assert_matches!(body[0], WirInstr::Nop);
     }
 
@@ -257,13 +273,9 @@ mod tests {
     /// A dropped allocation keeps only its operands' effects.
     #[test]
     fn dropped_struct_new_keeps_only_its_operands_effects() {
-        let call = WirInstr::Call {
-            func_id: WirFuncId::new(0, Rc::from("f")),
-            args: vec![],
-        };
         let mut body = vec![WirInstr::Drop(Box::new(WirInstr::StructNew {
             type_id: WirTypeId::new(0, Rc::from("pair")),
-            fields: vec![WirInstr::I32WrapI64(Box::new(call)), lget("x")],
+            fields: vec![WirInstr::I32WrapI64(Box::new(call())), lget("x")],
         }))];
         assert!(elide_write_only_locals_in_body(
             &mut body,
@@ -335,24 +347,6 @@ mod tests {
             panic!("expected the comparison to survive");
         };
         assert_matches!(lhs.as_ref(), WirInstr::LocalTee { .. });
-    }
-
-    fn elide(body: &mut [WirInstr]) {
-        while elide_write_only_locals_in_body(body, &Nullability::new(&WirLocals::default())) {}
-    }
-    fn ret(name: &str) -> WirInstr {
-        WirInstr::Return {
-            value: Some(Box::new(lget(name))),
-        }
-    }
-    fn call() -> WirInstr {
-        WirInstr::Call {
-            func_id: WirFuncId::new(0, Rc::from("f")),
-            args: vec![],
-        }
-    }
-    fn is_store_of(instr: &WirInstr, local: &str) -> bool {
-        matches!(instr, WirInstr::LocalSet { name, .. } if name == local)
     }
 
     /// A store overwritten before any read is dead, though the local is read.
