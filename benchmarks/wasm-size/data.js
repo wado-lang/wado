@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793149923248,
+  "lastUpdate": 1793155127315,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71777,6 +71777,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c94bec869d886b5afb09d2f1cf85ac31a2441c84"
         },
         "date": 1793149922441,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295756,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "87447233ca981cddb2aa993e81e55fc540e9ad03",
+          "message": "Merge pull request #2481 from wado-lang/ccr-324478b6-p4w981\n\nfix(cm): alias an imported type from the interface that declares it",
+          "timestamp": "2026-10-28T11:27:28+09:00",
+          "tree_id": "cd4b625a356a086b6b865cc60bc873267409ad57",
+          "url": "https://github.com/wado-lang/wado/commit/87447233ca981cddb2aa993e81e55fc540e9ad03"
+        },
+        "date": 1793155126473,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
