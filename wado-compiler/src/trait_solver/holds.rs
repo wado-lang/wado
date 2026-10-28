@@ -769,7 +769,7 @@ pub(super) fn impl_applies(
     )
 }
 
-/// Whether `source`'s receiver bounds hold of `ty`, its pins met by one binding
+/// Whether `source`'s bounds hold of `ty`, its pins met by one binding
 /// of the source's parameters.
 #[must_use]
 pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverType) -> bool {
@@ -782,12 +782,12 @@ pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverT
     };
     let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
     let mut deferred = Vec::new();
-    source.receiver.bounds.iter().all(|bound| {
+    source.bounds.iter().all(|bound| {
         query
             .holds(ty, bound.trait_, &bound.args)
             .is_some_and(|answer| {
                 query.meets_pins(
-                    &source.receiver.pins,
+                    &source.pins,
                     bound.trait_,
                     &answer,
                     &mut bindings,

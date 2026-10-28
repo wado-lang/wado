@@ -1113,8 +1113,7 @@ impl TypeSystem {
         else {
             return chain;
         };
-        let trait_def = trait_;
-        let trait_ = FqTraitName::declared(self.resolutions.defs(), trait_);
+        let fq_trait = FqTraitName::declared(self.resolutions.defs(), trait_);
         let mut type_id = type_id;
         // Bounded, so a pathologically nested (or cyclic) type cannot produce
         // an unbounded chain.
@@ -1130,7 +1129,7 @@ impl TypeSystem {
                 }
                 _ => self
                     .comparison_withheld_note(tr, type_id)
-                    .or_else(|| self.unsourced_note(scope, type_id, trait_def)),
+                    .or_else(|| self.unsourced_note(scope, type_id, trait_)),
             };
             if let Some(why) = written_instead {
                 chain.push(why);
@@ -1140,7 +1139,7 @@ impl TypeSystem {
             let StructuralConformance::Fails {
                 member: label,
                 type_id: member_tid,
-            } = self.structural_conformance(ctx, scope, &resolved, tr, &trait_)
+            } = self.structural_conformance(ctx, scope, &resolved, tr, &fq_trait)
             else {
                 break;
             };
@@ -1154,18 +1153,22 @@ impl TypeSystem {
         chain
     }
 
-    /// Why `type_id` derives no `trait_`: no source of it holds of the type
-    /// ([`SolverBridge::sourced`]). `None` where one does.
+    /// The declaration `type_id` represents, where no source of `trait_` holds
+    /// of it ([`SolverBridge::sourced`]).
+    fn unsourced(&self, type_id: TypeId, trait_: DefId) -> Option<DefId> {
+        self.represented_decl(type_id)
+            .filter(|&decl| !self.solver().sourced(decl, trait_))
+    }
+
+    /// Why `type_id` derives no `trait_`: no source of it holds of the type.
+    /// `None` where one does.
     pub(super) fn unsourced_note(
         &self,
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
     ) -> Option<String> {
-        let decl = self.represented_decl(type_id)?;
-        if self.solver().sourced(decl, trait_) {
-            return None;
-        }
+        let decl = self.unsourced(type_id, trait_)?;
         let owner = self.type_id_to_string(type_id);
         Some(
             match scope
@@ -1297,7 +1300,7 @@ impl TypeSystem {
                 self.type_implements_trait(ctx, *base_type, &trait_)
             }
             ResolvedType::Flags { .. } => self.type_implements_trait(ctx, TypeTable::U32, &trait_),
-            _ if self.unsourced_note(scope, type_id, trait_def).is_some() => false,
+            _ if self.unsourced(type_id, trait_def).is_some() => false,
             nominal => {
                 // A marker on a generic declaration (`impl<T> Eq for Pair<T>;`)
                 // asks whether the *declaration* derives, and its body is

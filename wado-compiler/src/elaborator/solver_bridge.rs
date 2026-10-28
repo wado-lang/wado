@@ -1283,15 +1283,12 @@ impl SolverBridge {
         };
         let ParamDef { bounds, pins, .. } = &def.def.params[receiver as usize];
         Some(Source {
-            receiver: ParamDef {
-                bounds: bounds
-                    .iter()
-                    .filter(|b| b.trait_ == kind)
-                    .cloned()
-                    .collect(),
-                pins: pins.iter().filter(|p| p.trait_ == kind).cloned().collect(),
-                copyable: false,
-            },
+            bounds: bounds
+                .iter()
+                .filter(|b| b.trait_ == kind)
+                .cloned()
+                .collect(),
+            pins: pins.iter().filter(|p| p.trait_ == kind).cloned().collect(),
             params: def.def.params.len(),
         })
     }

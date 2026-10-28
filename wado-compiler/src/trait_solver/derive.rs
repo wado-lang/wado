@@ -292,11 +292,8 @@ mod tests {
         p.sources.insert(
             EQ,
             vec![Source {
-                receiver: ParamDef {
-                    bounds: vec![ParamBound::bare(KIND)],
-                    pins: vec![pin(types), pin(inputs)],
-                    copyable: false,
-                },
+                bounds: vec![ParamBound::bare(KIND)],
+                pins: vec![pin(types), pin(inputs)],
                 params: 2,
             }],
         );

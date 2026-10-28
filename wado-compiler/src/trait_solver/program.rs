@@ -204,7 +204,8 @@ impl ParamDef {
 /// `params` parameters.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Source {
-    pub receiver: ParamDef,
+    pub bounds: Vec<ParamBound>,
+    pub pins: Vec<Pin>,
     pub params: usize,
 }
 
