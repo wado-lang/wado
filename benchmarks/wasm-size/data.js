@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793187281715,
+  "lastUpdate": 1793197925936,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71997,6 +71997,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/af982d2bc4efa8feafa8606285955734c4ea97d3"
         },
         "date": 1793187281212,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4603138ef960831a1d592b3192e23ffbea4dba9e",
+          "message": "Merge pull request #2486 from wado-lang/remove-reflect-visibility-gate\n\nfix(reflection): one answer for every Reflect* bound, open and closed structs",
+          "timestamp": "2026-10-28T23:12:44+09:00",
+          "tree_id": "ccb0361ec59d0badfb9715177764c0121d40f4ac",
+          "url": "https://github.com/wado-lang/wado/commit/4603138ef960831a1d592b3192e23ffbea4dba9e"
+        },
+        "date": 1793197925310,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
