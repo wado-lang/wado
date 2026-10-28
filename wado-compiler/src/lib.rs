@@ -1944,6 +1944,7 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         coverage,
+        space_modules,
         ..
     } = sem;
 
@@ -2221,7 +2222,7 @@ fn compile_after_load<H: CompilerHost>(
     // level so the NIR walk is skipped entirely when remarks would be filtered
     // out (the default CLI level is `warn`).
     if remarks_logged {
-        let residual = remarks::collect_value_copy_remarks(&nir)
+        let residual = remarks::collect_value_copy_remarks(&nir, &space_modules)
             .into_iter()
             .map(|mut remark| {
                 // A copy a destructuring assignment makes says why it is no move.
@@ -2235,8 +2236,8 @@ fn compile_after_load<H: CompilerHost>(
                 }
                 remark
             })
-            .chain(remarks::collect_param_gate_remarks(&nir))
-            .chain(remarks::collect_const_region_remarks(&nir))
+            .chain(remarks::collect_param_gate_remarks(&nir, &space_modules))
+            .chain(remarks::collect_const_region_remarks(&nir, &space_modules))
             .chain(
                 nir.specialization_cap
                     .as_ref()

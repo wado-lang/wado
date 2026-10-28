@@ -1,0 +1,23 @@
+// A remark stays where its cost was written. `grow` is spliced into `run`, and
+// the copy it makes is still reported at its own line in its own file, not at
+// the call that received its body.
+
+use { println, Stdout, Environment, args } from "core:cli";
+use { grow } from "./sub/remark_copy_spliced_helper.wado";
+
+export fn run() with (Stdout, Environment) {
+    println(`${grow(args().len() as i32)}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n",
+    "wir_scope": "remark_copy_spliced_from_module.wado/run",
+    "wir_not_expect:O2": ["/grow\""],
+    "remarks": {
+        "O2": [
+            {"contains": ["remark_copy_spliced_helper.wado:7:5 remark: a copy of"], "count": 1},
+            {"contains": ["remark_copy_spliced_from_module.wado"], "count": 0}
+        ]
+    }
+}

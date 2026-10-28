@@ -4,6 +4,7 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
+use crate::ast::{AstIdSpace, Module};
 use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
@@ -11,6 +12,7 @@ use crate::name::{DeclaredHead, effect_namespace, module_parent_dir};
 use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
+use crate::token::Span;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 use unicode_normalization::UnicodeNormalization;
@@ -1202,6 +1204,50 @@ impl fmt::Display for ModuleSource {
             Self::Wasm { path, .. } => write!(f, "{path}"),
             Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.rendered())),
         }
+    }
+}
+
+/// Which module's parse minted each [`AstIdSpace`], over a loaded set: what
+/// turns a span or an id back into the module whose text it indexes. A body
+/// walked away from its text (a trait's default reified per impl, a callee
+/// spliced into its caller) holds spans of another module than its own.
+#[derive(Debug, Clone, Default)]
+pub struct ParseModules(hashmap::IndexMap<AstIdSpace, ModuleSource>);
+
+impl ParseModules {
+    pub fn of<'m>(modules: impl IntoIterator<Item = (&'m ModuleSource, &'m Module)>) -> Self {
+        let mut spaces = hashmap::IndexMap::default();
+        for (source, module) in modules {
+            let claimed = spaces.insert(module.ast_id_space(), source.clone());
+            assert!(
+                claimed.is_none(),
+                "one module is one `AstIdSpace`, but {source} shares one with {}",
+                claimed.expect("just checked")
+            );
+        }
+        Self(spaces)
+    }
+
+    /// Add another load's parses. A space is minted once, so none is in both.
+    pub fn extend(&mut self, other: &Self) {
+        self.0.extend(
+            other
+                .0
+                .iter()
+                .map(|(space, source)| (*space, source.clone())),
+        );
+    }
+
+    /// The module `space` was parsed from, or `None` for a synthesized node,
+    /// which no module wrote.
+    pub fn module_of_space(&self, space: AstIdSpace) -> Option<&ModuleSource> {
+        self.0.get(&space)
+    }
+
+    /// The module whose text `span` indexes, or `holder` for a synthesized
+    /// span.
+    pub fn module_of_span<'m>(&'m self, span: Span, holder: &'m ModuleSource) -> &'m ModuleSource {
+        self.module_of_space(span.space).unwrap_or(holder)
     }
 }
 

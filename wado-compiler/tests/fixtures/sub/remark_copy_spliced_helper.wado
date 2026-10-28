@@ -1,0 +1,10 @@
+// `seed` keeps the list out of reach of constant folding, which would evaluate
+// the helper away and leave no copy to report. Nothing keeps the helper out of
+// its caller: the copy is reported here wherever its body ends up.
+
+pub fn grow(seed: i32) -> i32 {
+    let a: List<i32> = [seed, seed + 1];
+    let mut b = a;
+    b.push(seed + 2);
+    return a.len() + b.len();
+}

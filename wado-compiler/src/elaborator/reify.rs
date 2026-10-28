@@ -610,6 +610,7 @@ impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
             .reify
             .tysys
             .trait_env
+            .parse_modules()
             .module_of_space(ident.id.space())
             .map_or(self.reify.sem, |module| {
                 &self.reify.all_module_semantics[module]
@@ -1601,7 +1602,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_count: ctx.local_count(),
             locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: hashmap::IndexSet::default(),
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
@@ -1903,7 +1903,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             local_count: ctx.local_count(),
             locals: ctx.locals.clone(),
             address_taken_locals: ctx.address_taken_locals,
-            stores_aliased_locals: hashmap::IndexSet::default(),
             is_cm_binding: false,
             is_dispatch_wrapper: false,
             is_cm_export: false,
@@ -3567,6 +3566,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let file = self
             .tysys
             .trait_env
+            .parse_modules()
             .module_of_span(span, &self.current_module_source)
             .to_string();
         let mut pieces = TemplatePieces::default();
@@ -9095,6 +9095,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     None => self
                         .tysys
                         .trait_env
+                        .parse_modules()
                         .module_of_span(lit.span, &self.current_module_source)
                         .to_string(),
                 };

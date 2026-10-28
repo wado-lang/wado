@@ -383,6 +383,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn home_module(&self, node: ast::AstId) -> ModuleSource {
         self.tysys
             .trait_env
+            .parse_modules()
             .module_of_space(node.space())
             .cloned()
             .unwrap_or_else(|| self.current_module_source.clone())
@@ -409,6 +410,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let home = self
             .tysys
             .trait_env
+            .parse_modules()
             .module_of_space(node.space())
             .unwrap_or(&self.current_module_source);
         self.namespace_imports_in(home)

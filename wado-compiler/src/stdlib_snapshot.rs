@@ -215,8 +215,8 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 ) -> Option<&'a ModuleSource> {
     let cached = stdlib_sources(snap);
     modules.iter().find_map(|(ms, module)| {
-        let reparsed =
-            cached.contains(ms) && snap.space_modules.get(&module.ast_id_space()) != Some(ms);
+        let reparsed = cached.contains(ms)
+            && snap.space_modules.module_of_space(module.ast_id_space()) != Some(ms);
         reparsed.then_some(ms)
     })
 }

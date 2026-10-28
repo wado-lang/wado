@@ -5,17 +5,19 @@
 //!
 //! NIR is the last IR carrying per-expression spans and `wir_build` lowers these
 //! one-to-one, so walking optimized NIR yields exact source locations. Detection
-//! covers the entry package alone: a dependency's internals would drown out the
-//! program.
+//! covers the entry package's code alone: a dependency's internals would drown
+//! out the program. Which code that is, a span's own parse says, not the
+//! function holding it: a splice moves a callee's body, and its spans with it,
+//! into a caller of another module. So a remark stays where its cost was written
+//! whatever the inliner chose.
 
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
-use crate::hashmap;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ParseModules};
 use crate::name::COLD_PATH_INTRINSIC;
-use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::{NirPackage, SpecializationCapHit};
 use crate::niri::{
@@ -33,44 +35,91 @@ use crate::type_table::TypeTable;
 pub struct Remark {
     /// The remark text, without the `remark:` prefix the logger adds.
     pub message: String,
-    /// The module the span belongs to. A span carries no file, and the entry
-    /// package is more than one.
+    /// The module whose text the span indexes, which names the file where the
+    /// logger cannot: a synthetic entry (`<stdin>`) has no path.
     pub module: ModuleSource,
     /// Where the cost survives, in the original source.
     pub span: Span,
 }
 
-/// Collect remarks for value-semantic copies that survive optimization,
-/// restricted to functions the entry package defines.
-pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
+/// The remarks a walk found, each once. A body spliced into several callers
+/// carries its spans into each, and one cost written once is one remark.
+#[derive(Default)]
+struct RemarkSink {
+    seen: IndexSet<(ModuleSource, Span, String)>,
+    remarks: Vec<Remark>,
+}
+
+impl RemarkSink {
+    fn push(&mut self, remark: Remark) {
+        let key = (remark.module.clone(), remark.span, remark.message.clone());
+        if self.seen.insert(key) {
+            self.remarks.push(remark);
+        }
+    }
+}
+
+/// Where the entry package's code is: the module each span indexes, and the
+/// functions holding any of it.
+struct EntryCode<'a> {
+    parses: &'a ParseModules,
+}
+
+impl EntryCode<'_> {
+    /// The entry package's module whose text `span` indexes, or `None` for
+    /// another package's. A synthesized span answers with `home`, the module of
+    /// the function holding it.
+    fn module_of(&self, span: Span, home: &ModuleSource) -> Option<ModuleSource> {
+        let module = self.parses.module_of_span(span, home);
+        module.is_entry_package().then(|| module.clone())
+    }
+
+    /// Whether `func` holds any of the entry package's code, its own or spliced in.
+    fn reaches(&self, func: &NirFunction, body: &Body) -> bool {
+        func.module_source.is_entry_package()
+            || body
+                .find_in_nodes_under(NodeRef::Block(body.root()), |node| {
+                    self.module_of(body.span_of(node), &func.module_source)
+                })
+                .is_some()
+    }
+}
+
+/// Collect remarks for value-semantic copies that survive optimization in the
+/// entry package's code.
+pub fn collect_value_copy_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
     let callees: Vec<FunctionRef> = package.callee_descriptors_from(0).collect();
+    let entry = EntryCode { parses };
 
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
-    let mut remarks = Vec::new();
+    let mut sink = RemarkSink::default();
     for func_rc in &package.functions {
         let func = func_rc.borrow();
         // Skipping helper *bodies* keeps the copies inside a value-copy helper
         // from being reported against the helper itself.
-        if !func.module_source.is_entry_package() || func.is_value_copy() {
+        if func.is_value_copy() {
             continue;
         }
         let Some(body) = &func.body else {
             continue;
         };
+        if !entry.reaches(&func, body) {
+            continue;
+        }
         let mut collector = Collector {
             value_copy_set: &value_copy_set,
             callees: &callees,
             type_table,
-            module: func.module_source.clone(),
-            remarks: &mut remarks,
+            entry: &entry,
+            home: &func.module_source,
+            sink: &mut sink,
             current_span: body.blocks[body.root()].span,
-            in_value_block: false,
         };
         collector.scan_node(body, NodeRef::Block(body.root()));
     }
-    remarks
+    sink.remarks
 }
 
 struct Collector<'a> {
@@ -78,15 +127,15 @@ struct Collector<'a> {
     /// Callee descriptor indexed by `func_id.index()`. See [`collect_value_copy_remarks`].
     callees: &'a [FunctionRef],
     type_table: &'a TypeTable,
-    module: ModuleSource,
-    remarks: &'a mut Vec<Remark>,
-    /// Span of the enclosing real statement. Synthesized copy nodes
-    /// (`array_clone`, demoted spine copies) carry placeholder spans, so the
-    /// remark points at the statement that performs the copy (`let mut b = a;`).
+    entry: &'a EntryCode<'a>,
+    /// The module of the function walked.
+    home: &'a ModuleSource,
+    sink: &'a mut RemarkSink,
+    /// Span of the innermost statement written in source. Synthesized copy
+    /// nodes (`array_clone`, demoted spine copies) and the statements lowering
+    /// and SROA reconstruction write carry synthetic spans, so the remark
+    /// points at the statement that performs the copy (`let mut b = a;`).
     current_span: Span,
-    /// True while walking a block used as an expression value, whose inner
-    /// statements are synthesized and must not override `current_span`.
-    in_value_block: bool,
 }
 
 impl Collector<'_> {
@@ -122,64 +171,38 @@ impl Collector<'_> {
         }
     }
 
-    /// Walk the arena body parent-before-children, mirroring the previous tree
-    /// visitor: a real statement sets the current span, a block-as-value freezes
-    /// it (its synthesized inner statements carry placeholder spans), and a
-    /// surviving copy expression is reported against the current span.
+    /// Walk the arena body parent-before-children: a statement written in
+    /// source sets the current span, and a surviving copy expression is
+    /// reported against it.
     fn scan_node(&mut self, body: &Body, node: NodeRef) {
         match node {
-            NodeRef::Stmt(s) => {
-                if self.in_value_block {
-                    // Inside a block-as-value: keep the enclosing real
-                    // statement's span rather than the synthesized inner
-                    // statement's placeholder span.
-                    self.scan_children(body, node);
-                } else {
-                    let prev = self.current_span;
-                    self.current_span = body.stmts[s].span;
-                    self.scan_children(body, node);
-                    self.current_span = prev;
-                }
+            NodeRef::Stmt(s) if !body.stmts[s].span.is_synthetic() => {
+                let prev = std::mem::replace(&mut self.current_span, body.stmts[s].span);
+                self.scan_children(body, node);
+                self.current_span = prev;
             }
             NodeRef::Expr(e) => {
-                if let Some(type_id) = self.copied_type(body, e) {
+                if let Some(type_id) = self.copied_type(body, e)
+                    && let Some(module) = self.entry.module_of(self.current_span, self.home)
+                {
                     let type_name = self.type_table.type_name(type_id);
-                    self.remarks.push(Remark {
+                    self.sink.push(Remark {
                         message: format!("a copy of `{type_name}` survives optimization"),
-                        module: self.module.clone(),
+                        module,
                         span: self.current_span,
                     });
                 }
-                if is_value_block(body, e) {
-                    let prev = self.in_value_block;
-                    self.in_value_block = true;
-                    self.scan_children(body, node);
-                    self.in_value_block = prev;
-                } else {
-                    self.scan_children(body, node);
-                }
+                self.scan_children(body, node);
             }
-            NodeRef::Block(_) | NodeRef::Pat(_) => self.scan_children(body, node),
+            NodeRef::Stmt(_) | NodeRef::Block(_) | NodeRef::Pat(_) => {
+                self.scan_children(body, node);
+            }
         }
     }
 
     fn scan_children(&mut self, body: &Body, node: NodeRef) {
         body.for_each_child(node, |c| self.scan_node(body, c));
     }
-}
-
-/// Block-shaped expressions used as a value. Their inner statement lists come
-/// from lowering / SROA reconstruction and carry placeholder spans, so the
-/// remark anchors to the enclosing real statement instead of descending into
-/// them.
-fn is_value_block(body: &Body, id: ExprId) -> bool {
-    matches!(
-        body.exprs[id].kind,
-        ExprKind::LabeledBlock { .. }
-            | ExprKind::If { .. }
-            | ExprKind::Match { .. }
-            | ExprKind::Switch { .. }
-    )
 }
 
 /// For an `array_clone(&agg.repr)` call, recover the aggregate type (`List<T>`
@@ -211,32 +234,32 @@ fn clone_source_type(body: &Body, arg: ExprId) -> TypeId {
 /// and consulting the parameter at run time.
 ///
 /// A read outside a scrutinee is an ordinary use of the value, not a gate that
-/// failed, and is not reported. Scoped to the entry package, like the
+/// failed, and is not reported. Scoped to the entry package's code, like the
 /// value-copy remarks.
-pub fn collect_param_gate_remarks(package: &NirPackage) -> Vec<Remark> {
+pub fn collect_param_gate_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
     let params = parameter_decided_globals(package);
     if params.is_empty() {
         return Vec::new();
     }
-
-    let mut scan = ParamGateScan {
-        params: &params,
-        module: package.entry_module_source.clone(),
-        reported: hashmap::IndexSet::default(),
-        remarks: Vec::new(),
-    };
+    let entry = EntryCode { parses };
+    let mut sink = RemarkSink::default();
     for func_rc in &package.functions {
         let func = func_rc.borrow();
-        if !func.module_source.is_entry_package() {
-            continue;
-        }
         let Some(body) = &func.body else {
             continue;
         };
-        scan.module = func.module_source.clone();
-        scan.walk(body);
+        if !entry.reaches(&func, body) {
+            continue;
+        }
+        ParamGateScan {
+            params: &params,
+            entry: &entry,
+            home: &func.module_source,
+            sink: &mut sink,
+        }
+        .walk(body);
     }
-    scan.remarks
+    sink.remarks
 }
 
 /// Every global a build-time parameter decides the value of, and how: the
@@ -336,15 +359,12 @@ type GlobalKey = (ModuleSource, String);
 
 struct ParamGateScan<'a> {
     params: &'a IndexMap<GlobalKey, ParamOrigin>,
-    /// The module currently being walked; a `Remark` records where it was
-    /// found, since one span means nothing without its file.
-    module: ModuleSource,
-    /// `(parameter, file, gate span)` triples already remarked on, so one
-    /// source gate yields one remark however many times a scrutinee reads the
-    /// parameter and however many callers inlining copied it into. The module
-    /// is in the key because a span carries no file.
-    reported: hashmap::IndexSet<(String, ModuleSource, Span)>,
-    remarks: Vec<Remark>,
+    entry: &'a EntryCode<'a>,
+    /// The module of the function walked.
+    home: &'a ModuleSource,
+    /// One source gate yields one remark however many times a scrutinee reads
+    /// the parameter and however many callers inlining copied it into.
+    sink: &'a mut RemarkSink,
 }
 
 impl ParamGateScan<'_> {
@@ -383,23 +403,20 @@ impl ParamGateScan<'_> {
         let Some(origin) = self.params.get(&(module_source.clone(), name.clone())) else {
             return;
         };
-        let param = &origin.param;
-        if !self
-            .reported
-            .insert((param.clone(), self.module.clone(), span))
-        {
+        let Some(module) = self.entry.module_of(span, self.home) else {
             return;
-        }
+        };
+        let param = &origin.param;
         let read = match &origin.via {
             Some(global) => format!("is still read here through global `{global}`"),
             None => "is still read here".to_string(),
         };
-        self.remarks.push(Remark {
+        self.sink.push(Remark {
             message: format!(
                 "compile-time parameter `{param}` {read}, so this branch is \
                  decided at run time; the code it guards was not stripped"
             ),
-            module: self.module.clone(),
+            module,
             span,
         });
     }
@@ -427,43 +444,63 @@ fn branch_gate(body: &Body, node: NodeRef) -> Option<(Operand, Span)> {
 /// compile-time region, or a runnable callee given constants, the fold did not
 /// reach. Read off the final IR, never off a refusal a pass recorded, so it
 /// retires itself as the fold reaches each shape.
-pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
+pub fn collect_const_region_remarks(package: &NirPackage, parses: &ParseModules) -> Vec<Remark> {
+    let entry = EntryCode { parses };
     let in_order = Executor::default();
     let callees = build_callee_map(package, &in_order, |_| false);
     let ctfe_builtins = build_ctfe_builtin_map(package);
     let materializing = materializing_globals(package, &in_order);
     let names = ctfe_runnable_names(package);
+    let effectful: Vec<bool> = package
+        .functions
+        .iter()
+        .map(|f| !f.borrow().effects.is_empty())
+        .collect();
     let cold_path = package.builtin_func_id(COLD_PATH_INTRINSIC);
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
 
-    let mut remarks = Vec::new();
+    let mut sink = RemarkSink::default();
     for func_rc in &package.functions {
         let func = func_rc.borrow();
-        if !func.module_source.is_entry_package() {
-            continue;
-        }
         let Some(body) = &func.body else {
             continue;
         };
+        if !entry.reaches(&func, body) {
+            continue;
+        }
+        let in_entry = |e: ExprId| {
+            let span = body.exprs[e].span;
+            Some((entry.module_of(span, &func.module_source)?, span))
+        };
         let cold = ColdRuns::of(body, cold_path).exprs(body);
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
-            // Reading an outer local means no constant to miss; writing one
-            // means an inner block of a template, reported through its parent.
-            if region.reads_outer || region.writes_outer {
+            // Reading an outer local, or performing an effect, means no
+            // constant to miss; writing one means an inner block of a template,
+            // reported through its parent.
+            if region.reads_outer
+                || region.writes_outer
+                || performs_effect(body, region.expr, &effectful)
+            {
                 continue;
             }
+            let Some((module, span)) = in_entry(region.expr) else {
+                continue;
+            };
             let cause = match region.refusal {
                 Some(refusal) => refusal.describe().to_string(),
                 None => surviving_cause(body, NodeRef::Expr(region.expr), &names, &cold),
             };
-            remarks.push(Remark {
+            sink.push(Remark {
                 message: format!("this block computes a constant at run time: {cause}"),
-                module: func.module_source.clone(),
-                span: body.exprs[region.expr].span,
+                module,
+                span,
             });
         }
         for (call, func_id) in constant_calls(body, &names, &cold, type_table) {
+            let Some((module, span)) = in_entry(call) else {
+                continue;
+            };
             let callee = package.functions[func_id.index()].borrow();
             let callee_body = callee
                 .body
@@ -475,14 +512,14 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
                 &names,
                 &ColdRuns::of(callee_body, cold_path).exprs(callee_body),
             );
-            remarks.push(Remark {
+            sink.push(Remark {
                 message: format!("this call computes a constant at run time: {cause}"),
-                module: func.module_source.clone(),
-                span: body.exprs[call].span,
+                module,
+                span,
             });
         }
     }
-    remarks
+    sink.remarks
 }
 
 /// Report that constant-argument specialization ran out of clones, at the body
@@ -577,6 +614,19 @@ fn walk_hot_calls(
         }
         body.for_each_child(node, |c| stack.push(c));
     }
+}
+
+/// Whether the block `region` calls a function declaring an effect, whose
+/// result the run decides.
+fn performs_effect(body: &Body, region: ExprId, effectful: &[bool]) -> bool {
+    body.find_in_nodes_under(NodeRef::Expr(region), |node| match node {
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } if effectful[func_id.index()] => Some(()),
+            _ => None,
+        },
+        _ => None,
+    })
+    .is_some()
 }
 
 /// Display name per `func_id`, for the functions a compile-time frame can run.

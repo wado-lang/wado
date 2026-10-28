@@ -689,6 +689,7 @@ impl Expander<'_> {
         let site = self.site.clone().unwrap_or_else(|| {
             let module = self
                 .trait_env
+                .parse_modules()
                 .module_of_span(span, &self.func.module_source);
             format!("{module}:{}", span.line)
         });
