@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793197925936,
+  "lastUpdate": 1793211325378,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72061,6 +72061,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "39a51d0617ba8e71967c6803c3490ef167a9fce3",
+          "message": "Merge pull request #2488 from wado-lang/ccr-52b7fd41-lzjtwq\n\nfeat(pgo): mark cold the regions a profile never ran, under one portable name per module",
+          "timestamp": "2026-10-29T03:00:07+09:00",
+          "tree_id": "483ab64e86b60574531f67be885b2953cf6a35b4",
+          "url": "https://github.com/wado-lang/wado/commit/39a51d0617ba8e71967c6803c3490ef167a9fce3"
+        },
+        "date": 1793211325134,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295573,
             "unit": "bytes"
           }
         ]
