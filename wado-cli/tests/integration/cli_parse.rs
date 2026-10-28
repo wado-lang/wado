@@ -739,12 +739,15 @@ fn test_inline_threshold_growth_and_iterations() {
         "25",
         "--optimize-iterations",
         "7",
+        "--optimize-specializations",
+        "9",
         "a.wado",
     ]);
     let opts = wado_cli::test::parse_args(parser).unwrap();
     assert_eq!(opts.knobs.opt.inline_threshold, Some(42));
     assert_eq!(opts.knobs.opt.inline_growth, Some(25));
     assert_eq!(opts.knobs.opt.iterations, Some(7));
+    assert_eq!(opts.knobs.opt.specializations, Some(9));
 }
 
 #[test]

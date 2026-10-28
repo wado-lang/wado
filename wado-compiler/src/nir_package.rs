@@ -31,6 +31,7 @@ use crate::nir::{
 use crate::nir_arena::{Body, ExprKind, NodeRef};
 use crate::parallel::Executor;
 use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, TypeId};
+use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldInfo, WorldRegistry};
@@ -117,6 +118,18 @@ impl AmbientStdio {
             AmbientStream::Stderr => self.stderr,
         }
     }
+}
+
+/// `param_spec` reached its clone cap with calls it would still have cloned a
+/// callee for: the first such callee, where its body is, and how many callees
+/// were turned down.
+#[derive(Debug, Clone)]
+pub struct SpecializationCapHit {
+    pub limit: usize,
+    pub callee: String,
+    pub module: ModuleSource,
+    pub span: Span,
+    pub turned_down: usize,
 }
 
 /// A linked Wado package ready for WIR building and code generation.
@@ -214,6 +227,9 @@ pub struct NirPackage {
     /// `array.new_data` data-segment repr and stay lazy. Set by `optimize` from
     /// the opt level (raised at `-O3`); see `optimize::string_inline_max_bytes`.
     pub string_inline_max_bytes: usize,
+    /// Set by `optimize` when `param_spec` ran out of clones with calls left
+    /// to specialize, for the remark that says so.
+    pub specialization_cap: Option<SpecializationCapHit>,
     /// When true, skip Wasm validation after code generation.
     pub skip_validation: bool,
     /// Target world fully-qualified name (e.g., "wasi:cli/command", "wasi:http/service")

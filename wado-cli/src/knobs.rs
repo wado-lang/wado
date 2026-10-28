@@ -80,6 +80,7 @@ pub enum CompileKnobOpt {
     InlineThreshold,
     InlineGrowth,
     OptIterations,
+    Specializations,
     OptThreads,
     LogLevel,
     Allocator,
@@ -118,6 +119,12 @@ impl CompileKnobOpt {
                 short: None,
                 value: Some("<n>"),
                 desc: "Override number of fixed-point optimization iterations",
+            },
+            Self::Specializations => OptSpec {
+                long: Some("optimize-specializations"),
+                short: None,
+                value: Some("<n>"),
+                desc: "Override how many clones specializing a callee on constant\narguments may mint; reaching it is a remark (--log-level info)",
             },
             Self::OptThreads => OptSpec {
                 long: Some("optimize-threads"),
@@ -269,6 +276,10 @@ impl CompileKnobs {
             }
             CompileKnobOpt::OptIterations => {
                 self.opt.iterations = Some(args::parse_u32_arg("--optimize-iterations", parser)?);
+            }
+            CompileKnobOpt::Specializations => {
+                self.opt.specializations =
+                    Some(args::parse_u32_arg("--optimize-specializations", parser)? as usize);
             }
             CompileKnobOpt::OptThreads => {
                 let threads = args::parse_u32_arg("--optimize-threads", parser)?;

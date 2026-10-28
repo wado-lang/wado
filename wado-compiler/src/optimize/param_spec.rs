@@ -16,7 +16,7 @@ use crate::nir_arena::{
     Tracked,
 };
 use crate::nir_engine::{Engine, EngineBuffers};
-use crate::nir_package::NirPackage;
+use crate::nir_package::{NirPackage, SpecializationCapHit};
 use crate::nir_value_graph::ValueKind;
 use crate::niri::{
     Callee, CalleeMap, CtfeBuiltinMap, GlobalKey, build_callee_map, build_ctfe_builtin_map,
@@ -41,13 +41,15 @@ use crate::name::{COLD_PATH_INTRINSIC, param_spec_name};
 use crate::nir::NirLocal;
 use crate::parallel::Executor;
 
-/// Whole-module cap on synthesized clones, so a pathological program cannot
-/// trade unbounded code size for constant propagation. Clones are minted first
-/// come, first served and a dead one still counts, so a cap a real program
-/// reaches decides by visit order which calls specialize: at 128, nine of the
-/// fifteen benchmarks reached it, and json-catalog lost the `Formatter` fold in
-/// `prepare_int_write` (15.7%). gale-gen needs between 1024 and 4096.
-const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
+/// Default whole-module cap on synthesized clones, so a pathological program
+/// cannot trade unbounded code size for constant propagation;
+/// `--optimize-specializations` overrides it. Clones are minted first come,
+/// first served and a dead one still counts, so a cap a real program reaches
+/// decides by visit order which calls specialize: at 128, nine of the fifteen
+/// benchmarks reached it, and json-catalog lost the `Formatter` fold in
+/// `prepare_int_write` (15.7%). gale-gen needs between 1024 and 4096. Reaching
+/// it is reported as a remark ([`SpecializationCapHit`]).
+pub(super) const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 
 /// Largest callee body (expression nodes) worth cloning. A body this large
 /// costs more in duplicated code than its folded branches can return.
@@ -335,8 +337,13 @@ struct SpecKey {
 /// Cross-iteration state, so a clone minted in one iteration is reused by the
 /// next rather than re-minted, and its parameters' constants stay available to
 /// specialize one call deeper.
-#[derive(Default)]
 pub(super) struct ParamSpecState {
+    /// The clones the run may mint.
+    limit: usize,
+    /// The callees a call would have had cloned past the limit.
+    turned_down: IndexSet<FuncId>,
+    /// What the remark reports, from the first callee turned down.
+    cap_hit: Option<SpecializationCapHit>,
     /// Minted clones by identity.
     clones: IndexMap<SpecKey, FuncId>,
     /// Each clone's identity, which a clone of it extends.
@@ -362,8 +369,45 @@ struct ParamSeed {
 }
 
 impl ParamSpecState {
+    pub(super) fn new(limit: usize) -> Self {
+        Self {
+            limit,
+            turned_down: IndexSet::default(),
+            cap_hit: None,
+            clones: IndexMap::default(),
+            specs: IndexMap::default(),
+            per_callee: IndexMap::default(),
+            param_consts: IndexMap::default(),
+            callees: BodyMemo::default(),
+        }
+    }
+
     fn budget_exhausted(&self) -> bool {
-        self.clones.len() >= MAX_TOTAL_SPECIALIZATIONS
+        self.clones.len() >= self.limit
+    }
+
+    /// Record that the limit kept `callee` from a clone a call asked for.
+    fn turn_down(&mut self, project: &NirPackage, callee: FuncId) {
+        if !self.turned_down.insert(callee) {
+            return;
+        }
+        let hit = self.cap_hit.get_or_insert_with(|| {
+            let func = project.functions[callee.index()].borrow();
+            let body = func.body.as_ref().expect("a specialization candidate has a body");
+            SpecializationCapHit {
+                limit: self.limit,
+                callee: func.name.clone(),
+                module: func.module_source.clone(),
+                span: body.blocks[body.root()].span,
+                turned_down: 0,
+            }
+        });
+        hit.turned_down = self.turned_down.len();
+    }
+
+    /// What reaching the limit cost the run, if it did.
+    pub(super) fn cap_hit(&self) -> Option<SpecializationCapHit> {
+        self.cap_hit.clone()
     }
 
     /// Whether `func` is itself a clone this pass minted.
@@ -1600,10 +1644,11 @@ fn plan_clones<'s>(
             continue;
         }
         let ordinal = state.per_callee.get(&site.callee).copied().unwrap_or(0);
-        if site.cold
-            || state.budget_exhausted()
-            || body_exprs(project, site.callee) > MAX_CLONE_EXPRS
-        {
+        if site.cold || body_exprs(project, site.callee) > MAX_CLONE_EXPRS {
+            continue;
+        }
+        if state.budget_exhausted() {
+            state.turn_down(project, site.callee);
             continue;
         }
         compiler_trace!(

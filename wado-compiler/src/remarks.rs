@@ -17,7 +17,7 @@ use crate::module_source::ModuleSource;
 use crate::name::COLD_PATH_INTRINSIC;
 use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
-use crate::nir_package::NirPackage;
+use crate::nir_package::{NirPackage, SpecializationCapHit};
 use crate::niri::{
     build_callee_map, build_ctfe_builtin_map, is_ctfe_runnable, materializing_globals,
     region_queries,
@@ -483,6 +483,26 @@ pub fn collect_const_region_remarks(package: &NirPackage) -> Vec<Remark> {
         }
     }
     remarks
+}
+
+/// Report that constant-argument specialization ran out of clones, at the body
+/// of the first callee it then left general. Unlike the remarks above it is not
+/// limited to the entry package: the cap is the program's, wherever it bites.
+pub fn specialization_cap_remark(hit: &SpecializationCapHit) -> Remark {
+    let others = match hit.turned_down - 1 {
+        0 => String::new(),
+        n => format!(" and {n} other function(s)"),
+    };
+    Remark {
+        message: format!(
+            "constant-argument specialization reached its cap of {} clones, so `{}`{others} \
+             kept the general version for calls passing constants; \
+             `--optimize-specializations` raises the cap",
+            hit.limit, hit.callee,
+        ),
+        module: hit.module.clone(),
+        span: hit.span,
+    }
 }
 
 /// The value-producing calls on `body`'s own path that the engine was free to

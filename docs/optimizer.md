@@ -38,6 +38,11 @@ the Wasm instructions on the callee's hot path, less the call it replaces.
 values. `--optimize-inline-growth <pct>` also bounds how far inlining may grow
 the whole program. No level sets it.
 
+Specializing a callee on its constant arguments mints a clone per distinct set
+of constants, up to a cap per module. `--optimize-specializations <n>` sets the
+cap. Reaching it is a remark under `--log-level info`, naming the first callee
+that kept its general version.
+
 A pass reports a change only when it made one, because the fixed-point loop
 stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the loop must
 converge within the level's own count. At `-O1`, and wherever

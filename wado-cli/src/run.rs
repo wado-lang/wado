@@ -45,6 +45,7 @@ impl Opt {
         CompileKnobOpt::InlineThreshold,
         CompileKnobOpt::InlineGrowth,
         CompileKnobOpt::OptIterations,
+        CompileKnobOpt::Specializations,
         CompileKnobOpt::OptThreads,
         CompileKnobOpt::LogLevel,
         CompileKnobOpt::Allocator,
