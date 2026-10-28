@@ -393,6 +393,13 @@ test "externalizing moves each weight's raw data out, back to back, and keeps a 
     assert read_back.initializers[1].data == read(&model).unwrap().initializers[1].data;
 }
 
+test "the committed external tiny GPT-2 is what externalizing its model writes" {
+    let [external, data] = externalize(#include_bytes("../tests/models/tiny-gpt2/model.onnx"), "model.onnx_data").unwrap();
+
+    assert external == #include_bytes("../tests/models/tiny-gpt2/external/model.onnx");
+    assert data == #include_bytes("../tests/models/tiny-gpt2/external/model.onnx_data");
+}
+
 fn read_unread(weights: List<onnx::TensorProto>) -> Result<Graph, ReadError> {
     return read(grog::encode(&onnx::ModelProto {
         graph: Option::Some(onnx::GraphProto { initializer: weights }),
@@ -422,17 +429,6 @@ test "a weight left in place states its length" {
     ]).unwrap_err().reason;
 
     assert e == "W: external data in w.bin with no length, which a weight left in place states";
-}
-
-test "a weight left in place holds the elements its shape does" {
-    let e = read_unread([
-        external_weight([
-            ["location", "w.bin"],
-            ["length", "4"],
-        ]),
-    ]).unwrap_err().reason;
-
-    assert e == "W: 1 elements for a shape of 2";
 }
 
 test "a weight left in place past what a module can address names its range" {

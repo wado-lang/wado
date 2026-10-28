@@ -112,6 +112,12 @@ test "a raw data ahead of the data type saying it is a weight's is kept" {
     assert read(&slim.model).unwrap().initializers[0].data == Option::Some(V);
 }
 
+test "a wire type protobuf does not define names itself, not a group" {
+    let e = walked([7 << 3 | 2, 1, 1 << 3 | 6]).unwrap_err();
+
+    assert e == "wire type 6 at byte 3, which protobuf does not define";
+}
+
 test "a model cut off inside a field names where it ends" {
     let bytes = model();
     let cut = bytes[0..<bytes.len() - 3].to_list() as ByteList;

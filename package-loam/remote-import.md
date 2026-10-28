@@ -14,7 +14,9 @@ cache:
 - GPT-2's weights are in the file the build read, so `fetch.sh` downloads the
   same 653 MB a second time.
 - Gemma's weights are in `model.onnx_data`, which the build never reads. Nothing
-  pins it but `fetch.sh`.
+  pins it but `fetch.sh`, and `Prepared::load` cannot tell it from another file
+  long enough to hold every weight's range: it loads garbage. An `Asset` the host
+  checked against its digest is the file the program named.
 
 So each example's `fetch.sh` downloads the file its weights load from, and the
 oracle scripts and benchmarks read the files it downloads too.

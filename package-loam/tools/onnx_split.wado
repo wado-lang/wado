@@ -68,7 +68,9 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         max_shard_bytes = Option::Some(n);
         given = given.into_iter().skip(2).collect();
     }
-    let external = given.len() == 3 && given[0] == "--external-data";
+    // The two flags write different files, so `--external-data` after a shard
+    // size is left over, and the count below refuses it.
+    let external = max_shard_bytes matches { None } && given.len() == 3 && given[0] == "--external-data";
     if external {
         given = given.into_iter().skip(1).collect();
     }

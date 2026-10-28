@@ -7,7 +7,7 @@ use { Placement, emit } from "./emit.wado";
 use { emit_tokenizer } from "./emit_tokenizer.wado";
 use { read as read_tokenizer } from "./tokenizer_json.wado";
 use fs from "core:fs";
-use { Graph, InPlace } from "./graph.wado";
+use { Graph, InPlace, ValueInfo, check_payload_len, element_of, static_extents } from "./graph.wado";
 use { leave_weights } from "./onnx_stream.wado";
 use { Checked, infer } from "./infer.wado";
 use { declared_header_end, read_checkpoint } from "./runtime/checkpoint.wado";
@@ -188,10 +188,10 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
                 at(path, &`the weights are left in place in ${in_place.file}, so no checkpoint is given`),
             );
         }
-        if let Some(vi) = graph.initializers.iter_ref().find(
-            |vi| vi.data matches { None } && !in_place.ranges.contains_key(vi.name),
-        ) {
-            return Result::Err(at(path, &`${vi.name}: no data, and the weights left in place are in ${in_place.file}`));
+        for let vi of &graph.initializers {
+            if vi.data matches { None } {
+                check_left_in_place(vi, &in_place).map_err(|e| at(path, &e))?;
+            }
         }
         return emit_with(Placement::InPlace(in_place));
     }
@@ -214,6 +214,20 @@ pub fn generate_model(model: &Model, path: &String, weights: Weights, runtime: &
             Result::Ok(generated);
         },
     };
+}
+
+/// Whether `in_place` holds weight `vi` whole: a range of whole elements, as
+/// many as its shape declares. The build checks a weight's bytes nowhere else.
+fn check_left_in_place(vi: &ValueInfo, in_place: &InPlace) -> Result<(), String> {
+    let Some([start, end]) = in_place.ranges.get(vi.name) else {
+        return Result::Err(`${vi.name}: no data, and the weights left in place are in ${in_place.file}`);
+    };
+    let Some(element) = element_of(&vi.dtype) else {
+        return Result::Err(`${vi.name}: ${vi.dtype} weights left in place`);
+    };
+    // An initializer's extents are the integers its TensorProto states.
+    let extents = static_extents(&vi.rank).unwrap();
+    return check_payload_len(&vi.name, &vi.dtype, element.width, end - start, &extents);
 }
 
 /// The `Tokenizer` the `tokenizer.json` at `path` describes.

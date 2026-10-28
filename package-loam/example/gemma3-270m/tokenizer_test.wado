@@ -2,7 +2,13 @@
 //! Face's tokenizer gives it, recorded in `tokenize.json`, and decodes back.
 
 use { from_string } from "core:json";
-use { Tokenizer } from "./model.wado";
+// Not through `model.wado`, whose build reads the whole graph.
+use { Tokenizer } from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resolve/2dbbfdb1b59bd034eb959428c6a7da9dd7ea27f0/tokenizer.json"
+    with {
+        type: "hf-tokenizer",
+        integrity: "sha256:55da1312bdf1d7d8fe8d9d1b3eed04086261149e6034e0ac3f8c633b67f5aac8",
+        generator: { module: "lib:loam" },
+    };
 
 struct Tokenized {
     text: String,

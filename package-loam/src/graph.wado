@@ -174,6 +174,21 @@ pub fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) 
     return Result::Ok(());
 }
 
+/// Whether `bytes` bytes of `dtype` elements, each `width` wide, are whole
+/// elements, as many as `extents` declare.
+pub fn check_payload_len(
+    tensor: &String,
+    dtype: &String,
+    width: i32,
+    bytes: i32,
+    extents: &List<i32>,
+) -> Result<(), String> {
+    if bytes % width != 0 {
+        return Result::Err(`${*tensor}: ${bytes} raw bytes is not whole ${*dtype} elements`);
+    }
+    return check_element_count(tensor, bytes / width, extents);
+}
+
 /// A tensor whose elements the build reads: a `Constant`, an initializer no
 /// kernel computes in, or what stage 0 folds from them.
 pub struct Known {

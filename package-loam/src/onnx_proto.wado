@@ -21,6 +21,7 @@ use {
     ValueInfo,
     bit_pattern,
     check_element_count,
+    check_payload_len,
     constant_without_values,
     default_opset,
     element_of,
@@ -218,7 +219,7 @@ fn read_initializer(
     } else if files.contains_key(external_location(t, &name)?) {
         Option::Some(external_payload(t, &name, &dtype, &extents, files)?);
     } else {
-        leave_in_place(t, &name, &dtype, &extents, in_place)?;
+        leave_in_place(t, &name, in_place)?;
         null;
     };
     return Result::Ok(ValueInfo { name, dtype, rank: rank_of(dims), data });
@@ -226,17 +227,8 @@ fn read_initializer(
 
 /// Records where `t`'s external data sits in its file, which the reader was
 /// not given, for `Prepared::load` to read it there.
-fn leave_in_place(
-    t: &onnx::TensorProto,
-    name: &String,
-    dtype: &String,
-    extents: &List<i32>,
-    in_place: &mut Option<InPlace>,
-) -> Result<(), String> {
+fn leave_in_place(t: &onnx::TensorProto, name: &String, in_place: &mut Option<InPlace>) -> Result<(), String> {
     let location = external_location(t, name)?;
-    let Some(element) = element_of(dtype) else {
-        return Result::Err(`${*name}: external ${*dtype} data`);
-    };
     let Some(length) = external_number(t, name, "length")? else {
         return Result::Err(`${*name}: external data in ${location} with no length, which a weight left in place states`);
     };
@@ -244,11 +236,6 @@ fn leave_in_place(
     if offset < 0 || length < 0 || length > i32::MAX as i64 - offset {
         return Result::Err(`${*name}: external data at ${offset} for ${length} bytes, past what a module can address`);
     }
-    let width = element.width;
-    if length % width as i64 != 0 {
-        return Result::Err(`${*name}: ${length} raw bytes is not whole ${*dtype} elements`);
-    }
-    check_element_count(name, (length / width as i64) as i32, extents)?;
     let range = [offset as i32, (offset + length) as i32];
     let Some(held) = in_place else {
         let mut ranges = TreeMap::<String, [i32, i32]>::new();
@@ -280,11 +267,7 @@ fn external_payload(
         return Result::Err(`${*name}: external ${*dtype} data`);
     };
     let bytes = external_bytes(t, name, files)?;
-    let width = element.width;
-    if bytes.len() % width != 0 {
-        return Result::Err(`${*name}: ${bytes.len()} raw bytes is not whole ${*dtype} elements`);
-    }
-    check_element_count(name, bytes.len() / width, extents)?;
+    check_payload_len(name, dtype, element.width, bytes.len(), extents)?;
     return Result::Ok(bytes);
 }
 
@@ -317,10 +300,7 @@ fn payload(
     if bytes.is_empty() && check_element_count(name, 0, extents).is_err() {
         return Result::Ok(null);
     }
-    if bytes.len() % width != 0 {
-        return Result::Err(`${name}: ${bytes.len()} raw bytes is not whole ${dtype} elements`);
-    }
-    check_element_count(name, bytes.len() / width, extents)?;
+    check_payload_len(name, dtype, width, bytes.len(), extents)?;
     return Result::Ok(Option::Some(bytes));
 }
 

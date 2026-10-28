@@ -22,6 +22,8 @@ global READ_CHUNK: i32 = 65536;
 global VARINT: u64 = 0;
 global I64: u64 = 1;
 global LEN: u64 = 2;
+global GROUP_START: u64 = 3;
+global GROUP_END: u64 = 4;
 global I32: u64 = 5;
 
 // The tags the walk looks into, as `onnx.proto` numbers the fields: the field
@@ -102,7 +104,7 @@ fn walk_tensor(c: &mut Cursor, end: i64, ranges: &mut TreeMap<String, [i32, i32]
         } else if tag == TENSOR_NAME {
             let length = c.varint()?;
             let mut bytes: ByteList = [];
-            c.copy(c.end_of(length)? - c.pos(), &mut bytes)?;
+            c.copy_len(length, &mut bytes)?;
             put_message(&mut tensor, tag, &bytes);
             name = String::from_utf8_lossy(bytes);
         } else {
@@ -128,9 +130,10 @@ fn copy_field(c: &mut Cursor, tag: u64, out: &mut ByteList) -> Result<(), String
         LEN => {
             let length = c.varint()?;
             put_varint(out, length);
-            c.copy(c.end_of(length)? - c.pos(), out);
+            c.copy_len(length, out);
         },
-        _ => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
+        GROUP_START | GROUP_END => Result::Err(`a group at byte ${c.pos()}, which ONNX does not write`),
+        wire => Result::Err(`wire type ${wire} at byte ${c.pos()}, which protobuf does not define`),
     };
 }
 
@@ -237,6 +240,11 @@ impl Cursor {
             rest -= piece.len() as i64;
         }
         return Result::Ok(());
+    }
+
+    /// The `length` bytes a length prefix gave, copied to `out`.
+    fn copy_len(&mut self, length: u64, out: &mut ByteList) -> Result<(), String> {
+        return self.copy(self.end_of(length)? - self.pos(), out);
     }
 
     fn skip(&mut self, n: i64) -> Result<(), String> {
