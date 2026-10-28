@@ -443,9 +443,8 @@ annotate-time `Scope` it replaces is mutable state threaded through the
 elaborator, which is hard to retrofit.
 
 A query also carries the asking module, since scope gates candidates by what that
-module imported. No query is a function of types alone. A `Reflect*` fact is the
-exception that asks no module: it answers the same everywhere (WEP 2026-06-13,
-Visibility).
+module imported, so no query is a function of types alone. A `Reflect*` fact
+asks no module: it answers the same everywhere (WEP 2026-06-13, Visibility).
 
 #### Derivation is impl generation
 
