@@ -687,9 +687,6 @@ struct LoadedModule {
     /// `--coverage` or `--pgo`: the run's reports, and where this component's
     /// hits land.
     coverage: Option<(Arc<CoverageRun>, Registration)>,
-    /// What the compile read, where those reads decide every test's outcome,
-    /// so a pass can be cached.
-    cache_reads: Option<Vec<Input>>,
     /// Whether this module's tests may spawn.
     process: ProcessGrant,
     _module_permit: OwnedSemaphorePermit,
@@ -926,7 +923,13 @@ enum CompileOutcome {
 
 /// Per-file outcome from the **load** stage.
 enum LoadOutcome {
-    Loaded(LoadedModule),
+    Loaded {
+        module: Arc<LoadedModule>,
+        /// What the compile read, where those reads decide every test's
+        /// outcome, so a pass can be cached. The load stage's alone: the
+        /// execute stage never reads it.
+        cache_reads: Option<Vec<Input>>,
+    },
     LoadFailure(LoadFailure),
 }
 
@@ -1129,19 +1132,21 @@ fn load_module(
                 },
                 load_duration,
             );
-            LoadOutcome::Loaded(LoadedModule {
-                path: artifact.path,
-                engine,
-                component,
-                linker,
-                tests,
-                is_todo_module: artifact.is_todo_module,
-                profiler,
-                coverage,
+            LoadOutcome::Loaded {
+                module: Arc::new(LoadedModule {
+                    path: artifact.path,
+                    engine,
+                    component,
+                    linker,
+                    tests,
+                    is_todo_module: artifact.is_todo_module,
+                    profiler,
+                    coverage,
+                    process: runtime_knobs.process,
+                    _module_permit: module_permit,
+                }),
                 cache_reads,
-                process: runtime_knobs.process,
-                _module_permit: module_permit,
-            })
+            }
         }
         Err(e) => {
             reporter.on_load(
@@ -1366,18 +1371,21 @@ async fn run_load_stage(
 
     while let Some(outcome) = stream.next().await {
         match outcome {
-            LoadOutcome::Loaded(mut module) => {
+            LoadOutcome::Loaded {
+                module,
+                cache_reads,
+            } => {
                 tally.ok += 1;
                 if module.tests.is_empty() {
                     // Reported as `skip` on every run, never as `cached`.
                     tally.skip += 1;
-                } else if let Some(reads) = module.cache_reads.take() {
+                } else if let Some(reads) = cache_reads {
                     tally
                         .cacheable
                         .push((module.path.clone(), reads, module.tests.len()));
                 }
                 epoch_ticker.register(&module.engine);
-                if loaded_tx.send(Arc::new(module)).await.is_ok() {
+                if loaded_tx.send(module).await.is_ok() {
                     observer.record_output();
                 }
             }
