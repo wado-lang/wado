@@ -2168,9 +2168,18 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         });
     }
 
-    /// Resolve an import source relative to the importing module, or say why
-    /// a bare one names nothing.
+    /// Resolve an import source relative to the importing module, named where
+    /// the host says its file lies, or say why a bare one names nothing.
     fn resolve_import(
+        &mut self,
+        from_module_source: &ModuleSource,
+        import_source: &str,
+    ) -> Result<ModuleSource, LoadError> {
+        let resolved = self.resolve_import_unnamed(from_module_source, import_source)?;
+        Ok(self.interner.locate(resolved, self.host))
+    }
+
+    fn resolve_import_unnamed(
         &mut self,
         from_module_source: &ModuleSource,
         import_source: &str,
@@ -2183,7 +2192,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             &self.invocations,
         );
         let ModuleSource::Local { path, .. } = &resolved else {
-            return Ok(self.interner.locate(resolved, self.host));
+            return Ok(resolved);
         };
         if is_cwd_relative(import_source) {
             if !resolved.is_user_authored() {

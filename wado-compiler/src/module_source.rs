@@ -10,7 +10,10 @@ use crate::compiler_host::{
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::loader::strip_kiln_scheme;
-use crate::name::{DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir};
+use crate::name::{
+    DeclaredHead, canonicalize_entry_point, effect_namespace, module_parent_dir,
+    packaged_module_name,
+};
 use crate::path::{normalize, relative_path};
 use crate::primitive::PrimitiveType;
 use crate::remote::is_remote;
@@ -336,7 +339,7 @@ impl ModuleSourceInterner {
                         ..
                     }),
                 ..
-            }) => format!("{coordinate}/{}", join_dir(dir, file)),
+            }) => packaged_module_name(coordinate, &join_dir(dir, file)),
             Some(ModuleDir { path: dir, .. }) => from_root(&self.build_root, &join_dir(dir, file)),
             None => from_root(&self.build_root, path),
         };

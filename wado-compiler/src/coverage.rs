@@ -182,7 +182,9 @@ pub struct PlannedFunction {
 pub struct ModulePlan {
     /// The module's name, the same on any machine and from any entry.
     pub name: String,
-    /// Where the host reads the module: [`ModuleSource::source_path`].
+    /// Where the host reads the module, relative to the entry module's
+    /// directory ([`ModuleSource::file`]); for a module that is no file, its
+    /// name.
     pub path: String,
     pub functions: Vec<PlannedFunction>,
     pub regions: Vec<Region>,
@@ -559,7 +561,7 @@ pub(crate) fn plan_module(
     let mut planner = Planner {
         plan: ModulePlan {
             name: source.to_string(),
-            path: source.source_path(),
+            path: source.file().unwrap_or_else(|| source.to_string()),
             ..ModulePlan::default()
         },
         rt_unreachable_calls,
@@ -1606,7 +1608,7 @@ mod tests {
         let plan = plan();
         let mut coverage = Coverage::default();
         let registered = coverage
-            .register(&vec![(plan, 0)], str::to_string)
+            .register(&vec![(plan, 0)], |plan| plan.name.clone())
             .expect("one plan");
         coverage.record(&registered, &BTreeMap::from([(1, 3)]), None);
         let mut trapped = TestReport::default();

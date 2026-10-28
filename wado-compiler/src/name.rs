@@ -242,12 +242,20 @@ pub fn diagnostic_function_name(
     as_declared(local)
 }
 
+/// The name of the module whose file is `path` inside the package whose
+/// coordinate is `coordinate` (`acme:app@1.0.0+build.5`).
+#[must_use]
+pub fn packaged_module_name(coordinate: &str, path: &str) -> String {
+    format!("{coordinate}/{path}")
+}
+
 /// `name` with the module paths in its type arguments dropped and its clone
 /// suffix cut. A synthesized name opens with [`INTERNAL_PREFIX`], which is its
 /// own first character rather than a suffix marker; so may a type argument.
 fn as_declared(name: &str) -> String {
+    // What a path and a [`packaged_module_name`]'s semver coordinate spell.
     let is_module_path =
-        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-' | '@');
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-' | '@' | '+');
     let mut out = String::with_capacity(name.len());
     let mut depth = 0u32;
     for c in name.chars() {
@@ -2940,6 +2948,13 @@ mod tests {
         assert_eq!(
             named(&f1, "id<acme:dep@0.2.0/src/lib.wado/P,../x.wado/Q>"),
             "id<P,Q>"
+        );
+        assert_eq!(
+            named(
+                &f1,
+                &format!("id<{}/P>", packaged_module_name("dep@1.0.0+b.5", "lib.wado"))
+            ),
+            "id<P>"
         );
         assert_eq!(
             named(&f1, "id<fn(a.wado/P)->i32with($e263)>$$Closure_0"),

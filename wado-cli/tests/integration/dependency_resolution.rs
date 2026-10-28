@@ -637,6 +637,38 @@ fn a_package_reached_by_a_path_then_declared_is_one_package() {
         .success();
 }
 
+/// A file of such a package reached by its name is named by its package.
+#[test]
+fn an_exported_file_of_a_package_reached_by_a_path_is_named_by_its_package() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let b = root.join("b");
+    exporting_library(
+        &b,
+        &["src/sub/x.wado"],
+        "",
+        "pub fn make() -> i32 { return 1; }\n",
+    );
+    fs::create_dir(b.join("src/sub")).unwrap();
+    fs::write(b.join("src/sub/x.wado"), "pub fn x() -> i32 { return 2; }\n").unwrap();
+    library(
+        &root.join("a"),
+        "\"lib:b\" = { path = \"../b\" }\n",
+        "use { x } from \"lib:b/src/sub/x.wado\";\npub fn ax() -> i32 { return x(); }\n",
+    );
+    library(
+        &root.join("app"),
+        "",
+        "use { make } from \"../../b/src/lib.wado\";\nuse { ax } from \"../../a/src/lib.wado\";\n\
+         pub fn api() -> i32 { return make() + ax(); }\n",
+    );
+    wado_in(&root.join("app"))
+        .args(["dump", "--modules", "src/lib.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\n  b@0.1.0/src/sub/x.wado\n"));
+}
+
 /// A dependency is named by the path the OS reaches it by, so a source tree
 /// linked in from elsewhere still reaches it, as one package however reached.
 #[cfg(unix)]
