@@ -2579,6 +2579,15 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
+    /// `ty`, or `instead` where `ty` is `!`, which selects no op width.
+    fn unless_never(&self, ty: TypeId, instead: TypeId) -> TypeId {
+        if self.type_table.is_never(ty) {
+            instead
+        } else {
+            ty
+        }
+    }
+
     /// Emit a binary op from already-translated operand WIR. Shared by the
     /// skeleton `ExprKind::Binary` path and the value-graph extractor so the
     /// short-circuit / width-truncation behaviour cannot diverge. The left
@@ -2591,11 +2600,7 @@ impl FunctionTranslator<'_, '_> {
         r: WirInstr,
         [left_ty, right_ty]: [TypeId; 2],
     ) -> WirInstr {
-        let left_ty = if self.type_table.is_never(left_ty) {
-            right_ty
-        } else {
-            left_ty
-        };
+        let left_ty = self.unless_never(left_ty, right_ty);
         // Short-circuit logical operators: `r`'s instruction tree sits in a
         // conditional branch, so it runs only when reached.
         if matches!(op, NirBinaryOp::And) {
@@ -2645,11 +2650,7 @@ impl FunctionTranslator<'_, '_> {
         o: WirInstr,
         [inner_ty, result_ty]: [TypeId; 2],
     ) -> WirInstr {
-        let inner_ty = if self.type_table.is_never(inner_ty) {
-            result_ty
-        } else {
-            inner_ty
-        };
+        let inner_ty = self.unless_never(inner_ty, result_ty);
         let result = self.translate_unary_op(&op, Box::new(o), inner_ty);
         if matches!(op, NirUnaryOp::Neg | NirUnaryOp::BitNot)
             && let ResolvedType::Primitive(prim) = self.type_table.get(inner_ty)
@@ -2876,8 +2877,11 @@ impl FunctionTranslator<'_, '_> {
                 _ => {
                     let inner = *inner;
                     let o = self.translate_operand(inner);
-                    let tys = [self.operand_type_id(inner), self.body.exprs[expr_id].type_id];
-                    self.emit_unary_wir(*op, o, tys)
+                    let inner_and_result = [
+                        self.operand_type_id(inner),
+                        self.body.exprs[expr_id].type_id,
+                    ];
+                    self.emit_unary_wir(*op, o, inner_and_result)
                 }
             },
 
