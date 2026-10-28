@@ -835,18 +835,23 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// them than the callee does. `safepoint_calls` says which calls are one. The
 /// literal a `return` hands back is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
-/// that takes it apart deletes it. A cold run is no part of the run.
+/// that takes it apart deletes it. Nor is a literal of constants that a `let`
+/// binds to a local outside `written`, or that a shared `&` lends:
+/// `const_object_globalization` builds it once for the module rather than per
+/// run. A cold run is no part of the run.
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
     cold: &ColdRuns,
     safepoint_calls: &[bool],
+    written: &IndexSet<u32>,
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
         cold: &'a ColdRuns,
         safepoint_calls: &'a [bool],
+        written: &'a IndexSet<u32>,
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
@@ -864,16 +869,23 @@ fn has_safepoint(
         fn node(&self, node: NodeRef) -> bool {
             match node {
                 NodeRef::Block(b) => return self.block(b),
+                NodeRef::Expr(e) if self.lends_constant(e) => return false,
                 NodeRef::Expr(e) if self.is_safepoint(e) => return true,
-                NodeRef::Stmt(s) => {
-                    if let StmtKind::Return {
+                NodeRef::Stmt(s) => match self.body.stmts[s].kind {
+                    StmtKind::Return {
                         value: Some(Operand::Expr(e)),
-                    } = self.body.stmts[s].kind
-                        && allocates(&self.body.exprs[e].kind)
-                    {
+                    } if allocates(&self.body.exprs[e].kind) => {
                         return self.children(NodeRef::Expr(e));
                     }
-                }
+                    StmtKind::Let {
+                        local_index, value, ..
+                    } if !self.written.contains(&local_index)
+                        && is_constant_arg(self.body, value, &IndexSet::default()) =>
+                    {
+                        return false;
+                    }
+                    _ => {}
+                },
                 NodeRef::Expr(_) | NodeRef::Pat(_) => {}
             }
             self.children(node)
@@ -892,6 +904,14 @@ fn has_safepoint(
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
                 kind => allocates(kind),
             }
+        }
+
+        fn lends_constant(&self, e: ExprId) -> bool {
+            matches!(
+                self.body.exprs[e].kind,
+                ExprKind::Unary { op: NirUnaryOp::Ref, expr }
+                    if is_constant_arg(self.body, expr, &IndexSet::default())
+            )
         }
     }
     fn allocates(kind: &ExprKind) -> bool {
@@ -913,6 +933,7 @@ fn has_safepoint(
         type_table,
         cold,
         safepoint_calls,
+        written,
     }
     .block(body.root())
 }
@@ -1560,6 +1581,7 @@ fn classify_callee(
     foldable: &[bool],
     loopy: &[bool],
     safepoint_calls: &[bool],
+    written: &IndexSet<u32>,
     sites: usize,
     spliced: &[usize],
     hopeful: &IndexSet<u32>,
@@ -1636,7 +1658,7 @@ fn classify_callee(
         Reach::Everywhere
     } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
         Reach::Nowhere
-    } else if has_safepoint(body, type_table, cold, safepoint_calls) {
+    } else if has_safepoint(body, type_table, cold, safepoint_calls, written) {
         if sites == 1 && !arena_query::block_contains_loop(body, body.root()) {
             Reach::SoleOutsideLoops
         } else {
@@ -2285,6 +2307,7 @@ pub fn inline_functions(
             &foldable,
             &loopy,
             &safepoint_calls,
+            &scans[i].written,
             call_sites[i],
             &spliced,
             &hopeful_params[i],
