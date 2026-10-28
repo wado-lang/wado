@@ -71,13 +71,12 @@ fn "opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via
 }
 
 fn "opt_match_thread_cond_exit.wado/$cm_export__run"() {
-    let v_15: i32;
     let $sroa_slot_31: i32;
     let $sroa_slot_32: i32;
     cold_path;
     $inline_run_1__$inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: block {
         cold_path;
-        v_15 = $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block -> i32 {
+        $sroa_slot_32 = $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block -> i32 {
             cold_path;
             cold_path;
             $sroa_slot_31 = 1;
@@ -88,7 +87,7 @@ fn "opt_match_thread_cond_exit.wado/$cm_export__run"() {
             break $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: 2;
         };
         $sroa_slot_31 = 0;
-        $sroa_slot_32 = v_15 + 100;
+        $sroa_slot_32 = $sroa_slot_32 + 100;
         break $inline_run_1__$inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1;
     };
     if @unlikely((if ($sroa_slot_31 == 1) & ($sroa_slot_32 == -1) -> bool {
@@ -182,10 +181,8 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -213,38 +210,34 @@ fn "core:rt/unreachable"() {
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let written: i32;
     let ptr_13: i32;
     let ptr_19: i32;
     let count_20: i32;
-    let packed_22: i32;
-    let ws: i32;
-    let evt_ptr: i32;
     let status: i32;
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); "core:rt/gc_array_to_memory"($mv$data$repr, $mv$data$start, ptr_13, $mv$data$end); builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
-    $mv$data$start = 0;
+    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); "core:rt/gc_array_to_memory"($mv$data$repr, $mv$data$start, ptr_13, $mv$data$end); builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
+    ptr_13 = 0;
     block {
         l14: loop {
-            ptr_19 = ptr_13 + $mv$data$start;
-            count_20 = $mv$data$end - $mv$data$start;
-            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee packed_22("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: packed_22;
+            ptr_19 = $mv$data$start + ptr_13;
+            count_20 = $mv$data$end - ptr_13;
+            count_20 = local.tee ptr_19($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee ptr_19("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: ptr_19;
                 }
-                ws = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, ws);
-                evt_ptr = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(ws, evt_ptr));
-                status = builtin::load_i32(evt_ptr + 4);
-                drop("mem/realloc"(evt_ptr, 8, 4, 0));
+                ptr_19 = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, ptr_19);
+                count_20 = "mem/realloc"(0, 0, 4, 8);
+                drop("wasi/waitable-set-wait"(ptr_19, count_20));
+                status = builtin::load_i32(count_20 + 4);
+                drop("mem/realloc"(count_20, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(ws);
+                "wasi/waitable-set-drop"(ptr_19);
                 break $inline_cm_await_blocked_6: status;
             }) >>u 4;
-            ptr_19 = (if local.tee ptr_19(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            ptr_19 = (if local.tee ptr_19(ptr_19 & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
             } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
@@ -254,9 +247,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 "core:rt/unreachable"();
                 unreachable;
             });
-            $mv$data$start = $mv$data$start + count_20;
-            if ((ptr_19 != 0) | (count_20 <= 0)) | ($mv$data$start >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
+            ptr_13 = ptr_13 + count_20;
+            if ((ptr_19 != 0) | (count_20 <= 0)) | (ptr_13 >= $mv$data$end) {
+                drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return ptr_19;
             }
             continue l14;

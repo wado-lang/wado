@@ -147,7 +147,6 @@ fn "spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp
     let arr_16: ref Array<u8>;
     let i: i32;
     let w: i64;
-    let to: i32;
     let $licm_arith_7: i32;
     $outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
@@ -194,15 +193,14 @@ fn "spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp
                     l17: loop {
                         break_if b16 i > $licm_arith_7;
                         w = builtin::load_i64(address_family + i);
-                        to = i;
-                        builtin::array_set_u8(arr_16, to, builtin::i32_wrap_i64(w) & 255);
-                        builtin::array_set_u8(arr_16, to + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
+                        builtin::array_set_u8(arr_16, i, builtin::i32_wrap_i64(w) & 255);
+                        builtin::array_set_u8(arr_16, i + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
+                        builtin::array_set_u8(arr_16, i + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
                         i = i + 8;
                         continue l17;
                     };
@@ -347,10 +345,8 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -400,7 +396,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -409,11 +404,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l39: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            result_7 = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
+            if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
-                return result_7;
+                return written;
             }
             continue l39;
         };

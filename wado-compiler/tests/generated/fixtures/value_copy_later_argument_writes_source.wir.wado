@@ -548,7 +548,7 @@ fn "value_copy_later_argument_writes_source.wado/run"() {
         $load_1 = x.s;
         $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: let $array_clone_src_2: ref Array<i32>; $array_clone_src_2 = $load_1.repr; $load_3 = $load_1.used; let $array_clone_dst_3: ref Array<i32>; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>($load_3)), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/bump_a"(x);
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -567,10 +567,10 @@ two(x, then: { bump_a(&mut x); x; }): "), used: 39 }, s3: struct.new "core:prelu
     x = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } };
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_1 = x.a;
-        $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
+        $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         x.a = 1001;
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: 1001, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $mv_field_5.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
-        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, 1001, $v1_1.s);
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: 1001, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
+        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, 1001, $v1_1.s);
     }) != 1011) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Pair,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$349a06b5021b774f" { h0: x, h1: ref.as_non_null($v1_1), h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:82
@@ -589,7 +589,7 @@ two(y, then: { y.a = 1001; y; }): "), used: 35 }, s3: struct.new "core:prelude/s
         $mv_field_1 = x.a;
         $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         x.a = $mv_field_1 + 1000;
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -607,10 +607,10 @@ two(z, then: { bump(r); z; }): "), used: 32 }, s3: struct.new "core:prelude/stri
     x = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } };
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_1 = x.a;
-        $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
+        $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         x.a = $mv_field_1 + 1000;
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $mv_field_5.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
-        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
+        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Pair,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$349a06b5021b774f" { h0: x, h1: ref.as_non_null($v1_1), h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:89
@@ -630,7 +630,7 @@ two(v, then: { bump_v(); v; }): "), used: 33 }, s3: struct.new "core:prelude/str
         $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         let $indirect_call_46: ref "canonical//CanonicalClosure_0";
         call_ref "functype/$canonical_closure_fn_0"($indirect_call_46.func, local.tee $indirect_call_46(ref.cast "canonical//CanonicalClosure_0"(bump_u)).env);
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -650,7 +650,7 @@ two(u, then: { bump_u(); u; }): "), used: 33 }, s3: struct.new "core:prelude/str
         $mv_field_1 = x.a;
         $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/call"(bump_u);
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -670,7 +670,7 @@ two(w, then: { call(bump_w); w; }): "), used: 37 }, s3: struct.new "core:prelude
         $mv_field_1 = x.a;
         $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/bump_held"(held);
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -686,7 +686,7 @@ two(h, then: { bump_held(held); h; }): "), used: 40 }, s3: struct.new "core:prel
         unreachable;
     }
     held = struct.new "value_copy_later_argument_writes_source.wado//Holder" { w: local.tee x(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } }) };
-    if @unlikely(local.tee $mv_field_1("value_copy_later_argument_writes_source.wado/held_by_callee$sroa[p.a]"(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $mv_field_1($mv_field_5.used))), 0, $array_clone_src_2, 0, $mv_field_1); $array_clone_dst_3, used: $mv_field_1 } }.a, held)) != 1) {
+    if @unlikely(local.tee $mv_field_1("value_copy_later_argument_writes_source.wado/held_by_callee$sroa[p.a]"(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $mv_field_1($load_1.used))), 0, $array_clone_src_2, 0, $mv_field_1); $array_clone_dst_3, used: $mv_field_1 } }.a, held)) != 1) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Holder,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$052e7f5a3507d879" { h0: x, h1: held, h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:103
 condition: held_by_callee(k, kept) == 1
@@ -713,10 +713,10 @@ aliased_params(rl, rl): "), used: 25 }, s2: struct.new "core:prelude/string.wado
     x = global:value_copy_later_argument_writes_source.wado::G;
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_1 = x.a;
-        $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 };
+        $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/bump_global"();
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee x(global:value_copy_later_argument_writes_source.wado::G).a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
-        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee x(global:value_copy_later_argument_writes_source.wado::G).a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
+        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Pair,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$349a06b5021b774f" { h0: global:value_copy_later_argument_writes_source.wado::G, h1: ref.as_non_null($v1_1), h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:107
@@ -734,10 +734,10 @@ two(G, then: { bump_global(); G; }): "), used: 38 }, s3: struct.new "core:prelud
     global:value_copy_later_argument_writes_source.wado::GH.w = x;
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_1 = x.a;
-        $load_1 = struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $mv_field_5(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 };
+        $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         "value_copy_later_argument_writes_source.wado/bump_global_held"();
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $mv_field_5.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
-        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $load_1, $v1_1.a, $v1_1.s);
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
+        "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
         "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,[value_copy_later_argument_writes_source.wado/Pair,value_copy_later_argument_writes_source.wado/Pair,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$349a06b5021b774f" { h0: x, h1: ref.as_non_null($v1_1), h2: $mv_field_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:110
@@ -757,11 +757,11 @@ two(g, then: { bump_global_held(); g; }): "), used: 43 }, s3: struct.new "core:p
         "value_copy_later_argument_writes_source.wado/run$cold1$dae[$contract_arg_0]"($mv_field_1);
         unreachable;
     }
-    $v1_54 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee $mv_field_1(local.tee x(builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_133, 0)).a), s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+    $v1_54 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: local.tee $mv_field_1(local.tee x(builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_133, 0)).a), s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1(x.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
     if @unlikely(local.tee $mv_field_1(block -> i32 {
         $mv_field_5 = struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5($v1_54.s).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($mv_field_5.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 };
         builtin::array_get_value<ref "value_copy_later_argument_writes_source.wado//Pair">(elements_133, 0).a = 1001;
-        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_dst_3, 0, $load_3); $array_clone_src_2, used: $load_3 } };
+        $v1_1 = struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: x.a, s: struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = $load_1.repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $load_3($load_1.used))), 0, $array_clone_src_2, 0, $load_3); $array_clone_dst_3, used: $load_3 } };
         "value_copy_later_argument_writes_source.wado/two"($mv_field_1, $mv_field_5, $v1_1.a, $v1_1.s);
     }) != 1011) {
         cold_path;
@@ -778,12 +778,12 @@ two(*e, then: { list[0].a = 1001; *e; }): "), used: 43 }, r3: struct.new "core:p
 two(*e, then: { list[0].a = 1001; *e; }): "), used: 43 }, s4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r4: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_10.used);
         unreachable;
     }
-    if @unlikely(local.tee $load_3("value_copy_later_argument_writes_source.wado/count"(struct.new "core:prelude//List<i32>" { repr: $array_clone_dst_3 = local.tee $load_1(struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $load_1("value_copy_later_argument_writes_source.wado/items$sroa[p.s]"(local.tee $mv_field_5(local.tee $v1_54(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } }).s))).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $mv_field_1($load_1.used))), 0, $array_clone_src_2, 0, $mv_field_1); $array_clone_dst_3, used: $mv_field_1 }).repr; builtin::array_copy<i32>(local.tee $array_clone_src_2(builtin::array_new<i32>(local.tee $mv_field_1($load_1.used))), 0, $array_clone_dst_3, 0, $mv_field_1); $array_clone_src_2, used: $mv_field_1 }, local.tee $mv_field_1(if @unlikely(local.tee $mv_field_1($mv_field_5.used) >= builtin::array_len($mv_field_5.repr)) {
+    if @unlikely(local.tee $load_3("value_copy_later_argument_writes_source.wado/count"(struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5(struct.new "core:prelude//List<i32>" { repr: $array_clone_src_2 = local.tee $mv_field_5("value_copy_later_argument_writes_source.wado/items$sroa[p.s]"(local.tee $load_1(local.tee x(struct.new "value_copy_later_argument_writes_source.wado//Pair" { a: black_box(1), s: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(), used: 0 } }).s))).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $mv_field_1($mv_field_5.used))), 0, $array_clone_src_2, 0, $mv_field_1); $array_clone_dst_3, used: $mv_field_1 }).repr; builtin::array_copy<i32>(local.tee $array_clone_dst_3(builtin::array_new<i32>(local.tee $mv_field_1($mv_field_5.used))), 0, $array_clone_src_2, 0, $mv_field_1); $array_clone_dst_3, used: $mv_field_1 }, local.tee $mv_field_1(if @unlikely(local.tee $mv_field_1($load_1.used) >= builtin::array_len($load_1.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($mv_field_5);
-    }; builtin::array_set<i32>($mv_field_5.repr, $mv_field_1, 1); $mv_field_5.used = $mv_field_1 + 1; $v1_54.s.used))) != 1) {
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($load_1);
+    }; builtin::array_set<i32>($load_1.repr, $mv_field_1, 1); $load_1.used = $mv_field_1 + 1; x.s.used))) != 1) {
         cold_path;
-        "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$7c0eab094f181afb,[value_copy_later_argument_writes_source.wado/Pair,core:prelude/list.wado/List<i32>,i32,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$7c0eab094f181afb" { h0: $v1_54, h1: $load_1, h2: $mv_field_1, h3: $load_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:115
+        "core:rt/panic"(local.tee $mv_arg_10("core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_later_argument_writes_source.wado/$tmpl$7c0eab094f181afb,[value_copy_later_argument_writes_source.wado/Pair,core:prelude/list.wado/List<i32>,i32,i32]>"(struct.new "value_copy_later_argument_writes_source.wado//$tmpl$7c0eab094f181afb" { h0: x, h1: $mv_field_5, h2: $mv_field_1, h3: $load_3, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:115
 condition: count(items(&m), then: { m.s.push(1); m.s.len(); }) == 1
 m: "), used: 147 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in run at value_copy_later_argument_writes_source.wado:115
 condition: count(items(&m), then: { m.s.push(1); m.s.len(); }) == 1
@@ -1068,24 +1068,24 @@ fn "core:prelude/string.wado/utf8_seq_len"(b0) {
 
 fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
     let b0: u32;
-    let b1_3: u32;
-    let b2_5: u32;
+    let b1_4: u32;
+    let b2_7: u32;
     if local.tee b0(builtin::array_get_value<u8>(repr, pos)) <u 128 {
         return b0, 1;
     }
     if b0 <u 224 {
-        b1_3 = builtin::array_get_value<u8>(repr, pos + 1);
-        return ((b0 & 31) << 6) | (b1_3 & 63), 2;
+        pos = builtin::array_get_value<u8>(repr, pos + 1);
+        return ((b0 & 31) << 6) | (pos & 63), 2;
     }
     if b0 <u 240 {
-        b1_3 = builtin::array_get_value<u8>(repr, pos + 1);
-        b2_5 = builtin::array_get_value<u8>(repr, pos + 2);
-        return (((b0 & 15) << 12) | ((b1_3 & 63) << 6)) | (b2_5 & 63), 3;
+        b1_4 = builtin::array_get_value<u8>(repr, pos + 1);
+        pos = builtin::array_get_value<u8>(repr, pos + 2);
+        return (((b0 & 15) << 12) | ((b1_4 & 63) << 6)) | (pos & 63), 3;
     }
-    b2_5 = builtin::array_get_value<u8>(repr, pos + 1);
-    b1_3 = builtin::array_get_value<u8>(repr, pos + 2);
+    b1_4 = builtin::array_get_value<u8>(repr, pos + 1);
+    b2_7 = builtin::array_get_value<u8>(repr, pos + 2);
     pos = builtin::array_get_value<u8>(repr, pos + 3);
-    return ((((b0 & 7) << 18) | ((b2_5 & 63) << 12)) | ((b1_3 & 63) << 6)) | (pos & 63), 4;
+    return ((((b0 & 7) << 18) | ((b1_4 & 63) << 12)) | ((b2_7 & 63) << 6)) | (pos & 63), 4;
 }
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
@@ -1218,10 +1218,8 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -1270,7 +1268,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -1279,11 +1276,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l125: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            result_7 = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
+            if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
-                return result_7;
+                return written;
             }
             continue l125;
         };
@@ -1910,7 +1907,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let $load_5: i32;
     let $load_6: i32;
     let view_2: ref "core:prelude/string.wado//StrSlice";
-    let right_pad: i32;
     let other_18: ref "core:prelude/string.wado//StrSlice";
     let $av_52: i32;
     if local.tee $av_52(self.width) <= 0 {
@@ -1918,34 +1914,34 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
         return;
     }
     view_2 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(content.repr, content.used);
-    if local.tee $mv_byte_index_3("core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(let $mv_repr_1: ref Array<u8>; let $mv_used_2: i32; let $mv_byte_index_3: i32; multivalue_bind [$mv_repr_1, $mv_used_2, $mv_byte_index_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"(local.tee $load_4(view_2.repr), local.tee $load_5(view_2.start), local.tee $load_6(view_2.end)); struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 })) >= $av_52 {
+    if local.tee $mv_used_2("core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(let $mv_repr_1: ref Array<u8>; let $mv_used_2: i32; let $mv_byte_index_3: i32; multivalue_bind [$mv_repr_1, $mv_used_2, $mv_byte_index_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"(local.tee $load_4(view_2.repr), local.tee $load_5(view_2.start), local.tee $load_6(view_2.end)); struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 })) >= $av_52 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(self.buf, $load_4, $load_5, $load_6);
         return;
     }
-    $mv_byte_index_3 = $av_52 - $mv_byte_index_3;
+    $av_52 = $av_52 - $mv_used_2;
     if self.zero_pad {
-        $av_52 = "core:prelude/format.wado/core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(view_2, $load_6 - $load_5);
+        $mv_used_2 = "core:prelude/format.wado/core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(view_2, $load_6 - $load_5);
         content = self.buf;
-        other_18 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($load_4, $load_5, $av_52);
+        other_18 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($load_4, $load_5, $mv_used_2);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(content, other_18.repr, other_18.start, other_18.end);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, 48, $mv_byte_index_3);
-        other_18 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(view_2.repr, $load_5, $av_52, $load_6 - $load_5);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(content, other_18.repr, other_18.start, other_18.end);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, 48, $av_52);
+        view_2 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(view_2.repr, $load_5, $mv_used_2, $load_6 - $load_5);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(content, view_2.repr, view_2.start, view_2.end);
         return;
     }
-    $av_52 = self.align;
-    $mv_used_2 = self.fill;
-    if $av_52 == 0 {
+    $mv_used_2 = self.align;
+    $mv_byte_index_3 = self.fill;
+    if $mv_used_2 == 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(local.tee content(self.buf), $load_4, $load_5, $load_6);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, $mv_used_2, $mv_byte_index_3);
-    } else if $av_52 == 1 {
-        $av_52 = $mv_byte_index_3 / 2;
-        right_pad = $mv_byte_index_3 - $av_52;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee content(self.buf), $mv_used_2, $av_52);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, $mv_byte_index_3, $av_52);
+    } else if $mv_used_2 == 1 {
+        $mv_used_2 = $av_52 / 2;
+        $av_52 = $av_52 - $mv_used_2;
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee content(self.buf), $mv_byte_index_3, $mv_used_2);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(content, view_2.repr, $load_5, $load_6);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, $mv_used_2, right_pad);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(content, $mv_byte_index_3, $av_52);
     } else {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee content(self.buf), $mv_used_2, $mv_byte_index_3);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee content(self.buf), $mv_byte_index_3, $av_52);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(content, view_2.repr, $load_5, $load_6);
     }
 }
@@ -1956,7 +1952,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
-    let offset_10: i32;
     prefix = "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(alt_prefix.repr, alt_prefix.used);
     sign_len = select i32((if is_negative -> i32 {
         1;
@@ -1986,20 +1981,20 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         if prefix_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(self.buf, prefix.repr, prefix.start, prefix.end);
         }
-        offset_10 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee alt_prefix(self.buf), digit_count);
+        is_negative = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(local.tee alt_prefix(self.buf), digit_count);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(alt_prefix, self.fill, sign_len);
-        return offset_10;
+        return is_negative;
     } else if $load_6 == 1 {
         $load_6 = sign_len / 2;
-        offset_10 = sign_len - $load_6;
+        sign_len = sign_len - $load_6;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee alt_prefix(self.buf), local.tee $load_26(self.fill), $load_6);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative);
         if prefix_len > 0 {
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(alt_prefix, prefix.repr, prefix.start, prefix.end);
         }
-        $load_6 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(alt_prefix, $load_26, offset_10);
-        return $load_6;
+        is_negative = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(alt_prefix, $load_26, sign_len);
+        return is_negative;
     } else {
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee alt_prefix(self.buf), self.fill, sign_len);
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(self, is_negative);
@@ -2021,41 +2016,40 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     let $load_6: i32;
     let $load_7: i32;
     let $load_10: ref "core:prelude/string.wado//String";
-    let right_pad: i32;
     let other_16: ref "core:prelude/string.wado//StrSlice";
     let $av_54: i32;
     if local.tee $av_54(self.width) <= 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(self.buf, content.repr, content.start, content.end);
         return;
     }
-    if local.tee $mv_byte_index_3("core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(let $mv_repr_1: ref Array<u8>; let $mv_used_2: i32; let $mv_byte_index_3: i32; multivalue_bind [$mv_repr_1, $mv_used_2, $mv_byte_index_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"(local.tee $load_5(content.repr), local.tee $load_6(content.start), local.tee $load_7(content.end)); struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 })) >= $av_54 {
+    if local.tee $mv_used_2("core:prelude/string.wado/core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"(let $mv_repr_1: ref Array<u8>; let $mv_used_2: i32; let $mv_byte_index_3: i32; multivalue_bind [$mv_repr_1, $mv_used_2, $mv_byte_index_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::chars"(local.tee $load_5(content.repr), local.tee $load_6(content.start), local.tee $load_7(content.end)); struct.new "core:prelude/string.wado//StrCharIter" { repr: $mv_repr_1, used: $mv_used_2, byte_index: $mv_byte_index_3 })) >= $av_54 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(self.buf, $load_5, $load_6, $load_7);
         return;
     }
-    $mv_byte_index_3 = $av_54 - $mv_byte_index_3;
+    $av_54 = $av_54 - $mv_used_2;
     if self.zero_pad {
-        $av_54 = "core:prelude/format.wado/core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(content, $load_7 - $load_6);
+        $mv_used_2 = "core:prelude/format.wado/core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>$dae[at]"(content, $load_7 - $load_6);
         $load_10 = self.buf;
-        other_16 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($load_5, $load_6, $av_54);
+        other_16 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($load_5, $load_6, $mv_used_2);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($load_10, other_16.repr, other_16.start, other_16.end);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, 48, $mv_byte_index_3);
-        other_16 = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(content.repr, $load_6, $av_54, $load_7 - $load_6);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($load_10, other_16.repr, other_16.start, other_16.end);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, 48, $av_54);
+        content = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked"(content.repr, $load_6, $mv_used_2, $load_7 - $load_6);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($load_10, content.repr, content.start, content.end);
         return;
     }
-    $av_54 = self.align;
-    $mv_used_2 = self.fill;
-    if $av_54 == 0 {
+    $mv_used_2 = self.align;
+    $mv_byte_index_3 = self.fill;
+    if $mv_used_2 == 0 {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(local.tee $load_10(self.buf), $load_5, $load_6, $load_7);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, $mv_used_2, $mv_byte_index_3);
-    } else if $av_54 == 1 {
-        $av_54 = $mv_byte_index_3 / 2;
-        right_pad = $mv_byte_index_3 - $av_54;
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee $load_10(self.buf), $mv_used_2, $av_54);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, $mv_byte_index_3, $av_54);
+    } else if $mv_used_2 == 1 {
+        $mv_used_2 = $av_54 / 2;
+        $av_54 = $av_54 - $mv_used_2;
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee $load_10(self.buf), $mv_byte_index_3, $mv_used_2);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($load_10, content.repr, $load_6, $load_7);
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, $mv_used_2, right_pad);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"($load_10, $mv_byte_index_3, $av_54);
     } else {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee $load_10(self.buf), $mv_used_2, $mv_byte_index_3);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(local.tee $load_10(self.buf), $mv_byte_index_3, $av_54);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($load_10, content.repr, $load_6, $load_7);
     }
 }
@@ -2080,8 +2074,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<core:prelud
     self_13 = "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5, $load_6, $load_7, $load_8, $load_9);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, self_13.repr, self_13.start, self_13.end);
     $temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_list_wado__tmpl_59e16269228f9c88_core_prelude_string_wado_String___fmt_7_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    $load_9 = t.h0;
-    "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_list_wado__tmpl_59e16269228f9c88_core_prelude_string_wado_String___fmt_7_0, $load_9);
+    $load_2 = t.h0;
+    "core:prelude/format.wado/core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"($temp_inline_core_prelude_traits_wado_TemplateHole_core_prelude_list_wado__tmpl_59e16269228f9c88_core_prelude_string_wado_String___fmt_7_0, $load_2);
     self_13 = block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"($load_4.repr, $load_4.used);
     };
@@ -2139,7 +2133,7 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_la
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r3("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$r3.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
@@ -2154,13 +2148,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de,&mut value_copy_later_argument_writes_source.wado/Pair>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r2("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$r2.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r2("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$r2.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$671b91b4176678de"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
@@ -2173,25 +2167,25 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_la
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r3("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$r3.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$349a06b5021b774f"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879,value_copy_later_argument_writes_source.wado/Pair>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r3("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$r3.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879,value_copy_later_argument_writes_source.wado/Holder>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r3("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$r3.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r3("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$r3.used);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("value_copy_later_argument_writes_source.wado/$template_segment$value_copy_later_argument_writes_source.wado/$tmpl$052e7f5a3507d879"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 

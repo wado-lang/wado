@@ -270,10 +270,8 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -323,7 +321,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -332,11 +329,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l22: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            result_7 = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
+            if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
-                return result_7;
+                return written;
             }
             continue l22;
         };
@@ -427,39 +424,38 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_insp
     other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 };
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, other_13.repr, $mv_start_2, $mv_end_3);
     $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_char_wado__tmpl_afac97b99c085569_char___fmt_5_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out_3);
-    $mv_end_3 = t.h0;
-    $load_3 = $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_char_wado__tmpl_afac97b99c085569_char___fmt_5_0.buf;
-    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($mv_end_3, $load_3);
-    multivalue_bind [$mv_repr_1, $mv_end_3, $mv_start_2] = "assert_inspect_char.wado/assert_inspect_char.wado/$tmpl$afac97b99c085569^core:prelude/traits.wado/ReflectTemplate::tail"(t);
-    other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_end_3, end: $mv_start_2 };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, other_13.repr, $mv_end_3, $mv_start_2);
+    $mv_start_2 = t.h0;
+    $load_0 = $temp_inline_core_prelude_traits_wado_TemplateHole_assert_inspect_char_wado__tmpl_afac97b99c085569_char___fmt_5_0.buf;
+    "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"($mv_start_2, $load_0);
+    multivalue_bind [$mv_repr_1, $mv_start_2, $mv_end_3] = "assert_inspect_char.wado/assert_inspect_char.wado/$tmpl$afac97b99c085569^core:prelude/traits.wado/ReflectTemplate::tail"(t);
+    other_13 = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv_repr_1, start: $mv_start_2, end: $mv_end_3 };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"(out_3, other_13.repr, $mv_start_2, $mv_end_3);
     return out_3;
 }
 
 fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let $load_0: ref Array<u8>;
-    let $fuse_at_29: i32;
     "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(f, 39);
     if self == 39 {
-        $fuse_at_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
-        builtin::array_set_u8(local.tee $load_0(f.repr), $fuse_at_29, 92);
-        builtin::array_set_u8($load_0, $fuse_at_29 + 1, 39);
+        self = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
+        builtin::array_set_u8(local.tee $load_0(f.repr), self, 92);
+        builtin::array_set_u8($load_0, self + 1, 39);
     } else if self == 92 {
-        $fuse_at_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
-        builtin::array_set_u8(local.tee $load_0(f.repr), $fuse_at_29, 92);
-        builtin::array_set_u8($load_0, $fuse_at_29 + 1, 92);
+        self = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
+        builtin::array_set_u8(local.tee $load_0(f.repr), self, 92);
+        builtin::array_set_u8($load_0, self + 1, 92);
     } else if self == 10 {
-        $fuse_at_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
-        builtin::array_set_u8(local.tee $load_0(f.repr), $fuse_at_29, 92);
-        builtin::array_set_u8($load_0, $fuse_at_29 + 1, 110);
+        self = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
+        builtin::array_set_u8(local.tee $load_0(f.repr), self, 92);
+        builtin::array_set_u8($load_0, self + 1, 110);
     } else if self == 13 {
-        $fuse_at_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
-        builtin::array_set_u8(local.tee $load_0(f.repr), $fuse_at_29, 92);
-        builtin::array_set_u8($load_0, $fuse_at_29 + 1, 114);
+        self = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
+        builtin::array_set_u8(local.tee $load_0(f.repr), self, 92);
+        builtin::array_set_u8($load_0, self + 1, 114);
     } else if self == 9 {
-        $fuse_at_29 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
-        builtin::array_set_u8(local.tee $load_0(f.repr), $fuse_at_29, 92);
-        builtin::array_set_u8($load_0, $fuse_at_29 + 1, 116);
+        self = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(f, 2);
+        builtin::array_set_u8(local.tee $load_0(f.repr), self, 92);
+        builtin::array_set_u8($load_0, self + 1, 116);
     } else {
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(f, self);
     }
@@ -467,7 +463,7 @@ fn "core:prelude/primitive.wado/char^core:prelude/traits.wado/Inspect::inspect$s
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_inspect_char.wado/$tmpl$afac97b99c085569,char>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$r1("assert_inspect_char.wado/$template_segment$assert_inspect_char.wado/$tmpl$afac97b99c085569"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$r1.used);
+    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("assert_inspect_char.wado/$template_segment$assert_inspect_char.wado/$tmpl$afac97b99c085569"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
 }
 
 export fn "assert_inspect_char.wado/$cm_export__run" as "run"

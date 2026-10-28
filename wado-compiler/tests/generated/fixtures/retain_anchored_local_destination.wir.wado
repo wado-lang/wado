@@ -97,12 +97,9 @@ fn "retain_anchored_local_destination.wado/fill"(p) {
 fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retention_leaves_the_write_back_standing"() {
     let $load_0: ref null "core:prelude/string.wado//String";
     let $write_back_1: ref "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>";
-    let $write_back_before_2: ref null "core:prelude/string.wado//String";
     let $sroa_b_item_7: ref null "core:prelude/string.wado//String";
-    $write_back_1 = struct.new "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>" { value: local.tee $sroa_b_item_7(ref.null none) };
-    $write_back_before_2 = $sroa_b_item_7;
-    "retain_anchored_local_destination.wado/fill"($write_back_1);
-    if ref.eq(local.tee $load_0($write_back_1.value), $write_back_before_2) == 0 {
+    "retain_anchored_local_destination.wado/fill"(local.tee $write_back_1(struct.new "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>" { value: local.tee $sroa_b_item_7(ref.null none) }));
+    if ref.eq(local.tee $load_0($write_back_1.value), $sroa_b_item_7) == 0 {
         $sroa_b_item_7 = $load_0;
     }
     if @unlikely((ref.is_null($sroa_b_item_7) == 0) == 0) {
@@ -208,10 +205,8 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
     "wasi/stream-drop-writable"(tx);
 }
@@ -261,7 +256,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -270,11 +264,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l17: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            result_7 = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
+            if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
-                return result_7;
+                return written;
             }
             continue l17;
         };
