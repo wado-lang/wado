@@ -1,8 +1,8 @@
 //! The per-type bridge helper a reflection marker (`builtin::struct_field_get`,
 //! `builtin::variant_case_extract`, …) calls. `lower` rewrites each marker into
 //! a call of it, and `prelower_reach` follows the marker to it, so the two read
-//! one spelling and a bridge of a kind [`MARKERS`] lists is lowered only where a
-//! marker reaches it.
+//! one spelling and a [`MarkerBridge`] bridge is lowered only where a marker
+//! reaches it.
 
 use crate::module_source::ModuleSource;
 use crate::name::MarkerBridge;
@@ -28,75 +28,37 @@ impl BridgeCallee {
     }
 }
 
-/// What a marker's type arguments name besides the head type.
-#[derive(Clone, Copy)]
-enum Shape {
-    /// A member type too: a field read names the struct and the field type, a
-    /// hole read the shape and the hole type, a case bridge the variant and the
-    /// payload type.
-    Pair,
-    /// The template shape alone.
-    Head,
-}
-
-/// Every marker `lower` rewrites into a bridge call, and the bridge it calls.
+/// Whether `name` is a bridge only a [`MarkerBridge`] marker calls, so a walk
+/// that follows the markers reaches it without rooting it.
 /// `builtin::variant_tag` is not one: which helper it reads depends on the
 /// boxing `lower` plans, so its bridge stays a root.
-const MARKERS: &[(&str, MarkerBridge, Shape)] = &[
-    ("struct_field_get", MarkerBridge::FieldGet, Shape::Pair),
-    ("struct_field_ref", MarkerBridge::FieldRef, Shape::Pair),
-    ("hole_get", MarkerBridge::HoleGet, Shape::Pair),
-    ("hole_ref", MarkerBridge::HoleRef, Shape::Pair),
-    (
-        "variant_case_extract",
-        MarkerBridge::CaseExtract,
-        Shape::Pair,
-    ),
-    ("variant_case_ref", MarkerBridge::CaseRef, Shape::Pair),
-    (
-        "variant_case_construct",
-        MarkerBridge::CaseConstruct,
-        Shape::Pair,
-    ),
-    ("hole_fmt", MarkerBridge::HoleFmt, Shape::Head),
-    (
-        "template_segment",
-        MarkerBridge::TemplateSegment,
-        Shape::Head,
-    ),
-];
-
-/// Whether `name` is a bridge only a [`MARKERS`] marker calls, so a walk that
-/// follows the markers reaches it without rooting it.
 #[must_use]
 pub(crate) fn is_marker_bridge(name: &str) -> bool {
-    MARKERS
+    MarkerBridge::ALL
         .iter()
-        .any(|(_, bridge, _)| name.starts_with(bridge.prefix()))
+        .any(|bridge| name.starts_with(bridge.prefix()))
 }
 
-/// The bridge `func` calls, if it is one of [`MARKERS`].
+/// The bridge `func` calls, if it is a [`MarkerBridge`] marker.
 pub(crate) fn bridge_callee(
     tt: &TypeTable,
     func: &FunctionRef,
     type_args: &[TypeId],
 ) -> Option<BridgeCallee> {
     let intrinsic = func.intrinsic()?;
-    let &(marker, bridge, shape) = MARKERS.iter().find(|(m, ..)| *m == intrinsic)?;
+    let bridge = *MarkerBridge::ALL.iter().find(|b| b.marker() == intrinsic)?;
+    let marker = bridge.marker();
     let mi = func.monomorph_info.as_ref();
-    let (head, name) = match shape {
-        Shape::Pair => {
-            let [head, member] = marker_type_args::<2>(type_args, mi, marker);
-            let name = bridge.pair_name(
-                &tt.mangle_type_arg_unboxed(head),
-                &tt.mangle_type_arg_unboxed(member),
-            );
-            (head, name)
-        }
-        Shape::Head => {
-            let [shape] = marker_type_args::<1>(type_args, mi, marker);
-            (shape, bridge.shape_name(&tt.mangle_type_arg_unboxed(shape)))
-        }
+    let (head, name) = if bridge.names_member() {
+        let [head, member] = marker_type_args::<2>(type_args, mi, marker);
+        let name = bridge.pair_name(
+            &tt.mangle_type_arg_unboxed(head),
+            &tt.mangle_type_arg_unboxed(member),
+        );
+        (head, name)
+    } else {
+        let [shape] = marker_type_args::<1>(type_args, mi, marker);
+        (shape, bridge.shape_name(&tt.mangle_type_arg_unboxed(shape)))
     };
     Some(BridgeCallee::homed(tt, head, name, marker))
 }

@@ -316,7 +316,6 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             candidate.local_index,
             DecomposedLet {
                 literal: candidate.literal,
-                is_mut: candidate.is_mut,
                 copy: candidate.copy_of.is_some(),
             },
         );
@@ -1268,7 +1267,6 @@ fn callee_stores_param_at(
 #[derive(Clone, Copy)]
 struct DecomposedLet {
     literal: ExprId,
-    is_mut: bool,
     /// The `Let` binds a second name for a candidate, whose slots it shares.
     copy: bool,
 }
@@ -1335,23 +1333,11 @@ fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
         };
         if let Some(local_idx) = candidate {
             let span = engine.body.stmts[stmt].span;
-            let DecomposedLet {
-                literal,
-                is_mut,
-                copy,
-            } = ctx.decomposed_lets[&local_idx];
+            let DecomposedLet { literal, copy } = ctx.decomposed_lets[&local_idx];
             if copy {
                 continue;
             }
-            expand_struct_let(
-                engine,
-                literal,
-                local_idx,
-                is_mut,
-                span,
-                ctx,
-                &mut new_stmts,
-            );
+            expand_struct_let(engine, literal, local_idx, span, ctx, &mut new_stmts);
             continue;
         }
         rewrite_node(engine, NodeRef::Stmt(stmt), ctx);
@@ -1510,7 +1496,6 @@ fn expand_struct_let(
     engine: &mut Engine,
     value: ExprId,
     local_idx: u32,
-    is_mut: bool,
     span: Span,
     ctx: &Rewrite,
     new_stmts: &mut Vec<StmtId>,
@@ -1541,7 +1526,6 @@ fn expand_struct_let(
         push_field_let(
             engine,
             (local_idx, field_index),
-            is_mut,
             span,
             field_op,
             ctx,
@@ -1553,7 +1537,6 @@ fn expand_struct_let(
 fn push_field_let(
     engine: &mut Engine,
     key: (u32, u32),
-    is_mut: bool,
     span: Span,
     value: Operand,
     ctx: &Rewrite,
@@ -1564,7 +1547,9 @@ fn push_field_let(
         StmtKind::Let {
             name: slot.name.clone(),
             local_index: slot.local_index,
-            is_mut,
+            // A copy that writes through shares the slot, so the slot, not the
+            // candidate, says whether it is assigned.
+            is_mut: engine.locals()[slot.local_index as usize].is_mut,
             type_id: slot.type_id,
             value,
             // The original literal was a fresh value, so its fields don't need

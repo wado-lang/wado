@@ -255,6 +255,7 @@ fn collect_and_validate(
             )
         }))
         .collect();
+    let mut shared_by_type: IndexMap<TypeId, Vec<(String, ModuleSource)>> = IndexMap::default();
     loop {
         let entries: Vec<(&(FnKey, usize), &SroaInfo)> = candidates.iter().collect();
         let uses = gate.exec().map(&entries, |&(&(key, pi), info)| {
@@ -330,9 +331,17 @@ fn collect_and_validate(
                 info.field_index != u32::MAX
                     && is_sroa_eligible_inner_type(info.inner_type_id, &type_table)
                     && (info.form != FieldForm::Value || {
-                        let mut shared = IndexSet::default();
-                        by_value_structs(info.inner_type_id, types, &struct_fields, &mut shared);
-                        let shared: Vec<_> = shared.into_iter().collect();
+                        let shared =
+                            shared_by_type.entry(info.inner_type_id).or_insert_with(|| {
+                                let mut shared = IndexSet::default();
+                                by_value_structs(
+                                    info.inner_type_id,
+                                    types,
+                                    &struct_fields,
+                                    &mut shared,
+                                );
+                                shared.into_iter().collect()
+                            });
                         let reach = WriteReach {
                             writes: &reachable_writes[key.index()],
                             targets: &write_targets,
@@ -342,7 +351,7 @@ fn collect_and_validate(
                         !param_snapshot_unsound(
                             &functions[key.index()].borrow(),
                             pi,
-                            &shared,
+                            shared,
                             &reach,
                         )
                     })
@@ -493,8 +502,9 @@ fn by_value_structs(
                 type_table.struct_rendered_name(*def, type_args),
                 type_table.struct_head_module(*def).clone(),
             );
-            if let Some(fields) = struct_fields.get(&key).cloned()
-                && out.insert(key)
+            let fields = struct_fields.get(&key).cloned();
+            if out.insert(key)
+                && let Some(fields) = fields
             {
                 for field in fields {
                     by_value_structs(field, type_table, struct_fields, out);

@@ -13,8 +13,8 @@
 //
 // If field_forward's alias-group widening misses this, the read of
 // `*r1` (i.e. `r1.value`) folds to 0 (the value at `&mut x`'s
-// inception), and the assert panics. `sroa` splits the box and its copies
-// into one shared slot, so both asserts fold to true.
+// inception), and the assert panics. The box escapes at the end, so `sroa`
+// keeps it whole and the forwarding sees the writes through its aliases.
 
 export fn run() {
     let mut x = 0;
@@ -23,10 +23,12 @@ export fn run() {
     *r2 = 7;
     assert *r1 == 7;
     assert x == 7;
+    builtin::black_box(r2);
 }
 
 __DATA__
 {
     "stdout": "",
+    "wir_expect:O2": [".value = 7;"],
     "wir_not_expect:O2": ["panic"]
 }

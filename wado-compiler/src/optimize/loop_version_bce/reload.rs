@@ -14,17 +14,17 @@
 use crate::compiler_item::SeqField;
 use crate::hashmap::IndexMap;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::Engine;
-use crate::optimize::arena_query::{binary_parts, operand_local};
+use crate::optimize::arena_query::{binary_parts, control_escapes, is_pure_operand, operand_local};
 use crate::optimize::condition_implication::{
     Binds, BoundKey, FieldPath, parse_bound, parse_const_i64,
 };
 use crate::optimize::heap_effect::{Effect, HeapEffects, HeapFrame, LazyHeapFrame};
 use crate::tir::TypeId;
+use crate::type_table::{TypeKey, TypeTable};
 
 use super::subtree_redefines;
-use crate::type_table::{TypeKey, TypeTable};
 
 /// What a subtree does to the reloaded bound.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -56,8 +56,9 @@ struct Walk<'w> {
 /// The statements of `loop_body`, past the guard at `guard_idx`, after which
 /// the fast loop re-tests the bound `root.used`, each with its block. `None`
 /// when a check follows one, `root` is written other than by a reload, or the
-/// loop has an exit besides its guard: the original loop resumes after the
-/// fast one, which another exit would skip.
+/// original loop, which always resumes after the fast one, would not pick up
+/// where it stopped: the fast loop leaves other than by its guard, or what
+/// precedes the guard is not pure, which the original runs once more.
 pub(super) fn points(
     engine: &Engine,
     binds: &Binds,
@@ -74,20 +75,21 @@ pub(super) fn points(
     {
         return None;
     }
-    let mut exits = 0;
-    engine
-        .body
-        .for_each_node_under(NodeRef::Block(loop_body), |n| {
-            if let NodeRef::Stmt(s) = n
-                && matches!(
-                    engine.body.stmts[s].kind,
-                    StmtKind::Break { label: None, .. }
-                )
-            {
-                exits += 1;
+    let stmts = engine.body.blocks[loop_body].stmts.clone();
+    let body = &*engine.body;
+    let pure_head = stmts[..guard_idx]
+        .iter()
+        .all(|&s| match &body.stmts[s].kind {
+            StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } => {
+                is_pure_operand(body, *value)
             }
+            _ => unreachable!("only `let`s precede a break guard"),
         });
-    if exits != 1 {
+    let other_exit = stmts
+        .iter()
+        .enumerate()
+        .any(|(i, &s)| i != guard_idx && breaks_loop(body, NodeRef::Stmt(s), 0));
+    if !pure_head || other_exit {
         return None;
     }
     let mut walk = Walk {
@@ -104,9 +106,24 @@ pub(super) fn points(
         retested: false,
         points: Vec::new(),
     };
-    let stmts = engine.body.blocks[loop_body].stmts.clone();
     walk.stmts(engine, loop_body, &stmts[guard_idx + 1..])?;
     Some(walk.points)
+}
+
+/// Whether `node`, `loops` loops inside the loop in question, breaks out of it.
+fn breaks_loop(body: &Body, node: NodeRef, loops: usize) -> bool {
+    if let NodeRef::Stmt(s) = node {
+        match &body.stmts[s].kind {
+            StmtKind::Break { label: None, .. } => return loops == 0,
+            StmtKind::Loop { body: inner } => {
+                return breaks_loop(body, NodeRef::Block(*inner), loops + 1);
+            }
+            _ => {}
+        }
+    }
+    let mut breaks = false;
+    body.for_each_child(node, |c| breaks = breaks || breaks_loop(body, c, loops));
+    breaks
 }
 
 impl Walk<'_> {
@@ -183,8 +200,9 @@ impl Walk<'_> {
             | StmtKind::LetDestructure { .. } => self.scan(engine, NodeRef::Stmt(s))?,
         };
         if reach == Reach::Lowers {
-            // A check inside the statement may run after what lowers the bound.
-            if self.holds_check(engine, s) {
+            // A check inside the statement may run after what lowers the bound,
+            // and a jump out of it after that skips the re-test.
+            if self.holds_check(engine, s) || control_escapes(body, &[s]) {
                 return None;
             }
             self.points.push((block, s));
@@ -278,8 +296,8 @@ impl Walk<'_> {
         (path == FieldPath::of(SeqField::Len.index()) && self.of_key(ty)).then_some(x)
     }
 
-    /// The local `X` of a place `X.used` of the bound's type.
-    fn len_place(&self, engine: &Engine, place: ExprId) -> Option<u32> {
+    /// The receiver of a place `….used` of the bound's type.
+    fn len_receiver(&self, engine: &Engine, place: ExprId) -> Option<Operand> {
         let ExprKind::FieldAccess {
             expr, field_index, ..
         } = &engine.body.exprs[place].kind
@@ -287,7 +305,12 @@ impl Walk<'_> {
             return None;
         };
         (*field_index == SeqField::Len.index() && self.of_key(engine.body.operand_type(*expr)))
-            .then(|| operand_local(engine.body, *expr))?
+            .then_some(*expr)
+    }
+
+    /// The local `X` of a place `X.used` of the bound's type.
+    fn len_place(&self, engine: &Engine, place: ExprId) -> Option<u32> {
+        operand_local(engine.body, self.len_receiver(engine, place)?)
     }
 
     fn local_of(&self, engine: &Engine, e: ExprId) -> Option<u32> {
@@ -309,7 +332,7 @@ impl Walk<'_> {
                 ExprKind::Assign { target, .. } => {
                     if self.local_of(engine, *target) == Some(self.root) {
                         Reach::Refused
-                    } else if self.len_place(engine, *target).is_some()
+                    } else if self.len_receiver(engine, *target).is_some()
                         || matches!(
                             &body.exprs[*target].kind,
                             ExprKind::Unary {

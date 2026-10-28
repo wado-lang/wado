@@ -461,6 +461,42 @@ pub enum MarkerBridge {
 }
 
 impl MarkerBridge {
+    pub const ALL: [Self; 9] = [
+        Self::CaseExtract,
+        Self::CaseRef,
+        Self::CaseConstruct,
+        Self::FieldGet,
+        Self::FieldRef,
+        Self::HoleGet,
+        Self::HoleRef,
+        Self::TemplateSegment,
+        Self::HoleFmt,
+    ];
+
+    /// The `builtin::` marker that `lower` rewrites into a call of this bridge.
+    #[must_use]
+    pub const fn marker(self) -> &'static str {
+        match self {
+            Self::CaseExtract => "variant_case_extract",
+            Self::CaseRef => "variant_case_ref",
+            Self::CaseConstruct => "variant_case_construct",
+            Self::FieldGet => "struct_field_get",
+            Self::FieldRef => "struct_field_ref",
+            Self::HoleGet => "hole_get",
+            Self::HoleRef => "hole_ref",
+            Self::TemplateSegment => "template_segment",
+            Self::HoleFmt => "hole_fmt",
+        }
+    }
+
+    /// Whether the bridge names a member type besides its head, by
+    /// [`Self::pair_name`], rather than the template shape alone, by
+    /// [`Self::shape_name`].
+    #[must_use]
+    pub const fn names_member(self) -> bool {
+        !matches!(self, Self::TemplateSegment | Self::HoleFmt)
+    }
+
     /// What every bridge of this kind starts with.
     #[must_use]
     pub const fn prefix(self) -> &'static str {
