@@ -5,6 +5,7 @@
 //! output directory populated. See WEP 2026-04-12 §"Build integration".
 
 use super::invocation::{DeclSite, Invocation, InvocationPath};
+use crate::path::relative_path;
 
 /// A scheduling plan for a set of invocations.
 #[derive(Debug, Clone)]
@@ -172,8 +173,8 @@ fn topo_sort(invocations: Vec<Invocation>) -> Result<Plan, PlanError> {
 /// Does `a`'s inputs (primary + declared inputs) fall inside `b`'s output
 /// directory?
 ///
-/// Path comparison is purely lexical: `b.output_dir` is treated as a prefix.
-/// "Inside" means the input path equals `b.output_dir` or is a child.
+/// Path comparison is purely lexical. "Inside" means the input path equals
+/// `b.output_dir` or is a descendant of it.
 #[must_use]
 pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
     if path_inside(&a.from, &b.output_dir) {
@@ -188,19 +189,8 @@ pub fn depends_on(a: &Invocation, b: &Invocation) -> bool {
 }
 
 fn path_inside(candidate: &InvocationPath, dir: &InvocationPath) -> bool {
-    let c = candidate.as_str();
-    let d = dir.as_str();
-    if d.is_empty() {
-        return false;
-    }
-    if c == d {
-        return true;
-    }
-    if !c.starts_with(d) {
-        return false;
-    }
-    let rest = &c[d.len()..];
-    rest.starts_with('/')
+    let from_dir = relative_path(dir.as_str(), candidate.as_str());
+    from_dir == "." || from_dir.starts_with("./")
 }
 
 #[cfg(test)]
@@ -256,6 +246,18 @@ mod tests {
         let dir = InvocationPath::normalize("build/kiln/a");
         let sibling = InvocationPath::normalize("build/kiln/abc");
         assert!(!path_inside(&sibling, &dir));
+    }
+
+    #[test]
+    fn path_inside_a_root_dir() {
+        let cases = [(".", "schema.g4"), ("/", "/x/y.g4"), ("C:/", "C:/x.g4")];
+        for (dir, file) in cases {
+            let [dir, file] = [dir, file].map(InvocationPath::normalize);
+            assert!(path_inside(&file, &dir), "{file} in {dir}");
+        }
+        let dot = InvocationPath::normalize(".");
+        assert!(!path_inside(&InvocationPath::normalize("../x.g4"), &dot));
+        assert!(!path_inside(&InvocationPath::normalize("/x.g4"), &dot));
     }
 
     #[test]

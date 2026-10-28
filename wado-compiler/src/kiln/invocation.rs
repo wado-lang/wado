@@ -51,8 +51,9 @@ pub fn spec_key(spec: &str) -> &str {
     parse_spec(spec).key
 }
 
-/// A forward-slash, NFC-normalized file path relative to the project root, or
-/// absolute where the manifest wrote one.
+/// A forward-slash, NFC-normalized file path relative to the manifest root, or
+/// absolute where no relative spelling reaches it: a file in a module whose own
+/// identity is absolute.
 ///
 /// Wrapped to keep cache-key hashing consistent regardless of where the path
 /// was typed (manifest vs. inline) or how the OS separates path components.
