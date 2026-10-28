@@ -13,17 +13,36 @@ use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use super::util::{for_each_null_trapping_operand, is_side_effect_free, own_traps};
 
 pub(super) fn cleanup(module: &mut WirPackage) {
+    let nonnull_calls = nonnull_result_functions(module);
     for func in &mut module.functions {
         if let Some(body) = &mut func.body {
-            clean_body(body);
+            clean_body(body, &nonnull_calls);
         }
     }
 }
 
-pub(super) fn clean_body(body: &mut Vec<WirInstr>) {
+/// The `WirFuncId` indices of the defined functions whose one result is a
+/// non-null reference. Read only once no pass retypes a signature, so a call's
+/// value is as non-null as its callee declares.
+pub(super) fn nonnull_result_functions(module: &WirPackage) -> IndexSet<u32> {
+    module
+        .functions
+        .iter()
+        .enumerate()
+        .filter(|(_, func)| {
+            matches!(
+                module.types[func.type_id.index() as usize].expect_func().results.as_slice(),
+                [result] if result.is_nonnull_ref()
+            )
+        })
+        .map(|(position, _)| module.defined_func_index(position))
+        .collect()
+}
+
+pub(super) fn clean_body(body: &mut Vec<WirInstr>, nonnull_calls: &IndexSet<u32>) {
     // Remove DeclareLocal for locals that are never used (no LocalGet/LocalSet/LocalTee).
     eliminate_dead_locals(body);
-    CleanupVisitor.visit_body(body);
+    CleanupVisitor { nonnull_calls }.visit_body(body);
 }
 
 /// Elide the redundant `RefAsNonNull` wrappers `struct_new` adds for
@@ -32,8 +51,12 @@ pub(super) fn clean_body(body: &mut Vec<WirInstr>) {
 /// unchanged: the wrapper is already transparent to `is_const_expressible`,
 /// to `dedupe_const_globals`, and to the emitter.
 pub(super) fn cleanup_global_inits(module: &mut WirPackage) {
+    let nonnull_calls = nonnull_result_functions(module);
     for global in &mut module.globals {
-        CleanupVisitor.visit_instr(&mut global.init);
+        CleanupVisitor {
+            nonnull_calls: &nonnull_calls,
+        }
+        .visit_instr(&mut global.init);
     }
 }
 
@@ -80,9 +103,20 @@ impl WirMutVisitor for NopUnusedDeclareLocals<'_> {
     }
 }
 
-struct CleanupVisitor;
+struct CleanupVisitor<'a> {
+    nonnull_calls: &'a IndexSet<u32>,
+}
 
-impl WirMutVisitor for CleanupVisitor {
+impl CleanupVisitor<'_> {
+    fn is_nonnull(&self, instr: &WirInstr) -> bool {
+        match instr {
+            WirInstr::Call { func_id, .. } => self.nonnull_calls.contains(&func_id.index()),
+            _ => instr.is_nonnull_result(),
+        }
+    }
+}
+
+impl WirMutVisitor for CleanupVisitor<'_> {
     fn visit_body(&mut self, body: &mut Vec<WirInstr>) {
         self.walk_body(body);
         // Remove nops.
@@ -96,7 +130,7 @@ impl WirMutVisitor for CleanupVisitor {
     fn visit_instr(&mut self, instr: &mut WirInstr) {
         self.walk_instr(instr);
         if let WirInstr::RefAsNonNull(inner) = instr
-            && inner.is_nonnull_result()
+            && self.is_nonnull(inner)
         {
             *instr = std::mem::replace(inner.as_mut(), WirInstr::Nop);
         }
@@ -168,6 +202,7 @@ fn relax_nonnull(object: &mut WirInstr) {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::rc::Rc;
 
     use super::*;
@@ -207,7 +242,7 @@ mod tests {
     #[test]
     fn a_store_takes_its_array_unnarrowed() {
         let mut body = store_into(global_read(), WirInstr::I32Const(1));
-        clean_body(&mut body);
+        clean_body(&mut body, &IndexSet::default());
         assert!(!stored_array(&body).is_nonnull_result(), "{body:?}");
     }
 
@@ -221,7 +256,7 @@ mod tests {
     #[test]
     fn a_store_whose_value_has_an_effect_keeps_the_narrowing() {
         let mut body = store_into(global_read(), effect());
-        clean_body(&mut body);
+        clean_body(&mut body, &IndexSet::default());
         assert!(stored_array(&body).is_nonnull_result(), "{body:?}");
     }
 
@@ -232,10 +267,21 @@ mod tests {
             func_ref: Box::new(WirInstr::RefAsNonNull(Box::new(global_read()))),
             args: vec![effect()],
         }];
-        clean_body(&mut body);
+        clean_body(&mut body, &IndexSet::default());
         let [WirInstr::CallRef { func_ref, .. }] = body.as_slice() else {
             panic!("{body:?}");
         };
         assert!(!func_ref.is_nonnull_result(), "{body:?}");
+    }
+
+    #[test]
+    fn a_call_keeps_its_narrowing_unless_its_callee_returns_non_null() {
+        let narrowed_call = || vec![WirInstr::RefAsNonNull(Box::new(effect()))];
+        let mut body = narrowed_call();
+        clean_body(&mut body, &IndexSet::default());
+        assert_matches!(body.as_slice(), [WirInstr::RefAsNonNull(_)]);
+        let mut body = narrowed_call();
+        clean_body(&mut body, &IndexSet::from_iter([0]));
+        assert_matches!(body.as_slice(), [WirInstr::Call { .. }]);
     }
 }

@@ -533,7 +533,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/$tmpl$47518b5dd822a983^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/format.wado//$tmpl$47518b5dd822a983") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(167)
 
-type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]";  // TypeId(168)
+type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>";  // TypeId(168)
 
 type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/ReflectEnum::members" = fn() -> [ref "core:prelude/traits.wado//EnumCase<core:prelude/intparse.wado/IntErrorKind>", ref "core:prelude/traits.wado//EnumCase<core:prelude/intparse.wado/IntErrorKind>", ref "core:prelude/traits.wado//EnumCase<core:prelude/intparse.wado/IntErrorKind>", ref "core:prelude/traits.wado//EnumCase<core:prelude/intparse.wado/IntErrorKind>"];  // TypeId(169)
 
@@ -601,7 +601,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$afdf3efc
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "core:prelude/string.wado//$tmpl$b145b32c9a586330") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(201)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "tuple//[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]";  // TypeId(202)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members" = fn() -> ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";  // TypeId(202)
 
 type "functype//spec_traits_parse.wado/spec_traits_parse.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail" = fn(ref "spec_traits_parse.wado//$tmpl$ebaa20f4a908b504") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(203)
 
@@ -3394,21 +3394,71 @@ fn "core:prelude/primitive.wado/fmt_float_special$spec1"(f, is_neg, kind, zero_r
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/intparse.wado/ParseIntError,[core:prelude/intparse.wado/IntErrorKind]>$sroa[v.kind]"(v, f) {
     let $load_2: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>";
     let self_10: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_87) {
-        global:core:prelude/traits.wado::$const_obj_87 = "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>";
+        multivalue_bind [$mv_0_1] = "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_87 = struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]" { 0: $mv_0_1 };
     }
-    field_6 = global:core:prelude/traits.wado::$const_obj_87.0;
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_87.0;
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/intparse.wado/ParseIntError>$sroa[f.buf]"(f.buf);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_55);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
-    self_10 = field_6.field_name;
+    self_10 = $mv_0_1.field_name;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(local.tee $load_2(f.buf), self_10);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_24);
     "core:prelude/traits.wado/core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(v, $load_2);
+<<<<<<< HEAD
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_53);
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_52);
+||||||| 87447233c
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_84);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_83);
+    return;
+}
+
+fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]"(v, f) {
+    let $load_2: ref "core:prelude/string.wado//String";
+    let field_6: ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";
+    let self_10: ref "core:prelude/string.wado//String";
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_96) {
+        global:core:prelude/traits.wado::$const_obj_96 = "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::$const_obj_96.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/traits.wado/LenientParseError>$sroa[f.buf]"(f.buf);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_86);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
+    self_10 = field_6.field_name;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(local.tee $load_2(f.buf), self_10);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_80);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, v);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_84);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_83);
+=======
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"($load_2, global:core:prelude/traits.wado::$const_obj_84);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_83);
+    return;
+}
+
+fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]"(v, f) {
+    let $load_2: ref "core:prelude/string.wado//String";
+    let self_10: ref "core:prelude/string.wado//String";
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_96) {
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_96 = struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_96.0;
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/traits.wado/LenientParseError>$sroa[f.buf]"(f.buf);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_86);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_newline_indent"(f);
+    self_10 = $mv_0_1.field_name;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(local.tee $load_2(f.buf), self_10);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_2, global:core:prelude/traits.wado::$const_obj_80);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, v);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f.buf, global:core:prelude/traits.wado::$const_obj_84);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado/String>$spec0"(f, global:core:prelude/traits.wado::$const_obj_83);
+>>>>>>> origin/main
     return;
 }
 
@@ -3551,7 +3601,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/$tmpl$47518b5dd822a983^cor
 }
 
 fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]" { 0: struct.new "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 105, 110, 100), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(107, 105, 110, 100), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "core:prelude/intparse.wado/core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/ReflectEnum::members"() {
@@ -3865,7 +3915,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/$tmpl$b145b32c9a586330^cor
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]" { 0: struct.new "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reason"), used: 6 }, wire_override: ref.null none, has_default: 0, is_secret: 0 } };
+    return struct.new "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reason"), used: 6 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
 }
 
 fn "spec_traits_parse.wado/spec_traits_parse.wado/$tmpl$ebaa20f4a908b504^core:prelude/traits.wado/ReflectTemplate::tail"(t) {
@@ -5273,7 +5323,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_stri
 
 fn "core:prelude/traits.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Inspect::inspect$sroa[self.kind]"(self, f) {
     let $load_1: ref "core:prelude/string.wado//String";
-    let field_6: ref "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>";
     let self_22: ref "core:prelude/string.wado//String";
     if f.alternate {
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/intparse.wado/ParseIntError,[core:prelude/intparse.wado/IntErrorKind]>$sroa[v.kind]"(self, f);
@@ -5281,15 +5330,76 @@ fn "core:prelude/traits.wado/core:prelude/intparse.wado/ParseIntError^core:prelu
     }
     "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/intparse.wado/ParseIntError>$sroa[f.buf]"(local.tee $load_1(f.buf));
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_82) {
-        global:core:prelude/traits.wado::$const_obj_82 = "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"();
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>";
+        multivalue_bind [$mv_0_1] = "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_82 = struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]" { 0: $mv_0_1 };
     }
+<<<<<<< HEAD
     field_6 = global:core:prelude/traits.wado::$const_obj_82.0;
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_25);
     self_22 = field_6.field_name;
+||||||| 87447233c
+    field_6 = global:core:prelude/traits.wado::$const_obj_82.0;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_81);
+    self_22 = field_6.field_name;
+=======
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_82.0;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_81);
+    self_22 = $mv_0_1.field_name;
+>>>>>>> origin/main
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, self_22);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_24);
     "core:prelude/traits.wado/core:prelude/intparse.wado/IntErrorKind^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, $load_1);
+<<<<<<< HEAD
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_23);
+||||||| 87447233c
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_79);
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/Inspect::inspect$sroa[self.reason]"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
+    let field_6: ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";
+    let self_22: ref "core:prelude/string.wado//String";
+    if f.alternate {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]"(self, f);
+        return;
+    }
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/traits.wado/LenientParseError>$sroa[f.buf]"(local.tee $load_1(f.buf));
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_91) {
+        global:core:prelude/traits.wado::$const_obj_91 = "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"();
+    }
+    field_6 = global:core:prelude/traits.wado::$const_obj_91.0;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_81);
+    self_22 = field_6.field_name;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, self_22);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_80);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, self);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/traits.wado::$const_obj_79);
+=======
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_79);
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/Inspect::inspect$sroa[self.reason]"(self, f) {
+    let $load_1: ref "core:prelude/string.wado//String";
+    let self_22: ref "core:prelude/string.wado//String";
+    if f.alternate {
+        "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<core:prelude/traits.wado/LenientParseError,[core:prelude/string.wado/String]>$sroa[v.reason]"(self, f);
+        return;
+    }
+    "core:prelude/traits.wado/core/prelude/traits.wado/write_struct_head<core:prelude/traits.wado/LenientParseError>$sroa[f.buf]"(local.tee $load_1(f.buf));
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_91) {
+        let $mv_0_1: ref "core:prelude/traits.wado//StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>";
+        multivalue_bind [$mv_0_1] = "core:prelude/traits.wado/core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"();
+        global:core:prelude/traits.wado::$const_obj_91 = struct.new "tuple//[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]" { 0: $mv_0_1 };
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_91.0;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_81);
+    self_22 = $mv_0_1.field_name;
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"($load_1, self_22);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"($load_1, global:core:prelude/traits.wado::$const_obj_80);
+    "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, self);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f.buf, global:core:prelude/traits.wado::$const_obj_79);
+>>>>>>> origin/main
 }
 
 export fn "spec_traits_parse.wado/$cm_export__$test_0" as "$test_0"
