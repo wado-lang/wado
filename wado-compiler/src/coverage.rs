@@ -521,7 +521,7 @@ type Sites = Vec<(ProbeSite, AstId, u32)>;
 /// name alone to share that base.
 pub(crate) fn plan_path(source: &ModuleSource) -> String {
     match source {
-        ModuleSource::EntryPoint { .. } => source.to_path_string(),
+        ModuleSource::EntryPoint { .. } => source.to_string(),
         _ => source.source_path(),
     }
 }

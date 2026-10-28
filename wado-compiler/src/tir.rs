@@ -961,11 +961,6 @@ impl FunctionRef {
         self.template = self.template.as_ref().and_then(TemplateId::checked);
     }
 
-    /// Get the module path (for backwards compatibility)
-    pub fn module_path(&self) -> Vec<String> {
-        self.module_source.to_path()
-    }
-
     /// The function this reference denotes, keyed as NIR's
     /// `FunctionRef::function_id` keys it. Not by `method_info`: monomorphization
     /// points a call at an instance by its `name` alone, so the template's

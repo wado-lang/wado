@@ -655,7 +655,7 @@ impl<'a> NirUnparser<'a> {
                 name,
                 module_source,
             } => {
-                self.output.push_str(&module_source.to_path().join("::"));
+                self.output.push_str(&module_source.to_string());
                 self.output.push_str("::");
                 self.output.push_str(name);
             }
@@ -665,7 +665,7 @@ impl<'a> NirUnparser<'a> {
                 value,
             } => {
                 let value = *value;
-                self.output.push_str(&module_source.to_path().join("::"));
+                self.output.push_str(&module_source.to_string());
                 self.output.push_str("::");
                 self.output.push_str(name);
                 self.output.push_str(" = ");
@@ -735,9 +735,7 @@ impl<'a> NirUnparser<'a> {
                 } else {
                     let full_name = match self.callee(func_id) {
                         Some(func) => {
-                            let func_name = func.name.clone();
-                            let module_path = func.module_path();
-                            format!("{}::{func_name}", module_path.join("::"))
+                            format!("{}::{}", func.module_source, func.name)
                         }
                         None => format!("fn#{func_id:?}"),
                     };

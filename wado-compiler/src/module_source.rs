@@ -8,7 +8,6 @@ use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::name::{DeclaredHead, effect_namespace, module_parent_dir};
-use crate::path::is_cwd_relative;
 use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
 use std::fmt;
@@ -59,8 +58,7 @@ static WASI_CLOCKS: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("cloc
 static WASI_FILESYSTEM: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("filesystem"));
 static WASI_HTTP: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("http"));
 
-// Synthetic entry-point filenames used by from_path / loader.
-static ENTRY_FILENAME_ENTRY: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("<entry>"));
+// Synthetic entry-point filenames.
 static ENTRY_FILENAME_STDIN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::<str>::from("<stdin>"));
 static ENTRY_FILENAME_UNINITIALIZED: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("<uninitialized>"));
@@ -88,7 +86,6 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         WASI_CLOCKS.clone(),
         WASI_FILESYSTEM.clone(),
         WASI_HTTP.clone(),
-        ENTRY_FILENAME_ENTRY.clone(),
         ENTRY_FILENAME_STDIN.clone(),
         ENTRY_FILENAME_UNINITIALIZED.clone(),
     ];
@@ -516,21 +513,6 @@ impl ModuleSourceInterner {
             package: self.root_package.clone(),
         }
     }
-
-    /// Convert from the legacy `&[String]` module path representation.
-    pub fn from_path(&mut self, segments: &[String]) -> ModuleSource {
-        match segments {
-            // Legacy: empty path represents entry module.
-            [] => ModuleSource::entry_point_synthetic(),
-            [first] if is_cwd_relative(first) => self.local(first),
-            [first, rest @ ..] if first == "core" => self.core(&rest.join("/")),
-            [first, rest @ ..] if first == "dep" => self.dependency(&rest.join("/")),
-            all @ [first, rest @ ..] => match CmNamespace::from_prefix(first) {
-                Some(namespace) => self.binding(namespace, &rest.join("/")),
-                None => self.local(&all.join("/")),
-            },
-        }
-    }
 }
 
 impl Default for ModuleSourceInterner {
@@ -912,10 +894,6 @@ impl ModuleSource {
         /// `wasi:http` — http interface root.
         pub fn wasi_http() = Binding { interface: WASI_HTTP, namespace: CmNamespace::Wasi },
 
-        /// Synthetic `<entry>` placeholder used by `from_path(&[])`.
-        pub fn entry_point_synthetic() = EntryPoint {
-            filename: ENTRY_FILENAME_ENTRY, package: PackageId::Root
-        },
         /// `<uninitialized>` sentinel for elaborator bootstrap.
         pub fn entry_point_uninitialized() = EntryPoint {
             filename: ENTRY_FILENAME_UNINITIALIZED, package: PackageId::Root
@@ -945,31 +923,6 @@ impl ModuleSource {
             | PrimitiveType::V128
             | PrimitiveType::Bool
             | PrimitiveType::Char => Self::primitive(),
-        }
-    }
-
-    /// Convert to the legacy `Vec<String>` module path representation.
-    ///
-    /// This is the module's **portable qualifier** — the identity used to
-    /// namespace its symbols. An entry point contributes its base name (its
-    /// path relative to its own directory), not the raw compile path, so
-    /// symbol names stay stable across invocations and machines. The real
-    /// on-disk path lives on [`ModuleSource::source_path`].
-    #[must_use]
-    pub fn to_path(&self) -> Vec<String> {
-        match self {
-            Self::Core { name } => vec!["core".to_string(), name.to_string()],
-            Self::Binding {
-                namespace,
-                interface,
-            } => vec![namespace.prefix().to_string(), interface.to_string()],
-            Self::Local { path, .. } => vec![path.to_string()],
-            Self::Dependency { path, .. } => vec!["dep".to_string(), path.to_string()],
-            Self::Remote { url, .. } => vec![url.to_string()],
-            Self::EntryPoint { filename, .. } => vec![entry_basename(filename).to_string()],
-            Self::Redirected { uri, .. } => vec![uri.to_string()],
-            Self::Wasm { path, .. } => vec![path.to_string()],
-            Self::Effect { .. } => vec![self.to_string()],
         }
     }
 
@@ -1105,19 +1058,6 @@ impl ModuleSource {
         }
     }
 
-    /// Convert to a path string format used for method name mangling.
-    ///
-    /// Returns `self.to_path().join("/")`:
-    /// - `EntryPoint { filename }` → `"{basename}"`
-    /// - `Local { path }` → `"{path}"`
-    /// - `Core { name }` → `"core/{name}"`
-    /// - `Binding { namespace, interface }` → `"{namespace}/{interface}"`
-    /// - `Remote { url }` → `"{url}"`
-    #[must_use]
-    pub fn to_path_string(&self) -> String {
-        self.to_path().join("/")
-    }
-
     /// Create a module-qualified name using `//` as separator.
     ///
     /// A URL module may spell `//` itself, so only
@@ -1132,9 +1072,9 @@ impl ModuleSource {
         format!("{self}//{name}")
     }
 
-    /// The module's real source location — the counterpart to the portable
-    /// qualifier ([`Self::to_path`]), keeping the entry point's full compile path
-    /// rather than its base name. Read where a real path must resolve a sibling
+    /// The module's real source location — the counterpart to its name
+    /// ([`Display`]), keeping the entry point's full compile path rather than
+    /// its base name. Read where a real path must resolve a sibling
     /// file (`#include_str`) and as the filename in diagnostics. Empty for an
     /// entry point with no real filename, such as `<stdin>`.
     #[must_use]
@@ -1175,8 +1115,7 @@ fn shared_dir_len(path: &str, root: &str) -> usize {
 }
 
 /// The portable base name of an entry-point filename: its path relative to
-/// its own directory. Shared by [`ModuleSource::to_path`] and [`Display`] so a
-/// module's symbol qualifier is identical however it is rendered.
+/// its own directory.
 fn entry_basename(filename: &str) -> &str {
     filename.rsplit(['/', '\\']).next().unwrap_or(filename)
 }
@@ -1209,7 +1148,6 @@ impl fmt::Display for ModuleSource {
 mod tests {
     use super::*;
     use crate::compiler_host::DependencyIndex;
-    use std::assert_matches;
 
     #[test]
     fn every_bundled_namespace_is_a_bundled_specifier() {
@@ -1330,71 +1268,9 @@ mod tests {
     }
 
     #[test]
-    fn test_module_source_from_path_core() {
+    fn an_entry_is_named_apart_from_where_it_is_read() {
         let mut interner = ModuleSourceInterner::new();
-        let source = interner.from_path(&["core".to_string(), "prelude".to_string()]);
-        assert_matches!(source, ModuleSource::Core { ref name } if name == "prelude");
-
-        let source = interner.from_path(&["core".to_string(), "cli".to_string()]);
-        assert_matches!(source, ModuleSource::Core { ref name } if name == "cli");
-
-        let source = interner.from_path(&["core".to_string(), "rt".to_string()]);
-        assert!(source.is_core_rt());
-    }
-
-    #[test]
-    fn test_module_source_from_path_wasi() {
-        let mut interner = ModuleSourceInterner::new();
-        let source = interner.from_path(&["wasi".to_string(), "cli".to_string()]);
-        assert_matches!(
-            source,
-            ModuleSource::Binding {
-                namespace: CmNamespace::Wasi,
-                ref interface
-            } if interface == "cli"
-        );
-
-        let source = interner.from_path(&["wasi".to_string(), "io".to_string()]);
-        assert!(source.is_binding());
-    }
-
-    #[test]
-    fn test_module_source_from_path_local() {
-        let mut interner = ModuleSourceInterner::new();
-        let source = interner.from_path(&["./geometry.wado".to_string()]);
-        assert_matches!(source, ModuleSource::Local { ref path, .. } if path == "./geometry.wado");
-
-        let source = interner.from_path(&["../lib.wado".to_string()]);
-        assert!(source.is_local());
-    }
-
-    #[test]
-    fn test_module_source_from_path_entry_point() {
-        // Legacy: empty path represents entry module
-        let mut interner = ModuleSourceInterner::new();
-        let source = interner.from_path(&[]);
-        assert!(source.is_entry_point());
-    }
-
-    #[test]
-    fn test_module_source_to_path() {
-        let mut interner = ModuleSourceInterner::new();
-        let source = ModuleSource::prelude();
-        assert_eq!(source.to_path(), vec!["core", "prelude"]);
-
-        let source = interner.wasi("cli");
-        assert_eq!(source.to_path(), vec!["wasi", "cli"]);
-
-        let source = interner.local("./geometry.wado");
-        assert_eq!(source.to_path(), vec!["./geometry.wado"]);
-
-        let source = interner.entry_point("test.wado");
-        assert_eq!(source.to_path(), vec!["test.wado"]);
-
-        // An entry in a sub-directory contributes only its portable base name,
-        // not the raw compile path; the full path lives on `source_path`.
         let source = interner.entry_point("/abs/pkg/src/main.wado");
-        assert_eq!(source.to_path(), vec!["main.wado"]);
         assert_eq!(source.to_string(), "main.wado");
         assert_eq!(source.source_path(), "/abs/pkg/src/main.wado");
     }
@@ -1636,22 +1512,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_module_source_roundtrip() {
-        // Test that from_path and to_path are inverses (for supported formats)
-        let paths = vec![
-            vec!["core".to_string(), "prelude".to_string()],
-            vec!["wasi".to_string(), "cli".to_string()],
-            vec!["./geometry.wado".to_string()],
-        ];
-
-        let mut interner = ModuleSourceInterner::new();
-        for path in paths {
-            let source = interner.from_path(&path);
-            assert_eq!(source.to_path(), path, "Roundtrip failed for {path:?}");
-        }
-    }
-
     /// Every well-known zero-arg constructor must produce a value
     /// that compares equal to the matching interner-built one. If a
     /// `LazyLock<Arc<str>>` static contains content that duplicates
@@ -1682,10 +1542,6 @@ mod tests {
             (ModuleSource::wasi_clocks(), i.wasi("clocks")),
             (ModuleSource::wasi_filesystem(), i.wasi("filesystem")),
             (ModuleSource::wasi_http(), i.wasi("http")),
-            (
-                ModuleSource::entry_point_synthetic(),
-                i.entry_point("<entry>"),
-            ),
             (ModuleSource::entry_point_stdin(), i.entry_point("<stdin>")),
             (
                 ModuleSource::entry_point_uninitialized(),
