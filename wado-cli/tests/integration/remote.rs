@@ -531,6 +531,43 @@ fn model_package(server: &Server) -> tempfile::TempDir {
     project
 }
 
+/// A `main.wado` in no package, built once against `wado_root`, printing what
+/// the header of the model `server` serves generates. Its `use` pins the
+/// header `7\n`.
+fn use_pinned_model(server: &Server, wado_root: &Path) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("main.wado"),
+        format!(
+            "use {{ println, Stdout }} from \"core:cli\";\n\
+             use {{ hello }} from \"{}\"\n    with {{ generator: {{ module: \"./gen.wado\" }}, integrity: \"{}\" }};\n\n\
+             export fn run() with Stdout {{\n    println(`${{hello()}}`);\n}}\n",
+            server.url("model.bin"),
+            Integrity::of(b"7\n"),
+        ),
+    )
+    .unwrap();
+    std::fs::write(dir.path().join("gen.wado"), HEADER_GENERATOR).unwrap();
+    wado(dir.path(), wado_root)
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    dir
+}
+
+/// Rewrite the generator at `path` with `edit`, so the next build probes again.
+fn edit_generator(path: &Path, edit: impl FnOnce(String) -> String) {
+    let source = std::fs::read_to_string(path).unwrap();
+    std::fs::write(path, edit(source)).unwrap();
+}
+
+/// `generator`, a [`HEADER_GENERATOR`], made to read `n` bytes rather than up
+/// to the first newline.
+fn reading(generator: &str, n: u64) -> String {
+    generator.replace("chunk.items[0] == b'\\n'", &format!("n == {n}"))
+}
+
 /// A probe's extent is decided by the bytes inside it, so a model whose header
 /// moved changed, and is held to the extent the lock pins rather than pinned
 /// afresh.
@@ -570,11 +607,7 @@ fn a_shorter_extent_is_held_to_the_bytes_kept_for_the_longer_one() {
         .success()
         .stdout("10\n");
 
-    let generator = project.path().join("src/gen.wado");
-    let two_bytes = std::fs::read_to_string(&generator)
-        .unwrap()
-        .replace("chunk.items[0] == b'\\n'", "n == 2");
-    std::fs::write(&generator, two_bytes).unwrap();
+    edit_generator(&project.path().join("src/gen.wado"), |g| reading(&g, 2));
     let before = server.requests().len();
     wado(project.path(), wado_root.path())
         .args(["run", "src/main.wado"])
@@ -588,6 +621,198 @@ fn a_shorter_extent_is_held_to_the_bytes_kept_for_the_longer_one() {
             .all(|r| r.range.as_deref() != Some("bytes=0-2")),
         "{requests:?}"
     );
+}
+
+/// Build the package around a model serving `served`, then build it again
+/// with a changed generator once the server no longer serves it.
+fn probe_offline_once_fetched(served: &[u8]) {
+    let server = Server::start();
+    server.serve("model.bin", served);
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    server.withdraw("model.bin");
+    edit_generator(&project.path().join("src/gen.wado"), |g| g + "// changed\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// A probe run again, as a changed generator needs, reads the pinned part of
+/// its input from the cache, so it needs no server once fetched.
+#[test]
+fn a_kiln_input_is_probed_from_the_cache_once_fetched() {
+    probe_offline_once_fetched(&model(b"7\n"));
+}
+
+/// A probe reading a whole kept file to its end reads its end from the cache
+/// too.
+#[test]
+fn a_whole_kiln_input_is_probed_from_the_cache_to_its_end() {
+    probe_offline_once_fetched(b"7");
+}
+
+/// A probe reading past the bytes kept for a pin reads on from the server.
+#[test]
+fn a_probe_reads_past_the_kept_bytes_from_the_server() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+
+    edit_generator(&project.path().join("src/gen.wado"), |g| reading(&g, 3));
+    let before = server.requests().len();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    let lock = std::fs::read_to_string(project.path().join("wado.lock")).unwrap();
+    assert!(lock.contains("extent = 3"), "{lock}");
+    let requests = server.requests();
+    assert!(
+        requests[before..]
+            .iter()
+            .all(|r| r.range.as_deref() != Some("bytes=0-65535")),
+        "the kept bytes are not fetched again: {requests:?}"
+    );
+}
+
+/// The bytes kept for a `use`'s pin hold only the extent they are: a probe
+/// reading further is held to the pin, not handed them.
+#[test]
+fn a_use_pin_kept_for_a_shorter_extent_holds_a_longer_one() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let wado_root = tempfile::tempdir().unwrap();
+    let dir = use_pinned_model(&server, wado_root.path());
+
+    edit_generator(&dir.path().join("gen.wado"), |g| reading(&g, 3));
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "does not match its integrity: the `use` pins",
+        ));
+}
+
+/// The bytes kept for the lock's pin of a whole file are that file, whatever
+/// the server holds now and whether or not its length was kept.
+#[test]
+fn a_whole_file_the_lock_pins_is_read_from_the_cache_as_it_was_pinned() {
+    let server = Server::start();
+    server.serve("model.bin", b"7");
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+    std::fs::remove_dir_all(wado_root.path().join("remote/len")).unwrap();
+
+    server.serve("model.bin", b"77");
+    edit_generator(&project.path().join("src/gen.wado"), |g| g + "// changed\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// The longest kept part serves a probe even where its file's length was not
+/// kept: the probe learns the length from the server once, and needs no
+/// server after.
+#[test]
+fn the_longest_kept_part_serves_the_probe_though_its_length_was_not_kept() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    let generator = project.path().join("src/gen.wado");
+    for n in [2, 3] {
+        edit_generator(&generator, |_| reading(HEADER_GENERATOR, n));
+        wado(project.path(), wado_root.path())
+            .args(["run", "src/main.wado"])
+            .assert()
+            .success();
+    }
+    let url = Integrity::of(server.url("model.bin").as_bytes()).hex();
+    let three = Integrity::of(b"7\n\n").hex();
+    std::fs::remove_file(wado_root.path().join(format!("remote/len/{url}-{three}"))).unwrap();
+
+    edit_generator(&generator, |g| g + "// online\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    server.withdraw("model.bin");
+    edit_generator(&generator, |g| g + "// offline\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// A kept part fetched before its file's length was kept gains the length the
+/// next time a probe reaches the server, and needs no server after.
+#[test]
+fn a_kept_part_without_its_length_gains_it_from_the_next_probe() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let project = model_package(&server);
+    let wado_root = tempfile::tempdir().unwrap();
+    let generator = project.path().join("src/gen.wado");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    std::fs::remove_dir_all(wado_root.path().join("remote/len")).unwrap();
+
+    edit_generator(&generator, |g| g + "// online\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success();
+    server.withdraw("model.bin");
+    edit_generator(&generator, |g| g + "// offline\n");
+    wado(project.path(), wado_root.path())
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
+}
+
+/// The pin a `use` writes serves the probe from the cache as the lock's does,
+/// for a file in no package.
+#[test]
+fn a_kiln_input_pinned_by_its_use_is_probed_from_the_cache() {
+    let server = Server::start();
+    server.serve("model.bin", &model(b"7\n"));
+    let wado_root = tempfile::tempdir().unwrap();
+    let dir = use_pinned_model(&server, wado_root.path());
+
+    server.withdraw("model.bin");
+    edit_generator(&dir.path().join("gen.wado"), |g| g + "// changed\n");
+    wado(dir.path(), wado_root.path())
+        .args(["run", "main.wado"])
+        .assert()
+        .success()
+        .stdout("7\n");
 }
 
 /// A lock that cannot be read is reported, never replaced by one holding only

@@ -102,7 +102,9 @@ An input may be a URL, under the rules of
 [Remote Modules](./spec-modules.md#remote-modules). Its pin covers what the
 generator reads: the bytes up to the input's [extent](#the-probe), or the whole
 file when the generator exports no probe. The host fetches no byte past the
-extent, so a model's header crosses the network and its weights do not.
+extent, so a model's header crosses the network and its weights do not. A probe
+run again, as a changed generator needs, reads what a pin covers from the bytes
+an earlier build fetched, so it reaches the server only past them.
 
 <!-- {"fixture": "kiln_remote_from_pinned_to_its_extent.wado"} -->
 
