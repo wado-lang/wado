@@ -55,7 +55,9 @@ CLAUDE_API_KEY=... wado run -D tools=true package-eddy/tools/baseline.wado -- \
 ```
 
 They run `git` and `rg` through `core:process`, which needs no flag: the
-repository is the directory `wado run` grants. `mise install` provides `rg`. The
+repository is the directory `wado run` grants. Both must be installed system
+wide, such as under `/usr/bin`: a child may run only programs in the system
+baseline, not one under `$HOME`. The
 agent's tree is a `git worktree` under `scratchpad/`, removed once its entry
 is done.
 
