@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793181049983,
+  "lastUpdate": 1793187281715,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -71953,6 +71953,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1e7e11efa0e4201dc65f58818e3c46e97c44866f"
         },
         "date": 1793181048844,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3149,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7591,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 22178,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 295574,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "af982d2bc4efa8feafa8606285955734c4ea97d3",
+          "message": "Merge pull request #2487 from wado-lang/ccr-27c75edf-wov153\n\nfeat(lint): warn on a variable or parameter nothing reads",
+          "timestamp": "2026-10-28T20:21:10+09:00",
+          "tree_id": "4f8b657820fd8bac544d84432afbba4882643378",
+          "url": "https://github.com/wado-lang/wado/commit/af982d2bc4efa8feafa8606285955734c4ea97d3"
+        },
+        "date": 1793187281212,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
