@@ -81,7 +81,9 @@ program reads:
   `value` are values. A decoder's position reaches `range_i64` as its `start`
   and changes every token. Each becomes a scalar parameter, so a replay passes
   the new value rather than compiling again. A slice from a parameter is a
-  `stablehlo.dynamic_slice`, whose start is an operand.
+  `stablehlo.dynamic_slice`, whose start is an operand. It has no stride, so a
+  slice of `length` with a `step` other than 1 takes `(length - 1) * step + 1`
+  elements and a `stablehlo.slice` of that stride follows it.
 - An `upload` is a parameter, and a prepared weight a parameter that stays on
   the device.
 
@@ -151,10 +153,10 @@ The steps of "The PJRT backend", in order:
    tokens, and `WebGpuBackend` passes its conformance through the changed seam.
 4. [ ] `If` as a trait method over both branches. Finished when the conformance
    cases with an `If` pass on all three backends.
-5. [ ] Weights in bf16 and the cache donated. Finished when the compiled
-   program's device memory, as `PJRT_Executable_GetCompiledMemoryStats`
-   reports it, holds Gemma 3's weights at half their f32 size and no second
-   copy of the cache.
+5. [ ] Weights in bf16 and the cache donated. Finished when
+   `PJRT_Executable_GetCompiledMemoryStats` on the compiled decoder reports
+   argument bytes that hold Gemma 3's weights at half their f32 size beside the
+   cache and the inputs, and alias bytes equal to the cache's size.
 
 A TPU run and many requests at once are later items of the roadmap.
 

@@ -128,10 +128,10 @@ artifact takes libStablehlo: `stablehlo-translate --serialize`, or
 | Device memory and cost of the executable | —                                 | works                                                 |
 
 ```sh
-./probe libpjrt_cpu.so affine.mlir run
-./probe libpjrt_cpu.so affine.mlir aot cpu
-TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so affine.mlir run
-TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
+./probe ./libpjrt_cpu.so affine.mlir run
+./probe ./libpjrt_cpu.so affine.mlir aot cpu
+TPU_SKIP_MDS_QUERY=1 ./probe ./libtpu.so affine.mlir run
+TPU_SKIP_MDS_QUERY=1 ./probe ./libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
 ```
 
 `libtpu.so` asks the Compute Engine metadata server for the TPU's environment
@@ -163,8 +163,8 @@ appendix):
 | `libtpu.so` | `PJRT_Compile` fails the assertion `!count_overflow` in `shape_util.cc` and aborts the process |
 
 ```sh
-./probe libpjrt_cpu.so dynamic.mlir run
-TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so dynamic.mlir aot v5e:1x1
+./probe ./libpjrt_cpu.so dynamic.mlir run
+TPU_SKIP_MDS_QUERY=1 ./probe ./libtpu.so dynamic.mlir aot v5e:1x1
 ```
 
 A program that varies an extent compiles once per extent.
@@ -192,7 +192,7 @@ program is bound by memory bandwidth. Its effective bandwidth is
 | `v6e:1x1`  | 4.75138 × 10⁻⁵    | 1638 GB/s           |
 
 ```sh
-TPU_SKIP_MDS_QUERY=1 ./probe libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
+TPU_SKIP_MDS_QUERY=1 ./probe ./libtpu.so gemv.mlir aot v4:2x2x1 v5e:1x1 v5e:2x2 v6e:1x1
 ```
 
 `flops` is XLA's count. A product of one row by a 768 × 50257 matrix is
@@ -256,7 +256,7 @@ To reproduce, put `pjrt_c_api.h` from openxla/xla beside `probe.c`, then:
 gcc -O2 -o probe probe.c -ldl
 curl -LO https://github.com/zml/pjrt-artifacts/releases/download/v18.0.0/pjrt-cpu_linux-amd64.tar.gz
 tar xzf pjrt-cpu_linux-amd64.tar.gz
-pip download --no-deps libtpu==0.0.51 && unzip libtpu-*.whl libtpu/libtpu.so
+pip download --no-deps libtpu==0.0.51 && unzip -j libtpu-*.whl libtpu/libtpu.so
 ```
 
 `probe.c`:
@@ -310,6 +310,10 @@ static void report(PJRT_Executable* exe) {
     const PJRT_NamedValue* p = &cost.properties[i];
     if (p->type == PJRT_NamedValue_kFloat) printf("  %.*s = %g\n", (int)p->name_size, p->name, p->float_value);
   }
+  ARGS(PJRT_Executable_Serialize_Args, ser, .executable = exe);
+  check(api->PJRT_Executable_Serialize(&ser), "Serialize");
+  printf("  serialized: %zu bytes\n", ser.serialized_bytes_size);
+  ser.serialized_executable_deleter(ser.serialized_executable);
 }
 
 static void aot(const PJRT_Program* program, int count, char** topologies) {
