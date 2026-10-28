@@ -118,7 +118,7 @@ struct Slot {
 struct Interference {
     edges: Vec<Bits>,
     /// The locals each local is copied to or from.
-    copies: Vec<Vec<usize>>,
+    copies: Vec<IndexSet<usize>>,
 }
 
 impl Interference {
@@ -126,7 +126,7 @@ impl Interference {
         let width = flow.locals.len();
         let mut found = Self {
             edges: vec![Bits::new(width); width],
-            copies: vec![Vec::new(); width],
+            copies: vec![IndexSet::default(); width],
         };
         let entry = flow.run(&mut found);
         // Every parameter holds its argument at the entry, and every local live
@@ -155,8 +155,8 @@ impl Observer for Interference {
                 if let Some(source) = *copy_of {
                     others.remove(source);
                     if source != *local {
-                        self.copies[*local].push(source);
-                        self.copies[source].push(*local);
+                        self.copies[*local].insert(source);
+                        self.copies[source].insert(*local);
                     }
                 }
                 self.edges[*local].union(&others);

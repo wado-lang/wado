@@ -301,8 +301,9 @@ fn optimize_scoped(
     // first, while no merge has given its name a second live range.
     // Coalescing turns a copy between two merged locals into a self-copy it
     // drops, and leaves set-then-get pairs across them. Tee fusion comes late:
-    // a tee hides the copy it replaces from every pass before it. A set fused into its local's only read leaves a tee
-    // nothing reads, which dead-store elimination takes back to its value.
+    // a tee hides the copy it replaces from every pass before it. A set fused
+    // into its local's only read leaves a tee nothing reads, which dead-store
+    // elimination takes back to its value.
     wir_pass(scope, "forward_once_read_locals", module, profiler, |m| {
         peephole::fuse_once_read_local_tees(m);
         elide_dead_stores(m);
