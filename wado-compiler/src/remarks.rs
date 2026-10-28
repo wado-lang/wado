@@ -11,8 +11,6 @@
 //! into a caller of another module. So a remark stays where its cost was written
 //! whatever the inliner chose.
 
-use std::sync::RwLockReadGuard;
-
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
@@ -58,11 +56,16 @@ impl RemarkSink {
         self.push_nth(remark, 0);
     }
 
-    /// Push the `nth` of the like remarks one copy of their span makes, so two
-    /// costs written at one place stay two, while a splice of that place
+    /// Push the `nth` of the like remarks one instance of their span makes, so
+    /// two costs written at one place stay two, while a splice of that place
     /// repeats the same `nth`s.
     fn push_nth(&mut self, remark: Remark, nth: usize) {
-        let key = (remark.module.clone(), remark.span, remark.message.clone(), nth);
+        let key = (
+            remark.module.clone(),
+            remark.span,
+            remark.message.clone(),
+            nth,
+        );
         if self.seen.insert(key) {
             self.remarks.push(remark);
         }
@@ -99,32 +102,31 @@ impl<'a> EntryCode<'a> {
     /// The entry package's module whose text `span` indexes, or `None` for
     /// another package's. A synthesized span answers with `home`, the module of
     /// the function holding it.
-    fn module_of(&self, span: Span, home: &ModuleSource) -> Option<ModuleSource> {
-        let module = self.parses.module_of_span(span, home);
-        module.is_entry_package().then(|| module.clone())
+    fn module_of<'s>(&'s self, span: Span, home: &'s ModuleSource) -> Option<&'s ModuleSource> {
+        Some(self.parses.module_of_span(span, home)).filter(|module| module.is_entry_package())
     }
 
     fn holds_any(&self, func: &NirFunction, body: &Body) -> bool {
         func.module_source.is_entry_package()
             || body
                 .find_in_nodes_under(NodeRef::Block(body.root()), |node| {
-                    let module = self.parses.module_of_span(body.span_of(node), &func.module_source);
-                    module.is_entry_package().then_some(())
+                    self.module_of(body.span_of(node), &func.module_source)
                 })
                 .is_some()
     }
 
-    /// Each function holding any of the entry package's code, with its body.
-    fn bodies<'p>(
-        &self,
-        package: &'p NirPackage,
-    ) -> impl Iterator<Item = RwLockReadGuard<'p, NirFunction>> {
-        package
+    /// Visit each function holding any of the entry package's code.
+    fn for_each(&self, package: &NirPackage, mut visit: impl FnMut(&NirFunction, &Body)) {
+        for (func, _) in package
             .functions
             .iter()
             .zip(&self.holders)
             .filter(|&(_, &holds)| holds)
-            .map(|(f, _)| f.borrow())
+        {
+            let func = func.borrow();
+            let body = func.body.as_ref().expect("a holder has a body");
+            visit(&func, body);
+        }
     }
 }
 
@@ -137,13 +139,12 @@ pub fn collect_value_copy_remarks(package: &NirPackage, entry: &EntryCode) -> Ve
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;
     let mut sink = RemarkSink::default();
-    for func in entry.bodies(package) {
+    entry.for_each(package, |func, body| {
         // Skipping helper *bodies* keeps the copies inside a value-copy helper
         // from being reported against the helper itself.
         if func.is_value_copy() {
-            continue;
+            return;
         }
-        let body = func.body.as_ref().expect("an entry code holder has a body");
         let mut collector = Collector {
             value_copy_set: &value_copy_set,
             callees: &callees,
@@ -155,7 +156,7 @@ pub fn collect_value_copy_remarks(package: &NirPackage, entry: &EntryCode) -> Ve
             copied_here: Vec::new(),
         };
         collector.scan_node(body, NodeRef::Block(body.root()));
-    }
+    });
     sink.remarks
 }
 
@@ -224,7 +225,8 @@ impl Collector<'_> {
             }
             NodeRef::Expr(e) => {
                 if let Some(type_id) = self.copied_type(body, e)
-                    && let Some(module) = self.entry.module_of(self.current_span, self.home)
+                    && let Some(module) =
+                        self.entry.module_of(self.current_span, self.home).cloned()
                 {
                     let nth = self.copied_here.iter().filter(|&&t| t == type_id).count();
                     self.copied_here.push(type_id);
@@ -288,8 +290,7 @@ pub fn collect_param_gate_remarks(package: &NirPackage, entry: &EntryCode) -> Ve
         return Vec::new();
     }
     let mut sink = RemarkSink::default();
-    for func in entry.bodies(package) {
-        let body = func.body.as_ref().expect("an entry code holder has a body");
+    entry.for_each(package, |func, body| {
         ParamGateScan {
             params: &params,
             entry,
@@ -297,7 +298,7 @@ pub fn collect_param_gate_remarks(package: &NirPackage, entry: &EntryCode) -> Ve
             sink: &mut sink,
         }
         .walk(body);
-    }
+    });
     sink.remarks
 }
 
@@ -442,7 +443,7 @@ impl ParamGateScan<'_> {
         let Some(origin) = self.params.get(&(module_source.clone(), name.clone())) else {
             return;
         };
-        let Some(module) = self.entry.module_of(span, self.home) else {
+        let Some(module) = self.entry.module_of(span, self.home).cloned() else {
             return;
         };
         let param = &origin.param;
@@ -499,11 +500,10 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
     let type_table: &TypeTable = &type_table_ref;
 
     let mut sink = RemarkSink::default();
-    for func in entry.bodies(package) {
-        let body = func.body.as_ref().expect("an entry code holder has a body");
+    entry.for_each(package, |func, body| {
         let in_entry = |e: ExprId| {
             let span = body.exprs[e].span;
-            Some((entry.module_of(span, &func.module_source)?, span))
+            Some((entry.module_of(span, &func.module_source)?.clone(), span))
         };
         let cold = ColdRuns::of(body, cold_path).exprs(body);
         for region in region_queries(body, &callees, &ctfe_builtins, &materializing, type_table) {
@@ -553,7 +553,7 @@ pub fn collect_const_region_remarks(package: &NirPackage, entry: &EntryCode) -> 
                 span,
             });
         }
-    }
+    });
     sink.remarks
 }
 

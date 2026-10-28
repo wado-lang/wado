@@ -1389,8 +1389,8 @@ impl Body {
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
     /// Every local with a live `&local` / `&mut local`. The canonical
-    /// `address_taken_locals` go stale once `inline` /
-    /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
+    /// `address_taken_locals` goes stale once `inline` / `ref_elim` copy
+    /// reference nodes, so alias-sensitive consumers union this in.
     pub fn collect_address_taken_locals(&self, out: &mut hashmap::IndexSet<u32>) {
         self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node

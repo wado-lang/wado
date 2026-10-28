@@ -2115,9 +2115,9 @@ fn rewrite_call_sites(
         // than left to it. An aliased temp is not a pure destructure target, and
         // retyping it would hand a tuple to a reference cell the rebox can no
         // longer repair. A temp that fails is dropped and reboxed instead.
-        let aliased = |local: &u32| func.address_taken_locals.contains(local);
         bound.retain(|&local, &mut f| {
-            !aliased(&local) && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
+            !func.address_taken_locals.contains(&local)
+                && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
         });
         if !bound.is_empty() {
             for (&local, &f) in &bound {

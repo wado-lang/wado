@@ -118,9 +118,7 @@ pub(super) fn run_peephole(
         // Adjacent-use box-local elision runs post-inline only (it collapses the
         // `Box<T>` shells `sroa_param` / `inline` expose). Its stats come from
         // the pristine post-inline body; the escape set (`address_taken`) is read
-        // off the function before its body is borrowed — `build_elide_box_local`
-        // copies it, so it passes by reference (no per-function clone, and none
-        // at all in the pre-inline phase where this rule is absent).
+        // off the function before its body is borrowed.
         let elide_box_rule = (!pre_inline)
             .then(|| {
                 func.body

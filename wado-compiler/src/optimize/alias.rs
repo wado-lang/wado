@@ -241,9 +241,8 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
     map
 }
 
-/// The [`AliasSets`] the `ValueGraph` builder needs. Wraps [`build_alias_info`]
-/// (for `aliased`) with the mutable-escape analysis
-/// (`mut_escaped`).
+/// The [`AliasSets`] the `ValueGraph` builder needs: [`build_alias_info`]'s
+/// `aliased`, and the mutable-escape analysis's `mut_escaped`.
 ///
 /// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
 /// subtractively: a local is dropped only when its type is transitively free of
