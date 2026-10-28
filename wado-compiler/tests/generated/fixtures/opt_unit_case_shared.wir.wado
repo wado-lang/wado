@@ -288,9 +288,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i6
     let $load_3: ref Array<u8>;
     let new_used_116: i32;
     let start_117: i32;
+    let start_236: i32;
     let q: u64;
     let tens: i32;
-    let start_245: i32;
     if @unlikely(local.tee new_used_116(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_116);
@@ -365,25 +365,25 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i6
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_117);
         }
-        start_245 = f.used;
+        start_236 = f.used;
         f.used = start_117;
-        builtin::array_set_u8(f.repr, start_245, 45);
+        builtin::array_set_u8(f.repr, start_236, 45);
     } else {
     }
-    if @unlikely(local.tee start_245(f.used + new_used_116) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee start_236(f.used + new_used_116) > builtin::array_len(f.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_245);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_236);
     }
     start_117 = f.used;
-    f.used = start_245;
+    f.used = start_236;
     $load_3 = f.repr;
     new_used_116 = start_117 + new_used_116;
     b47: block {
         l48: loop {
             break_if b47 (new_used_116 - start_117) < 2;
             q = payload /u 100_i64;
-            tens = local.tee start_245(builtin::i32_wrap_i64(payload - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, new_used_116 - 1, ((48 + start_245) - (tens * 10)) & 255);
+            tens = local.tee start_236(builtin::i32_wrap_i64(payload - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_3, new_used_116 - 1, ((48 + start_236) - (tens * 10)) & 255);
             builtin::array_set_u8($load_3, new_used_116 - 2, (48 + tens) & 255);
             new_used_116 = new_used_116 - 2;
             payload = q;

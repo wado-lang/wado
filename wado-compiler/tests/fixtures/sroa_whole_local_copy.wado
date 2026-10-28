@@ -1,0 +1,64 @@
+// `sroa` splits a struct local taken whole. `self.l = x` repoints the field,
+// which leaves `o.l = x` after inlining: a move of a literal read nowhere else,
+// one scalar write per field. `let v = a` binds a second name for `a`'s object,
+// which reads and writes `a`'s slots. So `through_self` folds to a constant, and
+// `copy_then_write` allocates no `Point`.
+use { println, Stdout } from "core:cli";
+
+struct O {
+    l: List<i32>,
+}
+
+impl O {
+    fn set(&mut self, x: List<i32>) {
+        self.l = x;
+    }
+}
+
+#[inline("never")]
+fn through_self() -> i32 {
+    let mut x: List<i32> = [1];
+    let mut o = O { l: [] };
+    o.set(x);
+    x.push(2);
+    return o.l.len() * 10 + x.len();
+}
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline("never")]
+fn copy_then_write(seed: i32) -> i32 {
+    let mut a = Point { x: seed, y: seed + 1 };
+    let b = a;
+    a.x = 100;
+    let mut c = Point { x: 0, y: 0 };
+    c = a;
+    a.y = 200;
+    return b.x * 1000 + b.y * 100 + c.x + c.y;
+}
+
+// The closure captures `total` through a copy of its box, which shares the
+// box: the closure's writes are the ones `total` reads back.
+#[inline("never")]
+fn captured_through_copy() -> i32 {
+    let mut total = 0;
+    let mut bump = || { total += 1; };
+    bump();
+    bump();
+    return total;
+}
+
+export fn run() with Stdout {
+    println(`${through_self()}`);
+    println(`${copy_then_write(builtin::black_box(1))}`);
+    println(`${captured_through_copy()}`);
+}
+
+__DATA__
+{
+    "stdout": "12\n1302\n2\n",
+    "wir_not_expect:O2": ["through_self", "struct.new \"sroa_whole_local_copy.wado//Point\""]
+}

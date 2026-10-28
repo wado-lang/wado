@@ -83,7 +83,7 @@ fn "core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf, value) {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_75: i32;
+    let start_66: i32;
     return is_negative_20 = value < 0, x = builtin::i64_extend_i32_s(value), x = select i64(x < 0_i64, 0_i64 - x, x), value = $inline_count_digits_u64_0: block -> i32 {
         if x <u 100000_i64 {
             if x <u 100_i64 {
@@ -148,19 +148,19 @@ fn "core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf, value) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, is_negative_20);
         }
-        start_75 = buf.used;
+        start_66 = buf.used;
         buf.used = is_negative_20;
-        builtin::array_set_u8(buf.repr, start_75, 45);
+        builtin::array_set_u8(buf.repr, start_66, 45);
     } else {
-    }, if @unlikely(local.tee start_75(buf.used + value) > builtin::array_len(buf.repr)) {
+    }, if @unlikely(local.tee start_66(buf.used + value) > builtin::array_len(buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_75);
-    }, is_negative_20 = buf.used, buf.used = start_75, arr = buf.repr, value = is_negative_20 + value, b22: block {
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_66);
+    }, is_negative_20 = buf.used, buf.used = start_66, arr = buf.repr, value = is_negative_20 + value, b22: block {
         l23: loop {
             break_if b22 (value - is_negative_20) < 2;
             q = x /u 100_i64;
-            tens = local.tee start_75(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, ((48 + start_75) - (tens * 10)) & 255);
+            tens = local.tee start_66(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
+            builtin::array_set_u8(arr, value - 1, ((48 + start_66) - (tens * 10)) & 255);
             builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
             value = value - 2;
             x = q;

@@ -535,9 +535,9 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<&i
     let new_used_133: i32;
     let start_134: i32;
     let x_164: i64;
+    let start_274: i32;
     let q: u64;
     let tens: i32;
-    let start_283: i32;
     if @unlikely(local.tee new_used_133(f.used + 1) > builtin::array_len(f.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, new_used_133);
@@ -620,25 +620,25 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<&i
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_134);
         }
-        start_283 = f.used;
+        start_274 = f.used;
         f.used = start_134;
-        builtin::array_set_u8(f.repr, start_283, 45);
+        builtin::array_set_u8(f.repr, start_274, 45);
     } else {
     }
-    if @unlikely(local.tee start_283(f.used + new_used_133) > builtin::array_len(f.repr)) {
+    if @unlikely(local.tee start_274(f.used + new_used_133) > builtin::array_len(f.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_283);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(f, start_274);
     }
     start_134 = f.used;
-    f.used = start_283;
+    f.used = start_274;
     $load_3 = f.repr;
     new_used_133 = start_134 + new_used_133;
     b74: block {
         l75: loop {
             break_if b74 (new_used_133 - start_134) < 2;
             q = x_164 /u 100_i64;
-            tens = local.tee start_283(builtin::i32_wrap_i64(x_164 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, new_used_133 - 1, ((48 + start_283) - (tens * 10)) & 255);
+            tens = local.tee start_274(builtin::i32_wrap_i64(x_164 - (q * 100_i64))) / 10;
+            builtin::array_set_u8($load_3, new_used_133 - 1, ((48 + start_274) - (tens * 10)) & 255);
             builtin::array_set_u8($load_3, new_used_133 - 2, (48 + tens) & 255);
             new_used_133 = new_used_133 - 2;
             x_164 = q;

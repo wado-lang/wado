@@ -366,10 +366,134 @@ fn write_profiles(
 /// The profile `--pgo` records `entry`'s workloads into, or `None` once
 /// `entry` is gone.
 pub fn profile_file(entry: &Path) -> Option<PathBuf> {
+<<<<<<< HEAD
     let entry = entry.canonicalize().ok()?;
     let dir = entry.parent().expect("an entry is a file");
     if let Some(root) = package_root(dir) {
         return Some(root.join("pgo").join("default.pgo"));
+||||||| 39c41a94f
+    Profile::of(entry).map(|profile| profile.file)
+}
+
+/// The profile `--pgo` records an entry's workloads into, and the directory it
+/// names modules from: the entry's package's root, or for a program in no
+/// package, the program's directory. Several such programs may share it, so
+/// each keeps a profile of its own.
+struct Profile {
+    file: PathBuf,
+    root: PathBuf,
+}
+
+impl Profile {
+    fn of(entry: &Path) -> Option<Self> {
+        let entry = entry.canonicalize().ok()?;
+        let dir = entry.parent().expect("an entry is a file");
+        if let Some(root) = package_root(dir) {
+            return Some(Self {
+                file: root.join("pgo").join("default.pgo"),
+                root,
+            });
+        }
+        let stem = entry
+            .file_stem()
+            .expect("an entry is a file")
+            .to_string_lossy();
+        Some(Self {
+            file: dir.join("pgo").join(format!("{stem}.pgo")),
+            root: dir.to_path_buf(),
+        })
+    }
+
+    /// How the profile names the module a plan, made for an entry in `base`,
+    /// names `path`. The name is the same on any machine: a `core:` module is
+    /// its import path, another package's module is the package's name and
+    /// the file relative to its root, any other file is relative to this
+    /// profile's root, and a module that is no file, such as a remote one, is
+    /// its plan's path.
+    fn module_name(&self, base: &Path, path: &str) -> String {
+        if core_module_file(path).is_some() {
+            return path.to_string();
+        }
+        let Ok(file) = base.join(path).canonicalize() else {
+            return path.to_string();
+        };
+        let dir = file.parent().expect("a module is a file");
+        if let Some(root) = package_root(dir).filter(|root| *root != self.root)
+            && let Ok(Some(Manifest {
+                package: Some(package),
+                ..
+            })) = manifest_in(&root)
+        {
+            let rel = relative_to(&root, &file).expect("a module lies under its package's root");
+            let version = &package.version;
+            return match package.namespace {
+                Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
+                None => format!("{}@{version}/{rel}", package.name),
+            };
+        }
+        relative_to(&self.root, &file).expect("both paths are absolute")
+=======
+    Profile::of(entry).map(|profile| profile.file)
+}
+
+/// The profile `--pgo` records an entry's workloads into, and the directory it
+/// names modules from: the entry's package's root, or for a program in no
+/// package, the program's directory. Several such programs may share it, so
+/// each keeps a profile of its own.
+struct Profile {
+    file: PathBuf,
+    root: PathBuf,
+}
+
+impl Profile {
+    fn of(entry: &Path) -> Option<Self> {
+        let entry = entry.canonicalize().ok()?;
+        let dir = entry.parent().expect("an entry is a file");
+        if let Some(root) = package_root(dir) {
+            return Some(Self {
+                file: root.join("pgo").join("default.pgo"),
+                root,
+            });
+        }
+        let stem = entry
+            .file_stem()
+            .expect("an entry is a file")
+            .to_string_lossy();
+        Some(Self {
+            file: dir.join("pgo").join(format!("{stem}.pgo")),
+            root: dir.to_path_buf(),
+        })
+    }
+
+    /// How the profile names the module a plan, made for an entry in `base`,
+    /// names `path`. The name is the same on any machine: a `core:` module is
+    /// its import path, another package's module is the package's name and
+    /// the file relative to its root, any other file is relative to this
+    /// profile's root, and a module that is no file, such as a remote one, is
+    /// its plan's path.
+    fn module_name(&self, base: &Path, path: &str) -> String {
+        if core_module_file(path).is_some() {
+            return path.to_string();
+        }
+        let Ok(file) = base.join(path).canonicalize() else {
+            return path.to_string();
+        };
+        let dir = file.parent().expect("a module is a file");
+        if let Some(root) = package_root(dir).filter(|root| *root != self.root)
+            && let Ok(Some(Manifest {
+                package: Some(package),
+                ..
+            })) = manifest_in(&root)
+        {
+            let rel = relative_to(&root, &file);
+            let version = &package.version;
+            return match package.namespace {
+                Some(namespace) => format!("{namespace}:{}@{version}/{rel}", package.name),
+                None => format!("{}@{version}/{rel}", package.name),
+            };
+        }
+        relative_to(&self.root, &file)
+>>>>>>> origin/main
     }
     // Several programs in no package may share a directory, so each keeps a
     // profile of its own.

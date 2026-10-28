@@ -12,7 +12,7 @@ use crate::ast::{
 use crate::compiler_host::Diagnostic;
 use crate::hashmap::IndexMap;
 use crate::name::{is_package_namespace, resolve_module_path};
-use crate::path::is_cwd_relative;
+use crate::path::{is_cwd_relative, relative_path};
 use crate::remote::{Integrity, is_remote, pin_of, url_fault};
 
 use super::cache::{encode_written_options, hex_digest};
@@ -582,8 +582,7 @@ fn lower_pin(
 /// prefix; `from`/`inputs`/`output_dir` go through [`resolve_or_reject`]).
 fn resolve_decl_relative(module_path: &str, raw: &str, manifest_root: &str) -> InvocationPath {
     let resolved = resolve_module_path(module_path, raw);
-    let manifest_relative = strip_manifest_root_prefix(manifest_root, &resolved);
-    InvocationPath::normalize(&manifest_relative)
+    InvocationPath::normalize(&relative_path(manifest_root, &resolved))
 }
 
 /// Resolve a `from` / `inputs` / `output_dir` path, enforcing the Wado path
@@ -701,30 +700,6 @@ fn lower_module_specifier(
         ),
     ));
     None
-}
-
-/// Re-anchor `resolved` (project-root-relative) to `manifest_root`, which the
-/// provider resolves as `manifest_root.join(path)`: a shared prefix is stripped,
-/// and a `resolved` above or beside the root gets `..` segments to walk out
-/// first. An empty or `.` root returns the path verbatim, `.` segments being
-/// dropped on both sides so no spurious `..` sends output out of the project.
-fn strip_manifest_root_prefix(manifest_root: &str, resolved: &str) -> String {
-    let is_segment = |p: &&str| !p.is_empty() && *p != ".";
-    let root_parts: Vec<&str> = manifest_root.split('/').filter(is_segment).collect();
-    if root_parts.is_empty() {
-        return resolved.to_string();
-    }
-    let resolved_parts: Vec<&str> = resolved.split('/').filter(is_segment).collect();
-    let common = root_parts
-        .iter()
-        .zip(resolved_parts.iter())
-        .take_while(|(a, b)| a == b)
-        .count();
-    let ups = root_parts.len() - common;
-    let mut out = Vec::with_capacity(ups + resolved_parts.len() - common);
-    out.extend(std::iter::repeat_n("..", ups));
-    out.extend(resolved_parts.iter().skip(common).copied());
-    out.join("/")
 }
 
 fn validate_inline_options(
@@ -1739,45 +1714,45 @@ mod tests {
     }
 
     #[test]
-    fn strip_manifest_root_prefix_strips_when_inside() {
-        let p = strip_manifest_root_prefix("project/sub", "project/sub/dir/gen.wado");
-        assert_eq!(p, "dir/gen.wado");
+    fn resolve_decl_relative_keeps_an_absolute_declaring_module_absolute() {
+        let p = resolve_decl_relative("/home/u/dep/main.wado", "./x.g4", "a/b");
+        assert_eq!(p.as_str(), "/home/u/dep/x.g4");
     }
 
     #[test]
-    fn strip_manifest_root_prefix_emits_dotdots_when_above() {
-        let p = strip_manifest_root_prefix(
-            "wasm-size/sqlite_highlight",
-            "package-gale/src/generator.wado",
-        );
-        assert_eq!(p, "../../package-gale/src/generator.wado");
-    }
-
-    #[test]
-    fn strip_manifest_root_prefix_handles_partial_overlap() {
-        let p = strip_manifest_root_prefix("a/b/c", "a/x/y/gen.wado");
-        assert_eq!(p, "../../x/y/gen.wado");
-    }
-
-    #[test]
-    fn strip_manifest_root_prefix_empty_root_is_passthrough() {
-        let p = strip_manifest_root_prefix("", "package/src/gen.wado");
-        assert_eq!(p, "package/src/gen.wado");
-    }
-
-    #[test]
-    fn strip_manifest_root_prefix_dot_root_is_passthrough() {
-        // `.` (entry sits next to `wado.toml`) must behave like an empty root,
-        // not emit a spurious `..` that escapes the project.
-        assert_eq!(strip_manifest_root_prefix(".", "generated"), "generated");
-        assert_eq!(strip_manifest_root_prefix(".", "src/x.wado"), "src/x.wado");
-        assert_eq!(strip_manifest_root_prefix("./", "schema.g4"), "schema.g4");
-        // A `.` root passes the resolved path through verbatim (the caller
-        // runs it through `InvocationPath::normalize`, which strips `./`).
-        assert_eq!(
-            strip_manifest_root_prefix(".", "./schema.g4"),
-            "./schema.g4"
-        );
+    fn resolve_decl_relative_reanchors_to_the_manifest_root() {
+        let cases = [
+            (
+                "project/sub/main.wado",
+                "./dir/gen.wado",
+                "project/sub",
+                "dir/gen.wado",
+            ),
+            (
+                "package-gale/main.wado",
+                "./src/generator.wado",
+                "wasm-size/sqlite_highlight",
+                "../../package-gale/src/generator.wado",
+            ),
+            (
+                "a/x/main.wado",
+                "./y/gen.wado",
+                "a/b/c",
+                "../../x/y/gen.wado",
+            ),
+            (
+                "package/main.wado",
+                "./src/gen.wado",
+                "",
+                "package/src/gen.wado",
+            ),
+            // A `.` root must not emit a spurious `..` that escapes the project.
+            ("main.wado", "./generated", ".", "generated"),
+            ("main.wado", "./schema.g4", "./", "schema.g4"),
+        ];
+        for (module, raw, root, expected) in cases {
+            assert_eq!(resolve_decl_relative(module, raw, root).as_str(), expected);
+        }
     }
 
     #[test]

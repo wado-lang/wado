@@ -15,7 +15,6 @@ use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
-#[cfg(debug_assertions)]
 use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
@@ -114,7 +113,6 @@ pub struct FlatPackage {
 
     /// What `prelower_reach` dropped. Minting a stub for one of these means the
     /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.
-    #[cfg(debug_assertions)]
     pub pruned: IndexSet<FunctionId>,
 }
 
