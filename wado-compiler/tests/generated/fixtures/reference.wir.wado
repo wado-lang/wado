@@ -698,7 +698,6 @@ fn "reference.wado/process$dae[count]"(arr, input) {
     let i: i32;
     let val: u8;
     let src: i32;
-    let $v1_8: i32;
     let $v1_12: i32;
     let $contract_arg_0: i32;
     let $v1_17: i32;
@@ -716,7 +715,7 @@ fn "reference.wado/process$dae[count]"(arr, input) {
         b1: block {
             l2: loop {
                 break_if b1 i >= $bce_limit_63;
-                $v1_8 = input.used;
+                drop(input.used);
                 if local.tee val(builtin::array_get_value<u8>($licm_repr_63, i)) <u 128 {
                     if @unlikely(local.tee used_28(arr.used) >= builtin::array_len(arr.repr)) {
                         cold_path;
@@ -774,10 +773,10 @@ fn "reference.wado/process$dae[count]"(arr, input) {
     b12: block {
         l13: loop {
             break_if b12 i >= 4;
-            $v1_8 = input.used;
-            if @unlikely(i >= $v1_8) {
+            $bce_limit_63 = input.used;
+            if @unlikely(i >= $bce_limit_63) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reference.wado:347"), used: 18 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_63, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("reference.wado:347"), used: 18 });
                 unreachable;
             }
             if local.tee val(builtin::array_get_value<u8>($licm_repr_63, i)) <u 128 {

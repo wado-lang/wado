@@ -203,7 +203,6 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
     let $load_0: ref "core:prelude//List<i32>";
     let n: i32;
     let i: i32;
-    let $v1_7: i32;
     let value_11: i32;
     let used: i32;
     let $licm_repr_25: ref Array<i32>;
@@ -216,7 +215,6 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
         b2: block {
             l3: loop {
                 break_if b2 i >= $bce_limit_26;
-                $v1_7 = $load_0.used;
                 value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
                 if @unlikely(local.tee used(out.used) >= builtin::array_len(out.repr)) {
                     cold_path;
@@ -243,10 +241,10 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
     b8: block {
         l9: loop {
             break_if b8 (i >= n) | ((i + 1) >= n);
-            $v1_7 = $load_0.used;
-            if @unlikely(i >= $v1_7) {
+            $bce_limit_26 = $load_0.used;
+            if @unlikely(i >= $bce_limit_26) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
                 unreachable;
             }
             value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
@@ -262,10 +260,10 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
                 $licm_repr_25 = $load_0.repr;
             }
             i = i + 1;
-            $v1_7 = $load_0.used;
-            if @unlikely(i >= $v1_7) {
+            $bce_limit_26 = $load_0.used;
+            if @unlikely(i >= $bce_limit_26) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
                 unreachable;
             }
             value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
@@ -287,10 +285,10 @@ fn "sroa_param_snapshot_interior_alias.wado/probe"(sink, h, out) {
     b16: block {
         l17: loop {
             break_if b16 i >= n;
-            $v1_7 = $load_0.used;
-            if @unlikely(i >= $v1_7) {
+            $bce_limit_26 = $load_0.used;
+            if @unlikely(i >= $bce_limit_26) {
                 cold_path;
-                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $v1_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
+                "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(i, $bce_limit_26, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("sroa_param_snapshot_interior_alias.wado:21"), used: 42 });
                 unreachable;
             }
             value_11 = builtin::array_get_value<i32>($licm_repr_25, i);
