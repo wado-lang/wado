@@ -417,7 +417,7 @@ Program {
   traits: TraitDeclId -> { supertraits, holds_for_all, arg_defaults, on_ref,
                            methods: [MethodId], assoc_bounds: AssocId -> [TraitDeclId] }
   types:  TypeDeclId  -> { newtype_base }
-  facts:  (TypeDeclId, TraitDeclId) -> { visible_from }
+  facts:  (TypeDeclId, TraitDeclId) -> { assoc: AssocId -> SolverType }
   assoc_bindings: (ImplId, AssocId) -> SolverType
   impl_methods:   ImplId -> [MethodId]
   scopes: ModuleId    -> { traits_in_scope }
@@ -620,7 +620,7 @@ Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
 Monomorphization asks the same order. At each instance it ranks the impls
-reaching the concrete receiver (`instance_candidates`, `Asker::Instance`), and
+reaching the concrete receiver (`instance_candidates`), and
 names the call after the link of the receiver's chain the winner answers at. It
 holds no selection rule of its own, so an instance runs the body the order
 selected rather than one a second walk found.

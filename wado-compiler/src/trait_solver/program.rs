@@ -397,8 +397,8 @@ pub struct DerivationRequest {
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Fact {
     /// The associated types the kind binds, spelled with the declaration's own
-    /// parameters: a struct's `FieldTypes`, what a pin like
-    /// `ReflectStruct<FieldTypes = [..F]>` reads.
+    /// parameters: a struct's `FieldTypes` and `FieldInputs`, what a pin like
+    /// `ReflectStruct<FieldInputs = [..F]>` reads.
     pub assoc: Vec<(AssocId, SolverType)>,
 }
 
