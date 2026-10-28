@@ -245,7 +245,8 @@ the module.
 The compiler writes the plan as a custom section, `org.wado-lang.coverage`,
 beside `org.wado-lang.test-names`. For each instrumented module it holds:
 
-- the module's name, the same on any machine and from any entry, which a
+- the module's name, the same on any machine and from any entry of one
+  package, which a
   profile records;
 - the module's path: a file relative to the entry module's directory, as the
   loader reads it, and a `core:` module by its import path;

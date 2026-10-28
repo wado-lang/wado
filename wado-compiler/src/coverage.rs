@@ -180,7 +180,8 @@ pub struct PlannedFunction {
 /// The regions a module's source implies, numbered from zero.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ModulePlan {
-    /// The module's name, the same on any machine and from any entry.
+    /// The module's name, the same on any machine and from any entry of one
+    /// package.
     pub name: String,
     /// Where the host reads the module, relative to the entry module's
     /// directory ([`ModuleSource::file`]); for a module that is no file, its

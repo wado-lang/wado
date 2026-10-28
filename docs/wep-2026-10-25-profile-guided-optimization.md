@@ -150,7 +150,8 @@ wants it.
 A profile names a module by the module's name, the one the compiler gives it
 everywhere (see
 [WEP: Module Loader Design](./wep-2026-01-24-module-loader.md#a-module-has-one-name)),
-so every name resolves the same on any machine and from any entry. A packaged
+so every name resolves the same on any machine and from any entry of one
+package. A packaged
 module's name holds its package's name and version, never the cache path it was
 fetched to. Two versions of one package can be two packages in one build, so the
 version keeps their names apart. After an upgrade the profile holds no counts

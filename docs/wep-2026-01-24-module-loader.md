@@ -159,7 +159,9 @@ Anchoring at the entry directory — rather than the manifest root — keeps non
 The identity above is where the host reads a module, and it moves with the
 entry. A module's name does not: it is the one spelling of the module in a
 symbol, a diagnostic's function name, a coverage plan and a profile, the same on
-any machine and from any entry. `ModuleSource`'s `Display` prints it.
+any machine and from any entry of one package. Two programs in no package,
+each in its own directory, name a file they share from their own directories,
+so differently. `ModuleSource`'s `Display` prints it.
 
 - A file in a package whose `wado.toml` has a `[package]` is the package's
   `namespace:name@version`, then the file's path inside the package:

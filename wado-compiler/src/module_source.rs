@@ -1333,7 +1333,8 @@ fn redirected_file(uri: &str) -> String {
 /// A module's name: the one spelling of it in a symbol, a coverage plan or a
 /// profile. A module of a file is named where it lies, never by the path the
 /// compile reached it through, so the name is the same on any machine and
-/// from any entry; [`ModuleSource::source_path`] says where it is read.
+/// from any entry of one package; [`ModuleSource::source_path`] says where it
+/// is read.
 impl fmt::Display for ModuleSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
