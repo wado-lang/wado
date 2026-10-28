@@ -127,7 +127,7 @@ fn a_package_check_reports_a_shared_module_kiln_warning_once() {
 }
 
 /// Compiling a generator to run it lints nothing: the generator's own package
-/// check is where its lints belong.
+/// check is where its lints belong, and reports them once.
 #[test]
 fn compiling_a_generator_lints_none_of_it() {
     let tmp = tempfile::tempdir().unwrap();
@@ -142,7 +142,13 @@ fn compiling_a_generator_lints_none_of_it() {
         .arg("check")
         .assert()
         .success()
-        .stderr(predicate::str::contains("[kiln generator compile]").not());
+        .stderr(predicate::str::contains("[kiln generator compile]").not())
+        .stderr(predicate::function(|stderr: &str| {
+            stderr
+                .matches("parameter `unread_request` is never used")
+                .count()
+                == 1
+        }));
 }
 
 /// A member in a subdirectory reaches a sibling directory's module through

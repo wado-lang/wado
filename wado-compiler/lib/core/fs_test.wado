@@ -69,7 +69,7 @@ struct Substitute {
 }
 
 impl Stream<u8> for Substitute {
-    fn begin_read(&mut self, this: &Stream<u8>, max: i32, into: ReadInto) -> StartedRead<u8> {
+    fn begin_read(&mut self, _this: &Stream<u8>, _max: i32, _into: ReadInto) -> StartedRead<u8> {
         resume StartedRead::settled(StreamChunk { items: self.content, result: CopyResult::Dropped });
     }
 

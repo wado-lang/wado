@@ -39,19 +39,19 @@ impl MockStdio {
 }
 
 impl Stdout for MockStdio {
-    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+    fn write_via_stream(&mut self, _data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         resume self.written(false);
     }
 }
 
 impl Stderr for MockStdio {
-    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+    fn write_via_stream(&mut self, _data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
         resume self.written(true);
     }
 }
 
 impl StreamWritable<u8> for MockStdio {
-    fn write_raw_all(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
+    fn write_raw_all(&mut self, _this: &StreamWritable<u8>, data: Slice<u8>) -> CopyResult {
         if self.to_stderr {
             self.err.extend_from_slice(data);
         } else {
@@ -60,7 +60,7 @@ impl StreamWritable<u8> for MockStdio {
         resume CopyResult::Completed;
     }
 
-    fn drop(&mut self, this: &StreamWritable<u8>) {
+    fn drop(&mut self, _this: &StreamWritable<u8>) {
         resume ();
     }
 

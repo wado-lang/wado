@@ -3360,6 +3360,16 @@ impl Expr {
         }
     }
 
+    /// The places this expression writes by `=`, destructuring or a compound
+    /// assignment, in the order it writes them; none for any other expression.
+    pub fn assigned_places(&self) -> &[Expr] {
+        match self {
+            Expr::Assign(assign) => assign.places(),
+            Expr::CompoundAssign(compound) => std::slice::from_ref(&compound.target),
+            _ => &[],
+        }
+    }
+
     /// What a field, index and unary chain starts from: `r` of `(*r).f[i]`,
     /// or the expression itself where it is no such chain.
     pub fn place_root(&self) -> &Expr {

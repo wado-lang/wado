@@ -21,6 +21,7 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
     let mut writes = IndexSet::default();
     for (src, module) in lints.modules(&sem.modules) {
         let mut walk = Binders {
+            sem,
             module: src,
             waived: inner_attrs_allow(&module.inner_attributes, lint::UNUSED_VARIABLES),
             found: Vec::new(),
@@ -32,9 +33,23 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
         }
         binders.extend(walk.found);
     }
+    // A binder the elaborator did not bind as a local is a constant or a case
+    // a pattern tests against, not a variable.
+    binders.retain(|b| {
+        b.ids.iter().any(|id| {
+            matches!(
+                sem.symbol_at(*id).map(|sym| &sym.kind),
+                Some(SymbolKind::Variable(_))
+            )
+        })
+    });
+    let candidates: IndexSet<AstId> = binders.iter().flat_map(|b| b.ids.clone()).collect();
     let mut reads = IndexSet::default();
     let mut written = IndexSet::default();
     for (site, target) in sem.iter_references() {
+        if !candidates.contains(&target) {
+            continue;
+        }
         if writes.contains(&site) {
             written.insert(target);
         } else {
@@ -43,16 +58,6 @@ pub fn unused_variable_diagnostics(sem: &Semantics, lints: Lints) -> Vec<Diagnos
     }
     binders
         .into_iter()
-        // A binder the elaborator did not bind as a local is a constant or a
-        // case a pattern tests against, not a variable.
-        .filter(|b| {
-            b.ids.iter().any(|id| {
-                matches!(
-                    sem.symbol_at(*id).map(|sym| &sym.kind),
-                    Some(SymbolKind::Variable(_))
-                )
-            })
-        })
         .filter(|b| !b.ids.iter().any(|id| reads.contains(id)))
         .map(|b| {
             let only_written = b.ids.iter().any(|id| written.contains(id));
@@ -111,19 +116,33 @@ impl Binder<'_> {
 
 /// The binders of one module, and the sites where it assigns to a name.
 struct Binders<'a, 'w> {
+    sem: &'a Semantics,
     module: &'a ModuleSource,
     waived: bool,
     found: Vec<Binder<'a>>,
     /// The pattern ids a struct pattern binds by its field's own name.
     shorthand: IndexSet<AstId>,
-    /// Every module's: the sites written to by `=` or a compound assignment,
-    /// which read nothing back.
+    /// Every module's: the names an assignment writes into, by `=` or a
+    /// compound assignment, directly or through the fields and indexes of a
+    /// value they hold. None reads anything back.
     writes: &'w mut IndexSet<AstId>,
 }
 
 impl<'a> Binders<'a, '_> {
     fn bind_parameter(&mut self, attrs: &'a [Attribute], id: AstId, name: &'a str, span: Span) {
         self.visit_attributed(attrs, |s| s.bind(BinderKind::Parameter, id, name, span));
+    }
+
+    /// Records the name a write to `place` lands in. Through a projection, that
+    /// name must hold nothing that writes elsewhere: an index assignment on a
+    /// value holding a `&mut` may write through it.
+    fn write(&mut self, place: &Expr) {
+        let written = self.sem.written_place(place);
+        if let Expr::Ident(ident) = written
+            && (matches!(place, Expr::Ident(_)) || !self.sem.expr_reaches_mut_ref(written))
+        {
+            self.writes.insert(ident.id);
+        }
     }
 
     fn bind(&mut self, kind: BinderKind, id: AstId, name: &'a str, span: Span) {
@@ -162,25 +181,13 @@ impl<'a> AstVisitor<'a> for Binders<'a, '_> {
     }
 
     fn visit_expr(&mut self, expr: &'a Expr) {
-        match expr {
-            Expr::Assign(assign) => {
-                for place in assign.places() {
-                    if let Expr::Ident(ident) = place {
-                        self.writes.insert(ident.id);
-                    }
-                }
+        for place in expr.assigned_places() {
+            self.write(place);
+        }
+        if let Expr::Closure(closure) = expr {
+            for param in &closure.params {
+                self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
             }
-            Expr::CompoundAssign(assign) => {
-                if let Expr::Ident(ident) = &assign.target {
-                    self.writes.insert(ident.id);
-                }
-            }
-            Expr::Closure(closure) => {
-                for param in &closure.params {
-                    self.bind_parameter(&param.attrs, param.id, &param.name, param.name_span);
-                }
-            }
-            _ => {}
         }
         walk_expr(self, expr);
     }

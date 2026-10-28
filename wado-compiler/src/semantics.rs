@@ -687,6 +687,48 @@ impl Semantics {
             .is_none_or(|state| state.tysys.reaches_mut_ref(type_id))
     }
 
+    /// Whether a value `expr` evaluates to reaches a `&mut`
+    /// ([`Self::reaches_mut_ref`]).
+    pub(crate) fn expr_reaches_mut_ref(&self, expr: &Expr) -> bool {
+        self.expr_types(expr)
+            .into_iter()
+            .any(|ty| self.reaches_mut_ref(ty))
+    }
+
+    /// Types of `expr`, one per walk that reached it, preferring the type of
+    /// the binding an identifier names, where a parameter or a function-typed
+    /// local has one and the use site does not.
+    pub(crate) fn expr_types(&self, expr: &Expr) -> Vec<TypeId> {
+        if let Expr::Ident(ident) = expr
+            && let Some(def) = self.referenced_symbol(ident.id)
+        {
+            let bound: Vec<TypeId> = self.local_types(def).collect();
+            if !bound.is_empty() {
+                return bound;
+            }
+        }
+        self.expression_types(expr.id()).collect()
+    }
+
+    /// Where a write to `place` lands once it has gone down every field and
+    /// index of a value it holds: `p` of `p.x[i]` where neither `p` nor `p.x`
+    /// is a reference, `r.x` where `r` is one.
+    pub(crate) fn written_place<'e>(&self, place: &'e Expr) -> &'e Expr {
+        let base = match place {
+            Expr::FieldAccess(access) => &access.expr,
+            Expr::Index(index) => &index.expr,
+            _ => return place,
+        };
+        if self
+            .expr_types(base)
+            .into_iter()
+            .any(|ty| self.types.is_reference_shaped(ty))
+        {
+            return place;
+        }
+        self.written_place(base)
+    }
+
     /// Whether a value of `type_id` may hold a reference.
     pub(crate) fn may_hold_reference(&self, type_id: TypeId) -> bool {
         self.state

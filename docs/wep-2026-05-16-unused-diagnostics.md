@@ -87,19 +87,6 @@ optimize-time and silent.
 | `TestOnlyFunction` | Liveness  | `TestOnlyFunction` |
 | `TestOnlyGlobal`   | Liveness  | `TestOnlyGlobal`   |
 
-### What is out of scope (deferred to follow-up WEPs / PRs)
-
-- `unused_mut`, `unused_type_param`
-- `unused_assignments`: a value overwritten before anything reads it. A
-  variable nothing ever reads, however often it is written, is
-  `UnusedVariable`.
-- `dead_type`, `dead_trait_impl`, `unreachable_pattern`, `dead_closure_functor`
-- The `unused` lint group and `#[deny(...)]` (only `#[allow(dead_code)]`,
-  item- and module-level, is implemented — see Suppression)
-- Workspace-aware multi-package root computation
-- Preserving `pub`-only items in `optimize/dce.rs` for the not-yet-implemented
-  provider-metadata standalone-`.wasm` publish path (see Reachability roots)
-
 ### Reachability roots (package-external boundary)
 
 The pass runs two independent reachability closures over the same call graph:
@@ -230,6 +217,10 @@ emitted file.
   side effects.
 - `#[allow(unused_imports)]` on a `use`, or `#![allow(unused_imports)]`
   on the module, waives `UnusedImport`.
+- `#[allow(unused_variables)]` waives `UnusedVariable` and
+  `UnusedParameter` for every binder inside what it is written on: a `let`,
+  a parameter, a function, an `impl`, or the module as
+  `#![allow(unused_variables)]`.
 - `#[allow(dead_code)]` on a function or global waives its
   `DeadFunction` / `DeadGlobal` / `TestOnlyFunction` / `TestOnlyGlobal`
   lint — for unavoidable unused items (e.g. a library module being built
@@ -238,9 +229,7 @@ emitted file.
   attribute waives the lint for every item in the file — the idiom for
   test-helper files whose functions exist only to back `test` blocks. The
   liveness pass still records the item's call-graph edges; only its
-  candidacy for the lint is dropped. The broader `unused` lint group (and
-  `#[deny(...)]`) is deferred to the follow-up that lands the reference
-  pass.
+  candidacy for the lint is dropped.
 
 ## Implementation
 
@@ -301,12 +290,19 @@ name.
 walk collects each binder with its kind: a parameter of a function with a
 body or of a closure is a parameter, and a pattern's name is a variable. It
 skips a name starting with `_` and one an `#[allow(unused_variables)]` waives.
-It also collects the sites an assignment writes: an identifier on the left of
-`=`, of a destructuring assignment, or of a compound assignment.
+It also collects the names an assignment writes (`Expr::assigned_places`): a
+place on the left of `=`, of a destructuring assignment, or of a compound
+assignment. A place writes a name directly, or through the fields and indexes
+of a value the name holds (`Semantics::written_place`, the rule the `contract`
+clause check applies too). A projection stops at a reference, since the write
+lands in what the reference points to. Through a projection, a name whose type
+reaches a `&mut` counts as read, since an index assignment on it may write
+through that `&mut`.
 
 The elaborator records a use→def edge for every name that reaches a local
-(`Semantics::iter_references`). An edge from a write site marks its binder
-written, and any other edge marks it read. A binder the elaborator did not
+(`Semantics::iter_references`). Only edges reaching a candidate binder are
+kept. An edge from a write site marks its binder written, and any other edge
+marks it read, so `n = n + 1` reads `n`. A binder the elaborator did not
 bind as a local (`SymbolKind::Variable`) is a case or a constant the pattern
 tests against, and is dropped. Each remaining binder that nothing reads is
 reported at its name: "never used" when nothing writes it either, "assigned
@@ -670,3 +666,12 @@ through the diagnostics path.
 - Package mode elaborates every member on one thread, and runs every member's
   Kiln pipeline one at a time. On Gale it takes under twice as long as
   checking the declared entries alone.
+- No `unused_mut`, `unused_type_param`, `dead_type`, `dead_trait_impl`,
+  `unreachable_pattern` or `dead_closure_functor` lint exists.
+- No `unused_assignments` lint reports a value overwritten before anything
+  reads it. A read that only feeds the variable's own next value still reads
+  it, so `n = n + 1` keeps `n` from `UnusedVariable`, where `n += 1` does not.
+- There is no `unused` lint group, and no `#[deny(...)]`.
+- Roots are computed per package, never across a workspace.
+- `optimize/dce.rs` drops `pub`-only items, which a standalone `.wasm`
+  published with provider metadata would need (see Reachability roots).

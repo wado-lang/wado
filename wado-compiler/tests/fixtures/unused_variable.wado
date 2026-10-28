@@ -37,6 +37,20 @@ fn writes() -> i32 {
     return reassigned_read + swapped_read;
 }
 
+struct Holder { counter: &mut Counter }
+
+// A write through the fields and indexes of a value a name holds writes that
+// name. Through a reference it writes what the reference points to.
+fn projections(through_ref: &mut Counter) {
+    let mut field_only = Pair { kept: 0, dropped_field: 0 };
+    field_only.kept = 1;
+    let mut index_only: List<i32> = [0];
+    index_only[0] = 1;
+    through_ref.n = 2;
+    let held = Holder { counter: through_ref };
+    held.counter.n += 1;
+}
+
 fn patterns(o: Option<i32>, s: Shape, p: Pair) -> i32 {
     let { kept, dropped_field } = p;
     let mut total = kept;
@@ -84,6 +98,7 @@ impl Counter {
 export fn run() with Stdout {
     let mut c = Counter { n: 0 };
     c.bump(1);
+    projections(&mut c);
     allowed_fn(0);
     let total = params(1, 2, 3) + locals() + writes()
         + patterns(Some(1), Shape::Circle(2), Pair { kept: 3, dropped_field: 4 })
@@ -93,13 +108,15 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "31\n",
+    "stdout": "33\n",
     "warnings_contains": [
         "parameter `unread_param` is never used",
         "variable `unread_let` is never used",
         "variable `assigned_only` is assigned to, but never read",
         "variable `compound_only` is assigned to, but never read",
         "variable `swapped_only` is assigned to, but never read",
+        "variable `field_only` is assigned to, but never read",
+        "variable `index_only` is assigned to, but never read",
         "variable `dropped_field` is never used; write `dropped_field: _`",
         "variable `unread_if_let` is never used",
         "variable `unread_arm` is never used",
@@ -118,6 +135,8 @@ __DATA__
         "`read_let`",
         "`swapped_read`",
         "`reassigned_read`",
+        "`through_ref`",
+        "`held`",
         "`kept`",
         "`total`",
         "`or_read`",

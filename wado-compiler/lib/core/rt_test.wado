@@ -14,7 +14,7 @@ use { MonotonicClock } from "wasi:clocks";
 
 #[expect_trap]
 test "a read with negative room is a defect" {
-    let [rx, tx] = Stream::<u8>::new();
+    let [rx, _tx] = Stream::<u8>::new();
     rx.start_read(builtin::black_box(-1));
 }
 

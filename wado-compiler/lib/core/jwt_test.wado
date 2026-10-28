@@ -157,7 +157,7 @@ impl JwsAlgorithm for StubKey {
 }
 
 impl JwsVerifier for StubKey {
-    fn verify(&self, signing_input: &ByteList, signature: &ByteList) -> bool {
+    fn verify(&self, _signing_input: &ByteList, signature: &ByteList) -> bool {
         return eq_constant_time(signature, &self.accept);
     }
 }

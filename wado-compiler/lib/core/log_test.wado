@@ -231,7 +231,7 @@ test "record, follows_from and close reach the subscriber" {
 test "span attributes carry name, level and fields" {
     let mut sink = CaptureSink {};
     with Log => &mut sink do {
-        let s = span(Level::Warn, `job`, { id: 3 });
+        let _s = span(Level::Warn, `job`, { id: 3 });
     };
     let attrs = sink.spans[0];
     assert attrs.meta.name == "job";
@@ -561,7 +561,7 @@ struct Echo {
 }
 
 impl Log for Echo {
-    fn event(&mut self, ignored: Event) with Log {
+    fn event(&mut self, _ignored: Event) with Log {
         self.count += 1;
         with Log => self do {
             error(`again`);
