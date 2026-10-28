@@ -42,7 +42,7 @@ pub(super) fn promote_lone_assignments(
                 && !mentions_local_except(
                     body,
                     NodeRef::Block(body.root()),
-                    Some(NodeRef::Block(block)),
+                    &[NodeRef::Block(block)],
                     local,
                 )
             {

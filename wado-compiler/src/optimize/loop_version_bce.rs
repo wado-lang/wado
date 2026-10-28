@@ -25,6 +25,7 @@ use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
 use crate::compiler_item::SeqField;
+use crate::hashmap::IndexMap;
 use crate::nir::{FuncParts, FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
@@ -261,14 +262,16 @@ pub(super) fn version_loops(
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         engine.run(&rules);
 
-        // Fill idiom over the cleaned fast arms; sweep again if it fired.
-        let mut filled = false;
+        // Fill idiom over the cleaned fast arms; sweep again if it or the
+        // unsharing fired.
+        let mut swept = false;
         for (plan, arm) in plans.iter().zip(&fast_arms) {
+            swept |= unshare_unread_lets(&mut engine, plan, arm.fast_body);
             if plan.reload.is_none() {
-                filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
+                swept |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
             }
         }
-        if filled {
+        if swept {
             engine.run(&rules);
         }
         changed = true;
@@ -926,6 +929,7 @@ fn alloc_binary(
 /// What the fast loop's own guard bound is minted under, where the bound is
 /// reloaded.
 const LIMIT: &str = "bce_limit";
+const UNREAD: &str = "bce_unread";
 
 /// Apply one versioning plan: clone the loop, delete the implied checks in
 /// the clone, and replace the loop with
@@ -1305,6 +1309,57 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         constify_check_temp(engine, binds, check.cond, plan.var, check.limit, fast_body);
         eliminate_condition(engine, check.holder, check.cond);
     }
+}
+
+/// Rebind to a fresh local each `let` the fast arm binds and no longer reads,
+/// often a deleted check's bound, so the sweep can drop it. The arm shares its
+/// locals with the original loop, whose reads keep the slot live. Where the
+/// original rebinds the slot in a top-level `let` before any of its reads, and
+/// nothing else names it, the fast arm's value is never observed.
+fn unshare_unread_lets(engine: &mut Engine, plan: &Plan, fast_body: BlockId) -> bool {
+    let body = &*engine.body;
+    let slow = &body.blocks[plan.loop_body].stmts;
+    let arms = [NodeRef::Block(fast_body), NodeRef::Block(plan.loop_body)];
+    let names = |node: NodeRef, l: u32| mentions_local_except(body, node, &[], l);
+    let rebound_first = |l: u32| {
+        let Some(j) = slow.iter().position(|&s| {
+            matches!(body.stmts[s].kind, StmtKind::Let { local_index, .. } if local_index == l)
+        }) else {
+            return false;
+        };
+        !slow[..=j].iter().any(|&s| names(NodeRef::Stmt(s), l))
+    };
+    let mut lets: Vec<(StmtId, u32)> = Vec::new();
+    body.for_each_node_under(NodeRef::Block(fast_body), |n| {
+        if let NodeRef::Stmt(s) = n
+            && let StmtKind::Let { local_index, .. } = body.stmts[s].kind
+        {
+            lets.push((s, local_index));
+        }
+    });
+    lets.retain(|&(_, l)| {
+        !names(NodeRef::Block(fast_body), l)
+            && rebound_first(l)
+            && !mentions_local_except(body, NodeRef::Block(body.root()), &arms, l)
+    });
+    let mut fresh: IndexMap<u32, u32> = IndexMap::default();
+    for &(s, l) in &lets {
+        let local = &engine.locals()[l as usize];
+        let (ty, is_mut) = (local.type_id, local.is_mut);
+        let to = *fresh
+            .entry(l)
+            .or_insert_with(|| engine.alloc_minted_local(UNREAD, ty, is_mut));
+        let to_name = engine.local_name(to);
+        let StmtKind::Let {
+            local_index, name, ..
+        } = &mut engine.body.stmts[s].kind
+        else {
+            unreachable!("collected as a `let`");
+        };
+        *local_index = to;
+        *name = to_name;
+    }
+    !lets.is_empty()
 }
 
 /// If the check condition reads a `let`-bound temp, replace that temp's
@@ -1789,7 +1844,7 @@ fn collect_writes(body: &Body, node: NodeRef, out: &mut Vec<u32>) {
 fn confined_to(engine: &Engine, l: u32, version_if: StmtId) -> bool {
     let body = &engine.body;
     let root = NodeRef::Block(body.root());
-    !mentions_local_except(body, root, Some(NodeRef::Stmt(version_if)), l)
+    !mentions_local_except(body, root, &[NodeRef::Stmt(version_if)], l)
 }
 
 /// Whether `block` sits inside a loop, and so may run more than once.

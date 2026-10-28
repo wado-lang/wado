@@ -450,17 +450,17 @@ pub(super) fn operand_read_locals(body: &Body, op: Operand) -> IndexSet<u32> {
 }
 
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
-    mentions_local_except(body, node, None, idx)
+    mentions_local_except(body, node, &[], idx)
 }
 
-/// Whether `idx` appears anywhere under `node` outside the `skip` subtree.
+/// Whether `idx` appears anywhere under `node` outside the `skip` subtrees.
 pub(super) fn mentions_local_except(
     body: &Body,
     node: NodeRef,
-    skip: Option<NodeRef>,
+    skip: &[NodeRef],
     idx: u32,
 ) -> bool {
-    if Some(node) == skip {
+    if skip.contains(&node) {
         return false;
     }
     if let NodeRef::Expr(id) = node
