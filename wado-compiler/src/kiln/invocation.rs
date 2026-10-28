@@ -7,6 +7,7 @@ use crate::ast::AttrValue;
 use crate::kiln::cache::{encode_options_canonical, encode_written_options};
 use crate::kiln::inline::default_output_dir;
 use crate::kiln::options_check::CanonicalOptions;
+use crate::path;
 use crate::remote::{Integrity, is_remote};
 use crate::token::Span;
 use std::fmt;
@@ -50,7 +51,8 @@ pub fn spec_key(spec: &str) -> &str {
     parse_spec(spec).key
 }
 
-/// A forward-slash, NFC-normalized file path relative to the project root.
+/// A forward-slash, NFC-normalized file path relative to the project root, or
+/// absolute where the manifest wrote one.
 ///
 /// Wrapped to keep cache-key hashing consistent regardless of where the path
 /// was typed (manifest vs. inline) or how the OS separates path components.
@@ -58,9 +60,8 @@ pub fn spec_key(spec: &str) -> &str {
 pub struct InvocationPath(pub String);
 
 impl InvocationPath {
-    /// Normalize a raw manifest / source path: backslashes become forward
-    /// slashes, a `./` prefix and trailing slashes go, and empty segments
-    /// collapse. Only the structural cases that change identity — full NFC
+    /// Normalize a raw manifest / source path lexically, as [`path::normalize`]
+    /// does, minus its `./` prefix: an absolute root stays. Full NFC
     /// normalization happens in [`crate::kiln::cache`] at cache-key time. A URL
     /// is kept as written: its `//` and its trailing `/` are the server's.
     #[must_use]
@@ -68,15 +69,11 @@ impl InvocationPath {
         if is_remote(raw) {
             return Self(raw.to_string());
         }
-        let mut s = raw.replace('\\', "/");
-        if let Some(rest) = s.strip_prefix("./") {
-            s = rest.to_string();
+        let normalized = path::normalize(raw);
+        match normalized.strip_prefix("./") {
+            Some(rest) => Self(rest.to_string()),
+            None => Self(normalized),
         }
-        while s.ends_with('/') {
-            s.pop();
-        }
-        let parts: Vec<&str> = s.split('/').filter(|p| !p.is_empty()).collect();
-        Self(parts.join("/"))
     }
 
     #[must_use]
@@ -375,6 +372,15 @@ mod tests {
     #[test]
     fn normalize_collapses_empty_segments() {
         assert_eq!(InvocationPath::normalize("foo//bar").as_str(), "foo/bar");
+    }
+
+    #[test]
+    fn normalize_keeps_an_absolute_root() {
+        assert_eq!(
+            InvocationPath::normalize("/home/u/pkg/src/generator.wado").as_str(),
+            "/home/u/pkg/src/generator.wado"
+        );
+        assert_eq!(InvocationPath::normalize("C:\\pkg\\g.wado").as_str(), "C:/pkg/g.wado");
     }
 
     #[test]
