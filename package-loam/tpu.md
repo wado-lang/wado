@@ -145,8 +145,8 @@ The steps of "The PJRT backend", in order:
    runs on the CPU plugin within the tolerance of `Cpu`, one compile per
    extent set, and the cost of a replayed pass beside the executed program is
    recorded.
-3. [ ] Capacities and valid lengths in the seam. Finished when Gemma 3 (270M)
-   decodes on the CPU plugin with one compile per bucket and picks
+3. [ ] Capacities and valid lengths in the seam, on the `Cache` of the roadmap
+   item "The decoder's cache as one value". Finished when Gemma 3 (270M) decodes on the CPU plugin with one compile per bucket and picks
    onnxruntime's tokens, and `WebGpuBackend` passes its conformance through the
    changed seam.
 4. [ ] `If` as a trait method over both branches. Finished when the conformance

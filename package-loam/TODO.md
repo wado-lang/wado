@@ -11,15 +11,15 @@ leaves this file, and `design.md` states what it built.
 
 ## Roadmap
 
-1. [ ] The PJRT backend. A third `Backend` over `wado:pjrt`, served by
+1. [ ] The decoder's cache as one value. See A Decoder's Cache Is One Value.
+   Finished when the GPT-2 and Gemma 3 examples pass a `Cache` and no line of
+   theirs names a layer.
+2. [ ] The PJRT backend. A third `Backend` over `wado:pjrt`, served by
    `wado-run-pjrt`, which traces a pass into StableHLO once per set of
    extents and replays it, with the seam changes it needs. See
    [Loam on TPU](./tpu.md), whose plan lists the steps. It runs on XLA's CPU
    plugin, since only a backend that really runs through PJRT shows the
    architecture right. Finished when every step of that plan is.
-2. [ ] The decoder's cache as one value. See A Decoder's Cache Is One Value.
-   Finished when the GPT-2 and Gemma 3 examples pass a `Cache` and no line of
-   theirs names a layer.
 3. [ ] Narrowed outputs. A use site can name an output that each call reads at
    one position per row, and optionally only at some token ids. The call gives
    the positions and the ids. The generated module then computes only those
