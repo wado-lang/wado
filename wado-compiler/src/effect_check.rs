@@ -3232,7 +3232,7 @@ impl<'a> PurityWalker<'a> {
     /// holding a `&mut` shares what that `&mut` points to, wherever the copy
     /// is bound.
     fn flag_write(&mut self, place: &Expr) {
-        let written = self.sem.written_place(place);
+        let written = self.sem.write_target(place).place;
         let owned = match written {
             Expr::Ident(_) => {
                 self.declared_in_clause(written) && !self.sem.expr_reaches_mut_ref(written)

@@ -132,8 +132,8 @@ struct Binders<'a> {
     /// The pattern ids a struct pattern binds by its field's own name.
     shorthand: IndexSet<AstId>,
     /// The names an assignment writes into, by `=` or a compound assignment,
-    /// directly or through the fields and indexes of a value they hold. None
-    /// reads anything back.
+    /// directly or through the fields of a value they hold. None reads
+    /// anything back.
     writes: IndexSet<AstId>,
 }
 
@@ -143,36 +143,22 @@ impl<'a> Binders<'a> {
     }
 
     /// Records the name a write to `place` lands in, unless something besides
-    /// the name reads what it writes: the drop of an affine value, which may
-    /// run a `Drop` impl or a resource's destructor, or an index assignment on
-    /// a value reaching a `&mut`, which may write through it.
+    /// the name reads what it writes: an index assignment's `index_assign`, or
+    /// the drop of an affine value, which may run a `Drop` impl or a
+    /// resource's destructor.
     fn write(&mut self, place: &Expr) {
-        let written = self.sem.written_place(place);
-        let Expr::Ident(ident) = written else {
+        let target = self.sem.write_target(place);
+        let Expr::Ident(ident) = target.place else {
             return;
         };
         let dropped_with_it = self
             .sem
-            .expr_types(written)
+            .expr_types(target.place)
             .into_iter()
             .any(|ty| self.sem.is_affine(ty, self.affine_params));
-        if !dropped_with_it && !self.indexes_through_mut_ref(place, written) {
+        if !target.indexes && !dropped_with_it {
             self.writes.insert(ident.id);
         }
-    }
-
-    /// Whether an index step between `place` and the name it writes indexes a
-    /// value reaching a `&mut`. A field step only stores into the value.
-    fn indexes_through_mut_ref(&self, mut place: &Expr, written: &Expr) -> bool {
-        while !std::ptr::eq(place, written) {
-            place = match place {
-                Expr::FieldAccess(access) => &access.expr,
-                Expr::Index(index) if self.sem.expr_reaches_mut_ref(&index.expr) => return true,
-                Expr::Index(index) => &index.expr,
-                _ => unreachable!("a written place descends fields and indexes alone"),
-            };
-        }
-        false
     }
 
     fn bind(&mut self, kind: BinderKind, id: AstId, name: &'a str, span: Span) {

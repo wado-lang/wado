@@ -174,6 +174,16 @@ impl Destination {
     }
 }
 
+/// What [`Semantics::write_target`] answers for a write.
+pub(crate) struct WriteTarget<'e> {
+    /// Where the write lands.
+    pub place: &'e Expr,
+    /// Whether the write indexes on its way to `place`, as `p.x[i]` does. An
+    /// index assignment calls `index_assign`, which reads the value it
+    /// indexes; a field step only stores.
+    pub indexes: bool,
+}
+
 impl Semantics {
     /// Point every effect variable at the row the effect check solved it to,
     /// in the snapshot and in the table the TIR reads alike.
@@ -713,20 +723,26 @@ impl Semantics {
     /// Where a write to `place` lands once it has gone down every field and
     /// index of a value it holds: `p` of `p.x[i]` where neither `p` nor `p.x`
     /// is a reference, `r.x` where `r` is one.
-    pub(crate) fn written_place<'e>(&self, place: &'e Expr) -> &'e Expr {
-        let base = match place {
-            Expr::FieldAccess(access) => &access.expr,
-            Expr::Index(index) => &index.expr,
-            _ => return place,
-        };
-        if self
-            .expr_types(base)
-            .into_iter()
-            .any(|ty| self.types.is_reference_shaped(ty))
-        {
-            return place;
+    pub(crate) fn write_target<'e>(&self, place: &'e Expr) -> WriteTarget<'e> {
+        let mut indexes = false;
+        let mut at = place;
+        loop {
+            let base = match at {
+                Expr::FieldAccess(access) => &access.expr,
+                Expr::Index(index) => &index.expr,
+                _ => break,
+            };
+            if self
+                .expr_types(base)
+                .into_iter()
+                .any(|ty| self.types.is_reference_shaped(ty))
+            {
+                break;
+            }
+            indexes |= matches!(at, Expr::Index(_));
+            at = base;
         }
-        self.written_place(base)
+        WriteTarget { place: at, indexes }
     }
 
     /// Whether a value of `type_id` may hold a reference.

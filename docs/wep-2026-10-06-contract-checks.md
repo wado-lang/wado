@@ -463,10 +463,6 @@ API waits for a program outside the standard library that needs one.
 - A clause that takes `&mut` of a value it declares and hands the reference on
   through a local, rather than as the argument `&mut x`, is rejected, though
   the write lands in the clause's own value.
-- A clause that writes a local it declares is rejected whenever that local
-  reaches a `&mut`, even by a field store or a reassignment of the whole name,
-  which cannot write through it. The check meets an assignment and a `&mut`
-  lend as one kind of write site, and only the lend may write through.
 - A call through a function value has no callee known statically, so it has no
   contract to check or to remove.
 - `String::from_utf8` copies the bytes of a `ByteList` argument, though the

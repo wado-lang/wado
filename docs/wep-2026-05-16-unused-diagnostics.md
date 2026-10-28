@@ -302,13 +302,14 @@ and the renames hid none of the real defects the lint found elsewhere.
 It also collects the names an assignment writes (`Expr::assigned_places`): a
 place on the left of `=`, of a destructuring assignment, or of a compound
 assignment. A place writes a name directly, or through the fields and indexes
-of a value the name holds (`Semantics::written_place`, the rule the `contract`
-clause check applies too). A projection stops at a reference, since the write
+of a value the name holds (`Semantics::write_target`, which the `contract`
+clause check reads too). A projection stops at a reference, since the write
 lands in what the reference points to. A write counts as a read where something
-besides the name reads it: an index step whose indexed value reaches a `&mut`,
-since the index assignment may write through it, or an affine name
-(`Semantics::is_affine`), whose drop may run a `Drop` impl or a resource's
-destructor on what was written. A field step only stores into the value.
+besides the name reads it. An index step calls `index_assign`, which reads the
+value it indexes, for a bounds check or whatever an `impl IndexAssign` does. An
+affine name (`Semantics::is_affine`) is read by its drop, which may run a `Drop`
+impl or a resource's destructor on what was written. A field step only stores
+into the value.
 
 The elaborator records a use→def edge for every name that reaches a local
 (`Semantics::iter_references`). Only edges reaching a candidate binder are
