@@ -96,7 +96,7 @@ shallow spine copy, lowered as a `builtin::array_clone` /
 `array_clone_shallow` call on the backing array. So a value copy that survives
 optimization appears in the final NIR as one of: a remaining `$value_copy$T(...)`
 call, or an `array_clone` / `array_clone_shallow` / `copy_value` call. The remark
-collects all of these in the entry package's functions. (`array_copy` and
+collects all of these in the entry package's code. (`array_copy` and
 `array_move` are excluded: stdlib helpers like `String::push` write them
 themselves, so no remark can move one.) Example output (`--log-level info`), where `b` is a
 `List<i32>` copied then mutated:
@@ -111,13 +111,12 @@ carries no per-instruction span (only function-level `WirMeta` does), so a
 WIR-sourced remark could not point at the source. The optimized NIR is the last
 IR with per-expression spans, and `wir_build` lowers these copies one-to-one, so
 NIR is both span-accurate and faithful. Even so the synthesized copy nodes
-(`array_clone`, demoted spine copies) carry placeholder spans, as do the inner
+(`array_clone`, demoted spine copies) carry synthetic spans, as do the inner
 statements of the blocks that SROA reconstruction wraps them in, so the remark
-anchors to the enclosing _real_ statement — the `let mut b = a;` that performs the
-copy — rather than descending into those synthesized inner statements. The
-reference escape hatch (`&T` / `&mut T`) is the only construct that shares rather
-than copies (`spec-memory.md`); naming it as a suggestion is deferred to the
-read-only-vs-required classification below.
+anchors to the innermost statement written in source — the `let mut b = a;` that
+performs the copy. The reference escape hatch (`&T` / `&mut T`) is the only
+construct that shares rather than copies (`spec-memory.md`); naming it as a
+suggestion is deferred to the read-only-vs-required classification below.
 
 ### Surviving aggregate allocations (failed SROA)
 
@@ -169,7 +168,7 @@ the first two kinds.
 ### MVP scope
 
 Shipped: surviving value copies. `remarks::collect_value_copy_remarks` walks the
-optimized NIR's entry-package functions, collects residual `$value_copy$T` calls
+entry package's code in the optimized NIR, collects residual `$value_copy$T` calls
 and `array_clone` / `array_clone_shallow` / `copy_value` calls, and emits one
 info-level remark per survivor anchored to the enclosing statement.
 `logger.remark` carries the span and the module's own filename. E2E fixtures
@@ -197,13 +196,18 @@ Shipped:
 - [x] Remark surface: info-level `remark:` diagnostic via `logger.remark`, gated
   by `--log-level` (no dedicated flag). `Code::Remark`.
 - [x] Final-NIR walk (`remarks::collect_value_copy_remarks`) over the entry
-  package's functions, detecting `$value_copy$T` and `array_clone` /
+  package's code, detecting `$value_copy$T` and `array_clone` /
   `array_clone_shallow` / `copy_value` survivors, anchored to the enclosing
   statement span.
 - [x] The whole entry package, not just its entry point:
   `ModuleSource::is_entry_package` draws the line at the package boundary, so
-  a dependency and the stdlib stay out. A `Remark` carries its module, since
-  a span alone cannot say which file it is in.
+  a dependency and the stdlib stay out.
+- [x] Remarks invariant under inlining: a span names its own parse
+  (`ParseModules`), so code spliced into a function of another module is
+  judged and reported by the module that wrote it, and a cost spliced into
+  several callers is one remark (`remark_copy_spliced_from_module.wado`).
+- [x] A block that performs an effect computes no constant, so it gets no
+  constant-region remark (`remark_const_region_effectful_call.wado`).
 - [x] Surviving value-copy remarks with why + where, plus the survives / elided
   fixture pair at `-O2` (`remark_list_copy.wado`,
   `remark_scalarized_struct_copy.wado`).

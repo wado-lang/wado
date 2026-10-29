@@ -28,16 +28,14 @@ use crate::tir::{ResolvedType, TypeId};
 use crate::type_table::{TypeKey, TypeTable};
 
 /// Per-function alias annotations, computed once by [`build_alias_info`]:
-/// `aliased` are locals reachable through another handle, `untrackable` those
-/// whose aliasing escapes the analysis entirely (stashed across a retaining
-/// callee), and `alias_groups` the union-find over reference-typed
-/// `let dst = src` copies. Bounds heap-write invalidation in the [`ValueGraph`].
+/// `aliased` are locals reachable through another handle, and `alias_groups`
+/// the union-find over reference-typed `let dst = src` copies. Bounds
+/// heap-write invalidation in the [`ValueGraph`].
 ///
 /// [`ValueGraph`]: crate::nir_value_graph
 #[derive(Default, Clone, Debug)]
 pub struct AliasInfo {
     pub aliased: LocalSet,
-    pub untrackable: LocalSet,
     pub alias_groups: AliasGroups,
 }
 
@@ -89,12 +87,11 @@ pub(super) struct AliasWalkResult {
 /// `syntactic_mut` set, sharing one traversal across three per-node collectors.
 /// `aliased` seeds from the function's stable annotations, which persist across
 /// iterations so a pass erasing the syntactic markers cannot make the analysis
-/// forget an alias. `untrackable` mirrors `stores_aliased_locals` exactly.
+/// forget an alias.
 pub(super) fn build_alias_info(
     body: &Body,
     locals: &[NirLocal],
     address_taken_locals: &IndexSet<u32>,
-    stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
@@ -106,13 +103,6 @@ pub(super) fn build_alias_info(
     let mut aliased = LocalSet::with_capacity(locals.len());
     for &idx in address_taken_locals {
         aliased.insert(idx);
-    }
-    for &idx in stores_aliased_locals {
-        aliased.insert(idx);
-    }
-    let mut untrackable = LocalSet::with_capacity(locals.len());
-    for &idx in stores_aliased_locals {
-        untrackable.insert(idx);
     }
     // Reference parameters/locals pointing at the same struct may alias the
     // same heap object (Wado references alias, no borrow checker), so a write
@@ -127,7 +117,7 @@ pub(super) fn build_alias_info(
         aliased.insert(b);
     }
     let mut edges = same_pointee_edges;
-    let mut syntactic_mut: IndexSet<u32> = stores_aliased_locals.iter().copied().collect();
+    let mut syntactic_mut: IndexSet<u32> = IndexSet::default();
     walk_all(body, NodeRef::Block(body.root()), &mut |body, node| {
         collect_aliased_node(body, node, type_table, &mut aliased);
         if let Some(r) = extra_aliased(body, node) {
@@ -154,7 +144,6 @@ pub(super) fn build_alias_info(
     AliasWalkResult {
         info: AliasInfo {
             aliased,
-            untrackable,
             alias_groups,
         },
         syntactic_mut,
@@ -252,9 +241,8 @@ pub(super) fn first_param_types(project: &NirPackage) -> FirstParamTypes {
     map
 }
 
-/// The [`AliasSets`] the `ValueGraph` builder needs. Wraps [`build_alias_info`]
-/// (for `aliased` / `untrackable`) with the mutable-escape analysis
-/// (`mut_escaped`).
+/// The [`AliasSets`] the `ValueGraph` builder needs: [`build_alias_info`]'s
+/// `aliased`, and the mutable-escape analysis's `mut_escaped`.
 ///
 /// `mut_escaped` ⊆ `aliased` is the subset a call can actually mutate, derived
 /// subtractively: a local is dropped only when its type is transitively free of
@@ -265,7 +253,6 @@ pub(super) fn builder_alias_sets(
     body: &Body,
     locals: &[NirLocal],
     address_taken_locals: &IndexSet<u32>,
-    stores_aliased_locals: &IndexSet<u32>,
     type_table: &TypeTable,
     first_param_types: &FirstParamTypes,
     call_immutability: &CallImmutability,
@@ -282,7 +269,6 @@ pub(super) fn builder_alias_sets(
         body,
         locals,
         address_taken_locals,
-        stores_aliased_locals,
         type_table,
         first_param_types,
         call_immutability,
@@ -316,7 +302,6 @@ pub(super) fn builder_alias_sets(
     );
     AliasSets {
         aliased,
-        untrackable: info.untrackable.iter().collect(),
         mut_escaped,
     }
 }
@@ -324,8 +309,7 @@ pub(super) fn builder_alias_sets(
 /// Compute `mut_escaped` subtractively from `aliased`: keep every local that is
 /// not provably call-immutable or that has a syntactic mutable escape, then
 /// close over `alias_groups` so mutating one member of a group clobbers the
-/// whole group's fields. `syntactic_mut` is [`build_alias_info`]'s walk output
-/// plus `stores_aliased_locals`, whose mutability is unknown.
+/// whole group's fields. `syntactic_mut` is [`build_alias_info`]'s walk output.
 fn build_mut_escaped(
     locals: &[NirLocal],
     aliased: &IndexSet<u32>,

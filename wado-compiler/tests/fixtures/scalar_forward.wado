@@ -1,6 +1,6 @@
 // A single-use pure scalar `let` — the index/value operands that lowering
 // `arr[i] = v` leaves behind — forwards into its adjacent use, so the store
-// takes its operands directly (e.g. `array_set_u8(repr, pos, code & 255)` in the
+// takes its operands directly (e.g. `array_set_u8(repr, pos, code)` in the
 // UTF-8 encoder `String::push` delegates to) instead of routing through
 // dead-weight locals. Index reads are excluded, so read-modify-write element
 // updates keep their pre-write value.
@@ -26,5 +26,5 @@ export fn run() with Stdout {
 __DATA__
 {
     "stdout": "AZ:6:16\n",
-    "wir_expect:O2": [", c & 255);"]
+    "wir_expect:O2": [", c);"]
 }

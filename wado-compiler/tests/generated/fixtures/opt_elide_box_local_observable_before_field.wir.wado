@@ -217,27 +217,27 @@ fn "opt_elide_box_local_observable_before_field.wado/step"() {
 
 fn "opt_elide_box_local_observable_before_field.wado/run"() with Stdout {
     let index: i32;
-    let $sroa_boxed_v_19: i32;
     let $cm_pair_7: i64;
+    let $sroa_boxed_v_32: i32;
     let new_repr: ref Array<u8>;
-    $sroa_boxed_v_19 = "opt_elide_box_local_observable_before_field.wado/step"();
-    if @unlikely(local.tee $sroa_boxed_v_19(if @unlikely(global:opt_elide_box_local_observable_before_field.wado::idx >=u 3) {
+    $sroa_boxed_v_32 = "opt_elide_box_local_observable_before_field.wado/step"();
+    if @unlikely(local.tee $sroa_boxed_v_32(if @unlikely(global:opt_elide_box_local_observable_before_field.wado::idx >=u 3) {
         cold_path;
         "opt_elide_box_local_observable_before_field.wado/run$cold1$dae[$v1]"();
         unreachable;
-    }; index = global:opt_elide_box_local_observable_before_field.wado::idx; builtin::array_get_value<i32>(global:opt_elide_box_local_observable_before_field.wado::$const_obj_2, index) + $sroa_boxed_v_19) != 72) {
+    }; index = global:opt_elide_box_local_observable_before_field.wado::idx; builtin::array_get_value<i32>(global:opt_elide_box_local_observable_before_field.wado::$const_obj_2, index) + $sroa_boxed_v_32) != 72) {
         cold_path;
-        "opt_elide_box_local_observable_before_field.wado/run$cold0"($sroa_boxed_v_19);
+        "opt_elide_box_local_observable_before_field.wado/run$cold0"($sroa_boxed_v_32);
         unreachable;
     }
-    $sroa_boxed_v_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_boxed_v_32 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     index = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_boxed_v_19 = "opt_elide_box_local_observable_before_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_boxed_v_19);
+    $sroa_boxed_v_32 = "opt_elide_box_local_observable_before_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_boxed_v_32);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:opt_elide_box_local_observable_before_field.wado::$const_obj_1, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(index, new_repr);
     "wasi/stream-drop-writable"(index);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_boxed_v_19);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_boxed_v_32);
 }
 
 fn "opt_elide_box_local_observable_before_field.wado/$template_segment$opt_elide_box_local_observable_before_field.wado/$tmpl$ebaa20f4a908b504"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, index) {
@@ -310,15 +310,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b14 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l15;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -420,24 +420,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

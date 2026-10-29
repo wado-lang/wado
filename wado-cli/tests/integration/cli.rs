@@ -45,6 +45,32 @@ fn test_compile_project_under_path_with_space() {
     assert!(out.exists(), "expected out.wasm to be written");
 }
 
+/// Constant-argument specialization stops at `--optimize-specializations`
+/// clones, and a compile that reaches the cap says so in a remark.
+#[test]
+fn test_specialization_cap_is_remarked() {
+    let tmp = tempfile::tempdir().unwrap();
+    let main = tmp.path().join("main.wado");
+    std::fs::write(
+        &main,
+        "use { println, Stdout } from \"core:cli\";\n\
+         export fn run() with Stdout { println(\"hi\"); }\n",
+    )
+    .unwrap();
+    let remark = "constant-argument specialization reached its cap of 0 clones";
+    let compile = |extra: &[&str]| {
+        wado()
+            .args(["compile", "--log-level", "info", "-o"])
+            .arg(tmp.path().join("out.wasm"))
+            .args(extra)
+            .arg(&main)
+            .assert()
+            .success()
+    };
+    compile(&["--optimize-specializations", "0"]).stderr(predicate::str::contains(remark));
+    compile(&[]).stderr(predicate::str::contains("specialization reached its cap").not());
+}
+
 /// `wado doc` documents a program without errors. Given one with errors, it
 /// reports them and fails, since a page of it would answer wrongly.
 #[test]

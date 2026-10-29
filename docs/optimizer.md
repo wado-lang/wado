@@ -38,6 +38,11 @@ the Wasm instructions on the callee's hot path, less the call it replaces.
 values. `--optimize-inline-growth <pct>` also bounds how far inlining may grow
 the whole program. No level sets it.
 
+Specializing a callee on its constant arguments mints a clone per distinct set
+of constants, up to a cap per module. `--optimize-specializations <n>` sets the
+cap. Reaching it is a remark under `--log-level info`, naming the first callee
+that kept its general version.
+
 A pass reports a change only when it made one, because the fixed-point loop
 stops once no pass reports a change. At `-O2`, `-O3`, and `-Os` the loop must
 converge within the level's own count. At `-O1`, and wherever
@@ -102,11 +107,14 @@ Allocation and aggregates:
   `#[inline]`, `#[inline(always)]`, and `#[inline(never)]` adjust the decision,
   and a cold call site opts out, as does every site in a function only cold
   sites reach, unless the body is no bigger than the call. A callee that
-  reaches no safepoint (no call,
-  no allocation) is admitted at four times the threshold where the splice pays
-  back: at its only call site, or at its only site in a loop. Only sites in a
-  function an entry reaches count. A function only
-  loops reach runs once per iteration, so its body counts as a loop's. A call
+  reaches no safepoint (no call, no allocation) is admitted at four times the
+  threshold where the splice pays back: at its only call site, or at its only
+  site in a loop. A loop-free callee that does reach one is admitted at the
+  same price at its only call site outside a loop, since the call it replaces
+  was a safepoint already. If the compile-time engine may fold that call to its
+  value, the splice waits until the loop converges. Only sites in a function an
+  entry reaches count. A function only loops reach runs once per iteration, so
+  its body counts as a loop's. A call
   is tried before its arguments, and a spliced body, arguments included, is
   scanned again for calls to splice, wherever the call it replaced sat.
 - `cold_outline` — move the region a `cold_path()` marks into a function of its
@@ -137,7 +145,7 @@ Variants and references:
 - `labeled_block_fusion` — remove the `Option` or `Result` an inlined helper
   builds only for its caller to test, as `?` and `if let` do.
 - `slot_temp_sroa` — split the aggregate an inlined helper leaves where fusion
-  cannot reach.
+  cannot reach, or a `match`, `if` or `switch` leaves when each arm builds it.
 - `closure_devirt` — call a closure directly when its callee is known.
 - `ref_elim` — replace a reference read only through fields with its source.
 - `aggregate_forward` — hand a freshly built aggregate to its consumer directly.

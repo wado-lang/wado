@@ -132,7 +132,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_a
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary" = fn(ref Array<u8>, i32, i32) -> bool;  // TypeId(49)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::make_gap" = fn(ref "core:prelude/string.wado//String", i32, i32);  // TypeId(50)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::make_gap$dae[byte_index,width]" = fn(ref "core:prelude/string.wado//String");  // TypeId(50)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::char_prefix_end" = fn(ref Array<u8>, i32, i32, i32) -> i32;  // TypeId(51)
 
@@ -194,7 +194,7 @@ fn "string_insert_panic_boundary.wado/$cm_export__run"() {
         "string_insert_panic_boundary.wado/run$cold0$dae[$contract_arg_0]"(s);
         unreachable;
     }
-    "core:prelude/string.wado/core:prelude/string.wado/String::make_gap"(s, 1, 1);
+    "core:prelude/string.wado/core:prelude/string.wado/String::make_gap$dae[byte_index,width]"(s);
     drop("core:prelude/string.wado/encode_char"(s.repr, 1, 88));
     "wasi/task-return"(0);
 }
@@ -214,15 +214,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b1 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l2;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -324,24 +324,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -700,18 +700,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(
     };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap"(self, byte_index, width) {
+fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap$dae[byte_index,width]"(self) {
     let $load_0: i32;
     let $load_1: ref Array<u8>;
     let new_used: i32;
     let capacity: i32;
     let new_repr: ref Array<u8>;
-    let $av_16: i32;
-    if local.tee new_used(local.tee $av_16(local.tee $load_0(self.used)) + 1) > builtin::array_len(local.tee $load_1(self.repr)) {
+    let $av_14: i32;
+    if local.tee new_used(local.tee $av_14(local.tee $load_0(self.used)) + 1) > builtin::array_len(local.tee $load_1(self.repr)) {
         $inline_core_prelude_string_wado_String__grow_1: block {
             capacity = builtin::array_len($load_1);
             break_if $inline_core_prelude_string_wado_String__grow_1 new_used <= capacity;
-            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(capacity > 8, local.tee capacity(select i32(capacity > new_used, local.tee capacity(capacity * 2), new_used)), 8))), 0, $load_1, 0, $av_16);
+            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(capacity > 8, local.tee capacity(select i32(capacity > new_used, local.tee capacity(capacity * 2), new_used)), 8))), 0, $load_1, 0, $av_14);
             self.repr = new_repr;
         };
     }

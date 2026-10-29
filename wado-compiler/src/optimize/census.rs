@@ -43,10 +43,7 @@ struct Census {
 /// the alias facts that only exist over the whole lowered package.
 fn flow_resolvable(body: &Body, id: ExprId) -> bool {
     match &body.exprs[id].kind {
-        ExprKind::Local { index, .. } => {
-            !body.address_taken_locals.contains(index)
-                && !body.stores_aliased_locals.contains(index)
-        }
+        ExprKind::Local { index, .. } => !body.address_taken_locals.contains(index),
         ExprKind::Binary { left, right, .. } => {
             resolvable_operand(body, *left) && resolvable_operand(body, *right)
         }

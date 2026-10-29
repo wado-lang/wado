@@ -375,15 +375,15 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<i3
             break_if b46 (payload - start_116) < 2;
             q = x_128 /u 100_i64;
             tens = local.tee new_used_115(builtin::i32_wrap_i64(x_128 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_3, payload - 1, ((48 + new_used_115) - (tens * 10)) & 255);
-            builtin::array_set_u8($load_3, payload - 2, (48 + tens) & 255);
+            builtin::array_set_u8($load_3, payload - 1, (48 + new_used_115) - (tens * 10));
+            builtin::array_set_u8($load_3, payload - 2, 48 + tens);
             payload = payload - 2;
             x_128 = q;
             continue l47;
         };
     };
     if payload > start_116 {
-        builtin::array_set_u8($load_3, start_116, (48 + builtin::i32_wrap_i64(x_128 %u 10_i64)) & 255);
+        builtin::array_set_u8($load_3, start_116, 48 + builtin::i32_wrap_i64(x_128 %u 10_i64));
     }
     if @unlikely(local.tee payload(f.used + 1) > builtin::array_len($load_3)) {
         cold_path;

@@ -411,7 +411,7 @@ fn "handler_with_value_destructured.wado/$test_0_a_with_block_s_tuple_destructur
     let $local_1: ref "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick";
     let $local_2: i32;
     let $cm_pair_5: i64;
-    let $sroa_$pattern_temp_0_1_8: ref null "core:prelude//$Resource";
+    let $sroa_$pattern_temp_0_1_23: ref null "core:prelude//$Resource";
     c = struct.new "handler_with_value_destructured.wado//Counter" { n: 0 };
     global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick = struct.new "handler_with_value_destructured.wado//$Dispatch_handler_with_value_destructured.wado/Tick" { outer: local.tee $local_6_6(global:handler_with_value_destructured.wado::$effect_handler_with_value_destructured.wado/Tick), op_tick: struct.new "canonical//CanonicalClosure_0" { env: struct.new "handler_with_value_destructured.wado//$Closure_0" { $capture_0: c }, func: ref.func "closure/handler_with_value_destructured.wado/$closure_wrapper_0" } };
     $local_8 = struct.new "tuple//[i32, i32]" { 0: $inline__effect_dispatch__handler_with_value_destructured_wado_Tick__tick_0: block -> i32 {
@@ -429,10 +429,10 @@ fn "handler_with_value_destructured.wado/$test_0_a_with_block_s_tuple_destructur
             unreachable;
         }
         unreachable;
-    }, 1: $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())); $sroa_$pattern_temp_0_1_8 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) }; "wasi/stream-drop-readable"($local_2); local.tee $temp_9(struct.new "handler_with_value_destructured.wado//Token" { end: $sroa_$pattern_temp_0_1_8, v: 3 }).v };
+    }, 1: $local_2 = builtin::i32_wrap_i64(local.tee $cm_pair_5("wasi/stream-new"())); $sroa_$pattern_temp_0_1_23 = struct.new "core:prelude//$Resource" { value: builtin::i32_wrap_i64($cm_pair_5 >> 32_i64) }; "wasi/stream-drop-readable"($local_2); local.tee $temp_9(struct.new "handler_with_value_destructured.wado//Token" { end: $sroa_$pattern_temp_0_1_23, v: 3 }).v };
     if ref.is_null($temp_9) == 0 {
-        if ref.is_null(local.tee $sroa_$pattern_temp_0_1_8($temp_9.end)) == 0 {
-            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_8.value);
+        if ref.is_null(local.tee $sroa_$pattern_temp_0_1_23($temp_9.end)) == 0 {
+            "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_23.value);
         }
         $temp_9.end = ref.null none;
     }
@@ -473,15 +473,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b5 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l6;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -601,24 +601,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

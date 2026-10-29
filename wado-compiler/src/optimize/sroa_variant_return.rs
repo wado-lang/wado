@@ -1554,11 +1554,9 @@ fn invalidate_bad_call_sites(
                 .then_some((local, site.callee))
         })
         .collect();
-    // A bound temp whose address is taken, or which a retained parameter
-    // aliases, is not a pure destructure target.
+    // A bound temp whose address is taken is not a pure destructure target.
     for (&local, &f) in &bound {
-        if func.address_taken_locals.contains(&local) || func.stores_aliased_locals.contains(&local)
-        {
+        if func.address_taken_locals.contains(&local) {
             invalid.insert(f);
         }
     }
@@ -1727,7 +1725,6 @@ struct Rebind<'t> {
     /// The table the keys below were taken from, so a payload arriving at
     /// [`Self::rebound`] is keyed the same way.
     type_table: &'t TypeTable,
-    aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
     /// The key of each declared local type, references stripped: `&T` is `T` at
     /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
@@ -1763,7 +1760,6 @@ impl<'t> Rebind<'t> {
             .collect();
         Self {
             type_table,
-            aliased: func.stores_aliased_locals.clone(),
             local_types,
             peeled_keys,
             boxes,
@@ -1774,9 +1770,6 @@ impl<'t> Rebind<'t> {
     /// own type: `lower::plan::boxing` rewrites it along with the local, so the
     /// two agreeing says nothing about the value that arrives.
     fn rebound(&self, local: u32, payload_type: TypeId) -> Option<Rebound<'_>> {
-        if self.aliased.contains(&local) {
-            return None;
-        }
         let payload = self.type_table.type_key(payload_type);
         let declared = self.local_types[local as usize];
         if self.peeled_keys[local as usize] == payload {
@@ -2122,11 +2115,9 @@ fn rewrite_call_sites(
         // than left to it. An aliased temp is not a pure destructure target, and
         // retyping it would hand a tuple to a reference cell the rebox can no
         // longer repair. A temp that fails is dropped and reboxed instead.
-        let aliased = |local: &u32| {
-            func.address_taken_locals.contains(local) || func.stores_aliased_locals.contains(local)
-        };
         bound.retain(|&local, &mut f| {
-            !aliased(&local) && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
+            !func.address_taken_locals.contains(&local)
+                && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
         });
         if !bound.is_empty() {
             for (&local, &f) in &bound {
@@ -2190,7 +2181,6 @@ fn scalarize_locals_in(
     for (local, l) in func.locals.iter().enumerate() {
         let local = u32::try_from(local).expect("too many locals");
         if func.address_taken_locals.contains(&local)
-            || func.stores_aliased_locals.contains(&local)
             || func.params.iter().any(|p| p.local_index == local)
         {
             continue;

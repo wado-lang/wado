@@ -189,9 +189,6 @@ fn collect_and_validate(
             // Taking the parameter's address needs no guard of its own: `&p`
             // reads `p` whole, which `param_field_use` rejects, and a boxed
             // parameter is read through its shadow local.
-            if func.stores_aliased_locals.contains(&param.local_index) {
-                continue;
-            }
             if func.retains.iter().any(|s| s == &param.name) {
                 continue;
             }

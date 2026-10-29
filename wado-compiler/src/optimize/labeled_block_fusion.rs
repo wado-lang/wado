@@ -846,19 +846,23 @@ fn replace_exits(
     mut rewrite: impl FnMut(&mut Engine, StmtId) -> Vec<StmtId>,
 ) {
     for exit in exits {
-        let s = exit.stmt;
-        let with = rewrite(engine, s);
-        let Some(NodeRef::Block(parent)) = engine.parent_of(NodeRef::Stmt(s)) else {
-            panic!("labeled-block exit {s:?} is not held by a block");
-        };
-        let mut stmts = engine.body.blocks[parent].stmts.clone();
-        let at = stmts
-            .iter()
-            .position(|held| *held == s)
-            .expect("a block holds the statement it parents");
-        stmts.splice(at..=at, with);
-        engine.set_block_stmts(parent, stmts);
+        let with = rewrite(engine, exit.stmt);
+        replace_stmt(engine, exit.stmt, with);
     }
+}
+
+/// Replace `s`, in the block holding it, with `with`.
+fn replace_stmt(engine: &mut Engine, s: StmtId, with: Vec<StmtId>) {
+    let Some(NodeRef::Block(parent)) = engine.parent_of(NodeRef::Stmt(s)) else {
+        panic!("statement {s:?} is not held by a block");
+    };
+    let mut stmts = engine.body.blocks[parent].stmts.clone();
+    let at = stmts
+        .iter()
+        .position(|held| *held == s)
+        .expect("a block holds the statement it parents");
+    stmts.splice(at..=at, with);
+    engine.set_block_stmts(parent, stmts);
 }
 
 /// [`ExitSink`] for `check_lb_breaks_and_get_payload`: every `break L:` must
@@ -2121,19 +2125,19 @@ fn thread_exit(
     out
 }
 
-/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`
-/// read only as `temp.k` a local of its own, so the tuple never exists.
+/// The rule giving each slot of a `let temp = L: { …; break L: [tag, slots…]; }`,
+/// or of a `let temp = match …` whose arms build it, read only as `temp.k` a
+/// local of its own, so the aggregate never exists. A merge needs no labeled
+/// block: each arm's tail assigns the slots in its place.
 pub(super) fn build_slot_temp_sroa(type_table: &TypeTable) -> SlotTempSroaRuleWithTypes<'_> {
     SlotTempSroaRuleWithTypes { type_table }
 }
 
-/// One scalarizable temp: its labeled block, and the slots the body projects.
+/// One scalarizable temp: what hands it its value, and the slots the body
+/// projects.
 struct SlotTempSroa {
     temp_local: u32,
-    label: String,
-    lb_block: BlockId,
-    /// Statements a `Block` wrapper ran before the labeled block, hoisted out.
-    lead: Vec<StmtId>,
+    source: SlotSource,
     /// Projected slots in field order, each with the local that replaces it.
     slots: Vec<BoundSlot>,
     /// The name each slot is read under, for a materializing exit's projection.
@@ -2141,7 +2145,32 @@ struct SlotTempSroa {
     /// The declaring `let mut slot = <zero>` each one needs ahead of the block.
     zeros: Vec<(u32, TypeId, Operand)>,
     span: Span,
-    exits: Vec<Exit>,
+}
+
+/// Where a scalarized temp's value comes from.
+enum SlotSource {
+    /// `let temp = L: { …; break L: … }`.
+    Labeled {
+        label: String,
+        lb_block: BlockId,
+        /// Statements a `Block` wrapper ran before the labeled block, hoisted out.
+        lead: Vec<StmtId>,
+        exits: Vec<Exit>,
+    },
+    /// `let temp = match / if / switch …`, the merges nested in its arms
+    /// included, all of which yield nothing once their tails assign the slots.
+    Merge {
+        merge: ExprId,
+        merges: Vec<ExprId>,
+        tails: Vec<Tail>,
+    },
+}
+
+/// Where a merge hands over its value: the statement ending an arm's block, or
+/// a `match` arm whose body is the value itself.
+enum Tail {
+    Stmt(StmtId),
+    Arm { matched: ExprId, arm: usize },
 }
 
 impl SlotTempSroa {
@@ -2186,34 +2215,13 @@ fn plan_slot_temp_sroa(
         return None;
     };
     let temp_local = *temp_local;
-    // `let_block_flatten` normalises `let x = { stmts…; tail }`, but this tail
-    // is a labeled block rather than a plain value, so the wrapper can still be
-    // in place: look through it and carry its leading statements out ahead of
-    // the block.
     let lv = let_value.as_expr()?;
-    let (lead, lb_expr) = match body.unbroken_block(lv) {
-        Some(b) => {
-            let (&last, lead) = body.blocks[b].stmts.split_last()?;
-            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[last].kind else {
-                return None;
-            };
-            (lead.to_vec(), *tail)
-        }
-        None => (Vec::new(), lv),
-    };
-    let ExprKind::LabeledBlock {
-        label,
-        block: lb_block,
-        ..
-    } = &body.exprs[lb_expr].kind
-    else {
-        return None;
-    };
-    let (label, lb_block) = (label.clone(), *lb_block);
-
+    let labeled = labeled_source(body, lv);
     // Ordered ahead of the read census below, which walks the whole body.
-    if body.falls_through(lb_block) {
-        return None;
+    match &labeled {
+        Some((_, _, lb_block)) if body.falls_through(*lb_block) => return None,
+        None if !is_merge(body, lv) => return None,
+        _ => {}
     }
 
     // Every read of the temp must be a `temp.k` projection — the block has no
@@ -2262,7 +2270,30 @@ fn plan_slot_temp_sroa(
         struct_arity: None,
         saw_materialize: false,
     };
-    let exits = walk_exits(body, lb_block, &label, &mut sink)?;
+    let source = if let Some((lead, label, lb_block)) = labeled {
+        let exits = walk_exits(body, lb_block, &label, &mut sink)?;
+        SlotSource::Labeled {
+            label,
+            lb_block,
+            lead,
+            exits,
+        }
+    } else {
+        let mut walk = TailWalk {
+            sink: &mut sink,
+            type_table,
+            merges: Vec::new(),
+            tails: Vec::new(),
+        };
+        if !walk.merge(body, lv) {
+            return None;
+        }
+        SlotSource::Merge {
+            merge: lv,
+            merges: walk.merges,
+            tails: walk.tails,
+        }
+    };
     if !sink.admissible() {
         return None;
     }
@@ -2281,15 +2312,107 @@ fn plan_slot_temp_sroa(
     }
     Some(SlotTempSroa {
         temp_local,
-        label,
-        lb_block,
-        lead,
+        source,
         slots,
         names: reads.slot_names,
         zeros,
         span,
-        exits,
     })
+}
+
+/// `L: { … }`, or `{ lead…; L: { … } }`: the statements ahead of the labeled
+/// block, its label, and its block. `let_block_flatten` normalises
+/// `let x = { stmts…; tail }`, but this tail is a labeled block rather than a
+/// plain value, so the wrapper can still be in place.
+fn labeled_source(body: &Body, value: ExprId) -> Option<(Vec<StmtId>, String, BlockId)> {
+    let (lead, lb_expr) = match body.unbroken_block(value) {
+        Some(b) => {
+            let (&last, lead) = body.blocks[b].stmts.split_last()?;
+            let StmtKind::Expr(Operand::Expr(tail)) = &body.stmts[last].kind else {
+                return None;
+            };
+            (lead.to_vec(), *tail)
+        }
+        None => (Vec::new(), value),
+    };
+    let ExprKind::LabeledBlock {
+        label,
+        block: lb_block,
+        ..
+    } = &body.exprs[lb_expr].kind
+    else {
+        return None;
+    };
+    Some((lead, label.clone(), *lb_block))
+}
+
+/// Whether `e` chooses among arms that each yield its value.
+fn is_merge(body: &Body, e: ExprId) -> bool {
+    matches!(
+        body.exprs[e].kind,
+        ExprKind::If {
+            else_branch: Some(_),
+            ..
+        } | ExprKind::Match { .. }
+            | ExprKind::Switch { .. }
+    )
+}
+
+/// Every [`Tail`] of a merge and of the merges in its arms, once `sink` has
+/// accepted the value each hands over. An arm that diverges hands over none.
+struct TailWalk<'s, S> {
+    sink: &'s mut S,
+    type_table: &'s TypeTable,
+    merges: Vec<ExprId>,
+    tails: Vec<Tail>,
+}
+
+impl<S: ExitSink> TailWalk<'_, S> {
+    fn merge(&mut self, body: &Body, e: ExprId) -> bool {
+        self.merges.push(e);
+        match &body.exprs[e].kind {
+            ExprKind::If {
+                then_branch,
+                else_branch: Some(else_branch),
+                ..
+            } => self.block(body, *then_branch) && self.block(body, *else_branch),
+            ExprKind::Switch { arms, default, .. } => arms
+                .iter()
+                .chain(std::iter::once(default))
+                .all(|&b| self.block(body, b)),
+            ExprKind::Match { arms, .. } => arms
+                .iter()
+                .enumerate()
+                .all(|(arm, data)| self.tail(body, data.body, Tail::Arm { matched: e, arm })),
+            _ => match body.unbroken_block(e) {
+                Some(b) => self.block(body, b),
+                None => false,
+            },
+        }
+    }
+
+    fn block(&mut self, body: &Body, block: BlockId) -> bool {
+        let Some(&last) = body.blocks[block].stmts.last() else {
+            return false;
+        };
+        match body.stmts[last].kind {
+            StmtKind::Expr(value) => self.tail(body, value, Tail::Stmt(last)),
+            _ => body.terminates(last),
+        }
+    }
+
+    fn tail(&mut self, body: &Body, value: Operand, at: Tail) -> bool {
+        if let Some(e) = value.as_expr() {
+            if self.type_table.is_never(body.exprs[e].type_id) {
+                return true;
+            }
+            if is_merge(body, e) || body.unbroken_block(e).is_some() {
+                return self.merge(body, e);
+            }
+        }
+        self.tails.push(at);
+        self.sink.visit(body, Some(value))
+    }
 }
 
 /// [`ExitSink`] for the slot rule. A literal exit hands over its own operands,
@@ -2363,9 +2486,41 @@ fn perform_slot_temp_sroa(
     plan: SlotTempSroa,
 ) {
     let span = plan.span;
-    replace_exits(engine, &plan.exits, |engine, s| {
-        scalarize_exit(engine, s, &plan)
-    });
+    // The source yields nothing now, so it becomes a statement and the temp's
+    // binding goes with it.
+    let (lead, held) = match &plan.source {
+        SlotSource::Labeled {
+            label,
+            lb_block,
+            lead,
+            exits,
+        } => {
+            replace_exits(engine, exits, |engine, s| {
+                scalarize_exit(engine, s, label, &plan)
+            });
+            let held = StmtKind::LabeledBlock {
+                label: label.clone(),
+                block: *lb_block,
+            };
+            (lead.clone(), held)
+        }
+        SlotSource::Merge {
+            merge,
+            merges,
+            tails,
+        } => {
+            scalarize_tails(engine, tails, &plan);
+            for &m in merges {
+                let node = &mut engine.body.exprs[m];
+                node.type_id = TypeTable::UNIT;
+                if let ExprKind::LabeledBlock { result_type, .. } = &mut node.kind {
+                    *result_type = TypeTable::UNIT;
+                }
+                engine.enqueue(NodeRef::Expr(m));
+            }
+            (Vec::new(), StmtKind::Expr(Operand::Expr(*merge)))
+        }
+    };
 
     // Every `temp.k` now reads the slot local instead. Collect first: the
     // rewrite only replaces expression kinds, so the ids stay valid.
@@ -2387,18 +2542,10 @@ fn perform_slot_temp_sroa(
         );
     }
 
-    // The labeled block yields nothing now, so it becomes a statement and the
-    // temp's binding goes with it.
-    let lb_stmt = engine.alloc_stmt(
-        StmtKind::LabeledBlock {
-            label: plan.label,
-            block: plan.lb_block,
-        },
-        span,
-    );
-    let mut kept = Vec::with_capacity(stmts.len() + plan.zeros.len() + plan.lead.len());
+    let held = engine.alloc_stmt(held, span);
+    let mut kept = Vec::with_capacity(stmts.len() + plan.zeros.len() + lead.len());
     kept.extend_from_slice(&stmts[..i]);
-    kept.extend_from_slice(&plan.lead);
+    kept.extend_from_slice(&lead);
     for (local_index, type_id, zero) in plan.zeros {
         let decl = engine.alloc_stmt(
             StmtKind::Let {
@@ -2413,7 +2560,7 @@ fn perform_slot_temp_sroa(
         );
         kept.push(decl);
     }
-    kept.push(lb_stmt);
+    kept.push(held);
     kept.extend_from_slice(&stmts[i + 1..]);
     engine.set_block_stmts(outer_block, kept);
     engine.note_elided_local(plan.temp_local);
@@ -2421,7 +2568,7 @@ fn perform_slot_temp_sroa(
 
 /// What `break L: [e0, …]` becomes: the slot assignments the projections read
 /// and a value-less `break L`.
-fn scalarize_exit(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa) -> Vec<StmtId> {
+fn scalarize_exit(engine: &mut Engine, s: StmtId, label: &str, plan: &SlotTempSroa) -> Vec<StmtId> {
     let StmtKind::Break {
         value: Some(Operand::Expr(exit)),
         ..
@@ -2430,6 +2577,51 @@ fn scalarize_exit(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa) -> Vec<St
         unreachable!("guarded by SlotExitChecker")
     };
     let span = engine.body.stmts[s].span;
+    let mut out = slot_writes(engine, exit, plan, span);
+    let brk = engine.alloc_stmt(
+        StmtKind::Break {
+            label: Some(label.to_owned()),
+            value: None,
+        },
+        span,
+    );
+    out.push(brk);
+    out
+}
+
+/// What each merge tail becomes: the slot assignments, in the tail's place.
+fn scalarize_tails(engine: &mut Engine, tails: &[Tail], plan: &SlotTempSroa) {
+    for tail in tails {
+        match *tail {
+            Tail::Stmt(s) => {
+                let StmtKind::Expr(Operand::Expr(value)) = engine.body.stmts[s].kind else {
+                    unreachable!("guarded by SlotExitChecker")
+                };
+                let span = engine.body.stmts[s].span;
+                let writes = slot_writes(engine, value, plan, span);
+                replace_stmt(engine, s, writes);
+            }
+            Tail::Arm { matched, arm } => {
+                let ExprKind::Match { expr, arms } = &engine.body.exprs[matched].kind else {
+                    unreachable!("a `match` arm tail is held by a `match`")
+                };
+                let (expr, mut arms) = (*expr, arms.clone());
+                let Operand::Expr(value) = arms[arm].body else {
+                    unreachable!("guarded by SlotExitChecker")
+                };
+                let span = arms[arm].span;
+                let writes = slot_writes(engine, value, plan, span);
+                let block = engine.alloc_block(writes, span);
+                let assigned = ExprKind::plain_block(block, TypeTable::UNIT, "slots");
+                arms[arm].body = Operand::Expr(engine.alloc_expr(assigned, TypeTable::UNIT, span));
+                engine.replace_expr_kind(matched, ExprKind::Match { expr, arms });
+            }
+        }
+    }
+}
+
+/// The statements handing `exit`'s value to the slots the projections read.
+fn slot_writes(engine: &mut Engine, exit: ExprId, plan: &SlotTempSroa, span: Span) -> Vec<StmtId> {
     let mut out = Vec::new();
     // Field-carrying exits hand each operand straight to its slot; the rest bind
     // the aggregate first and project. `SlotExitChecker` admitted exactly these.
@@ -2463,14 +2655,6 @@ fn scalarize_exit(engine: &mut Engine, s: StmtId, plan: &SlotTempSroa) -> Vec<St
         }
         None => scalarize_materialized_exit(engine, exit, plan, span, &mut out),
     }
-    let brk = engine.alloc_stmt(
-        StmtKind::Break {
-            label: Some(plan.label.clone()),
-            value: None,
-        },
-        span,
-    );
-    out.push(brk);
     out
 }
 

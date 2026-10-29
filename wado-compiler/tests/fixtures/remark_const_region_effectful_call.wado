@@ -1,0 +1,15 @@
+// A block that performs an effect computes no constant, whatever its arguments:
+// what `args()` returns depends on the run. Only a block the engine could have
+// run to its value is one whose value the fold missed.
+
+use { println, Stdout, Environment, args } from "core:cli";
+
+export fn run() with (Stdout, Environment) {
+    println(`${args().len()}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n",
+    "remarks": {"O2": [{"contains": ["computes a constant at run time"], "count": 0}]}
+}

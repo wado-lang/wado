@@ -217,6 +217,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         codegen_flags,
         // Conservative default; `optimize` overrides per opt level.
         string_inline_max_bytes: NirPackage::DEFAULT_STRING_INLINE_MAX_BYTES,
+        specialization_cap: None,
         skip_validation,
         target_world,
         export_binding_names,
@@ -735,7 +736,6 @@ impl Translator<'_> {
             span: func.span,
             locals: Tracked::new(locals),
             address_taken_locals: func.address_taken_locals.clone(),
-            stores_aliased_locals: func.stores_aliased_locals.clone(),
             is_cm_binding: func.is_cm_binding,
             is_dispatch_wrapper: func.is_dispatch_wrapper,
             is_cm_export: func.is_cm_export,

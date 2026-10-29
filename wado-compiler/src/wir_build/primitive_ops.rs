@@ -48,8 +48,8 @@ impl PrimitiveKind {
             // A discriminant and a bitmask are both i32. Signed opcodes agree
             // with unsigned ones over their non-negative range.
             ResolvedType::Enum { .. } | ResolvedType::Flags { .. } => Some(Self::I32Signed),
-            // A `Never` operand traps before the operation runs, so the node is
-            // never observed — but it still needs an opcode to keep its shape.
+            // An operation whose operands both diverge never runs, but it still
+            // needs an opcode to keep its shape.
             // (`Unit` has no value to feed one; the elaborator rejects it.)
             ResolvedType::Never => Some(Self::I32Signed),
             _ => None,

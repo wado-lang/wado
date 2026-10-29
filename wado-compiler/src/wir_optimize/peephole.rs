@@ -347,6 +347,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, types: &
         });
         changed |= rewrite_everywhere(instrs, &mut try_fold_branchless_increment);
         changed |= rewrite_everywhere(instrs, &mut try_drop_mask);
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_drop_store_mask(instr, types));
         changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
         changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
@@ -974,7 +975,12 @@ fn try_fold_boolean_select(instr: &mut WirInstr, null: &Nullability) -> bool {
 /// - `ArrayGetU` on a packed `u8` / `u16` array field returns a zero-extended
 ///   byte / short.
 /// - `I32And` with a constant mask bounds the result to `mask + 1`.
+/// - A remainder by a constant `k` is below `k`, a right shift by `n` clears
+///   the top `n` bits, and a sum is one bit wider than its wider operand.
 fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
+    if is_boolean_valued(instr) {
+        return Some(1);
+    }
     match instr {
         WirInstr::I32Load8U { .. } => Some(8),
         WirInstr::I32Load16U { .. } => Some(16),
@@ -986,14 +992,11 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
             result_ty: WirType::U16,
             ..
         } => Some(16),
-        WirInstr::I32Const(v) => {
-            if *v >= 0 {
-                Some((*v as u32).bit_width())
-            } else {
-                None
-            }
+        WirInstr::I32Const(_) | WirInstr::I64Const(_) => {
+            u64::try_from(const_int(instr)?).ok().map(u64::bit_width)
         }
-        WirInstr::I32And(l, r) => {
+        WirInstr::LocalTee { value, .. } => unsigned_bit_width(value),
+        WirInstr::I32And(l, r) | WirInstr::I64And(l, r) => {
             // Result is bounded by the narrower of the two operands' masks.
             let lw = unsigned_bit_width(l);
             let rw = unsigned_bit_width(r);
@@ -1003,8 +1006,39 @@ fn unsigned_bit_width(instr: &WirInstr) -> Option<u32> {
                 (None, None) => None,
             }
         }
+        WirInstr::I32Or(l, r)
+        | WirInstr::I32Xor(l, r)
+        | WirInstr::I64Or(l, r)
+        | WirInstr::I64Xor(l, r) => Some(unsigned_bit_width(l)?.max(unsigned_bit_width(r)?)),
+        WirInstr::I32Add(l, r) => sum_width(32, l, r),
+        WirInstr::I64Add(l, r) => sum_width(64, l, r),
+        // A divisor `const_int` reads as negative is a huge unsigned one, which
+        // bounds nothing.
+        WirInstr::I32RemU(_, k) | WirInstr::I64RemU(_, k) => Some(
+            u64::try_from(const_int(k)?)
+                .ok()?
+                .checked_sub(1)?
+                .bit_width(),
+        ),
+        WirInstr::I32ShrU(x, n) => shifted_width(32, x, n),
+        WirInstr::I64ShrU(x, n) => shifted_width(64, x, n),
+        WirInstr::I32WrapI64(x) => unsigned_bit_width(x).filter(|w| *w <= 32),
+        WirInstr::I64ExtendI32U(x) => Some(unsigned_bit_width(x).unwrap_or(32)),
         _ => None,
     }
+}
+
+/// The width of `l + r` where it cannot wrap past `width` bits.
+fn sum_width(width: u32, l: &WirInstr, r: &WirInstr) -> Option<u32> {
+    let sum = unsigned_bit_width(l)?.max(unsigned_bit_width(r)?) + 1;
+    (sum <= width).then_some(sum)
+}
+
+/// The width of `x >>u n` for a constant `n`, which Wasm reduces mod `width`.
+fn shifted_width(width: u32, x: &WirInstr, n: &WirInstr) -> Option<u32> {
+    let shift = u32::try_from(const_int(n)? & i64::from(width - 1)).unwrap();
+    let remaining = width - shift;
+    Some(unsigned_bit_width(x).map_or(remaining, |w| w.saturating_sub(shift)))
 }
 
 /// Fold `x << n | x >>u W - n`, and its mirror, to a rotate. Wasm reduces a
@@ -1190,6 +1224,38 @@ fn try_drop_mask(instr: &mut WirInstr) -> bool {
     true
 }
 
+/// Remove an `x & mask` stored into packed storage whose width the mask keeps
+/// whole: an 8- or 16-bit array element or struct field stores only the low
+/// bits, so the mask cannot change what is stored.
+fn try_drop_store_mask(instr: &mut WirInstr, types: &[WirTypeDef]) -> bool {
+    let (storage, value) = match instr {
+        WirInstr::ArraySet { type_id, value, .. } => {
+            let WirTypeDef::Array(arr) = &types[type_id.index() as usize] else {
+                panic!("array.set names a non-array type");
+            };
+            (&arr.element_type, value)
+        }
+        WirInstr::StructSet {
+            type_id,
+            field_name,
+            value,
+            ..
+        } => {
+            let WirTypeDef::Struct(def) = &types[type_id.index() as usize] else {
+                panic!("struct.set names a non-struct type");
+            };
+            (&def.field(field_name).ty, value)
+        }
+        _ => return false,
+    };
+    let width = match storage {
+        WirType::I8 | WirType::U8 | WirType::Bool => 8,
+        WirType::I16 | WirType::U16 => 16,
+        _ => return false,
+    };
+    drop_low_bits_masks(value, width)
+}
+
 /// If `v` has the form `2^n - 1` with `1 <= n <= 31`, return `n`.
 fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
     if v <= 0 {
@@ -1282,25 +1348,10 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     let (WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner)) = instr else {
         return false;
     };
-    let mut changed = false;
 
-    // Step 1: drop a redundant `x & mask` whose low `width` bits are all set —
-    // the mask cannot change what `extend*_s` observes. Doing this first
-    // canonicalises `inner` so step 2 can still see an exposed load/extend
-    // (e.g. `extend8_s((load8_u a) & 0xFF)` → `extend8_s(load8_u a)` → folded
-    // to `load8_s a` below).
-    if let WirInstr::I32And(l, r) = inner.as_mut() {
-        let unmasked = match (l.as_ref(), r.as_ref()) {
-            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => Some(l),
-            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => Some(r),
-            _ => None,
-        };
-        if let Some(slot) = unmasked {
-            let value = std::mem::replace(slot.as_mut(), WirInstr::Nop);
-            **inner = value;
-            changed = true;
-        }
-    }
+    // Step 1 goes first so step 2 still sees an exposed load/extend:
+    // `extend8_s((load8_u a) & 0xFF)` → `extend8_s(load8_u a)` → `load8_s a`.
+    let mut changed = drop_low_bits_masks(inner, width);
 
     // Step 2: collapse the (possibly newly exposed) inner load/extend.
     match inner.as_mut() {
@@ -1348,8 +1399,24 @@ fn try_fold_sign_extension(instr: &mut WirInstr) -> bool {
     changed
 }
 
-/// True if the low `width` bits of `mask` are all set (so a `& mask` preserves
-/// every bit a `width`-bit sign extension reads).
+/// Strip every `x & mask` around `value` whose mask keeps the low `width` bits,
+/// for a reader that sees only those bits.
+fn drop_low_bits_masks(value: &mut WirInstr, width: u32) -> bool {
+    let mut changed = false;
+    while let WirInstr::I32And(l, r) = value {
+        let kept = match (l.as_ref(), r.as_ref()) {
+            (_, WirInstr::I32Const(m)) if low_bits_all_set(*m, width) => l,
+            (WirInstr::I32Const(m), _) if low_bits_all_set(*m, width) => r,
+            _ => break,
+        };
+        *value = std::mem::replace(kept.as_mut(), WirInstr::Nop);
+        changed = true;
+    }
+    changed
+}
+
+/// True if the low `width` bits of `mask` are all set, so a `& mask` preserves
+/// every bit a `width`-bit reader sees.
 fn low_bits_all_set(mask: i32, width: u32) -> bool {
     let low = (1u32 << width) - 1;
     (mask.cast_unsigned() & low) == low

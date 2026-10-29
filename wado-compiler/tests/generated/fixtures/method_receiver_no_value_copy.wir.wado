@@ -45,8 +45,6 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
 type "functype//method_receiver_no_value_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(19)
 
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(20)
-
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -69,22 +67,29 @@ fn "method_receiver_no_value_copy.wado/run"() with Stdout {
     let $cm_pair_7_24: i64;
     let $sroa_$pattern_temp_0_0_13_30: i32;
     let $sroa_$pattern_temp_0_1_14_31: i32;
-    let new_repr: ref Array<u8>;
+    let new_repr_50: ref Array<u8>;
+    let self_66: i32;
     $sroa_$pattern_temp_0_0_13_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7_24("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_31 = builtin::i32_wrap_i64($cm_pair_7_24 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_30 = "method_receiver_no_value_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_30);
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(6)), 0, global:method_receiver_no_value_copy.wado::$const_obj_2, 0, 5);
-    builtin::array_set_u8(new_repr, 5, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_31, new_repr);
+    builtin::array_copy<u8>(local.tee new_repr_50(builtin::array_new<u8>(6)), 0, global:method_receiver_no_value_copy.wado::$const_obj_2, 0, 5);
+    builtin::array_set_u8(new_repr_50, 5, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_31, new_repr_50);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_31);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_30);
     local.tee buf(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(8), used: 0 }).used = 6;
-    builtin::array_copy<u8>(local.tee new_repr(buf.repr), 0, global:method_receiver_no_value_copy.wado::$const_obj_1, 0, 3);
-    builtin::array_copy<u8>(new_repr, 0 + 3, global:method_receiver_no_value_copy.wado::$const_obj_0, 0, 3);
+    builtin::array_copy<u8>(local.tee new_repr_50(buf.repr), 0, global:method_receiver_no_value_copy.wado::$const_obj_1, 0, 3);
+    builtin::array_copy<u8>(new_repr_50, 0 + 3, global:method_receiver_no_value_copy.wado::$const_obj_0, 0, 3);
     $sroa_$pattern_temp_0_0_13_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7_24("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_31 = builtin::i32_wrap_i64($cm_pair_7_24 >> 32_i64);
     $sroa_$pattern_temp_0_0_13_30 = "method_receiver_no_value_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_30);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14_31, buf.repr, buf.used);
+    builtin::array_copy<u8>(local.tee new_repr_50(builtin::array_new<u8>(local.tee self_66(buf.used) + 1)), 0, buf.repr, 0, self_66);
+    builtin::array_set_u8(new_repr_50, self_66, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_66 = self_66 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_14_31, new_repr_50, 0, self_66);
+    });
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_31);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_30);
 }
 
@@ -95,17 +100,6 @@ fn "method_receiver_no_value_copy.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-
 fn "method_receiver_no_value_copy.wado/$cm_export__run"() {
     "method_receiver_no_value_copy.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

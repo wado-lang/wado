@@ -15,7 +15,7 @@ use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
 use crate::loader::resolve_use_decl_source;
-use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, PackageId, ParseModules};
 use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::{TemplateId, TypeId};
@@ -851,7 +851,7 @@ pub struct TraitEnv {
     /// it was written — the module it resolves in however far its AST travels.
     ///
     /// Rebuilt per load: a re-parse mints a new space.
-    space_modules: IndexMap<ast::AstIdSpace, ModuleSource>,
+    space_modules: ParseModules,
     /// Blanket impls by the trait they implement, in registration order. The
     /// single classification source for blanket dispatch (module, receiver
     /// kind, param, bounds), and where the monomorphizer finds the home module
@@ -960,19 +960,13 @@ impl TraitEnv {
     ) -> (Arc<Self>, Vec<(ModuleSource, TypeError)>) {
         let mut module_namespace_imports: IndexMap<ModuleSource, NamespaceImports> =
             IndexMap::default();
-        let mut space_modules: IndexMap<ast::AstIdSpace, ModuleSource> = IndexMap::default();
         for (module_source, module) in modules {
             module_namespace_imports.insert(
                 module_source.clone(),
                 namespace_imports_of(interner, module, module_source, entry_module, invocations),
             );
-            let claimed = space_modules.insert(module.ast_id_space(), module_source.clone());
-            assert!(
-                claimed.is_none(),
-                "one module is one `AstIdSpace`, but {module_source} shares one with {}",
-                claimed.expect("just checked")
-            );
         }
+        let space_modules = ParseModules::of(modules);
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
@@ -1259,21 +1253,8 @@ impl TraitEnv {
         (env, violations)
     }
 
-    /// The module `space` was parsed from, or `None` for a synthesized node,
-    /// which no module wrote.
-    pub(super) fn module_of_space(&self, space: ast::AstIdSpace) -> Option<&ModuleSource> {
-        self.space_modules.get(&space)
-    }
-
-    /// The module whose text `span` indexes, or `holder`'s for a synthesized
-    /// span. A body reified away from its text (a trait's default method, per
-    /// impl) holds spans of another module than its own.
-    pub(crate) fn module_of_span<'m>(
-        &'m self,
-        span: Span,
-        holder: &'m ModuleSource,
-    ) -> &'m ModuleSource {
-        self.space_modules.get(&span.space).unwrap_or(holder)
+    pub(crate) fn parse_modules(&self) -> &ParseModules {
+        &self.space_modules
     }
 
     /// The pre-computed namespace aliases for `module`. Every loaded module has

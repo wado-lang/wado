@@ -1,8 +1,9 @@
-// Regression: `fixed_width_for_prec` returns a `FormatResult` POD and must use
-// the multi-value return ABI, not a per-call heap `struct.new`. Its pure `let`
-// (promoted to an `Operand::Value`) used to fail `multi_value_return`'s shape
-// check, forcing an allocation per conversion. `pick` is `inline("never")` so
-// the float stays opaque (a constant would fold the call site away).
+// Regression: `fixed_width_for_prec` returns a `FormatResult` POD and must not
+// cost a per-call heap `struct.new`. Its pure `let` (promoted to an
+// `Operand::Value`) used to fail `multi_value_return`'s shape check, forcing an
+// allocation per conversion; today it is spliced into `fmt_fixed`, its only
+// caller, and the result is never built. `pick` is `inline("never")` so the
+// float stays opaque (a constant would fold the call site away).
 
 #[inline("never")]
 fn pick(n: i32) -> f64 {
@@ -17,9 +18,6 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_expect:O2": [
-        "fixed_width_for_prec\" = fn(f64, i32) -> [u64, i32, i32]"
-    ],
     "wir_not_expect:O2": [
         "struct.new \"core:prelude/fpfmt.wado//FormatResult\""
     ]

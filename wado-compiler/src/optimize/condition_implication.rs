@@ -158,7 +158,6 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             locals,
             params,
             address_taken_locals,
-            stores_aliased_locals,
             ..
         } = func.parts();
         let body = body.expect("checked above");
@@ -166,7 +165,6 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut Functi
             body,
             locals,
             address_taken_locals,
-            stores_aliased_locals,
             type_table,
             &first_param_types,
             &call_immutability,

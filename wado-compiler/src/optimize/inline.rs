@@ -18,6 +18,7 @@
 //! body worth more copied than called past the budget destroys it, one-way.
 
 use std::cell::{Cell, RefCell};
+use std::sync::Mutex;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{COLD_PATH_INTRINSIC, inline_block_label, inline_temp_name};
@@ -44,7 +45,7 @@ use crate::niri::is_ctfe_eligible;
 use crate::optimize::alias::{CallImmutability, call_verdicts, first_param_types};
 use crate::optimize::dce::{DescriptorCache, ReachabilityCache, reachable_function_positions};
 use crate::optimize::mod_ref::SummaryCache;
-use crate::parallel::Executor;
+use crate::parallel::{Executor, lock};
 use crate::token::Span;
 use crate::trace::filter;
 
@@ -305,8 +306,7 @@ impl<'a> CostWalk<'a> {
             // A call the compile-time engine runs on constant arguments leaves
             // a literal behind, so it costs the caller nothing.
             ExprKind::Call { func_id, args, .. } => {
-                view.foldable.get(func_id.index()).copied().unwrap_or(false)
-                    && args.iter().all(|a| self.folds(a.expr))
+                view.foldable[func_id.index()] && args.iter().all(|a| self.folds(a.expr))
             }
             ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
@@ -772,8 +772,8 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
                 ExprKind::Call { func_id, args, .. } => {
                     // Both halves: the engine has to be able to run it away
                     // (`foldable`), and there has to be a loop in what goes.
-                    if view.foldable.get(func_id.index()).copied().unwrap_or(false)
-                        && view.loopy.get(func_id.index()).copied().unwrap_or(false)
+                    if view.foldable[func_id.index()]
+                        && view.loopy[func_id.index()]
                         && args.iter().all(|a| walk.folds(a.expr))
                     {
                         return true;
@@ -835,18 +835,24 @@ fn fold_drops_loop(body: &Body, view: &ConstView<'_>, walk: &CostWalk<'_>) -> bo
 /// them than the callee does. `safepoint_calls` says which calls are one. The
 /// literal a `return` hands back is not: it is the body's last act, so what is
 /// live across it is what was live across the call it replaces, and a caller
-/// that takes it apart deletes it. A cold run is no part of the run.
+/// that takes it apart deletes it. Nor is a literal of constants that a `let`
+/// binds to a local the body never writes (none in `written`), or that a
+/// shared `&` lends:
+/// `const_object_globalization` builds it once for the module rather than per
+/// run. A cold run is no part of the run.
 fn has_safepoint(
     body: &Body,
     type_table: &TypeTable,
     cold: &ColdRuns,
     safepoint_calls: &[bool],
+    written: &IndexSet<u32>,
 ) -> bool {
     struct Walk<'a> {
         body: &'a Body,
         type_table: &'a TypeTable,
         cold: &'a ColdRuns,
         safepoint_calls: &'a [bool],
+        written: &'a IndexSet<u32>,
     }
     impl Walk<'_> {
         fn block(&self, block: BlockId) -> bool {
@@ -864,16 +870,23 @@ fn has_safepoint(
         fn node(&self, node: NodeRef) -> bool {
             match node {
                 NodeRef::Block(b) => return self.block(b),
+                NodeRef::Expr(e) if self.lends_constant(e) => return false,
                 NodeRef::Expr(e) if self.is_safepoint(e) => return true,
-                NodeRef::Stmt(s) => {
-                    if let StmtKind::Return {
+                NodeRef::Stmt(s) => match self.body.stmts[s].kind {
+                    StmtKind::Return {
                         value: Some(Operand::Expr(e)),
-                    } = self.body.stmts[s].kind
-                        && allocates(&self.body.exprs[e].kind)
-                    {
+                    } if allocates(&self.body.exprs[e].kind) => {
                         return self.children(NodeRef::Expr(e));
                     }
-                }
+                    StmtKind::Let {
+                        local_index, value, ..
+                    } if !self.written.contains(&local_index)
+                        && is_constant_arg(self.body, value, &IndexSet::default()) =>
+                    {
+                        return false;
+                    }
+                    _ => {}
+                },
                 NodeRef::Expr(_) | NodeRef::Pat(_) => {}
             }
             self.children(node)
@@ -892,6 +905,14 @@ fn has_safepoint(
                 ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => true,
                 kind => allocates(kind),
             }
+        }
+
+        fn lends_constant(&self, e: ExprId) -> bool {
+            matches!(
+                self.body.exprs[e].kind,
+                ExprKind::Unary { op: NirUnaryOp::Ref, expr }
+                    if is_constant_arg(self.body, expr, &IndexSet::default())
+            )
         }
     }
     fn allocates(kind: &ExprKind) -> bool {
@@ -913,6 +934,7 @@ fn has_safepoint(
         type_table,
         cold,
         safepoint_calls,
+        written,
     }
     .block(body.root())
 }
@@ -1141,6 +1163,18 @@ fn place_root_local(body: &Body, expr: ExprId) -> Option<u32> {
 /// shapes `const_folding` reads as one, plus the `&` a referenced literal wears
 /// and the local it may be bound to first.
 pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<u32>) -> bool {
+    folds_to_constant(body, op, const_locals, None)
+}
+
+/// [`is_constant_arg`], also seeing through a call to a `ctfe_eligible` callee
+/// given such arguments, which the compile-time engine runs to its value.
+fn folds_to_constant(
+    body: &Body,
+    op: Operand,
+    const_locals: &IndexSet<u32>,
+    ctfe_eligible: Option<&[bool]>,
+) -> bool {
+    let recurse = |op| folds_to_constant(body, op, const_locals, ctfe_eligible);
     match op {
         // `Const` covers the aggregate a string / list literal becomes once
         // `promote_pure_values_early` freezes it.
@@ -1150,19 +1184,17 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
         }
         Operand::Expr(e) => match &body.exprs[e].kind {
             ExprKind::PackedArray(_) | ExprKind::EnumConstruct { .. } => true,
-            ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => {
-                is_constant_arg(body, *expr, const_locals)
+            ExprKind::Unary { expr, .. } | ExprKind::Cast { expr, .. } => recurse(*expr),
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                elements.iter().all(|&e| recurse(e))
             }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => elements
-                .iter()
-                .all(|&e| is_constant_arg(body, e, const_locals)),
-            ExprKind::StructLiteral { fields, .. } => fields
-                .iter()
-                .all(|f| is_constant_arg(body, f.value, const_locals)),
-            ExprKind::VariantConstruct { payload, .. } => {
-                payload.is_none_or(|pl| is_constant_arg(body, pl, const_locals))
-            }
+            ExprKind::StructLiteral { fields, .. } => fields.iter().all(|f| recurse(f.value)),
+            ExprKind::VariantConstruct { payload, .. } => payload.is_none_or(recurse),
             ExprKind::Local { index, .. } => const_locals.contains(index),
+            ExprKind::Call { func_id, args, .. } => {
+                ctfe_eligible.is_some_and(|eligible| eligible[func_id.index()])
+                    && args.iter().all(|a| recurse(a.expr))
+            }
             ExprKind::Dead
             | ExprKind::Binary { .. }
             | ExprKind::FieldAccess { .. }
@@ -1173,7 +1205,6 @@ pub(crate) fn is_constant_arg(body: &Body, op: Operand, const_locals: &IndexSet<
             | ExprKind::Assign { .. }
             | ExprKind::GlobalVarGet { .. }
             | ExprKind::GlobalVarSet { .. }
-            | ExprKind::Call { .. }
             | ExprKind::CmRawCall { .. }
             | ExprKind::IndirectCall { .. }
             | ExprKind::ClosureToCanonical { .. }
@@ -1427,8 +1458,9 @@ fn single_bindings(scan: &BodyScan) -> IndexMap<u32, Operand> {
 /// How much more a callee may cost where its splice pays back than anywhere
 /// else: at a site inside a loop, whose call edge is paid on every iteration,
 /// and at the callee's only site, where the body moves rather than being
-/// copied. Only a callee reaching no safepoint qualifies, so the splice brings
-/// its body alone and none of the spills a safepoint costs the loop. At `-O2`
+/// copied. Only a callee reaching no safepoint qualifies inside a loop, so the
+/// splice brings its body alone and none of the spills a safepoint costs the
+/// loop ([`Reach::SoleOutsideLoops`] says what qualifies outside one). At `-O2`
 /// this admits up to 64, which reaches the stdlib's UTF-8 codec helpers
 /// (`decode_char_at` 50, `encode_char` 61) and the zlib match helpers that once
 /// carried an inline hint each.
@@ -1446,6 +1478,11 @@ enum Reach {
     /// [`PAYBACK_FACTOR`] with one site. A splice of its caller copies that
     /// site, and the copy is a second one.
     Sole,
+    /// [`Reach::Sole`] for a loop-free callee reaching a safepoint, and only
+    /// outside a loop: the call it replaces is a safepoint too, so the caller
+    /// spills nothing it did not already, where a loop would reload its
+    /// references on every iteration.
+    SoleOutsideLoops,
     Everywhere,
 }
 
@@ -1545,6 +1582,7 @@ fn classify_callee(
     foldable: &[bool],
     loopy: &[bool],
     safepoint_calls: &[bool],
+    written: &IndexSet<u32>,
     sites: usize,
     spliced: &[usize],
     hopeful: &IndexSet<u32>,
@@ -1619,10 +1657,14 @@ fn classify_callee(
     });
     let reach = if folds {
         Reach::Everywhere
-    } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR
-        || has_safepoint(body, type_table, cold, safepoint_calls)
-    {
+    } else if net_cost(plain, params) > effective_threshold * PAYBACK_FACTOR {
         Reach::Nowhere
+    } else if has_safepoint(body, type_table, cold, safepoint_calls, written) {
+        if sites == 1 && !arena_query::block_contains_loop(body, body.root()) {
+            Reach::SoleOutsideLoops
+        } else {
+            Reach::Nowhere
+        }
     } else if sites == 1 {
         Reach::Sole
     } else {
@@ -1856,9 +1898,14 @@ pub(super) struct InlineBudget {
 /// A hold bets on constants a later round brings. A loop that converged with
 /// the hold still in place brings none, so [`Self::release`] settles the bet
 /// and lets the function receive inlining like any other.
+///
+/// A call the compile-time engine may still fold to its value is the same bet,
+/// placed on one call rather than a whole function: `deferred` holds the
+/// callers that left one in place, and the release splices what survived.
 #[derive(Default)]
 pub(super) struct InlineHolds {
     held: IndexSet<FuncId>,
+    deferred: IndexSet<FuncId>,
     released: bool,
 }
 
@@ -1879,18 +1926,42 @@ impl InlineHolds {
     /// drain and the [`Self::settle`] guard leave the set empty for good, so
     /// the call after the reopened run converges is the loop's exit.
     pub(super) fn release(&mut self, gate: &mut FunctionGate) -> bool {
-        if self.held.is_empty() {
+        if self.held.is_empty() && self.deferred.is_empty() {
             return false;
         }
         self.released = true;
-        for id in self.held.drain(..) {
+        for id in self.held.drain(..).chain(self.deferred.drain(..)) {
             gate.mark_changed(id);
         }
         true
     }
 
-    pub(super) fn still_held(&self) -> usize {
-        self.held.len()
+    /// Record whether this round's visit to `caller` left a call to the
+    /// compile-time engine.
+    fn settle_deferral(&mut self, caller: FuncId, deferred: bool) {
+        // A deferral after the release would reopen the loop on every
+        // convergence.
+        assert!(
+            !(deferred && self.released),
+            "a released loop defers no call"
+        );
+        if deferred {
+            self.deferred.insert(caller);
+        } else {
+            self.deferred.swap_remove(&caller);
+        }
+    }
+
+    /// What a run stopped before the release leaves un-spliced, which nothing
+    /// downstream would say.
+    pub(super) fn unreleased(&self) -> Option<String> {
+        match (self.held.len(), self.deferred.len()) {
+            (0, 0) => None,
+            (held, deferred) => Some(format!(
+                "{held} function(s) still held and {deferred} caller(s) still deferring \
+                 a call to the engine"
+            )),
+        }
     }
 }
 
@@ -2003,6 +2074,16 @@ struct Candidates<'a> {
     /// The candidates a cold site calls that are no bigger than the call they
     /// replace: splicing one shrinks the caller, so [`Site::Cold`] admits it.
     shrinking: &'a IndexSet<FuncId>,
+    /// Per function, whether the compile-time engine may replace a call to it
+    /// given constant arguments by its value ([`is_ctfe_eligible`]). Wider than
+    /// [`ConstView`]'s `foldable`, which prices only a fold `mod_ref` proves
+    /// pure: the engine runs a body and refuses on what it meets, so it folds
+    /// callees that summary does not clear (`ctfe_bit_count.wado`'s integer
+    /// formatting), and a wait on one that does not fold costs only the wait.
+    ctfe_eligible: &'a [bool],
+    /// Whether a call the engine may fold is still left to it: until the loop
+    /// first converges ([`InlineHolds::release`]).
+    fold_pending: bool,
     rescan_cap: usize,
     /// What the re-scan under way may still splice, or `None` outside one.
     rescan_left: Option<&'a Cell<usize>>,
@@ -2137,11 +2218,15 @@ pub fn inline_functions(
     let const_params = constant_params(project, scans, &sites, gate.exec());
     let safepoint_calls = safepoint_calls(project, descriptors);
     let fn_effects = mod_ref.summaries(project, gate.exec()).effects;
-    let foldable: Vec<bool> = project
+    let ctfe_eligible: Vec<bool> = project
         .functions
         .iter()
+        .map(|f| is_ctfe_eligible(&f.borrow()))
+        .collect();
+    let foldable: Vec<bool> = ctfe_eligible
+        .iter()
         .zip(&fn_effects)
-        .map(|(f, e)| e.is_pure() && is_ctfe_eligible(&f.borrow()))
+        .map(|(&eligible, e)| eligible && e.is_pure())
         .collect();
     let loopy: Vec<bool> = scans.iter().map(|s| s.loopy).collect();
 
@@ -2186,9 +2271,7 @@ pub fn inline_functions(
         let Some(body) = func.body.as_ref() else {
             return 0;
         };
-        if !loopy.get(i).copied().unwrap_or(false)
-            || splice_barred(&func, &barred_cycle_members, type_table)
-        {
+        if !loopy[i] || splice_barred(&func, &barred_cycle_members, type_table) {
             return 0;
         }
         let gross = inline_cost(body, type_table, &cold_runs[i], &[]);
@@ -2225,6 +2308,7 @@ pub fn inline_functions(
             &foldable,
             &loopy,
             &safepoint_calls,
+            &scans[i].written,
             call_sites[i],
             &spliced,
             &hopeful_params[i],
@@ -2362,6 +2446,8 @@ pub fn inline_functions(
     let carried = carried_calls(&inline_candidates);
     let functions = &project.functions;
     let held = &holds.held;
+    let fold_pending = !holds.released;
+    let deferrals: Mutex<Vec<(FuncId, bool)>> = Mutex::new(Vec::new());
 
     let now: Vec<SweepRead> = (0..functions.len())
         .map(|i| {
@@ -2384,11 +2470,12 @@ pub fn inline_functions(
     let read = &*read;
 
     // Inline at call sites. A caller splices copies of the candidates, so no
-    // visit reads what another writes.
-    let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
+    // visit reads what another writes. Answers whether the visit left a call to
+    // the engine, and what it spliced.
+    let inline_into = |fid: FuncId| -> (bool, Option<Vec<FuncId>>) {
         // A dead caller's sites were priced as never running, so none is taken.
         if !live[fid.index()] || held.contains(&fid) {
-            return None;
+            return (false, None);
         }
         let candidates = Candidates {
             bodies: &inline_candidates,
@@ -2396,6 +2483,8 @@ pub fn inline_functions(
             carried: &carried,
             net_price: &net_price,
             shrinking: &shrinking,
+            ctfe_eligible: &ctfe_eligible,
+            fold_pending,
             // A threshold's worth of threshold-sized callees: a call tree that
             // doubles per level exceeds it within a few levels.
             rescan_cap: inline_threshold * inline_threshold,
@@ -2405,21 +2494,23 @@ pub fn inline_functions(
         // Asked before the frame is taken, so a caller with nothing to splice
         // is not written.
         if !func.calls_any(|id| inline_candidates.contains_key(id)) {
-            return None;
+            return (false, None);
         }
         // Track which functions (by `FuncId`) were inlined into this function
         let mut inlined_funcs: Vec<FuncId> = Vec::new();
         // Splice-point re-valuation records (Method A): one per inlined block.
         let mut reval: Vec<InlineRevalInfo> = Vec::new();
         let local_count = func.local_count();
+        let glue = func.is_cm_binding || func.is_dispatch_wrapper;
         let func = &mut *func;
         let mut frame = CallerFrame {
             local_count,
             locals: &mut func.locals,
             address_taken: std::mem::take(&mut func.address_taken_locals),
-            stores_aliased: std::mem::take(&mut func.stores_aliased_locals),
             loop_calls: Vec::new(),
             original_exprs: func.body.as_ref().expect("checked above").exprs.len(),
+            glue,
+            deferred: false,
         };
         let mut labels = InlineLabels::default();
         // Calls in this body that mutate no caller-reachable state, taken
@@ -2461,9 +2552,9 @@ pub fn inline_functions(
             );
         }
         func.address_taken_locals = frame.address_taken;
-        func.stores_aliased_locals = frame.stores_aliased;
+        let deferred = frame.deferred;
         if inlined_funcs.is_empty() {
-            return None;
+            return (deferred, None);
         }
         // The splice restructures the body, staling the persisted graph's
         // `loop_entry_values` (licm's pre-header snapshots — the only
@@ -2486,10 +2577,23 @@ pub fn inline_functions(
         // modified), so the sweep marks just the caller. Its call-graph edges
         // shift, but stale edges only cost 1-hop propagation precision
         // (quality), not correctness.
-        Some(inlined_funcs)
+        (deferred, Some(inlined_funcs))
+    };
+    // Every visit settles its caller's deferral, a visit that leaves early
+    // included: a deferred call the fold has since removed leaves one.
+    let spliced_into = gate.sweep_par(GatedPass::Inline, functions.len(), |fid| {
+        let (deferred, spliced) = inline_into(fid);
+        lock(&deferrals).push((fid, deferred));
+        spliced
     });
     drop(inline_call_immutability);
     drop(inline_type_table);
+    // The sweep pushes in thread order; settle in caller order.
+    let mut deferrals = std::mem::take(&mut *lock(&deferrals));
+    deferrals.sort_unstable_by_key(|&(caller, _)| caller);
+    for (caller, deferred) in deferrals {
+        holds.settle_deferral(caller, deferred);
+    }
 
     // Every caller's new strings, for one pass over `string_literals` rather
     // than one per caller.
@@ -2546,7 +2650,6 @@ struct CallerFrame<'f> {
     /// The caller's own, borrowed: a splice that mints none leaves them unwritten.
     locals: &'f mut Tracked<Vec<NirLocal>>,
     address_taken: IndexSet<u32>,
-    stores_aliased: IndexSet<u32>,
     /// Per enclosing loop, innermost last: how many sites in its body call
     /// each function, the ones its splices bring included.
     loop_calls: Vec<IndexMap<FuncId, usize>>,
@@ -2554,6 +2657,12 @@ struct CallerFrame<'f> {
     /// The arena only appends, so a call below it is one the round's site
     /// counts saw, and one above it came in with a splice.
     original_exprs: usize,
+    /// The caller is synthesized glue, a CM binding or a dispatch wrapper,
+    /// whose body `container_sroa` and `const_object_globalization` skip: a
+    /// callee moved into one goes without the cleanup it gets where it stands.
+    glue: bool,
+    /// A call was left to the compile-time engine this visit.
+    deferred: bool,
 }
 
 impl CallerFrame<'_> {
@@ -3024,9 +3133,6 @@ fn build_inlined_labeled_block(
     frame
         .address_taken
         .extend(candidate.address_taken_locals.iter().map(carry));
-    frame
-        .stores_aliased
-        .extend(candidate.stores_aliased_locals.iter().map(carry));
 
     let mut inner_labels: IndexSet<String> = IndexSet::default();
     collect_inner_labels(callee, NodeRef::Block(callee.root()), &mut inner_labels);
@@ -3089,8 +3195,30 @@ fn try_inline_call_expr(
             candidate.inline_hint == InlineHint::Always || candidates.shrinking.contains(&func_id)
         }
         (Site::Plain | Site::Loop, Reach::Everywhere) => true,
-        (Site::Plain | Site::Loop, Reach::Sole) => frame.original_site(call_id),
-        (Site::Loop, Reach::Loops) => frame.sole_loop_site(func_id),
+        (Site::Plain | Site::Loop, Reach::Sole) => !frame.glue && frame.original_site(call_id),
+        // A call the compile-time engine may run to its value is left to it
+        // until the loop converges: spliced, it becomes statements
+        // `let_block_flatten` lays into the caller before the fold reaches
+        // them. One still standing then is one the engine could not fold.
+        (Site::Plain, Reach::SoleOutsideLoops) => {
+            if frame.glue || !frame.original_site(call_id) {
+                false
+            } else if candidates.fold_pending
+                && folds_to_constant(
+                    caller,
+                    Operand::Expr(call_id),
+                    &IndexSet::default(),
+                    Some(candidates.ctfe_eligible),
+                )
+            {
+                frame.deferred = true;
+                false
+            } else {
+                true
+            }
+        }
+        (Site::Loop, Reach::SoleOutsideLoops) => false,
+        (Site::Loop, Reach::Loops) => !frame.glue && frame.sole_loop_site(func_id),
         (Site::Plain, Reach::Loops) => false,
         (Site::Plain | Site::Loop, Reach::Nowhere) => {
             unreachable!("a candidate is reached somewhere")

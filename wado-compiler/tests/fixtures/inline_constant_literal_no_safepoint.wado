@@ -1,0 +1,28 @@
+// A literal of constants the body only reads is built once for the module, not
+// on each run of the body holding it, so it is no safepoint: a looping callee
+// that reads a constant table is spliced at its only site like one reading
+// none.
+use { println, Stdout } from "core:cli";
+
+fn write_digits(out: &mut Array<u8>, value: i32) {
+    let table = "0123456789";
+    let mut v = value;
+    for let mut i = 2; i >= 0; i -= 1 {
+        out[i] = table.byte_at(v % 10);
+        v /= 10;
+    }
+}
+
+export fn run() with Stdout {
+    let mut out = Array::<u8>::filled(3, 0);
+    write_digits(&mut out, builtin::black_box(407));
+    println(`${out[0] as char}${out[1] as char}${out[2] as char}`);
+}
+
+__DATA__
+{
+    "stdout": "407\n",
+    "wir_not_expect:O2": [
+        "write_digits\"("
+    ]
+}

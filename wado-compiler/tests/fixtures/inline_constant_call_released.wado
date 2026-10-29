@@ -1,0 +1,33 @@
+// A call the compile-time engine may fold is left to it while the loop runs,
+// and spliced once the loop converges with the call still standing. `label`
+// reads a mutable global, so the engine cannot fold `label(3)`; it is
+// loop-free, allocates, and has one call site, so the release splices it into
+// `show`.
+use { println, Stdout } from "core:cli";
+
+global mut SEED: i32 = 7;
+
+fn label(n: i32) -> String {
+    let mut s = String::with_capacity(8);
+    s.push_str(`${SEED * 2}`);
+    s.push_str(`${n}`);
+    return s;
+}
+
+#[inline(never)]
+fn show() with Stdout {
+    println(label(3));
+}
+
+export fn run() with Stdout {
+    SEED = builtin::black_box(9);
+    show();
+}
+
+__DATA__
+{
+    "stdout": "183\n",
+    "wir_scope": "inline_constant_call_released.wado/show",
+    "wir_expect:O2": ["builtin::array_new<u8>(8)"],
+    "wir_not_expect:O2": ["/label"]
+}

@@ -1,0 +1,43 @@
+// A `u8` result is masked to its low byte, and the mask is dead wherever the
+// value already fits in a byte or lands in packed `u8` storage, which keeps
+// only the low byte itself.
+
+fn digits(v: u64) -> List<u8> {
+    let mut out: List<u8> = [0, 0, 0, 0];
+    let mut t = v;
+    for let mut i = 3; i >= 0; i -= 1 {
+        out[i] = b'0' + (t % 10) as u8;
+        t /= 10;
+    }
+    return out;
+}
+
+fn sums(a: u8, b: u8) -> List<u8> {
+    let mut out: List<u8> = [0];
+    out[0] = a + b;
+    return out;
+}
+
+fn sum(a: u8, b: u8) -> i32 {
+    return (a + b) as i32;
+}
+
+test {
+    let d = digits(builtin::black_box(1234));
+    assert d[0] == b'1' && d[1] == b'2' && d[2] == b'3' && d[3] == b'4';
+    assert sums(builtin::black_box(200), 100)[0] == 44;
+    assert sum(builtin::black_box(200), 100) == 44;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O2": [
+        "+ 100) & 255) != 44"
+    ],
+    "wir_not_expect:O2": [
+        "% 10_i64) & 255",
+        "% 10_i64)) & 255",
+        "+ 100) & 255);"
+    ]
+}

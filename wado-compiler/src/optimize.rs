@@ -120,6 +120,8 @@ struct OptConfig {
     /// threshold would otherwise admit, or `None` to leave it unbounded. See
     /// [`inline::InlineBudget`].
     inline_growth: Option<u32>,
+    /// The clones `param_spec` may mint over the whole run.
+    specializations: usize,
     /// Whether exhausting `iterations` is a defect rather than a budget — true
     /// for the caps `-O2`/`-Os` and `-O3` size so the loop converges under them.
     cap_is_defect: bool,
@@ -173,7 +175,9 @@ pub fn optimize(
         inline_threshold,
         inline_growth,
         iterations: opt_iterations,
+        specializations,
     } = opt;
+    let specializations = specializations.unwrap_or(param_spec::MAX_TOTAL_SPECIALIZATIONS);
     let exec = Arc::new(Executor::new(parallelism));
     // Decide the short-string inline threshold once, from the opt level. Read
     // by `wir_build` (`translate_packed_array` / `register_literal_data`) to
@@ -214,6 +218,7 @@ pub fn optimize(
                 iterations: opt_iterations.unwrap_or(2),
                 inline_threshold: inline_threshold.unwrap_or(4),
                 inline_growth,
+                specializations,
                 cap_is_defect: false,
             };
             // Early DCE: remove unreachable functions/types before optimization
@@ -256,6 +261,7 @@ pub fn optimize(
                 // re-derived under it.
                 inline_threshold: inline_threshold.unwrap_or(16),
                 inline_growth,
+                specializations,
                 cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(
@@ -290,6 +296,7 @@ pub fn optimize(
                 iterations: opt_iterations.unwrap_or(20),
                 inline_threshold: inline_threshold.unwrap_or(26),
                 inline_growth,
+                specializations,
                 cap_is_defect: opt_iterations.is_none(),
             };
             run_dce(
@@ -769,7 +776,7 @@ fn run_optimization_passes(
     let mut heap_effects = HeapEffectsCache::default();
     let mut mod_ref_summaries = SummaryCache::default();
     let mut sroa_param_state = SroaParamState::default();
-    let mut param_spec_state = param_spec::ParamSpecState::default();
+    let mut param_spec_state = param_spec::ParamSpecState::new(config.specializations);
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
     let mut inline_budget = inline::InlineBudget::new(config.inline_growth);
@@ -974,13 +981,12 @@ fn run_optimization_passes(
     if let Some(report) = inline_budget.report() {
         profiler.debug(&report);
     }
+    project.specialization_cap = param_spec_state.cap_hit();
     if !iter_changed.is_empty() {
-        // A run that stopped before the release still holds its callees, and
-        // each kept every call it makes. Nothing downstream would say so.
-        let held = match inline_holds.still_held() {
-            0 => String::new(),
-            n => format!("; {n} function(s) still held by the inliner"),
-        };
+        let held = inline_holds
+            .unreleased()
+            .map(|unreleased| format!("; the inliner has {unreleased}"))
+            .unwrap_or_default();
         let report = format!(
             "NIR optimizer hit the {limit}-iteration cap without converging; \
              still changing: [{}]{held}",

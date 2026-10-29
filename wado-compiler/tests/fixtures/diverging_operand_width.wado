@@ -1,0 +1,44 @@
+// A specialization that folds an operand to a panic leaves an operator whose
+// operand diverges: `panic(…) * 0`, `-panic(…)`. The operator keeps the width
+// its type says, i64 here, rather than one read off the never-typed operand.
+use { println, Stdout } from "core:cli";
+
+fn length_of(unit: i32) -> i64 {
+    return match unit {
+        0 => 1,
+        1 => 1000,
+        _ => panic(`unit ${unit} has no fixed length`),
+    };
+}
+
+fn most_of(unit: i32) -> i64 {
+    return match unit {
+        0 => 1000,
+        1 => 60,
+        _ => 0,
+    };
+}
+
+fn span_of(unit: i32) -> i64 {
+    return length_of(unit) * most_of(unit);
+}
+
+fn back_of(unit: i32) -> i64 {
+    return -length_of(unit);
+}
+
+fn wide_of(unit: i32) -> f64 {
+    return length_of(unit) as f64;
+}
+
+export fn run() with Stdout {
+    println(`${span_of(0)} ${span_of(1)} ${back_of(1)} ${wide_of(1)}`);
+    if builtin::black_box(false) {
+        println(`${span_of(2)} ${back_of(2)} ${wide_of(2)}`);
+    }
+}
+
+__DATA__
+{
+    "stdout": "1000 60000 -1000 1000\n"
+}

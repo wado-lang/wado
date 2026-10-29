@@ -206,20 +206,20 @@ fn "value_copy_kept_ref_to_temporary.wado/proj"(a, sink) {
 fn "value_copy_kept_ref_to_temporary.wado/run"() with Stdout {
     let sink: ref "core:prelude//List<&value_copy_kept_ref_to_temporary.wado/S>";
     let $v1_5: i32;
-    let message_19: ref "core:prelude/string.wado//String";
+    let message_11: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_1_14: i32;
+    let $sroa_$pattern_temp_0_1_33: i32;
     sink = struct.new "core:prelude//List<&value_copy_kept_ref_to_temporary.wado/S>" { repr: array.new_fixed<ref "value_copy_kept_ref_to_temporary.wado//S">(), used: 0 };
     drop("value_copy_kept_ref_to_temporary.wado/proj"(struct.new "value_copy_kept_ref_to_temporary.wado//S" { v: 1 }, sink));
-    message_19 = "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_kept_ref_to_temporary.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0$sroa[t.h0]"($v1_5 = sink.used; if @unlikely(0 >= $v1_5) {
+    message_11 = "core:prelude/string.wado/core:prelude/string.wado/String::format<value_copy_kept_ref_to_temporary.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0$sroa[t.h0]"($v1_5 = sink.used; if @unlikely(0 >= $v1_5) {
         cold_path;
         "value_copy_kept_ref_to_temporary.wado/run$cold0$dae[$contract_arg_0]"($v1_5);
         unreachable;
     }; builtin::array_get_value<ref "value_copy_kept_ref_to_temporary.wado//S">(sink.repr, 0).v);
     $v1_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_1_33 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $v1_5 = "value_copy_kept_ref_to_temporary.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_5);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, message_19.repr, message_19.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_33, message_11.repr, message_11.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v1_5);
 }
 
@@ -269,15 +269,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b10 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l11;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -601,24 +601,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c & 255);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -893,15 +893,15 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
             break_if b95 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, self - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l96;
         };
     };
     if self > is_negative {
-        builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
 }
 

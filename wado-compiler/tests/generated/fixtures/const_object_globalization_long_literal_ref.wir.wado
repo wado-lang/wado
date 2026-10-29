@@ -325,15 +325,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<const_objec
             break_if b44 ($mv$t$h0 - start_270) < 2;
             q = x_74 /u 100_i64;
             tens = local.tee is_negative_70(builtin::i32_wrap_i64(x_74 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_6, $mv$t$h0 - 1, ((48 + is_negative_70) - (tens * 10)) & 255);
-            builtin::array_set_u8($load_6, $mv$t$h0 - 2, (48 + tens) & 255);
+            builtin::array_set_u8($load_6, $mv$t$h0 - 1, (48 + is_negative_70) - (tens * 10));
+            builtin::array_set_u8($load_6, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
             x_74 = q;
             continue l45;
         };
     };
     if $mv$t$h0 > start_270 {
-        builtin::array_set_u8($load_6, start_270, (48 + builtin::i32_wrap_i64(x_74 %u 10_i64)) & 255);
+        builtin::array_set_u8($load_6, start_270, 48 + builtin::i32_wrap_i64(x_74 %u 10_i64));
     }
     repr_107 = global:core:prelude/string.wado::$const_obj_1;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_6)) {

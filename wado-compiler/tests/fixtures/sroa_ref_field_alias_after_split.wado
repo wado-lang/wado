@@ -1,0 +1,59 @@
+// A struct holding a reference to a local splits into a reference local, and
+// every pass reads that local's aliasing from the body: a write through the
+// split field reaches the local, and a write to the local is read back through
+// the field, before and after `ref_elim` folds the reference away.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Holder {
+    pair: &mut Pair,
+}
+
+fn bump(q: &mut Pair) {
+    q.a += 1;
+}
+
+#[inline(never)]
+fn through_holder() -> String {
+    let mut p = Pair { a: builtin::black_box(1), b: 2 };
+    let h = Holder { pair: &mut p };
+    h.pair.a = 10;
+    bump(h.pair);
+    return `${p.a} ${p.b}`;
+}
+
+#[inline(never)]
+fn through_local() -> String {
+    let mut p = Pair { a: builtin::black_box(1), b: 2 };
+    let h = Holder { pair: &mut p };
+    p.a = 5;
+    let seen = h.pair.a;
+    p.b = seen + 1;
+    return `${seen} ${h.pair.b}`;
+}
+
+#[inline(never)]
+fn split_twice() -> String {
+    let mut p = Pair { a: builtin::black_box(1), b: 2 };
+    let outer = Holder { pair: &mut p };
+    let inner = Holder { pair: outer.pair };
+    inner.pair.b = 7;
+    outer.pair.a = inner.pair.b + 1;
+    return `${p.a} ${p.b}`;
+}
+
+export fn run() with Stdout {
+    println(through_holder());
+    println(through_local());
+    println(split_twice());
+}
+
+__DATA__
+{
+    "stdout": "11 2\n5 6\n8 7\n"
+}

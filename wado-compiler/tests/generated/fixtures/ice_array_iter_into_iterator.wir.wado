@@ -42,15 +42,13 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
 type "functype//ice_array_iter_into_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(20)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(21)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -61,9 +59,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:ice_array_iter_into_iterator.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(72, 101, 108, 108, 111);
 
@@ -97,7 +95,13 @@ fn "ice_array_iter_into_iterator.wado/run"() with Stdout {
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_u8__core_prelude_traits_wado_Iterator__collect_core_prelude_bytes_wado_ByteList__9_0_index_80 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     item_32 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_u8__core_prelude_traits_wado_Iterator__collect_core_prelude_bytes_wado_ByteList__9_0_index_80 = "ice_array_iter_into_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_u8__core_prelude_traits_wado_Iterator__collect_core_prelude_bytes_wado_ByteList__9_0_index_80);
-    "core:rt/write_string_to_stream$dae[add_newline]"(item_32, s.repr, s.used);
+    builtin::array_copy<u8>(local.tee $sroa_slice_repr_82(builtin::array_new<u8>(local.tee used_35(s.used) + 1)), 0, s.repr, 0, used_35);
+    builtin::array_set_u8($sroa_slice_repr_82, used_35, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        used_35 = used_35 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(item_32, $sroa_slice_repr_82, 0, used_35);
+    });
+    "wasi/stream-drop-writable"(item_32);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$temp_inline_core_prelude_slice_wado_SliceValueIter_u8__core_prelude_traits_wado_Iterator__collect_core_prelude_bytes_wado_ByteList__9_0_index_80);
 }
 
@@ -108,17 +112,6 @@ fn "ice_array_iter_into_iterator.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-v
 fn "ice_array_iter_into_iterator.wado/$cm_export__run"() {
     "ice_array_iter_into_iterator.wado/run"();
     "wasi/task-return"(0);
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

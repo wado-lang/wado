@@ -710,7 +710,7 @@ f16::from_f32(3.0): "), used: 21 }, s4: struct.new "core:prelude/string.wado//St
         "half_compare.wado/run$cold6"(0, $v0_0);
         unreachable;
     }
-    $v1_1 = (local.tee $v0_0(builtin::i32_reinterpret_f32(1_f32)) >>u 16) & 65535;
+    $v1_1 = local.tee $v0_0(builtin::i32_reinterpret_f32(1_f32)) >>u 16;
     $v0_0 = $inline_round_to_even_40: block -> u16 {
         if local.tee $v0_0($v0_0 & 65535) >u 32768 {
             break $inline_round_to_even_40: ($v1_1 + 1) & 65535;
@@ -720,7 +720,7 @@ f16::from_f32(3.0): "), used: 21 }, s4: struct.new "core:prelude/string.wado//St
         }
         break $inline_round_to_even_40: $v1_1;
     };
-    $v3_35 = (local.tee $v1_1(builtin::i32_reinterpret_f32(1_f32)) >>u 16) & 65535;
+    $v3_35 = local.tee $v1_1(builtin::i32_reinterpret_f32(1_f32)) >>u 16;
     $v1_1 = $inline_round_to_even_46: block -> u16 {
         if local.tee $v1_1($v1_1 & 65535) >u 32768 {
             break $inline_round_to_even_46: ($v3_35 + 1) & 65535;
@@ -751,7 +751,7 @@ f16::from_f32(3.0): "), used: 21 }, s4: struct.new "core:prelude/string.wado//St
         "half_compare.wado/run$cold3"(32704, 65473);
         unreachable;
     }
-    $v1_1 = (local.tee $v0_0(builtin::i32_reinterpret_f32(1_f32)) >>u 16) & 65535;
+    $v1_1 = local.tee $v0_0(builtin::i32_reinterpret_f32(1_f32)) >>u 16;
     $v0_0 = $inline_round_to_even_77: block -> u16 {
         if local.tee $v0_0($v0_0 & 65535) >u 32768 {
             break $inline_round_to_even_77: ($v1_1 + 1) & 65535;
@@ -761,7 +761,7 @@ f16::from_f32(3.0): "), used: 21 }, s4: struct.new "core:prelude/string.wado//St
         }
         break $inline_round_to_even_77: $v1_1;
     };
-    $v3_35 = (local.tee $v1_1(builtin::i32_reinterpret_f32(2_f32)) >>u 16) & 65535;
+    $v3_35 = local.tee $v1_1(builtin::i32_reinterpret_f32(2_f32)) >>u 16;
     $v1_1 = $inline_round_to_even_83: block -> u16 {
         if local.tee $v1_1($v1_1 & 65535) >u 32768 {
             break $inline_round_to_even_83: ($v3_35 + 1) & 65535;
@@ -789,7 +789,7 @@ f16::from_f32(3.0): "), used: 21 }, s4: struct.new "core:prelude/string.wado//St
     block {
     };
     $v0_0 = "core:prelude/half.wado/f16::from_f32$spec0$dae[v]"();
-    $v3_35 = (local.tee $v1_1(builtin::i32_reinterpret_f32(0_f32)) >>u 16) & 65535;
+    $v3_35 = local.tee $v1_1(builtin::i32_reinterpret_f32(0_f32)) >>u 16;
     $v1_1 = $inline_round_to_even_104: block -> u16 {
         if local.tee $v1_1($v1_1 & 65535) >u 32768 {
             break $inline_round_to_even_104: ($v3_35 + 1) & 65535;
@@ -1916,15 +1916,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b203 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l204;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -2034,24 +2034,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 
@@ -2408,7 +2408,7 @@ fn "core:prelude/fpfmt.wado/write_digits_at$sroa[&mut(buf.repr)]"(buf, offset, v
     b278: block {
         l279: loop {
             break_if b278 nd < offset;
-            builtin::array_set_u8(buf, nd, (48 + (builtin::i32_wrap_i64(val %u 10_i64) & 255)) & 255);
+            builtin::array_set_u8(buf, nd, 48 + builtin::i32_wrap_i64(val %u 10_i64));
             val = val /u 10_i64;
             nd = nd - 1;
             continue l279;

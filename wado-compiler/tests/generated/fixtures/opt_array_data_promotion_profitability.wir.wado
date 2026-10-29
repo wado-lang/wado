@@ -153,19 +153,17 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(58)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<opt_array_data_promotion_profitability.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0" = fn(i32, i32) -> ref "core:prelude/string.wado//String";  // TypeId(59)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(59)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(60)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(60)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(61)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(61)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(62)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(62)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(63)
+type "functype//opt_array_data_promotion_profitability.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(63)
 
-type "functype//opt_array_data_promotion_profitability.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(64)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(65)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(64)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -181,37 +179,60 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global mut global:opt_array_data_promotion_profitability.wado::$const_obj_0: ref null Array<i32> = ref.null none;
-global global:opt_array_data_promotion_profitability.wado::$const_obj_1: ref Array<i32> = array.new_fixed<i32>(100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249);
-global global:core:prelude/string.wado::$const_obj_2: ref Array<u8> = array.new_fixed<u8>(32);
+global global:opt_array_data_promotion_profitability.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
+global mut global:opt_array_data_promotion_profitability.wado::$const_obj_1: ref null Array<i32> = ref.null none;
+global global:opt_array_data_promotion_profitability.wado::$const_obj_2: ref Array<i32> = array.new_fixed<i32>(100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247, 248, 249);
 
 fn "opt_array_data_promotion_profitability.wado/run"() with Stdout {
+    let $load_0: ref Array<u8>;
     let $contract_arg_0: i32;
     let $contract_arg_1: i32;
-    let message_34: ref "core:prelude/string.wado//String";
-    let $cm_pair_7: i64;
-    if ref.is_null(global:opt_array_data_promotion_profitability.wado::$const_obj_0) {
-        global:opt_array_data_promotion_profitability.wado::$const_obj_0 = array.new_data<i32>(3000000, 3000001, 3000002, 3000003, 3000004, 3000005, 3000006, 3000007, 3000008, 3000009, 3000010, 3000011, 3000012, 3000013, 3000014, 3000015, 3000016, 3000017, 3000018, 3000019, 3000020, 3000021, 3000022, 3000023, 3000024, 3000025, 3000026, 3000027, 3000028, 3000029, 3000030, 3000031, 3000032, 3000033, 3000034, 3000035, 3000036, 3000037, 3000038, 3000039, 3000040, 3000041, 3000042, 3000043, 3000044, 3000045, 3000046, 3000047, 3000048, 3000049, 3000050, 3000051, 3000052, 3000053, 3000054, 3000055, 3000056, 3000057, 3000058, 3000059, 3000060, 3000061, 3000062, 3000063, 3000064, 3000065, 3000066, 3000067, 3000068, 3000069, 3000070, 3000071, 3000072, 3000073, 3000074, 3000075, 3000076, 3000077, 3000078, 3000079, 3000080, 3000081, 3000082, 3000083, 3000084, 3000085, 3000086, 3000087, 3000088, 3000089, 3000090, 3000091, 3000092, 3000093, 3000094, 3000095, 3000096, 3000097, 3000098, 3000099, 3000100, 3000101, 3000102, 3000103, 3000104, 3000105, 3000106, 3000107, 3000108, 3000109, 3000110, 3000111, 3000112, 3000113, 3000114, 3000115, 3000116, 3000117, 3000118, 3000119, 3000120, 3000121, 3000122, 3000123, 3000124, 3000125, 3000126, 3000127, 3000128, 3000129, 3000130, 3000131, 3000132, 3000133, 3000134, 3000135, 3000136, 3000137, 3000138, 3000139, 3000140, 3000141, 3000142, 3000143, 3000144, 3000145, 3000146, 3000147, 3000148, 3000149);
+    let out_52: ref "core:prelude/string.wado//String";
+    let is_negative_119: bool;
+    let x_123: i64;
+    let repr_142: ref Array<u8>;
+    if ref.is_null(global:opt_array_data_promotion_profitability.wado::$const_obj_1) {
+        global:opt_array_data_promotion_profitability.wado::$const_obj_1 = array.new_data<i32>(3000000, 3000001, 3000002, 3000003, 3000004, 3000005, 3000006, 3000007, 3000008, 3000009, 3000010, 3000011, 3000012, 3000013, 3000014, 3000015, 3000016, 3000017, 3000018, 3000019, 3000020, 3000021, 3000022, 3000023, 3000024, 3000025, 3000026, 3000027, 3000028, 3000029, 3000030, 3000031, 3000032, 3000033, 3000034, 3000035, 3000036, 3000037, 3000038, 3000039, 3000040, 3000041, 3000042, 3000043, 3000044, 3000045, 3000046, 3000047, 3000048, 3000049, 3000050, 3000051, 3000052, 3000053, 3000054, 3000055, 3000056, 3000057, 3000058, 3000059, 3000060, 3000061, 3000062, 3000063, 3000064, 3000065, 3000066, 3000067, 3000068, 3000069, 3000070, 3000071, 3000072, 3000073, 3000074, 3000075, 3000076, 3000077, 3000078, 3000079, 3000080, 3000081, 3000082, 3000083, 3000084, 3000085, 3000086, 3000087, 3000088, 3000089, 3000090, 3000091, 3000092, 3000093, 3000094, 3000095, 3000096, 3000097, 3000098, 3000099, 3000100, 3000101, 3000102, 3000103, 3000104, 3000105, 3000106, 3000107, 3000108, 3000109, 3000110, 3000111, 3000112, 3000113, 3000114, 3000115, 3000116, 3000117, 3000118, 3000119, 3000120, 3000121, 3000122, 3000123, 3000124, 3000125, 3000126, 3000127, 3000128, 3000129, 3000130, 3000131, 3000132, 3000133, 3000134, 3000135, 3000136, 3000137, 3000138, 3000139, 3000140, 3000141, 3000142, 3000143, 3000144, 3000145, 3000146, 3000147, 3000148, 3000149);
     }
-    message_34 = block -> ref "core:prelude/string.wado//String" {
-        if @unlikely(local.tee $contract_arg_0(black_box(3)) >=u 150) {
-            cold_path;
-            "opt_array_data_promotion_profitability.wado/run$cold1$dae[$v1]"($contract_arg_0);
-            unreachable;
-        }
-        $contract_arg_0 = builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::$const_obj_1, $contract_arg_0);
-        if @unlikely(local.tee $contract_arg_1(black_box(3)) >=u 150) {
-            cold_path;
-            "opt_array_data_promotion_profitability.wado/run$cold0$dae[$v1]"($contract_arg_1);
-            unreachable;
-        }
-        $contract_arg_1 = builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::$const_obj_0, $contract_arg_1);
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_array_data_promotion_profitability.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($contract_arg_0, $contract_arg_1);
+    if @unlikely(local.tee $contract_arg_0(black_box(3)) >=u 150) {
+        cold_path;
+        "opt_array_data_promotion_profitability.wado/run$cold1$dae[$v1]"($contract_arg_0);
+        unreachable;
+    }
+    $contract_arg_0 = builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::$const_obj_2, $contract_arg_0);
+    if @unlikely(local.tee $contract_arg_1(black_box(3)) >=u 150) {
+        cold_path;
+        "opt_array_data_promotion_profitability.wado/run$cold0$dae[$v1]"($contract_arg_1);
+        unreachable;
+    }
+    $contract_arg_1 = builtin::array_get_value<i32>(global:opt_array_data_promotion_profitability.wado::$const_obj_1, $contract_arg_1);
+    out_52 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
+    $inline_core_prelude_string_wado_String__format_opt_array_data_promotion_profitability_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22: block {
+        break $inline_core_prelude_string_wado_String__format_opt_array_data_promotion_profitability_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_22;
     };
-    $contract_arg_0 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $contract_arg_1 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    is_negative_119 = $contract_arg_0 < 0;
+    $contract_arg_0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_123(x_123 = builtin::i64_extend_i32_s($contract_arg_0); select i64(x_123 < 0_i64, 0_i64 - x_123, x_123)));
+    is_negative_119 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_52, is_negative_119, $contract_arg_0);
+    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_52.repr), is_negative_119, x_123, $contract_arg_0);
+    repr_142 = global:opt_array_data_promotion_profitability.wado::$const_obj_0;
+    if @unlikely(local.tee $contract_arg_0(out_52.used + 1) > builtin::array_len($load_0)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_52, $contract_arg_0);
+    }
+    is_negative_119 = out_52.used;
+    out_52.used = $contract_arg_0;
+    builtin::array_copy<u8>(out_52.repr, is_negative_119, repr_142, 0, 1);
+    $contract_arg_0 = $contract_arg_1 < 0;
+    $contract_arg_1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_123(x_123 = builtin::i64_extend_i32_s($contract_arg_1); select i64(x_123 < 0_i64, 0_i64 - x_123, x_123)));
+    $contract_arg_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_52, $contract_arg_0, $contract_arg_1);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_52.repr, $contract_arg_0, x_123, $contract_arg_1);
+    $inline_core_prelude_string_wado_String__format_opt_array_data_promotion_profitability_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70: block {
+        break $inline_core_prelude_string_wado_String__format_opt_array_data_promotion_profitability_wado__tmpl_8db8629cb9c7db93__i32_i32___spec0_spec0_0__$inline_core_prelude_string_wado_String__internal_push_view_70;
+    };
+    $contract_arg_0 = builtin::i32_wrap_i64(local.tee x_123("wasi/stream-new"()));
+    $contract_arg_1 = builtin::i32_wrap_i64(x_123 >> 32_i64);
     $contract_arg_0 = "opt_array_data_promotion_profitability.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($contract_arg_0);
-    "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_1, message_34.repr, message_34.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($contract_arg_1, out_52.repr, out_52.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($contract_arg_0);
 }
 
@@ -266,15 +287,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b12 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l13;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -659,24 +680,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c & 255);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -943,15 +964,15 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
             break_if b116 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, self - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l117;
         };
     };
     if self > is_negative {
-        builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
 }
 
@@ -1212,38 +1233,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     digit_count = self.used;
     self.used = is_negative;
     return digit_count;
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_array_data_promotion_profitability.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
-    let $load_0: ref Array<u8>;
-    let out_3: ref "core:prelude/string.wado//String";
-    let is_negative_70: bool;
-    let x_74: i64;
-    let repr_93: ref Array<u8>;
-    out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
-    $inline_core_prelude_string_wado_String__internal_push_view_22: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_22;
-    };
-    is_negative_70 = $mv$t$h0 < 0;
-    $mv$t$h0 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h0); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h0);
-    "core:prelude/primitive.wado/write_decimal_digits"(local.tee $load_0(out_3.repr), is_negative_70, x_74, $mv$t$h0);
-    repr_93 = global:core:prelude/string.wado::$const_obj_2;
-    if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len($load_0)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, $mv$t$h0);
-    }
-    is_negative_70 = out_3.used;
-    out_3.used = $mv$t$h0;
-    builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_93, 0, 1);
-    $mv$t$h0 = $mv$t$h1 < 0;
-    $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, $mv$t$h0, x_74, $mv$t$h1);
-    $inline_core_prelude_string_wado_String__internal_push_view_70: block {
-        break $inline_core_prelude_string_wado_String__internal_push_view_70;
-    };
-    return out_3;
 }
 
 export fn "opt_array_data_promotion_profitability.wado/$cm_export__run" as "run"

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use crate::analyze::Analyzer;
 use crate::ast::{
-    AstId, AstIdSpace, AstVisitor, Expr, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
+    AstId, AstVisitor, Expr, IdCollector, ImplBlock, Item, Module, SelfKind, Visibility,
 };
 use crate::ast_index::{AstIndex, FunctionLocation};
 use crate::compiler_host::{Code, CompilerHost, LogLevel};
@@ -29,7 +29,7 @@ use crate::kiln::InvocationIndex;
 use crate::kiln::import_check::inject_kiln_request_adapter;
 use crate::logger::Logger;
 use crate::marker::write_out_markers;
-use crate::module_source::{ModuleSource, ModuleSourceInterner};
+use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
 use crate::pgo::{ColdMap, Profile};
 use crate::resolve::Resolutions;
@@ -78,11 +78,10 @@ pub struct Semantics {
     /// — annotate finished but `build_tir` bailed; `(Some(_), true)` — full
     /// success. Batch compilation rejects all but the last.
     pub(crate) state: Option<AnnotateState>,
-    /// `AstIdSpace → ModuleSource` registry over the loaded modules: which
-    /// module's parse minted each id space. Lets bare-`AstId` facts be
-    /// resolved back to their owning module (spans, URIs) without carrying a
-    /// module in every key.
-    pub(crate) space_modules: IndexMap<AstIdSpace, ModuleSource>,
+    /// Which module's parse minted each id space, over the loaded modules. Lets
+    /// bare-`AstId` facts be resolved back to their owning module (spans, URIs)
+    /// without carrying a module in every key.
+    pub(crate) space_modules: ParseModules,
     /// The [`ModuleSemantics`] holding each fact the body walk recorded, as a
     /// position in [`AnnotateState::module_semantics`] — the routing every
     /// `AstId`-keyed query below reads through, in place of a second copy.
@@ -334,10 +333,7 @@ impl Semantics {
         symbols: SymbolTable,
         interner: std::rc::Rc<std::cell::RefCell<ModuleSourceInterner>>,
     ) -> Self {
-        let space_modules = modules
-            .iter()
-            .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
-            .collect();
+        let space_modules = ParseModules::of(&modules);
         Self {
             entry_module_source,
             modules,
@@ -393,7 +389,11 @@ impl Semantics {
             IndexMap::default();
         for types in self.walks() {
             for (site, shown) in &types.inexact_float_patterns {
-                let module = self.space_modules[&site.space].clone();
+                let module = self
+                    .space_modules
+                    .module_of_space(site.space)
+                    .expect("a pattern's span indexes a loaded parse")
+                    .clone();
                 by_module
                     .entry(module)
                     .or_default()
@@ -1255,7 +1255,7 @@ impl Semantics {
     /// for ids of unloaded/transient origin (e.g. `AstId::fresh`).
     #[must_use]
     pub fn module_of_id(&self, id: AstId) -> Option<&ModuleSource> {
-        self.space_modules.get(&id.space())
+        self.space_modules.module_of_space(id.space())
     }
 
     /// Span of the AST node identified by `key` — the source range of the
@@ -1535,12 +1535,8 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 ) -> Semantics {
     // Before any phase reports: a diagnostic's span names the file it indexes
     // by looking its parse up here.
-    logger.register_parses(
-        load_result
-            .modules
-            .iter()
-            .map(|(source, module)| (module.ast_id_space(), source.clone())),
-    );
+    let space_modules = ParseModules::of(&load_result.modules);
+    logger.register_parses(&space_modules);
     logger.register_asset_origins(std::mem::take(&mut load_result.asset_origins));
 
     // Wrap the loader's interner in `Rc<RefCell<>>` so analyze and the
@@ -1682,11 +1678,6 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
 
     let cm_bound = lower_ok && register_user_cm_bindings(&mut state, &load_result.modules, logger);
 
-    let space_modules = load_result
-        .modules
-        .iter()
-        .map(|(ms, m)| (m.ast_id_space(), ms.clone()))
-        .collect();
     let export_mappings = if lower_ok {
         export_mappings_of(
             &load_result.modules,

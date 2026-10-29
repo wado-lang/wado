@@ -748,7 +748,6 @@ pub struct Body {
     root: Tracked<BlockId>,
     pub locals: Tracked<Vec<NirLocal>>,
     pub address_taken_locals: Tracked<IndexSet<u32>>,
-    pub stores_aliased_locals: Tracked<IndexSet<u32>>,
     /// The pure-value pool every [`Operand::Value`] indexes. Maintained in
     /// place; never re-derived from the skeleton.
     pub values: Tracked<ValuePool>,
@@ -777,7 +776,7 @@ impl Body {
     /// Its parts' versions: different after any edit, by any route, since a
     /// part's edit count only grows and a part put in place of another carries
     /// an epoch of its own.
-    pub fn version(&self) -> [(u64, u64); 10] {
+    pub fn version(&self) -> [(u64, u64); 9] {
         [
             self.exprs.version(),
             self.stmts.version(),
@@ -786,7 +785,6 @@ impl Body {
             self.root.version(),
             self.locals.version(),
             self.address_taken_locals.version(),
-            self.stores_aliased_locals.version(),
             self.values.version(),
             self.value_graph.version(),
         ]
@@ -909,7 +907,6 @@ impl Body {
             root: Tracked::new(BlockId::from_u32(0)),
             locals: Tracked::new(Vec::new()),
             address_taken_locals: Tracked::new(IndexSet::default()),
-            stores_aliased_locals: Tracked::new(IndexSet::default()),
             values: Tracked::new(ValuePool::new()),
             value_graph: Tracked::new(None),
         }
@@ -928,7 +925,6 @@ impl Body {
             root: self.root.clone(),
             locals: Tracked::new(Vec::new()),
             address_taken_locals: Tracked::new(IndexSet::default()),
-            stores_aliased_locals: Tracked::new(IndexSet::default()),
             values: self.values.clone(),
             // Scratch clone (niri CTFE): the value graph is a per-function
             // optimizer artifact and is not carried into a node-only working copy.
@@ -1393,8 +1389,8 @@ impl Body {
 /// Structural navigation used by the rewrite engine (parent map + worklist).
 impl Body {
     /// Every local with a live `&local` / `&mut local`. The canonical
-    /// `address_taken_locals` / `stores_aliased_locals` go stale once `inline` /
-    /// `ref_elim` copy reference nodes, so alias-sensitive consumers union this in.
+    /// `address_taken_locals` goes stale once `inline` / `ref_elim` copy
+    /// reference nodes, so alias-sensitive consumers union this in.
     pub fn collect_address_taken_locals(&self, out: &mut hashmap::IndexSet<u32>) {
         self.for_each_reachable_node(|node| {
             if let NodeRef::Expr(id) = node

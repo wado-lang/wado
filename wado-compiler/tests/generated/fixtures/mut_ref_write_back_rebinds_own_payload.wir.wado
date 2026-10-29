@@ -371,12 +371,13 @@ global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/strin
 fn "mut_ref_write_back_rebinds_own_payload.wado/bump_by_match"(slot) {
     let m_2: ref "mut_ref_write_back_rebinds_own_payload.wado//Inner";
     let $match_3: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
-    let $av_5: i32;
-    local.tee m_2(struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: local.tee $av_5((if ref.is_null(local.tee $match_3(slot.value)) == 0 -> ref "mut_ref_write_back_rebinds_own_payload.wado//Inner" {
-        ref.as_non_null($match_3);
+    let $sroa_slot_5: i32;
+    if ref.is_null(local.tee $match_3(slot.value)) == 0 {
+        $sroa_slot_5 = $match_3.x;
     } else {
-        struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: 0 };
-    }).x) }).x = $av_5 + 1;
+        $sroa_slot_5 = 0;
+    }
+    local.tee m_2(struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: $sroa_slot_5 }).x = $sroa_slot_5 + 1;
     slot.value = m_2;
 }
 
@@ -461,15 +462,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b11 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l12;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -589,24 +590,24 @@ fn "core:prelude/string.wado/decode_char_at"(repr, pos) {
 
 fn "core:prelude/string.wado/encode_char"(repr, pos, code) {
     if code <u 128 {
-        builtin::array_set_u8(repr, pos, code & 255);
+        builtin::array_set_u8(repr, pos, code);
         return 1;
     }
     if code <u 2048 {
-        builtin::array_set_u8(repr, pos, (192 | (code >>u 6)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 192 | (code >>u 6));
+        builtin::array_set_u8(repr, pos + 1, 128 | (code & 63));
         return 2;
     }
     if code <u 65536 {
-        builtin::array_set_u8(repr, pos, (224 | (code >>u 12)) & 255);
-        builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, pos + 2, (128 | (code & 63)) & 255);
+        builtin::array_set_u8(repr, pos, 224 | (code >>u 12));
+        builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 6) & 63));
+        builtin::array_set_u8(repr, pos + 2, 128 | (code & 63));
         return 3;
     }
-    builtin::array_set_u8(repr, pos, (240 | (code >>u 18)) & 255);
-    builtin::array_set_u8(repr, pos + 1, (128 | ((code >>u 12) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 2, (128 | ((code >>u 6) & 63)) & 255);
-    builtin::array_set_u8(repr, pos + 3, (128 | (code & 63)) & 255);
+    builtin::array_set_u8(repr, pos, 240 | (code >>u 18));
+    builtin::array_set_u8(repr, pos + 1, 128 | ((code >>u 12) & 63));
+    builtin::array_set_u8(repr, pos + 2, 128 | ((code >>u 6) & 63));
+    builtin::array_set_u8(repr, pos + 3, 128 | (code & 63));
     return 4;
 }
 

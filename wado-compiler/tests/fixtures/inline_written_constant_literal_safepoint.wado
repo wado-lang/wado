@@ -1,0 +1,26 @@
+// A literal of constants the body then writes is built on every run, so it
+// stays a safepoint: a looping callee filling one is left a call, as one
+// allocating anything else is.
+use { println, Stdout } from "core:cli";
+
+fn digit_sum(value: i32) -> i32 {
+    let mut digits: List<i32> = [0, 0, 0];
+    let mut v = value;
+    for let mut i = 2; i >= 0; i -= 1 {
+        digits[i] = v % 10;
+        v /= 10;
+    }
+    return digits[0] + digits[1] + digits[2];
+}
+
+export fn run() with Stdout {
+    println(`${digit_sum(builtin::black_box(407))}`);
+}
+
+__DATA__
+{
+    "stdout": "11\n",
+    "wir_expect:O2": [
+        "digit_sum\"("
+    ]
+}

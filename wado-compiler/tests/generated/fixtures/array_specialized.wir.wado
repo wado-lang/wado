@@ -1316,7 +1316,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         b109: block {
             l110: loop {
                 break_if b109 nd < p;
-                builtin::array_set_u8($load_3, nd, (48 + (builtin::i32_wrap_i64(d %u 10_i64) & 255)) & 255);
+                builtin::array_set_u8($load_3, nd, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 nd = nd - 1;
                 continue l110;
@@ -1334,7 +1334,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         b113: block {
             l114: loop {
                 break_if b113 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, (48 + (builtin::i32_wrap_i64(d %u 10_i64) & 255)) & 255);
+                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l114;
@@ -1357,7 +1357,7 @@ fn "core:prelude/fpfmt.wado/write_decimal"(buf, d, p, nd) {
         b116: block {
             l117: loop {
                 break_if b116 $av_141 < start_15;
-                builtin::array_set_u8($load_3, $av_141, (48 + (builtin::i32_wrap_i64(d %u 10_i64) & 255)) & 255);
+                builtin::array_set_u8($load_3, $av_141, 48 + builtin::i32_wrap_i64(d %u 10_i64));
                 d = d /u 10_i64;
                 $av_141 = $av_141 - 1;
                 continue l117;
@@ -1659,24 +1659,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c & 255);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }
@@ -2364,15 +2364,15 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
             break_if b248 (self - is_negative) < 2;
             q = x /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, self - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, self - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, self - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, self - 2, 48 + tens);
             self = self - 2;
             x = q;
             continue l249;
         };
     };
     if self > is_negative {
-        builtin::array_set_u8(arr, is_negative, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, is_negative, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
 }
 
@@ -2860,15 +2860,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b339 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + is_negative_65) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l340;
         };
     };
     if t > start_153 {
-        builtin::array_set_u8(arr, start_153, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -2961,15 +2961,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b362 (digit_count_65 - start_205) < 2;
             q = t /u 100_i64;
             tens = local.tee new_used_204(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count_65 - 1, ((48 + new_used_204) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count_65 - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count_65 - 1, (48 + new_used_204) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count_65 - 2, 48 + tens);
             digit_count_65 = digit_count_65 - 2;
             t = q;
             continue l363;
         };
     };
     if digit_count_65 > start_205 {
-        builtin::array_set_u8(arr, start_205, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_205, 48 + builtin::i32_wrap_i64(t %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
@@ -3063,15 +3063,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b385 (t - start_206) < 2;
             q = value_65 /u 100_i64;
             tens = local.tee new_used_205(builtin::i32_wrap_i64(value_65 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + new_used_205) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + new_used_205) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             value_65 = q;
             continue l386;
         };
     };
     if t > start_206 {
-        builtin::array_set_u8(arr, start_206, (48 + builtin::i32_wrap_i64(value_65 %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_206, 48 + builtin::i32_wrap_i64(value_65 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
@@ -3177,15 +3177,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b410 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + is_negative_65) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l411;
         };
     };
     if t > start_153 {
-        builtin::array_set_u8(arr, start_153, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -3291,15 +3291,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b435 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + is_negative_65) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l436;
         };
     };
     if t > start_153 {
-        builtin::array_set_u8(arr, start_153, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -3404,15 +3404,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b460 (is_negative_66 - start_154) < 2;
             q = t /u 100_i64;
             tens = local.tee digit_count_68(builtin::i32_wrap_i64(t - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, is_negative_66 - 1, ((48 + digit_count_68) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, is_negative_66 - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, is_negative_66 - 1, (48 + digit_count_68) - (tens * 10));
+            builtin::array_set_u8(arr, is_negative_66 - 2, 48 + tens);
             is_negative_66 = is_negative_66 - 2;
             t = q;
             continue l461;
         };
     };
     if is_negative_66 > start_154 {
-        builtin::array_set_u8(arr, start_154, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_154, 48 + builtin::i32_wrap_i64(t %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -3518,15 +3518,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b485 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + is_negative_65) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l486;
         };
     };
     if t > start_153 {
-        builtin::array_set_u8(arr, start_153, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -3632,15 +3632,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b510 (t - start_153) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, t - 1, ((48 + is_negative_65) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, t - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
+            builtin::array_set_u8(arr, t - 2, 48 + tens);
             t = t - 2;
             x = q;
             continue l511;
         };
     };
     if t > start_153 {
-        builtin::array_set_u8(arr, start_153, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;
@@ -3794,15 +3794,15 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<array_speci
             break_if b539 ($mv$t$h0 - start_138) < 2;
             q = x_163 /u 100_i64;
             tens = local.tee $mv$t$h1(builtin::i32_wrap_i64(x_163 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_121, $mv$t$h0 - 1, ((48 + $mv$t$h1) - (tens * 10)) & 255);
-            builtin::array_set_u8(repr_121, $mv$t$h0 - 2, (48 + tens) & 255);
+            builtin::array_set_u8(repr_121, $mv$t$h0 - 1, (48 + $mv$t$h1) - (tens * 10));
+            builtin::array_set_u8(repr_121, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
             x_163 = q;
             continue l540;
         };
     };
     if $mv$t$h0 > start_138 {
-        builtin::array_set_u8(repr_121, start_138, (48 + builtin::i32_wrap_i64(x_163 %u 10_i64)) & 255);
+        builtin::array_set_u8(repr_121, start_138, 48 + builtin::i32_wrap_i64(x_163 %u 10_i64));
     }
     $load_5 = global:core:prelude/string.wado::$const_obj_34;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len(repr_121)) {

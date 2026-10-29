@@ -26,31 +26,29 @@ type "functype//opt_match_thread_cond_exit.wado/$cm_export__run" = fn();  // Typ
 
 type "functype//opt_match_thread_cond_exit.wado/run$cold2" = fn();  // TypeId(11)
 
-type "functype//core:cli/println" = fn(ref Array<u8>, i32);  // TypeId(12)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(12)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(13)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(13)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(14)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(14)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(15)
+type "functype//core:rt/unreachable" = fn();  // TypeId(15)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(16)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(16)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(17)
+type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(17)
 
-type "functype//core:rt/panic$cold0" = fn(ref Array<u8>, i32);  // TypeId(18)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(18)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(21)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
+type "functype//opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(22)
 
-type "functype//opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(23)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(24)
+type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(23)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -61,9 +59,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
-import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
+import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 fn "opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -71,26 +69,27 @@ fn "opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via
 }
 
 fn "opt_match_thread_cond_exit.wado/$cm_export__run"() {
-    let $sroa_slot_31: i32;
-    let $sroa_slot_32: i32;
+    let $cm_pair_7: i64;
+    let $sroa_slot_44: i32;
+    let $sroa_slot_45: i32;
     cold_path;
     $inline_run_1__$inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1: block {
         cold_path;
-        $sroa_slot_32 = $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block -> i32 {
+        $sroa_slot_45 = $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: block -> i32 {
             cold_path;
             cold_path;
-            $sroa_slot_31 = 1;
-            $sroa_slot_32 = -1;
+            $sroa_slot_44 = 1;
+            $sroa_slot_45 = -1;
             if break $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2 {
                 break $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: 1;
             }
             break $inline_run_1__$fused_$inline_opt_match_thread_cond_exit_wado_S__pick_sroa_return__2: 2;
         };
-        $sroa_slot_31 = 0;
-        $sroa_slot_32 = $sroa_slot_32 + 100;
+        $sroa_slot_44 = 0;
+        $sroa_slot_45 = $sroa_slot_45 + 100;
         break $inline_run_1__$inline_opt_match_thread_cond_exit_wado_S__run_sroa_return__1;
     };
-    if @unlikely((if ($sroa_slot_31 == 1) & ($sroa_slot_32 == -1) -> bool {
+    if @unlikely((if ($sroa_slot_44 == 1) & ($sroa_slot_45 == -1) -> bool {
         1;
     } else {
         0;
@@ -99,7 +98,13 @@ fn "opt_match_thread_cond_exit.wado/$cm_export__run"() {
         "opt_match_thread_cond_exit.wado/run$cold2"();
         unreachable;
     }
-    "core:cli/println"(array.new_fixed<u8>(111, 107), 2);
+    $sroa_slot_44 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_slot_45 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_slot_44 = "opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_slot_44);
+    let $mv_field_2: ref Array<u8>;
+    $mv_field_2 = array.new_fixed<u8>(111, 107);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_slot_45, $mv_field_2, 2);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_slot_44);
     "wasi/task-return"(0);
 }
 
@@ -108,17 +113,6 @@ fn "opt_match_thread_cond_exit.wado/run$cold2"() with Stdout {
 condition: a.run() matches { Err(-1) }
 "), 101);
     unreachable;
-}
-
-fn "core:cli/println"($mv$message$repr, $mv$message$used) with Stdout {
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_13: i32;
-    let $sroa_$pattern_temp_0_1_14: i32;
-    $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13 = "opt_match_thread_cond_exit.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
 }
 
 fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {

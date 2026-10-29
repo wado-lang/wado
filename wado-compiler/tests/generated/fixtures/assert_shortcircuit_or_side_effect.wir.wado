@@ -24,7 +24,7 @@ type "functype//assert_shortcircuit_or_side_effect.wado/$cm_export__run" = fn();
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(10)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(11)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(11)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
 
@@ -65,7 +65,7 @@ fn "assert_shortcircuit_or_side_effect.wado/$cm_export__run"() {
     $sroa_message_repr_37 = array.new_data<u8>("passed");
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, $sroa_message_repr_37, 0, 6);
     builtin::array_set_u8(new_repr, 6, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
     "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
     "wasi/task-return"(0);
@@ -76,7 +76,7 @@ fn "core:rt/unreachable"() {
     unreachable;
 }
 
-fn "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"(handle, data) {
+fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle, data) {
     let ptr_13: i32;
     let ptr_19: i32;
     let count_20: i32;

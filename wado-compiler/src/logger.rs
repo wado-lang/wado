@@ -12,7 +12,7 @@ use crate::compiler_host::{
 };
 use crate::hashmap;
 use crate::loader::PathSite;
-use crate::module_source::ModuleSource;
+use crate::module_source::{ModuleSource, ParseModules};
 
 /// Maximum number of errors before compilation is aborted
 pub const MAX_ERRORS: usize = 100;
@@ -55,7 +55,7 @@ pub struct Logger<'a, H: CompilerHost> {
     reported: std::cell::RefCell<hashmap::IndexSet<String>>,
     /// Which module's parse minted each id space, over the loaded set. What
     /// turns a span's [`crate::ast::AstIdSpace`] into the file it indexes.
-    parses: std::cell::RefCell<hashmap::IndexMap<AstIdSpace, ModuleSource>>,
+    parses: std::cell::RefCell<ParseModules>,
     /// Each wasm asset's file -> the path of the `use` where a diagnostic in
     /// its bindings is reported. The bindings are synthesized, so a location in
     /// them indexes no text.
@@ -96,7 +96,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// Record which module each loaded parse belongs to, so a diagnostic's span
     /// can name its own file. Called once the loader has the set; a span from a
     /// parse not in it falls back to the reporting caller's module.
-    pub fn register_parses(&self, parses: impl IntoIterator<Item = (AstIdSpace, ModuleSource)>) {
+    pub fn register_parses(&self, parses: &ParseModules) {
         self.parses.borrow_mut().extend(parses);
     }
 
@@ -104,7 +104,7 @@ impl<'a, H: CompilerHost> Logger<'a, H> {
     /// with a loadable path. A synthetic entry (`<stdin>`, `<entry>`) has none,
     /// and answering with its empty path would blank a file the caller knew.
     fn file_of_parse(&self, space: AstIdSpace) -> Option<String> {
-        let file = self.parses.borrow().get(&space)?.source_path();
+        let file = self.parses.borrow().module_of_space(space)?.source_path();
         (!file.is_empty()).then_some(file)
     }
 

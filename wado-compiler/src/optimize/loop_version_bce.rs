@@ -189,13 +189,11 @@ pub(super) fn version_loops(
         if !body_contains_loop(body_ref) {
             continue;
         }
-        let stores_aliased = func.stores_aliased_locals.clone();
         let FuncParts {
             body,
             locals,
             params,
             address_taken_locals,
-            stores_aliased_locals,
             ..
         } = func.parts();
         let frame = LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
@@ -204,7 +202,6 @@ pub(super) fn version_loops(
             body,
             locals,
             address_taken_locals,
-            stores_aliased_locals,
             &type_table,
             &first_param_types,
             &call_immutability,
@@ -256,7 +253,7 @@ pub(super) fn version_loops(
             effects: &summaries.effects,
             proofs: &proofs,
         };
-        let elide_rule = ElideRule::new(&stores_aliased, calls);
+        let elide_rule = ElideRule::new(calls);
         let prune_rule = BranchPruneRule;
         let rules: [&dyn Rule; 2] = [&prune_rule, &elide_rule];
         engine.run(&rules);

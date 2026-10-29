@@ -253,7 +253,6 @@ pub fn apply_licm(
             locals,
             params,
             address_taken_locals,
-            stores_aliased_locals,
             name,
             ..
         } = func.parts();
@@ -262,7 +261,6 @@ pub fn apply_licm(
             body,
             locals,
             address_taken_locals,
-            stores_aliased_locals,
             type_table,
             &first_param_types,
             &call_immutability,

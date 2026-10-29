@@ -63,15 +63,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(25)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
 type "functype//tagged_template_html.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(27)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(28)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -82,9 +80,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:tagged_template_html.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(38, 113, 117, 111, 116, 59);
 global global:tagged_template_html.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(38, 97, 109, 112, 59);
@@ -179,16 +177,24 @@ fn "tagged_template_html.wado/run"() with Stdout {
     let title: ref "core:prelude/string.wado//String";
     let n: i32;
     let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_1_14: i32;
+    let $sroa_$pattern_temp_0_1_16: i32;
+    let new_repr: ref Array<u8>;
+    let self_23: i32;
     title = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("say \"hi\" & <bye>"), used: 16 });
     n = black_box(3);
     title = block -> ref "core:prelude/string.wado//String" {
         "tagged_template_html.wado/tagged_template_html.wado/html<tagged_template_html.wado/$tmpl$2dabe586663636a6,[core:prelude/string.wado/String,core:prelude/string.wado/String,i32]>$spec0$spec0"(title, title, n);
     };
     n = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_1_16 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     n = "tagged_template_html.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, title.repr, title.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_23(title.used) + 1)), 0, title.repr, 0, self_23);
+    builtin::array_set_u8(new_repr, self_23, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_23 = self_23 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_16, new_repr, 0, self_23);
+    });
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_16);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n);
 }
 
@@ -332,20 +338,20 @@ fn "tagged_template_html.wado/tagged_template_html.wado/html<tagged_template_htm
     $mv$t$h0.used = start_33;
     repr_16 = $mv$t$h0.repr;
     $mv$t$h2 = start_135 + $mv$t$h2;
-    b38: block {
-        l39: loop {
-            break_if b38 ($mv$t$h2 - start_135) < 2;
+    b39: block {
+        l40: loop {
+            break_if b39 ($mv$t$h2 - start_135) < 2;
             q = x_315 /u 100_i64;
             tens = local.tee start_33(builtin::i32_wrap_i64(x_315 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_16, $mv$t$h2 - 1, ((48 + start_33) - (tens * 10)) & 255);
-            builtin::array_set_u8(repr_16, $mv$t$h2 - 2, (48 + tens) & 255);
+            builtin::array_set_u8(repr_16, $mv$t$h2 - 1, (48 + start_33) - (tens * 10));
+            builtin::array_set_u8(repr_16, $mv$t$h2 - 2, 48 + tens);
             $mv$t$h2 = $mv$t$h2 - 2;
             x_315 = q;
-            continue l39;
+            continue l40;
         };
     };
     if $mv$t$h2 > start_135 {
-        builtin::array_set_u8(repr_16, start_135, (48 + builtin::i32_wrap_i64(x_315 %u 10_i64)) & 255);
+        builtin::array_set_u8(repr_16, start_135, 48 + builtin::i32_wrap_i64(x_315 %u 10_i64));
     }
     "tagged_template_html.wado/escape"(0, $mv$t$h0, out_1);
     repr_16 = global:tagged_template_html.wado::$const_obj_4;
@@ -357,17 +363,6 @@ fn "tagged_template_html.wado/tagged_template_html.wado/html<tagged_template_htm
     out_1.used = $mv$t$h2;
     builtin::array_copy<u8>(out_1.repr, start_33, repr_16, 0, 4);
     return out_1;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {
@@ -503,24 +498,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, new_used, c & 255);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }

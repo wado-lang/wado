@@ -1,7 +1,8 @@
 // Optimization: SROA with mixed stores/non-stores &s usage.
 //
-// `a` has only non-stores ref → should be SROA'd.
-// `b` has stores ref → should NOT be SROA'd.
+// `a` has only a non-stores ref, and is SROA'd. `b`'s ref is stored in a
+// `Holder`, which splits once `store_point` is inlined, leaving an ordinary
+// reference local that `ref_elim` folds away; `b` then splits as well.
 //
 // `black_box` keeps the fields off the constant path: with constant ones both
 // structs are compile-time values and there is nothing left to decompose.
@@ -33,7 +34,7 @@ export fn run() {
     let ra = read_point(&a);
     assert a.x + ra == 4;
 
-    // b: has stores ref — should NOT be SROA'd
+    // b: has a stores ref
     let b = Point {
         x: builtin::black_box(3),
         y: builtin::black_box(4),
@@ -46,5 +47,5 @@ export fn run() {
 __DATA__
 {
     "stdout": "",
-    "wir_not_expect:O2": ["a = Point"]
+    "wir_not_expect:O2": ["a = struct.new", "b = struct.new"]
 }

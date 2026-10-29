@@ -248,8 +248,8 @@ pub(crate) fn reparsed_snapshot_module<'a>(
 ) -> Option<&'a ModuleSource> {
     let cached = stdlib_sources(snap);
     modules.iter().find_map(|(ms, module)| {
-        let reparsed =
-            cached.contains(ms) && snap.space_modules.get(&module.ast_id_space()) != Some(ms);
+        let reparsed = cached.contains(ms)
+            && snap.space_modules.module_of_space(module.ast_id_space()) != Some(ms);
         reparsed.then_some(ms)
     })
 }
@@ -324,7 +324,7 @@ fn resolve_stdlib_bindings() -> StdlibBindings {
         .collect();
     let mut entry = String::new();
     for (i, path) in paths.iter().enumerate() {
-        let _ = writeln!(entry, "use binding{i} from \"{path}\";");
+        writeln!(entry, "use binding{i} from \"{path}\";").expect("writing to a String");
     }
     let host = SnapshotHost;
     let logger = Logger::new(&host, LogLevel::Error);

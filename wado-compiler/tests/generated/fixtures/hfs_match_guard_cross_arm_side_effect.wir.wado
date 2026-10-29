@@ -54,15 +54,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(23)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(24)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
 type "functype//hfs_match_guard_cross_arm_side_effect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(26)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(27)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -73,9 +71,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
@@ -91,7 +89,8 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
     let i: i32;
     let message_4: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
-    let $hfs_value_19: i32;
+    let new_repr: ref Array<u8>;
+    let $hfs_value_34: i32;
     state = struct.new "hfs_match_guard_cross_arm_side_effect.wado//State" { value: 0, seen: 0 };
     sum = 0;
     i = 0;
@@ -99,28 +98,34 @@ fn "hfs_match_guard_cross_arm_side_effect.wado/run"() with Stdout {
         l1: loop {
             break_if b0 i >= 3;
             if "hfs_match_guard_cross_arm_side_effect.wado/probe"(state) > 0 {
-                $hfs_value_19 = -1;
+                $hfs_value_34 = -1;
             } else {
-                $hfs_value_19 = state.value;
-                sum = sum + $hfs_value_19;
-                $hfs_value_19 = $hfs_value_19 + 1;
+                $hfs_value_34 = state.value;
+                sum = sum + $hfs_value_34;
+                $hfs_value_34 = $hfs_value_34 + 1;
             }
-            sum = sum + $hfs_value_19;
-            $hfs_value_19 = $hfs_value_19 + 1000;
+            sum = sum + $hfs_value_34;
+            $hfs_value_34 = $hfs_value_34 + 1000;
             i = i + 1;
-            state.value = $hfs_value_19;
+            state.value = $hfs_value_34;
             continue l1;
         };
     };
     message_4 = block -> ref "core:prelude/string.wado//String" {
         i = state.value;
-        $hfs_value_19 = state.seen;
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_match_guard_cross_arm_side_effect.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"(sum, i, $hfs_value_19);
+        $hfs_value_34 = state.seen;
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_match_guard_cross_arm_side_effect.wado/$tmpl$b31438d91a1e3c14,[i32,i32,i32]>$spec0$spec0"(sum, i, $hfs_value_34);
     };
     sum = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     i = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     sum = "hfs_match_guard_cross_arm_side_effect.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    "core:rt/write_string_to_stream$dae[add_newline]"(i, message_4.repr, message_4.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $hfs_value_34(message_4.used) + 1)), 0, message_4.repr, 0, $hfs_value_34);
+    builtin::array_set_u8(new_repr, $hfs_value_34, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        $hfs_value_34 = $hfs_value_34 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i, new_repr, 0, $hfs_value_34);
+    });
+    "wasi/stream-drop-writable"(i);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
 }
 
@@ -138,20 +143,20 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b4: block {
-        l5: loop {
-            break_if b4 (digit_count - offset) < 2;
+    b5: block {
+        l6: loop {
+            break_if b5 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l5;
+            continue l6;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -214,17 +219,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
         return 19;
     }
     return 20;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

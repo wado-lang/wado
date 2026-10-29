@@ -87,23 +87,23 @@ fn "wasi_tls_connector_drop.wado/run"() with Stdout, Connector, Error {
     let _send_done: ref null "core:prelude//$Resource";
     let $cm_pair_7_7: i64;
     let $pattern_temp_1: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:tls/types.wado/Error>>]";
-    let $sroa_$pattern_temp_0_0_10: i32;
-    let $sroa_$pattern_temp_0_1_11: i32;
+    let $sroa_$pattern_temp_0_0_23: i32;
+    let $sroa_$pattern_temp_0_1_24: i32;
     let new_repr: ref Array<u8>;
     conn = "wasi_tls_connector_drop.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[constructor]connector"();
-    $sroa_$pattern_temp_0_0_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_11 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
-    _tls_rx = local.tee $pattern_temp_1("wasi_tls_connector_drop.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[method]connector.send"(conn, $sroa_$pattern_temp_0_0_10)).0;
+    $sroa_$pattern_temp_0_0_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_24 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    _tls_rx = local.tee $pattern_temp_1("wasi_tls_connector_drop.wado/$cm_binding__wasi:tls/client@0.3.0-draft#[method]connector.send"(conn, $sroa_$pattern_temp_0_0_23)).0;
     _send_done = $pattern_temp_1.1;
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_11);
-    $sroa_$pattern_temp_0_0_10 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_11 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_10 = "wasi_tls_connector_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_10);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_24);
+    $sroa_$pattern_temp_0_0_23 = builtin::i32_wrap_i64(local.tee $cm_pair_7_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_24 = builtin::i32_wrap_i64($cm_pair_7_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_23 = "wasi_tls_connector_drop.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_23);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(18)), 0, global:wasi_tls_connector_drop.wado::$const_obj_0, 0, 17);
     builtin::array_set_u8(new_repr, 17, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_11, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_11);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_24, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_24);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_23);
     if ref.is_null(_send_done) == 0 {
         "wasi/future-drop-readable:val-result<_,own<wasi:tls/types.wado#Error>>"(_send_done.value);
     }

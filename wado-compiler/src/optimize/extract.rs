@@ -335,7 +335,6 @@ pub(super) fn freeze_pure_arith(
                 locals,
                 params,
                 address_taken_locals,
-                stores_aliased_locals,
                 ..
             } = func.parts();
             let body = body.expect("checked above");
@@ -346,7 +345,6 @@ pub(super) fn freeze_pure_arith(
                 body,
                 locals,
                 address_taken_locals,
-                stores_aliased_locals,
                 type_table,
                 &first_param_types,
                 &call_immutability,

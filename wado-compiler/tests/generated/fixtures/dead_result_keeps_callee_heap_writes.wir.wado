@@ -64,15 +64,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(27)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(29)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
 type "functype//dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream" = fn(i32) -> i32;  // TypeId(30)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,9 +81,9 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
+import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
 
@@ -111,15 +109,16 @@ fn "dead_result_keeps_callee_heap_writes.wado/run"() with Stdout {
     let c: ref "dead_result_keeps_callee_heap_writes.wado//Cell";
     let l: ref "core:prelude//List<i32>";
     let a: ref Array<i32>;
-    let message_15: ref "core:prelude/string.wado//String";
+    let message_14: ref "core:prelude/string.wado//String";
     let $cm_pair_7: i64;
+    let new_repr: ref Array<u8>;
     "dead_result_keeps_callee_heap_writes.wado/bump$dae[return]"(local.tee c(struct.new "dead_result_keeps_callee_heap_writes.wado//Cell" { v: 0 }));
     "dead_result_keeps_callee_heap_writes.wado/shorten$dae[return]"(local.tee l(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }));
     "dead_result_keeps_callee_heap_writes.wado/poke$dae[return]"(local.tee a(builtin::array_new<i32>(1)));
     if 0 < l.used {
         l.used = 0;
     }
-    message_15 = block -> ref "core:prelude/string.wado//String" {
+    message_14 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_1: i32;
         $mv_field_1 = c.v;
         let $mv_field_2: i32;
@@ -131,7 +130,13 @@ fn "dead_result_keeps_callee_heap_writes.wado/run"() with Stdout {
     $mv_field_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $mv_field_1 = "dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_2, message_15.repr, message_15.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $mv_field_3(message_14.used) + 1)), 0, message_14.repr, 0, $mv_field_3);
+    builtin::array_set_u8(new_repr, $mv_field_3, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        $mv_field_3 = $mv_field_3 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($mv_field_2, new_repr, 0, $mv_field_3);
+    });
+    "wasi/stream-drop-writable"($mv_field_2);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_1);
 }
 
@@ -149,20 +154,20 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b3: block {
-        l4: loop {
-            break_if b3 (digit_count - offset) < 2;
+    b4: block {
+        l5: loop {
+            break_if b4 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l4;
+            continue l5;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 
@@ -225,17 +230,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
         return 19;
     }
     return 20;
-}
-
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {

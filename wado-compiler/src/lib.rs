@@ -137,7 +137,8 @@ pub use compiler_host::{
 };
 pub use logger::{Bail, Logger};
 pub use remarks::{
-    Remark, collect_const_region_remarks, collect_param_gate_remarks, collect_value_copy_remarks,
+    EntryCode, Remark, collect_const_region_remarks, collect_param_gate_remarks,
+    collect_value_copy_remarks,
 };
 pub use semantics::{
     Cursor, Definition, Semantics, SymbolResolveError, semantics, semantics_for_world, semantics_of,
@@ -448,6 +449,8 @@ pub struct OptOverrides {
     pub inline_threshold: Option<usize>,
     pub inline_growth: Option<u32>,
     pub iterations: Option<u32>,
+    /// The clones constant-argument specialization may mint over the module.
+    pub specializations: Option<usize>,
 }
 
 /// Compilation options for the compiler
@@ -1934,6 +1937,7 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         coverage,
+        space_modules,
         ..
     } = sem;
 
@@ -2211,7 +2215,8 @@ fn compile_after_load<H: CompilerHost>(
     // level so the NIR walk is skipped entirely when remarks would be filtered
     // out (the default CLI level is `warn`).
     if remarks_logged {
-        let residual = remarks::collect_value_copy_remarks(&nir)
+        let entry = EntryCode::new(&nir, &space_modules);
+        let residual = remarks::collect_value_copy_remarks(&nir, &entry)
             .into_iter()
             .map(|mut remark| {
                 // A copy a destructuring assignment makes says why it is no move.
@@ -2225,8 +2230,13 @@ fn compile_after_load<H: CompilerHost>(
                 }
                 remark
             })
-            .chain(remarks::collect_param_gate_remarks(&nir))
-            .chain(remarks::collect_const_region_remarks(&nir));
+            .chain(remarks::collect_param_gate_remarks(&nir, &entry))
+            .chain(remarks::collect_const_region_remarks(&nir, &entry))
+            .chain(
+                nir.specialization_cap
+                    .as_ref()
+                    .map(remarks::specialization_cap_remark),
+            );
         for remark in residual {
             // `source_path` is empty for a synthetic entry name (`<stdin>`),
             // so the entry point keeps the caller's filename.

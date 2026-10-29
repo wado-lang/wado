@@ -24,15 +24,17 @@ type "functype//log_stderr_explicit_import.wado/$cm_export__run" = fn();  // Typ
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(10)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(11)
+type "functype//core:rt/log_stderr$spec0" = fn(ref Array<u8>, i32);  // TypeId(11)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
+type "functype//core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]" = fn(i32, ref Array<u8>);  // TypeId(12)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(13)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(14)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(15)
+
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -42,32 +44,34 @@ import fn wasi/waitable-set-new from "wasi/waitable-set-new";
 import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stderr@0.3.0#write-via-stream from "wasi/$wasi:cli/stderr@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
+import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
-import fn wasi/task-return from "wasi/task-return";
 
 fn "log_stderr_explicit_import.wado/$cm_export__run"() {
-    let $cm_pair_7: i64;
-    let $sroa_$pattern_temp_0_0_9: i32;
-    let $sroa_$pattern_temp_0_1_10: i32;
-    let new_repr: ref Array<u8>;
-    let $sroa_message_repr_25: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
-    $sroa_message_repr_25 = array.new_data<u8>("explicit import works");
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(22)), 0, $sroa_message_repr_25, 0, 21);
-    builtin::array_set_u8(new_repr, 21, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_10, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_10);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
+    "core:rt/log_stderr$spec0"(array.new_data<u8>("explicit import works"), 21);
     "wasi/task-return"(0);
 }
 
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;
+}
+
+fn "core:rt/log_stderr$spec0"($mv$message$repr, $mv$message$used) {
+    let $cm_pair_7: i64;
+    let new_repr: ref Array<u8>;
+    let $sroa_$pattern_temp_0_0_24: i32;
+    let $sroa_$pattern_temp_0_1_25: i32;
+    $sroa_$pattern_temp_0_0_24 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
+    $sroa_$pattern_temp_0_1_25 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    $sroa_$pattern_temp_0_0_24 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_24);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(22)), 0, $mv$message$repr, 0, 21);
+    builtin::array_set_u8(new_repr, 21, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_25, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_25);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_24);
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(handle, data) {

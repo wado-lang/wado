@@ -1,0 +1,35 @@
+// A loop whose body calls a function stays as it is: the call costs more than
+// the bounds checks the copy's iterations would share, so the copy only adds
+// code. A serializer's `for` over its elements is this shape.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn weigh(v: i32) -> i32 {
+    return v * 3 + 1;
+}
+
+#[inline(never)]
+fn total(x: &Array<i32>, n: i32) -> i32 {
+    let mut sum = 0;
+    for let mut i = 0; i < n; i += 1 {
+        sum += weigh(x[i]);
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let len = builtin::black_box(10);
+    let mut x = Array::<i32>::filled(len, 0);
+    for let i of 0..<len {
+        x[i] = i;
+    }
+    println(`${total(&x, len)}`);
+}
+
+__DATA__
+{
+    "stdout": "145\n",
+    "wir_not_expect:O2": [
+        " + 1) + 1) + 1) >= n"
+    ]
+}

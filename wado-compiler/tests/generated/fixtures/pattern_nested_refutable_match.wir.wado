@@ -134,7 +134,7 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
     message_46 = block -> ref "core:prelude/string.wado//String" {
         n_5 = (if (if ref.is_null(some1) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(ref.as_non_null(some1))) -> i32 {
-                (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
+                ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1;
             } else {
                 0;
             }
@@ -158,7 +158,7 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
         });
         n_11 = (if (if ref.is_null(some2) == 0 -> i32 {
             if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(ref.as_non_null(some2))) -> i32 {
-                (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
+                ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1;
             } else {
                 0;
             }
@@ -189,7 +189,7 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_5);
     message_46 = block -> ref "core:prelude/string.wado//String" {
         n_5 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_3)).0)) -> i32 {
-            (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
+            ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1;
         } else {
             0;
         }) -> i32 {
@@ -206,7 +206,7 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
             0;
         });
         n_11 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_2)).0)) -> i32 {
-            (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
+            ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1;
         } else {
             0;
         }) -> i32 {
@@ -310,15 +310,15 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
             break_if b37 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, digit_count - 1, ((48 + pair) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, digit_count - 2, (48 + tens) & 255);
+            builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
+            builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
             continue l38;
         };
     };
     if digit_count > offset {
-        builtin::array_set_u8(arr, offset, (48 + builtin::i32_wrap_i64(val %u 10_i64)) & 255);
+        builtin::array_set_u8(arr, offset, 48 + builtin::i32_wrap_i64(val %u 10_i64));
     }
 }
 

@@ -150,10 +150,10 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
     // the skeleton — count those so a param read only through a promoted value
     // is not seen as dead.
     arena_query::promoted_local_reads(body, &mut reads);
-    // Neither `retains` nor `address_taken_locals` / `stores_aliased_locals` is
-    // consulted: keeping a parameter, or a reference to it, takes a read of
-    // it. The sets are carried through rewrites that can delete that read,
-    // such as a specialization substituting every field read.
+    // Neither `retains` nor `address_taken_locals` is consulted: keeping a
+    // parameter, or a reference to it, takes a read of it. Both are carried
+    // through rewrites that can delete that read, such as a specialization
+    // substituting every field read.
     func.params
         .iter()
         .map(|p| !reads.contains(&p.local_index))
@@ -389,14 +389,8 @@ fn shrink_params_and_renumber(func: &mut NirFunction, dead: &[bool]) {
         }
     });
 
-    // Apply the remap to address_taken_locals / stores_aliased_locals.
     func.address_taken_locals = func
         .address_taken_locals
-        .iter()
-        .filter_map(|i| remap[*i as usize])
-        .collect();
-    func.stores_aliased_locals = func
-        .stores_aliased_locals
         .iter()
         .filter_map(|i| remap[*i as usize])
         .collect();

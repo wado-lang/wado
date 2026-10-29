@@ -1,0 +1,53 @@
+// A loop that steps its variable ahead of the rest of its body unrolls as one
+// stepping last does: `for b of s.bytes()` reads the byte, steps, then sums it.
+// Every length leaves the same remainder, and work after the step that reads
+// the stepped variable sees the value it saw before.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn byte_sum(s: &String) -> i32 {
+    let mut sum = 0;
+    for let b of s.bytes() {
+        sum += b as i32;
+    }
+    return sum;
+}
+
+#[inline(never)]
+fn weighted(x: &Array<i32>, n: i32) -> i32 {
+    let mut sum = 0;
+    let mut i = 0;
+    while i < n {
+        let v = x[i];
+        i += 1;
+        sum += v * i;
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let len = builtin::black_box(10);
+    let mut x = Array::<i32>::filled(len, 0);
+    let mut text = "";
+    for let i of 0..<len {
+        x[i] = i * 3 + 1;
+    }
+    let mut sums: List<i32> = [];
+    let mut weights: List<i32> = [];
+    for let n of 0..=len {
+        sums.push(byte_sum(&text));
+        weights.push(weighted(&x, n));
+        text.push_str("ab");
+    }
+    println(`${sums:?}`);
+    println(`${weights:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[0, 195, 390, 585, 780, 975, 1170, 1365, 1560, 1755, 1950]\n[0, 1, 9, 30, 70, 135, 231, 364, 540, 765, 1045]\n",
+    "wir_expect:O2": [
+        " + 1) + 1) + 1) >= $mv$s$used",
+        " + 1) + 1) + 1) >= n"
+    ]
+}
