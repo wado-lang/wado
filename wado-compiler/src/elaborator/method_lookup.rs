@@ -296,10 +296,7 @@ fn target_arg_names(arg: &Type, name: &str) -> bool {
 impl TypeSystem {
     /// What a reference type refers to, `None` for anything else.
     pub(crate) fn pointee_of(&self, id: TypeId) -> Option<TypeId> {
-        match self.type_table.borrow().get(id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-            _ => None,
-        }
+        self.type_table.borrow().ref_pointee(id)
     }
 
     /// `id` read through one reference, if it is one.

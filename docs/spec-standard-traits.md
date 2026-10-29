@@ -1124,8 +1124,8 @@ eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
 types mutated in place rather than replaced on assignment, which excludes
-`variant`, `fn` and a reference. A `resource` is a handle that cannot be aliased, so a
-resource element is read by value. A newtype follows its base. Neither marker
+`variant`, `fn` and a reference. A `resource` is a handle that cannot be
+aliased, so a resource element is read by value. A newtype follows its base. Neither marker
 asks whether a value holds references: a `struct` with `&T` fields is `Ref`, and
 `i32` is not `Ref`, although `&i32` is.
 

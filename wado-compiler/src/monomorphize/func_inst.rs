@@ -4276,31 +4276,9 @@ fn try_lower_comparison(
 /// holding one — has no `&` node to drop, so it gets an explicit deref; leaving
 /// it alone handed codegen a `(ref $type)` where the instruction wanted an i32.
 fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
-    let mut expr = if let TirExprKind::Unary {
-        op: TirUnaryOp::Ref,
-        expr: inner,
-    } = &operand.kind
-    {
-        (**inner).clone()
-    } else {
-        operand.clone()
-    };
-    // `T = &i32` leaves the inner value a reference of its own, so peel a
-    // layer at a time and type each `Deref` by what it yields.
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(expr.type_id)
-    {
-        let inner = *inner;
-        let span = expr.span;
-        expr = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: Box::new(expr),
-            },
-            inner,
-            span,
-        );
-    }
-    expr
+    // `T = &i32` leaves the inner value a reference of its own, so every layer
+    // is peeled.
+    deref_to_layers(operand.clone(), 0, type_table)
 }
 
 /// Holds each template literal's holes as its concrete shape does, which reify
