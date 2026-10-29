@@ -1713,6 +1713,9 @@ fn rewrite_arg(
 /// The other fields are dropped with the literal, so each must be something
 /// whose evaluation nothing observes — a constant, or a local read. That is
 /// the ordinary case for a record built to carry options at a call.
+///
+/// The initializer is a value, so a parameter taking the field by reference
+/// takes Case 3's `&(Wrapper{V}).f` instead.
 fn literal_field(
     body: &Body,
     arg: ExprId,
@@ -1727,7 +1730,8 @@ fn literal_field(
     else {
         return None;
     };
-    if struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
+    if info.form.ref_op().is_some()
+        || struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
         || !fields
             .iter()
             .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
