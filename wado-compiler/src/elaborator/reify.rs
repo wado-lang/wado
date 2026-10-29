@@ -3011,17 +3011,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 {
                     ctx.address_taken_locals.insert(*index);
                 }
-                // `&*r` / `&mut *r` names the storage `r` already refers to;
-                // taking `&` of the deref would box a copy of a scalar.
-                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                    && let TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: referent,
-                    } = &inner.kind
-                    && self.tysys.type_table.borrow().type_key(referent.type_id)
-                        == self.tysys.type_table.borrow().type_key(recorded_type)
-                {
-                    return *referent.clone();
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) {
+                    return reference_to(op, inner, recorded_type, span, &self.tysys.type_table);
                 }
                 TirExpr::new(
                     TirExprKind::Unary {
@@ -4692,13 +4683,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(arg.type_id));
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(arg),
-                        },
+                    reference_to(
+                        TirUnaryOp::Ref,
+                        arg,
                         arg_ref_type,
                         span,
+                        &self.tysys.type_table,
                     )
                 } else {
                     arg
@@ -6435,7 +6425,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 5: assemble the capture list, making this frame capture whatever
         // the closure only reached through it, as `resolve_closure` also did.
-        let captures = relink_recorded_captures(&cap_info.captures, &closure_ctx, ctx);
+        let captures = relink_recorded_captures(
+            &cap_info.captures,
+            &closure_ctx,
+            ctx,
+            &self.tysys.type_table.borrow(),
+        );
 
         // An explicit annotation wins; otherwise single-expression closure
         // bodies (e.g. `|c| c.method()`) take their body's type as the return
@@ -10401,25 +10396,11 @@ fn adjust_receiver_node(
         return match self_kind {
             ast::SelfKind::Ref => {
                 let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(receiver),
-                    },
-                    ref_type,
-                    span,
-                )
+                reference_to(TirUnaryOp::Ref, receiver, ref_type, span, type_table)
             }
             ast::SelfKind::MutRef => {
                 let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: Box::new(receiver),
-                    },
-                    mut_ref_type,
-                    span,
-                )
+                reference_to(TirUnaryOp::MutRef, receiver, mut_ref_type, span, type_table)
             }
             ast::SelfKind::None | ast::SelfKind::Value => {
                 deref_to_value(receiver, span, type_table)
@@ -10449,14 +10430,7 @@ fn adjust_receiver_node(
                 _ => {
                     // Value T, need to add &
                     let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(receiver),
-                        },
-                        ref_type,
-                        span,
-                    )
+                    reference_to(TirUnaryOp::Ref, receiver, ref_type, span, type_table)
                 }
             }
         }
@@ -10468,17 +10442,40 @@ fn adjust_receiver_node(
             } else {
                 // Value T, need to add &mut
                 let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: Box::new(receiver),
-                    },
-                    mut_ref_type,
-                    span,
-                )
+                reference_to(TirUnaryOp::MutRef, receiver, mut_ref_type, span, type_table)
             }
         }
     }
+}
+
+/// `&place` / `&mut place`, typed `ref_type`. `&*r` / `&mut *r` names the
+/// storage `r` already refers to, so it is `r`: taking `&` of the deref would
+/// box a copy of a scalar, and a write through it would be lost.
+fn reference_to(
+    op: TirUnaryOp,
+    place: TirExpr,
+    ref_type: TypeId,
+    span: Span,
+    type_table: &std::cell::RefCell<TypeTable>,
+) -> TirExpr {
+    if let TirExprKind::Unary {
+        op: TirUnaryOp::Deref,
+        expr: referent,
+    } = &place.kind
+    {
+        let table = type_table.borrow();
+        if table.type_key(referent.type_id) == table.type_key(ref_type) {
+            return (**referent).clone();
+        }
+    }
+    TirExpr::new(
+        TirExprKind::Unary {
+            op,
+            expr: Box::new(place),
+        },
+        ref_type,
+        span,
+    )
 }
 
 /// The TIR read of a resolved binding: a local, a by-value capture, or a

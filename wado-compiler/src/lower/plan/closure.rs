@@ -1037,14 +1037,20 @@ impl ClosureLowerer {
     ) {
         let mut func_by_name: IndexMap<(ModuleSource, String), Rc<RefCell<TirFunction>>> =
             IndexMap::default();
+        // A bodyless callee (an intrinsic such as `builtin::black_box`, or an
+        // import) has no body to clone, so a call to one keeps the canonical
+        // closure.
         for func_rc in func_refs {
             let func = func_rc.borrow();
-            func_by_name.insert(
-                (func.module_source.clone(), func.name.clone()),
-                Rc::clone(func_rc),
-            );
+            if func.body.is_some() {
+                func_by_name.insert(
+                    (func.module_source.clone(), func.name.clone()),
+                    Rc::clone(func_rc),
+                );
+            }
         }
         let mut spec_requests: Vec<(FnParamSpecKey, Rc<RefCell<TirFunction>>)> = Vec::new();
+        let mut unspecializable: IndexSet<FnParamSpecKey> = IndexSet::default();
 
         let mut collector = FnParamSpecCollector {
             func_by_name: &func_by_name,
@@ -1065,7 +1071,7 @@ impl ClosureLowerer {
         let mut next = 0;
         while let Some((key, callee_rc)) = spec_requests.get(next).cloned() {
             next += 1;
-            if self.fn_param_specializations.contains_key(&key) {
+            if self.fn_param_specializations.contains_key(&key) || unspecializable.contains(&key) {
                 continue;
             }
 
@@ -1079,18 +1085,17 @@ impl ClosureLowerer {
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
-            // A bodyless callee (an intrinsic such as `builtin::black_box`, or
-            // an import) has no body to clone, so the call keeps the canonical
-            // closure.
-            let Some(body) = &callee.body else {
-                continue;
-            };
+            let body = callee
+                .body
+                .as_ref()
+                .expect("`func_by_name` holds only callees with a body");
             let mut check = UnspecializableFnParam {
                 fn_param_indices: &fn_param_indices,
                 found: false,
             };
             check.visit_block(body);
             if check.found {
+                unspecializable.insert(key);
                 continue;
             }
             // The clone's body is the callee's, so what it passes on is read here.

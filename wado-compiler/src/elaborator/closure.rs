@@ -23,6 +23,7 @@ pub(super) fn relink_recorded_captures(
     recorded: &[CaptureEntry],
     closure_ctx: &FunctionContext,
     ctx: &mut FunctionContext,
+    type_table: &TypeTable,
 ) -> Vec<TirCapture> {
     let linked = link_parent_captures(closure_ctx, ctx);
     assert_eq!(
@@ -34,9 +35,18 @@ pub(super) fn relink_recorded_captures(
     linked
         .into_iter()
         .zip(recorded)
-        .map(|(linked, recorded)| TirCapture {
-            type_id: recorded.type_id,
-            ..linked
+        .map(|(linked, recorded)| {
+            assert!(
+                !closure_ctx.outer_box_types.contains_key(&linked.name)
+                    || matches!(type_table.get(recorded.type_id), ResolvedType::MutRef(_)),
+                "in {}: reify reads `{}` through its box, so annotate must have recorded the box",
+                closure_ctx.function_name,
+                linked.name
+            );
+            TirCapture {
+                type_id: recorded.type_id,
+                ..linked
+            }
         })
         .collect()
 }

@@ -3501,9 +3501,9 @@ pub(super) struct FunctionContext {
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
     /// The locals a closure built here captures `&mut`, which boxes them: a
-    /// later closure reads one through its box. Annotate and reify settle this
-    /// set alike, unlike `address_taken_locals`, which only reify fills from a
-    /// `&x`, so a capture read through it disagreed with the recorded one.
+    /// later closure reads one through its box. Annotate and reify fill it
+    /// alike; `address_taken_locals` cannot stand in, since only reify adds a
+    /// `&x` to it.
     pub(super) mut_captured_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
     /// locals, plus what it reaches by capture. Only set for closure contexts.
@@ -4169,8 +4169,8 @@ impl FunctionContext {
         self.captures_seeded = true;
     }
 
-    /// The captures in slot order, for building `TirCapture` entries. An
-    /// address-taken outer local carries its box type (`&mut T`).
+    /// The captures in slot order, for building `TirCapture` entries. A
+    /// mut-captured outer local carries its box type (`&mut T`).
     pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
         self.captured_vars
             .iter()
