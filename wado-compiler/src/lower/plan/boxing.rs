@@ -16,7 +16,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// Type-level boxing facts produced by [`prepare_types`].
 pub struct BoxPlan {
@@ -221,12 +221,15 @@ struct TypeBuilder {
     box_module_source: ModuleSource,
     /// `(arity, return type)` → the function `TypeId` its `Box` is keyed on.
     fn_box_repr: IndexMap<(usize, TypeId), TypeId>,
+    /// `(pointee, depth)` → the reference `TypeId` its `Box` is keyed on.
+    ref_box_repr: IndexMap<(TypeKey, usize), TypeId>,
 }
 
 impl TypeBuilder {
     fn new(box_module_source: ModuleSource) -> Self {
         Self {
             fn_box_repr: IndexMap::default(),
+            ref_box_repr: IndexMap::default(),
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
@@ -234,22 +237,30 @@ impl TypeBuilder {
         }
     }
 
-    /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
-    /// first one seen with its `(arity, return type)`. Every `Box<fn(...)>`
-    /// holds one `ref struct` field whatever the signature, so one serves all.
+    /// The `TypeId` a `Box` is keyed on: itself, or the first one seen with its
+    /// representation. Every `Box<fn(...)>` holds one `ref struct` field
+    /// whatever the signature, keyed by `(arity, return type)`; a box of `&X`
+    /// and one of `&mut X` hold the same reference, keyed by the pointee and the
+    /// depth, so a `&mut` argument reaches a `&` parameter at any depth.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
-        let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = type_table.get(inner)
-        else {
-            return inner;
-        };
-        *self
-            .fn_box_repr
-            .entry((params.len(), *return_type))
-            .or_insert(inner)
+        match type_table.get(inner) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => *self
+                .fn_box_repr
+                .entry((params.len(), *return_type))
+                .or_insert(inner),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                let pointee = type_table.type_key(type_table.peel_refs(inner));
+                *self
+                    .ref_box_repr
+                    .entry((pointee, type_table.ref_depth(inner)))
+                    .or_insert(inner)
+            }
+            _ => inner,
+        }
     }
 
     fn get_or_create_box_type(
