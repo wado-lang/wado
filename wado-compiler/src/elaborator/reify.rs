@@ -2998,20 +2998,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
 
-                // Track address-taken locals for `&x` / `&mut x`, mirroring
-                // `Elaborator::resolve_unary`. The
-                // boxing pass (`lower::plan::boxing`) reads
-                // `TirFunction::address_taken_locals` to retag a referenced
-                // local's declaration to its box type, so that mutation
-                // through the reference (e.g. `*slot = other_fn`) writes
-                // back to the original slot. Without this the local stays
-                // unboxed and `&mut local` boxes a throwaway copy.
-                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
-                    && let TirExprKind::Local { index, .. } = &inner.kind
-                {
-                    ctx.address_taken_locals.insert(*index);
-                }
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) {
+                    // The boxing pass (`lower::plan::boxing`) reads
+                    // `TirFunction::address_taken_locals` to retag a referenced
+                    // local's declaration to its box type, so that mutation
+                    // through the reference (e.g. `*slot = other_fn`) writes
+                    // back to the original slot. Without this the local stays
+                    // unboxed and `&mut local` boxes a throwaway copy.
+                    if let TirExprKind::Local { index, .. } = &inner.kind {
+                        ctx.address_taken_locals.insert(*index);
+                    }
                     return reference_to(op, inner, recorded_type, span, &self.tysys.type_table);
                 }
                 TirExpr::new(
@@ -10458,15 +10454,13 @@ fn reference_to(
     span: Span,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TirExpr {
-    if let TirExprKind::Unary {
-        op: TirUnaryOp::Deref,
-        expr: referent,
-    } = &place.kind
-    {
-        let table = type_table.borrow();
-        if table.type_key(referent.type_id) == table.type_key(ref_type) {
-            return (**referent).clone();
-        }
+    let reborrows = matches!(&place.kind, TirExprKind::Unary { op: TirUnaryOp::Deref, expr: referent }
+        if type_table.borrow().type_key(referent.type_id) == type_table.borrow().type_key(ref_type));
+    if reborrows {
+        let TirExprKind::Unary { expr: referent, .. } = place.kind else {
+            unreachable!("matched as a deref above")
+        };
+        return *referent;
     }
     TirExpr::new(
         TirExprKind::Unary {
