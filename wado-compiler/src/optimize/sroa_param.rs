@@ -1683,7 +1683,23 @@ fn rewrite_arg(
     }
 
     if let Some(fe) = literal_field(body, arg, info, type_table) {
-        become_expr(body, arg, fe);
+        let field = match info.form.ref_op() {
+            None => fe,
+            // The initializer is a value; the parameter takes the field under
+            // the reference `project_field` would add.
+            Some(op) => {
+                let span = body.exprs[arg].span;
+                body.exprs.push(ExprNode {
+                    kind: ExprKind::Unary {
+                        op,
+                        expr: fe.into(),
+                    },
+                    type_id: info.scalar_type_id,
+                    span,
+                })
+            }
+        };
+        become_expr(body, arg, field);
         return;
     }
 
@@ -1713,9 +1729,6 @@ fn rewrite_arg(
 /// The other fields are dropped with the literal, so each must be something
 /// whose evaluation nothing observes — a constant, or a local read. That is
 /// the ordinary case for a record built to carry options at a call.
-///
-/// The initializer is a value, so a parameter taking the field by reference
-/// takes Case 3's `&(Wrapper{V}).f` instead.
 fn literal_field(
     body: &Body,
     arg: ExprId,
@@ -1730,8 +1743,7 @@ fn literal_field(
     else {
         return None;
     };
-    if info.form.ref_op().is_some()
-        || struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
+    if struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
         || !fields
             .iter()
             .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
