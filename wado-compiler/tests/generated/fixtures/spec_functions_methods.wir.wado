@@ -548,7 +548,6 @@ global mut global:core:prelude/traits.wado::$const_obj_24: ref null "tuple//[cor
 
 fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
     let $load_1: ref "spec_functions_methods.wado//Shape";
-    let $load_2: ref "spec_functions_methods.wado//Shape";
     let $v0: ref "spec_functions_methods.wado//Shape";
     let $v1: ref "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>";
     let $v2: bool;
@@ -564,20 +563,21 @@ fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
     let $v4_text: ref "core:prelude/string.wado//String";
     let $v5_text: ref "core:prelude/string.wado//String";
     let $v6_text: ref "core:prelude/string.wado//String";
-    $v1 = struct.new "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>" { value: local.tee $v0(struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 5 }) };
+    let other_18: ref "spec_functions_methods.wado//Shape";
+    other_18 = local.tee $v1(struct.new "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>" { value: local.tee $v0(struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 5 }) }).value;
     let $match_scrut_0: ref "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]";
-    $v2 = (if $load_1 = local.tee $match_scrut_0(struct.new "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]" { 0: struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 1 }, 1: $v1.value }).0; $load_2 = $match_scrut_0.1; (if ref.test "spec_functions_methods.wado//Shape::Circle"($load_1) & ref.test "spec_functions_methods.wado//Shape::Circle"($load_2) -> i32 {
+    $v2 = (if other_18 = local.tee $match_scrut_0(struct.new "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]" { 0: struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 1 }, 1: other_18 }).0; $load_1 = $match_scrut_0.1; (if ref.test "spec_functions_methods.wado//Shape::Circle"(other_18) & ref.test "spec_functions_methods.wado//Shape::Circle"($load_1) -> i32 {
+        drop(ref.cast "spec_functions_methods.wado//Shape::Circle"(other_18).payload_0);
         drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_1).payload_0);
-        drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_2).payload_0);
         1;
     } else {
         0;
     }) -> bool {
         1;
     } else {
-        if ref.test "spec_functions_methods.wado//Shape::Square"($load_1) & ref.test "spec_functions_methods.wado//Shape::Square"($load_2) -> i32 {
+        if ref.test "spec_functions_methods.wado//Shape::Square"(other_18) & ref.test "spec_functions_methods.wado//Shape::Square"($load_1) -> i32 {
+            drop(ref.cast "spec_functions_methods.wado//Shape::Square"(other_18).payload_0);
             drop(ref.cast "spec_functions_methods.wado//Shape::Square"($load_1).payload_0);
-            drop(ref.cast "spec_functions_methods.wado//Shape::Square"($load_2).payload_0);
             1;
         } else {
             0;
@@ -588,18 +588,18 @@ fn "spec_functions_methods.wado/$test_3_self_names_the_impl_s_type"() {
     $v5_seen = 0;
     $v6_seen = 0;
     if @unlikely((if $v2 -> i32 {
-        $v6 = $v4 = struct.new "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>" { value: $v3 = struct.new "spec_functions_methods.wado//Shape::Square" { discriminant: 1, payload_0: 1 }; $v3_seen = 1; ref.as_non_null($v3) }; $v4_seen = 1; $v5 = (if $load_1 = local.tee $match_scrut_0(struct.new "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]" { 0: struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 1 }, 1: $v4.value }).0; $load_2 = $match_scrut_0.1; (if ref.test "spec_functions_methods.wado//Shape::Circle"($load_1) & ref.test "spec_functions_methods.wado//Shape::Circle"($load_2) -> i32 {
+        $v6 = other_18 = $v4 = struct.new "core:prelude/types.wado//Box<spec_functions_methods.wado/Shape>" { value: $v3 = struct.new "spec_functions_methods.wado//Shape::Square" { discriminant: 1, payload_0: 1 }; $v3_seen = 1; ref.as_non_null($v3) }; $v4_seen = 1; $v4.value; $v5 = (if other_18 = local.tee $match_scrut_0(struct.new "tuple//[spec_functions_methods.wado/Shape, spec_functions_methods.wado/Shape]" { 0: struct.new "spec_functions_methods.wado//Shape::Circle" { discriminant: 0, payload_0: 1 }, 1: other_18 }).0; $load_1 = $match_scrut_0.1; (if ref.test "spec_functions_methods.wado//Shape::Circle"(other_18) & ref.test "spec_functions_methods.wado//Shape::Circle"($load_1) -> i32 {
+            drop(ref.cast "spec_functions_methods.wado//Shape::Circle"(other_18).payload_0);
             drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_1).payload_0);
-            drop(ref.cast "spec_functions_methods.wado//Shape::Circle"($load_2).payload_0);
             1;
         } else {
             0;
         }) -> bool {
             1;
         } else {
-            if ref.test "spec_functions_methods.wado//Shape::Square"($load_1) & ref.test "spec_functions_methods.wado//Shape::Square"($load_2) -> i32 {
+            if ref.test "spec_functions_methods.wado//Shape::Square"(other_18) & ref.test "spec_functions_methods.wado//Shape::Square"($load_1) -> i32 {
+                drop(ref.cast "spec_functions_methods.wado//Shape::Square"(other_18).payload_0);
                 drop(ref.cast "spec_functions_methods.wado//Shape::Square"($load_1).payload_0);
-                drop(ref.cast "spec_functions_methods.wado//Shape::Square"($load_2).payload_0);
                 1;
             } else {
                 0;

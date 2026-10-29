@@ -29,7 +29,7 @@ type "functype//const_object_globalization_call_arg.wado/run" = fn();  // TypeId
 
 type "functype//const_object_globalization_call_arg.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//const_object_globalization_call_arg.wado/byte_sum$spec0$spec0$dae[s]" = fn(i32) -> i32;  // TypeId(12)
+type "functype//const_object_globalization_call_arg.wado/byte_sum$spec0$sroa[s.repr]" = fn(ref Array<u8>, i32) -> i32;  // TypeId(12)
 
 type "functype//core:rt/unreachable" = fn();  // TypeId(13)
 
@@ -73,7 +73,7 @@ fn "const_object_globalization_call_arg.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_t_h0_139: i32;
     let start_178: i32;
-    $sroa_t_h0_139 = "const_object_globalization_call_arg.wado/byte_sum$spec0$spec0$dae[s]"(black_box(0));
+    $sroa_t_h0_139 = "const_object_globalization_call_arg.wado/byte_sum$spec0$sroa[s.repr]"(global:const_object_globalization_call_arg.wado::$const_obj_0, black_box(0));
     out_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
@@ -199,7 +199,7 @@ fn "const_object_globalization_call_arg.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-fn "const_object_globalization_call_arg.wado/byte_sum$spec0$spec0$dae[s]"(extra) {
+fn "const_object_globalization_call_arg.wado/byte_sum$spec0$sroa[s.repr]"(s, extra) {
     let current: i32;
     let $sroa_$iter_0_start_26: i32;
     $sroa_$iter_0_start_26 = 0;
@@ -207,7 +207,7 @@ fn "const_object_globalization_call_arg.wado/byte_sum$spec0$spec0$dae[s]"(extra)
         l27: loop {
             break_if b26 $sroa_$iter_0_start_26 >= 5;
             $sroa_$iter_0_start_26 = local.tee current($sroa_$iter_0_start_26) + 1;
-            extra = extra + builtin::array_get_value<u8>(global:const_object_globalization_call_arg.wado::$const_obj_0, current);
+            extra = extra + builtin::array_get_value<u8>(s, current);
             continue l27;
         };
     };

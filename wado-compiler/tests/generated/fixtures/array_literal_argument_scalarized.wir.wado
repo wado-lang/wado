@@ -217,6 +217,7 @@ fn "array_literal_argument_scalarized.wado/run"() with Stdout {
     let acc: v128;
     let current: i32;
     let $sroa_$iter_0_start_33: i32;
+    let v_231: v128;
     k = black_box(2_f32);
     n_194 = black_box(4);
     acc = v128.const(0);
@@ -225,7 +226,8 @@ fn "array_literal_argument_scalarized.wado/run"() with Stdout {
         l1: loop {
             break_if b0 $sroa_$iter_0_start_33 >= n_194;
             $sroa_$iter_0_start_33 = local.tee current($sroa_$iter_0_start_33) + 1;
-            acc = acc + f32x4.replace_lane(3, f32x4.replace_lane(2, f32x4.replace_lane(1, f32x4.replace_lane(0, v128.const(0), builtin::f32_convert_i32_s(current) * k), builtin::f32_convert_i32_s(current + 1) * k), builtin::f32_convert_i32_s(current + 2) * k), builtin::f32_convert_i32_s(current + 3) * k);
+            v_231 = f32x4.replace_lane(3, f32x4.replace_lane(2, f32x4.replace_lane(1, f32x4.replace_lane(0, v128.const(0), builtin::f32_convert_i32_s(current) * k), builtin::f32_convert_i32_s(current + 1) * k), builtin::f32_convert_i32_s(current + 2) * k), builtin::f32_convert_i32_s(current + 3) * k);
+            acc = acc + v_231;
             continue l1;
         };
     };

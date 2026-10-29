@@ -298,25 +298,25 @@ fn "linear_array_loop_checks_removed.wado/dot"(x, w, at, n) {
     let sum: v128;
     let v: i32;
     let $contract_arg_0: i32;
-    let $sroa_self_value_58: v128;
-    let $sroa_rhs_value_59: v128;
-    let $licm_len_60: i32;
-    let $licm_block_61: ref null "core:linear//Block";
-    let $licm_len_62: i32;
-    let $licm_block_63: ref null "core:linear//Block";
-    let $licm_ptr_64: i32;
-    let $licm_ptr_65: i32;
+    let self_18: v128;
+    let rhs_19: v128;
+    let $licm_len_56: i32;
+    let $licm_block_57: ref null "core:linear//Block";
+    let $licm_len_58: i32;
+    let $licm_block_59: ref null "core:linear//Block";
+    let $licm_ptr_60: i32;
+    let $licm_ptr_61: i32;
     sum = v128.const(0);
     v = 0;
-    $licm_len_60 = x.len;
-    $licm_block_61 = x.block;
-    $licm_len_62 = w.len;
-    $licm_block_63 = w.block;
-    $licm_ptr_64 = $licm_block_61.ptr;
-    $licm_ptr_65 = $licm_block_63.ptr;
-    if (if n <= $licm_len_60 -> i32 {
-        if $licm_len_62 >= 0 -> i32 {
-            (at >= 0) & (n <= ($licm_len_62 - at));
+    $licm_len_56 = x.len;
+    $licm_block_57 = x.block;
+    $licm_len_58 = w.len;
+    $licm_block_59 = w.block;
+    $licm_ptr_60 = $licm_block_57.ptr;
+    $licm_ptr_61 = $licm_block_59.ptr;
+    if (if n <= $licm_len_56 -> i32 {
+        if $licm_len_58 >= 0 -> i32 {
+            (at >= 0) & (n <= ($licm_len_58 - at));
         } else {
             0;
         }
@@ -326,11 +326,11 @@ fn "linear_array_loop_checks_removed.wado/dot"(x, w, at, n) {
         b3: block {
             l4: loop {
                 break_if b3 v >= n;
-                $sroa_self_value_58 = builtin::load_v128($licm_ptr_64 + (v * 16));
+                self_18 = builtin::load_v128($licm_ptr_60 + (v * 16));
                 $contract_arg_0 = at + v;
-                $sroa_rhs_value_59 = builtin::load_v128($licm_ptr_65 + ($contract_arg_0 * 16));
-                $sroa_self_value_58 = $sroa_self_value_58 * $sroa_rhs_value_59;
-                sum = sum + $sroa_self_value_58;
+                rhs_19 = builtin::load_v128($licm_ptr_61 + ($contract_arg_0 * 16));
+                self_18 = self_18 * rhs_19;
+                sum = sum + self_18;
                 v = v + 1;
                 continue l4;
             };
@@ -339,21 +339,21 @@ fn "linear_array_loop_checks_removed.wado/dot"(x, w, at, n) {
         b5: block {
             l6: loop {
                 break_if b5 v >= n;
-                if @unlikely(v >= $licm_len_60) {
+                if @unlikely(v >= $licm_len_56) {
                     cold_path;
-                    "core:linear/core:linear/LinearArray<core:simd/f32x4>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(v, $licm_len_60, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_loop_checks_removed.wado:12"), used: 40 });
+                    "core:linear/core:linear/LinearArray<core:simd/f32x4>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"(v, $licm_len_56, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_loop_checks_removed.wado:12"), used: 40 });
                     unreachable;
                 }
-                $sroa_self_value_58 = builtin::load_v128($licm_ptr_64 + (v * 16));
+                self_18 = builtin::load_v128($licm_ptr_60 + (v * 16));
                 $contract_arg_0 = at + v;
-                if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_len_62)) == 0) {
+                if @unlikely(((0 <= $contract_arg_0) & ($contract_arg_0 < $licm_len_58)) == 0) {
                     cold_path;
-                    "core:linear/core:linear/LinearArray<core:simd/f32x4>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_len_62, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_loop_checks_removed.wado:12"), used: 40 });
+                    "core:linear/core:linear/LinearArray<core:simd/f32x4>^core:prelude/traits.wado/IndexValue<i32>::index_value$contract_report0"($contract_arg_0, $licm_len_58, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("linear_array_loop_checks_removed.wado:12"), used: 40 });
                     unreachable;
                 }
-                $sroa_rhs_value_59 = builtin::load_v128($licm_ptr_65 + ($contract_arg_0 * 16));
-                $sroa_self_value_58 = $sroa_self_value_58 * $sroa_rhs_value_59;
-                sum = sum + $sroa_self_value_58;
+                rhs_19 = builtin::load_v128($licm_ptr_61 + ($contract_arg_0 * 16));
+                self_18 = self_18 * rhs_19;
+                sum = sum + self_18;
                 v = v + 1;
                 continue l6;
             };
