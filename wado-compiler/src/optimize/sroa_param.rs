@@ -388,7 +388,10 @@ fn candidate_info_for(
         return None;
     }
     // Seed on field 0; a wider struct has this overwritten once its uses agree.
-    let (field_name, inner_type_id) = fields[0].clone();
+    let (field_name, field_type) = fields[0].clone();
+    // One `Box` holds `&X` and `&mut X` alike, its field typed by whichever it
+    // met first; the parameter's own payload says which this one holds.
+    let inner_type_id = type_table.box_payload_of(param_type).unwrap_or(field_type);
     Some(SroaInfo {
         struct_key: key,
         inner_type_id,
