@@ -2998,13 +2998,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
 
-                // Track address-taken locals for `&x` / `&mut x`. The
-                // boxing pass (`lower::plan::boxing`) reads
+                // The boxing pass (`lower::plan::boxing`) reads
                 // `TirFunction::address_taken_locals` to retag a referenced
-                // local's declaration to its box type, so that mutation
-                // through the reference (e.g. `*slot = other_fn`) writes
-                // back to the original slot. Without this the local stays
-                // unboxed and `&mut local` boxes a throwaway copy.
+                // local's declaration to its box type, so that a write through
+                // the reference (`*slot = other_fn`) reaches the original
+                // slot. Unrecorded, the local stays unboxed and `&mut local`
+                // boxes a throwaway copy.
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
