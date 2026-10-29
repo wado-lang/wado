@@ -194,9 +194,9 @@ fn collect_and_validate(
             // drops. A boxed reference's retention is the referent its payload
             // names, which the rewrite passes on unchanged.
             if func.retains.iter().any(|s| s == &param.name)
-                && !types
+                && types
                     .box_payload_of(param.type_id)
-                    .is_some_and(|payload| types.ref_pointee(payload).is_some())
+                    .is_none_or(|payload| types.ref_pointee(payload).is_none())
             {
                 continue;
             }
