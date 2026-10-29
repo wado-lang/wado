@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793254307847,
+  "lastUpdate": 1793273836441,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72305,6 +72305,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bc7e797546f477174b8fd9759c3fc89a0671a0e2"
         },
         "date": 1793254306904,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316581,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e1c02a83734f4fb6fe2727829d54793cad8151fc",
+          "message": "Merge pull request #2495 from wado-lang/fix/emi-black-box-closure\n\nfix(compiler): five closure and reference miscompiles the EMI run led to",
+          "timestamp": "2026-10-29T20:24:26+09:00",
+          "tree_id": "bf2cff9bfc48b47b8d85b7f2d46f603f10cd0524",
+          "url": "https://github.com/wado-lang/wado/commit/e1c02a83734f4fb6fe2727829d54793cad8151fc"
+        },
+        "date": 1793273835546,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
