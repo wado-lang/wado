@@ -514,11 +514,12 @@ global global:core:prelude/traits.wado::$const_obj_44: ref "core:prelude/string.
 global mut global:core:prelude/traits.wado::$const_obj_45: ref null "tuple//[core:prelude/traits.wado/StructField<opt_sroa_single_field.wado/Wrapper,i32>]" = ref.null none;
 
 fn "opt_sroa_single_field.wado/conditional_wrapper"(flag) {
-    return "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$sroa[self.inner]"((if flag -> ref "opt_sroa_single_field.wado//Wrapper" {
-        struct.new "opt_sroa_single_field.wado//Wrapper" { inner: black_box(10) };
+    if flag {
+        flag = black_box(10);
     } else {
-        struct.new "opt_sroa_single_field.wado//Wrapper" { inner: black_box(20) };
-    }).inner);
+        flag = black_box(20);
+    }
+    return "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$sroa[self.inner]"(flag);
 }
 
 fn "opt_sroa_single_field.wado/mixed_single_fields"() {

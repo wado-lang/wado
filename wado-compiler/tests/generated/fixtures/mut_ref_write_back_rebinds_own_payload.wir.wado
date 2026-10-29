@@ -371,12 +371,13 @@ global global:core:prelude/primitive.wado::$const_obj_2: ref "core:prelude/strin
 fn "mut_ref_write_back_rebinds_own_payload.wado/bump_by_match"(slot) {
     let m_2: ref "mut_ref_write_back_rebinds_own_payload.wado//Inner";
     let $match_3: ref null "mut_ref_write_back_rebinds_own_payload.wado//Inner";
-    let $av_5: i32;
-    local.tee m_2(struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: local.tee $av_5((if ref.is_null(local.tee $match_3(slot.value)) == 0 -> ref "mut_ref_write_back_rebinds_own_payload.wado//Inner" {
-        ref.as_non_null($match_3);
+    let $sroa_slot_5: i32;
+    if ref.is_null(local.tee $match_3(slot.value)) == 0 {
+        $sroa_slot_5 = $match_3.x;
     } else {
-        struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: 0 };
-    }).x) }).x = $av_5 + 1;
+        $sroa_slot_5 = 0;
+    }
+    local.tee m_2(struct.new "mut_ref_write_back_rebinds_own_payload.wado//Inner" { x: $sroa_slot_5 }).x = $sroa_slot_5 + 1;
     slot.value = m_2;
 }
 
