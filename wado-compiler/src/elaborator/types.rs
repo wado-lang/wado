@@ -3500,11 +3500,10 @@ pub(super) struct FunctionContext {
     pub(super) source_bindings: IndexSet<String>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
-    /// The locals a closure built here captures `&mut`, which boxes them, so a
-    /// later closure reading one reads it through the box. Annotate settles
-    /// this set and reify replays it. `address_taken_locals` is not that set:
-    /// reify alone address-takes a `&x`, so a closure read through it
-    /// disagreed with the environment annotate recorded.
+    /// The locals a closure built here captures `&mut`, which boxes them: a
+    /// later closure reads one through its box. Annotate and reify settle this
+    /// set alike, unlike `address_taken_locals`, which only reify fills from a
+    /// `&x`, so a capture read through it disagreed with the recorded one.
     pub(super) mut_captured_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
     /// locals, plus what it reaches by capture. Only set for closure contexts.
