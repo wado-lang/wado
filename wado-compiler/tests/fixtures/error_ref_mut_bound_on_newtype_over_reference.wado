@@ -1,0 +1,19 @@
+// A newtype over a reference is no `RefMut`, as the reference is not: a `&mut`
+// to one is a detached box, so a write through it would be lost.
+
+type R = &i32;
+
+fn first<T: RefMut>(xs: &mut List<T>) -> &mut T {
+    return &mut xs[0];
+}
+
+test {
+    let a = 1;
+    let b = 2;
+    let mut xs: List<R> = [&a as R];
+    let p = first(&mut xs);
+    *p = &b as R;
+}
+
+__DATA__
+{"compile_error": "error_ref_mut_bound_on_newtype_over_reference.wado:14:13: analysis error: type 'R' does not implement trait 'RefMut' required by bound on 'T'"}

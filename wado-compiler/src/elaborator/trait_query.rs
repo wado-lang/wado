@@ -1386,16 +1386,20 @@ impl TypeSystem {
     }
 
     /// The `RefMut` marker's eligibility: a `Ref` type whose value is mutated in
-    /// place rather than replaced on assign (WEP 2026-01-20). `variant` and `fn`
-    /// are `Ref` but boxed (replace-on-assign), so a `&mut` cannot write through
-    /// them; every other `Ref` type qualifies. A `Newtype` follows its base.
+    /// place rather than replaced on assign (WEP 2026-01-20). `variant`, `fn` and
+    /// a reference are `Ref` but boxed (replace-on-assign, WEP 2026-06-13), so a
+    /// `&mut` cannot write through them; every other `Ref` type qualifies. A
+    /// `Newtype` follows its base.
     pub(super) fn is_ref_mut_identity(
         &self,
         is_variant: &dyn Fn(DefId) -> bool,
         resolved: &ResolvedType,
     ) -> bool {
         match resolved {
-            ResolvedType::Variant { .. } | ResolvedType::Function { .. } => false,
+            ResolvedType::Variant { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_) => false,
             ResolvedType::GenericInstance { def, .. } => {
                 if is_variant(*def) {
                     false
