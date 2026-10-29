@@ -3062,22 +3062,12 @@ impl TypeTable {
     }
 
     /// `type_id` with its outer references stripped until at most `layers`
-    /// hold the pointee: `&&mut X` at 1 → `&mut X`.
+    /// hold the pointee: `&&mut X` at 1 → `&mut X`, the layer holding it.
     pub fn ref_layers(&self, mut type_id: TypeId, layers: usize) -> TypeId {
-        while self.ref_depth(type_id) > layers {
+        for _ in layers..self.ref_depth(type_id) {
             type_id = self
                 .ref_pointee(type_id)
                 .expect("a type deeper than `layers` is a reference");
-        }
-        type_id
-    }
-
-    /// The reference layer holding the pointee: `&&mut X` → `&mut X`.
-    pub fn innermost_ref(&self, mut type_id: TypeId) -> TypeId {
-        while let Some(inner) = self.ref_pointee(type_id)
-            && self.ref_pointee(inner).is_some()
-        {
-            type_id = inner;
         }
         type_id
     }

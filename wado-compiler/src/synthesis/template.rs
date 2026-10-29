@@ -741,7 +741,7 @@ pub(crate) fn method_template_at(
     tt: &TypeTable,
 ) -> Option<TemplateId> {
     let receiver = if info.ref_receiver().is_some() {
-        tt.innermost_ref(receiver)
+        tt.ref_layers(receiver, 1)
     } else {
         tt.peel_refs(receiver)
     };

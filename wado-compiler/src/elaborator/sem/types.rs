@@ -28,8 +28,8 @@ pub(crate) struct MethodDispatch {
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
     /// True when the resolved method's impl was found on a reference type
-    /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
-    /// `&mut` layer before passing it to the method.
+    /// (`impl Trait for &T`), whose `&self` / `&mut self` holds two layers
+    /// over the pointee.
     pub(crate) is_ref_impl: bool,
     /// True when the method is the referent's, reached through the reference
     /// a newtype wraps (`type H = &mut T`): the receiver passes that
@@ -1093,10 +1093,9 @@ pub(crate) struct ImplFacts {
     /// trait_type_args)`, so a generic-effect handler needs the args to
     /// match the binding's instantiation.
     pub(crate) trait_type_args: Vec<tir::TypeId>,
-    /// True iff the impl target is `&T` / `&mut T` (ref-type
-    /// impl). Method receivers `&self` get an extra `&` layer at
-    /// receiver-adjustment time; mirrors [`MethodDispatch::is_ref_impl`]
-    /// but is decided at impl-block scope.
+    /// True iff the impl target is `&T` / `&mut T`, whose `&self` holds two
+    /// layers over the pointee; mirrors [`MethodDispatch::is_ref_impl`] but is
+    /// decided at impl-block scope.
     pub(crate) is_ref_impl: bool,
     /// Mangled struct name the elaborator feeds into
     /// [`crate::name::MethodName::format_local`] when naming the impl's methods.

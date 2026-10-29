@@ -932,7 +932,7 @@ impl FunctionTranslator<'_, '_> {
     }
 
     fn try_boxing_ref(&self, inner: &TirExpr, span: Span) -> Option<ExprId> {
-        // `&local` of an address-taken primitive: the Box IS the
+        // `&local` of a boxed local: the Box IS the
         // address, so collapse to the Local without re-wrapping.
         if let TirExprKind::Local { index, name } = &inner.kind
             && let Some(box_type_id) = self.box_type_of_local(*index, inner.type_id)

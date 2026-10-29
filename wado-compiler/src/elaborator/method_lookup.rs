@@ -3896,46 +3896,31 @@ pub(super) fn adjusted_receiver_type(
     is_ref_impl: bool,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TypeId {
-    // A ref-target impl binds `Self` to `&T`, so `&self` is `&&T`: the receiver
-    // carries `Self`'s layer, and the declaration asks for another over it.
-    if is_ref_impl {
-        let outer_two = type_table.borrow().ref_layers(receiver, 2);
-        let outer = type_table.borrow().get(outer_two).clone();
-        let has_two = type_table.borrow().ref_depth(outer_two) == 2;
-        return match self_kind {
-            ast::SelfKind::Ref if has_two => outer_two,
-            ast::SelfKind::MutRef if has_two && matches!(outer, ResolvedType::MutRef(_)) => {
-                outer_two
-            }
-            ast::SelfKind::Ref => {
-                let own = type_table.borrow().ref_layers(receiver, 1);
-                type_table.borrow_mut().make_ref(own)
-            }
-            ast::SelfKind::MutRef => {
-                let own = type_table.borrow().ref_layers(receiver, 1);
-                type_table.borrow_mut().make_mut_ref(own)
-            }
-            ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
-        };
+    let mutable = match self_kind {
+        ast::SelfKind::None | ast::SelfKind::Value => {
+            return type_table.borrow().peel_refs(receiver);
+        }
+        ast::SelfKind::Ref => false,
+        ast::SelfKind::MutRef => true,
+    };
+    // `self` holds the pointee under one reference, or two where the impl is a
+    // reference's (`Self` is `&T`, so `&self` is `&&T`). A receiver holding
+    // that many passes them, further layers read through; `&mut T` satisfies
+    // `&self`. Any other gets the declaration's reference over its own layers.
+    let layers = if is_ref_impl { 2 } else { 1 };
+    let held = type_table.borrow().ref_layers(receiver, layers);
+    let fits = {
+        let tt = type_table.borrow();
+        tt.ref_depth(held) == layers
+            && (!mutable || matches!(tt.get(held), ResolvedType::MutRef(_)))
+    };
+    if fits {
+        return held;
     }
-    match self_kind {
-        ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
-        // `&mut T` already satisfies `&self`, and a reference to a reference
-        // reaches the pointee through it; only a value needs the wrap.
-        ast::SelfKind::Ref => {
-            if type_table.borrow().ref_depth(receiver) > 0 {
-                type_table.borrow().innermost_ref(receiver)
-            } else {
-                type_table.borrow_mut().make_ref(receiver)
-            }
-        }
-        ast::SelfKind::MutRef => {
-            let innermost = type_table.borrow().innermost_ref(receiver);
-            if matches!(type_table.borrow().get(innermost), ResolvedType::MutRef(_)) {
-                innermost
-            } else {
-                type_table.borrow_mut().make_mut_ref(receiver)
-            }
-        }
+    let own = type_table.borrow().ref_layers(receiver, layers - 1);
+    if mutable {
+        type_table.borrow_mut().make_mut_ref(own)
+    } else {
+        type_table.borrow_mut().make_ref(own)
     }
 }

@@ -600,13 +600,13 @@ pub fn to_layers_of(expr: TirExpr, target: TypeId, type_table: &TypeTable) -> Ti
     })
 }
 
-/// The reference a newtype receiver wraps (`type H = &mut T`): the receiver's
+/// The reference the newtype `expr` holds wraps (`type H = &mut T`): `expr`'s
 /// own references dereferenced away, then each newtype cast to its base.
 pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
     let mut expr = deref_to_layers(expr, 0, type_table);
     while type_table.ref_pointee(expr.type_id).is_none() {
         let ResolvedType::Newtype { base_type, .. } = *type_table.get(expr.type_id) else {
-            unreachable!("a method reached through a newtype's reference has one");
+            unreachable!("the caller passes a newtype over a reference");
         };
         let span = expr.span;
         expr = TirExpr::new(

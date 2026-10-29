@@ -391,7 +391,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .and_then(|item| self.tysys.compiler_trait_def(item))
             .and_then(|trait_| self.tysys.own_impl_link(left, trait_));
         let (left, right) = if op.is_comparison() && own_impl.is_none() {
-            (self.tysys.wrapped_ref_type(left), self.tysys.wrapped_ref_type(right))
+            (
+                self.tysys.wrapped_ref_type(left),
+                self.tysys.wrapped_ref_type(right),
+            )
         } else {
             (left, right)
         };
