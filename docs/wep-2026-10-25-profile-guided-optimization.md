@@ -199,20 +199,35 @@ A function whose body region never ran thus gets one marker, at its start, and
 nothing inside it. Marking every region with a zero count would have
 `cold_outline` outline each branch of such a function into a function of its
 own, and put a marker on both sides of its `if`s. A region that ran any number
-of times gets no marker. Using the counts beyond zero, to optimize a hot path
-harder than the rest, is left to a later proposal.
+of times gets no marker. The counts beyond zero decide only whether a `?`'s
+failure path stays cold (see below). Using them to optimize a hot path harder
+than the rest is left to a later proposal.
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
 applied, so a profiled compile seeds from the snapshot as a plain one does.
 
-### The source wins over the profile, and says so
+### The author wins over the profile; the compiler's guess does not
 
 An author's `cold_path()` in a region the workload ran stays in force. It
 states an intent the workload may not cover, such as an error path a test
 exercises often. The compile reports the conflict as an optimizer remark at
 `--log-level info`, naming the marker and the count. The remark audits the
 author's guesses against measurement.
+
+The marker the compiler puts on a `?`'s failure path is its own guess, and a
+workload modelled on real use measures better than any guess. The guess is
+usually right: an HTTP service answers well under 1% of its requests with a 4xx
+or 5xx. So the marker stays while the failure path ran in under 1% of the runs
+of the region holding the `?`. At 1% or more the profile wins: the marker is
+dropped, and the same remark names the count and the share. Comparing with zero
+would drop a right guess, since a rare path still runs now and then.
+
+The other markers the compiler places sit ahead of a trap, or past a global's
+once-guard. A workload that reaches a trap fails the recording, and a once-guard
+runs once by construction, so a profile has nothing to correct in them. The
+marker `match_to_switch` puts on the default arm of an exhaustive `match` is one
+of these: that arm is `unreachable`.
 
 ### Flags switch the marks
 
@@ -240,12 +255,12 @@ from traps stay, since they read no marker. The two flags give three builds of
 one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
 and the compiler's, and the default adds the profile's.
 
-Reify and lowering write the compiler's marker as `builtin::$known_cold_path()`,
-so the conflict remark can tell it from the author's until NIR, which has one
-marker: a global's once-guard runs once, and its marker states no guess to
-audit. The marker on a `?` propagating a failure is a guess and is written as
-the author's. The profile's marker states a measurement, so it is written as
-the compiler's.
+Reify and lowering spell a marker that states a guess `builtin::cold_path()`,
+as the author does, and any other `builtin::$known_cold_path()`, so the conflict
+remark can tell the two apart until NIR, which has one marker. The marker on a
+`?` propagating a failure is a guess. A global's once-guard runs once, and the
+profile's marker states a measurement. The spelling decides nothing about the
+profile: a `?`'s marker yields to it, and an author's never does.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
@@ -276,8 +291,10 @@ level.
    regions end up cold.
 5. [ ] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [ ] The random-profile differential test.
-7. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
+6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
+   marker, with the remark. An e2e fixture states both sides of the threshold.
+7. [ ] The random-profile differential test.
+8. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that
@@ -287,7 +304,9 @@ level.
 
 - [ ] The conflict remark reads the author's markers and the `?`s from the
   source, where the plan finds its regions, so nothing reads the difference
-  `$known_cold_path` keeps through TIR.
+  `$known_cold_path` keeps through TIR. Once a `?`'s marker yields by its share
+  of runs, no marker `$known_cold_path` writes can be contradicted, so the
+  distinction may have no reader left.
 - [ ] A region that starts in an expression, the right operand of `&&` or
   `||`, has no statement position for a marker, so the regions inside one that
   never ran are marked in its place.

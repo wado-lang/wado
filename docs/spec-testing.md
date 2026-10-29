@@ -398,10 +398,18 @@ function ran. A function that never ran is marked once, at its start. A
 function the profile has no count for is compiled as without one. Where that
 is because its hash differs, the compile says so at `--log-level info`.
 
-A profile never removes a marker. Where the profile ran an author's
-`cold_path()`, or the failure path of a `?`, which the compiler marks cold as
-an author would, the marker stays, and the compile names it and the count at
+A profile never removes an author's `cold_path()`. Where the profile ran one,
+the marker stays, and the compile names it and the count at
 `--log-level info`.
+
+The compiler marks the failure path of a `?` cold as an author would. Where the
+profile ran that path in 1% or more of the runs of the region holding the `?`,
+the marker is dropped, and the compile names it, the count and the share at
+`--log-level info`. Below 1% the marker stays, and the compile says nothing.
+
+> Not yet implemented: a `?`'s marker is never dropped. Where the profile ran
+> its failure path at all, the marker stays and the compile names it and the
+> count.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
