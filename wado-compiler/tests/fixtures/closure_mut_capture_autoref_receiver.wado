@@ -1,0 +1,23 @@
+// A `&mut self` method called on a binding a closure captures `&mut`: the
+// receiver is `*$ref_n` there, and autoref took `&mut` of that read, which
+// boxed a copy, so the write was lost.
+
+trait Bump with () {
+    fn bump(&mut self);
+}
+
+impl Bump for i32 {
+    fn bump(&mut self) {
+        *self += 1;
+    }
+}
+
+test "a method call through a mut capture writes the captured binding" {
+    let mut n = builtin::black_box(1);
+    let mut bump = || n.bump();
+    bump();
+    assert n == 2;
+    let read = || n;
+    bump();
+    assert read() == 3;
+}

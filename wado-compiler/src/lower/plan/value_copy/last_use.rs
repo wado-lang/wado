@@ -700,15 +700,11 @@ impl<'a> Analyzer<'a> {
                 .is_some_and(|element| self.type_table.is_in_place_aggregate(element))
         {
             self.note_site(call, receiver, true, start, live);
-            // A list reached through a reference (`*capture` in a closure) is
-            // the referent's, which no field of this body owns.
-            if matches!(
-                place::unwrap_ref(receiver).kind,
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    ..
-                }
-            ) && let Some(site) = self.assign_sites.last_mut()
+            // A list reached through a reference (`*capture` in a closure, or
+            // the capture itself) is the referent's, which no field of this
+            // body owns.
+            if place::receiver_place(receiver).is_none()
+                && let Some(site) = self.assign_sites.last_mut()
             {
                 site.through_ref = true;
                 site.last = None;
@@ -1185,10 +1181,11 @@ pub fn mark_unanalyzed_in_place_assigns(
                         .type_table
                         .as_list(receiver.type_id)
                         .is_some_and(|element| self.type_table.is_in_place_aggregate(element));
-                    let list = place::unwrap_ref(receiver);
-                    if in_place_elements
-                        && self.writes_in_place(list, self.owning_field(list), expr)
-                    {
+                    let writes_in_place = match place::receiver_place(receiver) {
+                        Some(list) => self.writes_in_place(list, self.owning_field(list), expr),
+                        None => true,
+                    };
+                    if in_place_elements && writes_in_place {
                         expr.mark(|marks| marks.in_place = true);
                     }
                 }
@@ -3096,7 +3093,15 @@ impl<'a> Analyzer<'a> {
             TirExprKind::Call { func, .. } if func.is_builtin_named("is_moved") => {}
             TirExprKind::Call { func, args, .. } => {
                 let result = self.result_kept.take().unwrap_or(Kept::Frame);
-                let receiver = args.receiver().map(|r| &r.expr);
+                // A path call (`IndexAssign::index_assign(&mut xs, i, v)`) passes
+                // the receiver first, as the method spelling does.
+                let takes_self_by_ref = self
+                    .ref_receiver_methods
+                    .contains(&func.module_source, &func.name);
+                let receiver = args
+                    .receiver()
+                    .or_else(|| args.iter().next().filter(|_| takes_self_by_ref))
+                    .map(|r| &r.expr);
                 let mutated_receiver = receiver.filter(|_| self.mutates_receiver(func));
                 let exprs: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
                 let call_writes = self.mutations.len();
@@ -3112,10 +3117,7 @@ impl<'a> Analyzer<'a> {
                 }
                 // A `&self` / `&mut self` receiver is a place the callee reads
                 // through rather than a value it takes.
-                let ref_receiver = receiver.is_some()
-                    && self
-                        .ref_receiver_methods
-                        .contains(&func.module_source, &func.name);
+                let ref_receiver = receiver.is_some() && takes_self_by_ref;
                 let kept = if record {
                     let fresh = self.returns_owned.contains(&func.module_source, &func.name);
                     self.kept_through(

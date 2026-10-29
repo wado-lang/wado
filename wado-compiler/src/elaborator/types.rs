@@ -3500,6 +3500,11 @@ pub(super) struct FunctionContext {
     pub(super) source_bindings: IndexSet<String>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
+    /// The locals a closure built here captures `&mut`, which boxes them: a
+    /// later closure reads one through its box. Annotate and reify fill it
+    /// alike; `address_taken_locals` cannot stand in, since only reify adds a
+    /// `&x` to it.
+    pub(super) mut_captured_locals: IndexSet<u32>,
     /// Bindings the enclosing frame can reach, and how it reaches each: its own
     /// locals, plus what it reaches by capture. Only set for closure contexts.
     pub(super) outer_locals: IndexMap<String, OuterBinding>,
@@ -3521,7 +3526,7 @@ pub(super) struct FunctionContext {
     /// Bindings of an enclosing frame this frame takes `&mut`, which the
     /// closure owning it captures `&mut`.
     pub(super) mut_ref_captures: IndexSet<String>,
-    /// Box types for outer address-taken locals: maps outer var name -> `&mut T` type.
+    /// Box types for outer mut-captured locals: maps outer var name -> `&mut T` type.
     /// When capturing such a variable, use `DerefCapture` to read through the box.
     pub(super) outer_box_types: IndexMap<String, TypeId>,
     /// Per-local closure parameter defaults for `let f = |...| ...` bindings.
@@ -3803,6 +3808,7 @@ impl FunctionContext {
             locals: Vec::new(),
             source_bindings: IndexSet::default(),
             address_taken_locals: IndexSet::default(),
+            mut_captured_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
             captures_seeded: false,
@@ -3828,7 +3834,7 @@ impl FunctionContext {
 
     /// Create a closure context with outer scope access for capture detection.
     ///
-    /// `type_table` is used to compute `&mut T` types for address-taken outer locals,
+    /// `type_table` is used to compute `&mut T` types for mut-captured outer locals,
     /// enabling correct `DerefCapture` behaviour when those locals are captured.
     pub(super) fn new_closure(
         return_type: TypeId,
@@ -3865,7 +3871,7 @@ impl FunctionContext {
         for (name, binding) in &outer_locals {
             let ref_type = match binding.reach {
                 OuterReach::ParentLocal(index) => outer_ctx
-                    .address_taken_locals
+                    .mut_captured_locals
                     .contains(&index)
                     .then(|| type_table.borrow_mut().make_mut_ref(binding.local.type_id)),
                 // Boxed where it is owned, however many frames out that is.
@@ -3887,6 +3893,7 @@ impl FunctionContext {
             locals: Vec::new(),
             source_bindings: outer_ctx.source_bindings.clone(),
             address_taken_locals: IndexSet::default(),
+            mut_captured_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
             captures_seeded: false,
@@ -4105,7 +4112,7 @@ impl FunctionContext {
             let outer_defining_ast_id = outer.local.defining_ast_id;
             let index = self.capture_slot(name, outer.reach);
 
-            // If this outer local has been address-taken (boxed), capture via DerefCapture
+            // A closure boxed this outer local to capture it `&mut`: read through the box.
             if let Some(&ref_type_id) = self.outer_box_types.get(name) {
                 return Some(VarRef::DerefCapture {
                     index,
@@ -4162,8 +4169,8 @@ impl FunctionContext {
         self.captures_seeded = true;
     }
 
-    /// The captures in slot order, for building `TirCapture` entries. An
-    /// address-taken outer local carries its box type (`&mut T`).
+    /// The captures in slot order, for building `TirCapture` entries. A
+    /// mut-captured outer local carries its box type (`&mut T`).
     pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
         self.captured_vars
             .iter()

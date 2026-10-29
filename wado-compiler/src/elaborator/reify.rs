@@ -2998,14 +2998,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
 
-                // Track address-taken locals for `&x` / `&mut x`, mirroring
-                // `Elaborator::resolve_unary`. The
-                // boxing pass (`lower::plan::boxing`) reads
+                // The boxing pass (`lower::plan::boxing`) reads
                 // `TirFunction::address_taken_locals` to retag a referenced
-                // local's declaration to its box type, so that mutation
-                // through the reference (e.g. `*slot = other_fn`) writes
-                // back to the original slot. Without this the local stays
-                // unboxed and `&mut local` boxes a throwaway copy.
+                // local's declaration to its box type, so that a write through
+                // the reference (`*slot = other_fn`) reaches the original
+                // slot. Unrecorded, the local stays unboxed and `&mut local`
+                // boxes a throwaway copy.
                 if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
                     && let TirExprKind::Local { index, .. } = &inner.kind
                 {
@@ -6324,6 +6322,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let outer_index = outer.index;
             let ref_index = ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
             ctx.address_taken_locals.insert(outer_index);
+            ctx.mut_captured_locals.insert(outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),
@@ -6434,7 +6433,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 5: assemble the capture list, making this frame capture whatever
         // the closure only reached through it, as `resolve_closure` also did.
-        let captures = relink_recorded_captures(&cap_info.captures, &closure_ctx, ctx);
+        let captures = relink_recorded_captures(
+            &cap_info.captures,
+            &closure_ctx,
+            ctx,
+            &self.tysys.type_table.borrow(),
+        );
 
         // An explicit annotation wins; otherwise single-expression closure
         // bodies (e.g. `|c| c.method()`) take their body's type as the return

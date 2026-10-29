@@ -914,65 +914,68 @@ impl FunctionTranslator<'_, '_> {
                 span,
             ));
         }
+        let boxes_slot = self.base.type_table.borrow().boxes_slot(inner.type_id);
+        // `&*r` / `&mut *r` through a box is the box: a fresh one would hold a
+        // copy, so a write through it would be lost (`|| n.bump()` on a
+        // mut-captured `i32`), and an affine variant's slot would be detached.
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: reference,
+        } = &inner.kind
+            && (boxes_slot || self.base.box_plan.box_type_ids.contains(&reference.type_id))
+        {
+            return Some(self.convert_expr(reference));
+        }
         // A slot holding an affine variant holds it in a box, which is the
-        // place: a fresh box would detach it. `&*r` is `r`, and `&s.f` the box
-        // the field holds.
-        if self.base.type_table.borrow().boxes_slot(inner.type_id) {
-            match &inner.kind {
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: reference,
-                } => return Some(self.convert_expr(reference)),
-                // A builtin rather than `Unary::Ref`, which the optimizer reads
-                // as the referent itself.
-                TirExprKind::FieldAccess {
-                    expr: receiver,
-                    field_index,
-                    ..
-                } => {
-                    let is_reference = matches!(
-                        self.base.type_table.borrow().get(receiver.type_id),
-                        ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                    );
-                    let holder = if is_reference {
-                        (**receiver).clone()
-                    } else {
-                        let holder_type = self
-                            .base
-                            .type_table
-                            .borrow_mut()
-                            .make_mut_ref(receiver.type_id);
-                        TirExpr::new(
-                            TirExprKind::Unary {
-                                op: TirUnaryOp::MutRef,
-                                expr: receiver.clone(),
-                            },
-                            holder_type,
-                            span,
-                        )
-                    };
-                    let field = TirExpr::new(
-                        TirExprKind::IntLiteral {
-                            value: u64::from(*field_index),
-                            repr: field_index.to_string(),
-                        },
-                        TypeTable::I32,
-                        span,
-                    );
-                    let slot_box = self
-                        .base
-                        .type_table
-                        .borrow()
-                        .slot_box(inner.type_id)
-                        .expect("the boxing plan registers a box for every slot that boxes");
-                    return Some(self.convert_expr(&builtin_call(
-                        "field_slot",
-                        vec![holder, field],
-                        slot_box,
-                    )));
-                }
-                _ => {}
-            }
+        // place: `&s.f` is the box the field holds, read by a builtin rather
+        // than `Unary::Ref`, which the optimizer reads as the referent itself.
+        if boxes_slot
+            && let TirExprKind::FieldAccess {
+                expr: receiver,
+                field_index,
+                ..
+            } = &inner.kind
+        {
+            let is_reference = matches!(
+                self.base.type_table.borrow().get(receiver.type_id),
+                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+            );
+            let holder = if is_reference {
+                (**receiver).clone()
+            } else {
+                let holder_type = self
+                    .base
+                    .type_table
+                    .borrow_mut()
+                    .make_mut_ref(receiver.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: receiver.clone(),
+                    },
+                    holder_type,
+                    span,
+                )
+            };
+            let field = TirExpr::new(
+                TirExprKind::IntLiteral {
+                    value: u64::from(*field_index),
+                    repr: field_index.to_string(),
+                },
+                TypeTable::I32,
+                span,
+            );
+            let slot_box = self
+                .base
+                .type_table
+                .borrow()
+                .slot_box(inner.type_id)
+                .expect("the boxing plan registers a box for every slot that boxes");
+            return Some(self.convert_expr(&builtin_call(
+                "field_slot",
+                vec![holder, field],
+                slot_box,
+            )));
         }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
         let inner_nir = self.convert_operand(inner);
