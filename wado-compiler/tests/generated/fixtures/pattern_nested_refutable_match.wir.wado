@@ -128,7 +128,6 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
     let $local_6_36: ref "pattern_nested_refutable_match.wado//Tree";
     let b_39: i32;
     let message_46: ref "core:prelude/string.wado//String";
-    let $moved_4_50: i32;
     let $cm_pair_7_53: i64;
     some2 = black_box(global:pattern_nested_refutable_match.wado::$const_obj_5);
     some1 = black_box(global:pattern_nested_refutable_match.wado::$const_obj_4);
@@ -183,15 +182,30 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
         });
         "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(n_5, n_11);
     };
-    n_11 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
-    n_5 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
-    $moved_4_50 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_50 = n_11; n_11 = 0; $moved_4_50);
-    n_11 = n_5;
-    n_5 = 0;
+    n_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
+    n_11 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
+    n_5 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_5);
     "core:rt/write_string_to_stream$dae[add_newline]"(n_11, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_11 = $moved_4_50; $moved_4_50 = 0; n_11);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_5);
     message_46 = block -> ref "core:prelude/string.wado//String" {
-        n_11 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_3)).0)) -> i32 {
+        n_5 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_3)).0)) -> i32 {
+            (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
+        } else {
+            0;
+        }) -> i32 {
+            1;
+        n_5 = t_16.1;
+        } else if (if ref.test "core:prelude/types.wado//Option<i32>::Some"($local_2_6) -> i32 {
+            n_17 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0;
+            1;
+        } else {
+            0;
+        }) -> i32 {
+            n_17 + n_5;
+        } else {
+            0;
+        });
+        n_11 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_2)).0)) -> i32 {
             (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
         } else {
             0;
@@ -199,43 +213,24 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
             1;
         n_11 = t_16.1;
         } else if (if ref.test "core:prelude/types.wado//Option<i32>::Some"($local_2_6) -> i32 {
-            n_17 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0;
-            1;
-        } else {
-            0;
-        }) -> i32 {
-            n_17 + n_11;
-        } else {
-            0;
-        });
-        n_17 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $local_2_6(local.tee t_16(black_box(global:pattern_nested_refutable_match.wado::$const_obj_2)).0)) -> i32 {
-            (ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0 == 1) & 1;
-        } else {
-            0;
-        }) -> i32 {
-            1;
-        n_17 = t_16.1;
-        } else if (if ref.test "core:prelude/types.wado//Option<i32>::Some"($local_2_6) -> i32 {
             n_24 = ref.cast "core:prelude/types.wado//Option<i32>::Some"($local_2_6).payload_0;
             1;
         } else {
             0;
         }) -> i32 {
-            n_24 + n_17;
+            n_24 + n_11;
         } else {
             0;
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(n_11, n_17);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(n_5, n_11);
     };
-    n_17 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
+    n_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
     n_11 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
-    n_24 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_24 = n_17; n_17 = 0; n_24);
-    n_17 = n_11;
-    n_11 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(n_17, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_17 = n_24; n_24 = 0; n_17);
+    n_5 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_5);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_11, message_46.repr, message_46.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_5);
     message_46 = block -> ref "core:prelude/string.wado//String" {
-        b_31 = (if (if ref.test "pattern_nested_refutable_match.wado//Tree::Branch"(local.tee t_30(black_box(global:pattern_nested_refutable_match.wado::$const_obj_1))) -> i32 {
+        n_5 = (if (if ref.test "pattern_nested_refutable_match.wado//Tree::Branch"(local.tee t_30(black_box(global:pattern_nested_refutable_match.wado::$const_obj_1))) -> i32 {
             if ref.test "pattern_nested_refutable_match.wado//Tree::Leaf"(local.tee $local_6_36(local.tee $local_3_33(ref.cast "pattern_nested_refutable_match.wado//Tree::Branch"(t_30).payload_0).0)) -> i32 {
                 if ref.cast "pattern_nested_refutable_match.wado//Tree::Leaf"($local_6_36).payload_0 == 1 -> i32 {
                     if ref.test "pattern_nested_refutable_match.wado//Tree::Leaf"(local.tee $local_6_36($local_3_33.1)) -> i32 {
@@ -261,7 +256,7 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
         } else {
             unreachable;
         });
-        b_39 = (if (if ref.test "pattern_nested_refutable_match.wado//Tree::Branch"(local.tee t_30(black_box(global:pattern_nested_refutable_match.wado::$const_obj_0))) -> i32 {
+        n_11 = (if (if ref.test "pattern_nested_refutable_match.wado//Tree::Branch"(local.tee t_30(black_box(global:pattern_nested_refutable_match.wado::$const_obj_0))) -> i32 {
             if ref.test "pattern_nested_refutable_match.wado//Tree::Leaf"(local.tee $local_6_36(local.tee $local_3_33(ref.cast "pattern_nested_refutable_match.wado//Tree::Branch"(t_30).payload_0).0)) -> i32 {
                 if ref.cast "pattern_nested_refutable_match.wado//Tree::Leaf"($local_6_36).payload_0 == 1 -> i32 {
                     if ref.test "pattern_nested_refutable_match.wado//Tree::Leaf"(local.tee $local_6_36($local_3_33.1)) -> i32 {
@@ -287,19 +282,17 @@ fn "pattern_nested_refutable_match.wado/run"() with Stdout {
         } else {
             unreachable;
         });
-        "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(b_31, b_39);
+        "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"(n_5, n_11);
     };
-    b_39 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
-    b_31 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
-    n_17 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_17 = b_39; b_39 = 0; n_17);
-    b_39 = b_31;
-    b_31 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(b_39, message_46.repr, message_46.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(b_39 = n_17; n_17 = 0; b_39);
+    n_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7_53("wasi/stream-new"()));
+    n_11 = builtin::i32_wrap_i64($cm_pair_7_53 >> 32_i64);
+    n_5 = "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_5);
+    "core:rt/write_string_to_stream$dae[add_newline]"(n_11, message_46.repr, message_46.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_5);
 }
 
 fn "pattern_nested_refutable_match.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
-    return let $cm_handle_2: i32, $cm_handle_2 = data, data = 0, "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"($cm_handle_2);
+    return "wasi/$wasi:cli/stdout@0.3.0#write-via-stream"(data);
 }
 
 fn "pattern_nested_refutable_match.wado/$cm_export__run"() {
@@ -395,12 +388,10 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/unreachable"() {
@@ -409,11 +400,7 @@ fn "core:rt/unreachable"() {
 }
 
 fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $mv$data$end) {
-    let written: i32;
     let ptr_13: i32;
-    let ptr_19: i32;
-    let count_20: i32;
-    let status: i32;
     let i: i32;
     let at: i32;
     let w: i64;
@@ -421,7 +408,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b61: block {
+    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b61: block {
         l62: loop {
             break_if b61 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             at = $mv$data$start + i;
@@ -464,39 +451,39 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
             continue l68;
         };
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
-    i = 0;
+    ptr_13 = 0;
     block {
         l70: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = $mv$data$end - i;
-            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
+            i = $mv$data$start + ptr_13;
+            $licm_arith_7 = $mv$data$end - ptr_13;
+            $licm_arith_7 = local.tee i($inline_cm_await_blocked_6: block -> i32 {
+                if local.tee i("wasi/stream-write"(handle, i, select i32($licm_arith_7 < 268435455, $licm_arith_7, 268435455))) != -1 {
+                    break $inline_cm_await_blocked_6: i;
                 }
-                at = "wasi/waitable-set-new"();
-                "wasi/waitable-join"(handle, at);
+                i = "wasi/waitable-set-new"();
+                "wasi/waitable-join"(handle, i);
                 $licm_arith_7 = "mem/realloc"(0, 0, 4, 8);
-                drop("wasi/waitable-set-wait"(at, $licm_arith_7));
-                status = builtin::load_i32($licm_arith_7 + 4);
+                drop("wasi/waitable-set-wait"(i, $licm_arith_7));
+                at = builtin::load_i32($licm_arith_7 + 4);
                 drop("mem/realloc"($licm_arith_7, 8, 4, 0));
                 "wasi/waitable-join"(handle, 0);
-                "wasi/waitable-set-drop"(at);
-                break $inline_cm_await_blocked_6: status;
+                "wasi/waitable-set-drop"(i);
+                break $inline_cm_await_blocked_6: at;
             }) >>u 4;
-            ptr_19 = (if local.tee ptr_19(written & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
+            i = (if local.tee i(i & 15) == 0 -> "core:prelude/types.wado//enum:CopyResult" {
                 0;
-            } else if ptr_19 == 1 -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if i == 1 -> "core:prelude/types.wado//enum:CopyResult" {
                 1;
-            } else if @likely(ptr_19 == 2) -> "core:prelude/types.wado//enum:CopyResult" {
+            } else if @likely(i == 2) -> "core:prelude/types.wado//enum:CopyResult" {
                 2;
             } else {
                 "core:rt/unreachable"();
                 unreachable;
             });
-            i = i + count_20;
-            if ((ptr_19 != 0) | (count_20 <= 0)) | (i >= $mv$data$end) {
-                drop("mem/realloc"(ptr_13, $mv$data$end, 1, 0));
-                return ptr_19;
+            ptr_13 = ptr_13 + $licm_arith_7;
+            if ((i != 0) | ($licm_arith_7 <= 0)) | (ptr_13 >= $mv$data$end) {
+                drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
+                return i;
             }
             continue l70;
         };
@@ -530,13 +517,13 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         builtin::array_set_u8(self.repr, start_27, 45);
     } else {
     }
-    if @unlikely(local.tee digit_count(self.used + digit_count) > builtin::array_len(self.repr)) {
+    if @unlikely(local.tee is_negative(self.used + digit_count) > builtin::array_len(self.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, digit_count);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, is_negative);
     }
-    start_27 = self.used;
-    self.used = digit_count;
-    return start_27;
+    digit_count = self.used;
+    self.used = is_negative;
+    return digit_count;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nested_refutable_match.wado/$tmpl$8db8629cb9c7db93,[i32,i32]>$spec0$spec0"($mv$t$h0, $mv$t$h1) {
@@ -561,10 +548,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<pattern_nes
     is_negative_70 = out_3.used;
     out_3.used = $mv$t$h0;
     builtin::array_copy<u8>(out_3.repr, is_negative_70, repr_93, 0, 1);
-    is_negative_70 = $mv$t$h1 < 0;
+    $mv$t$h0 = $mv$t$h1 < 0;
     $mv$t$h1 = "core:prelude/primitive.wado/count_digits_u64"(local.tee x_74(x_74 = builtin::i64_extend_i32_s($mv$t$h1); select i64(x_74 < 0_i64, 0_i64 - x_74, x_74)));
-    is_negative_70 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, is_negative_70, $mv$t$h1);
-    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, is_negative_70, x_74, $mv$t$h1);
+    $mv$t$h0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(out_3, $mv$t$h0, $mv$t$h1);
+    "core:prelude/primitive.wado/write_decimal_digits"(out_3.repr, $mv$t$h0, x_74, $mv$t$h1);
     $inline_core_prelude_string_wado_String__internal_push_view_70: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_70;
     };

@@ -92,19 +92,17 @@ import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode f
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0: ref "core:prelude/types.wado//Option<i32>" = struct.new "core:prelude/types.wado//Option<i32>" { 0 };
 
 fn "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_in_a_generic_struct_field"() {
-    let v_14: ref "core:prelude/types.wado//Option<i32>";
+    let v_17: ref "core:prelude/types.wado//Option<i32>";
     let $sroa_b_last_24: ref "core:prelude/types.wado//Option<i32>";
-    v_14 = local.tee $sroa_b_last_24(global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0);
-    $sroa_b_last_24 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
-    if @unlikely((v_14.discriminant == 0) == 0) {
+    if @unlikely((global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0.discriminant == 0) == 0) {
         cold_path;
         "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_in_a_generic_struct_field$cold4"();
         unreachable;
     }
-    v_14 = local.tee $sroa_b_last_24(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 10 });
+    v_17 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 10 };
     $sroa_b_last_24 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
-    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(v_14) -> i32 {
-        ref.cast "core:prelude/types.wado//Option<i32>::Some"(v_14).payload_0 == 10;
+    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(v_17) -> i32 {
+        ref.cast "core:prelude/types.wado//Option<i32>::Some"(v_17).payload_0 == 10;
     } else {
         0;
     }) == 0) {
@@ -112,17 +110,13 @@ fn "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_
         "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_in_a_generic_struct_field$cold3"();
         unreachable;
     }
-    v_14 = $sroa_b_last_24;
-    $sroa_b_last_24 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
-    if @unlikely((v_14.discriminant == 0) == 0) {
+    if @unlikely(($sroa_b_last_24.discriminant == 0) == 0) {
         cold_path;
         "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_in_a_generic_struct_field$cold2"();
         unreachable;
     }
-    v_14 = local.tee $sroa_b_last_24(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 20 });
-    $sroa_b_last_24 = global:core:builtin::$unit_case$core:prelude/types.wado//Option<i32>$0;
-    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(v_14) -> i32 {
-        ref.cast "core:prelude/types.wado//Option<i32>::Some"(v_14).payload_0 == 20;
+    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $sroa_b_last_24(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 20 })) -> i32 {
+        ref.cast "core:prelude/types.wado//Option<i32>::Some"($sroa_b_last_24).payload_0 == 20;
     } else {
         0;
     }) == 0) {
@@ -130,8 +124,8 @@ fn "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_
         "assoc_type_projection_struct_field.wado/$test_0_projected_assoc_type_stored_in_a_generic_struct_field$cold1"();
         unreachable;
     }
-    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee v_14(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 30 })) -> i32 {
-        ref.cast "core:prelude/types.wado//Option<i32>::Some"(v_14).payload_0 == 30;
+    if @unlikely((if ref.test "core:prelude/types.wado//Option<i32>::Some"(local.tee $sroa_b_last_24(struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 1, payload_0: 30 })) -> i32 {
+        ref.cast "core:prelude/types.wado//Option<i32>::Some"($sroa_b_last_24).payload_0 == 30;
     } else {
         0;
     }) == 0) {
@@ -269,24 +263,21 @@ fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$m
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
     builtin::array_set_u8(new_repr, $mv$message$used, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
         $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
+        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
     });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
+    "wasi/stream-drop-writable"(tx);
 }
 
 fn "core:rt/log_stderr"($mv$message$repr, $mv$message$used) {
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_9: i32;
     let $sroa_$pattern_temp_0_1_10: i32;
     $sroa_$pattern_temp_0_0_9 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_10 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_9; $sroa_$pattern_temp_0_0_9 = 0; $moved_4);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_9 = $sroa_$pattern_temp_0_1_10; $sroa_$pattern_temp_0_1_10 = 0; $sroa_$pattern_temp_0_0_9, $mv$message$repr, $mv$message$used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv$message$used = $moved_4; $moved_4 = 0; $mv$message$used);
+    $sroa_$pattern_temp_0_0_9 = "wasi/$wasi:cli/stderr@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_9);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_10, $mv$message$repr, $mv$message$used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_9);
 }
 
 fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
@@ -322,7 +313,6 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     let taken: i32;
     let written: i32;
     let delivered_6: i32;
-    let result_7: "core:prelude/types.wado//enum:CopyResult";
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
@@ -331,11 +321,11 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     block {
         l23: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
-            result_7 = "core:prelude/types.wado/copy_result"(written);
+            written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
-            if ((result_7 != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
+            if ((written != 0) | (delivered_6 <= 0)) | (taken >= $mv$data$end) {
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
-                return result_7;
+                return written;
             }
             continue l23;
         };

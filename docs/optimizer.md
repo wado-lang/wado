@@ -217,7 +217,8 @@ settles the locals (step 11).
    rotates), and variant result slots flattened. Then a resource whose
    `$Resource` box no reference reaches is kept as its bare handle, across the
    locals, parameters and results it moves through.
-6. Write-only local elimination.
+6. Dead-store elimination: a store to a local that every path overwrites, or
+   leaves the function after, before reading it.
 7. Global cleanup (constant initializers, duplicate globals, dead data), then
    `br_if` selection, the calls to a function left empty and the once-flags
    guarding them, loop unrolling, and branch hints. A small loop that reads GC
@@ -226,8 +227,9 @@ settles the locals (step 11).
    original loop runs what is left.
 8. DCE and compaction.
 9. Local coalescing: a local read once is first forwarded into its read. Then
-   locals of one Wasm type whose live ranges never overlap share a slot. A
-   local's nullability is settled before it shares one.
+   locals of one Wasm type that are never live at once share a slot, and so do
+   the two ends of a copy. A local's nullability is settled before it shares
+   one.
 10. Tee fusion: a `local.set` and the read right after it become a
     `local.tee`. A local this leaves unread is removed.
 11. Local settling: a non-null local that Wasm's block-scoped rule sees read
@@ -313,7 +315,7 @@ Architectural work is tracked in
 - [ ] Sparse conditional constant propagation, intra- and interprocedural.
 - [ ] Global value numbering across effectful nodes.
 - [ ] Instruction combining over identical operands (`x - x`, `x & x`, `~(~x)`).
-- [ ] Dead store elimination.
+- [ ] Dead store elimination at NIR, and of field and array stores.
 - [ ] Strength reduction, reassociation, jump threading, and CFG simplification.
 - [ ] Cross-block copy propagation.
 - [ ] Sinking a pure definition into the branch that uses it.

@@ -37,10 +37,7 @@ fn "cm_interface_plain_func.wado/$cm_export__run"() {
     let device: i32;
     drop("cm_interface_plain_func.wado/$cm_binding__wasi:demo/gfx@0.1.0#[method]device.id"(local.tee device("cm_interface_plain_func.wado/$cm_binding__wasi:demo/gfx@0.1.0#get-device"())));
     if (device == 0) == 0 {
-        let $cm_handle_2: i32;
-        $cm_handle_2 = device;
-        device = 0;
-        "wasi/resource-drop:cm_interface_plain_func.wado#Device"($cm_handle_2);
+        "wasi/resource-drop:cm_interface_plain_func.wado#Device"(device);
     }
     "wasi/task-return"(0);
 }

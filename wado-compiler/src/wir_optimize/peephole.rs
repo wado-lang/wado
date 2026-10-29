@@ -1470,7 +1470,7 @@ pub(super) fn fuse_remaining_local_tees(module: &mut WirPackage) {
 }
 
 /// Fuse the set-then-get pairs of the locals read once, which leaves a tee
-/// nothing reads for the write-only sweep to take back to its value. Before
+/// nothing reads for dead-store elimination to take back to its value. Before
 /// `coalesce_locals`, since the local goes and so hides no copy, while one
 /// merged into a live range is read elsewhere and keeps its tee.
 pub(super) fn fuse_once_read_local_tees(module: &mut WirPackage) {

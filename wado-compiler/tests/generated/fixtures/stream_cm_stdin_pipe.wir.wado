@@ -70,11 +70,10 @@ global global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:c
 fn "stream_cm_stdin_pipe.wado/run"() with Stdout, Stdin {
     let stdin_stream: ref null "core:prelude//$Resource";
     let _done: ref null "core:prelude//$Resource";
-    let $moved_3: ref null "core:prelude//$Resource";
     let $pattern_temp_0: ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]";
     stdin_stream = local.tee $pattern_temp_0("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdin@0.3.0#read-via-stream"()).0;
     _done = $pattern_temp_0.1;
-    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_3 = stdin_stream; stdin_stream = ref.null none; $moved_3)));
+    drop("stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>"("stream_cm_stdin_pipe.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(stdin_stream)));
     if ref.is_null(_done) == 0 {
         "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(_done.value);
     }
@@ -107,7 +106,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     let evt_ptr: i32;
     let status_14: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status_14 = $inline_cm_await_blocked_0: block -> i32 {
+    packed = $inline_cm_await_blocked_0: block -> i32 {
         if local.tee packed("wasi/future-read:transmission-wasi:cli/types.wado#ErrorCode"(handle, ptr)) != -1 {
             break $inline_cm_await_blocked_0: packed;
         }
@@ -122,18 +121,18 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
         break $inline_cm_await_blocked_0: status_14;
     };
     result = ref.null none;
-    if (status_14 & 15) == 0 {
+    if (packed & 15) == 0 {
         result = (if builtin::load_u8(ptr) == 0 -> ref "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>" {
             global:core:builtin::$unit_case$core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>$0;
         } else {
-            status_14 = (if local.tee status_14(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
+            packed = (if local.tee packed(builtin::load_u8(ptr + 1)) == 0 -> "wasi:cli/types.wado//enum:ErrorCode" {
                 0;
-            } else if status_14 == 1 -> "wasi:cli/types.wado//enum:ErrorCode" {
+            } else if packed == 1 -> "wasi:cli/types.wado//enum:ErrorCode" {
                 1;
             } else {
                 2;
             });
-            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: status_14 };
+            struct.new "core:prelude/types.wado//Result<(),wasi:cli/types.wado/ErrorCode>::Err" { discriminant: 1, payload_0: packed };
         });
     }
     drop("mem/realloc"(ptr, 2, 1, 0));

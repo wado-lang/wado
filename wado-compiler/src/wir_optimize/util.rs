@@ -5,6 +5,48 @@ use crate::wir::{WirExportDesc, WirInstr, WirLocals, WirPackage, WirType, WirTyp
 
 use super::nullability::Nullability;
 
+/// A set of local indices, one bit each.
+#[derive(Clone, PartialEq, Eq)]
+pub(super) struct Bits(Vec<u64>);
+
+impl Bits {
+    pub(super) fn new(len: usize) -> Self {
+        Self(vec![0; len.div_ceil(64)])
+    }
+
+    pub(super) fn insert(&mut self, i: usize) {
+        self.0[i / 64] |= 1 << (i % 64);
+    }
+
+    pub(super) fn remove(&mut self, i: usize) {
+        self.0[i / 64] &= !(1 << (i % 64));
+    }
+
+    pub(super) fn contains(&self, i: usize) -> bool {
+        self.0[i / 64] & (1 << (i % 64)) != 0
+    }
+
+    pub(super) fn union(&mut self, other: &Self) {
+        for (word, other) in self.0.iter_mut().zip(&other.0) {
+            *word |= other;
+        }
+    }
+
+    /// The indices in the set, ascending.
+    pub(super) fn iter(&self) -> impl Iterator<Item = usize> + '_ {
+        self.0.iter().enumerate().flat_map(|(at, &word)| {
+            let mut rest = word;
+            std::iter::from_fn(move || {
+                (rest != 0).then(|| {
+                    let bit = rest.trailing_zeros() as usize;
+                    rest &= rest - 1;
+                    at * 64 + bit
+                })
+            })
+        })
+    }
+}
+
 /// `func_id`s that must not be SROA'd: exports, element tables, and `RefFunc`
 /// references.
 pub(super) fn collect_pinned_func_ids(module: &WirPackage) -> IndexSet<u32> {
