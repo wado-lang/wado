@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793241669774,
+  "lastUpdate": 1793254307847,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72281,6 +72281,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 293944,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bc7e797546f477174b8fd9759c3fc89a0671a0e2",
+          "message": "Merge pull request #2494 from wado-lang/fts-perf\n\nperf: float-to-string 12% faster, through the inliner, param_spec and WIR",
+          "timestamp": "2026-10-29T14:59:46+09:00",
+          "tree_id": "1cb8e7a9719004d8ba2f52ad26123ab5d1adaf1f",
+          "url": "https://github.com/wado-lang/wado/commit/bc7e797546f477174b8fd9759c3fc89a0671a0e2"
+        },
+        "date": 1793254306904,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316581,
             "unit": "bytes"
           }
         ]
