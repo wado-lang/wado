@@ -2034,7 +2034,8 @@ struct UnspecializableFnParam<'a> {
 
 impl TirRefVisitor for UnspecializableFnParam<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
-        if self.found {
+        // A closure body numbers its locals apart from the body around it.
+        if self.found || matches!(expr.kind, TirExprKind::Closure { .. }) {
             return;
         }
         if let TirExprKind::Assign { target, .. } = &expr.kind

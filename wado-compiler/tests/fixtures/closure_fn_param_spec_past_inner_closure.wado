@@ -1,0 +1,28 @@
+// A closure body numbers its locals apart from the function around it, so its
+// `x = 1` writes its own local 0, not the parameter `f`. The fn-param
+// specializer read it as a write to `f` and kept the canonical closure.
+
+use { println, Stdout } from "core:cli";
+
+fn apply(f: fn() -> i32) -> i32 {
+    let g = || {
+        let mut x = 0;
+        x = 1;
+        return x;
+    };
+    return f() + g();
+}
+
+export fn run() with Stdout {
+    let n = 5;
+    let y = apply(|| n);
+    println(`${y}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_expect:O0": [
+        "/apply$$Closure_{}\"(struct.new"
+    ]
+}
