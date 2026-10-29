@@ -511,7 +511,7 @@ become references. Matching `&Option<T>` with `Some(x)` gives `x: &T`, not
 `x: T`, as Rust's match ergonomics (RFC 2005) do.
 
 Under a `&mut` scrutinee, a payload of a replace-on-assign type (a primitive,
-`enum`, `flags` or `fn`) cannot bind at all, even to be read: matching
+`enum`, `flags`, `fn` or reference) cannot bind at all, even to be read: matching
 `&mut Option<i32>` with `Some(x)` is an error. Match `*r` to bind the payload
 by value, or a `&` to the value to bind a `&i32`. See
 [Mutable References to Fields and Elements](./spec-memory.md#mutable-references-to-fields-and-elements).

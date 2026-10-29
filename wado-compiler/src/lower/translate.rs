@@ -367,9 +367,16 @@ impl BoxedLocals {
     /// The box `local` lives in, where a read of it typed `ty` reads the value
     /// the box holds. A read typed as a reference to that value, as a closure
     /// capture spells one, is the box itself.
-    fn box_of_value(&self, local: u32, ty: tir::TypeId, plan: &BoxPlan) -> Option<tir::TypeId> {
+    fn box_of_value(
+        &self,
+        local: u32,
+        ty: tir::TypeId,
+        plan: &BoxPlan,
+        type_table: &TypeTable,
+    ) -> Option<tir::TypeId> {
         let declared = *self.0.get(&local)?;
-        (plan.box_struct_types.get(&ty) == Some(&declared)).then_some(declared)
+        let holding = *plan.box_struct_types.get(&ty)?;
+        (type_table.type_key(holding) == type_table.type_key(declared)).then_some(declared)
     }
 }
 
@@ -563,7 +570,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
         }
         let guarded_locals = guarded_locals(func, |local, ty| {
             boxed_locals
-                .box_of_value(local, ty, base.box_plan)
+                .box_of_value(local, ty, base.box_plan, &base.type_table.borrow())
                 .is_some()
         });
         let share_eligible_locals = ownership.share_eligible;
@@ -1674,8 +1681,12 @@ impl FunctionTranslator<'_, '_> {
 
     /// The `Box` a local holding a `ty` lives in, where its address is taken.
     fn box_type_of_local(&self, local: u32, ty: tir::TypeId) -> Option<tir::TypeId> {
-        self.boxed_locals
-            .box_of_value(local, ty, self.base.box_plan)
+        self.boxed_locals.box_of_value(
+            local,
+            ty,
+            self.base.box_plan,
+            &self.base.type_table.borrow(),
+        )
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {

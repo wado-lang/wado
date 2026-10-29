@@ -3112,10 +3112,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // and a newtype over that reference is cast to it.
                 let inner = {
                     let tt = self.tysys.type_table.borrow();
-                    let pointee = tt.peel_refs(inner.type_id);
-                    let inner = if pointee != tt.representation_head(pointee)
-                        && tt.ref_pointee(tt.representation_head(pointee)).is_some()
-                    {
+                    let inner = if self.tysys.wraps_reference(tt.peel_refs(inner.type_id)) {
                         wrapped_reference(inner, &tt)
                     } else {
                         inner
@@ -4694,6 +4691,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             !matches!(dispatch.self_kind, ast::SelfKind::MutRef),
             "a binary operator trait takes `&self`, so its receiver needs no box"
         );
+        // An impl for a reference answers a newtype over one with the
+        // reference it wraps.
+        let (left, right) = if dispatch.is_ref_impl() {
+            let tt = self.tysys.type_table.borrow();
+            let unwrap = |operand: TirExpr| {
+                if self.tysys.wraps_reference(operand.type_id) {
+                    wrapped_reference(operand, &tt)
+                } else {
+                    operand
+                }
+            };
+            (unwrap(left), unwrap(right))
+        } else {
+            (left, right)
+        };
         let receiver = adjust_receiver_for_self_kind(
             left,
             dispatch.self_kind,
@@ -10471,36 +10483,28 @@ fn adjust_receiver_node(
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TirExpr {
     if is_ref_impl {
-        // For ref-type impls, Self is &T (or &mut T).
-        // &self means &&T, &mut self means &mut &T.
-        // The receiver is already &T, so we need to add an extra reference layer.
-        return match self_kind {
-            ast::SelfKind::Ref => {
-                let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Ref,
-                        expr: Box::new(receiver),
-                    },
-                    ref_type,
-                    span,
-                )
-            }
-            ast::SelfKind::MutRef => {
-                let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::MutRef,
-                        expr: Box::new(receiver),
-                    },
-                    mut_ref_type,
-                    span,
-                )
-            }
-            ast::SelfKind::None | ast::SelfKind::Value => {
-                deref_to_layers(receiver, 0, &type_table.borrow())
-            }
+        // `Self` is `&T`, so `&self` is `&&T` and `&mut self` is `&mut &T`:
+        // a receiver already holding both layers passes them, and one holding
+        // `Self`'s alone gets the declaration's over it.
+        let target = adjusted_receiver_type(receiver.type_id, self_kind, true, type_table);
+        let held = type_table.borrow().ref_depth(target);
+        if type_table.borrow().ref_layers(receiver.type_id, held) == target {
+            return deref_to_layers(receiver, held, &type_table.borrow());
+        }
+        let own = deref_to_layers(receiver, held - 1, &type_table.borrow());
+        let op = if matches!(type_table.borrow().get(target), ResolvedType::MutRef(_)) {
+            TirUnaryOp::MutRef
+        } else {
+            TirUnaryOp::Ref
         };
+        return TirExpr::new(
+            TirExprKind::Unary {
+                op,
+                expr: Box::new(own),
+            },
+            target,
+            span,
+        );
     }
 
     let depth = type_table.borrow().ref_depth(receiver.type_id);

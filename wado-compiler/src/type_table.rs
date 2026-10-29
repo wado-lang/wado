@@ -2970,6 +2970,20 @@ impl TypeTable {
         self.redirects.set_growing(id, target);
     }
 
+    /// Point each erasure redirect aimed at a reference [`Self::redefine_to`]
+    /// moved on at where it went, so `get` keeps its one hop: an erased
+    /// `type R = &i32` resolves to the `Box<i32>` its reference became.
+    pub fn follow_redefinitions(&mut self) {
+        let moved: Vec<(TypeId, TypeId)> = self
+            .redirects
+            .iter()
+            .filter_map(|(id, &to)| Some((id, *self.redirects.get(to)?)))
+            .collect();
+        for (id, to) in moved {
+            self.redirects.set_growing(id, to);
+        }
+    }
+
     /// Whether `id` bottoms out in a primitive, through any newtype chain.
     pub fn is_primitive_like(&self, id: TypeId) -> bool {
         self.primitive_head(id).is_some()
@@ -3045,6 +3059,17 @@ impl TypeTable {
             depth += 1;
         }
         depth
+    }
+
+    /// `type_id` with its outer references stripped until at most `layers`
+    /// hold the pointee: `&&mut X` at 1 → `&mut X`.
+    pub fn ref_layers(&self, mut type_id: TypeId, layers: usize) -> TypeId {
+        while self.ref_depth(type_id) > layers {
+            type_id = self
+                .ref_pointee(type_id)
+                .expect("a type deeper than `layers` is a reference");
+        }
+        type_id
     }
 
     /// The reference layer holding the pointee: `&&mut X` → `&mut X`.
@@ -3146,9 +3171,10 @@ impl TypeTable {
             && !matches!(self.spelled_ref(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a reference, or `None` when it is not one.
-    /// The sole reader of a redefined reference; every other view answers `Box<T>`.
-    fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+    /// How `id`'s own slot spells a reference, or `None` when it is not one: an
+    /// erased newtype redirected onto a reference is not. The sole reader of a
+    /// redefined reference; every other view answers `Box<T>`.
+    pub fn spelled_ref(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
         match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
             ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),

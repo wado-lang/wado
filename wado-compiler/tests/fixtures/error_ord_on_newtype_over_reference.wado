@@ -1,0 +1,14 @@
+// A reference is no `Ord`, so a newtype over one inherits none.
+
+type R = &i32;
+
+export fn run() {
+    let a = 1;
+    let b = 2;
+    let ra = &a as R;
+    let rb = &b as R;
+    assert ra < rb;
+}
+
+__DATA__
+{"compile_error": ":10:12: error: operator `<` cannot be applied to type `&i32`"}

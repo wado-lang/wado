@@ -1,0 +1,38 @@
+// An impl written for a reference takes `&self` as `&&T`: a receiver holding
+// more references than that passes the two innermost, not one more over all.
+
+struct P {
+    x: i32,
+}
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+impl Show for &P {
+    fn show(&self) -> i32 {
+        return self.x;
+    }
+}
+
+test "a ref impl's method through a reference to a reference" {
+    let p = P { x: 3 };
+    let r = &p;
+    let rr = &r;
+    assert r.show() == 3;
+    assert rr.show() == 3;
+}
+
+test "a ref impl's iterator through a reference to a reference" {
+    let xs: List<i32> = [1, 2];
+    let lr = &xs;
+    let llr = &lr;
+    let mut n = 0;
+    for let v of llr {
+        n += *v;
+    }
+    assert n == 3;
+}
+
+__DATA__
+{"test": {}}

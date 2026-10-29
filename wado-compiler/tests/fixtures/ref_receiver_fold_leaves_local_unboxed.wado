@@ -1,0 +1,29 @@
+// `Show::show(&r)` on `r: &P` folds the receiver `*&r` to `r`: no `&r` is left,
+// so `r` needs no box.
+
+struct P {
+    n: i32,
+}
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+impl Show for P {
+    fn show(&self) -> i32 {
+        return self.n;
+    }
+}
+
+test "a folded receiver borrow boxes nothing" {
+    let p = P { n: 7 };
+    let r = &p;
+    assert Show::show(&r) == 7;
+    assert (&r).show() == 7;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O0": ["r = struct.new"]
+}

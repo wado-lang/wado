@@ -11,8 +11,10 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirUnaryOp, TypeId,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -84,7 +86,7 @@ pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize
 }
 
 fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
-    let address_taken = func.address_taken_locals.clone();
+    let address_taken = still_taken(func);
     let param_count = u32::try_from(func.params.len()).unwrap();
 
     // (param_idx, shadow_local_idx, box_type_id, original_type_id, name)
@@ -172,6 +174,36 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
     // original param indices. The fold's address-taken consumer reads
     // from `func.address_taken_locals` directly.
     func.address_taken_locals = effective_address_taken;
+}
+
+/// The recorded address-taken locals whose `&` the body still takes. A
+/// rewrite after the record may fold one away, as a receiver's `*&r` folds
+/// to `r`, and boxing that local would cost a box nothing reads through.
+fn still_taken(func: &TirFunction) -> IndexSet<u32> {
+    struct Taken(IndexSet<u32>);
+    impl TirRefVisitor for Taken {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
+                && let TirExprKind::Local { index, .. } = inner.kind
+            {
+                self.0.insert(index);
+            }
+            self.walk_expr_in_frame(expr);
+        }
+    }
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut taken = Taken(IndexSet::default());
+    taken.visit_block(body);
+    func.address_taken_locals
+        .iter()
+        .copied()
+        .filter(|local| taken.0.contains(local))
+        .collect()
 }
 
 /// One `Ref` / `MutRef` `TypeId` about to be redefined onto its `Box<T>` struct.
@@ -322,9 +354,10 @@ impl TypeBuilder {
         let mut replacements: Vec<BoxRewrite> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            let inner = match *type_table.get(type_id) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => inner,
-                _ => continue,
+            // A newtype over a reference reads as one once erased, but it is
+            // that reference's slot, which is redefined under its own id.
+            let Some((inner, _)) = type_table.spelled_ref(type_id) else {
+                continue;
             };
             let key = self.box_key(inner, type_table);
             if let Some(&box_type_id) = self.box_struct_types.get(&key) {
@@ -345,6 +378,7 @@ impl TypeBuilder {
             self.box_type_ids.insert(r.type_id);
             type_table.register_box_payload(r.type_id, r.payload);
         }
+        type_table.follow_redefinitions();
         for (&inner, &wrapper) in &self.box_struct_types {
             type_table.register_box_payload(wrapper, inner);
         }

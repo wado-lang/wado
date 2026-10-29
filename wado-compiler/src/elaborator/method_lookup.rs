@@ -299,6 +299,22 @@ impl TypeSystem {
         self.type_table.borrow().ref_pointee(id)
     }
 
+    /// Whether `id` is a newtype over a reference (`type H = &mut T`).
+    pub(crate) fn wraps_reference(&self, id: TypeId) -> bool {
+        let tt = self.type_table.borrow();
+        matches!(tt.get(id), ResolvedType::Newtype { .. })
+            && tt.ref_pointee(tt.representation_head(id)).is_some()
+    }
+
+    /// The reference a newtype over one wraps, or `id` itself.
+    pub(crate) fn wrapped_ref_type(&self, id: TypeId) -> TypeId {
+        if self.wraps_reference(id) {
+            self.type_table.borrow().representation_head(id)
+        } else {
+            id
+        }
+    }
+
     /// `id` read through one reference, if it is one.
     pub(crate) fn through_ref(&self, id: TypeId) -> TypeId {
         self.pointee_of(id).unwrap_or(id)
@@ -3881,11 +3897,24 @@ pub(super) fn adjusted_receiver_type(
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TypeId {
     // A ref-target impl binds `Self` to `&T`, so `&self` is `&&T`: the receiver
-    // already carries one layer and the declaration asks for another.
+    // carries `Self`'s layer, and the declaration asks for another over it.
     if is_ref_impl {
+        let outer_two = type_table.borrow().ref_layers(receiver, 2);
+        let outer = type_table.borrow().get(outer_two).clone();
+        let has_two = type_table.borrow().ref_depth(outer_two) == 2;
         return match self_kind {
-            ast::SelfKind::Ref => type_table.borrow_mut().make_ref(receiver),
-            ast::SelfKind::MutRef => type_table.borrow_mut().make_mut_ref(receiver),
+            ast::SelfKind::Ref if has_two => outer_two,
+            ast::SelfKind::MutRef if has_two && matches!(outer, ResolvedType::MutRef(_)) => {
+                outer_two
+            }
+            ast::SelfKind::Ref => {
+                let own = type_table.borrow().ref_layers(receiver, 1);
+                type_table.borrow_mut().make_ref(own)
+            }
+            ast::SelfKind::MutRef => {
+                let own = type_table.borrow().ref_layers(receiver, 1);
+                type_table.borrow_mut().make_mut_ref(own)
+            }
             ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
         };
     }
