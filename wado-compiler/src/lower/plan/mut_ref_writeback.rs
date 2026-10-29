@@ -296,7 +296,10 @@ impl WriteBack<'_> {
         if tt.is_wide_int(ty) {
             Some(TirBinaryOp::RefNotEq)
         } else if tt.is_scalar_primitive_like(ty)
-            || matches!(tt.get(tt.representation_head(ty)), ResolvedType::Enum { .. })
+            || matches!(
+                tt.get(tt.representation_head(ty)),
+                ResolvedType::Enum { .. }
+            )
         {
             Some(TirBinaryOp::NotEq)
         } else if tt.primitive_head(ty).is_some() {
@@ -618,15 +621,21 @@ impl WriteBack<'_> {
             // without any store back.
             let temp = self.bind(&mut prefix, "", place.clone(), true, LetStorage::Aliased);
             self.ref_temps.push(temp.index);
-            // An identity witness, never a copy: a copy would make every call
-            // look like a whole-value write.
-            let before = self.bind(
-                &mut prefix,
-                "before_",
-                temp.read(),
-                false,
-                LetStorage::Aliased,
-            );
+            // Store back only what the callee replaced. An unconditional store
+            // would also undo a write the callee made through another route to
+            // the same place — `self`, or a sibling `&mut` argument. The witness
+            // aliases what the temp held, never copies it: a copy would make
+            // every call look like a whole-value write.
+            let witness = self.replacement_witness(temp.type_id).map(|op| {
+                let before = self.bind(
+                    &mut prefix,
+                    "before_",
+                    temp.read(),
+                    false,
+                    LetStorage::Aliased,
+                );
+                (op, before)
+            });
             // The store is the temp's last read, so it hands the storage over
             // rather than copying the whole payload.
             let mut store_back: Vec<TirStmt> = Vec::new();
@@ -648,11 +657,8 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
-            // Store back only what the callee replaced. An unconditional store
-            // would also undo a write the callee made through another route to
-            // the same place — `self`, or a sibling `&mut` argument.
-            write_backs.push(match self.replacement_witness(temp.type_id) {
-                Some(op) => TirStmt::new(
+            write_backs.push(match witness {
+                Some((op, before)) => TirStmt::new(
                     TirStmtKind::If {
                         condition: TirExpr::new(
                             TirExprKind::Binary {

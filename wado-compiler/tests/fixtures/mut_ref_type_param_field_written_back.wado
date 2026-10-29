@@ -36,6 +36,12 @@ test "a primitive field is replaced" {
     assert c.v == 2;
 }
 
+test "a half float field, which no operator compares, is stored back" {
+    let mut c = Cell { v: 1.5 as f16 };
+    c.set(2.5 as f16);
+    assert c.v == 2.5 as f16;
+}
+
 test "a struct field is replaced in place" {
     let mut c = Cell { v: P { n: 1 } };
     c.set(P { n: 3 });
