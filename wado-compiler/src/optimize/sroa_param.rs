@@ -189,7 +189,15 @@ fn collect_and_validate(
             // Taking the parameter's address needs no guard of its own: `&p`
             // reads `p` whole, which `param_field_use` rejects, and a boxed
             // parameter is read through its shadow local.
-            if func.retains.iter().any(|s| s == &param.name) {
+            //
+            // A retained parameter keeps its identity, which a field snapshot
+            // drops. A boxed reference's retention is the referent its payload
+            // names, which the rewrite passes on unchanged.
+            if func.retains.iter().any(|s| s == &param.name)
+                && !types
+                    .box_payload_of(param.type_id)
+                    .is_some_and(|payload| types.ref_pointee(payload).is_some())
+            {
                 continue;
             }
             let Some(mut info) = candidate_info_for(param.type_id, types, &field_table) else {
@@ -1495,6 +1503,9 @@ enum ArgPlan {
     /// struct, handed over untouched. The call has to retarget, the original no
     /// longer taking the type this argument holds.
     Forwarded,
+    /// A literal of the wrapper, which gives way to the field's initializer
+    /// where it stood, moving no read.
+    Unwrapped,
     /// Project `place.f` at the call site.
     Projected,
     /// Neither applies, so the call keeps the original.
@@ -1564,6 +1575,11 @@ fn classify_arg(
     // just as the skeleton one does.
     if scalarized_from(body, op, scalar_param_struct).as_ref() == Some(&info.struct_key) {
         return ArgPlan::Forwarded;
+    }
+    if let Some(arg) = op.as_expr()
+        && literal_field(body, peel_one_ref(body, arg), info, type_table).is_some()
+    {
+        return ArgPlan::Unwrapped;
     }
     // A promoted operand has no node to inspect, so take the value graph's type
     // for it and require the same proof as any other argument.
@@ -1666,26 +1682,7 @@ fn rewrite_arg(
         }
     }
 
-    // Case 1: StructLiteral matching the wrapper's canonical identity → unwrap
-    // to the field the callee reads. Only a skeleton field is lifted in place; a
-    // promoted constant field falls through to Case 3's `FieldAccess`
-    // (`(Wrapper{V}).f`, folded later) since it has no node to become.
-    //
-    // The other fields are dropped with the literal, so each must be something
-    // whose evaluation nothing observes — a constant, or a local read. That is
-    // the ordinary case for a record built to carry options at a call.
-    if let ExprKind::StructLiteral {
-        struct_type,
-        fields,
-        ..
-    } = &body.exprs[arg].kind
-        && struct_key_of(*struct_type, type_table).as_ref() == Some(&info.struct_key)
-        && let Some(used) = fields.iter().find(|f| f.field_index == info.field_index)
-        && let Some(fe) = used.value.as_expr()
-        && fields
-            .iter()
-            .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
-    {
+    if let Some(fe) = literal_field(body, arg, info, type_table) {
         become_expr(body, arg, fe);
         return;
     }
@@ -1705,6 +1702,43 @@ fn rewrite_arg(
     let span = body.exprs[arg].span;
     let projected = project_field(body, orig.into(), info, span);
     become_expr(body, arg, projected);
+}
+
+/// Case 1 of [`rewrite_arg`]: `arg` is a literal of the wrapper, which unwraps
+/// to the initializer of the field the callee reads, evaluated where the
+/// literal was. Only a skeleton field is lifted in place; a promoted constant
+/// field falls through to Case 3's `FieldAccess` (`(Wrapper{V}).f`, folded
+/// later) since it has no node to become.
+///
+/// The other fields are dropped with the literal, so each must be something
+/// whose evaluation nothing observes — a constant, or a local read. That is
+/// the ordinary case for a record built to carry options at a call.
+fn literal_field(
+    body: &Body,
+    arg: ExprId,
+    info: &SroaInfo,
+    type_table: &TypeTable,
+) -> Option<ExprId> {
+    let ExprKind::StructLiteral {
+        struct_type,
+        fields,
+        ..
+    } = &body.exprs[arg].kind
+    else {
+        return None;
+    };
+    if struct_key_of(*struct_type, type_table).as_ref() != Some(&info.struct_key)
+        || !fields
+            .iter()
+            .all(|f| f.field_index == info.field_index || discardable_field(body, f.value))
+    {
+        return None;
+    }
+    fields
+        .iter()
+        .find(|f| f.field_index == info.field_index)?
+        .value
+        .as_expr()
 }
 
 /// The field a call site hands over in place of the wrapper: `source.f`, under
