@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793223404705,
+  "lastUpdate": 1793241669774,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72237,6 +72237,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 295573,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2794f05827f61275771d4190ff3bff15efb1dbc",
+          "message": "Merge pull request #2492 from wado-lang/claude/determined-keller-oxytgd\n\nperf(wir): remove dead stores and coalesce locals by liveness",
+          "timestamp": "2026-10-29T11:28:14+09:00",
+          "tree_id": "ba8a94aac493631b9d936cadf074a5b7c14539de",
+          "url": "https://github.com/wado-lang/wado/commit/a2794f05827f61275771d4190ff3bff15efb1dbc"
+        },
+        "date": 1793241669248,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7451,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21896,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 293944,
             "unit": "bytes"
           }
         ]
