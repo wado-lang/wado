@@ -317,7 +317,12 @@ impl FunctionTranslator<'_, '_> {
     /// `NotIdentical` at `type_id`'s representation. It also takes the operands
     /// [`PrimitiveKind`] leaves out: a GC reference, a `v128`, and a half
     /// float, which is a `u16` in Wasm.
-    fn not_identical(&self, left: Box<WirInstr>, right: Box<WirInstr>, type_id: TypeId) -> WirInstr {
+    fn not_identical(
+        &self,
+        left: Box<WirInstr>,
+        right: Box<WirInstr>,
+        type_id: TypeId,
+    ) -> WirInstr {
         match PrimitiveKind::from_type_id(self.type_table, type_id) {
             Some(PrimitiveKind::F32) => WirInstr::I32Ne(
                 Box::new(WirInstr::I32ReinterpretF32(left)),
