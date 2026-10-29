@@ -202,7 +202,7 @@ fix to conform; none should be preserved.
   | ----------------------------------------------------------------- | ------------------------ |
   | primitive / enum / flags / `fn` / reference field or element      | refused at the reference |
   | the same, behind `&mut *p`                                        | dropped                  |
-  | the same, as a type parameter's field (`&mut self.v`, `v: T`)     | dropped                  |
+  | the same, as a type parameter's field (`&mut self.v`, `v: T`)     | as a `variant`'s, below  |
   | `variant`, into a variable / aggregate / payload / `return`       | refused                  |
   | `variant`, reaching one of those through a variable               | refused                  |
   | `variant` field / `&mut *p`, call argument                        | written back             |
@@ -215,7 +215,12 @@ fix to conform; none should be preserved.
   place re-boxes what it names — a capture and a `&mut *p` included. `variant`
   is exempt from the reference-site refusal because mutation through its
   payload lands. A rewritten call reads its callee and each of its arguments in
-  source order, so a preceding one's write is not read past.
+  source order, so a preceding one's write is not read past. A type parameter's
+  field reaches the reference site as no replace type at all, so its instances
+  take the `variant` rules from the write-back pass, which reads the
+  substituted type. A scalar has no identity to witness a replacement by, so its
+  value does; `v128` and the half floats, which no operator compares, store back
+  unconditionally, undoing a write the callee made through another route.
 
   Both halves follow the reference, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
@@ -236,10 +241,6 @@ fix to conform; none should be preserved.
 - `&mut *p` for every replace type but `variant`. The reference-site refusal keys
   on a `FieldAccess` / `Index` operand, so `&mut *p` slips past it. `variant`
   is covered from the other side by the write-back; the rest are not.
-- A field typed by a type parameter. The reference-site refusal reads the
-  generic body, where `T` is no replace type, and the instance whose `T` is one
-  is never checked: `Cell<i32>::set` calling `put(&mut self.v, x)` writes a box
-  the field never sees.
 - A `variant` element as a call argument, where the callee neither replaces
   nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
   write-back is an `index_assign` to synthesize, and that resolves in the
