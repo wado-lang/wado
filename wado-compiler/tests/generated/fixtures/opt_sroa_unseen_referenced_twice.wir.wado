@@ -127,11 +127,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(45)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(46)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(46)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(47)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(47)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(48)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe,bool>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(49)
 
@@ -197,7 +197,7 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_164: i32;
+    let start_167: i32;
     p = struct.new "opt_sroa_unseen_referenced_twice.wado//Point" { x: a, y: 2 };
     h_3 = struct.new "opt_sroa_unseen_referenced_twice.wado//Holder" { a: ref.null none, b: ref.null none };
     if @unlikely(bad) {
@@ -282,22 +282,22 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, bad);
         }
-        start_164 = out_7.used;
+        start_167 = out_7.used;
         out_7.used = bad;
-        builtin::array_set_u8(out_7.repr, start_164, 45);
+        builtin::array_set_u8(out_7.repr, start_167, 45);
     } else {
     }
     if @unlikely(local.tee bad(out_7.used + a) > builtin::array_len(out_7.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_7, bad);
     }
-    start_164 = out_7.used;
+    start_167 = out_7.used;
     out_7.used = bad;
     arr = out_7.repr;
-    a = start_164 + a;
+    a = start_167 + a;
     b25: block {
         l26: loop {
-            break_if b25 (a - start_164) < 2;
+            break_if b25 (a - start_167) < 2;
             q = x /u 100_i64;
             tens = local.tee bad(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, a - 1, (48 + bad) - (tens * 10));
@@ -307,8 +307,8 @@ fn "opt_sroa_unseen_referenced_twice.wado/f"(a, bad) with Stdout {
             continue l26;
         };
     };
-    if a > start_164 {
-        builtin::array_set_u8(arr, start_164, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if a > start_167 {
+        builtin::array_set_u8(arr, start_167, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_40: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_40;
@@ -670,10 +670,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<opt_sroa_un
     let self_9: ref "core:prelude/string.wado//StrSlice";
     let $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_unseen_referenced_twice_wado__tmpl_82976a53828ad9fe_bool___fmt_4_0: ref "core:prelude/format.wado//Formatter";
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>((local.tee self_9("opt_sroa_unseen_referenced_twice.wado/opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_9.start) + (local.tee self_9("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe,bool>::lit$sroa[self.index]"(0, local.tee $load_2(t.s0), local.tee $load_3(t.r0), local.tee $load_4(t.s1), local.tee $load_5(t.r1))).end - self_9.start + 16)), used: 0 };
-    "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe,bool>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5), out);
+    "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe,bool>::lit$sroa[self.index]"(0, $load_2, $load_3, $load_4, $load_5), out);
     $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_unseen_referenced_twice_wado__tmpl_82976a53828ad9fe_bool___fmt_4_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(out);
     "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_opt_sroa_unseen_referenced_twice_wado__tmpl_82976a53828ad9fe_bool___fmt_4_0);
-    "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"("opt_sroa_unseen_referenced_twice.wado/opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe^core:prelude/traits.wado/ReflectTemplate::tail"(t), out);
+    "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"("opt_sroa_unseen_referenced_twice.wado/opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe^core:prelude/traits.wado/ReflectTemplate::tail"(t), out);
     return out;
 }
 
@@ -720,7 +720,30 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
-fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self, out) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b74: block {
+        l75: loop {
+            break_if b74 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l75;
+        };
+    };
+}
+
+fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
+    let text: ref "core:prelude/string.wado//String";
+    text = (if self -> ref "core:prelude/string.wado//String" {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
+    } else {
+        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
+    });
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text);
+}
+
+fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
     let start_14: i32;
@@ -734,29 +757,6 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
     };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b75: block {
-        l76: loop {
-            break_if b75 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l76;
-        };
-    };
-}
-
-fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
-    let text: ref "core:prelude/string.wado//String";
-    text = (if self -> ref "core:prelude/string.wado//String" {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 114, 117, 101), used: 4 };
-    } else {
-        struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
-    });
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text);
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<opt_sroa_unseen_referenced_twice.wado/$tmpl$82976a53828ad9fe,bool>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {

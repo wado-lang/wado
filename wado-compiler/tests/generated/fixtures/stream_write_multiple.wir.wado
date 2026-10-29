@@ -284,9 +284,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedWrite<u8>
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<stream_write_multiple.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(92)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(93)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(93)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(94)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(94)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(95)
 
@@ -296,9 +296,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slic
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(98)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(99)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(99)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(100)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(100)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(101)
 
@@ -1572,6 +1572,19 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<stream_write_
     };
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b178: block {
+        l179: loop {
+            break_if b178 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l179;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let s_11: ref "core:prelude/string.wado//String";
     if ref.is_null(global:core:prelude/traits.wado::$const_obj_14) {
@@ -1584,40 +1597,27 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/tra
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_14.0;
     if self == 0 {
         s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_11);
         s_11 = $mv_0_1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
     }
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_14.1;
     if self == 1 {
         s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_11);
         s_11 = $mv_0_1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
     }
     $mv_0_1 = global:core:prelude/traits.wado::$const_obj_14.2;
     if self == 2 {
         s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, global:core:prelude/traits.wado::$const_obj_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, global:core:prelude/traits.wado::$const_obj_11);
         s_11 = $mv_0_1.case_name;
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
     }
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b182: block {
-        l183: loop {
-            break_if b182 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l183;
-        };
-    };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
@@ -1641,18 +1641,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {
     let start: i32;
+    start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, 10);
+    builtin::array_copy<u8>(self.repr, start, other.repr, 0, 10);
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(self, other) {
+    let start: i32;
     start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, 2);
     builtin::array_copy<u8>(self.repr, start, other.repr, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]"($mv$self$repr, $mv$self$start) {
     return builtin::array_get_value<u8>($mv$self$repr, $mv$self$start);
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(self, other) {
-    let start: i32;
-    start = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(self, 10);
-    builtin::array_copy<u8>(self.repr, start, other.repr, 0, 10);
 }
 
 export fn "stream_write_multiple.wado/$cm_export__run" as "run"

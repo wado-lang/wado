@@ -167,7 +167,7 @@ for let p of &mut points {
 assert points[0].x == 2 && points[1].x == 3;
 ```
 
-An element type that is replaced on assignment (a primitive, `enum`, `flags`, `variant`, or `fn`) is not `RefMut`, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
+An element type that is replaced on assignment (a primitive, `enum`, `flags`, `variant`, `fn`, or a reference) is not `RefMut`, so a write through `&mut T` would be lost. `&mut` iteration over such a list is a compile error; use indexed access instead:
 
 <!-- {"fixture":"spec_traits_iter_mut.wado"} -->
 
@@ -1085,7 +1085,9 @@ A write assigns into the element rather than over it, so every subscript the
 target passes through is a `&mut` place: `o[i][j] = v` and `o[i][j].f = v` take
 `IndexRefMut` on `o[i]`. Neither other trait serves there. `IndexRef` hands out
 a shared reference, which a write cannot go through, and `IndexValue` hands out
-a copy, on which the write would be lost.
+a copy, on which the write would be lost. A subscript behind a reference is no
+such place: on a `List<&mut P>`, `l[i].f = v` writes into the `P` the element
+refers to, so `l[i]` reads the element.
 
 The five traits are independent: a container implements only the ones it
 supports. A subscript names the prelude's declarations, as an operator does, so
@@ -1115,15 +1117,14 @@ eligible type, and a user `impl Ref` or `impl RefMut` is a compile error:
 | Types                                                                         | `Ref` | `RefMut` |
 | ----------------------------------------------------------------------------- | ----- | -------- |
 | `struct`, `List<T>`, `String`, tuples, `TreeMap` / `TreeSet`, `i128` / `u128` | yes   | yes      |
-| `variant`, `fn`                                                               | yes   | no       |
-| `&T`, `&mut T`                                                                | yes   | yes      |
+| `variant`, `fn`, `&T`, `&mut T`                                               | yes   | no       |
 | scalars, `enum`, `flags`                                                      | no    | no       |
 | `resource`                                                                    | no    | no       |
 | `()`, `!`                                                                     | no    | no       |
 
 `Ref` holds for a type whose value `&T` can alias. `RefMut` holds for the `Ref`
 types mutated in place rather than replaced on assignment, which excludes
-`variant` and `fn`. A `resource` is a handle that cannot be aliased, so a
+`variant`, `fn` and a reference. A `resource` is a handle that cannot be aliased, so a
 resource element is read by value. A newtype follows its base. Neither marker
 asks whether a value holds references: a `struct` with `&T` fields is `Ref`, and
 `i32` is not `Ref`, although `&i32` is.

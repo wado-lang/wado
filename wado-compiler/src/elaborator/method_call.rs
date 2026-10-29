@@ -1213,6 +1213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &func,
                 self_kind,
                 is_ref_impl,
+                matches!(owner, MethodOwner::Referent(_)),
                 param_is_mut,
                 defaults,
                 substituted_param_types.clone(),
@@ -1376,7 +1377,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
-            let (type_args, params) = sig.into_dispatch_parts(receiver_type);
+            // `self` as the method declares it, which a reference's own impl
+            // (`impl IntoIterator for &List<T>`) takes one layer deeper.
+            let self_type = adjusted_receiver_type(
+                receiver_type,
+                sig.self_kind,
+                dispatched.is_ref_impl,
+                &self.tysys.type_table,
+            );
+            let (type_args, params) = sig.into_dispatch_parts(self_type);
             self.record_call_param_types(call_id, params.param_types.clone());
             self.sem.types.static_method_dispatch.insert(
                 call_id,

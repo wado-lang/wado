@@ -1379,9 +1379,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Result<TypeId, ()> {
         let projected = projected_subscripts_of_place(target);
         let resolved = self.resolve_expr(expr, &mut ctx.marking_mut_places(&projected), None);
-        if let Some(refusal) = projected
-            .iter()
-            .find_map(|id| self.subscript_write_refusal(*id))
+        if let Some(refusal) = self
+            .subscripts_written_through(target)
+            .find_map(|id| self.subscript_write_refusal(id))
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: refusal.to_string(),
@@ -1390,6 +1390,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Err(());
         }
         Ok(resolved)
+    }
+
+    /// The subscripts of [`projected_subscripts_of_place`] the write lands in.
+    /// One behind a reference is not: `l[0].a` on a `List<&mut P>` writes into
+    /// the `P` the element points to, whatever hands the element out.
+    fn subscripts_written_through<'a>(
+        &'a self,
+        target: &'a ast::Expr,
+    ) -> impl Iterator<Item = AstId> + 'a {
+        let mut at = match target {
+            ast::Expr::FieldAccess(field) => Some(&field.expr),
+            ast::Expr::Index(index) => Some(&index.expr),
+            _ => None,
+        };
+        std::iter::from_fn(move || {
+            loop {
+                let expr = at.take()?;
+                let is_reference = self
+                    .sem
+                    .types
+                    .expression_types
+                    .get(&expr.id())
+                    .is_some_and(|ty| self.reference_mutability(*ty).is_some());
+                if is_reference {
+                    return None;
+                }
+                match expr {
+                    ast::Expr::Index(index) => {
+                        at = Some(&index.expr);
+                        return Some(index.id);
+                    }
+                    ast::Expr::FieldAccess(field) => at = Some(&field.expr),
+                    _ => return None,
+                }
+            }
+        })
     }
 
     /// Why a write cannot reach the element this subscript names, if it cannot.

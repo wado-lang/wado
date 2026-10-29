@@ -253,9 +253,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" =
 
 type "functype//core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter", i32, bool, ref "core:prelude/string.wado//String");  // TypeId(92)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<sroa_split_loop_rebound_local.wado/$tmpl$d48748ffcad618c0,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(93)
+type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
 
-type "functype//core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(94)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<sroa_split_loop_rebound_local.wado/$tmpl$d48748ffcad618c0,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(94)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(95)
 
@@ -523,18 +523,18 @@ fn "sroa_split_loop_rebound_local.wado/sroa_split_loop_rebound_local.wado/statem
     let part_3: ref "core:prelude/string.wado//String";
     let $match_5: ref null "core:prelude/string.wado//String";
     let self_26: ref "core:prelude/string.wado//StrSlice";
-    let $sroa_sep_repr_46: ref Array<u8>;
+    let $sroa_sep_repr_47: ref Array<u8>;
     out = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(), used: 0 };
-    $sroa_sep_repr_46 = array.new_fixed<u8>(59);
-    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_46, sep_at: 0, sep_len: 1, finished: 0 };
+    $sroa_sep_repr_47 = array.new_fixed<u8>(59);
+    $iter_0 = struct.new "core:prelude/string.wado//StrSplitIter" { repr: $mv$text$repr, used: $mv$text$used, pos: 0, sep_repr: $sroa_sep_repr_47, sep_at: 0, sep_len: 1, finished: 0 };
     b45: block {
         l46: loop {
             if ref.is_null(local.tee $match_5("core:prelude/string.wado/core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Iterator::next$spec0"($iter_0))) == 0 {
                 self_26 = struct.new "core:prelude/string.wado//StrSlice" { repr: local.tee part_3(ref.as_non_null($match_5)).repr, start: 0, end: part_3.used };
                 multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = (let $mv_end_3: i32; multivalue_bind [$mv$text$repr, $mv$text$used, $mv_end_3] = "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_start"(self_26.repr, 0, self_26.end); "core:prelude/string.wado/core:prelude/string.wado/StrSlice::trim_end"($mv$text$repr, $mv$text$used, $mv_end_3));
                 if $mv_end_3 != $mv$text$used {
-                    builtin::array_copy<u8>(local.tee $sroa_sep_repr_46(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv$text$used))), 0, $mv$text$repr, $mv$text$used, $mv_end_3);
-                    part_3 = struct.new "core:prelude/string.wado//String" { repr: $sroa_sep_repr_46, used: $mv_end_3 };
+                    builtin::array_copy<u8>(local.tee $sroa_sep_repr_47(builtin::array_new<u8>(local.tee $mv_end_3($mv_end_3 - $mv$text$used))), 0, $mv$text$repr, $mv$text$used, $mv_end_3);
+                    part_3 = struct.new "core:prelude/string.wado//String" { repr: $sroa_sep_repr_47, used: $mv_end_3 };
                     if @unlikely(local.tee $mv$text$used(out.used) >= builtin::array_len(out.repr)) {
                         cold_path;
                         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(out);
@@ -1710,14 +1710,14 @@ fn "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(self, f, base, u
     "core:prelude/primitive.wado/write_u64_base_digits"(f.buf.repr, offset, self, digit_count, bits_per_digit, base, upper);
 }
 
+fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
+    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_8);
+}
+
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<sroa_split_loop_rebound_local.wado/$tmpl$d48748ffcad618c0,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("sroa_split_loop_rebound_local.wado/$template_segment$sroa_split_loop_rebound_local.wado/$tmpl$d48748ffcad618c0"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
     };
-}
-
-fn "core:prelude/primitive.wado/i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex$sroa[self.value]"(self, f) {
-    "core:prelude/primitive.wado/u64::fmt_base$sroa[self.value]"(builtin::i64_extend_i32_u(self), f, 16, 0, global:core:prelude/primitive.wado::$const_obj_8);
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {

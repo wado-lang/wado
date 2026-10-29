@@ -68,7 +68,7 @@ fn "niri_loop_invariant_array_len.wado/run"() with Stdout {
     let arr_126: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_186: i32;
+    let start_189: i32;
     acc = 0;
     i_117 = 0;
     b0: block {
@@ -152,22 +152,22 @@ fn "niri_loop_invariant_array_len.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, i_117);
         }
-        start_186 = out_13.used;
+        start_189 = out_13.used;
         out_13.used = i_117;
-        builtin::array_set_u8(out_13.repr, start_186, 45);
+        builtin::array_set_u8(out_13.repr, start_189, 45);
     } else {
     }
     if @unlikely(local.tee i_117(out_13.used + acc) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, i_117);
     }
-    start_186 = out_13.used;
+    start_189 = out_13.used;
     out_13.used = i_117;
     arr_126 = out_13.repr;
-    acc = start_186 + acc;
+    acc = start_189 + acc;
     b24: block {
         l25: loop {
-            break_if b24 (acc - start_186) < 2;
+            break_if b24 (acc - start_189) < 2;
             q = x /u 100_i64;
             tens = local.tee i_117(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr_126, acc - 1, (48 + i_117) - (tens * 10));
@@ -177,8 +177,8 @@ fn "niri_loop_invariant_array_len.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if acc > start_186 {
-        builtin::array_set_u8(arr_126, start_186, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if acc > start_189 {
+        builtin::array_set_u8(arr_126, start_189, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -186,11 +186,11 @@ fn "niri_loop_invariant_array_len.wado/run"() with Stdout {
     acc = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_117 = builtin::i32_wrap_i64(x >> 32_i64);
     acc = "niri_loop_invariant_array_len.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(acc);
-    builtin::array_copy<u8>(local.tee arr_126(builtin::array_new<u8>(local.tee start_186(out_13.used) + 1)), 0, out_13.repr, 0, start_186);
-    builtin::array_set_u8(arr_126, start_186, 10);
+    builtin::array_copy<u8>(local.tee arr_126(builtin::array_new<u8>(local.tee start_189(out_13.used) + 1)), 0, out_13.repr, 0, start_189);
+    builtin::array_set_u8(arr_126, start_189, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_186 = start_186 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i_117, arr_126, 0, start_186);
+        start_189 = start_189 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i_117, arr_126, 0, start_189);
     });
     "wasi/stream-drop-writable"(i_117);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(acc);

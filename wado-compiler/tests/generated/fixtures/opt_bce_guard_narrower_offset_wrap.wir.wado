@@ -88,7 +88,7 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_164: i32;
+    let start_167: i32;
     if @unlikely((i + 1) >= local.tee $load_0(arr.used)) {
         cold_path;
         "core:rt/panic"(array.new_data<u8>("offset guard"), 12);
@@ -171,22 +171,22 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $load_0);
         }
-        start_164 = out_16.used;
+        start_167 = out_16.used;
         out_16.used = $load_0;
-        builtin::array_set_u8(out_16.repr, start_164, 45);
+        builtin::array_set_u8(out_16.repr, start_167, 45);
     } else {
     }
     if @unlikely(local.tee $load_0(out_16.used + i) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $load_0);
     }
-    start_164 = out_16.used;
+    start_167 = out_16.used;
     out_16.used = $load_0;
     repr_45 = out_16.repr;
-    i = start_164 + i;
+    i = start_167 + i;
     b24: block {
         l25: loop {
-            break_if b24 (i - start_164) < 2;
+            break_if b24 (i - start_167) < 2;
             q = x /u 100_i64;
             tens = local.tee $load_0(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(repr_45, i - 1, (48 + $load_0) - (tens * 10));
@@ -196,8 +196,8 @@ fn "opt_bce_guard_narrower_offset_wrap.wado/g"(arr, i) with Stdout {
             continue l25;
         };
     };
-    if i > start_164 {
-        builtin::array_set_u8(repr_45, start_164, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if i > start_167 {
+        builtin::array_set_u8(repr_45, start_167, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

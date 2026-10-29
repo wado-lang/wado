@@ -121,7 +121,7 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_148: i32;
-    let start_184: i32;
+    let start_187: i32;
     fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
     global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_wasi:random/random.wado/Random" { outer: local.tee $save_wasi:random/random.wado/Random(global:effect_with_clause_renamed_import.wado::$effect_wasi:random/random.wado/Random), op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
     $sroa_t_h0_148 = $inline__effect_dispatch__wasi_random_random_wado_Random__get_random_bytes_5: block -> ref "core:prelude//List<u8>" {
@@ -210,22 +210,22 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_83);
         }
-        start_184 = out_16.used;
+        start_187 = out_16.used;
         out_16.used = is_negative_83;
-        builtin::array_set_u8(out_16.repr, start_184, 45);
+        builtin::array_set_u8(out_16.repr, start_187, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_83(out_16.used + $sroa_t_h0_148) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, is_negative_83);
     }
-    start_184 = out_16.used;
+    start_187 = out_16.used;
     out_16.used = is_negative_83;
     arr = out_16.repr;
-    $sroa_t_h0_148 = start_184 + $sroa_t_h0_148;
+    $sroa_t_h0_148 = start_187 + $sroa_t_h0_148;
     b24: block {
         l25: loop {
-            break_if b24 ($sroa_t_h0_148 - start_184) < 2;
+            break_if b24 ($sroa_t_h0_148 - start_187) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_83(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_t_h0_148 - 1, (48 + is_negative_83) - (tens * 10));
@@ -235,8 +235,8 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if $sroa_t_h0_148 > start_184 {
-        builtin::array_set_u8(arr, start_184, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_148 > start_187 {
+        builtin::array_set_u8(arr, start_187, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_45: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_45;
@@ -244,11 +244,11 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     $sroa_t_h0_148 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_83 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_t_h0_148 = "effect_with_clause_renamed_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_148);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_184(out_16.used) + 1)), 0, out_16.repr, 0, start_184);
-    builtin::array_set_u8(arr, start_184, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_187(out_16.used) + 1)), 0, out_16.repr, 0, start_187);
+    builtin::array_set_u8(arr, start_187, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_184 = start_184 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_83, arr, 0, start_184);
+        start_187 = start_187 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_83, arr, 0, start_187);
     });
     "wasi/stream-drop-writable"(is_negative_83);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_148);

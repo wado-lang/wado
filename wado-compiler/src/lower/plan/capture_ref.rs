@@ -74,7 +74,12 @@ fn rewrite_frame(
             site.captured
                 .iter()
                 .filter(|(_, local, type_id)| {
+                    // A capture typed apart from its binding holds the box a
+                    // `&mut` capture made of it, which already sees each write.
                     complete
+                        && locals.local(*local).is_some_and(|(_, binding)| {
+                            type_table.type_key(binding) == type_table.type_key(*type_id)
+                        })
                         && type_table.is_boxed_reference_target(*type_id)
                         && (address_taken.contains(local) || scan.written_after(*local, site))
                 })
@@ -368,14 +373,13 @@ impl TirRefVisitor for Scan {
 
     fn visit_expr(&mut self, expr: &TirExpr) {
         let at = self.now();
-        if let TirExprKind::Closure { captures, body, .. } = &expr.kind {
+        if let TirExprKind::Closure { captures, .. } = &expr.kind {
             let captured = captures
                 .iter()
                 .enumerate()
                 .filter_map(|(slot, capture)| {
                     let local = capture.source.local()?;
-                    let slot = u32::try_from(slot).unwrap();
-                    (!reads_through_ref(body, slot)).then_some((slot, local, capture.type_id))
+                    Some((u32::try_from(slot).unwrap(), local, capture.type_id))
                 })
                 .collect::<Vec<_>>();
             for (_, local, _) in &captured {
@@ -403,45 +407,6 @@ impl TirRefVisitor for Scan {
             let at = self.now();
             self.writes.push(Event { local, at });
         }
-    }
-}
-
-/// Whether `body` reads slot `slot` through a dereference: the binding was
-/// already boxed where the closure was built, so the slot holds its box.
-fn reads_through_ref(body: &TirExpr, slot: u32) -> bool {
-    let mut finder = DerefRead { slot, found: false };
-    finder.visit_expr(body);
-    finder.found
-}
-
-struct DerefRead {
-    slot: u32,
-    found: bool,
-}
-
-impl TirRefVisitor for DerefRead {
-    fn visit_expr(&mut self, expr: &TirExpr) {
-        if let TirExprKind::Unary {
-            op: TirUnaryOp::Deref,
-            expr: inner,
-        } = &expr.kind
-            && let TirExprKind::Capture { index, .. } = &inner.kind
-            && *index == self.slot
-        {
-            self.found = true;
-            return;
-        }
-        // A nested body numbers its own environment: follow the slot only
-        // where the closure takes it on.
-        if let TirExprKind::Closure { captures, body, .. } = &expr.kind {
-            for (slot, capture) in captures.iter().enumerate() {
-                if capture.source == CaptureSource::Capture(self.slot) {
-                    self.found |= reads_through_ref(body, u32::try_from(slot).unwrap());
-                }
-            }
-            return;
-        }
-        self.walk_expr(expr);
     }
 }
 

@@ -72,37 +72,37 @@ fn "user_cm_interface_import.wado/run"() with Stdout, Entropy {
     let out_13: ref "core:prelude/string.wado//String";
     let new_repr: ref Array<u8>;
     let self_114: i32;
-    let new_used_150: i32;
-    let start_151: i32;
+    let new_used_153: i32;
+    let start_154: i32;
     drop(local.tee seed("user_cm_interface_import.wado/$cm_binding__wasi:random/random@0.3.0#get-random-u64"()) == seed);
     out_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_23;
     };
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
-        if @unlikely(local.tee new_used_150(0 + 4) > builtin::array_len(out_13.repr)) {
+        if @unlikely(local.tee new_used_153(0 + 4) > builtin::array_len(out_13.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, new_used_150);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, new_used_153);
         }
-        start_151 = out_13.used;
-        out_13.used = new_used_150;
-        builtin::array_copy<u8>(out_13.repr, start_151, global:user_cm_interface_import.wado::$const_obj_0.repr, 0, 4);
+        start_154 = out_13.used;
+        out_13.used = new_used_153;
+        builtin::array_copy<u8>(out_13.repr, start_154, global:user_cm_interface_import.wado::$const_obj_0.repr, 0, 4);
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;
     };
-    new_used_150 = builtin::i32_wrap_i64(local.tee seed("wasi/stream-new"()));
-    start_151 = builtin::i32_wrap_i64(seed >> 32_i64);
-    new_used_150 = "user_cm_interface_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_150);
+    new_used_153 = builtin::i32_wrap_i64(local.tee seed("wasi/stream-new"()));
+    start_154 = builtin::i32_wrap_i64(seed >> 32_i64);
+    new_used_153 = "user_cm_interface_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used_153);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_114(out_13.used) + 1)), 0, out_13.repr, 0, self_114);
     builtin::array_set_u8(new_repr, self_114, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
         self_114 = self_114 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(start_151, new_repr, 0, self_114);
+        "core:rt/cm_stream_write_raw_all_u8"(start_154, new_repr, 0, self_114);
     });
-    "wasi/stream-drop-writable"(start_151);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_150);
+    "wasi/stream-drop-writable"(start_154);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used_153);
 }
 
 fn "user_cm_interface_import.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {

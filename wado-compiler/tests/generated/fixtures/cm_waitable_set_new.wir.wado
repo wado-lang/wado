@@ -118,8 +118,8 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     let repr_50: ref Array<u8>;
     let text: ref "core:prelude/string.wado//String";
     let $sroa_t_h0_132: bool;
-    let new_used_159: i32;
-    let start_160: i32;
+    let new_used_162: i32;
+    let start_163: i32;
     $sroa_t_h0_132 = (local.tee set(struct.new "core:prelude/types.wado//WaitableSet<core:prelude/types.wado/Subtask>" { raw: struct.new "core:prelude//$Resource" { value: "wasi/waitable-set-new"() }, members: struct.new "core:prelude//List<core:prelude/types.wado/Subtask>" { repr: array.new_fixed<ref null "core:prelude//$Resource">(), used: 0 }, ready: struct.new "core:prelude//List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>" { repr: array.new_fixed<ref null "core:prelude/types.wado//Ready<core:prelude/types.wado/Subtask>">(), used: 0 } }).members.used + set.ready.used) == 0;
     out_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     repr_50 = global:cm_waitable_set_new.wado::$const_obj_0;
@@ -133,13 +133,13 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
     $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0: block {
         $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2: block {
             break_if $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0__$inline_core_prelude_string_wado_String__internal_push_string_2 local.tee $sroa_t_h0_132(text.used) == 0;
-            if @unlikely(local.tee new_used_159(7 + $sroa_t_h0_132) > 23) {
+            if @unlikely(local.tee new_used_162(7 + $sroa_t_h0_132) > 23) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_17, new_used_159);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_17, new_used_162);
             }
-            start_160 = out_17.used;
-            out_17.used = new_used_159;
-            builtin::array_copy<u8>(out_17.repr, start_160, text.repr, 0, $sroa_t_h0_132);
+            start_163 = out_17.used;
+            out_17.used = new_used_162;
+            builtin::array_copy<u8>(out_17.repr, start_163, text.repr, 0, $sroa_t_h0_132);
         };
         break $inline_core_prelude_format_wado_Formatter__pad_core_prelude_string_wado_String__spec0_sroa_self_buf__0;
     };
@@ -147,15 +147,15 @@ fn "cm_waitable_set_new.wado/run"() with Stdout {
         break $inline_core_prelude_string_wado_String__internal_push_view_46;
     };
     $sroa_t_h0_132 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_159 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
+    new_used_162 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $sroa_t_h0_132 = "cm_waitable_set_new.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_132);
-    builtin::array_copy<u8>(local.tee repr_50(builtin::array_new<u8>(local.tee start_160(out_17.used) + 1)), 0, out_17.repr, 0, start_160);
-    builtin::array_set_u8(repr_50, start_160, 10);
+    builtin::array_copy<u8>(local.tee repr_50(builtin::array_new<u8>(local.tee start_163(out_17.used) + 1)), 0, out_17.repr, 0, start_163);
+    builtin::array_set_u8(repr_50, start_163, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_160 = start_160 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_159, repr_50, 0, start_160);
+        start_163 = start_163 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_162, repr_50, 0, start_163);
     });
-    "wasi/stream-drop-writable"(new_used_159);
+    "wasi/stream-drop-writable"(new_used_162);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_132);
     if ref.is_null(set) == 0 {
         "core:prelude/types.wado/core:prelude/types.wado/WaitableSet<core:prelude/types.wado/Subtask>^core:prelude/traits.wado/Drop::drop"(set.raw, set.members, set.ready);

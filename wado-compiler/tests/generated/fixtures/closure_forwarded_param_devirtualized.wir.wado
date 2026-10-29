@@ -70,7 +70,7 @@ fn "closure_forwarded_param_devirtualized.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_178: i32;
+    let start_181: i32;
     scale = black_box(3);
     n_19 = black_box(5);
     scale = "closure_forwarded_param_devirtualized.wado/summed$$Closure_0$sroa[at.$capture_0]"(0, n_19, scale);
@@ -146,22 +146,22 @@ fn "closure_forwarded_param_devirtualized.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, n_19);
         }
-        start_178 = out_13.used;
+        start_181 = out_13.used;
         out_13.used = n_19;
-        builtin::array_set_u8(out_13.repr, start_178, 45);
+        builtin::array_set_u8(out_13.repr, start_181, 45);
     } else {
     }
     if @unlikely(local.tee n_19(out_13.used + scale) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, n_19);
     }
-    start_178 = out_13.used;
+    start_181 = out_13.used;
     out_13.used = n_19;
     arr = out_13.repr;
-    scale = start_178 + scale;
+    scale = start_181 + scale;
     b22: block {
         l23: loop {
-            break_if b22 (scale - start_178) < 2;
+            break_if b22 (scale - start_181) < 2;
             q = x /u 100_i64;
             tens = local.tee n_19(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, scale - 1, (48 + n_19) - (tens * 10));
@@ -171,8 +171,8 @@ fn "closure_forwarded_param_devirtualized.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if scale > start_178 {
-        builtin::array_set_u8(arr, start_178, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if scale > start_181 {
+        builtin::array_set_u8(arr, start_181, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -180,11 +180,11 @@ fn "closure_forwarded_param_devirtualized.wado/run"() with Stdout {
     scale = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     n_19 = builtin::i32_wrap_i64(x >> 32_i64);
     scale = "closure_forwarded_param_devirtualized.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(scale);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_178(out_13.used) + 1)), 0, out_13.repr, 0, start_178);
-    builtin::array_set_u8(arr, start_178, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_181(out_13.used) + 1)), 0, out_13.repr, 0, start_181);
+    builtin::array_set_u8(arr, start_181, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_178 = start_178 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(n_19, arr, 0, start_178);
+        start_181 = start_181 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(n_19, arr, 0, start_181);
     });
     "wasi/stream-drop-writable"(n_19);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(scale);

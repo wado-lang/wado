@@ -349,6 +349,30 @@ pub(super) fn tir_function_key(f: &TirFunction) -> FunctionId {
     .function_id()
 }
 
+/// The address-taken locals living in a `Box`, each with that box's type.
+#[derive(Default)]
+struct BoxedLocals(IndexMap<u32, tir::TypeId>);
+
+impl BoxedLocals {
+    fn of(func: &TirFunction, plan: &BoxPlan) -> Self {
+        Self(
+            func.address_taken_locals
+                .iter()
+                .map(|&local| (local, func.locals[local as usize].type_id))
+                .filter(|(_, ty)| plan.box_type_ids.contains(ty))
+                .collect(),
+        )
+    }
+
+    /// The box `local` lives in, where a read of it typed `ty` reads the value
+    /// the box holds. A read typed as a reference to that value, as a closure
+    /// capture spells one, is the box itself.
+    fn box_of_value(&self, local: u32, ty: tir::TypeId, plan: &BoxPlan) -> Option<tir::TypeId> {
+        let declared = *self.0.get(&local)?;
+        (plan.box_struct_types.get(&ty) == Some(&declared)).then_some(declared)
+    }
+}
+
 /// The locals declared without a value (`let x: T;`, a unit initializer) that an
 /// assignment writing in place replaces whole, or that live in a `Box`.
 fn guarded_locals(func: &TirFunction, boxed: impl Fn(u32, tir::TypeId) -> bool) -> IndexSet<u32> {
@@ -410,7 +434,7 @@ struct FunctionTranslator<'a, 'p> {
     /// `alloc_local` would have no function to attach to.
     extra: Option<ExtraLocals>,
     immutable_locals: IndexSet<u32>,
-    address_taken: IndexSet<u32>,
+    boxed_locals: BoxedLocals,
     /// The reads whose copy is elided because they hand their storage over.
     moves: value_copy::last_use::MoveEligible,
     /// Whether this function hands a returned variant's payload out uncopied,
@@ -467,7 +491,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .filter(|(_, l)| !l.is_mut)
             .map(|(i, _)| u32::try_from(i).unwrap())
             .collect();
-        let address_taken = func.address_taken_locals.clone();
+        let boxed_locals = BoxedLocals::of(func, base.box_plan);
         // The move/share/alias analyses only ever mark copyable-value locals; a
         // function with none has nothing to elide, so all three are empty. Skip
         // them — running them is otherwise pure per-function allocation, and most
@@ -538,7 +562,9 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             );
         }
         let guarded_locals = guarded_locals(func, |local, ty| {
-            address_taken.contains(&local) && base.box_plan.box_struct_types.contains_key(&ty)
+            boxed_locals
+                .box_of_value(local, ty, base.box_plan)
+                .is_some()
         });
         let share_eligible_locals = ownership.share_eligible;
         let moves = ownership.move_eligible;
@@ -561,7 +587,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                 locals: RefCell::new(Vec::new()),
             }),
             immutable_locals,
-            address_taken,
+            boxed_locals,
             moves,
             hands_out_payload,
             share_eligible_locals,
@@ -587,7 +613,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             specialized: None,
             extra: None,
             immutable_locals: IndexSet::default(),
-            address_taken: IndexSet::default(),
+            boxed_locals: BoxedLocals::default(),
             moves: value_copy::last_use::MoveEligible::default(),
             hands_out_payload: false,
             share_eligible_locals: IndexSet::default(),
@@ -882,8 +908,8 @@ impl FunctionTranslator<'_, '_> {
     /// wrap, `*box` projection).
     fn try_boxing_rewrite(&self, expr: &TirExpr) -> Option<ExprId> {
         match &expr.kind {
-            TirExprKind::Local { index, name } if self.address_taken.contains(index) => {
-                self.base.box_plan.box_struct_types.get(&expr.type_id)?;
+            TirExprKind::Local { index, name } => {
+                self.box_type_of_local(*index, expr.type_id)?;
                 Some(self.read_local(*index, name, expr.type_id, expr.span))
             }
             TirExprKind::Unary {
@@ -902,8 +928,7 @@ impl FunctionTranslator<'_, '_> {
         // `&local` of an address-taken primitive: the Box IS the
         // address, so collapse to the Local without re-wrapping.
         if let TirExprKind::Local { index, name } = &inner.kind
-            && self.address_taken.contains(index)
-            && let Some(&box_type_id) = self.base.box_plan.box_struct_types.get(&inner.type_id)
+            && let Some(box_type_id) = self.box_type_of_local(*index, inner.type_id)
         {
             return Some(self.alloc_expr(
                 ExprKind::Local {
@@ -1647,12 +1672,10 @@ impl FunctionTranslator<'_, '_> {
         )]
     }
 
-    /// The `Box` a local of type `ty` lives in, where its address is taken.
+    /// The `Box` a local holding a `ty` lives in, where its address is taken.
     fn box_type_of_local(&self, local: u32, ty: tir::TypeId) -> Option<tir::TypeId> {
-        if !self.address_taken.contains(&local) {
-            return None;
-        }
-        self.base.box_plan.box_struct_types.get(&ty).copied()
+        self.boxed_locals
+            .box_of_value(local, ty, self.base.box_plan)
     }
 
     fn convert_stmt(&self, stmt: &TirStmt) -> StmtId {
@@ -2766,11 +2789,7 @@ impl FunctionTranslator<'_, '_> {
     /// promoted its slot: the box *is* the storage, so the value stands one
     /// field in.
     fn read_local(&self, index: u32, name: &str, type_id: tir::TypeId, span: Span) -> ExprId {
-        let boxed = self
-            .address_taken
-            .contains(&index)
-            .then(|| self.base.box_plan.box_struct_types.get(&type_id).copied())
-            .flatten();
+        let boxed = self.box_type_of_local(index, type_id);
         let local = self.alloc_expr(
             ExprKind::Local {
                 index,

@@ -1,5 +1,5 @@
 // `RefMut` fails for the replace-on-assign reference types and for non-references.
-// A `variant` and a `fn` are `Ref` (live `&` handles) but boxed, so a `&mut`
+// A `variant`, a `fn` and a reference are `Ref` (live `&` handles) but boxed, so a `&mut`
 // cannot write through them; a scalar `i32` is not a reference at all.
 // See WEP 2026-01-20.
 
@@ -22,6 +22,12 @@ fn use_fn() -> i32 {
         return n + 1;
     };
     return accepts_ref_mut(&mut g);
+}
+
+fn use_reference() -> i32 {
+    let n: i32 = 7;
+    let mut r = &n;
+    return accepts_ref_mut(&mut r);
 }
 
 fn use_scalar() -> i32 {

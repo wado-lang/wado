@@ -31,6 +31,10 @@ pub(crate) struct MethodDispatch {
     /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
     /// `&mut` layer before passing it to the method.
     pub(crate) is_ref_impl: bool,
+    /// True when the method is the referent's, reached through the reference
+    /// a newtype wraps (`type H = &mut T`): the receiver passes that
+    /// reference, not one taken to the newtype.
+    pub(crate) through_referent: bool,
     /// Per-argument `is_mut` flag off the dispatched method's own signature.
     /// Reify zips this with the reified argument exprs to build
     /// [`crate::tir::CallArg`]s with the same `is_mut` shape annotate produced.
@@ -1129,10 +1133,8 @@ pub(crate) struct OperatorDispatch {
     pub(crate) function_ref: FunctionRef,
     /// The declaration the dispatch selected.
     pub(crate) method_def: Option<DefId>,
-    /// Self-kind of the trait method's receiver. Reify feeds this
-    /// (with `is_ref_impl = false` — operator trait methods are
-    /// always dispatched on the value type, not on a ref-impl) into
-    /// reify's `adjust_receiver_for_self_kind`.
+    /// Self-kind of the trait method's receiver, which reify feeds with
+    /// [`Self::is_ref_impl`] into `adjust_receiver_for_self_kind`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the
@@ -1154,6 +1156,17 @@ pub(crate) struct OperatorDispatch {
     /// `&i32`) would otherwise be mistaken for the `Index` shape and
     /// double-dereferenced.
     pub(crate) needs_deref: bool,
+}
+
+impl OperatorDispatch {
+    /// Whether the answering impl is written for a reference (`impl Eq for
+    /// &T`), whose `&self` holds one more layer than the operand.
+    pub(crate) fn is_ref_impl(&self) -> bool {
+        self.function_ref
+            .method_info
+            .as_ref()
+            .is_some_and(|info| info.ref_receiver().is_some())
+    }
 }
 
 /// `for x of expr` iterator dispatch result.

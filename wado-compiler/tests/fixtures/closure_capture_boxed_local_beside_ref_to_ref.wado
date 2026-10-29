@@ -1,0 +1,22 @@
+// A closure capturing a boxed binding by reference holds the binding's box,
+// even where the program also boxes the reference type itself: `Held`'s
+// derived code takes `&self.r`, a `&&mut i32`, so a `Box<&mut i32>` exists.
+
+struct Held {
+    r: &mut i32,
+}
+
+export fn run() {
+    let mut fs: List<fn() -> i32> = [];
+    for let mut i = 0; i < 3; i += 1 {
+        let mut raise = || i += 1;
+        raise();
+        fs.push(|| i);
+    }
+    assert fs.len() == 2;
+    assert fs[0]() == 1;
+    assert fs[1]() == 3;
+}
+
+__DATA__
+{}

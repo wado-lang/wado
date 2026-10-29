@@ -1008,7 +1008,9 @@ impl TypeTable {
             ResolvedType::Primitive(_) => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::Function { .. } => true,
+            | ResolvedType::Function { .. }
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_) => true,
             ResolvedType::GenericInstance { def, .. } => self.find_variant_type(*def).is_some(),
             _ => false,
         }
@@ -3027,15 +3029,30 @@ impl TypeTable {
         }
     }
 
+    /// The type the reference `type_id` points at.
+    pub fn ref_pointee(&self, type_id: TypeId) -> Option<TypeId> {
+        match self.get(type_id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// How many references hold the pointee: `&&mut X` → 2.
+    pub fn ref_depth(&self, mut type_id: TypeId) -> usize {
+        let mut depth = 0;
+        while let Some(inner) = self.ref_pointee(type_id) {
+            type_id = inner;
+            depth += 1;
+        }
+        depth
+    }
+
     /// The reference layer holding the pointee: `&&mut X` → `&mut X`.
     pub fn innermost_ref(&self, mut type_id: TypeId) -> TypeId {
-        while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = self.get(type_id)
-            && matches!(
-                self.get(*inner),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
+        while let Some(inner) = self.ref_pointee(type_id)
+            && self.ref_pointee(inner).is_some()
         {
-            type_id = *inner;
+            type_id = inner;
         }
         type_id
     }

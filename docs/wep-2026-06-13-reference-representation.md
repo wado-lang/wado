@@ -45,11 +45,11 @@ as a by-value struct snapshots an aliased reference and loses the write.
 
 ### Classification of types
 
-| Category                        | Types                                                                             | `&T` / `&mut T`                                        | Mutation through the reference             |
-| ------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------ |
-| In-place (reference types)      | `struct`; `List<T>` (raw GC `Array<T>`); `String`; `i128` / `u128`                | shared GC handle                                       | field / element write on the shared object |
-| Replace-on-assign (value/boxed) | `primitive` (except `i128` / `u128`); `enum`; `flags`; `variant`; `fn` / `fn mut` | `Box<T>`                                               | `*r = v` replaces the box's content        |
-| Handle                          | `resource` (opaque `i32`; conceptually `i32` / `externref`)                       | see [divergence D6](#known-implementation-divergences) | replace-on-assign conceptually             |
+| Category                        | Types                                                                                              | `&T` / `&mut T`                                        | Mutation through the reference             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------------------------ |
+| In-place (reference types)      | `struct`; `List<T>` (raw GC `Array<T>`); `String`; `i128` / `u128`                                 | shared GC handle                                       | field / element write on the shared object |
+| Replace-on-assign (value/boxed) | `primitive` (except `i128` / `u128`); `enum`; `flags`; `variant`; `fn` / `fn mut`; `&U` / `&mut U` | `Box<T>`                                               | `*r = v` replaces the box's content        |
+| Handle                          | `resource` (opaque `i32`; conceptually `i32` / `externref`)                                        | see [divergence D6](#known-implementation-divergences) | replace-on-assign conceptually             |
 
 Notes on the non-obvious entries:
 
@@ -66,6 +66,12 @@ Notes on the non-obvious entries:
   therefore compares places, and a closure's own identity stays unobservable.
   (Note: the issue #1333 enumeration omits `fn`; the implementation boxes it —
   see [D3](#known-implementation-divergences).)
+- A reference has no interior either: `*rr = &y` through a `&mut &T` rebinds
+  the variable holding the reference. So `&&T` / `&mut &T` is a `Box` holding the
+  inner handle, and a reference is no `RefMut`: `IndexRefMut` hands out no
+  `&mut` to an element that is a reference. A write through such an element
+  (`l[0].a = 5` on a `List<&mut P>`) lands in its referent, so the `IndexRef`
+  reading the element is no refusal.
 - `i128` / `u128` are GC structs (a low/high `i64` pair), so they are treated as
   `struct` (shared handle), and are deliberately excluded from boxing despite
   their scalar value semantics.

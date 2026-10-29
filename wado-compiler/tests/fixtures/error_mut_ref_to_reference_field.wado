@@ -1,0 +1,19 @@
+// A reference is replaced on assign, as a primitive is, so a `&mut` to a field
+// holding one has no storage to write: the write would rebind a copy and be
+// lost.
+
+struct H {
+    r: &i32,
+}
+
+export fn run() {
+    let a = 1;
+    let b = 2;
+    let mut h = H { r: &a };
+    let p = &mut h.r;
+    *p = &b;
+    assert *h.r == 2;
+}
+
+__DATA__
+{"compile_error": "cannot take a mutable reference to a field or element of a replace-on-assign type"}

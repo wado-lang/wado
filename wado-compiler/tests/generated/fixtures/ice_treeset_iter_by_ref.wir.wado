@@ -196,9 +196,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(67)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(68)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i32,()>", i32, i32) -> i32;  // TypeId(68)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i32,()>", i32, i32) -> i32;  // TypeId(69)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(69)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(70)
 
@@ -1350,12 +1350,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("ice_treeset_iter_by_ref.wado/$template_segment$ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>::place$sroa[key.value]"(self, key, e) {
     let $load_0: i32;
     let $load_4: ref Array<i32>;
@@ -1388,15 +1382,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
     $load_0 = self.root;
     n_19 = 0;
     block {
-        l153: loop {
+        l152: loop {
             if local.tee base_62($inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: block -> i32 {
                 base_62 = $load_0 * 31;
                 lo = 0;
                 hi = builtin::array_get_value<i32>(self.lens, $load_0);
                 $load_4 = self.nkeys;
-                b155: block {
-                    l156: loop {
-                        break_if b155 lo >= hi;
+                b154: block {
+                    l155: loop {
+                        break_if b154 lo >= hi;
                         mid = (lo + hi) >> 1;
                         if local.tee other_70($inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             other_70 = builtin::array_get_value<i32>($load_4, base_62 + mid);
@@ -1414,7 +1408,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
                         } else {
                             break $inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: mid;
                         }
-                        continue l156;
+                        continue l155;
                     };
                 };
                 break $inline_core_collections_treemap_wado_TreeMap_i32______search_node_sroa_key_value__0: -1 - lo;
@@ -1469,8 +1463,14 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i32,()>:
             }
             $load_0 = builtin::array_get_value<i32>(self.kids, ($load_0 * 32) + base_62);
             n_19 = n_19 + 1;
-            continue l153;
+            continue l152;
         };
+    };
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("ice_treeset_iter_by_ref.wado/$template_segment$ice_treeset_iter_by_ref.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 

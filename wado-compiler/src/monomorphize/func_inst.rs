@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, hold_hole, method_param_offset, transpose_tuple_expr,
+    TirUnaryOp, TypeId, deref_to_layers, hold_hole, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -1848,6 +1848,7 @@ impl Monomorphizer {
             } => {
                 let (receiver, args) = args.split_mut();
                 let receiver = &mut receiver.expect("the arm above takes a free call").expr;
+                let written_layers = type_table.ref_depth(receiver.type_id);
                 self.substitute_types_in_expr(
                     receiver,
                     substitution,
@@ -1885,6 +1886,21 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                 );
+                // A type parameter bound to a reference dispatches to its
+                // pointee's impl, which takes the receiver with the layers the
+                // generic body wrote over the parameter, not the reference's too.
+                if type_param_trait_info.is_some()
+                    && method_func
+                        .method_info
+                        .as_ref()
+                        .is_some_and(|info| info.ref_receiver().is_none())
+                {
+                    let substituted = std::mem::replace(
+                        receiver,
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, receiver.span),
+                    );
+                    *receiver = deref_to_layers(substituted, written_layers, type_table);
+                }
 
                 // Primitives use direct Wasm instructions, not trait methods.
                 // Convert back to a binary op when monomorphization concretized to a primitive.

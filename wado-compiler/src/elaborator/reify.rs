@@ -107,7 +107,7 @@ use crate::tir::{
 use crate::tir::{
     FunctionKind, FunctionRef, InlineHint, MonomorphInfo, ReturnAbi, TemplateHole, TemplateShape,
     TirHandlerBinding, TirLiteralPattern, TirMatchArm, TirStructField, TirStructPatternField,
-    hold_hole,
+    deref_to_layers, hold_hole, to_layers_of, wrapped_reference,
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
@@ -2932,8 +2932,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // be rejected by codegen (`expected i32, found (ref $T)`),
                     // so replay the recorded method call instead. Unary
                     // operators take no extra arguments.
-                    let receiver =
-                        self.adjust_receiver(inner, dispatch.self_kind, false, span, ctx);
+                    let receiver = self.adjust_receiver(
+                        inner,
+                        dispatch.self_kind,
+                        dispatch.is_ref_impl(),
+                        span,
+                        ctx,
+                    );
                     return build_tir_method_call(
                         receiver,
                         dispatch.function_ref,
@@ -3102,6 +3107,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 if self.tysys.type_table.borrow().is_never(inner.type_id) {
                     return inner;
                 }
+                // A field is read through the one reference that is the
+                // struct's handle: any further layer is dereferenced to it,
+                // and a newtype over that reference is cast to it.
+                let inner = {
+                    let tt = self.tysys.type_table.borrow();
+                    let pointee = tt.peel_refs(inner.type_id);
+                    let inner = if pointee != tt.representation_head(pointee)
+                        && tt.ref_pointee(tt.representation_head(pointee)).is_some()
+                    {
+                        wrapped_reference(inner, &tt)
+                    } else {
+                        inner
+                    };
+                    deref_to_layers(inner, 1, &tt)
+                };
                 let (field_index, field_name, field_type) =
                     self.lookup_struct_field_index(inner.type_id, &field_access.field);
                 TirExpr::new(
@@ -4677,7 +4697,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let receiver = adjust_receiver_for_self_kind(
             left,
             dispatch.self_kind,
-            /* is_ref_impl */ false,
+            dispatch.is_ref_impl(),
             span,
             &self.tysys.type_table,
         );
@@ -5568,7 +5588,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let deref_type = self
             .tysys
             .index_deref_type(self.ann_expression_types(index_expr.id), &dispatch);
-        let recv = self.adjust_receiver(recv.clone(), dispatch.self_kind, false, span, ctx);
+        let recv = self.adjust_receiver(
+            recv.clone(),
+            dispatch.self_kind,
+            dispatch.is_ref_impl(),
+            span,
+            ctx,
+        );
         self.tysys
             .build_index_read_from_dispatch(recv, idx.clone(), dispatch, deref_type, span)
     }
@@ -5598,7 +5624,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Some(dispatch) = self.ann_index_assign_dispatch(index_expr.id)
         {
             let receiver = self.reify_expr(&index_expr.expr, ctx, None);
-            let receiver = self.adjust_receiver(receiver, dispatch.self_kind, false, span, ctx);
+            let receiver = self.adjust_receiver(
+                receiver,
+                dispatch.self_kind,
+                dispatch.is_ref_impl(),
+                span,
+                ctx,
+            );
             let index = self.reify_expr(&index_expr.index, ctx, None);
             return WritePlace::IndexAssign {
                 receiver,
@@ -5678,6 +5710,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// A receiver spelled as the first argument (`Trait::method(recv)`) given
+    /// the references its `self` declares.
+    fn adjust_receiver_in_args(
+        &self,
+        args: &mut [CallArg],
+        dispatch: &StaticMethodDispatch,
+        span: Span,
+    ) {
+        if !dispatch.self_in_args {
+            return;
+        }
+        let (Some(receiver), Some(&self_type)) = (args.first_mut(), dispatch.param_types.first())
+        else {
+            return;
+        };
+        let spelled = std::mem::replace(
+            &mut receiver.expr,
+            TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, span),
+        );
+        receiver.expr = to_layers_of(spelled, self_type, &self.tysys.type_table.borrow());
+    }
+
     /// [`adjust_receiver_for_self_kind`] for a dispatched receiver. A
     /// `&mut self` receiver the callee can replace rather than write into is
     /// boxed, or the mutation has no slot to land in and mutates a copy.
@@ -5716,7 +5770,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let receiver = self.reify_expr(transposition.container, ctx, None);
-        let receiver = self.adjust_receiver(receiver, dispatch.self_kind, false, span, ctx);
+        let receiver = self.adjust_receiver(
+            receiver,
+            dispatch.self_kind,
+            dispatch.is_ref_impl(),
+            span,
+            ctx,
+        );
         let j = self.reify_expr(transposition.j, ctx, None);
         let i = self.reify_expr(transposition.i, ctx, None);
         let ctx = &mut ctx.enter_scope();
@@ -5829,7 +5889,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let rhs = self.reify_expr(&compound.value, ctx, Some(read.type_id));
             let combined = self.build_compound_combined(read, rhs, op, compound);
 
-            let receiver = self.adjust_receiver(recv, dispatch.self_kind, false, span, ctx);
+            let receiver =
+                self.adjust_receiver(recv, dispatch.self_kind, dispatch.is_ref_impl(), span, ctx);
             let place = WritePlace::IndexAssign {
                 receiver,
                 index: Box::new(index),
@@ -6273,8 +6334,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         if let Some(dispatch) = self.index_read_dispatch(index) {
             let idx_expr = self.reify_expr(&index.index, ctx, None);
             let deref_type = self.tysys.index_deref_type(Some(recorded_type), &dispatch);
-            let receiver =
-                self.adjust_receiver(receiver, dispatch.self_kind, false, index.span, ctx);
+            let receiver = self.adjust_receiver(
+                receiver,
+                dispatch.self_kind,
+                dispatch.is_ref_impl(),
+                index.span,
+                ctx,
+            );
             return self.tysys.build_index_read_from_dispatch(
                 receiver, idx_expr, dispatch, deref_type, index.span,
             );
@@ -7367,6 +7433,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 )
                 .map(|(a, is_mut)| CallArg::new(self.reify_expr(a, ctx, None), is_mut))
                 .collect();
+            self.adjust_receiver_in_args(&mut args, &dispatch, static_call.span);
 
             let prelude = self.reify_apply_param_defaults(
                 &mut args,
@@ -7707,7 +7774,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 other.span().location()
             ),
         };
-        deref_to_value(value, span, &self.tysys.type_table)
+        deref_to_layers(value, 0, &self.tysys.type_table.borrow())
     }
 
     /// Whether `func` reads `result`'s elements out of bytes as their raw bits:
@@ -7847,6 +7914,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     CallArg::new(arg, is_mut)
                 })
                 .collect();
+            self.adjust_receiver_in_args(&mut arg_exprs, &dispatch, span);
             let prelude = self.reify_pad_dispatch_defaults(
                 &call.callee,
                 &mut arg_exprs,
@@ -8346,6 +8414,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             receiver
         };
 
+        let raw_receiver = if dispatch.through_referent {
+            wrapped_reference(raw_receiver, &self.tysys.type_table.borrow())
+        } else {
+            raw_receiver
+        };
         let adjusted_receiver = self.adjust_receiver(
             raw_receiver,
             dispatch.self_kind,
@@ -10425,49 +10498,40 @@ fn adjust_receiver_node(
                 )
             }
             ast::SelfKind::None | ast::SelfKind::Value => {
-                deref_to_value(receiver, span, type_table)
+                deref_to_layers(receiver, 0, &type_table.borrow())
             }
         };
     }
 
-    let receiver_type = type_table.borrow().get(receiver.type_id).clone();
+    let depth = type_table.borrow().ref_depth(receiver.type_id);
+    let innermost = type_table.borrow().innermost_ref(receiver.type_id);
 
     match self_kind {
         ast::SelfKind::None | ast::SelfKind::Value => {
             // No auto-ref: static method context, or a by-value `self`
             // receiver that transfers the resource. Deref all refs.
-            deref_to_value(receiver, span, type_table)
+            deref_to_layers(receiver, 0, &type_table.borrow())
         }
         ast::SelfKind::Ref => {
-            // Method expects &self
-            match &receiver_type {
-                ResolvedType::Ref(_) => {
-                    // Already &T, use as-is
-                    receiver
-                }
-                ResolvedType::MutRef(_) => {
-                    // &mut T can be coerced to &T, use as-is
-                    receiver
-                }
-                _ => {
-                    // Value T, need to add &
-                    let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                    TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Ref,
-                            expr: Box::new(receiver),
-                        },
-                        ref_type,
-                        span,
-                    )
-                }
+            if depth > 0 {
+                // `&mut T` coerces to `&T`; a reference to a reference reaches
+                // the pointee through it.
+                deref_to_layers(receiver, 1, &type_table.borrow())
+            } else {
+                let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(receiver),
+                    },
+                    ref_type,
+                    span,
+                )
             }
         }
         ast::SelfKind::MutRef => {
-            // Method expects &mut self
-            if let ResolvedType::MutRef(_) = &receiver_type {
-                // Already &mut T, use as-is
-                receiver
+            if matches!(type_table.borrow().get(innermost), ResolvedType::MutRef(_)) {
+                deref_to_layers(receiver, 1, &type_table.borrow())
             } else {
                 // Value T, need to add &mut
                 let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
@@ -10526,30 +10590,6 @@ fn var_ref_expr(var_ref: VarRef, name: &str, span: Span) -> TirExpr {
                 inner_type_id,
                 span,
             )
-        }
-    }
-}
-
-/// Peel every reference layer off a receiver, so a by-value `self` reaches the
-/// callee as the value it declares.
-fn deref_to_value(
-    mut receiver: TirExpr,
-    span: Span,
-    type_table: &std::cell::RefCell<TypeTable>,
-) -> TirExpr {
-    loop {
-        match type_table.borrow().get(receiver.type_id).clone() {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                receiver = TirExpr::new(
-                    TirExprKind::Unary {
-                        op: TirUnaryOp::Deref,
-                        expr: Box::new(receiver),
-                    },
-                    inner,
-                    span,
-                );
-            }
-            _ => return receiver,
         }
     }
 }

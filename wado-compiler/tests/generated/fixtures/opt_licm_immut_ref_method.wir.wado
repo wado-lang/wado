@@ -68,7 +68,7 @@ fn "opt_licm_immut_ref_method.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_181: i32;
+    let start_184: i32;
     sum = 0;
     i_3 = 0;
     b0: block {
@@ -151,22 +151,22 @@ fn "opt_licm_immut_ref_method.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, i_3);
         }
-        start_181 = out_16.used;
+        start_184 = out_16.used;
         out_16.used = i_3;
-        builtin::array_set_u8(out_16.repr, start_181, 45);
+        builtin::array_set_u8(out_16.repr, start_184, 45);
     } else {
     }
     if @unlikely(local.tee i_3(out_16.used + sum) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, i_3);
     }
-    start_181 = out_16.used;
+    start_184 = out_16.used;
     out_16.used = i_3;
     arr = out_16.repr;
-    sum = start_181 + sum;
+    sum = start_184 + sum;
     b24: block {
         l25: loop {
-            break_if b24 (sum - start_181) < 2;
+            break_if b24 (sum - start_184) < 2;
             q = x /u 100_i64;
             tens = local.tee i_3(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, sum - 1, (48 + i_3) - (tens * 10));
@@ -176,8 +176,8 @@ fn "opt_licm_immut_ref_method.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if sum > start_181 {
-        builtin::array_set_u8(arr, start_181, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if sum > start_184 {
+        builtin::array_set_u8(arr, start_184, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -185,11 +185,11 @@ fn "opt_licm_immut_ref_method.wado/run"() with Stdout {
     sum = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     i_3 = builtin::i32_wrap_i64(x >> 32_i64);
     sum = "opt_licm_immut_ref_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(sum);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_181(out_16.used) + 1)), 0, out_16.repr, 0, start_181);
-    builtin::array_set_u8(arr, start_181, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_184(out_16.used) + 1)), 0, out_16.repr, 0, start_184);
+    builtin::array_set_u8(arr, start_184, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_181 = start_181 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(i_3, arr, 0, start_181);
+        start_184 = start_184 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(i_3, arr, 0, start_184);
     });
     "wasi/stream-drop-writable"(i_3);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(sum);
