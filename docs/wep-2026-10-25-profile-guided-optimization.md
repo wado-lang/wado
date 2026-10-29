@@ -255,14 +255,12 @@ from traps stay, since they read no marker. The two flags give three builds of
 one program: `-f no-cold-paths` has no markers, `-f no-pgo` has the author's
 and the compiler's, and the default adds the profile's.
 
-Reify and lowering spell a marker that states no guess
-`builtin::$known_cold_path()`, so the conflict remark can tell it from a guess,
-spelled `builtin::cold_path()`, until NIR, which has one marker. A global's
-once-guard runs once, and the profile's marker states a measurement, so both
-take the first spelling. The marker on a `?` propagating a failure is a guess,
-so it takes the second, as the author's does. The spelling says only whether a
-marker is a guess, not whether the profile overrides it: the `?`'s yields to the
-profile as set out above, and the author's never does.
+Reify and lowering spell a marker that states a guess `builtin::cold_path()`,
+as the author does, and any other `builtin::$known_cold_path()`, so the conflict
+remark can tell the two apart until NIR, which has one marker. The marker on a
+`?` propagating a failure is a guess. A global's once-guard runs once, and the
+profile's marker states a measurement. The spelling decides nothing about the
+profile: a `?`'s marker yields to it, and an author's never does.
 
 The existing `-f no-branch-hinting` is a different cut. Every pass sees the
 same markers and hints with it as without, and only the emitter leaves out the
