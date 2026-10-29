@@ -83,14 +83,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-<<<<<<< HEAD
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-||||||| 6c1b356354e
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-=======
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
->>>>>>> origin/main
 import fn wasi/task-return from "wasi/task-return";
 
 global mut global:affine_drop_impl.wado::DROPS: i32 = 0;
@@ -101,6 +95,7 @@ global global:core:prelude/string.wado::$const_obj_1: ref Array<u8> = array.new_
 fn "affine_drop_impl.wado/report"(what) with Stdout {
     let $cm_pair_7: i64;
     let new_repr: ref Array<u8>;
+    let self_22: i32;
     what = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_2: i32;
         $mv_field_2 = global:affine_drop_impl.wado::DROPS;
@@ -108,37 +103,17 @@ fn "affine_drop_impl.wado/report"(what) with Stdout {
         $mv_field_3 = global:affine_drop_impl.wado::GIVEN;
         "core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_impl.wado/$tmpl$16ca23be0fe2cd35,[core:prelude/string.wado/String,i32,i32]>$spec0$spec0"(what, $mv_field_2, $mv_field_3);
     };
-<<<<<<< HEAD
-    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "affine_drop_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $mv_field_3; $mv_field_3 = 0; $moved_4);
-    $mv_field_3 = $mv_field_2;
-    $mv_field_2 = 0;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $mv_field_2(what.used) + 1)), 0, what.repr, 0, $mv_field_2);
-    builtin::array_set_u8(new_repr, $mv_field_2, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_12: i32;
-        $arg_spill_12 = $mv_field_3;
-        $mv_field_2 = $mv_field_2 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_12, new_repr, 0, $mv_field_2);
-    });
-    "wasi/stream-drop-writable"($mv_field_2 = $mv_field_3; $mv_field_3 = 0; $mv_field_2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_2 = $moved_4; $moved_4 = 0; $mv_field_2);
-||||||| 6c1b356354e
-    $mv_field_3 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "affine_drop_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $mv_field_3; $mv_field_3 = 0; $moved_4);
-    $mv_field_3 = $mv_field_2;
-    $mv_field_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, what.repr, what.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $moved_4; $moved_4 = 0; $mv_field_3);
-=======
     $mv_field_2 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $mv_field_3 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $mv_field_2 = "affine_drop_impl.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_2);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, what.repr, what.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee self_22(what.used) + 1)), 0, what.repr, 0, self_22);
+    builtin::array_set_u8(new_repr, self_22, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_22 = self_22 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($mv_field_3, new_repr, 0, self_22);
+    });
+    "wasi/stream-drop-writable"($mv_field_3);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_2);
->>>>>>> origin/main
     global:affine_drop_impl.wado::DROPS = 0;
     global:affine_drop_impl.wado::GIVEN = 0;
 }
@@ -161,66 +136,30 @@ fn "affine_drop_impl.wado/run"() with Stdout {
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("by name"), used: 7 });
     global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 4;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("builtin"), used: 7 });
-<<<<<<< HEAD
-    if ref.is_null(local.tee $moved_1_1(local.tee _p(struct.new "affine_drop_impl.wado//Pair" { a: struct.new "affine_drop_impl.wado//Guard" { id: 10 }, b: struct.new "affine_drop_impl.wado//Guard" { id: 20 } }).a)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
-||||||| 6c1b356354e
-    "affine_drop_impl.wado/holder"();
-    "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("holder"), used: 6 });
-    self_16 = struct.new "affine_drop_impl.wado//Keeper" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 100 } };
-    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
-    if ref.is_null(local.tee $moved_1_1(self_16.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
-=======
-    "affine_drop_impl.wado/holder"();
-    "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("holder"), used: 6 });
-    self_16 = struct.new "affine_drop_impl.wado//Keeper" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 100 } };
-    global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
-    if ref.is_null(local.tee kept(self_16.inner)) == 0 {
+    if ref.is_null(local.tee kept(local.tee _p(struct.new "affine_drop_impl.wado//Pair" { a: struct.new "affine_drop_impl.wado//Guard" { id: 10 }, b: struct.new "affine_drop_impl.wado//Guard" { id: 20 } }).a)) == 0 {
         global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
->>>>>>> origin/main
     }
     _p.a = ref.null none;
-    if ref.is_null(local.tee $moved_1_1(_p.b)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
+    if ref.is_null(local.tee kept(_p.b)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
     }
     _p.b = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("holder"), used: 6 });
     self_19 = struct.new "affine_drop_impl.wado//Keeper" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 100 } };
     global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + 1;
-    if ref.is_null(local.tee $moved_1_1(self_19.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
+    if ref.is_null(local.tee kept(self_19.inner)) == 0 {
+        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
     }
     self_19.inner = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("keeper"), used: 6 });
-<<<<<<< HEAD
-    $moved_1_1 = local.tee self_23(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
+    kept = local.tee self_23(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
     self_23.inner = ref.null none;
-    global:affine_drop_impl.wado::GIVEN = global:affine_drop_impl.wado::GIVEN + local.tee self_8($moved_1_1.id);
-    if ref.is_null($moved_1_1) == 0 {
-||||||| 6c1b356354e
-    $moved_1_1 = local.tee self_20(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
-    self_20.inner = ref.null none;
-    global:affine_drop_impl.wado::GIVEN = global:affine_drop_impl.wado::GIVEN + local.tee self_8($moved_1_1.id);
-    if ref.is_null($moved_1_1) == 0 {
-=======
-    kept = local.tee self_20(struct.new "affine_drop_impl.wado//Giver" { inner: struct.new "affine_drop_impl.wado//Guard" { id: 1000 } }).inner;
-    self_20.inner = ref.null none;
     global:affine_drop_impl.wado::GIVEN = global:affine_drop_impl.wado::GIVEN + local.tee self_8(kept.id);
     if ref.is_null(kept) == 0 {
->>>>>>> origin/main
         global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + self_8;
     }
-<<<<<<< HEAD
-    if ref.is_null(local.tee $moved_1_1(self_23.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
-||||||| 6c1b356354e
-    if ref.is_null(local.tee $moved_1_1(self_20.inner)) == 0 {
-        global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + $moved_1_1.id;
-=======
-    if ref.is_null(local.tee kept(self_20.inner)) == 0 {
+    if ref.is_null(local.tee kept(self_23.inner)) == 0 {
         global:affine_drop_impl.wado::DROPS = global:affine_drop_impl.wado::DROPS + kept.id;
->>>>>>> origin/main
     }
     self_23.inner = ref.null none;
     "affine_drop_impl.wado/report"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("giver"), used: 5 });
@@ -318,34 +257,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

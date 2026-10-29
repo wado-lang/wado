@@ -88,69 +88,25 @@ fn "ctfe_place_field.wado/repointed"() {
     let a: ref "core:prelude/string.wado//String";
     let b: ref "core:prelude/string.wado//String";
     let $sroa_s_out_7: ref "core:prelude/string.wado//String";
-<<<<<<< HEAD
-    let self_9: ref "core:prelude/string.wado//String";
-||||||| 6c1b356354e
-    let self_9: ref "core:prelude/string.wado//String";
-    let new_used_14: i32;
-=======
-    let new_used_14: i32;
->>>>>>> origin/main
     let start_15: i32;
     let start_36: i32;
     a = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-<<<<<<< HEAD
-    self_9 = local.tee $sroa_s_out_7(a);
-    if @unlikely(1 > builtin::array_len(self_9.repr)) {
-||||||| 6c1b356354e
-    self_9 = local.tee $sroa_s_out_7(a);
-    if @unlikely(local.tee new_used_14(0 + 1) > builtin::array_len(self_9.repr)) {
-=======
     $sroa_s_out_7 = a;
-    if @unlikely(local.tee new_used_14(0 + 1) > builtin::array_len($sroa_s_out_7.repr)) {
->>>>>>> origin/main
+    if @unlikely(1 > builtin::array_len($sroa_s_out_7.repr)) {
         cold_path;
-<<<<<<< HEAD
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, 1);
-||||||| 6c1b356354e
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, new_used_14);
-=======
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_s_out_7, new_used_14);
->>>>>>> origin/main
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_s_out_7, 1);
     }
-<<<<<<< HEAD
-    start_15 = self_9.used;
-    self_9.used = 1;
-    builtin::array_set_u8(self_9.repr, start_15, 120);
-    if @unlikely(local.tee start_15(local.tee $sroa_s_out_7(b).used + 1) > builtin::array_len($sroa_s_out_7.repr)) {
-||||||| 6c1b356354e
-    start_15 = self_9.used;
-    self_9.used = new_used_14;
-    builtin::array_set_u8(self_9.repr, start_15, 120);
-    if @unlikely(local.tee start_15(local.tee $sroa_s_out_7(b).used + 1) > builtin::array_len($sroa_s_out_7.repr)) {
-=======
     start_15 = $sroa_s_out_7.used;
-    $sroa_s_out_7.used = new_used_14;
+    $sroa_s_out_7.used = 1;
     builtin::array_set_u8($sroa_s_out_7.repr, start_15, 120);
-    if @unlikely(local.tee new_used_14(local.tee $sroa_s_out_7(b).used + 1) > builtin::array_len($sroa_s_out_7.repr)) {
->>>>>>> origin/main
+    if @unlikely(local.tee start_15(local.tee $sroa_s_out_7(b).used + 1) > builtin::array_len($sroa_s_out_7.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_s_out_7, new_used_14);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_s_out_7, start_15);
     }
-<<<<<<< HEAD
     start_36 = $sroa_s_out_7.used;
     $sroa_s_out_7.used = start_15;
     builtin::array_set_u8($sroa_s_out_7.repr, start_36, 121);
-||||||| 6c1b356354e
-    new_used_14 = $sroa_s_out_7.used;
-    $sroa_s_out_7.used = start_15;
-    builtin::array_set_u8($sroa_s_out_7.repr, new_used_14, 121);
-=======
-    start_15 = $sroa_s_out_7.used;
-    $sroa_s_out_7.used = new_used_14;
-    builtin::array_set_u8($sroa_s_out_7.repr, start_15, 121);
->>>>>>> origin/main
     return block -> ref "core:prelude/string.wado//String" {
         "core:prelude/string.wado/core:prelude/string.wado/String::format<ctfe_place_field.wado/$tmpl$60f2adf5184ddec7,[core:prelude/string.wado/String,core:prelude/string.wado/String]>$spec0$spec0"(a, b);
     };

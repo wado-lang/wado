@@ -32,78 +32,10 @@ fn "cm_qualified_inherited_method.wado/$cm_binding__wasi:demo/events@0.1.0#tag"(
     let $str_len: i32;
     let $lifted_string: ref "core:prelude/string.wado//String";
     let arr_10: ref Array<u8>;
-<<<<<<< HEAD
-||||||| 6c1b356354e
-    let i: i32;
-    let to: i32;
-    let $licm_arith_7: i32;
-=======
-    let i: i32;
-    let $licm_arith_7: i32;
->>>>>>> origin/main
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/$wasi:demo/events@0.1.0#tag"(builtin::f64_reinterpret_i64(self), $outptr);
     $str_ptr = builtin::load_i32($outptr);
-<<<<<<< HEAD
     "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_10(builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)))), $str_ptr, $str_len);
-||||||| 6c1b356354e
-    arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
-    i = 0;
-    $licm_arith_7 = $str_len - 8;
-    b0: block {
-        l1: loop {
-            break_if b0 i > $licm_arith_7;
-            self = builtin::load_i64($str_ptr + i);
-            to = i;
-            builtin::array_set_u8(arr_10, to, builtin::i32_wrap_i64(self) & 255);
-            builtin::array_set_u8(arr_10, to + 1, builtin::i32_wrap_i64(self >> 8_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 2, builtin::i32_wrap_i64(self >> 16_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 3, builtin::i32_wrap_i64(self >> 24_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 4, builtin::i32_wrap_i64(self >> 32_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 5, builtin::i32_wrap_i64(self >> 40_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 6, builtin::i32_wrap_i64(self >> 48_i64) & 255);
-            builtin::array_set_u8(arr_10, to + 7, builtin::i32_wrap_i64(self >> 56_i64) & 255);
-            i = i + 8;
-            continue l1;
-        };
-    };
-    b2: block {
-        l3: loop {
-            break_if b2 i >= $str_len;
-            builtin::array_set_u8(arr_10, i, builtin::load_u8($str_ptr + i));
-            i = i + 1;
-            continue l3;
-        };
-    };
-=======
-    arr_10 = builtin::array_new<u8>(local.tee $str_len(builtin::load_i32($outptr + 4)));
-    i = 0;
-    $licm_arith_7 = $str_len - 8;
-    b0: block {
-        l1: loop {
-            break_if b0 i > $licm_arith_7;
-            self = builtin::load_i64($str_ptr + i);
-            builtin::array_set_u8(arr_10, i, builtin::i32_wrap_i64(self) & 255);
-            builtin::array_set_u8(arr_10, i + 1, builtin::i32_wrap_i64(self >> 8_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 2, builtin::i32_wrap_i64(self >> 16_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 3, builtin::i32_wrap_i64(self >> 24_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 4, builtin::i32_wrap_i64(self >> 32_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 5, builtin::i32_wrap_i64(self >> 40_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 6, builtin::i32_wrap_i64(self >> 48_i64) & 255);
-            builtin::array_set_u8(arr_10, i + 7, builtin::i32_wrap_i64(self >> 56_i64) & 255);
-            i = i + 8;
-            continue l1;
-        };
-    };
-    b2: block {
-        l3: loop {
-            break_if b2 i >= $str_len;
-            builtin::array_set_u8(arr_10, i, builtin::load_u8($str_ptr + i));
-            i = i + 1;
-            continue l3;
-        };
-    };
->>>>>>> origin/main
     $lifted_string = struct.new "core:prelude/string.wado//String" { repr: arr_10, used: $str_len };
     if $str_len > 0 {
         drop("mem/realloc"($str_ptr, $str_len, 1, 0));
@@ -120,7 +52,6 @@ fn "cm_qualified_inherited_method.wado/$cm_export__run"() {
 fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     let i: i32;
     let w: i64;
-    let to: i32;
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
@@ -128,15 +59,14 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
         l2: loop {
             break_if b1 i > $licm_arith_7;
             w = builtin::load_i64(ptr + i);
-            to = i;
-            builtin::array_set_u8(arr, to, builtin::i32_wrap_i64(w));
-            builtin::array_set_u8(arr, to + 1, builtin::i32_wrap_i64(w >> 8_i64));
-            builtin::array_set_u8(arr, to + 2, builtin::i32_wrap_i64(w >> 16_i64));
-            builtin::array_set_u8(arr, to + 3, builtin::i32_wrap_i64(w >> 24_i64));
-            builtin::array_set_u8(arr, to + 4, builtin::i32_wrap_i64(w >> 32_i64));
-            builtin::array_set_u8(arr, to + 5, builtin::i32_wrap_i64(w >> 40_i64));
-            builtin::array_set_u8(arr, to + 6, builtin::i32_wrap_i64(w >> 48_i64));
-            builtin::array_set_u8(arr, to + 7, builtin::i32_wrap_i64(w >> 56_i64));
+            builtin::array_set_u8(arr, i, builtin::i32_wrap_i64(w));
+            builtin::array_set_u8(arr, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
+            builtin::array_set_u8(arr, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
+            builtin::array_set_u8(arr, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
+            builtin::array_set_u8(arr, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
+            builtin::array_set_u8(arr, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
+            builtin::array_set_u8(arr, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
+            builtin::array_set_u8(arr, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
             i = i + 8;
             continue l2;
         };

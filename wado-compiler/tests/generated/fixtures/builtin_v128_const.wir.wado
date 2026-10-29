@@ -243,35 +243,13 @@ fn "builtin_v128_const.wado/run"() with Stdout {
         unreachable;
     }
     $v1_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_39 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "builtin_v128_const.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v1_1; $v1_1 = 0; $moved_4);
-    $v1_1 = $sroa_$pattern_temp_0_1_39;
-    $sroa_$pattern_temp_0_1_39 = 0;
-||||||| 6c1b356354e
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "builtin_v128_const.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v1_1; $v1_1 = 0; $moved_4);
-    $v1_1 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-=======
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $v1_1 = "builtin_v128_const.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v1_1);
->>>>>>> origin/main
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(3)), 0, global:builtin_v128_const.wado::$const_obj_0, 0, 2);
     builtin::array_set_u8(new_repr, 2, 10);
-<<<<<<< HEAD
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v1_1, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_39 = $v1_1; $v1_1 = 0; $sroa_$pattern_temp_0_1_39);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_39 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_39);
-||||||| 6c1b356354e
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($v1_1, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14 = $v1_1; $v1_1 = 0; $sroa_$pattern_temp_0_1_14);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_14);
-=======
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_39, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_39);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v1_1);
->>>>>>> origin/main
 }
 
 fn "builtin_v128_const.wado/$template_segment$builtin_v128_const.wado/$tmpl$010d89c86788d28b"($mv$v$s0, $mv$v$r0, $mv$v$s1, $mv$v$r1, $mv$v$s2, $mv$v$r2, index) {
@@ -508,16 +486,8 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 builtin::array_set_u8(arr, digit_count, (if offset < 10 -> i32 {
                     48 + offset;
                 } else {
-<<<<<<< HEAD
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }));
-||||||| 6c1b356354e
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
-=======
                     select i32(upper, (65 + offset) - 10, (97 + offset) - 10);
-                }) & 255);
->>>>>>> origin/main
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l39;
             };

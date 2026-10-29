@@ -39,15 +39,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(17)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -62,14 +56,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-<<<<<<< HEAD
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-||||||| 6c1b356354e
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-=======
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
->>>>>>> origin/main
 import fn wasi/task-return from "wasi/task-return";
 
 global global:serde_generic_trait_method.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(104, 101, 108, 108, 111);
@@ -79,17 +67,10 @@ global global:serde_generic_trait_method.wado::$const_obj_2: ref Array<u8> = arr
 fn "serde_generic_trait_method.wado/run"() with Stdout {
     let $load_2: ref Array<u8>;
     let start_19: i32;
-<<<<<<< HEAD
-    let $moved_4: i32;
-||||||| 6c1b356354e
-    let $sroa_buf_data_54: ref "core:prelude/string.wado//String";
-    let $moved_4: i32;
-=======
-    let $sroa_buf_data_54: ref "core:prelude/string.wado//String";
->>>>>>> origin/main
     let $cm_pair_7: i64;
     let $sroa_buf_data_67: ref "core:prelude/string.wado//String";
     let $sroa_$pattern_temp_0_1_70: i32;
+    let self_77: i32;
     $sroa_buf_data_67 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if @unlikely(2 > builtin::array_len($sroa_buf_data_67.repr)) {
         cold_path;
@@ -113,34 +94,16 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     $sroa_buf_data_67.used = 8;
     builtin::array_copy<u8>($sroa_buf_data_67.repr, start_19, global:serde_generic_trait_method.wado::$const_obj_0, 0, 5);
     start_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_70 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_19; start_19 = 0; $moved_4);
-    start_19 = $sroa_$pattern_temp_0_1_70;
-    $sroa_$pattern_temp_0_1_70 = 0;
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee $sroa_$pattern_temp_0_1_70($sroa_buf_data_67.used) + 1)), 0, $sroa_buf_data_67.repr, 0, $sroa_$pattern_temp_0_1_70);
-    builtin::array_set_u8($load_2, $sroa_$pattern_temp_0_1_70, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = start_19;
-        $sroa_$pattern_temp_0_1_70 = $sroa_$pattern_temp_0_1_70 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, $load_2, 0, $sroa_$pattern_temp_0_1_70);
-    });
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_70 = start_19; start_19 = 0; $sroa_$pattern_temp_0_1_70);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_70 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_1_70);
-||||||| 6c1b356354e
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_19; start_19 = 0; $moved_4);
-    start_19 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_19, $sroa_buf_data_54.repr, $sroa_buf_data_54.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_19 = $moved_4; $moved_4 = 0; start_19);
-=======
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     start_19 = "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_19);
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $sroa_buf_data_54.repr, $sroa_buf_data_54.used);
+    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee self_77($sroa_buf_data_67.used) + 1)), 0, $sroa_buf_data_67.repr, 0, self_77);
+    builtin::array_set_u8($load_2, self_77, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_77 = self_77 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($sroa_$pattern_temp_0_1_70, $load_2, 0, self_77);
+    });
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_70);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_19);
->>>>>>> origin/main
 }
 
 fn "serde_generic_trait_method.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -152,34 +115,6 @@ fn "serde_generic_trait_method.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

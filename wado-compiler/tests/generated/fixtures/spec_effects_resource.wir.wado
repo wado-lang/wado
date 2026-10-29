@@ -95,29 +95,17 @@ type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(28)
 
 type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(29)
 
-<<<<<<< HEAD
 type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(30)
-||||||| 6c1b356354e
-type "functype//wasi/resource-drop:wasi/sockets/types.wado#TcpSocket" = fn(i32);  // TypeId(30)
-=======
-type "functype//wasi/resource-drop:wasi:sockets/types.wado#TcpSocket" = fn(i32);  // TypeId(30)
->>>>>>> origin/main
 
-type "functype//wasi/resource-drop:wasi/sockets/types.wado#TcpSocket" = fn(i32);  // TypeId(31)
+type "functype//wasi/resource-drop:wasi:sockets/types.wado#TcpSocket" = fn(i32);  // TypeId(31)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(33)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(34)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(34)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(34)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(35)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(36)
 
@@ -159,17 +147,6 @@ fn "spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp
     let $local_9: i32;
     let $local_10: ref "core:prelude/string.wado//String";
     let arr_16: ref Array<u8>;
-<<<<<<< HEAD
-||||||| 6c1b356354e
-    let i: i32;
-    let w: i64;
-    let to: i32;
-    let $licm_arith_7: i32;
-=======
-    let i: i32;
-    let w: i64;
-    let $licm_arith_7: i32;
->>>>>>> origin/main
     $outptr = "mem/realloc"(0, 0, 4, 20);
     "wasi/$wasi:sockets/types@0.3.0#[static]tcp-socket.create"(address_family, $outptr);
     $result_val = (if builtin::load_u8($outptr) == 0 -> ref null "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>" {
@@ -208,66 +185,7 @@ fn "spec_effects_resource.wado/$cm_binding__wasi:sockets/types@0.3.0#[static]tcp
             $local_7 = ref.null none;
             if address_family != 0 {
                 address_family = builtin::load_i32((($outptr + 4) + 4) + 4);
-<<<<<<< HEAD
                 "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_16(builtin::array_new<u8>(local.tee $local_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)))), address_family, $local_9);
-||||||| 6c1b356354e
-                arr_16 = builtin::array_new<u8>(local.tee $local_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)));
-                i = 0;
-                $licm_arith_7 = $local_9 - 8;
-                b16: block {
-                    l17: loop {
-                        break_if b16 i > $licm_arith_7;
-                        w = builtin::load_i64(address_family + i);
-                        to = i;
-                        builtin::array_set_u8(arr_16, to, builtin::i32_wrap_i64(w) & 255);
-                        builtin::array_set_u8(arr_16, to + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
-                        builtin::array_set_u8(arr_16, to + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
-                        i = i + 8;
-                        continue l17;
-                    };
-                };
-                b18: block {
-                    l19: loop {
-                        break_if b18 i >= $local_9;
-                        builtin::array_set_u8(arr_16, i, builtin::load_u8(address_family + i));
-                        i = i + 1;
-                        continue l19;
-                    };
-                };
-=======
-                arr_16 = builtin::array_new<u8>(local.tee $local_9(builtin::load_i32(((($outptr + 4) + 4) + 4) + 4)));
-                i = 0;
-                $licm_arith_7 = $local_9 - 8;
-                b16: block {
-                    l17: loop {
-                        break_if b16 i > $licm_arith_7;
-                        w = builtin::load_i64(address_family + i);
-                        builtin::array_set_u8(arr_16, i, builtin::i32_wrap_i64(w) & 255);
-                        builtin::array_set_u8(arr_16, i + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
-                        builtin::array_set_u8(arr_16, i + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
-                        i = i + 8;
-                        continue l17;
-                    };
-                };
-                b18: block {
-                    l19: loop {
-                        break_if b18 i >= $local_9;
-                        builtin::array_set_u8(arr_16, i, builtin::load_u8(address_family + i));
-                        i = i + 1;
-                        continue l19;
-                    };
-                };
->>>>>>> origin/main
                 $local_10 = struct.new "core:prelude/string.wado//String" { repr: arr_16, used: $local_9 };
                 if $local_9 > 0 {
                     drop("mem/realloc"(address_family, $local_9, 1, 0));
@@ -343,7 +261,6 @@ fn "core:prelude/types.wado/cm_await_copy"(handle) {
 fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     let i: i32;
     let w: i64;
-    let to: i32;
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
@@ -351,15 +268,14 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
         l24: loop {
             break_if b23 i > $licm_arith_7;
             w = builtin::load_i64(ptr + i);
-            to = i;
-            builtin::array_set_u8(arr, to, builtin::i32_wrap_i64(w));
-            builtin::array_set_u8(arr, to + 1, builtin::i32_wrap_i64(w >> 8_i64));
-            builtin::array_set_u8(arr, to + 2, builtin::i32_wrap_i64(w >> 16_i64));
-            builtin::array_set_u8(arr, to + 3, builtin::i32_wrap_i64(w >> 24_i64));
-            builtin::array_set_u8(arr, to + 4, builtin::i32_wrap_i64(w >> 32_i64));
-            builtin::array_set_u8(arr, to + 5, builtin::i32_wrap_i64(w >> 40_i64));
-            builtin::array_set_u8(arr, to + 6, builtin::i32_wrap_i64(w >> 48_i64));
-            builtin::array_set_u8(arr, to + 7, builtin::i32_wrap_i64(w >> 56_i64));
+            builtin::array_set_u8(arr, i, builtin::i32_wrap_i64(w));
+            builtin::array_set_u8(arr, i + 1, builtin::i32_wrap_i64(w >> 8_i64));
+            builtin::array_set_u8(arr, i + 2, builtin::i32_wrap_i64(w >> 16_i64));
+            builtin::array_set_u8(arr, i + 3, builtin::i32_wrap_i64(w >> 24_i64));
+            builtin::array_set_u8(arr, i + 4, builtin::i32_wrap_i64(w >> 32_i64));
+            builtin::array_set_u8(arr, i + 5, builtin::i32_wrap_i64(w >> 40_i64));
+            builtin::array_set_u8(arr, i + 6, builtin::i32_wrap_i64(w >> 48_i64));
+            builtin::array_set_u8(arr, i + 7, builtin::i32_wrap_i64(w >> 56_i64));
             i = i + 8;
             continue l24;
         };

@@ -401,36 +401,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<hfs_aliased
         l50: loop {
             break_if b49 ($mv$t$h0 - start_138) < 2;
             q = x_163 /u 100_i64;
-<<<<<<< HEAD
-            tens = local.tee $mv$t$h0(builtin::i32_wrap_i64(x_163 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_5, $mv$t$h1 - 1, (48 + $mv$t$h0) - (tens * 10));
-            builtin::array_set_u8($load_5, $mv$t$h1 - 2, 48 + tens);
-            $mv$t$h1 = $mv$t$h1 - 2;
-||||||| 6c1b356354e
-            tens = local.tee $mv$t$h0(builtin::i32_wrap_i64(x_163 - (q * 100_i64))) / 10;
-            builtin::array_set_u8($load_5, $mv$t$h1 - 1, ((48 + $mv$t$h0) - (tens * 10)) & 255);
-            builtin::array_set_u8($load_5, $mv$t$h1 - 2, (48 + tens) & 255);
-            $mv$t$h1 = $mv$t$h1 - 2;
-=======
             tens = local.tee $mv$t$h1(builtin::i32_wrap_i64(x_163 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_121, $mv$t$h0 - 1, ((48 + $mv$t$h1) - (tens * 10)) & 255);
-            builtin::array_set_u8(repr_121, $mv$t$h0 - 2, (48 + tens) & 255);
+            builtin::array_set_u8(repr_121, $mv$t$h0 - 1, (48 + $mv$t$h1) - (tens * 10));
+            builtin::array_set_u8(repr_121, $mv$t$h0 - 2, 48 + tens);
             $mv$t$h0 = $mv$t$h0 - 2;
->>>>>>> origin/main
             x_163 = q;
             continue l50;
         };
     };
-<<<<<<< HEAD
-    if $mv$t$h1 > start_138 {
-        builtin::array_set_u8($load_5, start_138, 48 + builtin::i32_wrap_i64(x_163 %u 10_i64));
-||||||| 6c1b356354e
-    if $mv$t$h1 > start_138 {
-        builtin::array_set_u8($load_5, start_138, (48 + builtin::i32_wrap_i64(x_163 %u 10_i64)) & 255);
-=======
     if $mv$t$h0 > start_138 {
-        builtin::array_set_u8(repr_121, start_138, (48 + builtin::i32_wrap_i64(x_163 %u 10_i64)) & 255);
->>>>>>> origin/main
+        builtin::array_set_u8(repr_121, start_138, 48 + builtin::i32_wrap_i64(x_163 %u 10_i64));
     }
     $load_5 = global:core:prelude/string.wado::$const_obj_0;
     if @unlikely(local.tee $mv$t$h0(out_3.used + 1) > builtin::array_len(repr_121)) {

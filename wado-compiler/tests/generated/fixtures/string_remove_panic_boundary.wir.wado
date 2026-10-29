@@ -172,19 +172,9 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(68)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(70)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(70)
 
-<<<<<<< HEAD
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(71)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(71)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(72)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(71)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(72)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -204,36 +194,34 @@ global global:core:prelude/primitive.wado::$const_obj_1: ref "core:prelude/strin
 fn "string_remove_panic_boundary.wado/run"() {
     let $sroa_s_repr_31: ref Array<u8>;
     let b0: u32;
-    let $sroa_slot_57: i32;
     if @unlikely((builtin::array_get_value<u8>(local.tee $sroa_s_repr_31(array.new_data<u8>("日本語")), 1) & 192) == 128) {
         cold_path;
         "string_remove_panic_boundary.wado/run$cold0$dae[$contract_arg_0]"(struct.new "core:prelude/string.wado//String" { repr: $sroa_s_repr_31, used: 9 });
         unreachable;
     }
-    $sroa_slot_57 = 0;
     $inline_decode_char_at_spec0_0: block {
         if local.tee b0(builtin::array_get_value<u8>($sroa_s_repr_31, 1)) <u 128 {
-            $sroa_slot_57 = 1;
+            b0 = 1;
             break $inline_decode_char_at_spec0_0;
         }
         if b0 <u 224 {
             drop(builtin::array_get_value<u8>($sroa_s_repr_31, 2));
-            $sroa_slot_57 = 2;
+            b0 = 2;
             break $inline_decode_char_at_spec0_0;
         }
         if b0 <u 240 {
             drop(builtin::array_get_value<u8>($sroa_s_repr_31, 2));
             drop(builtin::array_get_value<u8>($sroa_s_repr_31, 3));
-            $sroa_slot_57 = 3;
+            b0 = 3;
             break $inline_decode_char_at_spec0_0;
         }
         drop(builtin::array_get_value<u8>($sroa_s_repr_31, 2));
         drop(builtin::array_get_value<u8>($sroa_s_repr_31, 3));
         drop(builtin::array_get_value<u8>($sroa_s_repr_31, 4));
-        $sroa_slot_57 = 4;
+        b0 = 4;
         break $inline_decode_char_at_spec0_0;
     };
-    builtin::array_copy<u8>($sroa_s_repr_31, 1, $sroa_s_repr_31, 1 + $sroa_slot_57, 8 - $sroa_slot_57);
+    builtin::array_copy<u8>($sroa_s_repr_31, 1, $sroa_s_repr_31, 1 + b0, 8 - b0);
 }
 
 fn "string_remove_panic_boundary.wado/$cm_export__run"() {

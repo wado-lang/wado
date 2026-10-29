@@ -139,14 +139,6 @@ global global:opt_clone_forward_mutated.wado::$const_obj_0: ref "core:prelude/st
 fn "opt_clone_forward_mutated.wado/run"() with Stdout {
     let $load_0: ref Array<i32>;
     let $v0_5: i32;
-<<<<<<< HEAD
-    let $moved_4: i32;
-||||||| 6c1b356354e
-    let $sroa_b_data_64: ref "core:prelude//List<i32>";
-    let $moved_4: i32;
-=======
-    let $sroa_b_data_64: ref "core:prelude//List<i32>";
->>>>>>> origin/main
     let $cm_pair_7: i64;
     let $sroa_b_data_77: ref "core:prelude//List<i32>";
     let $sroa_$pattern_temp_0_1_79: i32;
@@ -175,23 +167,11 @@ fn "opt_clone_forward_mutated.wado/run"() with Stdout {
         unreachable;
     }
     $v0_5 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-<<<<<<< HEAD
     $sroa_$pattern_temp_0_1_79 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_clone_forward_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v0_5; $v0_5 = 0; $moved_4);
-    $v0_5 = $sroa_$pattern_temp_0_1_79;
-    $sroa_$pattern_temp_0_1_79 = 0;
-||||||| 6c1b356354e
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "opt_clone_forward_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $v0_5; $v0_5 = 0; $moved_4);
-    $v0_5 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-=======
-    $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
     $v0_5 = "opt_clone_forward_mutated.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($v0_5);
->>>>>>> origin/main
     let $mv_arg_5: ref "core:prelude/string.wado//String";
     $mv_arg_5 = global:opt_clone_forward_mutated.wado::$const_obj_0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, $mv_arg_5.repr, $mv_arg_5.used);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_79, $mv_arg_5.repr, $mv_arg_5.used);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($v0_5);
 }
 
@@ -422,60 +402,24 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
     self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, c);
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, c & 255);
-=======
-            builtin::array_set_u8(repr, new_used, c & 255);
->>>>>>> origin/main
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_0: 1;
         }
         if c <u 2048 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, byte + 1, 128 | (c & 63));
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | (c & 63)) & 255);
-=======
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
->>>>>>> origin/main
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_0: 2;
         }
         if c <u 65536 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, byte + 2, 128 | (c & 63));
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, byte + 2, (128 | (c & 63)) & 255);
-=======
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
->>>>>>> origin/main
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_0: 3;
         }
-<<<<<<< HEAD
-        builtin::array_set_u8(repr, byte, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, byte + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, byte + 3, 128 | (c & 63));
-||||||| 6c1b356354e
-        builtin::array_set_u8(repr, byte, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 3, (128 | (c & 63)) & 255);
-=======
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
->>>>>>> origin/main
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_0: 4;
     };
 }

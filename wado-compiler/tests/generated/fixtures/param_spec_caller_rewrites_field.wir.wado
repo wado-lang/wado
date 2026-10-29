@@ -37,17 +37,11 @@ type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::realloc_to" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(15)
 
-<<<<<<< HEAD
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(16)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(16)
->>>>>>> origin/main
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -76,7 +70,6 @@ fn "param_spec_caller_rewrites_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#wri
 
 fn "param_spec_caller_rewrites_field.wado/$cm_export__run"() {
     let out: ref "core:prelude/string.wado//String";
-    let $moved_4: i32;
     let $cm_pair_7: i64;
     let $sroa_$pattern_temp_0_0_13: i32;
     let $sroa_$pattern_temp_0_1_14: i32;
@@ -84,11 +77,9 @@ fn "param_spec_caller_rewrites_field.wado/$cm_export__run"() {
     "param_spec_caller_rewrites_field.wado/emit$spec1$dae[opt]"(out);
     $sroa_$pattern_temp_0_0_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    $moved_4 = "param_spec_caller_rewrites_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = $sroa_$pattern_temp_0_0_13; $sroa_$pattern_temp_0_0_13 = 0; $moved_4);
-    $sroa_$pattern_temp_0_0_13 = $sroa_$pattern_temp_0_1_14;
-    $sroa_$pattern_temp_0_1_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_0_13, out.repr, out.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13 = $moved_4; $moved_4 = 0; $sroa_$pattern_temp_0_0_13);
+    $sroa_$pattern_temp_0_0_13 = "param_spec_caller_rewrites_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13);
+    "core:rt/write_string_to_stream$dae[add_newline]"($sroa_$pattern_temp_0_1_14, out.repr, out.used);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13);
     "wasi/task-return"(0);
 }
 
@@ -115,10 +106,9 @@ fn "param_spec_caller_rewrites_field.wado/emit$spec0$dae[opt]"(out) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, i);
     }
-<<<<<<< HEAD
-    start_8 = out.used;
+    new_used_7 = out.used;
     out.used = i;
-    builtin::array_set_u8(out.repr, start_8, 47);
+    builtin::array_set_u8(out.repr, new_used_7, 47);
 }
 
 fn "param_spec_caller_rewrites_field.wado/emit$spec1$dae[opt]"(out) {
@@ -126,100 +116,27 @@ fn "param_spec_caller_rewrites_field.wado/emit$spec1$dae[opt]"(out) {
     let new_used_28: i32;
     let start_29: i32;
     i = 0;
-||||||| 6c1b356354e
-    start_14 = out_1.used;
-    out_1.used = i_7;
-    builtin::array_set_u8(out_1.repr, start_14, 47);
-    start_14 = 0;
-=======
-    new_used_13 = out_1.used;
-    out_1.used = i_7;
-    builtin::array_set_u8(out_1.repr, new_used_13, 47);
-    i_7 = 0;
->>>>>>> origin/main
     b4: block {
         l5: loop {
-<<<<<<< HEAD
             break_if b4 i >= 2;
             if @unlikely(local.tee new_used_28(out.used + 1) > builtin::array_len(out.repr)) {
-||||||| 6c1b356354e
-            break_if b4 start_14 >= 2;
-            if @unlikely(local.tee i_7(out_1.used + 1) > builtin::array_len(out_1.repr)) {
-=======
-            break_if b4 i_7 >= 2;
-            if @unlikely(local.tee new_used_13(out_1.used + 1) > builtin::array_len(out_1.repr)) {
->>>>>>> origin/main
                 cold_path;
-<<<<<<< HEAD
                 "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used_28);
-||||||| 6c1b356354e
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, i_7);
-=======
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, new_used_13);
->>>>>>> origin/main
             }
-<<<<<<< HEAD
             start_29 = out.used;
             out.used = new_used_28;
             builtin::array_set_u8(out.repr, start_29, 98);
             i = i + 1;
-||||||| 6c1b356354e
-            new_used_13 = out_1.used;
-            out_1.used = i_7;
-            builtin::array_set_u8(out_1.repr, new_used_13, 98);
-            start_14 = start_14 + 1;
-=======
-            start_14 = out_1.used;
-            out_1.used = new_used_13;
-            builtin::array_set_u8(out_1.repr, start_14, 98);
-            i_7 = i_7 + 1;
->>>>>>> origin/main
             continue l5;
         };
     };
-<<<<<<< HEAD
     if @unlikely(local.tee i(out.used + 1) > builtin::array_len(out.repr)) {
-||||||| 6c1b356354e
-    if @unlikely(local.tee start_14(out_1.used + 1) > builtin::array_len(out_1.repr)) {
-=======
-    if @unlikely(local.tee i_7(out_1.used + 1) > builtin::array_len(out_1.repr)) {
->>>>>>> origin/main
         cold_path;
-<<<<<<< HEAD
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, i);
-||||||| 6c1b356354e
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, start_14);
-=======
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_1, i_7);
->>>>>>> origin/main
     }
-<<<<<<< HEAD
-    start_29 = out.used;
+    new_used_28 = out.used;
     out.used = i;
-    builtin::array_set_u8(out.repr, start_29, 47);
-||||||| 6c1b356354e
-    new_used_13 = out_1.used;
-    out_1.used = start_14;
-    builtin::array_set_u8(out_1.repr, new_used_13, 47);
-    new_used_13 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    start_14 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    i_7 = "param_spec_caller_rewrites_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_7 = new_used_13; new_used_13 = 0; i_7);
-    new_used_13 = start_14;
-    start_14 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_13, out_1.repr, out_1.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used_13 = i_7; i_7 = 0; new_used_13);
-    "wasi/task-return"(0);
-=======
-    new_used_13 = out_1.used;
-    out_1.used = i_7;
-    builtin::array_set_u8(out_1.repr, new_used_13, 47);
-    i_7 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
-    new_used_13 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-    i_7 = "param_spec_caller_rewrites_field.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_7);
-    "core:rt/write_string_to_stream$dae[add_newline]"(new_used_13, out_1.repr, out_1.used);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_7);
-    "wasi/task-return"(0);
->>>>>>> origin/main
+    builtin::array_set_u8(out.repr, new_used_28, 47);
 }
 
 fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {

@@ -700,47 +700,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::is_char_boundary"(
     };
 }
 
-<<<<<<< HEAD
 fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap$dae[byte_index,width]"(self) {
-||||||| 6c1b356354e
-fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap"(self, byte_index, width) {
-=======
-fn "core:prelude/string.wado/core:prelude/string.wado/String::make_gap"(self, byte_index, width) {
->>>>>>> origin/main
     let $load_0: i32;
     let $load_1: ref Array<u8>;
     let new_used: i32;
     let capacity: i32;
     let new_repr: ref Array<u8>;
-<<<<<<< HEAD
     let $av_14: i32;
     if local.tee new_used(local.tee $av_14(local.tee $load_0(self.used)) + 1) > builtin::array_len(local.tee $load_1(self.repr)) {
-||||||| 6c1b356354e
-    if local.tee new_used(local.tee byte_index(local.tee width(self.used)) + 1) > builtin::array_len(local.tee $load_1(self.repr)) {
-=======
-    let $av_16: i32;
-    if local.tee new_used(local.tee $av_16(local.tee $load_0(self.used)) + 1) > builtin::array_len(local.tee $load_1(self.repr)) {
->>>>>>> origin/main
         $inline_core_prelude_string_wado_String__grow_1: block {
             capacity = builtin::array_len($load_1);
             break_if $inline_core_prelude_string_wado_String__grow_1 new_used <= capacity;
-<<<<<<< HEAD
             builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(capacity > 8, local.tee capacity(select i32(capacity > new_used, local.tee capacity(capacity * 2), new_used)), 8))), 0, $load_1, 0, $av_14);
-||||||| 6c1b356354e
-            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(capacity > 8, local.tee capacity(select i32(capacity > new_used, local.tee capacity(capacity * 2), new_used)), 8))), 0, $load_1, 0, byte_index);
-=======
-            builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(capacity > 8, local.tee capacity(select i32(capacity > new_used, local.tee capacity(capacity * 2), new_used)), 8))), 0, $load_1, 0, $av_16);
->>>>>>> origin/main
             self.repr = new_repr;
         };
     }
-<<<<<<< HEAD
-    builtin::array_copy<u8>(local.tee new_repr(self.repr), 2, new_repr, 1, $load_0 - 1);
-||||||| 6c1b356354e
-    builtin::array_copy<u8>(local.tee new_repr(self.repr), 2, new_repr, 1, width - 1);
-=======
     builtin::array_copy<u8>(local.tee $load_1(self.repr), 2, $load_1, 1, $load_0 - 1);
->>>>>>> origin/main
     self.used = new_used;
 }
 

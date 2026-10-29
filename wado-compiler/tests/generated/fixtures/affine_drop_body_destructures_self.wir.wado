@@ -367,15 +367,9 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(127)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(128)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(129)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(129)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(129)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(130)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(130)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(131)
 
@@ -428,71 +422,7 @@ fn "affine_drop_body_destructures_self.wado/$template_segment$affine_drop_body_d
 }
 
 fn "affine_drop_body_destructures_self.wado/$cm_export__$test_0"() {
-<<<<<<< HEAD
     "affine_drop_body_destructures_self.wado/affine_drop_body_destructures_self.wado/Pair^core:prelude/traits.wado/Drop::drop"(struct.new "affine_drop_body_destructures_self.wado//Pair" { a: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 1 }, b: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 2 } });
-||||||| 6c1b356354e
-    let self_2: ref null "affine_drop_body_destructures_self.wado//Pair";
-    let a: ref null "affine_drop_body_destructures_self.wado//Tok";
-    let $moved_5: ref null "affine_drop_body_destructures_self.wado//Tok";
-    let $drop_spill_1: i32;
-    a = local.tee self_2(struct.new "affine_drop_body_destructures_self.wado//Pair" { a: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 1 }, b: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 2 } }).a;
-    if ref.is_null(self_2.b) == 0 {
-        global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
-    }
-    self_2 = ref.null none;
-    if @unlikely((global:affine_drop_body_destructures_self.wado::DROPS == 1) == 0) {
-        cold_path;
-        "affine_drop_body_destructures_self.wado/affine_drop_body_destructures_self.wado/Pair^core:prelude/traits.wado/Drop::drop$cold0$dae[self]"();
-        unreachable;
-    }
-    $moved_5 = a;
-    a = ref.null none;
-    $drop_spill_1 = $moved_5.id;
-    if ref.is_null($moved_5) == 0 {
-        global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
-    }
-    if @unlikely($drop_spill_1 != 1) {
-        cold_path;
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_body_destructures_self.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_drop_body_destructures_self.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $drop_spill_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in Pair::drop at affine_drop_body_destructures_self.wado:29
-condition: eat(a) == 1
-a: "), used: 103 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in Pair::drop at affine_drop_body_destructures_self.wado:29
-condition: eat(a) == 1
-a: "), used: 103 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-eat(a): "), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-eat(a): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
-        unreachable;
-    }
-=======
-    let self_2: ref null "affine_drop_body_destructures_self.wado//Pair";
-    let a: ref null "affine_drop_body_destructures_self.wado//Tok";
-    let $drop_spill_1: i32;
-    a = local.tee self_2(struct.new "affine_drop_body_destructures_self.wado//Pair" { a: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 1 }, b: struct.new "affine_drop_body_destructures_self.wado//Tok" { id: 2 } }).a;
-    if ref.is_null(self_2.b) == 0 {
-        global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
-    }
-    if @unlikely((global:affine_drop_body_destructures_self.wado::DROPS == 1) == 0) {
-        cold_path;
-        "affine_drop_body_destructures_self.wado/affine_drop_body_destructures_self.wado/Pair^core:prelude/traits.wado/Drop::drop$cold0$dae[self]"();
-        unreachable;
-    }
-    $drop_spill_1 = a.id;
-    if ref.is_null(a) == 0 {
-        global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
-    }
-    if @unlikely($drop_spill_1 != 1) {
-        cold_path;
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:rt/panic"(local.tee $mv_arg_1("core:prelude/string.wado/core:prelude/string.wado/String::format<affine_drop_body_destructures_self.wado/$tmpl$f86a99973c5f619d,[core:prelude/string.wado/String,i32]>"(struct.new "affine_drop_body_destructures_self.wado//$tmpl$f86a99973c5f619d" { h0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<moved>"), used: 7 }, h1: $drop_spill_1, s0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in Pair::drop at affine_drop_body_destructures_self.wado:29
-condition: eat(a) == 1
-a: "), used: 103 }, r0: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in Pair::drop at affine_drop_body_destructures_self.wado:29
-condition: eat(a) == 1
-a: "), used: 103 }, s1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-eat(a): "), used: 9 }, r1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
-eat(a): "), used: 9 }, s2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, r2: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 } })).repr, $mv_arg_1.used);
-        unreachable;
-    }
->>>>>>> origin/main
     if @unlikely((global:affine_drop_body_destructures_self.wado::DROPS == 2) == 0) {
         cold_path;
         "affine_drop_body_destructures_self.wado/$test_0$cold0"();
@@ -1345,22 +1275,18 @@ fn "core:prelude/string.wado/$template_segment$core:prelude/string.wado/$tmpl$b1
 
 fn "affine_drop_body_destructures_self.wado/affine_drop_body_destructures_self.wado/Pair^core:prelude/traits.wado/Drop::drop"(self) {
     let a: ref null "affine_drop_body_destructures_self.wado//Tok";
-    let $moved_5: ref null "affine_drop_body_destructures_self.wado//Tok";
     let $drop_spill_1: i32;
     a = self.a;
     if ref.is_null(self.b) == 0 {
         global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
     }
-    self = ref.null none;
     if @unlikely((global:affine_drop_body_destructures_self.wado::DROPS == 1) == 0) {
         cold_path;
         "affine_drop_body_destructures_self.wado/affine_drop_body_destructures_self.wado/Pair^core:prelude/traits.wado/Drop::drop$cold0$dae[self]"();
         unreachable;
     }
-    $moved_5 = a;
-    a = ref.null none;
-    $drop_spill_1 = $moved_5.id;
-    if ref.is_null($moved_5) == 0 {
+    $drop_spill_1 = a.id;
+    if ref.is_null(a) == 0 {
         global:affine_drop_body_destructures_self.wado::DROPS = global:affine_drop_body_destructures_self.wado::DROPS + 1;
     }
     if @unlikely($drop_spill_1 != 1) {

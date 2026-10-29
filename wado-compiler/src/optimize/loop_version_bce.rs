@@ -194,14 +194,6 @@ pub(super) fn version_loops(
             locals,
             params,
             address_taken_locals,
-<<<<<<< HEAD
-            params,
-||||||| 6c1b356354e
-            stores_aliased_locals,
-            params,
-=======
-            stores_aliased_locals,
->>>>>>> origin/main
             ..
         } = func.parts();
         let frame = LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());

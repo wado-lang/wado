@@ -915,8 +915,7 @@ id_opt(Option::Some(3)): "), used: 26 }, s3: struct.new "core:prelude/string.wad
 
 fn "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands"() {
     let i: i32;
-    i = black_box(2);
-    if @unlikely((select i32(i < 5, i, 0) == 2) == 0) {
+    if @unlikely((select i32(i < 5, local.tee i(black_box(2)), 0) == 2) == 0) {
         cold_path;
         "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold2"();
         unreachable;
@@ -1094,44 +1093,7 @@ fn "literal_coercion.wado/$cm_export__$test_35_call_result_type_flows_into_the_l
 }
 
 fn "literal_coercion.wado/$cm_export__$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands"() {
-<<<<<<< HEAD
     "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands"();
-||||||| 6c1b356354e
-    let i: i32;
-    i = black_box(2);
-    if @unlikely((select i32(i < 5, i, 0) == 2) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold2"();
-        unreachable;
-    }
-    if @unlikely((3 != select i32(i < 5, i, 0)) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold1"();
-        unreachable;
-    }
-    if @unlikely((select i32(i < 5, i, 0) < 3) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold0"();
-        unreachable;
-    }
-=======
-    let i: i32;
-    if @unlikely((select i32(i < 5, local.tee i(black_box(2)), 0) == 2) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold2"();
-        unreachable;
-    }
-    if @unlikely((3 != select i32(i < 5, i, 0)) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold1"();
-        unreachable;
-    }
-    if @unlikely((select i32(i < 5, i, 0) < 3) == 0) {
-        cold_path;
-        "literal_coercion.wado/$test_36_a_comparison_s_expected_bool_does_not_reach_its_operands$cold0"();
-        unreachable;
-    }
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 
@@ -2455,35 +2417,29 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
-<<<<<<< HEAD
-    self.used = local.tee byte(self.used) + $inline_encode_char_8: block -> i32 {
+    self.used = local.tee new_used(self.used) + $inline_encode_char_8: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-            builtin::array_set_u8(repr, byte, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_8: 1;
         }
         if c <u 2048 {
-            builtin::array_set_u8(repr, byte, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, byte + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_8: 2;
         }
         if c <u 65536 {
-            builtin::array_set_u8(repr, byte, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, byte + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_8: 3;
         }
-        builtin::array_set_u8(repr, byte, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, byte + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, byte + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_8: 4;
     };
-||||||| 6c1b356354e
-    self.used = local.tee byte(self.used) + "core:prelude/string.wado/encode_char"(self.repr, byte, c);
-=======
-    self.used = local.tee new_used(self.used) + "core:prelude/string.wado/encode_char"(self.repr, new_used, c);
->>>>>>> origin/main
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(self, byte) {

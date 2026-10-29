@@ -1770,16 +1770,8 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 builtin::array_set_u8(arr, digit_count, (if offset < 10 -> i32 {
                     48 + offset;
                 } else {
-<<<<<<< HEAD
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }));
-||||||| 6c1b356354e
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
-=======
                     select i32(upper, (65 + offset) - 10, (97 + offset) - 10);
-                }) & 255);
->>>>>>> origin/main
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l179;
             };
@@ -3920,49 +3912,7 @@ fn "variant_ord_derived.wado/core:prelude/list.wado/List<variant_ord_derived.wad
                     k = start;
                     b487: block {
                         l488: loop {
-<<<<<<< HEAD
-                            break_if b487 k >= end;
-||||||| 6c1b356354e
-                            break_if b487 (k >= end) | ((k + 1) >= end);
-                            if i < mid {
-                                if j < end {
-                                    if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, i), builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, j)) == 2 {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                        j = j + 1;
-                                    } else {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                        i = i + 1;
-                                    }
-                                } else {
-                                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                    i = i + 1;
-                                }
-                            } else {
-                                builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                j = j + 1;
-                            }
-                            k = k + 1;
-=======
-                            break_if b487 (k >= b_14) | ((k + 1) >= b_14);
-                            if i < mid {
-                                if j < b_14 {
-                                    if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, i), builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, j)) == 2 {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                        j = j + 1;
-                                    } else {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                        i = i + 1;
-                                    }
-                                } else {
-                                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                    i = i + 1;
-                                }
-                            } else {
-                                builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                j = j + 1;
-                            }
-                            k = k + 1;
->>>>>>> origin/main
+                            break_if b487 k >= b_14;
                             if i < mid {
                                 if j < b_14 {
                                     if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, i), builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, j)) == 2 {
@@ -3984,64 +3934,8 @@ fn "variant_ord_derived.wado/core:prelude/list.wado/List<variant_ord_derived.wad
                             continue l488;
                         };
                     };
-<<<<<<< HEAD
-                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">($licm_repr_18, start, buf, start, end - start);
-                    start = end;
-||||||| 6c1b356354e
-                    b495: block {
-                        l496: loop {
-                            break_if b495 k >= end;
-                            if i < mid {
-                                if j < end {
-                                    if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, i), builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, j)) == 2 {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                        j = j + 1;
-                                    } else {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                        i = i + 1;
-                                    }
-                                } else {
-                                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                    i = i + 1;
-                                }
-                            } else {
-                                builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                j = j + 1;
-                            }
-                            k = k + 1;
-                            continue l496;
-                        };
-                    };
-                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">($licm_repr_18, start, buf, start, end - start);
-                    start = end;
-=======
-                    b495: block {
-                        l496: loop {
-                            break_if b495 k >= b_14;
-                            if i < mid {
-                                if j < b_14 {
-                                    if "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.wado/Ord::cmp$sroa[self.value,other.value]"(builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, i), builtin::array_get_value<ref "variant_ord_derived.wado//Shape">($licm_repr_18, j)) == 2 {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                        j = j + 1;
-                                    } else {
-                                        builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                        i = i + 1;
-                                    }
-                                } else {
-                                    builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, i, 1);
-                                    i = i + 1;
-                                }
-                            } else {
-                                builtin::array_copy<ref "variant_ord_derived.wado//Shape">(buf, k, $licm_repr_18, j, 1);
-                                j = j + 1;
-                            }
-                            k = k + 1;
-                            continue l496;
-                        };
-                    };
                     builtin::array_copy<ref "variant_ord_derived.wado//Shape">($licm_repr_18, start, buf, start, b_14 - start);
                     start = b_14;
->>>>>>> origin/main
                     continue l486;
                 };
             };
@@ -4180,25 +4074,11 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
         if @likely(ref.test "variant_ord_derived.wado//Shape::Label"(other)) {
             $eq_other_Label_7 = ref.cast "variant_ord_derived.wado//Shape::Label"(other).payload_0;
             return $inline_core_prelude_array_wado_seq_cmp_u8__0: block -> "core:prelude/traits.wado//enum:Ordering" {
-<<<<<<< HEAD
                 a_41 = $eq_self_Label_6.repr;
-                b_3 = $eq_self_Label_6.used;
-                b_44 = $eq_other_Label_7.repr;
-                $load_0 = $eq_other_Label_7.used;
-                min_len = select i32(b_3 < $load_0, b_3, $load_0);
-||||||| 6c1b356354e
-                a_17 = $eq_self_Label_6.repr;
-                b_3 = $eq_self_Label_6.used;
-                b_20 = $eq_other_Label_7.repr;
-                $load_0 = $eq_other_Label_7.used;
-                min_len = select i32(b_3 < $load_0, b_3, $load_0);
-=======
-                a_17 = $eq_self_Label_6.repr;
                 $load_0 = $eq_self_Label_6.used;
-                b_20 = $eq_other_Label_7.repr;
+                b_44 = $eq_other_Label_7.repr;
                 b_3 = $eq_other_Label_7.used;
                 min_len = select i32($load_0 < b_3, $load_0, b_3);
->>>>>>> origin/main
                 i = 0;
                 b508: block {
                     l509: loop {
@@ -4275,81 +4155,29 @@ fn "variant_ord_derived.wado/variant_ord_derived.wado/Shape^core:prelude/traits.
             return $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: block -> "core:prelude/traits.wado//enum:Ordering" {
                 $load_0 = $eq_self_Box_8.0;
                 b_3 = $eq_self_Box_8.1;
-<<<<<<< HEAD
-                y = $eq_other_Box_9.0;
-                x = $eq_other_Box_9.1;
-                if local.tee y($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if $load_0 < y {
-                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 0;
-||||||| 6c1b356354e
-                y = $eq_other_Box_9.0;
-                x = $eq_other_Box_9.1;
-                if local.tee y($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if $load_0 < y {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
-=======
                 min_len = $eq_other_Box_9.0;
                 i = $eq_other_Box_9.1;
-                if local.tee $load_0($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if local.tee $load_0($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: block -> "core:prelude/traits.wado//enum:Ordering" {
                     if $load_0 < min_len {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 0;
->>>>>>> origin/main
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 0;
                     }
-<<<<<<< HEAD
-                    if $load_0 > y {
-                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 2;
-||||||| 6c1b356354e
-                    if $load_0 > y {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
-=======
                     if $load_0 > min_len {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__2: 2;
->>>>>>> origin/main
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 2;
                     }
                     break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__5: 1;
                 }) != 1 {
-<<<<<<< HEAD
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: y;
-||||||| 6c1b356354e
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: y;
-=======
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: $load_0;
->>>>>>> origin/main
+                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: $load_0;
                 }
-<<<<<<< HEAD
-                if local.tee x($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if b_3 < x {
-                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 0;
-||||||| 6c1b356354e
-                if local.tee x($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
-                    if b_3 < x {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
-=======
-                if local.tee $load_0($inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: block -> "core:prelude/traits.wado//enum:Ordering" {
+                if local.tee $load_0($inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: block -> "core:prelude/traits.wado//enum:Ordering" {
                     if b_3 < i {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 0;
->>>>>>> origin/main
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 0;
                     }
-<<<<<<< HEAD
-                    if b_3 > x {
-                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 2;
-||||||| 6c1b356354e
-                    if b_3 > x {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
-=======
                     if b_3 > i {
-                        break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0__$inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__3: 2;
->>>>>>> origin/main
+                        break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 2;
                     }
                     break $inline_i32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__6: 1;
                 }) != 1 {
-<<<<<<< HEAD
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: x;
-||||||| 6c1b356354e
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: x;
-=======
-                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_0: $load_0;
->>>>>>> origin/main
+                    break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: $load_0;
                 }
                 break $inline__i32_i32__core_prelude_traits_wado_Ord__cmp_2: 1;
             };

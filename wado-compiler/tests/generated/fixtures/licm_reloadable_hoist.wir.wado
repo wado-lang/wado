@@ -66,8 +66,8 @@ global global:licm_reloadable_hoist.wado::$const_obj_0: ref Array<u8> = array.ne
 
 fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
     let i: i32;
-    let b: u8;
     let self_5: i32;
+    let new_used: i32;
     let start_27: i32;
     let $licm_repr_29: ref Array<u8>;
     self_5 = s.used;
@@ -75,10 +75,7 @@ fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
     $licm_repr_29 = s.repr;
     b0: block {
         l1: loop {
-<<<<<<< HEAD
             break_if b0 i >= self_5;
-||||||| 6c1b356354e
-            break_if b0 (((i >= self_5) | ((i + 1) >= self_5)) | (((i + 1) + 1) >= self_5)) | ((((i + 1) + 1) + 1) >= self_5);
             if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
                 if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
                     cold_path;
@@ -87,119 +84,12 @@ fn "licm_reloadable_hoist.wado/escape_quotes"(buf, s) {
                 }
                 start_27 = buf.used;
                 buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-=======
-            break_if b0 (((i >= self_5) | ((i + 1) >= self_5)) | (((i + 1) + 1) >= self_5)) | ((((i + 1) + 1) + 1) >= self_5);
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee b(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, b);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = b;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee b(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, b);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = b;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee b(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, b);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = b;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
->>>>>>> origin/main
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee b(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, b);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = b;
                 builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
             }
             i = i + 1;
             continue l1;
         };
     };
-<<<<<<< HEAD
-||||||| 6c1b356354e
-    b10: block {
-        l11: loop {
-            break_if b10 i >= self_5;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee new_used(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = new_used;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            continue l11;
-        };
-    };
-=======
-    b10: block {
-        l11: loop {
-            break_if b10 i >= self_5;
-            if builtin::array_get_value<u8>($licm_repr_29, i) == 34 {
-                if @unlikely(local.tee b(buf.used + 3) > builtin::array_len(buf.repr)) {
-                    cold_path;
-                    "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, b);
-                    $licm_repr_29 = s.repr;
-                }
-                start_27 = buf.used;
-                buf.used = b;
-                builtin::array_copy<u8>(buf.repr, start_27, global:licm_reloadable_hoist.wado::$const_obj_0, 0, 3);
-            }
-            i = i + 1;
-            continue l11;
-        };
-    };
->>>>>>> origin/main
 }
 
 fn "licm_reloadable_hoist.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -248,19 +138,9 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     if local.tee $mv$data$end($mv$data$end - $mv$data$start) == 0 {
         return 0;
     }
-<<<<<<< HEAD
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b6: block {
+    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b6: block {
         l7: loop {
             break_if b6 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-||||||| 6c1b356354e
-    ptr_13 = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b16: block {
-        l17: loop {
-            break_if b16 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
-=======
-    $mv$data$start = builtin::i32_wrap_i64(ptr_13 = "mem/realloc"(0, 0, 1, $mv$data$end); i = 0; $licm_arith_7 = $mv$data$end - 8; b16: block {
-        l17: loop {
-            break_if b16 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
->>>>>>> origin/main
             at = $mv$data$start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8($mv$data$repr, at + 7)) << 56_i64);
             builtin::store_i64(ptr_13 + i, w);
@@ -303,28 +183,12 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     }; builtin::i64_extend_i32_u(ptr_13) | (builtin::i64_extend_i32_s($mv$data$end) << 32_i64));
     ptr_13 = 0;
     block {
-<<<<<<< HEAD
         l15: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = $mv$data$end - i;
-            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
-||||||| 6c1b356354e
-        l25: loop {
-            ptr_19 = ptr_13 + i;
-            count_20 = $mv$data$end - i;
-            count_20 = local.tee written($inline_cm_await_blocked_6: block -> i32 {
-                if local.tee $mv$data$start("wasi/stream-write"(handle, ptr_19, select i32(count_20 < 268435455, count_20, 268435455))) != -1 {
-                    break $inline_cm_await_blocked_6: $mv$data$start;
-=======
-        l25: loop {
             i = $mv$data$start + ptr_13;
             $licm_arith_7 = $mv$data$end - ptr_13;
             $licm_arith_7 = local.tee i($inline_cm_await_blocked_6: block -> i32 {
                 if local.tee i("wasi/stream-write"(handle, i, select i32($licm_arith_7 < 268435455, $licm_arith_7, 268435455))) != -1 {
                     break $inline_cm_await_blocked_6: i;
->>>>>>> origin/main
                 }
                 i = "wasi/waitable-set-new"();
                 "wasi/waitable-join"(handle, i);

@@ -151,19 +151,9 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(57)
 
-<<<<<<< HEAD
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(58)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(58)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(59)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(58)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(59)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -198,15 +188,9 @@ fn "opt_sroa_stores_ref_mixed.wado/run"() {
         "opt_sroa_stores_ref_mixed.wado/run$cold2"($sroa_a_y_13, $sroa_a_x_12, $v2);
         unreachable;
     }
-<<<<<<< HEAD
-    $v2 = black_box(3);
+    $sroa_a_x_12 = black_box(3);
     drop(black_box(4));
-    if @unlikely($v2 != 3) {
-||||||| 6c1b356354e
-    if @unlikely(local.tee $v2(struct.new "opt_sroa_stores_ref_mixed.wado//Point" { x: black_box(3), y: black_box(4) }.x) != 3) {
-=======
-    if @unlikely(local.tee $sroa_a_x_12(struct.new "opt_sroa_stores_ref_mixed.wado//Point" { x: black_box(3), y: black_box(4) }.x) != 3) {
->>>>>>> origin/main
+    if @unlikely($sroa_a_x_12 != 3) {
         cold_path;
         "opt_sroa_stores_ref_mixed.wado/run$cold1"($sroa_a_x_12);
         unreachable;

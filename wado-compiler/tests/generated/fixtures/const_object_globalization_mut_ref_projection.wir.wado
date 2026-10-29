@@ -41,15 +41,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
@@ -64,14 +58,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-<<<<<<< HEAD
-||||||| 6c1b356354e
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-=======
-import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
->>>>>>> origin/main
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
+import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:const_object_globalization_mut_ref_projection.wado::$const_obj_0: ref Array<u8> = builtin::array_new<u8>(0);
@@ -83,6 +71,7 @@ fn "const_object_globalization_mut_ref_projection.wado/run"() with Stdout {
     let $cm_pair_7_60: i64;
     let $sroa_writer_buf_113: ref "core:prelude/string.wado//String";
     let new_repr_117: ref Array<u8>;
+    let self_119: i32;
     $sroa_writer_buf_113 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if black_box(0) {
     }
@@ -90,121 +79,28 @@ fn "const_object_globalization_mut_ref_projection.wado/run"() with Stdout {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_writer_buf_113, new_used);
     }
-<<<<<<< HEAD
     start_26 = $sroa_writer_buf_113.used;
     $sroa_writer_buf_113.used = new_used;
     builtin::array_copy<u8>($sroa_writer_buf_113.repr, start_26, global:const_object_globalization_mut_ref_projection.wado::$const_obj_3, 0, 2);
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    $moved_4_57 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = start_26; start_26 = 0; $moved_4_57);
-    start_26 = new_used;
-    new_used = 0;
-    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(local.tee new_used($sroa_writer_buf_113.used) + 1)), 0, $sroa_writer_buf_113.repr, 0, new_used);
-    builtin::array_set_u8(new_repr_117, new_used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = start_26;
-        new_used = new_used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr_117, 0, new_used);
-    });
-    "wasi/stream-drop-writable"(new_used = start_26; start_26 = 0; new_used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used = $moved_4_57; $moved_4_57 = 0; new_used);
-||||||| 6c1b356354e
-    start_26 = writer_5.used;
-    writer_5.used = new_used;
-    builtin::array_copy<u8>(writer_5.repr, start_26, global:const_object_globalization_mut_ref_projection.wado::$const_obj_3, 0, 2);
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    $moved_4_57 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = start_26; start_26 = 0; $moved_4_57);
-    start_26 = new_used;
-    new_used = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_26, writer_5.repr, writer_5.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = $moved_4_57; $moved_4_57 = 0; start_26);
-    if black_box(0) {
-    }
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    $moved_4_57 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = start_26; start_26 = 0; new_used);
-    start_26 = $moved_4_57;
-    $moved_4_57 = 0;
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_116);
-    "wasi/stream-drop-writable"($moved_4_57 = start_26; start_26 = 0; $moved_4_57);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_57 = new_used; new_used = 0; $moved_4_57);
-    if black_box(0) {
-    }
-    $moved_4_57 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    start_26 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_26 = $moved_4_57; $moved_4_57 = 0; start_26);
-    $moved_4_57 = new_used;
-    new_used = 0;
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($moved_4_57, new_repr_116);
-    "wasi/stream-drop-writable"(new_used = $moved_4_57; $moved_4_57 = 0; new_used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used = start_26; start_26 = 0; new_used);
-=======
-    start_26 = writer_5.used;
-    writer_5.used = new_used;
-    builtin::array_copy<u8>(writer_5.repr, start_26, global:const_object_globalization_mut_ref_projection.wado::$const_obj_3, 0, 2);
     new_used = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
     start_26 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
     new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_26, writer_5.repr, writer_5.used);
+    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(local.tee self_119($sroa_writer_buf_113.used) + 1)), 0, $sroa_writer_buf_113.repr, 0, self_119);
+    builtin::array_set_u8(new_repr_117, self_119, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_119 = self_119 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(start_26, new_repr_117, 0, self_119);
+    });
+    "wasi/stream-drop-writable"(start_26);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used);
->>>>>>> origin/main
     if black_box(0) {
     }
     new_used = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    $moved_4_57 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    start_26 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_26 = new_used; new_used = 0; start_26);
-    new_used = $moved_4_57;
-    $moved_4_57 = 0;
-    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_117, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(new_used, new_repr_117);
-    "wasi/stream-drop-writable"($moved_4_57 = new_used; new_used = 0; $moved_4_57);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($moved_4_57 = start_26; start_26 = 0; $moved_4_57);
-    if black_box(0) {
-    }
-    $moved_4_57 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
     start_26 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-<<<<<<< HEAD
-    new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used = $moved_4_57; $moved_4_57 = 0; new_used);
-    $moved_4_57 = start_26;
-    start_26 = 0;
-    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_117, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"($moved_4_57, new_repr_117);
-    "wasi/stream-drop-writable"(start_26 = $moved_4_57; $moved_4_57 = 0; start_26);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = new_used; new_used = 0; start_26);
-    if black_box(0) {
-    }
-    start_26 = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
-    new_used = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
-    $moved_4_57 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = start_26; start_26 = 0; $moved_4_57);
-    start_26 = new_used;
-    new_used = 0;
+    new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used);
     builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
     builtin::array_set_u8(new_repr_117, 0, 10);
     "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_117);
-    "wasi/stream-drop-writable"(new_used = start_26; start_26 = 0; new_used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(new_used = $moved_4_57; $moved_4_57 = 0; new_used);
-||||||| 6c1b356354e
-    $moved_4_57 = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_57 = new_used; new_used = 0; $moved_4_57);
-    new_used = start_26;
-    start_26 = 0;
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(new_used, new_repr_116);
-    "wasi/stream-drop-writable"(start_26 = new_used; new_used = 0; start_26);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_26 = $moved_4_57; $moved_4_57 = 0; start_26);
-=======
-    new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used);
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_116);
     "wasi/stream-drop-writable"(start_26);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used);
     if black_box(0) {
@@ -212,9 +108,9 @@ fn "const_object_globalization_mut_ref_projection.wado/run"() with Stdout {
     new_used = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
     start_26 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
     new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used);
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_116);
+    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
+    builtin::array_set_u8(new_repr_117, 0, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_117);
     "wasi/stream-drop-writable"(start_26);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used);
     if black_box(0) {
@@ -222,12 +118,11 @@ fn "const_object_globalization_mut_ref_projection.wado/run"() with Stdout {
     new_used = builtin::i32_wrap_i64(local.tee $cm_pair_7_60("wasi/stream-new"()));
     start_26 = builtin::i32_wrap_i64($cm_pair_7_60 >> 32_i64);
     new_used = "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(new_used);
-    builtin::array_copy<u8>(local.tee new_repr_116(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
-    builtin::array_set_u8(new_repr_116, 0, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_116);
+    builtin::array_copy<u8>(local.tee new_repr_117(builtin::array_new<u8>(1)), 0, global:const_object_globalization_mut_ref_projection.wado::$const_obj_0, 0, 0);
+    builtin::array_set_u8(new_repr_117, 0, 10);
+    "core:rt/cm_stream_write_raw_all_u8$spec0$sroa[data.repr]$dae[return]"(start_26, new_repr_117);
     "wasi/stream-drop-writable"(start_26);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(new_used);
->>>>>>> origin/main
 }
 
 fn "const_object_globalization_mut_ref_projection.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -239,34 +134,6 @@ fn "const_object_globalization_mut_ref_projection.wado/$cm_export__run"() {
     "wasi/task-return"(0);
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

@@ -4,16 +4,10 @@
 //! canonicalised into an `Arc<str>` through [`ModuleSourceInterner`], so `clone`
 //! / `eq` / `hash` are O(1) and well-known names need no interner at all.
 
-<<<<<<< HEAD
 use crate::ast::{AstIdSpace, Module};
-use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
-||||||| 6c1b356354e
-use crate::compiler_host::{CompilerHost, DependencyIndex, DependencyManifest};
-=======
 use crate::compiler_host::{
     CompilerHost, DependencyIndex, DependencyManifest, ModuleDir, PackageDir,
 };
->>>>>>> origin/main
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::loader::strip_kiln_scheme;

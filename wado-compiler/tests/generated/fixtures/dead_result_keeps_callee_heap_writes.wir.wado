@@ -64,15 +64,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(26)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(27)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(27)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(28)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
 
@@ -87,14 +81,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-<<<<<<< HEAD
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-||||||| 6c1b356354e
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-=======
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
->>>>>>> origin/main
 import fn wasi/task-return from "wasi/task-return";
 
 global global:core:prelude/string.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(32);
@@ -141,31 +129,15 @@ fn "dead_result_keeps_callee_heap_writes.wado/run"() with Stdout {
     };
     $mv_field_1 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     $mv_field_2 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-<<<<<<< HEAD
-    $mv_field_1 = "dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1 = $mv_field_3; $mv_field_3 = 0; $mv_field_1);
-    $mv_field_3 = $mv_field_2;
-    $mv_field_2 = 0;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $mv_field_2(message_14.used) + 1)), 0, message_14.repr, 0, $mv_field_2);
-    builtin::array_set_u8(new_repr, $mv_field_2, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_12: i32;
-        $arg_spill_12 = $mv_field_3;
-        $mv_field_2 = $mv_field_2 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_12, new_repr, 0, $mv_field_2);
-    });
-    "wasi/stream-drop-writable"($mv_field_2 = $mv_field_3; $mv_field_3 = 0; $mv_field_2);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_2 = $mv_field_1; $mv_field_1 = 0; $mv_field_2);
-||||||| 6c1b356354e
-    $mv_field_1 = "dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1 = $mv_field_3; $mv_field_3 = 0; $mv_field_1);
-    $mv_field_3 = $mv_field_2;
-    $mv_field_2 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_3, message_15.repr, message_15.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($mv_field_3 = $mv_field_1; $mv_field_1 = 0; $mv_field_3);
-=======
     $mv_field_1 = "dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($mv_field_1);
-    "core:rt/write_string_to_stream$dae[add_newline]"($mv_field_2, message_15.repr, message_15.used);
+    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(local.tee $mv_field_3(message_14.used) + 1)), 0, message_14.repr, 0, $mv_field_3);
+    builtin::array_set_u8(new_repr, $mv_field_3, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        $mv_field_3 = $mv_field_3 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($mv_field_2, new_repr, 0, $mv_field_3);
+    });
+    "wasi/stream-drop-writable"($mv_field_2);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($mv_field_1);
->>>>>>> origin/main
 }
 
 fn "dead_result_keeps_callee_heap_writes.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -260,34 +232,6 @@ fn "core:prelude/primitive.wado/count_digits_u64"(val) {
     return 20;
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

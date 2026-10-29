@@ -150,54 +150,22 @@ fn "core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf, value) {
         buf.used = is_negative_20;
         builtin::array_set_u8(buf.repr, start_66, 45);
     } else {
-<<<<<<< HEAD
-    }, if @unlikely(local.tee start_66(buf.used + value) > builtin::array_len(buf.repr)) {
-||||||| 6c1b356354e
-    }, if @unlikely(local.tee start_75(buf.used + value) > builtin::array_len(buf.repr)) {
-=======
     }, if @unlikely(local.tee is_negative_20(buf.used + value) > builtin::array_len(buf.repr)) {
->>>>>>> origin/main
         cold_path;
-<<<<<<< HEAD
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_66);
-    }, is_negative_20 = buf.used, buf.used = start_66, arr = buf.repr, value = is_negative_20 + value, b22: block {
-||||||| 6c1b356354e
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, start_75);
-    }, is_negative_20 = buf.used, buf.used = start_75, arr = buf.repr, value = is_negative_20 + value, b22: block {
-=======
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, is_negative_20);
     }, start_66 = buf.used, buf.used = is_negative_20, arr = buf.repr, value = start_66 + value, b22: block {
->>>>>>> origin/main
         l23: loop {
             break_if b22 (value - start_66) < 2;
             q = x /u 100_i64;
-<<<<<<< HEAD
-            tens = local.tee start_66(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, (48 + start_66) - (tens * 10));
-            builtin::array_set_u8(arr, value - 2, 48 + tens);
-||||||| 6c1b356354e
-            tens = local.tee start_75(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, ((48 + start_75) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
-=======
             tens = local.tee is_negative_20(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
-            builtin::array_set_u8(arr, value - 1, ((48 + is_negative_20) - (tens * 10)) & 255);
-            builtin::array_set_u8(arr, value - 2, (48 + tens) & 255);
->>>>>>> origin/main
+            builtin::array_set_u8(arr, value - 1, (48 + is_negative_20) - (tens * 10));
+            builtin::array_set_u8(arr, value - 2, 48 + tens);
             value = value - 2;
             x = q;
             continue l23;
         };
-<<<<<<< HEAD
-    }, if value > is_negative_20 {
-        builtin::array_set_u8(arr, is_negative_20, 48 + builtin::i32_wrap_i64(x %u 10_i64));
-||||||| 6c1b356354e
-    }, if value > is_negative_20 {
-        builtin::array_set_u8(arr, is_negative_20, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
-=======
     }, if value > start_66 {
-        builtin::array_set_u8(arr, start_66, (48 + builtin::i32_wrap_i64(x %u 10_i64)) & 255);
->>>>>>> origin/main
+        builtin::array_set_u8(arr, start_66, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }, ref.null none;
 }
 
@@ -210,8 +178,8 @@ fn "core:json/core:json/to_string<serde_bound_driven_absence.wado/UsedForSeriali
     $thread_$inline_serde_bound_driven_absence_wado_UsedForSerialize_core_serde_Serialize__serialize_core_json_JsonSerializer__sroa_self_x__1: block {
         buf.used = 1;
         builtin::array_copy<u8>(buf.repr, 0, global:core:json::$const_obj_14, 0, 1);
-        "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, global:core:json::$const_obj_13, 0);
-        if @likely(ref.is_null(local.tee r("core:json/core/json/serialize_into<i32>$sroa[value.value]"(buf, value)))) {
+        "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, global:core:json::$const_obj_13, 0);
+        if @likely(ref.is_null(local.tee r("core:json/core:json/serialize_into<i32>$sroa[value.value]"(buf, value)))) {
         } else {
             $qm_e_19 = ref.as_non_null(r);
             cold_path;
@@ -228,11 +196,11 @@ fn "core:json/core:json/to_string<serde_bound_driven_absence.wado/UsedForSeriali
         break $thread_$inline_serde_bound_driven_absence_wado_UsedForSerialize_core_serde_Serialize__serialize_core_json_JsonSerializer__sroa_self_x__1;
     };
     if ref.test "core:prelude/types.wado//Option<char>::Some"(trailing_char) {
-        start_62 = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
-        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, start_62);
+        value = ref.cast "core:prelude/types.wado//Option<char>::Some"(trailing_char).payload_0;
+        "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, value);
     } else {
     }
-    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; start_62 = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(start_62)), 0, $array_clone_src_1, 0, start_62); $array_clone_dst_2, used: start_62 } };
+    return struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:serde/SerializeError>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; value = buf.used; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>(value)), 0, $array_clone_src_1, 0, value); $array_clone_dst_2, used: value } };
 }
 
 fn "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {
@@ -309,141 +277,29 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used + 4);
     }
-<<<<<<< HEAD
-    self.used = local.tee byte(self.used) + $inline_encode_char_7: block -> i32 {
-||||||| 6c1b356354e
-    self.used = local.tee byte(self.used) + $inline_encode_char_0: block -> i32 {
-=======
-    self.used = local.tee new_used(self.used) + $inline_encode_char_0: block -> i32 {
->>>>>>> origin/main
+    self.used = local.tee new_used(self.used) + $inline_encode_char_7: block -> i32 {
         repr = self.repr;
         if c <u 128 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, c);
+            builtin::array_set_u8(repr, new_used, c);
             break $inline_encode_char_7: 1;
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, c & 255);
-            break $inline_encode_char_0: 1;
-=======
-            builtin::array_set_u8(repr, new_used, c & 255);
-            break $inline_encode_char_0: 1;
->>>>>>> origin/main
         }
         if c <u 2048 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, 192 | (c >>u 6));
-            builtin::array_set_u8(repr, byte + 1, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 192 | (c >>u 6));
+            builtin::array_set_u8(repr, new_used + 1, 128 | (c & 63));
             break $inline_encode_char_7: 2;
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | (c & 63)) & 255);
-            break $inline_encode_char_0: 2;
-=======
-            builtin::array_set_u8(repr, new_used, (192 | (c >>u 6)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | (c & 63)) & 255);
-            break $inline_encode_char_0: 2;
->>>>>>> origin/main
         }
         if c <u 65536 {
-<<<<<<< HEAD
-            builtin::array_set_u8(repr, byte, 224 | (c >>u 12));
-            builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 6) & 63));
-            builtin::array_set_u8(repr, byte + 2, 128 | (c & 63));
+            builtin::array_set_u8(repr, new_used, 224 | (c >>u 12));
+            builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 6) & 63));
+            builtin::array_set_u8(repr, new_used + 2, 128 | (c & 63));
             break $inline_encode_char_7: 3;
-||||||| 6c1b356354e
-            builtin::array_set_u8(repr, byte, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, byte + 2, (128 | (c & 63)) & 255);
-            break $inline_encode_char_0: 3;
-=======
-            builtin::array_set_u8(repr, new_used, (224 | (c >>u 12)) & 255);
-            builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 6) & 63)) & 255);
-            builtin::array_set_u8(repr, new_used + 2, (128 | (c & 63)) & 255);
-            break $inline_encode_char_0: 3;
->>>>>>> origin/main
         }
-<<<<<<< HEAD
-        builtin::array_set_u8(repr, byte, 240 | (c >>u 18));
-        builtin::array_set_u8(repr, byte + 1, 128 | ((c >>u 12) & 63));
-        builtin::array_set_u8(repr, byte + 2, 128 | ((c >>u 6) & 63));
-        builtin::array_set_u8(repr, byte + 3, 128 | (c & 63));
+        builtin::array_set_u8(repr, new_used, 240 | (c >>u 18));
+        builtin::array_set_u8(repr, new_used + 1, 128 | ((c >>u 12) & 63));
+        builtin::array_set_u8(repr, new_used + 2, 128 | ((c >>u 6) & 63));
+        builtin::array_set_u8(repr, new_used + 3, 128 | (c & 63));
         break $inline_encode_char_7: 4;
-||||||| 6c1b356354e
-        builtin::array_set_u8(repr, byte, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, byte + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, byte + 3, (128 | (c & 63)) & 255);
-        break $inline_encode_char_0: 4;
-=======
-        builtin::array_set_u8(repr, new_used, (240 | (c >>u 18)) & 255);
-        builtin::array_set_u8(repr, new_used + 1, (128 | ((c >>u 12) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 2, (128 | ((c >>u 6) & 63)) & 255);
-        builtin::array_set_u8(repr, new_used + 3, (128 | (c & 63)) & 255);
-        break $inline_encode_char_0: 4;
->>>>>>> origin/main
     };
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(self, s) {
-    let $qm_e_10: ref "core:serde//SerializeError";
-    let new_used_28: i32;
-    let start_29: i32;
-    let r: ref null "core:serde//SerializeError";
-    if @unlikely(local.tee new_used_28(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_28);
-    }
-    start_29 = s.used;
-    s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_14, 0, 1);
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_13, 0);
-    if @likely(ref.is_null(local.tee r("core:json/core/json/serialize_into<i32>$sroa[value.value]"(s, self)))) {
-    } else {
-        $qm_e_10 = ref.as_non_null(r);
-        cold_path;
-        return $qm_e_10;
-    }
-    if @unlikely(local.tee self(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, self);
-    }
-    start_29 = s.used;
-    s.used = self;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_12, 0, 1);
-    return ref.null none;
-}
-
-=======
-fn "core:serde/serde_bound_driven_absence.wado/UsedForSerialize^core:serde/Serialize::serialize<core:json/JsonSerializer>$sroa[self.x,s.buf]"(self, s) {
-    let $qm_e_10: ref "core:serde//SerializeError";
-    let new_used_28: i32;
-    let start_29: i32;
-    let r: ref null "core:serde//SerializeError";
-    if @unlikely(local.tee new_used_28(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_28);
-    }
-    start_29 = s.used;
-    s.used = new_used_28;
-    builtin::array_copy<u8>(s.repr, start_29, global:core:serde::$const_obj_14, 0, 1);
-    "core:json/core:json/write_plain_key<&core:prelude/string.wado/String>$spec0"(s, global:core:serde::$const_obj_13, 0);
-    if @likely(ref.is_null(local.tee r("core:json/core:json/serialize_into<i32>$sroa[value.value]"(s, self)))) {
-    } else {
-        $qm_e_10 = ref.as_non_null(r);
-        cold_path;
-        return $qm_e_10;
-    }
-    if @unlikely(local.tee self(s.used + 1) > builtin::array_len(s.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, self);
-    }
-    new_used_28 = s.used;
-    s.used = self;
-    builtin::array_copy<u8>(s.repr, new_used_28, global:core:serde::$const_obj_12, 0, 1);
-    return ref.null none;
-}
-
->>>>>>> origin/main
 export fn "serde_bound_driven_absence.wado/$cm_export__run" as "run"

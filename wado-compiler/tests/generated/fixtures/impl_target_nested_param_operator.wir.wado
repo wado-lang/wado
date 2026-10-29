@@ -1355,16 +1355,8 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                 builtin::array_set_u8(arr, digit_count, (if offset < 10 -> i32 {
                     48 + offset;
                 } else {
-<<<<<<< HEAD
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }));
-||||||| 6c1b356354e
-                    select i32(upper, (65 + bits_per_digit) - 10, (97 + bits_per_digit) - 10);
-                }) & 255);
-=======
                     select i32(upper, (65 + offset) - 10, (97 + offset) - 10);
-                }) & 255);
->>>>>>> origin/main
+                }));
                 val_i64 = val_i64 >>u $licm_arith_13;
                 continue l194;
             };
@@ -3224,22 +3216,10 @@ fn "impl_target_nested_param_operator.wado/impl_target_nested_param_operator.wad
     $load_1 = rhs.used;
     $array_clone_src_1 = rhs.repr;
     $array_clone_i_4 = 0;
-<<<<<<< HEAD
     b453: block {
         l454: loop {
             break_if b453 $array_clone_i_4 >= $load_1;
-            $av_26 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4)).used;
-||||||| 6c1b356354e
-    b459: block {
-        l460: loop {
-            break_if b459 $array_clone_i_4 >= $load_1;
-            $av_26 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_dst_2, $array_clone_i_4)).used;
-=======
-    b459: block {
-        l460: loop {
-            break_if b459 $array_clone_i_4 >= $load_1;
             $av_26 = local.tee v_13(builtin::array_get_value<ref "core:prelude/string.wado//String">($array_clone_src_1, $array_clone_i_4)).used;
->>>>>>> origin/main
             v_13 = struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = v_13.repr; let $array_clone_dst_7: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_7(builtin::array_new<u8>($av_26)), 0, $array_clone_src_6, 0, $av_26); $array_clone_dst_7, used: $av_26 };
             $array_clone_i_4 = $array_clone_i_4 + 1;
             if @unlikely(local.tee $av_26(self.used) >= builtin::array_len(self.repr)) {

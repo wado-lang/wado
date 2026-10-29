@@ -89,33 +89,33 @@ type "functype//cross_module_type_identity.wado/$cm_export__run" = fn();  // Typ
 
 type "functype//cross_module_type_identity.wado/run$cold0" = fn(i32);  // TypeId(23)
 
-type "functype//./sub/cross_module_type_identity_util.wado/sum_shapes" = fn(ref "core:prelude//List<cross_module_type_identity.wado/Shape>") -> i32;  // TypeId(24)
+type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(24)
 
-type "functype//core:prelude/primitive.wado/write_decimal_digits" = fn(ref Array<u8>, i32, u64, i32);  // TypeId(25)
+type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(25)
 
-type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32;  // TypeId(26)
+type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/string.wado/encode_char" = fn(ref Array<u8>, i32, u32) -> i32;  // TypeId(27)
+type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(27)
 
-type "functype//core:prelude/types.wado/copy_result" = fn(i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(28)
+type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(28)
 
-type "functype//core:prelude/types.wado/cm_await_copy" = fn(i32) -> i32;  // TypeId(29)
+type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(29)
 
-type "functype//core:rt/gc_array_to_memory" = fn(ref Array<u8>, i32, i32, i32);  // TypeId(30)
+type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(30)
 
-type "functype//core:rt/log_stderr" = fn(ref Array<u8>, i32);  // TypeId(31)
+type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(31)
 
-type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(32)
+type "functype//core:rt/unreachable" = fn();  // TypeId(32)
 
-type "functype//core:rt/unreachable" = fn();  // TypeId(33)
+type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(33)
 
-type "functype//core:rt/cm_lower_list_u8" = fn(ref Array<u8>, i32, i32) -> i64;  // TypeId(34)
+type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(34)
 
-type "functype//core:rt/cm_await_blocked" = fn(i32, i32) -> i32;  // TypeId(35)
+type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(35)
 
-type "functype//core:rt/cm_stream_write_once" = fn(i32, i32, i32) -> i32;  // TypeId(36)
+type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(36)
 
-type "functype//core:rt/cm_stream_write_raw_all_u8" = fn(i32, ref Array<u8>, i32, i32) -> "core:prelude/types.wado//enum:CopyResult";  // TypeId(37)
+type "functype//sub/cross_module_type_identity_util.wado/sum_shapes" = fn(ref "core:prelude//List<cross_module_type_identity.wado/Shape>") -> i32;  // TypeId(37)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::new" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/format.wado//Formatter";  // TypeId(38)
 
@@ -151,17 +151,11 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<c
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(54)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(55)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(55)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(55)
->>>>>>> origin/main
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(57)
 
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(58)
 
@@ -196,7 +190,7 @@ fn "cross_module_type_identity.wado/$template_segment$cross_module_type_identity
 
 fn "cross_module_type_identity.wado/$cm_export__run"() {
     let result: i32;
-    if @unlikely(local.tee result("./sub/cross_module_type_identity_util.wado/sum_shapes"(struct.new "core:prelude//List<cross_module_type_identity.wado/Shape>" { repr: array.new_fixed<ref "cross_module_type_identity.wado//Shape">(struct.new "cross_module_type_identity.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "cross_module_type_identity.wado//CircleData" { radius: 10 } }, struct.new "cross_module_type_identity.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "cross_module_type_identity.wado//RectData" { width: 5 } }), used: 2 })) != 15) {
+    if @unlikely(local.tee result("sub/cross_module_type_identity_util.wado/sum_shapes"(struct.new "core:prelude//List<cross_module_type_identity.wado/Shape>" { repr: array.new_fixed<ref "cross_module_type_identity.wado//Shape">(struct.new "cross_module_type_identity.wado//Shape::Circle" { discriminant: 0, payload_0: struct.new "cross_module_type_identity.wado//CircleData" { radius: 10 } }, struct.new "cross_module_type_identity.wado//Shape::Rect" { discriminant: 1, payload_0: struct.new "cross_module_type_identity.wado//RectData" { width: 5 } }), used: 2 })) != 15) {
         cold_path;
         "cross_module_type_identity.wado/run$cold0"(result);
         unreachable;
@@ -214,93 +208,21 @@ result: "), used: 94 }, s1: struct.new "core:prelude/string.wado//String" { repr
     unreachable;
 }
 
-fn "./sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {
-    let total: i32;
-    let c: ref "cross_module_type_identity.wado//CircleData";
-    let r: ref "cross_module_type_identity.wado//RectData";
-    let end: i32;
-    let ref_val: ref "cross_module_type_identity.wado//Shape";
-    let $sroa_$iter_0_repr_16: ref "Array<cross_module_type_identity.wado/Shape>";
-    let $sroa_$iter_0_index_17: i32;
-    total = 0;
-    end = shapes.used;
-    $sroa_$iter_0_repr_16 = shapes.repr;
-    $sroa_$iter_0_index_17 = 0;
-    b5: block {
-        l6: loop {
-            break_if b5 ((($sroa_$iter_0_index_17 >= end) | (($sroa_$iter_0_index_17 + 1) >= end)) | ((($sroa_$iter_0_index_17 + 1) + 1) >= end)) | (((($sroa_$iter_0_index_17 + 1) + 1) + 1) >= end);
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            continue l6;
-        };
-    };
-    b11: block {
-        l12: loop {
-            break_if b11 $sroa_$iter_0_index_17 >= end;
-            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
-            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
-            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
-                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
-                total = total + c.radius;
-            } else {
-                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
-                total = total + r.width;
-            }
-            continue l12;
-        };
-    };
-    return total;
-}
-
 fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_count) {
     let q: u64;
     let pair: i32;
     let tens: i32;
     digit_count = offset + digit_count;
-    b14: block {
-        l15: loop {
-            break_if b14 (digit_count - offset) < 2;
+    b5: block {
+        l6: loop {
+            break_if b5 (digit_count - offset) < 2;
             q = val /u 100_i64;
             tens = local.tee pair(builtin::i32_wrap_i64(val - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, digit_count - 1, (48 + pair) - (tens * 10));
             builtin::array_set_u8(arr, digit_count - 2, 48 + tens);
             digit_count = digit_count - 2;
             val = q;
-            continue l15;
+            continue l6;
         };
     };
     if digit_count > offset {
@@ -427,9 +349,9 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
-    b42: block {
-        l43: loop {
-            break_if b42 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
+    b33: block {
+        l34: loop {
+            break_if b33 (i > $licm_arith_7) | ((i + 8) > $licm_arith_7);
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
@@ -438,22 +360,22 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l43;
+            continue l34;
         };
     };
-    b44: block {
-        l45: loop {
-            break_if b44 i > $licm_arith_7;
+    b35: block {
+        l36: loop {
+            break_if b35 i > $licm_arith_7;
             at = src_start + i;
             w = ((((((builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 1)) << 8_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 2)) << 16_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 3)) << 24_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 4)) << 32_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 5)) << 40_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 6)) << 48_i64)) | (builtin::i64_extend_i32_u(builtin::array_get_value_u8(arr, at + 7)) << 56_i64);
             builtin::store_i64(ptr + i, w);
             i = i + 8;
-            continue l45;
+            continue l36;
         };
     };
-    b46: block {
-        l47: loop {
-            break_if b46 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
+    b37: block {
+        l38: loop {
+            break_if b37 (((i >= len) | ((i + 1) >= len)) | (((i + 1) + 1) >= len)) | ((((i + 1) + 1) + 1) >= len);
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
@@ -462,15 +384,15 @@ fn "core:rt/gc_array_to_memory"(arr, src_start, ptr, len) {
             i = i + 1;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l47;
+            continue l38;
         };
     };
-    b48: block {
-        l49: loop {
-            break_if b48 i >= len;
+    b39: block {
+        l40: loop {
+            break_if b39 i >= len;
             builtin::store_u8(ptr + i, builtin::array_get_value_u8(arr, src_start + i));
             i = i + 1;
-            continue l49;
+            continue l40;
         };
     };
 }
@@ -537,7 +459,7 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
     $mv$data$start = builtin::i32_wrap_i64("core:rt/cm_lower_list_u8"($mv$data$repr, $mv$data$start, $mv$data$end));
     taken = 0;
     block {
-        l54: loop {
+        l45: loop {
             delivered_6 = local.tee written("core:rt/cm_stream_write_once"(handle, $mv$data$start + taken, $mv$data$end - taken)) >>u 4;
             written = "core:prelude/types.wado/copy_result"(written);
             taken = taken + delivered_6;
@@ -545,9 +467,81 @@ fn "core:rt/cm_stream_write_raw_all_u8"(handle, $mv$data$repr, $mv$data$start, $
                 drop("mem/realloc"($mv$data$start, $mv$data$end, 1, 0));
                 return written;
             }
+            continue l45;
+        };
+    };
+}
+
+fn "sub/cross_module_type_identity_util.wado/sum_shapes"(shapes) {
+    let total: i32;
+    let c: ref "cross_module_type_identity.wado//CircleData";
+    let r: ref "cross_module_type_identity.wado//RectData";
+    let end: i32;
+    let ref_val: ref "cross_module_type_identity.wado//Shape";
+    let $sroa_$iter_0_repr_16: ref "Array<cross_module_type_identity.wado/Shape>";
+    let $sroa_$iter_0_index_17: i32;
+    total = 0;
+    end = shapes.used;
+    $sroa_$iter_0_repr_16 = shapes.repr;
+    $sroa_$iter_0_index_17 = 0;
+    b47: block {
+        l48: loop {
+            break_if b47 ((($sroa_$iter_0_index_17 >= end) | (($sroa_$iter_0_index_17 + 1) >= end)) | ((($sroa_$iter_0_index_17 + 1) + 1) >= end)) | (((($sroa_$iter_0_index_17 + 1) + 1) + 1) >= end);
+            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
+                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
+                total = total + c.radius;
+            } else {
+                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
+                total = total + r.width;
+            }
+            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
+                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
+                total = total + c.radius;
+            } else {
+                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
+                total = total + r.width;
+            }
+            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
+                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
+                total = total + c.radius;
+            } else {
+                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
+                total = total + r.width;
+            }
+            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
+                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
+                total = total + c.radius;
+            } else {
+                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
+                total = total + r.width;
+            }
+            continue l48;
+        };
+    };
+    b53: block {
+        l54: loop {
+            break_if b53 $sroa_$iter_0_index_17 >= end;
+            ref_val = builtin::array_get_value<ref "cross_module_type_identity.wado//Shape">($sroa_$iter_0_repr_16, $sroa_$iter_0_index_17);
+            $sroa_$iter_0_index_17 = $sroa_$iter_0_index_17 + 1;
+            if ref.test "cross_module_type_identity.wado//Shape::Circle"(ref_val) {
+                c = ref.cast "cross_module_type_identity.wado//Shape::Circle"(ref_val).payload_0;
+                total = total + c.radius;
+            } else {
+                r = ref.cast "cross_module_type_identity.wado//Shape::Rect"(ref_val).payload_0;
+                total = total + r.width;
+            }
             continue l54;
         };
     };
+    return total;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"(buf) {

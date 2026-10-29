@@ -128,19 +128,9 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(49)
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(50)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(50)
 
-<<<<<<< HEAD
 type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(51)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(51)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(52)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(51)
-
-type "functype//core:rt/write_string_to_stream$dae[add_newline]" = fn(i32, ref Array<u8>, i32);  // TypeId(52)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -161,8 +151,6 @@ fn "half_literal.wado/run"() {
     let bits_111: u32;
     let sign: u16;
     let exp: i32;
-    let full: u32;
-    let shift_118: u32;
     let kept_119: u16;
     let half_130: u32;
     let v_141: f32;
@@ -198,7 +186,7 @@ fn "half_literal.wado/run"() {
     };
     block {
     };
-    exp = $inline_f16__from_f32_27: block -> u16 {
+    bits_111 = $inline_f16__from_f32_27: block -> u16 {
         sign = (local.tee bits_111(builtin::i32_reinterpret_f32(black_box(0.33325195_f32))) >>u 16) & 32768;
         exp = (bits_111 >>u 23) & 255;
         bits_111 = bits_111 & 8388607;
@@ -212,23 +200,23 @@ fn "half_literal.wado/run"() {
             if exp < -10 {
                 break $inline_f16__from_f32_27: sign;
             }
-            full = bits_111 | 8388608;
-            shift_118 = 14 - exp;
-            kept_119 = (full >>u shift_118) & 65535;
-            kept_119 = $inline_round_to_even_32: block -> u16 {
-                half_130 = 1 << (shift_118 - 1);
-                if local.tee shift_118(full & ((1 << shift_118) - 1)) >u half_130 {
+            bits_111 = bits_111 | 8388608;
+            exp = 14 - exp;
+            kept_119 = (bits_111 >>u exp) & 65535;
+            bits_111 = $inline_round_to_even_32: block -> u16 {
+                half_130 = 1 << (exp - 1);
+                if local.tee bits_111(bits_111 & ((1 << exp) - 1)) >u half_130 {
                     break $inline_round_to_even_32: (kept_119 + 1) & 65535;
                 }
-                if (shift_118 == half_130) & ((kept_119 & 1) == 1) {
+                if (bits_111 == half_130) & ((kept_119 & 1) == 1) {
                     break $inline_round_to_even_32: (kept_119 + 1) & 65535;
                 }
                 break $inline_round_to_even_32: kept_119;
             };
-            break $inline_f16__from_f32_27: (sign | kept_119) & 65535;
+            break $inline_f16__from_f32_27: (sign | bits_111) & 65535;
         }
         exp = ((exp << 10) | (bits_111 >>u 13)) & 65535;
-        exp = $inline_round_to_even_34: block -> u16 {
+        bits_111 = $inline_round_to_even_34: block -> u16 {
             if local.tee bits_111(bits_111 & 8191) >u 4096 {
                 break $inline_round_to_even_34: (exp + 1) & 65535;
             }
@@ -237,57 +225,33 @@ fn "half_literal.wado/run"() {
             }
             break $inline_round_to_even_34: exp;
         };
-        break $inline_f16__from_f32_27: (sign | exp) & 65535;
+        break $inline_f16__from_f32_27: (sign | bits_111) & 65535;
     };
-    if @unlikely(13653 != exp) {
+    if @unlikely(13653 != bits_111) {
         cold_path;
-        "half_literal.wado/run$cold1"(13653, exp);
+        "half_literal.wado/run$cold1"(13653, bits_111);
         unreachable;
     }
-<<<<<<< HEAD
-    sign = $inline_bf16__from_f32_38: block -> u16 {
-        exp = builtin::i32_reinterpret_f32(local.tee v_141(black_box(1.0039063_f32)));
+    bits_111 = $inline_bf16__from_f32_38: block -> u16 {
+        bits_111 = builtin::i32_reinterpret_f32(local.tee v_141(black_box(1.0039063_f32)));
         if v_141 != v_141 {
-            break $inline_bf16__from_f32_38: (exp >>u 16) | 64;
-||||||| 6c1b356354e
-    kept_114 = $inline_bf16__from_f32_29: block -> u16 {
-        self_109 = builtin::i32_reinterpret_f32(local.tee v(black_box(1.0039063_f32)));
-        if v != v {
-            break $inline_bf16__from_f32_29: (((self_109 >>u 16) & 65535) | 64) & 65535;
-=======
-    self_109 = $inline_bf16__from_f32_29: block -> u16 {
-        self_109 = builtin::i32_reinterpret_f32(local.tee v(black_box(1.0039063_f32)));
-        if v != v {
-            break $inline_bf16__from_f32_29: (((self_109 >>u 16) & 65535) | 64) & 65535;
->>>>>>> origin/main
+            break $inline_bf16__from_f32_38: (bits_111 >>u 16) | 64;
         }
-        sign = exp >>u 16;
+        sign = bits_111 >>u 16;
         $inline_round_to_even_43: block -> u16 {
-            if local.tee exp(exp & 65535) >u 32768 {
+            if local.tee bits_111(bits_111 & 65535) >u 32768 {
                 break $inline_round_to_even_43: (sign + 1) & 65535;
             }
-            if (exp == 32768) & ((sign & 1) == 1) {
+            if (bits_111 == 32768) & ((sign & 1) == 1) {
                 break $inline_round_to_even_43: (sign + 1) & 65535;
             }
             break $inline_round_to_even_43: sign;
         };
         break $inline_bf16__from_f32_38;
     };
-<<<<<<< HEAD
-    if @unlikely(16256 != sign) {
-||||||| 6c1b356354e
-    if @unlikely(16256 != kept_114) {
-=======
-    if @unlikely(16256 != self_109) {
->>>>>>> origin/main
+    if @unlikely(16256 != bits_111) {
         cold_path;
-<<<<<<< HEAD
-        "half_literal.wado/run$cold0"(16256, sign);
-||||||| 6c1b356354e
-        "half_literal.wado/run$cold0"(16256, kept_114);
-=======
-        "half_literal.wado/run$cold0"(16256, self_109);
->>>>>>> origin/main
+        "half_literal.wado/run$cold0"(16256, bits_111);
         unreachable;
     }
 }
@@ -601,106 +565,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_sign"(sel
     }
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:prelude/half.wado/f16::from_f32"(v) {
-    let bits_1: u32;
-    let sign: u16;
-    let exp: i32;
-    let full: u32;
-    let shift_8: u32;
-    let kept_9: u16;
-    let half_20: u32;
-    sign = (local.tee bits_1(builtin::i32_reinterpret_f32(v)) >>u 16) & 32768;
-    exp = (bits_1 >>u 23) & 255;
-    bits_1 = bits_1 & 8388607;
-    if exp == 255 {
-        return (((sign | 31744) & 65535) | select u16(bits_1 == 0, 0, 512)) & 65535;
-    }
-    if local.tee exp(exp - 112) >= 31 {
-        return (sign | 31744) & 65535;
-    }
-    if exp <= 0 {
-        if exp < -10 {
-            return sign;
-        }
-        full = bits_1 | 8388608;
-        shift_8 = 14 - exp;
-        kept_9 = (full >>u shift_8) & 65535;
-        kept_9 = $inline_round_to_even_4: block -> u16 {
-            half_20 = 1 << (shift_8 - 1);
-            if local.tee shift_8(full & ((1 << shift_8) - 1)) >u half_20 {
-                break $inline_round_to_even_4: (kept_9 + 1) & 65535;
-            }
-            if (shift_8 == half_20) & ((kept_9 & 1) == 1) {
-                break $inline_round_to_even_4: (kept_9 + 1) & 65535;
-            }
-            break $inline_round_to_even_4: kept_9;
-        };
-        return (sign | kept_9) & 65535;
-    }
-    exp = ((exp << 10) | (bits_1 >>u 13)) & 65535;
-    exp = $inline_round_to_even_6: block -> u16 {
-        if local.tee bits_1(bits_1 & 8191) >u 4096 {
-            break $inline_round_to_even_6: (exp + 1) & 65535;
-        }
-        if (bits_1 == 4096) & ((exp & 1) == 1) {
-            break $inline_round_to_even_6: (exp + 1) & 65535;
-        }
-        break $inline_round_to_even_6: exp;
-    };
-    return (sign | exp) & 65535;
-}
-
-=======
-fn "core:prelude/half.wado/f16::from_f32"(v) {
-    let bits_1: u32;
-    let sign: u16;
-    let exp: i32;
-    let kept_9: u16;
-    let half_20: u32;
-    sign = (local.tee bits_1(builtin::i32_reinterpret_f32(v)) >>u 16) & 32768;
-    exp = (bits_1 >>u 23) & 255;
-    bits_1 = bits_1 & 8388607;
-    if exp == 255 {
-        return (((sign | 31744) & 65535) | select u16(bits_1 == 0, 0, 512)) & 65535;
-    }
-    if local.tee exp(exp - 112) >= 31 {
-        return (sign | 31744) & 65535;
-    }
-    if exp <= 0 {
-        if exp < -10 {
-            return sign;
-        }
-        bits_1 = bits_1 | 8388608;
-        exp = 14 - exp;
-        kept_9 = (bits_1 >>u exp) & 65535;
-        bits_1 = $inline_round_to_even_4: block -> u16 {
-            half_20 = 1 << (exp - 1);
-            if local.tee bits_1(bits_1 & ((1 << exp) - 1)) >u half_20 {
-                break $inline_round_to_even_4: (kept_9 + 1) & 65535;
-            }
-            if (bits_1 == half_20) & ((kept_9 & 1) == 1) {
-                break $inline_round_to_even_4: (kept_9 + 1) & 65535;
-            }
-            break $inline_round_to_even_4: kept_9;
-        };
-        return (sign | bits_1) & 65535;
-    }
-    exp = ((exp << 10) | (bits_1 >>u 13)) & 65535;
-    bits_1 = $inline_round_to_even_6: block -> u16 {
-        if local.tee bits_1(bits_1 & 8191) >u 4096 {
-            break $inline_round_to_even_6: (exp + 1) & 65535;
-        }
-        if (bits_1 == 4096) & ((exp & 1) == 1) {
-            break $inline_round_to_even_6: (exp + 1) & 65535;
-        }
-        break $inline_round_to_even_6: exp;
-    };
-    return (sign | bits_1) & 65535;
-}
-
->>>>>>> origin/main
 fn "core:prelude/primitive.wado/i64::abs"(x) {
     return select i64(x < 0_i64, 0_i64 - x, x);
 }

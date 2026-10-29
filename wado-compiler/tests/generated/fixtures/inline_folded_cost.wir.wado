@@ -41,15 +41,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(18)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(19)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
 
@@ -64,14 +58,8 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/$wasi:cli/stdout@0.3.0#write-via-stream from "wasi/$wasi:cli/stdout@0.3.0#write-via-stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-<<<<<<< HEAD
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-||||||| 6c1b356354e
-import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode";
-=======
 import fn wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode from "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode";
->>>>>>> origin/main
 import fn wasi/task-return from "wasi/task-return";
 
 global global:inline_folded_cost.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(103, 97, 109, 109, 97);
@@ -84,6 +72,7 @@ fn "inline_folded_cost.wado/run"() with Stdout {
     let start_30: i32;
     let start_234: i32;
     let $cm_pair_7: i64;
+    let self_514: i32;
     out_0 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     if @unlikely(1 > builtin::array_len(out_0.repr)) {
         cold_path;
@@ -156,31 +145,15 @@ fn "inline_folded_cost.wado/run"() with Stdout {
     "core:prelude/primitive.wado/write_decimal_digits"(out_0.repr, start_234, 3_i64, 1);
     start_30 = builtin::i32_wrap_i64(local.tee $cm_pair_7("wasi/stream-new"()));
     start_234 = builtin::i32_wrap_i64($cm_pair_7 >> 32_i64);
-<<<<<<< HEAD
-    $moved_4 = "inline_folded_cost.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_30; start_30 = 0; $moved_4);
-    start_30 = start_234;
-    start_234 = 0;
-    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee start_234(out_0.used) + 1)), 0, out_0.repr, 0, start_234);
-    builtin::array_set_u8($load_2, start_234, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = start_30;
-        start_234 = start_234 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, $load_2, 0, start_234);
-    });
-    "wasi/stream-drop-writable"(start_234 = start_30; start_30 = 0; start_234);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_234 = $moved_4; $moved_4 = 0; start_234);
-||||||| 6c1b356354e
-    $moved_4 = "inline_folded_cost.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4 = start_30; start_30 = 0; $moved_4);
-    start_30 = start_234;
-    start_234 = 0;
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_30, out_0.repr, out_0.used);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"(start_30 = $moved_4; $moved_4 = 0; start_30);
-=======
     start_30 = "inline_folded_cost.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(start_30);
-    "core:rt/write_string_to_stream$dae[add_newline]"(start_234, out_0.repr, out_0.used);
+    builtin::array_copy<u8>(local.tee $load_2(builtin::array_new<u8>(local.tee self_514(out_0.used) + 1)), 0, out_0.repr, 0, self_514);
+    builtin::array_set_u8($load_2, self_514, 10);
+    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
+        self_514 = self_514 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(start_234, $load_2, 0, self_514);
+    });
+    "wasi/stream-drop-writable"(start_234);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(start_30);
->>>>>>> origin/main
 }
 
 fn "inline_folded_cost.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -214,34 +187,6 @@ fn "core:prelude/primitive.wado/write_decimal_digits"(arr, offset, val, digit_co
     }
 }
 
-<<<<<<< HEAD
-||||||| 6c1b356354e
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        let $arg_spill_1: i32;
-        $arg_spill_1 = tx;
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($arg_spill_1, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"($mv$message$used = tx; tx = 0; $mv$message$used);
-}
-
-=======
-fn "core:rt/write_string_to_stream$dae[add_newline]"(tx, $mv$message$repr, $mv$message$used) {
-    let new_repr: ref Array<u8>;
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>($mv$message$used + 1)), 0, $mv$message$repr, 0, $mv$message$used);
-    builtin::array_set_u8(new_repr, $mv$message$used, 10);
-    drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        $mv$message$used = $mv$message$used + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(tx, new_repr, 0, $mv$message$used);
-    });
-    "wasi/stream-drop-writable"(tx);
-}
-
->>>>>>> origin/main
 fn "core:rt/unreachable"() {
     cold_path;
     unreachable;

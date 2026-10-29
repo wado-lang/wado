@@ -30,15 +30,9 @@ type "functype//core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[ret
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(14)
-||||||| 6c1b356354e
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(14)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(14)
->>>>>>> origin/main
 
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
@@ -60,21 +54,18 @@ import fn wasi/task-return from "wasi/task-return";
 global global:opt_lbf_fallthrough_block.wado::$const_obj_0: ref Array<u8> = array.new_fixed<u8>(79, 75, 58, 32, 52, 50);
 
 fn "opt_lbf_fallthrough_block.wado/run"() with Stdout {
-    let $moved_4_109: i32;
     let $cm_pair_7_112: i64;
     let $sroa_$pattern_temp_0_0_13_118: i32;
     let $sroa_$pattern_temp_0_1_14_119: i32;
     let new_repr: ref Array<u8>;
     $sroa_$pattern_temp_0_0_13_118 = builtin::i32_wrap_i64(local.tee $cm_pair_7_112("wasi/stream-new"()));
     $sroa_$pattern_temp_0_1_14_119 = builtin::i32_wrap_i64($cm_pair_7_112 >> 32_i64);
-    $moved_4_109 = "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_109 = $sroa_$pattern_temp_0_0_13_118; $sroa_$pattern_temp_0_0_13_118 = 0; $moved_4_109);
-    $sroa_$pattern_temp_0_0_13_118 = $sroa_$pattern_temp_0_1_14_119;
-    $sroa_$pattern_temp_0_1_14_119 = 0;
+    $sroa_$pattern_temp_0_0_13_118 = "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_118);
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, global:opt_lbf_fallthrough_block.wado::$const_obj_0, 0, 6);
     builtin::array_set_u8(new_repr, 6, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_118, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_119 = $sroa_$pattern_temp_0_0_13_118; $sroa_$pattern_temp_0_0_13_118 = 0; $sroa_$pattern_temp_0_1_14_119);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_119 = $moved_4_109; $moved_4_109 = 0; $sroa_$pattern_temp_0_1_14_119);
+    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_119, new_repr);
+    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_119);
+    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_118);
 }
 
 fn "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(data) with Stdout {
@@ -82,42 +73,7 @@ fn "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-
 }
 
 fn "opt_lbf_fallthrough_block.wado/$cm_export__run"() {
-<<<<<<< HEAD
     "opt_lbf_fallthrough_block.wado/run"();
-||||||| 6c1b356354e
-    let $moved_4_10: i32;
-    let $cm_pair_7_13: i64;
-    let $sroa_$pattern_temp_0_0_13_19: i32;
-    let $sroa_$pattern_temp_0_1_14_20: i32;
-    let new_repr: ref Array<u8>;
-    let $sroa_message_repr_50: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_13_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7_13("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_20 = builtin::i32_wrap_i64($cm_pair_7_13 >> 32_i64);
-    $moved_4_10 = "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($moved_4_10 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $moved_4_10);
-    $sroa_$pattern_temp_0_0_13_19 = $sroa_$pattern_temp_0_1_14_20;
-    $sroa_$pattern_temp_0_1_14_20 = 0;
-    $sroa_message_repr_50 = array.new_data<u8>("OK: 42");
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, $sroa_message_repr_50, 0, 6);
-    builtin::array_set_u8(new_repr, 6, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_0_13_19, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_20 = $sroa_$pattern_temp_0_0_13_19; $sroa_$pattern_temp_0_0_13_19 = 0; $sroa_$pattern_temp_0_1_14_20);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_1_14_20 = $moved_4_10; $moved_4_10 = 0; $sroa_$pattern_temp_0_1_14_20);
-=======
-    let $cm_pair_7_13: i64;
-    let $sroa_$pattern_temp_0_0_13_19: i32;
-    let $sroa_$pattern_temp_0_1_14_20: i32;
-    let new_repr: ref Array<u8>;
-    let $sroa_message_repr_50: ref Array<u8>;
-    $sroa_$pattern_temp_0_0_13_19 = builtin::i32_wrap_i64(local.tee $cm_pair_7_13("wasi/stream-new"()));
-    $sroa_$pattern_temp_0_1_14_20 = builtin::i32_wrap_i64($cm_pair_7_13 >> 32_i64);
-    $sroa_$pattern_temp_0_0_13_19 = "opt_lbf_fallthrough_block.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_$pattern_temp_0_0_13_19);
-    $sroa_message_repr_50 = array.new_data<u8>("OK: 42");
-    builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(7)), 0, $sroa_message_repr_50, 0, 6);
-    builtin::array_set_u8(new_repr, 6, 10);
-    "core:rt/cm_stream_write_raw_all_u8$spec1$sroa[data.repr]$dae[return]"($sroa_$pattern_temp_0_1_14_20, new_repr);
-    "wasi/stream-drop-writable"($sroa_$pattern_temp_0_1_14_20);
-    "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_$pattern_temp_0_0_13_19);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 
