@@ -32,10 +32,8 @@ use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, cold_paths, wide_arith, wide_int_literal};
 use crate::name::{
-    COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, case_construct_helper_name,
-    case_extract_helper_name, case_ref_helper_name, closure_capture_field, field_get_helper_name,
-    field_ref_helper_name, hole_fmt_helper_name, hole_get_helper_name, hole_ref_helper_name,
-    template_segment_helper_name, variant_tag_helper_name,
+    COLD_PATH_INTRINSIC, FunctionId, KNOWN_COLD_PATH_INTRINSIC, closure_capture_field,
+    variant_tag_helper_name,
 };
 use crate::nir::{
     FuncCell, FuncId, FuncRef, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember,
@@ -50,6 +48,7 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::primitive::PrimitiveType;
+use crate::reflect_marker::{BridgeCallee, bridge_callee};
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, LetStorage, MonomorphInfo,
     ResolvedType, StructDef, StructFields, TirBinaryOp, TirBlock, TirCapture, TirEnum, TirEnumCase,
@@ -132,7 +131,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
         builtin_registry,
         wasm_assets,
         trait_env,
-        #[cfg(debug_assertions)]
         pruned,
     } = flat;
 
@@ -164,7 +162,6 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan, profiler: &dyn SpanEmitter)
             base_len,
             #[cfg(debug_assertions)]
             shadowed: Vec::new(),
-            #[cfg(debug_assertions)]
             pruned,
         }),
     };
@@ -293,7 +290,6 @@ struct Interner {
     #[cfg(debug_assertions)]
     shadowed: Vec<String>,
     /// What `prelower_reach` dropped before this phase — see `resolve`.
-    #[cfg(debug_assertions)]
     pruned: IndexSet<FunctionId>,
 }
 
@@ -305,7 +301,8 @@ impl Interner {
         if let Some(&id) = self.ids.get(&key) {
             return id;
         }
-        #[cfg(debug_assertions)]
+        // Checked in every build: a release build would otherwise bind the call
+        // to a body-less stub and emit a component that fails to link.
         assert!(
             !self.pruned.contains(&key),
             "[lower] `{key:?}` was pruned before `lower` and then minted here: \
@@ -2458,47 +2455,11 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// The `N` type args a bridge marker names: the call's own, else the
-    /// method's, else the `impl`'s.
-    fn marker_type_args<const N: usize>(
-        type_args: &[tir::TypeId],
-        mi: Option<&tir::MonomorphInfo>,
-        marker: &str,
-    ) -> [tir::TypeId; N] {
-        let ta = if type_args.is_empty() {
-            let mi =
-                mi.unwrap_or_else(|| panic!("{marker} marker without type args or monomorph info"));
-            if mi.method_type_args.is_empty() {
-                &mi.impl_type_args
-            } else {
-                &mi.method_type_args
-            }
-        } else {
-            type_args
-        };
-        *ta.first_chunk::<N>()
-            .unwrap_or_else(|| panic!("{marker} marker expects {N} type args, got {ta:?}"))
-    }
-
-    /// A call of the bridge helper `name`, homed where `head_ty` is declared,
-    /// with a marker's arguments.
-    fn bridge_call(
-        &self,
-        head_ty: tir::TypeId,
-        name: String,
-        args: &[CallArg],
-        marker: &str,
-    ) -> ExprKind {
-        let module_source = self
-            .base
-            .type_table
-            .borrow()
-            .nominal_head(head_ty)
-            .map(|(_, m)| m)
-            .unwrap_or_else(|| panic!("{marker} marker on a type with no declaration"));
+    /// A call of the bridge helper `callee` with a marker's arguments.
+    fn bridge_call(&self, callee: BridgeCallee, args: &[CallArg]) -> ExprKind {
         let nir_func = nir::FunctionRef {
-            module_source,
-            name,
+            module_source: callee.module_source,
+            name: callee.name,
             monomorph_info: None,
             method_info: None,
         };
@@ -2528,13 +2489,11 @@ impl FunctionTranslator<'_, '_> {
         type_args: &[tir::TypeId],
         args: &[CallArg],
     ) -> Option<ExprKind> {
-        let mi = func.monomorph_info.as_ref();
-
         if func.is_builtin_named("variant_tag") && args.len() == 1 {
             // The `&V` receiver matches the marker's argument, so `discriminant`
             // is the single lowering for the tag read.
             let arg_ty = args[0].expr.type_id;
-            let (helper_name, variant_ty) = {
+            let callee = {
                 let tt = self.base.type_table.borrow();
                 // The marker's `&T` argument may already be lowered to `Box<V>`.
                 let peeled = tt.peel_refs(arg_ty);
@@ -2570,68 +2529,12 @@ impl FunctionTranslator<'_, '_> {
                         items.method_name(CompilerItem::ReflectVariantDiscriminant),
                     ),
                 };
-                (name, variant_ty)
+                BridgeCallee::homed(&tt, variant_ty, name, "variant_tag")
             };
-            return Some(self.bridge_call(variant_ty, helper_name, args, "variant_tag"));
+            return Some(self.bridge_call(callee, args));
         }
-
-        // A field read names the struct and the field type, a hole read the
-        // shape and the hole type.
-        for (builtin, helper_name) in [
-            (
-                "struct_field_get",
-                field_get_helper_name as fn(&str, &str) -> String,
-            ),
-            ("struct_field_ref", field_ref_helper_name),
-            ("hole_get", hole_get_helper_name),
-            ("hole_ref", hole_ref_helper_name),
-        ] {
-            if func.is_builtin_named(builtin) {
-                let ta = Self::marker_type_args::<2>(type_args, mi, builtin);
-                let name = {
-                    let tt = self.base.type_table.borrow();
-                    helper_name(
-                        &tt.mangle_type_arg_unboxed(ta[0]),
-                        &tt.mangle_type_arg_unboxed(ta[1]),
-                    )
-                };
-                return Some(self.bridge_call(ta[0], name, args, builtin));
-            }
-        }
-
-        // `hole_fmt<T>` and `template_segment<T>` name the shape only.
-        for (builtin, helper_name) in [
-            ("hole_fmt", hole_fmt_helper_name as fn(&str) -> String),
-            ("template_segment", template_segment_helper_name),
-        ] {
-            if func.is_builtin_named(builtin) {
-                let ta = Self::marker_type_args::<1>(type_args, mi, builtin);
-                let name =
-                    helper_name(&self.base.type_table.borrow().mangle_type_arg_unboxed(ta[0]));
-                return Some(self.bridge_call(ta[0], name, args, builtin));
-            }
-        }
-
-        let helper_name_for: fn(&str, &str) -> String =
-            if func.is_builtin_named("variant_case_extract") {
-                case_extract_helper_name
-            } else if func.is_builtin_named("variant_case_ref") {
-                case_ref_helper_name
-            } else if func.is_builtin_named("variant_case_construct") {
-                case_construct_helper_name
-            } else {
-                return None;
-            };
-
-        let ta = Self::marker_type_args::<2>(type_args, mi, "case bridge");
-        let name = {
-            let tt = self.base.type_table.borrow();
-            helper_name_for(
-                &tt.mangle_type_arg_unboxed(ta[0]),
-                &tt.mangle_type_arg_unboxed(ta[1]),
-            )
-        };
-        Some(self.bridge_call(ta[0], name, args, "case bridge"))
+        let callee = bridge_callee(&self.base.type_table.borrow(), func, type_args)?;
+        Some(self.bridge_call(callee, args))
     }
 
     fn convert_pattern(&self, pattern: &TirPattern) -> PatId {

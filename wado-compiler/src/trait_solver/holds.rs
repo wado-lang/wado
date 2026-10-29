@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    Asker, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
-    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ParamBound, Pin, Program,
+    RefRule, SolverType, Source, TraitDeclId, TypeDeclId,
 };
 use crate::hashmap::IndexSet;
 
@@ -47,17 +47,11 @@ impl Member {
     }
 }
 
-/// Whether `ty` satisfies `trait_`, asked from `scope`. `None` is "does not
-/// hold", which is also the answer to a question reaching itself through bounds.
+/// Whether `ty` satisfies `trait_`. `None` is "does not hold", which is also
+/// the answer to a question reaching itself through bounds.
 #[must_use]
-pub fn holds(
-    program: &Program,
-    env: &Env,
-    ty: &SolverType,
-    trait_: TraitDeclId,
-    scope: ModuleId,
-) -> Option<Holds> {
-    holds_with_args(program, env, ty, trait_, scope, &[])
+pub fn holds(program: &Program, env: &Env, ty: &SolverType, trait_: TraitDeclId) -> Option<Holds> {
+    holds_with_args(program, env, ty, trait_, &[])
 }
 
 /// [`holds`] where the asking bound writes arguments for the trait's own
@@ -68,13 +62,11 @@ pub fn holds_with_args(
     env: &Env,
     ty: &SolverType,
     trait_: TraitDeclId,
-    scope: ModuleId,
     args: &[SolverType],
 ) -> Option<Holds> {
     Query {
         program,
         env,
-        asker: Asker::Module(scope),
         asking: Vec::new(),
         member_next: false,
         at_itself: None,
@@ -90,7 +82,6 @@ pub fn holds_with_args(
 pub fn owed(
     program: &Program,
     env: &Env,
-    scope: ModuleId,
     mut requests: Vec<DerivationRequest>,
 ) -> Vec<DerivationRequest> {
     let mut seen = IndexSet::default();
@@ -106,7 +97,7 @@ pub fn owed(
             for member in decl.members_at(args) {
                 // A marker's bounds are written, so a member may not hold;
                 // that is the marker's error, reported where it is written.
-                if let Some(held) = holds(program, env, &member, request.trait_, scope) {
+                if let Some(held) = holds(program, env, &member, request.trait_) {
                     requests.extend(held.requests);
                 }
             }
@@ -116,14 +107,8 @@ pub fn owed(
             let args = program.per_param(Some(request.trait_), &[]);
             for clause in &def.supertraits {
                 if let Some(clause) = program.clause_at(clause, request.trait_, &args, &request.ty)
-                    && let Some(held) = holds_with_args(
-                        program,
-                        env,
-                        &request.ty,
-                        clause.trait_,
-                        scope,
-                        &clause.args,
-                    )
+                    && let Some(held) =
+                        holds_with_args(program, env, &request.ty, clause.trait_, &clause.args)
                 {
                     requests.extend(held.requests);
                 }
@@ -171,7 +156,6 @@ struct Open {
 struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
-    asker: Asker,
     asking: Vec<Open>,
     /// Whether the next question asks about a member of the type a pin
     /// bound it from, rather than about a bound's subject.
@@ -290,13 +274,6 @@ impl Query<'_> {
         }
         if let Some(head) = fact_head(program, ty)
             && let Some(fact) = program.facts.get(&(head, trait_))
-            && fact
-                .visible_from
-                .as_ref()
-                .is_none_or(|modules| match self.asker {
-                    Asker::Module(module) => modules.contains(&module),
-                    Asker::Instance => true,
-                })
         {
             let matched = || -> Vec<Option<SolverType>> {
                 let SolverType::Decl(_, args) = ty else {
@@ -457,26 +434,14 @@ impl Query<'_> {
                         .collect();
                     self.member_next = through_member;
                     let answer = self.holds(element, bound.trait_, &args)?;
-                    // An impl binding the pinned assoc otherwise is refuted;
-                    // one binding nothing is not. A pin naming a parameter
-                    // still unbound binds it from what the answer binds.
-                    for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
-                        let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
-                            continue;
-                        };
-                        let actual = self.normalized(&actual);
-                        match self.at_bindings(&pin.ty, &bindings) {
-                            Some(expected) if expected != actual => return None,
-                            Some(_) => {}
-                            None => {
-                                let from = deferred.len();
-                                if !match_target(&pin.ty, &actual, &mut bindings, &mut deferred)
-                                    || self.projections_refuted(&deferred[from..], &bindings)
-                                {
-                                    return None;
-                                }
-                            }
-                        }
+                    if !self.meets_pins(
+                        &param.pins,
+                        bound.trait_,
+                        &answer,
+                        &mut bindings,
+                        &mut deferred,
+                    ) {
+                        return None;
                     }
                     requests.extend(answer.requests);
                 }
@@ -515,6 +480,39 @@ impl Query<'_> {
                 })
                 .collect(),
         })
+    }
+
+    /// Whether `answer`, to a bound on `trait_`, meets each of `pins` on it. An
+    /// answer binding the pinned assoc otherwise is refuted; one binding
+    /// nothing is not. A pin naming a parameter still unbound binds it from
+    /// what the answer binds.
+    fn meets_pins(
+        &mut self,
+        pins: &[Pin],
+        trait_: TraitDeclId,
+        answer: &Holds,
+        bindings: &mut [Option<Binding>],
+        deferred: &mut Vec<(SolverType, SolverType)>,
+    ) -> bool {
+        for pin in pins.iter().filter(|pin| pin.trait_ == trait_) {
+            let Some(actual) = answer.assoc_at(pin.assoc, &[]) else {
+                continue;
+            };
+            let actual = self.normalized(&actual);
+            match self.at_bindings(&pin.ty, bindings) {
+                Some(expected) if expected != actual => return false,
+                Some(_) => {}
+                None => {
+                    let from = deferred.len();
+                    if !match_target(&pin.ty, &actual, bindings, deferred)
+                        || self.projections_refuted(&deferred[from..], bindings)
+                    {
+                        return false;
+                    }
+                }
+            }
+        }
+        true
     }
 
     /// Whether a projection a match met, readable at `bindings` already, holds
@@ -754,7 +752,6 @@ struct Answer {
 pub(super) fn impl_applies(
     program: &Program,
     env: &Env,
-    asker: Asker,
     id: ImplId,
     def: &ImplDef,
     ty: &SolverType,
@@ -763,7 +760,6 @@ pub(super) fn impl_applies(
         Query {
             program,
             env,
-            asker,
             asking: Vec::new(),
             member_next: false,
             at_itself: Some(ty.clone()),
@@ -771,6 +767,34 @@ pub(super) fn impl_applies(
         .impl_answers(id, def, ty)?
         .trait_args,
     )
+}
+
+/// Whether `source`'s bounds hold of `ty`, its pins met by one binding
+/// of the source's parameters.
+#[must_use]
+pub(super) fn admits(program: &Program, env: &Env, source: &Source, ty: &SolverType) -> bool {
+    let mut query = Query {
+        program,
+        env,
+        asking: Vec::new(),
+        member_next: false,
+        at_itself: None,
+    };
+    let mut bindings: Vec<Option<Binding>> = vec![None; source.params];
+    let mut deferred = Vec::new();
+    source.bounds.iter().all(|bound| {
+        query
+            .holds(ty, bound.trait_, &bound.args)
+            .is_some_and(|answer| {
+                query.meets_pins(
+                    &source.pins,
+                    bound.trait_,
+                    &answer,
+                    &mut bindings,
+                    &mut deferred,
+                )
+            })
+    }) && query.projections_met(&deferred, &bindings)
 }
 
 /// What a target parameter matched: a pack takes every element past the
@@ -1027,8 +1051,6 @@ mod tests {
     const POINT: TypeDeclId = TypeDeclId(0);
     const LIST: TypeDeclId = TypeDeclId(1);
     const I32: TypeDeclId = TypeDeclId(2);
-    const HERE: ModuleId = ModuleId(0);
-    const ELSEWHERE: ModuleId = ModuleId(1);
 
     fn list_of(inner: SolverType) -> SolverType {
         SolverType::Decl(LIST, vec![inner])
@@ -1053,11 +1075,11 @@ mod tests {
             param_bounds: vec![vec![ParamBound::bare(EQ)]],
         };
         assert_eq!(
-            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[]),
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[]),
             Some(Holds::default())
         );
         assert_eq!(
-            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(I32)]),
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
             None
         );
     }
@@ -1073,11 +1095,11 @@ mod tests {
             }]],
         };
         assert_eq!(
-            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(I32)]),
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(I32)]),
             Some(Holds::default())
         );
         assert_eq!(
-            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(POINT)]),
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, &[decl(POINT)]),
             None
         );
     }
@@ -1085,17 +1107,17 @@ mod tests {
     #[test]
     fn nothing_holds_in_an_empty_program() {
         let p = Program::default();
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA), None);
     }
 
     #[test]
     fn an_impl_written_for_the_type_answers() {
         let p = Builder::default().concrete(ALPHA, decl(POINT)).build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE),
+            holds(&p, &Env::default(), &decl(POINT), ALPHA),
             Some(Holds::default())
         );
-        assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA), None);
     }
 
     /// An impl of `Sub` owes one of `Base` beside it, and does not stand in
@@ -1106,7 +1128,7 @@ mod tests {
             .supertrait(SUB, BASE)
             .concrete(SUB, decl(POINT))
             .build();
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BASE, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BASE), None);
     }
 
     /// A generic body's parameter holds by its own signature, not by any impl.
@@ -1115,10 +1137,10 @@ mod tests {
         let p = Program::default();
         let e = env(vec![vec![ALPHA]]);
         assert_eq!(
-            holds(&p, &e, &SolverType::Param(0), ALPHA, HERE),
+            holds(&p, &e, &SolverType::Param(0), ALPHA),
             Some(Holds::default())
         );
-        assert_eq!(holds(&p, &e, &SolverType::Param(0), BETA, HERE), None);
+        assert_eq!(holds(&p, &e, &SolverType::Param(0), BETA), None);
     }
 
     /// A pack's bound holds of each element, so inside a variadic body the
@@ -1134,17 +1156,17 @@ mod tests {
             .build();
         let own = SolverType::Tuple(vec![SolverType::Pack(0)]);
         assert_eq!(
-            holds(&p, &env(vec![vec![ALPHA]]), &own, BETA, HERE),
+            holds(&p, &env(vec![vec![ALPHA]]), &own, BETA),
             Some(Holds::default())
         );
-        assert_eq!(holds(&p, &env(vec![vec![]]), &own, BETA, HERE), None);
+        assert_eq!(holds(&p, &env(vec![vec![]]), &own, BETA), None);
     }
 
     #[test]
     fn a_bound_in_force_answers_for_its_supertraits() {
         let p = Builder::default().supertrait(SUB, BASE).build();
         assert_eq!(
-            holds(&p, &env(vec![vec![SUB]]), &SolverType::Param(0), BASE, HERE),
+            holds(&p, &env(vec![vec![SUB]]), &SolverType::Param(0), BASE),
             Some(Holds::default())
         );
     }
@@ -1163,9 +1185,8 @@ mod tests {
             )
             .build();
         let bound = env(vec![vec![SUB]]);
-        let ask = |args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), BASE, HERE, args)
-        };
+        let ask =
+            |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), BASE, args);
         assert_eq!(ask(&[]), Some(Holds::default()));
         assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(&[decl(POINT)]), None);
@@ -1199,7 +1220,7 @@ mod tests {
             }]],
         };
         let ask = |trait_: TraitDeclId, args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), trait_, HERE, args)
+            holds_with_args(&p, &bound, &SolverType::Param(0), trait_, args)
         };
         assert_eq!(ask(SUB, &[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(BASE, &[decl(I32)]), Some(Holds::default()));
@@ -1222,9 +1243,8 @@ mod tests {
             .build();
         p.traits.entry(ALPHA).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
         let bound = env(vec![vec![ALPHA]]);
-        let ask = |args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
-        };
+        let ask =
+            |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), SUB, args);
         assert_eq!(ask(&[SolverType::Param(0)]), Some(Holds::default()));
         assert_eq!(ask(&[decl(I32)]), None);
     }
@@ -1252,9 +1272,8 @@ mod tests {
                 args: vec![decl(I32), decl(POINT)],
             }]],
         };
-        let ask = |args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
-        };
+        let ask =
+            |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), SUB, args);
         let pair = SolverType::Tuple(vec![decl(I32), decl(POINT)]);
         assert_eq!(ask(&[pair]), Some(Holds::default()));
         assert_eq!(ask(&[SolverType::Tuple(vec![decl(I32)])]), None);
@@ -1277,9 +1296,8 @@ mod tests {
         alpha.arg_defaults = vec![Some(ArgDefault::Type(decl(I32))), None];
         alpha.pack = Some(1);
         let bound = env(vec![vec![ALPHA]]);
-        let ask = |args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), SUB, HERE, args)
-        };
+        let ask =
+            |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), SUB, args);
         assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(&[SolverType::Tuple(Vec::new())]), None);
     }
@@ -1291,9 +1309,8 @@ mod tests {
         let mut p = Builder::default().supertrait(SUB, BASE).build();
         p.traits.entry(BASE).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
         let bound = env(vec![vec![SUB]]);
-        let ask = |args: &[SolverType]| {
-            holds_with_args(&p, &bound, &SolverType::Param(0), BASE, HERE, args)
-        };
+        let ask =
+            |args: &[SolverType]| holds_with_args(&p, &bound, &SolverType::Param(0), BASE, args);
         assert_eq!(ask(&[]), Some(Holds::default()));
         assert_eq!(ask(&[decl(I32)]), None);
     }
@@ -1304,7 +1321,7 @@ mod tests {
     fn a_fact_answers_and_owes_the_body() {
         let p = Builder::default().fact(POINT, EQ, Fact::default()).build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), EQ, HERE),
+            holds(&p, &Env::default(), &decl(POINT), EQ),
             Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
@@ -1314,7 +1331,7 @@ mod tests {
                 ..Holds::default()
             })
         );
-        assert_eq!(holds(&p, &Env::default(), &decl(I32), EQ, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(I32), EQ), None);
     }
 
     /// A fact is stated of a declaration and answers for every instance:
@@ -1325,7 +1342,7 @@ mod tests {
             .fact(LIST, ALPHA, Fact::default())
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &list_of(decl(I32)), ALPHA, HERE),
+            holds(&p, &Env::default(), &list_of(decl(I32)), ALPHA),
             Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: list_of(decl(I32)),
@@ -1334,27 +1351,6 @@ mod tests {
                 }],
                 ..Holds::default()
             })
-        );
-    }
-
-    /// A `Reflect*` bound holds only where the receiver's members are visible,
-    /// so the fact names the modules it holds in and the asking module decides.
-    #[test]
-    fn a_fact_restricted_to_a_module_answers_only_there() {
-        let p = Builder::default()
-            .fact(
-                POINT,
-                ALPHA,
-                Fact {
-                    visible_from: Some(vec![HERE]),
-                    ..Fact::default()
-                },
-            )
-            .build();
-        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), ALPHA, ELSEWHERE),
-            None
         );
     }
 
@@ -1382,8 +1378,7 @@ mod tests {
                 ..TraitDef::default()
             },
         );
-        let ask =
-            |ty: SolverType, trait_: TraitDeclId| holds(&p, &Env::default(), &ty, trait_, HERE);
+        let ask = |ty: SolverType, trait_: TraitDeclId| holds(&p, &Env::default(), &ty, trait_);
         assert_eq!(ask(ref_to(decl(POINT)), ALPHA), Some(Holds::default()));
         assert_eq!(ask(ref_to(decl(I32)), ALPHA), None);
         assert_eq!(ask(ref_to(decl(POINT)), BETA), None);
@@ -1400,14 +1395,14 @@ mod tests {
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![ALPHA])
             .build();
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BETA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BETA), None);
 
         let p = Builder::default()
             .bounded(BETA, SolverType::Param(0), vec![ALPHA])
             .concrete(ALPHA, decl(POINT))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BETA, HERE),
+            holds(&p, &Env::default(), &decl(POINT), BETA),
             Some(Holds::default())
         );
     }
@@ -1421,13 +1416,10 @@ mod tests {
             .concrete(EQ, decl(I32))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &list_of(decl(I32)), EQ, HERE),
+            holds(&p, &Env::default(), &list_of(decl(I32)), EQ),
             Some(Holds::default())
         );
-        assert_eq!(
-            holds(&p, &Env::default(), &list_of(decl(POINT)), EQ, HERE),
-            None
-        );
+        assert_eq!(holds(&p, &Env::default(), &list_of(decl(POINT)), EQ), None);
     }
 
     /// Nested, so the recursion is more than one step deep.
@@ -1438,7 +1430,7 @@ mod tests {
             .concrete(EQ, decl(I32))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &list_of(list_of(decl(I32))), EQ, HERE),
+            holds(&p, &Env::default(), &list_of(list_of(decl(I32))), EQ),
             Some(Holds::default())
         );
     }
@@ -1451,8 +1443,8 @@ mod tests {
             .bounded(BETA, SolverType::Param(0), vec![ALPHA])
             .bounded(ALPHA, SolverType::Param(0), vec![BETA])
             .build();
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BETA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), BETA), None);
     }
 
     /// A cycle grounded at one type holds there and nowhere else.
@@ -1464,10 +1456,10 @@ mod tests {
             .concrete(ALPHA, decl(POINT))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BETA, HERE),
+            holds(&p, &Env::default(), &decl(POINT), BETA),
             Some(Holds::default())
         );
-        assert_eq!(holds(&p, &Env::default(), &decl(I32), BETA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(I32), BETA), None);
     }
 
     /// A blanket keyed on the trait it implements is its own cycle.
@@ -1476,7 +1468,7 @@ mod tests {
         let p = Builder::default()
             .bounded(ALPHA, SolverType::Param(0), vec![ALPHA])
             .build();
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA), None);
     }
 
     /// A request found behind a blanket reaches the caller: the body is owed
@@ -1493,7 +1485,7 @@ mod tests {
             .fact(POINT, EQ, Fact::default())
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), BETA, HERE),
+            holds(&p, &Env::default(), &decl(POINT), BETA),
             Some(Holds {
                 requests: vec![request],
                 ..Holds::default()
@@ -1513,23 +1505,11 @@ mod tests {
             )
             .build();
         assert_eq!(
-            holds(
-                &p,
-                &Env::default(),
-                &pair(decl(I32), decl(I32)),
-                ALPHA,
-                HERE
-            ),
+            holds(&p, &Env::default(), &pair(decl(I32), decl(I32)), ALPHA),
             Some(Holds::default())
         );
         assert_eq!(
-            holds(
-                &p,
-                &Env::default(),
-                &pair(decl(I32), decl(POINT)),
-                ALPHA,
-                HERE
-            ),
+            holds(&p, &Env::default(), &pair(decl(I32), decl(POINT)), ALPHA),
             None
         );
     }
@@ -1540,15 +1520,15 @@ mod tests {
             .bounded(ALPHA, ref_to(SolverType::Param(0)), vec![])
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &ref_to(decl(POINT)), ALPHA, HERE),
+            holds(&p, &Env::default(), &ref_to(decl(POINT)), ALPHA),
             Some(Holds::default())
         );
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA), None);
         let mut_ref = SolverType::Ref {
             is_mut: true,
             inner: Box::new(decl(POINT)),
         };
-        assert_eq!(holds(&p, &Env::default(), &mut_ref, ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &mut_ref, ALPHA), None);
     }
 
     /// `impl Serialize for Handler;` is written to make the pair exist where no
@@ -1563,7 +1543,7 @@ mod tests {
             })
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), EQ, HERE),
+            holds(&p, &Env::default(), &decl(POINT), EQ),
             Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
@@ -1589,8 +1569,8 @@ mod tests {
             .impl_(derived(BASE))
             .build();
         let env = Env::default();
-        let held = holds(&p, &env, &decl(POINT), SUB, HERE).expect("`Sub` holds");
-        let owed: Vec<TraitDeclId> = owed(&p, &env, HERE, held.requests)
+        let held = holds(&p, &env, &decl(POINT), SUB).expect("`Sub` holds");
+        let owed: Vec<TraitDeclId> = owed(&p, &env, held.requests)
             .into_iter()
             .map(|request| request.trait_)
             .collect();
@@ -1610,11 +1590,11 @@ mod tests {
             },
         );
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE),
+            holds(&p, &Env::default(), &decl(POINT), ALPHA),
             Some(Holds::default())
         );
         assert_eq!(
-            holds(&p, &Env::default(), &SolverType::Param(3), ALPHA, HERE),
+            holds(&p, &Env::default(), &SolverType::Param(3), ALPHA),
             Some(Holds::default())
         );
     }
@@ -1632,7 +1612,7 @@ mod tests {
             },
         );
         assert_eq!(
-            holds(&p, &Env::default(), &decl(DURATION), ALPHA, HERE),
+            holds(&p, &Env::default(), &decl(DURATION), ALPHA),
             Some(Holds::default())
         );
     }
@@ -1653,9 +1633,9 @@ mod tests {
         );
         p.comparisons = Some((EQ, ALPHA));
         p.push_impl(concrete(EQ, decl(COARSE)));
-        assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(COARSE), ALPHA), None);
         assert_eq!(
-            holds(&p, &Env::default(), &decl(COARSE), BETA, HERE),
+            holds(&p, &Env::default(), &decl(COARSE), BETA),
             Some(Holds::default())
         );
     }
@@ -1670,11 +1650,11 @@ mod tests {
             origin: ImplOrigin::Marker,
             ..concrete(ALPHA, decl(POINT))
         });
-        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA).is_some());
         p.push_impl(concrete(EQ, decl(POINT)));
-        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(POINT), ALPHA), None);
         p.push_impl(concrete(ALPHA, decl(POINT)));
-        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA, HERE).is_some());
+        assert!(holds(&p, &Env::default(), &decl(POINT), ALPHA).is_some());
     }
 
     /// Each instance reads its own row, by the written impls reaching it; a
@@ -1722,8 +1702,7 @@ mod tests {
                 &p,
                 &Env::default(),
                 &SolverType::Decl(MY_LIST, vec![decl(I32)]),
-                EQ,
-                HERE
+                EQ
             ),
             Some(Holds::default())
         );
@@ -1732,8 +1711,7 @@ mod tests {
                 &p,
                 &Env::default(),
                 &SolverType::Decl(MY_LIST, vec![decl(POINT)]),
-                EQ,
-                HERE
+                EQ
             ),
             None
         );
@@ -1759,7 +1737,7 @@ mod tests {
         // Answered through the marker, so it owes the body; through the base
         // it would owe nothing.
         assert_eq!(
-            holds(&p, &Env::default(), &decl(DURATION), ALPHA, HERE),
+            holds(&p, &Env::default(), &decl(DURATION), ALPHA),
             Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: decl(DURATION),
@@ -1784,12 +1762,12 @@ mod tests {
             SolverType::Tuple(vec![decl(I32), decl(POINT)]),
         ] {
             assert_eq!(
-                holds(&p, &Env::default(), &tuple, ALPHA, HERE),
+                holds(&p, &Env::default(), &tuple, ALPHA),
                 Some(Holds::default()),
                 "{tuple:?}"
             );
         }
-        assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(I32), ALPHA), None);
     }
 
     /// `impl<A, ..T> Alpha for (A, ..T)`: the fixed prefix must be there, and
@@ -1807,7 +1785,7 @@ mod tests {
             .concrete(BETA, decl(I32))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &SolverType::Tuple(vec![]), ALPHA, HERE),
+            holds(&p, &Env::default(), &SolverType::Tuple(vec![]), ALPHA),
             None
         );
         assert_eq!(
@@ -1815,8 +1793,7 @@ mod tests {
                 &p,
                 &Env::default(),
                 &SolverType::Tuple(vec![decl(I32)]),
-                ALPHA,
-                HERE
+                ALPHA
             ),
             Some(Holds::default())
         );
@@ -1825,8 +1802,7 @@ mod tests {
                 &p,
                 &Env::default(),
                 &SolverType::Tuple(vec![decl(I32), decl(POINT), decl(POINT)]),
-                ALPHA,
-                HERE
+                ALPHA
             ),
             Some(Holds::default())
         );
@@ -1836,8 +1812,7 @@ mod tests {
                 &p,
                 &Env::default(),
                 &SolverType::Tuple(vec![decl(POINT)]),
-                ALPHA,
-                HERE
+                ALPHA
             ),
             None
         );
@@ -1856,9 +1831,8 @@ mod tests {
             )
             .concrete(BETA, decl(I32))
             .build();
-        let ask = |elems: Vec<SolverType>| {
-            holds(&p, &Env::default(), &SolverType::Tuple(elems), ALPHA, HERE)
-        };
+        let ask =
+            |elems: Vec<SolverType>| holds(&p, &Env::default(), &SolverType::Tuple(elems), ALPHA);
         assert_eq!(ask(vec![]), Some(Holds::default()));
         assert_eq!(ask(vec![decl(I32), decl(I32)]), Some(Holds::default()));
         assert_eq!(ask(vec![decl(I32), decl(POINT)]), None);
@@ -1888,13 +1862,13 @@ mod tests {
                 ..TraitDef::default()
             },
         );
-        assert_eq!(holds(&p, &Env::default(), &decl(CM), MUL, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(CM), MUL), None);
         assert_eq!(
-            holds(&p, &Env::default(), &decl(INCH), MUL, HERE),
+            holds(&p, &Env::default(), &decl(INCH), MUL),
             Some(Holds::default())
         );
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), MUL, HERE),
+            holds(&p, &Env::default(), &decl(POINT), MUL),
             Some(Holds::default())
         );
     }
@@ -1931,19 +1905,18 @@ mod tests {
             .insert(ImplId(1), vec![(OUTPUT, decl(AREA))]);
         p.assoc_bindings
             .insert(ImplId(2), vec![(OUTPUT, decl(INCH))]);
-        assert_eq!(holds(&p, &Env::default(), &decl(CM), PRODUCT, HERE), None);
+        assert_eq!(holds(&p, &Env::default(), &decl(CM), PRODUCT), None);
         assert_eq!(
-            holds(&p, &Env::default(), &decl(INCH), PRODUCT, HERE),
+            holds(&p, &Env::default(), &decl(INCH), PRODUCT),
             Some(Holds::default())
         );
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), PRODUCT, HERE),
+            holds(&p, &Env::default(), &decl(POINT), PRODUCT),
             Some(Holds::default())
         );
         // The answer reports what the impl binds, at the receiver.
         assert_eq!(
-            holds(&p, &Env::default(), &decl(CM), MUL, HERE)
-                .and_then(|held| held.assoc_at(OUTPUT, &[])),
+            holds(&p, &Env::default(), &decl(CM), MUL).and_then(|held| held.assoc_at(OUTPUT, &[])),
             Some(decl(AREA))
         );
     }
@@ -1979,7 +1952,7 @@ mod tests {
         p.assoc_bindings
             .insert(ImplId(1), vec![(OUTPUT, decl(AREA))]);
         assert_eq!(
-            holds(&p, &Env::default(), &decl(CM), PRODUCT, HERE),
+            holds(&p, &Env::default(), &decl(CM), PRODUCT),
             Some(Holds::default())
         );
     }
@@ -1996,13 +1969,10 @@ mod tests {
             .impl_(unsupplied(vec![ALPHA]))
             .concrete(ALPHA, decl(I32))
             .build();
-        assert_eq!(
-            holds(&p, &Env::default(), &list_of(decl(I32)), BETA, HERE),
-            None
-        );
+        assert_eq!(holds(&p, &Env::default(), &list_of(decl(I32)), BETA), None);
         let p = Builder::default().impl_(unsupplied(vec![])).build();
         assert_eq!(
-            holds(&p, &Env::default(), &list_of(decl(I32)), BETA, HERE),
+            holds(&p, &Env::default(), &list_of(decl(I32)), BETA),
             Some(Holds::default())
         );
     }
@@ -2033,7 +2003,7 @@ mod tests {
             .fact(POINT, ALPHA, Fact::default())
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &decl(POINT), ARBITRARY, HERE),
+            holds(&p, &Env::default(), &decl(POINT), ARBITRARY),
             Some(Holds {
                 requests: vec![DerivationRequest {
                     ty: decl(POINT),
@@ -2043,10 +2013,7 @@ mod tests {
                 ..Holds::default()
             })
         );
-        assert_eq!(
-            holds(&p, &Env::default(), &decl(I32), ARBITRARY, HERE),
-            None
-        );
+        assert_eq!(holds(&p, &Env::default(), &decl(I32), ARBITRARY), None);
     }
 
     /// `impl<T: Alpha> Beta for T` answers no reference of its own: `&Point`
@@ -2058,7 +2025,7 @@ mod tests {
             .concrete(ALPHA, decl(POINT))
             .build();
         assert_eq!(
-            holds(&p, &Env::default(), &ref_to(decl(POINT)), BETA, HERE),
+            holds(&p, &Env::default(), &ref_to(decl(POINT)), BETA),
             Some(Holds::default())
         );
         p.traits.insert(
@@ -2068,9 +2035,6 @@ mod tests {
                 ..TraitDef::default()
             },
         );
-        assert_eq!(
-            holds(&p, &Env::default(), &ref_to(decl(POINT)), BETA, HERE),
-            None
-        );
+        assert_eq!(holds(&p, &Env::default(), &ref_to(decl(POINT)), BETA), None);
     }
 }

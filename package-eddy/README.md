@@ -8,6 +8,8 @@ exchanging opinions. It is not implemented yet.
   yet settled.
 - [Research](./docs/research-code-review-bots.md): the evidence behind them,
   from work published since August 2026.
+- [Tools](./docs/tools.md): what a reviewer agent reads and checks a change
+  with, built and wanted.
 
 ## Directions
 

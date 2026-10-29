@@ -1,14 +1,15 @@
 //! Split an `.onnx` into the two files Loam reads: a textual graph whose
 //! weights carry no values, and a safetensors checkpoint holding them, whole or
 //! in shards beside their index. A model keeping its weights in external data
-//! files reads them from beside it.
+//! files reads them from beside it. With `--external-data` it writes the model
+//! as an exporter writes a large one instead, its weights in one such file.
 
 use { args, eprintln, exit, println, Environment, Exit, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
 use { HashMap } from "core:collections";
 use { Graph } from "../src/graph.wado";
-use { external_locations, read_with_external } from "../src/onnx_proto.wado";
+use { external_locations, externalize, read_with_external } from "../src/onnx_proto.wado";
 use { print } from "../src/onnx_print.wado";
 use {
     StoredTensor,
@@ -43,10 +44,11 @@ fn read_model(source: &String) -> Graph with (Stderr, Exit, Preopens) {
     return or_exit(read_with_external(&bytes, &files), `${*source}: `);
 }
 
-global USAGE: String = "usage: onnx_split [--max-shard-bytes <n>] <model.onnx> <stem>
+global USAGE: String = "usage: onnx_split [--max-shard-bytes <n> | --external-data] <model.onnx> <stem>
 writes <stem>.onnxtext and <stem>.safetensors, or with --max-shard-bytes the
 shards <stem>-00001-of-0000N.safetensors onward, each of at most n payload
-bytes unless one tensor is larger, beside <stem>.safetensors.index.json";
+bytes unless one tensor is larger, beside <stem>.safetensors.index.json, or with
+--external-data <stem>.onnx keeping its weights in <stem>.onnx_data";
 
 fn usage() -> ! with (Stderr, Exit) {
     eprintln(USAGE);
@@ -66,14 +68,28 @@ export fn run() with (Stdout, Stderr, Environment, Exit, Preopens) {
         max_shard_bytes = Option::Some(n);
         given = given.into_iter().skip(2).collect();
     }
+    // The two flags write different files, so `--external-data` after a shard
+    // size is left over, and the count below refuses it.
+    let external = max_shard_bytes matches { None } && given.len() == 3 && given[0] == "--external-data";
+    if external {
+        given = given.into_iter().skip(1).collect();
+    }
     if given.len() != 2 {
         usage();
     }
     let [source, stem] = [given[0], given[1]];
-    // A shard is named after the stem's last segment.
+    // A shard and an external data file are named after the stem's last segment.
     let Some(base) = fs::file_name(&stem) else {
         usage();
     };
+    if external {
+        let location = `${base}.onnx_data`;
+        let [model, data] = or_exit(externalize(or_exit(fs::read(&source), ""), location), `${source}: `);
+        or_exit(fs::write(`${stem}.onnx`, &model), "");
+        or_exit(fs::write(`${stem}.onnx_data`, &data), "");
+        println(`${stem}.onnx and ${stem}.onnx_data: ${data.len()} bytes of weights`);
+        return;
+    }
     // A filesystem error names its path; a read or print error does not.
     let [kept, stored] = split_weights(read_model(&source));
     let text = or_exit(print(&kept), `${source}: `);

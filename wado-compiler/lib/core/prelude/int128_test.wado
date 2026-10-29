@@ -769,7 +769,7 @@ test "i128::from_str_hex" {
     let max = i128::from_pair(u64::MAX, i64::MAX);
     assert i128::from_str_hex("7fffffffffffffffffffffffffffffff") matches { Ok(v) && v == max };
     assert i128::from_str_hex("80000000000000000000000000000000") matches { Err(e) && e.kind() == IntErrorKind::PosOverflow };
-    assert i128::from_str_hex("-80000000000000000000000000000000") matches { Ok(v) };
+    assert i128::from_str_hex("-80000000000000000000000000000000") matches { Ok(_) };
 }
 
 test "u128::as_f64 is correctly rounded" {

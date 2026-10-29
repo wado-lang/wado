@@ -108,11 +108,11 @@ fn "cm_import_user_result_error_type.wado/$cm_binding__wasi:demo/gfx@0.1.0#name"
         }
         struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Ok" { discriminant: 0, payload_0: $local_5 };
     } else {
-        $local_4 = builtin::load_i32($outptr + 4);
-        "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_14(builtin::array_new<u8>(local.tee $local_3(builtin::load_i32(($outptr + 4) + 4)))), $local_4, $local_3);
-        $local_5 = struct.new "core:prelude/string.wado//String" { repr: arr_14, used: $local_3 };
-        if $local_3 > 0 {
-            drop("mem/realloc"($local_4, $local_3, 1, 0));
+        $local_3 = builtin::load_i32($outptr + 4);
+        "core:rt/memory_into_gc_array$dae[at]"(local.tee arr_14(builtin::array_new<u8>(local.tee $local_4(builtin::load_i32(($outptr + 4) + 4)))), $local_3, $local_4);
+        $local_5 = struct.new "core:prelude/string.wado//String" { repr: arr_14, used: $local_4 };
+        if $local_4 > 0 {
+            drop("mem/realloc"($local_3, $local_4, 1, 0));
         }
         struct.new "core:prelude/types.wado//Result<core:prelude/string.wado/String,core:prelude/string.wado/String>::Err" { discriminant: 1, payload_0: $local_5 };
     });
@@ -143,7 +143,6 @@ fn "cm_import_user_result_error_type.wado/$cm_export__run"() {
 fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
     let i: i32;
     let w: i64;
-    let to: i32;
     let $licm_arith_7: i32;
     i = 0;
     $licm_arith_7 = len - 8;
@@ -151,6 +150,7 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
         l6: loop {
             break_if b5 i > $licm_arith_7;
             w = builtin::load_i64(ptr + i);
+<<<<<<< HEAD
             to = i;
             builtin::array_set_u8(arr, to, builtin::i32_wrap_i64(w));
             builtin::array_set_u8(arr, to + 1, builtin::i32_wrap_i64(w >> 8_i64));
@@ -160,6 +160,26 @@ fn "core:rt/memory_into_gc_array$dae[at]"(arr, ptr, len) {
             builtin::array_set_u8(arr, to + 5, builtin::i32_wrap_i64(w >> 40_i64));
             builtin::array_set_u8(arr, to + 6, builtin::i32_wrap_i64(w >> 48_i64));
             builtin::array_set_u8(arr, to + 7, builtin::i32_wrap_i64(w >> 56_i64));
+||||||| 6c1b356354e
+            to = i;
+            builtin::array_set_u8(arr, to, builtin::i32_wrap_i64(w) & 255);
+            builtin::array_set_u8(arr, to + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
+            builtin::array_set_u8(arr, to + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
+            builtin::array_set_u8(arr, to + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
+            builtin::array_set_u8(arr, to + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
+            builtin::array_set_u8(arr, to + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
+            builtin::array_set_u8(arr, to + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
+            builtin::array_set_u8(arr, to + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
+=======
+            builtin::array_set_u8(arr, i, builtin::i32_wrap_i64(w) & 255);
+            builtin::array_set_u8(arr, i + 1, builtin::i32_wrap_i64(w >> 8_i64) & 255);
+            builtin::array_set_u8(arr, i + 2, builtin::i32_wrap_i64(w >> 16_i64) & 255);
+            builtin::array_set_u8(arr, i + 3, builtin::i32_wrap_i64(w >> 24_i64) & 255);
+            builtin::array_set_u8(arr, i + 4, builtin::i32_wrap_i64(w >> 32_i64) & 255);
+            builtin::array_set_u8(arr, i + 5, builtin::i32_wrap_i64(w >> 40_i64) & 255);
+            builtin::array_set_u8(arr, i + 6, builtin::i32_wrap_i64(w >> 48_i64) & 255);
+            builtin::array_set_u8(arr, i + 7, builtin::i32_wrap_i64(w >> 56_i64) & 255);
+>>>>>>> origin/main
             i = i + 8;
             continue l6;
         };

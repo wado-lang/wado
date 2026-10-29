@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Downloads Gemma 3 (270M, instruction-tuned) as onnx-community exports it into
-# build/, with its tokenizer, and splits the graph into the checkpoint
-# gemma3.wado runs with. Set WADO to use another binary.
+# build/: the weights gemma3.wado loads, and the model and tokenizer the oracle
+# scripts run.
 set -euo pipefail
 cd "$(dirname "$0")"
 mkdir -p build
@@ -18,7 +18,3 @@ if command -v sha256sum > /dev/null; then sha256=(sha256sum); else sha256=(shasu
 55da1312bdf1d7d8fe8d9d1b3eed04086261149e6034e0ac3f8c633b67f5aac8  build/tokenizer.json
 8ae5c9297e0ca85077c0f4952f85251b4773af7abc4673b62b54bc0b609a9667  build/tokenizer_config.json
 EOF
-
-# The weights outgrow the copying collector's half of the heap.
-"${WADO:-wado}" run --collector drc ../../tools/onnx_split.wado -- build/model.onnx build/gemma3
-cp build/gemma3.onnxtext gemma3.onnxtext

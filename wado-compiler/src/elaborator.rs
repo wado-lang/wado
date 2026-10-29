@@ -1269,6 +1269,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         } else {
             self.tysys
                 .comparison_withheld_note(on_bound, target_type_id)
+                .or_else(|| {
+                    self.tysys
+                        .unsourced_note(&self.type_lookup(), target_type_id, trait_)
+                })
         };
         if let Some(why) = withheld {
             let _ = self.emit(types::TypeError::MarkerWithheld {

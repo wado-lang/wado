@@ -93,6 +93,7 @@ use crate::name::{
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
     widened_half_local_name,
 };
+use crate::pgo::ColdMap;
 use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
 use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
@@ -555,6 +556,8 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// The coverage plan whose probes reify puts in, under
     /// `wado test --coverage` or `--pgo`. See `probe.rs`.
     pub(crate) coverage: Option<&'a CoverageMap>,
+    /// Where the profile marks code cold. See `probe.rs`.
+    pub(crate) cold: Option<&'a ColdMap>,
     /// The probe ids reify has put in so far.
     pub(crate) probes_emitted: IndexSet<u32>,
     /// The probe ids of code reify emits no instance of: a tuple `for-of` body
@@ -684,6 +687,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             pending_template_structs: Vec::new(),
             pending_local_newtypes: IndexMap::default(),
             coverage: None,
+            cold: None,
             probes_emitted: IndexSet::default(),
             probes_without_instance: IndexSet::default(),
             body_ownership: None,
@@ -2350,9 +2354,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let len = slice.len();
         let mut stmts = Vec::new();
         for (i, s) in slice.iter().enumerate() {
-            if let Some(probe) = self.probe(ProbeSite::BeforeStmt, s.id(), s.span()) {
-                stmts.push(probe);
-            }
+            stmts.extend(self.site_stmts(ProbeSite::BeforeStmt, s.id(), s.span()));
             // `reify_let_else` consumes the rest of the block as its then-arm,
             // so stop here after emitting it.
             if let ast::Stmt::Let(l) = s

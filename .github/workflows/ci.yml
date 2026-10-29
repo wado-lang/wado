@@ -155,7 +155,6 @@ jobs:
 
       - run: mise run check-deps
       - run: mise run test-hooks
-      - run: mise run test-loam-js
       - run: mise run check-review-filters
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
@@ -227,6 +226,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           rust-cache: false
           prebuilt: wado
+      # Eddy's tools spawn `rg`. A child the `wado` host runs may execute only
+      # programs in the system baseline, so it comes from apt, not mise.
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
 
       - run: mise run check-wadopoet-vocabulary
       - parallel:

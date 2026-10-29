@@ -13,8 +13,8 @@ use { Model } from "../../example/gemma3-270m/model.wado";
 use { timed } from "./generate.wado";
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock) {
-    let Ok(checkpoint) = fs::read("build/gemma3.safetensors") else {
-        eprintln("build/gemma3.safetensors is missing; run package-loam/example/gemma3-270m/fetch.sh");
+    let Ok(checkpoint) = fs::read("build/model.onnx_data") else {
+        eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
         return;
     };
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();

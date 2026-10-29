@@ -16,17 +16,22 @@
 //! residual too: `i >= FLOOR` at the version point, carried to every later
 //! value by a step the residual proves non-negative and clear of the wrap.
 
+mod reload;
+
 use std::ops::ControlFlow;
+use std::sync::Arc;
 
 use cranelift_entity::EntityRef;
 
 use crate::call_args::CallArgs;
+use crate::compiler_item::SeqField;
 use crate::nir::{FuncParts, FunctionRef, NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
 use crate::parallel::Executor;
+use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -35,15 +40,17 @@ use super::alias::{CallImmutability, builder_alias_sets, first_param_types};
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::bounds;
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
+    Binds, BoundKey, Conjunct, FieldPath, InductionStep, VAR_OFFSET_MAX_DEPTH, break_guard_cmp,
     build_copy_bindings, capture_block_binding, check_conjuncts, eliminate_condition,
-    induction_entry, induction_step, modifies_any_root, negated_operand, panic_guard_check,
-    parse_break_guard_head, parse_const_i64, parse_var_offset, peel_capture_block, resolve,
-    resolve_panic_ids, stmt_modifies,
+    induction_entry, induction_step, is_seq_length, modifies_any_root, negated_operand,
+    panic_guard_check, parse_bound, parse_break_guard_head, parse_const_i64, parse_var_offset,
+    peel_capture_block, resolve, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::BranchPruneRule;
 use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
+use super::gate::FunctionGate;
+use super::heap_effect::{HeapEffectsCache, LazyHeapFrame};
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
 use crate::nir_arena;
@@ -81,6 +88,16 @@ struct Plan {
     limits: Vec<Limit>,
     /// The floor the checks demand, when it is the residual's to establish.
     floor: Option<RuntimeFloor>,
+    /// Where a [`BoundKey::Field`] limit's bound is reloaded.
+    reload: Option<Reload>,
+}
+
+/// A bound the loop reloads: see [`reload`]. The bound's own local is the
+/// [`BoundKey::Field`] limit's root.
+struct Reload {
+    /// Each statement of the original loop after which the fast loop re-tests
+    /// the bound, with its block.
+    points: Vec<(BlockId, StmtId)>,
 }
 
 /// What a check makes of the guard variable before comparing: `var * stride +
@@ -136,7 +153,7 @@ struct FastArm {
 pub(super) fn version_loops(
     project: &mut NirPackage,
     cache: &mut DescriptorCache,
-    exec: &Executor,
+    exec: &Arc<Executor>,
 ) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
@@ -159,6 +176,9 @@ pub(super) fn version_loops(
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table, exec);
+    let gate = FunctionGate::new(project, exec);
+    let mut heap = HeapEffectsCache::default();
+    let effects = heap.effects(project, &type_table, &gate);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for func_rc in &project.functions {
@@ -172,10 +192,19 @@ pub(super) fn version_loops(
         let FuncParts {
             body,
             locals,
-            address_taken_locals,
             params,
+            address_taken_locals,
+<<<<<<< HEAD
+            params,
+||||||| 6c1b356354e
+            stores_aliased_locals,
+            params,
+=======
+            stores_aliased_locals,
+>>>>>>> origin/main
             ..
         } = func.parts();
+        let frame = LazyHeapFrame::new(&effects, params.iter().map(|p| p.local_index).collect());
         let body = body.expect("checked above");
         let alias = builder_alias_sets(
             body,
@@ -197,7 +226,15 @@ pub(super) fn version_loops(
         let plans: Vec<Plan> = loops
             .into_iter()
             .filter_map(|(parent, loop_stmt, loop_body)| {
-                analyze_loop(&engine, &binds, &type_table, parent, loop_stmt, loop_body)
+                analyze_loop(
+                    &engine,
+                    &binds,
+                    &type_table,
+                    &frame,
+                    parent,
+                    loop_stmt,
+                    loop_body,
+                )
             })
             .collect();
         if plans.is_empty() {
@@ -206,7 +243,7 @@ pub(super) fn version_loops(
 
         let fast_arms: Vec<FastArm> = plans
             .iter()
-            .map(|plan| apply_version(&mut engine, &binds, plan))
+            .map(|plan| apply_version(&mut engine, &binds, &type_table, plan))
             .collect();
 
         // The splice invalidates licm's loop-entry snapshots (cloned loops
@@ -232,7 +269,9 @@ pub(super) fn version_loops(
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
         let mut filled = false;
         for (plan, arm) in plans.iter().zip(&fast_arms) {
-            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
+            if plan.reload.is_none() {
+                filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
+            }
         }
         if filled {
             engine.run(&rules);
@@ -286,7 +325,7 @@ fn parse_loop_guard(
     let (guard_idx, cond) = parse_break_guard_head(engine, loop_body)?;
     let (var, off, h, op) = break_guard_cmp(engine, binds, cond)?;
     let h = match h {
-        BoundKey::Field(..) => guard_bound_local(engine, binds, cond)?,
+        BoundKey::Field(..) => guard_bound_local(engine, binds, loop_body, cond)?,
         BoundKey::Local(_) | BoundKey::Const(_) => h,
     };
     if off < 0 || (off > 0 && op != NirBinaryOp::Lt) {
@@ -319,10 +358,15 @@ fn parse_loop_guard(
 /// The local a guard compares against, as written. [`break_guard_cmp`] reads a
 /// `let` of a field (`let per_row = b.per_row`) as the field, which the
 /// residual cannot re-read, where the guard reads the local.
-fn guard_bound_local(engine: &Engine, binds: &Binds, cond: Operand) -> Option<BoundKey> {
+fn guard_bound_local(
+    engine: &Engine,
+    binds: &Binds,
+    loop_body: BlockId,
+    cond: Operand,
+) -> Option<BoundKey> {
     let cmp = negated_operand(engine, binds, cond).unwrap_or(cond);
     let (_, _, right) = binary_parts(engine.body, resolve(engine, binds, cmp))?;
-    match parse_check_bound(engine, binds, right)? {
+    match parse_check_bound(engine, binds, loop_body, right)? {
         (bound @ BoundKey::Local(_), 0) => Some(bound),
         _ => None,
     }
@@ -343,13 +387,14 @@ struct Check {
 fn collect_checks_in_node(
     engine: &Engine,
     binds: &Binds,
+    loop_body: BlockId,
     node: NodeRef,
     var: u32,
     out: &mut Vec<Check>,
 ) {
     engine.body.for_each_node_under(node, |n| {
         if let Some(cond) = panic_guard_check(engine, n)
-            && let Some(check) = parse_versionable_check(engine, binds, n, cond, var)
+            && let Some(check) = parse_versionable_check(engine, binds, loop_body, n, cond, var)
         {
             out.push(check);
         }
@@ -366,6 +411,7 @@ fn collect_checks_in_node(
 fn parse_versionable_check(
     engine: &Engine,
     binds: &Binds,
+    loop_body: BlockId,
     holder: NodeRef,
     cond: Operand,
     var: u32,
@@ -378,7 +424,7 @@ fn parse_versionable_check(
                 if limit.is_some() {
                     return None;
                 }
-                limit = Some(parse_limit(engine, binds, left, right, var)?);
+                limit = Some(parse_limit(engine, binds, loop_body, left, right, var)?);
             }
             Conjunct::AtLeast(fvar, foff, f) => {
                 floors.push((local_shift(engine, binds, fvar, var)?.plus(foff)?, f));
@@ -569,15 +615,30 @@ const MAX_LIMITS: usize = 8;
 /// a `let` initializer target is single-assignment by [`build_copy_bindings`]'
 /// definition; in-loop re-bindings are rejected by `subtree_redefines`.
 ///
+/// A local the loop binds anew each iteration to the length of a list or
+/// string local is read through, as that length: a [`reload`] bound.
+///
 /// A local less a non-negative constant, `B - c`, reads as `B` with the `c`
 /// it takes away: the form `condition_implication` leaves where it merged
 /// `i < B` and `i + c < B` into one check.
-fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<(BoundKey, i64)> {
+fn parse_check_bound(
+    engine: &Engine,
+    binds: &Binds,
+    loop_body: BlockId,
+    op: Operand,
+) -> Option<(BoundKey, i64)> {
     let op = peel_capture_block(engine, binds, op);
     if let Some(c) = parse_const_i64(engine, binds, op) {
         return Some((BoundKey::Const(c), 0));
     }
     if let Some(l) = operand_local(engine.body, op) {
+        if subtree_redefines(engine, loop_body, &[l])
+            && let Some(&read) = binds.get(&l)
+            && is_seq_length(engine, binds, read)
+            && let Some(field @ BoundKey::Field(..)) = parse_bound(engine, binds, read)
+        {
+            return Some((field, 0));
+        }
         return Some((BoundKey::Local(l), 0));
     }
     let (minuend, NirBinaryOp::Sub, less) = binary_parts(engine.body, op)? else {
@@ -594,12 +655,13 @@ fn parse_check_bound(engine: &Engine, binds: &Binds, op: Operand) -> Option<(Bou
 fn parse_limit(
     engine: &Engine,
     binds: &Binds,
+    loop_body: BlockId,
     left: Operand,
     right: Operand,
     var: u32,
 ) -> Option<Limit> {
     let shift = parse_shift(engine, binds, left, var)?;
-    let (bound, less) = parse_check_bound(engine, binds, right)?;
+    let (bound, less) = parse_check_bound(engine, binds, loop_body, right)?;
     Some(Limit {
         shift: shift.plus(less)?,
         bound,
@@ -611,6 +673,7 @@ fn analyze_loop(
     engine: &Engine,
     binds: &Binds,
     type_table: &TypeTable,
+    heap: &LazyHeapFrame,
     parent: BlockId,
     loop_stmt: StmtId,
     loop_body: BlockId,
@@ -629,7 +692,7 @@ fn analyze_loop(
         if stmt_modifies(engine, s, var, h) {
             break;
         }
-        collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
+        collect_checks_in_node(engine, binds, loop_body, NodeRef::Stmt(s), var, &mut checks);
     }
     // A floor is answered from the fast arm's own facts, so it must hold for
     // every collected check before any of them is deleted.
@@ -672,10 +735,23 @@ fn analyze_loop(
     };
     // Every local the residual reads, which must hold still across the loop.
     let mut invariant: Vec<u32> = Vec::new();
-    // The local a bound reads, `Some(None)` for a constant, `None` for neither.
+    // The one local a reloaded bound's length is read off.
+    let mut reload: Option<u32> = None;
+    let len_path = FieldPath::of(SeqField::Len.index());
+    for limit in &limits {
+        if let BoundKey::Field(root, path) = limit.bound {
+            if path != len_path || reload.is_some_and(|r| r != root) {
+                return None;
+            }
+            reload = Some(root);
+        }
+    }
+    // The local a bound reads, `Some(None)` for a constant or a reloaded
+    // length, `None` for neither.
     let bound_local = |b: BoundKey| match b {
         BoundKey::Local(l) if of_ty(l) => Some(Some(l)),
         BoundKey::Const(c) if spells_same(type_table, ty, c)? => Some(None),
+        BoundKey::Field(..) if type_table.type_key(TypeTable::I32) == key => Some(None),
         BoundKey::Local(_) | BoundKey::Const(_) | BoundKey::Field(..) => None,
     };
     invariant.extend(bound_local(h)?);
@@ -730,6 +806,21 @@ fn analyze_loop(
     if subtree_redefines(engine, loop_body, &invariant) {
         return None;
     }
+    let reload = match reload {
+        Some(root) => {
+            // `$lim` drops below every value to end the fast loop, which `<=`
+            // would not compare past.
+            if guard_le {
+                return None;
+            }
+            let holders: Vec<NodeRef> = checks.iter().map(|c| c.holder).collect();
+            let points = reload::points(
+                engine, binds, heap, type_table, root, loop_body, guard_idx, &holders,
+            )?;
+            Some(Reload { points })
+        }
+        None => None,
+    };
     Some(Plan {
         parent,
         loop_stmt,
@@ -742,6 +833,7 @@ fn analyze_loop(
         unsigned: type_table.is_unsigned_int(ty),
         limits,
         floor,
+        reload,
     })
 }
 
@@ -798,7 +890,19 @@ fn bound_read(engine: &mut Engine, plan: &Plan, bound: BoundKey, span: Span) -> 
             let ty = engine.locals()[plan.var as usize].type_id;
             engine.const_operand(ValueKind::Int(c as u64, ty), ty)
         }
-        BoundKey::Field(..) => unreachable!("`analyze_loop` admits a local or a constant"),
+        BoundKey::Field(root, _) => {
+            let base = local_read(engine, root, span);
+            let e = engine.alloc_expr(
+                ExprKind::FieldAccess {
+                    expr: base,
+                    field_index: SeqField::Len.index(),
+                    field_name: SeqField::Len.field_name().to_string(),
+                },
+                TypeTable::I32,
+                span,
+            );
+            Operand::Expr(e)
+        }
     }
 }
 
@@ -824,12 +928,78 @@ fn alloc_binary(
     Operand::Expr(e)
 }
 
+/// What the fast loop's own guard bound is minted under, where the bound is
+/// reloaded.
+const LIMIT: &str = "bce_limit";
+
 /// Apply one versioning plan: clone the loop, delete the implied checks in
 /// the clone, and replace the loop with
-/// `if <residual> { fast } else { original }`.
-fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
+/// `if <residual> { fast } else { original }`. Where the bound is reloaded, it
+/// is `let $lim = H; if <residual> { fast } original`: the fast loop runs while
+/// `var < $lim`, a failed re-test drops `$lim` below every value, and the
+/// original loop takes over where the fast one stopped, or exits at once.
+fn apply_version(
+    engine: &mut Engine,
+    binds: &Binds,
+    type_table: &TypeTable,
+    plan: &Plan,
+) -> FastArm {
     let span = engine.body.stmts[plan.loop_stmt].span;
+    let var_ty = engine.locals()[plan.var as usize].type_id;
+    // The re-tests go into the original first, so the clone carries them at
+    // the statements the analysis found, and come out of it after.
+    let reload = plan.reload.as_ref().map(|reload| {
+        let lim = engine.alloc_minted_local(LIMIT, var_ty, true);
+        let floor = if plan.unsigned {
+            0
+        } else {
+            let bits = type_table
+                .primitive_head(var_ty)
+                .and_then(PrimitiveType::int_max)
+                .expect("the guard variable is an integer");
+            !u64::try_from(bits).expect("a scalar integer maximum fits u64")
+        };
+        let mut retests = Vec::with_capacity(reload.points.len());
+        for &(block, after) in &reload.points {
+            let retest = alloc_retest(engine, plan, lim, floor, span);
+            let mut stmts = engine.body.blocks[block].stmts.clone();
+            let pos = stmts
+                .iter()
+                .position(|&s| s == after)
+                .expect("a re-test point is a statement of its block");
+            stmts.insert(pos + 1, retest);
+            engine.set_block_stmts(block, stmts);
+            retests.push((block, retest));
+        }
+        (lim, retests)
+    });
     let fast_body = engine.clone_block(plan.loop_body);
+    if let Some((lim, retests)) = &reload {
+        for &(block, retest) in retests {
+            let mut stmts = engine.body.blocks[block].stmts.clone();
+            stmts.retain(|&s| s != retest);
+            engine.set_block_stmts(block, stmts);
+        }
+        // The original guard with `$lim` for its bound: `var + g >= $lim`.
+        let mut guarded = local_read(engine, plan.var, span);
+        if plan.guard_offset != 0 {
+            let g = engine.const_operand(ValueKind::Int(plan.guard_offset as u64, var_ty), var_ty);
+            guarded = alloc_binary(engine, guarded, NirBinaryOp::Add, g, var_ty, span);
+        }
+        let lim_read = local_read(engine, *lim, span);
+        let done = alloc_pred(engine, guarded, NirBinaryOp::GtEq, lim_read, span);
+        let exit = engine.alloc_stmt(
+            StmtKind::Break {
+                label: None,
+                value: None,
+            },
+            span,
+        );
+        let guard = alloc_if_then(engine, done, exit, span);
+        let mut stmts = engine.body.blocks[fast_body].stmts.clone();
+        stmts[plan.guard_idx] = guard;
+        engine.set_block_stmts(fast_body, stmts);
+    }
     // `fast_body` is a structural clone of `plan.loop_body`, so the guard/check
     // layout `analyze_loop` recorded on `plan` holds verbatim — no re-parse.
     eliminate_checks_in_fast(engine, binds, plan, fast_body);
@@ -842,8 +1012,42 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
         span,
     );
     let then_block = engine.alloc_block(vec![fast_stmt], span);
-    let else_block = engine.alloc_block(vec![slow_stmt], span);
 
+    let residual = residual(engine, plan, span);
+    let mut stmts = engine.body.blocks[plan.parent].stmts.clone();
+    let pos = stmts
+        .iter()
+        .position(|&s| s == plan.loop_stmt)
+        .expect("versioned loop stmt must be in its parent block");
+    let else_block = reload
+        .is_none()
+        .then(|| engine.alloc_block(vec![slow_stmt], span));
+    let if_stmt = engine.alloc_stmt(
+        StmtKind::If {
+            condition: residual,
+            then_block,
+            else_block,
+        },
+        span,
+    );
+    if let Some((lim, _)) = &reload {
+        let h = bound_read(engine, plan, plan.bound, span);
+        let init = alloc_local_set(engine, *lim, h, span);
+        stmts.splice(pos..=pos, [init, if_stmt, slow_stmt]);
+    } else {
+        stmts[pos] = if_stmt;
+    }
+    engine.set_block_stmts(plan.parent, stmts);
+
+    FastArm {
+        version_if: if_stmt,
+        then_block,
+        fast_body,
+    }
+}
+
+/// The condition under which the fast loop's checks all hold.
+fn residual(engine: &mut Engine, plan: &Plan, span: Span) -> Operand {
     let mut residual = limit_terms(engine, plan, plan.limits[0], span);
     for &limit in &plan.limits[1..] {
         let terms = limit_terms(engine, plan, limit, span);
@@ -852,27 +1056,49 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     if let Some(floor) = &plan.floor {
         residual = and_floor_terms(engine, plan, floor, residual, span);
     }
-    let if_stmt = engine.alloc_stmt(
-        StmtKind::If {
-            condition: residual,
-            then_block,
-            else_block: Some(else_block),
+    residual
+}
+
+/// `if !<the reloaded limits' terms> { $lim = floor }`: the re-test after a
+/// statement that may lower the reloaded bound, ending the fast loop at this
+/// iteration's close when it did.
+fn alloc_retest(engine: &mut Engine, plan: &Plan, lim: u32, floor: u64, span: Span) -> StmtId {
+    let mut holds: Option<Operand> = None;
+    for &limit in &plan.limits {
+        if matches!(limit.bound, BoundKey::Field(..)) {
+            let terms = limit_terms(engine, plan, limit, span);
+            holds = Some(match holds {
+                Some(rest) => alloc_pred(engine, rest, NirBinaryOp::And, terms, span),
+                None => terms,
+            });
+        }
+    }
+    let holds = holds.expect("a reloaded plan has a reloaded limit");
+    let failed = engine.alloc_expr(
+        ExprKind::Unary {
+            op: NirUnaryOp::Not,
+            expr: holds,
         },
+        TypeTable::BOOL,
         span,
     );
-    let mut stmts = engine.body.blocks[plan.parent].stmts.clone();
-    let pos = stmts
-        .iter()
-        .position(|&s| s == plan.loop_stmt)
-        .expect("versioned loop stmt must be in its parent block");
-    stmts[pos] = if_stmt;
-    engine.set_block_stmts(plan.parent, stmts);
+    let ty = engine.locals()[lim as usize].type_id;
+    let floor = engine.const_operand(ValueKind::Int(floor, ty), ty);
+    let end = alloc_local_set(engine, lim, floor, span);
+    alloc_if_then(engine, Operand::Expr(failed), end, span)
+}
 
-    FastArm {
-        version_if: if_stmt,
-        then_block,
-        fast_body,
-    }
+/// `if condition { stmt }`.
+fn alloc_if_then(engine: &mut Engine, condition: Operand, stmt: StmtId, span: Span) -> StmtId {
+    let then_block = engine.alloc_block(vec![stmt], span);
+    engine.alloc_stmt(
+        StmtKind::If {
+            condition,
+            then_block,
+            else_block: None,
+        },
+        span,
+    )
 }
 
 /// The residual terms under which every `var` the guard admits keeps
@@ -1073,7 +1299,7 @@ fn eliminate_checks_in_fast(engine: &mut Engine, binds: &Binds, plan: &Plan, fas
         if stmt_modifies(engine, s, var, h) {
             break;
         }
-        collect_checks_in_node(engine, binds, NodeRef::Stmt(s), var, &mut checks);
+        collect_checks_in_node(engine, binds, fast_body, NodeRef::Stmt(s), var, &mut checks);
     }
     for check in checks {
         // As in `condition_implication`: the elimination drops the condition
@@ -1114,7 +1340,7 @@ fn constify_check_temp(
             } = &engine.body.stmts[s].kind
             && *local_index == temp
             && is_pure_operand(engine.body, *value)
-            && is_check_comparison(engine, binds, *value, var, limit)
+            && is_check_comparison(engine, binds, fast_body, *value, var, limit)
         {
             let v = engine
                 .body
@@ -1141,6 +1367,7 @@ fn constify_check_temp(
 fn is_check_comparison(
     engine: &Engine,
     binds: &Binds,
+    loop_body: BlockId,
     value: Operand,
     var: u32,
     limit: Option<Limit>,
@@ -1154,7 +1381,8 @@ fn is_check_comparison(
         NirBinaryOp::Lt | NirBinaryOp::LtEq | NirBinaryOp::Gt | NirBinaryOp::GtEq
     );
     let is_limit = limit.is_some_and(|limit| {
-        op == NirBinaryOp::Lt && parse_limit(engine, binds, left, right, var) == Some(limit)
+        op == NirBinaryOp::Lt
+            && parse_limit(engine, binds, loop_body, left, right, var) == Some(limit)
     });
     (relational && (reads_var(left) || reads_var(right))) || is_limit
 }

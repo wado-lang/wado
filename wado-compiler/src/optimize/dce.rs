@@ -2330,7 +2330,7 @@ fn drop_unobserved_stmts(
 
 /// How DCE names a global: its module path and its name.
 fn global_key(module_source: &ModuleSource, name: &str) -> (String, String) {
-    (module_source.to_path().join("::"), name.to_string())
+    (module_source.to_string(), name.to_string())
 }
 
 /// Drop a global that only feeds itself. Installing a handler saves the
@@ -2796,7 +2796,10 @@ mod tests {
     use crate::token::Span;
 
     fn free_fn(interner: &mut ModuleSourceInterner, name: &str) -> FunctionId {
-        FunctionId::Free(FreeFunctionName::from_strs(interner, &["test"], name))
+        FunctionId::Free(FreeFunctionName::new(
+            interner.local("test"),
+            name.to_string(),
+        ))
     }
 
     /// The graph where the function at position `i` is named `names[i]` and

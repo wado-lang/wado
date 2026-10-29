@@ -140,7 +140,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: ToWire> ToWire for T {
     }
 }
 
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: FromWire> FromWire for T {
+impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: FromWire> FromWire for T {
     fn from_wire(n: &Node) -> Result<T, WireError> {
         match n {
             Node::Obj(entries) => {

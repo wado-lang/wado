@@ -603,6 +603,7 @@ async fn render_phases(
     }
 
     if needs_compile {
+        let profile = inputs.profile(&base_path);
         let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
         let options = wado_compiler::CompilerOptions {
             opt_level,
@@ -613,6 +614,7 @@ async fn render_phases(
             codegen_flags: inputs.codegen_flags.clone(),
             params,
             coverage: inputs.coverage_scope(),
+            profile,
             invocations,
             parallelism: 2,
             ..wado_compiler::CompilerOptions::default()

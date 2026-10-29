@@ -1,0 +1,39 @@
+// `sroa_param` must not narrow `h: &Holder` to a by-value `h.data` while a
+// sibling `&mut List<i32>` may write that list's interior. `sink` aliases
+// `hh.data`, so `shrink` empties the list `h.data` names mid-loop, and the
+// bounds check on `h.data[i]` must fail as it does at O0. A by-value snapshot
+// reads as a copy no one else writes, which lets the check fold away and the
+// loop read the stale slots past `used`.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+#[inline("never")]
+fn shrink(list: &mut List<i32>) {
+    list.truncate(1);
+}
+
+fn probe(sink: &mut List<i32>, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(h.data[i]);
+        if i == 0 {
+            shrink(sink);
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh.data, &hh, &mut out);
+    println(`${out.len()}`);
+}
+
+__DATA__
+{
+    "trapped": true,
+    "stderr_contains": ["Contract of List::index_value failed"]
+}

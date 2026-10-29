@@ -4786,7 +4786,7 @@ impl<'a> TirUnparser<'a> {
                 // Source-form reproduces the name as written (bare); debug-form
                 // qualifies every module the same way.
                 if !self.source_form {
-                    self.output.push_str(&module_source.to_path().join("::"));
+                    self.output.push_str(&module_source.to_string());
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -4807,7 +4807,7 @@ impl<'a> TirUnparser<'a> {
                 module_source,
             } => {
                 if !self.source_form {
-                    self.output.push_str(&module_source.to_path().join("::"));
+                    self.output.push_str(&module_source.to_string());
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -4818,7 +4818,7 @@ impl<'a> TirUnparser<'a> {
                 value,
             } => {
                 if !self.source_form {
-                    self.output.push_str(&module_source.to_path().join("::"));
+                    self.output.push_str(&module_source.to_string());
                     self.output.push_str("::");
                 }
                 self.output.push_str(name);
@@ -4891,7 +4891,7 @@ impl<'a> TirUnparser<'a> {
                     let full_name = if self.source_form {
                         func_name
                     } else {
-                        format!("{}::{func_name}", func.module_path().join("::"))
+                        format!("{}::{func_name}", func.module_source)
                     };
                     self.output.push_str(&Self::quote_if_needed(&full_name));
                 }

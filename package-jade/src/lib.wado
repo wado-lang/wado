@@ -205,7 +205,8 @@ pub fn schema_for<T: JsonSchema>() -> Schema {
 
 // ── The derivation, one blanket per reflection kind ──
 
-impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Serialize> JsonSchema for T {
+// An open struct only, as serde derives: a closed one writes its own wire form.
+impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: JsonSchema + Serialize> JsonSchema for T {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
         return gen.define(Reflect::<T>::type_name(), |g| struct_schema::<T>(g));
     }
@@ -227,7 +228,7 @@ fn struct_schema<T: ReflectStruct<FieldTypes = [..F]>, ..F: JsonSchema + Seriali
     return s;
 }
 
-fn field_schema<T, F: JsonSchema>(f: &StructField<T, F>, gen: &mut SchemaGenerator) -> Schema {
+fn field_schema<T, F: JsonSchema>(_field: &StructField<T, F>, gen: &mut SchemaGenerator) -> Schema {
     return F::json_schema(gen);
 }
 
@@ -281,7 +282,7 @@ fn one_property(name: String, value: Schema) -> Schema {
 
 impl<E: ReflectEnum<Members = [..M]>, ..M> JsonSchema for E {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return gen.define(Reflect::<E>::type_name(), |g| enum_schema::<E>());
+        return gen.define(Reflect::<E>::type_name(), |_| enum_schema::<E>());
     }
 }
 
@@ -296,7 +297,7 @@ fn enum_schema<E: ReflectEnum<Members = [..M]>, ..M>() -> Schema {
 
 impl<L: ReflectFlags<Members = [..M]>, ..M> JsonSchema for L {
     fn json_schema(gen: &mut SchemaGenerator) -> Schema {
-        return gen.define(Reflect::<L>::type_name(), |g| flags_schema::<L>());
+        return gen.define(Reflect::<L>::type_name(), |_| flags_schema::<L>());
     }
 }
 

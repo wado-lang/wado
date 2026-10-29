@@ -8,10 +8,10 @@ user-written ones — is a generic library `impl`, static and monomorphized. No
 per-capability synthesizer, no macros, no dynamic reflection.
 
 The two are exposed as one family in two layers, because they answer to
-different rules: identity through the root trait `Reflect`, which every nameable
-type satisfies; structure through a sealed sub-trait per kind, gated on every
-member being visible. Naming a type reveals nothing about what is inside it, so
-the gate belongs to the kinds alone.
+different rules: identity through the root trait `Reflect`, and structure through
+a sealed sub-trait per kind. Both hold of every type in every module. Reading a
+type's structure is always allowed; building a struct from its fields is allowed
+only when the struct is open (see [Visibility](#visibility)).
 
 Two channels serve a derivation: a payload pack (`FieldTypes` / `CasePayloads`)
 binds the per-member type variables `..F` / `..P` and drives the value-free
@@ -84,10 +84,11 @@ pub trait Reflect {                              // identity — every nameable 
 
 pub trait ReflectStruct: Reflect {               // struct
     type FieldTypes;                             // payload pack [F_0, F_1, …]
+    type FieldInputs;                            // FieldTypes if open, ! if closed
     type FieldSlots;                             // [Option<F_0>, …]
     type Members;                                // [StructField<Self, F_0>, …]
     fn members() -> Self::Members;
-    fn from_fields(fields: Self::FieldTypes) -> Self;  // assemble from field values
+    fn from_fields(fields: Self::FieldInputs) -> Self; // assemble from field values
     fn default_slot(index: i32) -> Self::FieldSlots;  // field `index`'s `f: T = expr`
     fn empty_slots() -> Self::FieldSlots;        // every slot `None`
 }
@@ -160,8 +161,9 @@ through the blanket needs the turbofish.
 
 Every kind spells its build direction `from_<channel>`. `from_discriminant` /
 `from_bits` return `Option` because an unknown raw input is a normal deserialize
-error, not a bug; `from_fields` is total, since a field-value tuple is already
-typed. `discriminant` / `bits` read the live tag off a value.
+error, not a bug; `from_fields` is total on an open struct, since a field-value
+tuple is already typed, and takes no argument at all on a closed one
+([Visibility](#visibility)). `discriminant` / `bits` read the live tag off a value.
 
 `FieldSlots` is the value-level companion of `FieldTypes`: the same pack under
 `Option`. `default_slot(i)` fills slot `i` with field `i`'s declared default
@@ -234,12 +236,10 @@ case carries, and a type with no declaration to name — a reference, a function
 type — carries its components instead. Sealed as everything here is: a program
 reads a case and mints none, and `TypeInfo` is not itself reflectable.
 
-Identity sits on the root rather than on each kind. A kind bound gates a name
-behind [Visibility](#visibility), so a type whose fields are private
-(`TreeMap<String,i32>`) could not be named by the library that must key it; and
-it would force a derivation to widen its bound to a kind just to name its
-subject. A schema generator keying `$defs` by a `T: JsonSchema` cannot do that,
-since it does not know which kind `T` is.
+Identity sits on the root rather than on each kind. Otherwise a derivation would
+have to widen its bound to a kind just to name its subject. A schema generator
+keying `$defs` by a `T: JsonSchema` cannot do that, since it does not know which
+kind `T` is.
 
 `type_name()` sits beside `type_info()` on the root: the allocation-free
 shorthand serde's `begin_struct` calls, answering the declaration name
@@ -293,7 +293,7 @@ so the derivation holds the values: a slot tuple `[..Option<F>]` that starts
 empty, is written by the wire loop at the index the format reports, and is read
 back in declaration order.
 
-The blanket binds `T: ReflectStruct<FieldTypes = [..F]> + FieldSchema` and
+The blanket binds `T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]> + FieldSchema` and
 `..F: Deserialize`, and the walk needs three things the language grew for it: a
 variadic `for-of` that binds the element index, that index as a tuple subscript
 so the wire loop can write one slot, and the comprehension that reads the slots
@@ -328,28 +328,36 @@ import. They are the reflection API, documented where the rest of the prelude
 is. Like every prelude name they are reserved: a module declaring its own
 `EnumCase` is an error, and generated code (wadopoet, Gale) avoids them.
 
-A type satisfies a `T: Reflect*` bound only where every one of its members is
-visible. A declaration carries a single synthesized impl, so `members()` is
-fixed and cannot be shortened for a caller that sees less; admitting a type on
-one public member would enumerate its private ones alongside it. The shape is
-observable as a whole or not at all. A type declaring no member is genuinely
-memberless and always satisfies.
+Every `Reflect*` bound a type satisfies, it satisfies in every module. An
+earlier rule held a kind trait only where every member was visible at the use
+site. That made the answer depend on who asked, so one bound could select
+different impls in different modules, and an impl selected by one module could
+be instantiated from another that was not allowed to see it.
 
-This gates reflection written _about_ a type, not the impls derived _for_ it. A
-derived impl is synthesized at the declaration, where every member is visible,
-so `${v:?}` and serde keep rendering a foreign type in full — that is the
-declaring module's own choice of representation, the same as deriving it by
-hand. What visibility withholds is a third party enumerating a shape its owner
-did not expose.
+Reading is what a derivation like `Inspect` does, and it reveals no more than
+the declaring module's own `${v:?}` would. Forging is what visibility must stop:
+a private field usually guards an invariant, and `from_fields` would let any
+module build a value that skips it. So the rule splits the two.
 
-This is what keeps an abstraction like `TreeMap` out of a downstream
-`T: ReflectStruct` without naming it: its fields are private, so nothing outside
-its module can enumerate them.
+A struct is open when no field reaches less far than the struct itself, on the
+ladder file-private < `internal` < `pub`. Wherever an open struct can be named,
+so can each of its fields, so building it from them bypasses nothing. A struct
+with a field narrower than itself is closed. `ReflectStruct::FieldInputs`, the
+parameter type of `from_fields`, is `FieldTypes` for an open struct and `!` for
+a closed one, so no argument reaches a closed struct's `from_fields`. The rule
+reads only the declaration, so it gives the same answer in every module.
 
-The gate is on the kind traits alone, never on the root. A type's name and module
-are public the moment the type is, so `TreeMap<String,i32>` satisfies `Reflect`
-downstream and [answers for its identity](#type-identity) like any other type,
-while `ReflectStruct` still refuses to enumerate it.
+A generic body that builds `T` bounds it with `FieldInputs = [..F]`. Serde's
+derivations and Jade's `JsonSchema` take only open structs: a closed struct's
+author decides what its fields mean on the wire. The pin in their blankets is
+the only place this is stated. The structural derivation admits a declaration
+only where its source's bound on the kind holds, pins included. So a marker on a
+closed struct is an error where it is written, rather than reaching the closed
+`from_fields` at run time. The diagnostic names the field that closes the
+struct.
+
+The rule costs one case: a `pub` struct with an `internal` field is closed even
+inside its own package, where the field is visible.
 
 ## Generic types
 
@@ -373,18 +381,11 @@ the plain-struct case and Rust's `{:?}`. The instantiation shows in
 `Pair<…>`, with `type_args()` substituted per instance, so a consumer keying
 `$defs` separates `Pair<String>` from `Pair<i32>` (see [Type identity](#type-identity)).
 
-Two rules bound what is reflectable:
-
-- A member's own type never disqualifies its owner. An associated-type
-  projection looks like an exception — an iterator adapter's
-  `pub f: fn mut(I::Item) -> U` does not substitute the declaration's own
-  parameters — but the synthesized impl carries the declaration's bounds, so
-  `I::Item` resolves at the instantiation like any other projection.
-- A type whose members are not all visible at the use site is not reflectable
-  there (see [Visibility](#visibility)). This is what leaves `TreeMap`'s
-  hand-written `Inspect` as the only candidate: a generic instance's mangled
-  name (`TreeMap<String, i32>`) does not match the impl written for `TreeMap`,
-  so the derivation would otherwise take it.
+A member's own type never disqualifies its owner. An associated-type projection
+looks like an exception — an iterator adapter's `pub f: fn mut(I::Item) -> U`
+does not substitute the declaration's own parameters — but the synthesized impl
+carries the declaration's bounds, so `I::Item` resolves at the instantiation like
+any other projection.
 
 ### Value bridges
 

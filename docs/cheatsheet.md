@@ -204,6 +204,13 @@ let println = 1;                                  // warns: shadows the function
 if let Some(x) = x { }                            // exempt: derives from old x
 if let Some(x) = y { }                            // warns: derives from y
 match x { Some(x) => ... }                        // warns: x means two things here
+
+// A variable or parameter nothing reads warns (`unused_variables`), and so
+// does one only ever assigned to. A leading `_` keeps it on purpose. The
+// parameters of a trait or interface method, or of an `export fn`, are exempt:
+// the declaration or the component boundary names them.
+let unread = 1;                                   // warns: never used
+let _kept = 1;                                    // no warning
 ```
 
 ## Global Variables

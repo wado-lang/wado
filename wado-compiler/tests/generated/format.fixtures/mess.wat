@@ -76,7 +76,7 @@
               (unreachable)))))
     )
     (func $realloc (;3;) (type 3) (param i32 i32 i32 i32) (result i32)
-      (local i64 i64 i32)
+      (local i64 i64)
       (if ;; label = @1
         (i32.eqz
           (local.get 3))
@@ -90,7 +90,7 @@
               (if ;; label = @3
                 (i32.ne
                   (i32.load
-                    (local.tee 6
+                    (local.tee 2
                       (i32.sub
                         (local.get 0)
                         (i32.const 4))))
@@ -98,7 +98,7 @@
                 (then
                   (unreachable)))
               (i32.store
-                (local.get 6)
+                (local.get 2)
                 (i32.const -1))
               (if ;; label = @3
                 (i32.ne
@@ -114,7 +114,7 @@
       (local.set 4
         (i64.add
           (i64.extend_i32_u
-            (local.tee 1
+            (local.tee 0
               (select (result i32)
                 (i32.const 4)
                 (local.get 2)
@@ -162,15 +162,15 @@
           (local.get 4)))
       (i32.store
         (i32.sub
-          (local.tee 1
+          (local.tee 0
             (i32.add
               (i32.wrap_i64
                 (local.get 5))
-              (local.get 1)))
+              (local.get 0)))
           (i32.const 4))
         (i32.const -1591939840))
       (return
-        (local.get 1))
+        (local.get 0))
       (unreachable)
     )
   )

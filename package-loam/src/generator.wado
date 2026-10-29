@@ -17,6 +17,7 @@ use { CheckpointFile } from "./safetensors.wado";
 use {
     Spelling,
     check,
+    check_in_place,
     generate_model,
     generate_tokenizer,
     header_extent,
@@ -114,9 +115,12 @@ fn generate_graph(
     }
     let path = req.primary.path;
     let weights = weights_of(indexes, files).map_err(|e| KilnError::InvalidSchema(e));
-    let model = check(&path, spelling, read_all(req.primary.content), &req.options).map_err(
-        |e| KilnError::InvalidSchema(e),
-    )?;
+    let checked = if req.options.embed {
+        check(&path, spelling, read_all(req.primary.content), &req.options);
+    } else {
+        check_in_place(&path, spelling, req.primary.content, &req.options);
+    };
+    let model = checked.map_err(|e| KilnError::InvalidSchema(e))?;
     let source = generate_model(&model, &path, weights?, runtime).map_err(|e| KilnError::InvalidSchema(e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,

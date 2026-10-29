@@ -501,8 +501,19 @@ struct ReflectTarget {
     receiver: FqTypeName,
     type_params: Vec<TirTypeParam>,
     fields: Vec<ReflectFieldInfo>,
+    openness: Openness,
     wire_name_policy: Option<NamePolicy>,
     span: Span,
+}
+
+/// Whether a struct may be built from its fields through reflection
+/// ([`Visibility::first_hidden_field`]).
+#[derive(Clone, Copy)]
+enum Openness {
+    /// `FieldInputs` is `FieldTypes`.
+    Open,
+    /// A field reaches less far than the struct: `FieldInputs` is `!`.
+    Closed,
 }
 
 /// Select the structs in `module` that need a synthesized `ReflectStruct` impl:
@@ -537,6 +548,13 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     default_expr: f.default_expr.clone(),
                 })
                 .collect(),
+            openness: match s
+                .visibility
+                .first_hidden_field(s.fields.iter().map(|f| f.visibility))
+            {
+                Some(_) => Openness::Closed,
+                None => Openness::Open,
+            },
             wire_name_policy: s.wire_name_policy,
             span: s.span,
         })
@@ -558,6 +576,7 @@ fn generate_struct_reflect_methods(
         receiver,
         type_params,
         fields,
+        openness,
         wire_name_policy: name_policy,
         span,
     } = target;
@@ -605,6 +624,10 @@ fn generate_struct_reflect_methods(
             .map(|f| tt.make_generic_instance(env.member_struct_def, vec![struct_type, f.type_id]))
             .collect();
         let members_tuple_type = tt.make_tuple(member_types.clone());
+        let field_inputs_type = match openness {
+            Openness::Open => fields_tuple_type,
+            Openness::Closed => TypeTable::NEVER,
+        };
         register_reflect_assoc_types(
             &mut tt,
             struct_type,
@@ -612,6 +635,7 @@ fn generate_struct_reflect_methods(
             is_generic,
             &[
                 (REFLECT_FIELD_TYPES_ASSOC, fields_tuple_type),
+                (REFLECT_FIELD_INPUTS_ASSOC, field_inputs_type),
                 (REFLECT_FIELD_SLOTS_ASSOC, slots_tuple_type),
                 (REFLECT_MEMBERS_ASSOC, members_tuple_type),
             ],
@@ -644,6 +668,7 @@ fn generate_struct_reflect_methods(
         struct_type,
         fields,
         fields_tuple_type,
+        *openness,
         span,
     );
     let default_slot_fn = generate_struct_default_slot_fn(
@@ -749,6 +774,10 @@ pub(crate) const REFLECT_MEMBERS_ASSOC: &str = "Members";
 /// field types themselves, bound to place per-field trait bounds on a
 /// derivation.
 pub(crate) const REFLECT_FIELD_TYPES_ASSOC: &str = "FieldTypes";
+
+/// `ReflectStruct`'s constructor-input associated type (`type FieldInputs`):
+/// `FieldTypes` for an open struct, `!` for a closed one.
+pub(crate) const REFLECT_FIELD_INPUTS_ASSOC: &str = "FieldInputs";
 
 /// `ReflectStruct`'s slot associated type (`type FieldSlots`): the field types
 /// under `Option`, the shape `default_slot()` returns and a streaming build fills.
@@ -1161,7 +1190,8 @@ fn generate_struct_empty_slots_fn(
 }
 
 /// Build `S^ReflectStruct::from_fields(fields: [F_0, …]) -> S`:
-/// `return S { f_0: fields.0, … };`.
+/// `return S { f_0: fields.0, … };`. A closed struct takes `!`, which no
+/// caller can supply, so its body is unreachable.
 fn generate_struct_from_fields_fn(
     env: &ReflectSynthEnv,
     reflect_trait_name: &FqTraitName,
@@ -1169,10 +1199,36 @@ fn generate_struct_from_fields_fn(
     struct_type: TypeId,
     fields: &[ReflectFieldInfo],
     fields_tuple_type: TypeId,
+    openness: Openness,
     span: Span,
 ) -> TirFunction {
     let method_info = trait_method_info(receiver, reflect_trait_name, &env.from_fields_method);
     let qualified_name = method_info.to_mangled_name();
+    let fields_param = |type_id| TirParam {
+        name: "fields".to_string(),
+        type_id,
+        local_index: 0,
+        is_mut: false,
+        is_mut_ref: false,
+        span,
+    };
+    if let Openness::Closed = openness {
+        let body = TirBlock::new(
+            vec![TirStmt::new(
+                TirStmtKind::Expr(unreachable_call(TypeTable::NEVER, span)),
+                span,
+            )],
+            span,
+        );
+        return make_synthetic_method(
+            qualified_name,
+            method_info,
+            vec![fields_param(TypeTable::NEVER)],
+            struct_type,
+            body,
+            vec![],
+        );
+    }
 
     let literal_fields = fields
         .iter()
@@ -1208,14 +1264,7 @@ fn generate_struct_from_fields_fn(
     make_synthetic_method(
         qualified_name,
         method_info,
-        vec![TirParam {
-            name: "fields".to_string(),
-            type_id: fields_tuple_type,
-            local_index: 0,
-            is_mut: false,
-            is_mut_ref: false,
-            span,
-        }],
+        vec![fields_param(fields_tuple_type)],
         struct_type,
         body,
         vec![],

@@ -1,0 +1,98 @@
+//! A model working a task with the repository tools until it answers.
+
+use { Preopens } from "core:fs";
+use { Process } from "core:process";
+use { Client } from "wasi:http";
+use { Value } from "core:value";
+use { converse, message, Message, Usage } from "./anthropic.wado";
+use { tools, Workspace } from "./tools.wado";
+
+/// What an agent did. A run that failed keeps what it spent before the error.
+pub struct AgentRun {
+    pub answer: Result<String, String>,
+    pub turns: i32,
+    pub calls: List<Call>,
+    pub usage: Usage,
+}
+
+/// A tool call the model made, kept to see how it read.
+pub struct Call {
+    pub name: String,
+    pub input: Value,
+    pub is_error: bool,
+}
+
+struct TextBlock {
+    #[wire(name = "type")]
+    kind: String = "text",
+    text: String,
+}
+
+struct ToolResult {
+    #[wire(name = "type")]
+    kind: String = "tool_result",
+    tool_use_id: String,
+    content: String,
+    is_error: bool,
+}
+
+struct Blocks {
+    role: String,
+    content: List<Value>,
+}
+
+/// The answer `model` gives to `task` after reading `ws` with the tools, in at
+/// most `max_turns` turns. The last turn takes no tool call.
+pub fn run_agent(
+    api_key: &String,
+    model: String,
+    system: String,
+    task: String,
+    ws: &Workspace,
+    max_turns: i32,
+    max_tokens: i32,
+) -> AgentRun with (Client, Preopens, Process) {
+    assert max_turns >= 1;
+    let declared = tools();
+    let mut messages = [message(&Message { role: "user", content: task })] as List<Value>;
+    let [mut turns, mut calls, mut usage] = [0, [] as List<Call>, Usage {}];
+    loop {
+        turns += 1;
+        let last = turns == max_turns;
+        let turn = match converse(*api_key, model, system, &declared, !last, &messages, max_tokens) {
+            Ok(turn) => turn,
+            Err(e) => {
+                return AgentRun { answer: Err(e), turns, calls, usage };
+            },
+        };
+        usage.add(&turn.usage);
+        if turn.stop_reason != "tool_use" {
+            let answer: Result<String, String> = if turn.stop_reason == "end_turn" {
+                Ok(turn.text());
+            } else {
+                Err(`stopped on ${turn.stop_reason}`);
+            };
+            return AgentRun { answer, turns, calls, usage };
+        }
+        let mut results: List<Value> = [];
+        for let b of turn.blocks() {
+            if b.kind != "tool_use" {
+                continue;
+            }
+            let name = b.name.unwrap();
+            let [content, is_error] = match ws.call(&name, &b.input) {
+                Ok(out) => [out, false],
+                Err(e) => [e, true],
+            };
+            calls.push(Call { name, input: b.input, is_error });
+            results.push(message(&ToolResult { tool_use_id: b.id.unwrap(), content, is_error }));
+        }
+        if turns + 1 == max_turns {
+            results.push(message(
+                &TextBlock { text: "This is your last turn: tools are no longer available. Give your answer now." },
+            ));
+        }
+        messages.push(message(&Blocks { role: "assistant", content: turn.content }));
+        messages.push(message(&Blocks { role: "user", content: results }));
+    }
+}

@@ -95,10 +95,7 @@ obj : '{' pair (',' pair)* '}' ;";
     } else {
         panic("expected Literal");
     }
-    if let Repeat(r) = elems[2] {
-    } else {
-        panic("expected Repeat");
-    }
+    assert elems[2] matches { Repeat(_) };
 }
 
 test "parser rule with label assignment" {

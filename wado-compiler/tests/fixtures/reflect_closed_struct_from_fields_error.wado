@@ -1,0 +1,10 @@
+// A closed struct cannot be built from its fields: its `FieldInputs` is `!`,
+// so nothing outside its constructors forges one.
+use { PubPrivateField } from "./sub/reflect_open_struct_dep.wado";
+
+export fn run() {
+    let _ = ReflectStruct::<PubPrivateField>::from_fields([0]);
+}
+
+__DATA__
+{"compile_error": ":6:13: analysis error: `ReflectStruct::<PubPrivateField>::from_fields()` cannot build `PubPrivateField`\n  note: `PubPrivateField` is closed: its field `a` is private to its defining file while `PubPrivateField` is `pub`, so its `FieldInputs` is `!`\n  hint: build it with a function its module provides"}

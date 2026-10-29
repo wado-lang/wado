@@ -1,0 +1,22 @@
+// A marker asks for the derivation its source blanket states, so a closed
+// struct's serde marker is refused where it is written: the blankets pin
+// `FieldInputs = [..F]`, which a closed struct binds to `!`. The derived body
+// would otherwise reach the closed `from_fields` and trap at run time.
+use { Serialize, Deserialize } from "core:serde";
+
+pub struct Properties {
+    name: String,
+}
+impl Serialize for Properties;
+impl Deserialize for Properties;
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":10:1: analysis error: cannot derive `Serialize` for `Properties`: `Properties` is closed: its field `name` is private to its defining file while `Properties` is `pub`\n  hint: widen `name` to `pub`, or write the impl",
+    "compile_errors_contains": [
+        "cannot derive `Deserialize` for `Properties`: `Properties` is closed: its field `name` is private to its defining file while `Properties` is `pub`"
+    ]
+}

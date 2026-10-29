@@ -1,18 +1,20 @@
-//! Local coalescing: locals of one Wasm type whose live ranges never overlap
+//! Local coalescing: locals of one Wasm type that never hold values at once
 //! share one slot, as a register allocator shares a register. A `bool` and a
-//! `u32` are both an `i32` there, so they may share. A range runs from a
-//! local's first access to its last in evaluation order. It widens to cover a
-//! loop whose back edge the value may cross, and back to the function entry
-//! where a read may see the zero Wasm starts a local at. A parameter is live
-//! from the entry and can absorb a local whose range starts after its own ends.
-
-use std::collections::BTreeSet;
+//! `u32` are both an `i32` there, so they may share. Two locals interfere when
+//! one is written where the other is live ([`Flow`]), except that a copy
+//! `x = y` leaves `x` and `y` free to share, holding one value. A local live
+//! at the entry holds the zero Wasm starts it at, so it is written there, as
+//! each parameter is with its argument. A parameter keeps its slot and can
+//! absorb a local that never overlaps it.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::wir::{WirInstr, WirLocals, WirPackage, WirType};
 use crate::wir_optimize::local_layout::WasmClass;
 use crate::wir_optimize::local_nullability::relax_unset_nonnull_locals_in;
-use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
+use crate::wir_visitor::WirMutVisitor;
+
+use super::liveness::{Flow, Observer, Store};
+use super::util::Bits;
 
 /// Rename each local to the slot it shares, dropping the declarations and the
 /// self-copies the renaming leaves.
@@ -45,366 +47,141 @@ fn coalesce_body(body: &mut Vec<WirInstr>, params: &[(&str, &WirType)]) {
 /// Each local merged into another slot, mapped to that slot's name.
 fn plan_slots(body: &[WirInstr], params: &[(&str, &WirType)]) -> IndexMap<String, String> {
     let declared = WirLocals::scan(body);
-    // Parameters first, so an index below `params.len()` is one.
-    let locals: IndexSet<&str> = params
-        .iter()
-        .map(|&(name, _)| name)
-        .chain(declared.iter().map(|(name, _)| name))
-        .collect();
-    assert_eq!(
-        locals.len(),
-        params.len() + declared.iter().count(),
+    let param_names: IndexSet<&str> = params.iter().map(|&(name, _)| name).collect();
+    assert!(
+        param_names.iter().all(|name| declared.get(name).is_none()),
         "[WIR] a local is declared under a parameter's name"
     );
-    let is_param = |i: usize| i < params.len();
-    let mut ranges = Ranges::new(&locals);
-    ranges.walk_body(body);
-    let mut assignment = DefiniteAssignment::new(&locals, params.len());
-    assignment.walk_body(body);
-
-    let mut intervals: Vec<Option<Interval>> = (0..locals.len())
-        .map(|i| {
-            if is_param(i) {
-                return Some(Interval::new(params[i].1, 0, ranges.last[i], true));
-            }
-            let first = ranges.first[i];
-            (first != 0).then(|| {
-                let start = if assignment.maybe_unset[i] { 0 } else { first };
-                let ty = declared
-                    .get(locals[i])
-                    .expect("indexed from the declarations");
-                Interval::new(ty, start, ranges.last[i], false)
-            })
+    let flow = Flow::of(body);
+    let locals = &flow.locals;
+    let class: Vec<WasmClass> = locals
+        .iter()
+        .map(|name| {
+            let ty = match param_names.get_index_of(name.as_str()) {
+                Some(i) => params[i].1,
+                None => declared.get(name).unwrap_or_else(|| {
+                    panic!("[WIR] `{name}` is accessed but neither declared nor a parameter")
+                }),
+            };
+            WasmClass::of(ty)
         })
         .collect();
-    for lp in &ranges.loops {
-        for (&i, &set_first) in &lp.first_access {
-            let interval = intervals[i].as_mut().expect("an accessed local is ranged");
-            let inside = lp.start <= interval.start && interval.end <= lp.end;
-            if !(inside && set_first) {
-                interval.start = interval.start.min(lp.start);
-                interval.end = interval.end.max(lp.end);
-            }
-        }
-    }
+    let is_param = |local: usize| param_names.contains(locals[local].as_str());
+    let interference = Interference::of(&flow, is_param);
 
-    let mut intervals: Vec<(usize, Interval)> = intervals
-        .into_iter()
-        .enumerate()
-        .filter_map(|(i, interval)| Some((i, interval?)))
-        .collect();
-    intervals.sort_by_key(|&(i, ref interval)| {
-        let order = if interval.is_param {
-            i as u32
-        } else {
-            ranges.first[i]
-        };
-        (interval.start, !interval.is_param, order)
-    });
-    // Per Wasm type, each slot's end and index. A local takes the slot freed
-    // last before it starts: after a copy `b = a` that ends `a`, that is
-    // `a`'s, and the copy goes.
-    let mut pools: Vec<(WasmClass, BTreeSet<(u32, usize)>)> = Vec::new();
-    let mut slot_owners: Vec<usize> = Vec::new();
+    // Parameters first, as they own their slots; then the locals in the order
+    // they are first accessed.
+    let mut order: Vec<usize> = (0..locals.len()).filter(|&l| is_param(l)).collect();
+    order.sort_by_key(|&l| param_names.get_index_of(locals[l].as_str()));
+    order.extend((0..locals.len()).filter(|&l| !is_param(l)));
+
+    let mut slots: Vec<Slot> = Vec::new();
+    let mut slot_of: Vec<Option<usize>> = vec![None; locals.len()];
     let mut renames = IndexMap::default();
-    for (i, interval) in intervals {
-        let pool_index = pools
-            .iter()
-            .position(|(class, _)| *class == interval.class)
-            .unwrap_or_else(|| {
-                pools.push((interval.class, BTreeSet::new()));
-                pools.len() - 1
-            });
-        let pool = &mut pools[pool_index].1;
-        let free = pool.range(..(interval.start, 0)).next_back().copied();
-        let slot = match free {
-            Some(entry @ (_, slot)) if !interval.is_param => {
-                pool.remove(&entry);
-                renames.insert(locals[i].to_string(), locals[slot_owners[slot]].to_string());
-                slot
-            }
-            _ => {
-                slot_owners.push(i);
-                slot_owners.len() - 1
-            }
+    for local in order {
+        let fits = |slot: &Slot| slot.class == class[local] && !slot.interference.contains(local);
+        // A slot holding a copy's other end first, so the copy goes.
+        let shared = if is_param(local) {
+            None
+        } else {
+            interference.copies[local]
+                .iter()
+                .filter_map(|&partner| slot_of[partner])
+                .chain(0..slots.len())
+                .find(|&s| fits(&slots[s]))
         };
-        pool.insert((interval.end, slot));
+        let slot = if let Some(s) = shared {
+            renames.insert(locals[local].clone(), locals[slots[s].owner].clone());
+            s
+        } else {
+            slots.push(Slot {
+                class: class[local].clone(),
+                owner: local,
+                interference: Bits::new(locals.len()),
+            });
+            slots.len() - 1
+        };
+        slots[slot].interference.union(&interference.edges[local]);
+        slot_of[local] = Some(slot);
     }
     renames
 }
 
-struct Interval {
+struct Slot {
     class: WasmClass,
-    start: u32,
-    end: u32,
-    is_param: bool,
+    owner: usize,
+    /// The locals any member interferes with.
+    interference: Bits,
 }
 
-impl Interval {
-    fn new(ty: &WirType, start: u32, end: u32, is_param: bool) -> Self {
-        Self {
-            class: WasmClass::of(ty),
-            start,
-            end,
-            is_param,
-        }
-    }
+/// Which locals hold values at once, and which a copy joins.
+struct Interference {
+    edges: Vec<Bits>,
+    /// The locals each local is copied to or from.
+    copies: Vec<IndexSet<usize>>,
 }
 
-/// Each local's first and last access, numbered in evaluation order from 1 (0
-/// where it has none), and the span of each loop.
-struct Ranges<'a> {
-    locals: &'a IndexSet<&'a str>,
-    position: u32,
-    first: Vec<u32>,
-    last: Vec<u32>,
-    /// Closed loops, inner ones first.
-    loops: Vec<LoopSpan>,
-    open_loops: Vec<LoopSpan>,
-    /// The statement being visited sits directly in the innermost loop's body.
-    at_loop_top: bool,
-}
-
-struct LoopSpan {
-    start: u32,
-    end: u32,
-    /// Each local accessed in the loop, and whether its first access writes
-    /// it from a statement directly in the loop body, so no value of it
-    /// crosses the back edge.
-    first_access: IndexMap<usize, bool>,
-}
-
-impl<'a> Ranges<'a> {
-    fn new(locals: &'a IndexSet<&'a str>) -> Self {
-        Self {
-            locals,
-            position: 0,
-            first: vec![0; locals.len()],
-            last: vec![0; locals.len()],
-            loops: Vec::new(),
-            open_loops: Vec::new(),
-            at_loop_top: false,
-        }
-    }
-
-    fn tick(&mut self) -> u32 {
-        self.position += 1;
-        self.position
-    }
-
-    /// Access `names` at one position: the targets of a multi-value bind are
-    /// written at once, so none of them is dead while another is written.
-    fn access<'n>(&mut self, names: impl IntoIterator<Item = &'n str>, top_write: bool) {
-        let position = self.tick();
-        let innermost = self.open_loops.len().saturating_sub(1);
-        for name in names {
-            let i = local_index(self.locals, name);
-            if self.first[i] == 0 {
-                self.first[i] = position;
-            }
-            self.last[i] = position;
-            for (depth, lp) in self.open_loops.iter_mut().enumerate() {
-                lp.first_access
-                    .entry(i)
-                    .or_insert(top_write && depth == innermost);
-            }
-        }
-    }
-}
-
-fn local_index(locals: &IndexSet<&str>, name: &str) -> usize {
-    locals.get_index_of(name).unwrap_or_else(|| {
-        panic!("[WIR] `{name}` is accessed but neither declared nor a parameter")
-    })
-}
-
-impl WirRefVisitor for Ranges<'_> {
-    fn visit_instr(&mut self, instr: &WirInstr) {
-        let at_loop_top = std::mem::replace(&mut self.at_loop_top, false);
-        if let WirInstr::Loop { body, .. } = instr {
-            let start = self.tick();
-            self.open_loops.push(LoopSpan {
-                start,
-                end: start,
-                first_access: IndexMap::default(),
-            });
-            for stmt in body {
-                self.at_loop_top = true;
-                self.visit_instr(stmt);
-            }
-            let mut lp = self.open_loops.pop().expect("the loop pushed above");
-            lp.end = self.tick();
-            self.loops.push(lp);
-            return;
-        }
-        self.walk_instr(instr);
-        if let Some(name) = instr.local_read() {
-            self.access([name], false);
-        }
-        let mut writes = instr.local_writes().peekable();
-        if writes.peek().is_some() {
-            self.access(writes, at_loop_top);
-        }
-    }
-}
-
-/// Which locals a read may see before any write on some path, following Wasm's
-/// branches.
-struct DefiniteAssignment<'a> {
-    locals: &'a IndexSet<&'a str>,
-    /// The locals written on every path reaching here, `None` where no path
-    /// reaches.
-    state: Option<Bits>,
-    maybe_unset: Vec<bool>,
-    /// One per enclosing label, innermost last.
-    labels: Vec<Label>,
-}
-
-/// Where a branch to an enclosing label goes.
-enum Label {
-    /// The end of a block or an `if`: the meet of the states branching there.
-    End(Option<Bits>),
-    /// The start of a loop. A back edge writes nothing a read in the loop has
-    /// not already seen on entry.
-    LoopStart,
-}
-
-impl<'a> DefiniteAssignment<'a> {
-    /// The leading `params` locals hold their arguments from the entry.
-    fn new(locals: &'a IndexSet<&'a str>, params: usize) -> Self {
-        let mut entry = Bits::new(locals.len());
-        for i in 0..params {
-            entry.insert(i);
-        }
-        Self {
-            locals,
-            state: Some(entry),
-            maybe_unset: vec![false; locals.len()],
-            labels: Vec::new(),
-        }
-    }
-
-    /// A branch to `depth`: the current state joins the target label's.
-    fn branch(&mut self, depth: u32) {
-        let Some(target) = (self.labels.len() as u32)
-            .checked_sub(depth + 1)
-            .map(|i| &mut self.labels[i as usize])
-        else {
-            return; // the function body: a return
+impl Interference {
+    fn of(flow: &Flow, is_param: impl Fn(usize) -> bool) -> Self {
+        let width = flow.locals.len();
+        let mut found = Self {
+            edges: vec![Bits::new(width); width],
+            copies: vec![IndexSet::default(); width],
         };
-        if let (Label::End(pending), Some(state)) = (target, &self.state) {
-            match pending {
-                Some(pending) => pending.intersect(state),
-                None => *pending = Some(state.clone()),
+        let entry = flow.run(&mut found);
+        // Every parameter holds its argument at the entry, and every local live
+        // there its zero.
+        for local in (0..width).filter(|&l| is_param(l) || entry.contains(l)) {
+            let mut others = entry.clone();
+            others.remove(local);
+            found.edges[local].union(&others);
+        }
+        let one_way = found.edges.clone();
+        for (local, edges) in one_way.iter().enumerate() {
+            for other in edges.iter() {
+                found.edges[other].insert(local);
             }
         }
-    }
-
-    fn labeled(&mut self, label: Label, body: &[WirInstr]) {
-        self.labels.push(label);
-        self.walk_body(body);
-        if let Label::End(pending) = self.labels.pop().expect("pushed above") {
-            self.state = meet(self.state.take(), pending);
-        }
+        found
     }
 }
 
-impl WirRefVisitor for DefiniteAssignment<'_> {
-    fn visit_instr(&mut self, instr: &WirInstr) {
-        match instr {
-            WirInstr::Block { body, .. } => self.labeled(Label::End(None), body),
-            WirInstr::Loop { body, .. } => self.labeled(Label::LoopStart, body),
-            WirInstr::If {
-                condition,
-                then_body,
-                else_body,
-                ..
-            } => {
-                self.visit_instr(condition);
-                let entry = self.state.clone();
-                self.labeled(Label::End(None), then_body);
-                let then_state = std::mem::replace(&mut self.state, entry);
-                if let Some(else_body) = else_body {
-                    self.labeled(Label::End(None), else_body);
-                }
-                self.state = meet(then_state, self.state.take());
-            }
-            WirInstr::Br { depth } => {
-                self.branch(*depth);
-                self.state = None;
-            }
-            WirInstr::BrIf { depth, condition } => {
-                self.visit_instr(condition);
-                self.branch(*depth);
-            }
-            WirInstr::BrTable {
-                index,
-                targets,
-                default,
-            } => {
-                self.visit_instr(index);
-                for depth in targets.iter().chain([default]) {
-                    self.branch(*depth);
-                }
-                self.state = None;
-            }
-            WirInstr::Return { .. } | WirInstr::Unreachable => {
-                self.walk_instr(instr);
-                self.state = None;
-            }
-            _ => {
-                self.walk_instr(instr);
-                let Some(written) = &mut self.state else {
-                    return;
-                };
-                if let Some(name) = instr.local_read() {
-                    let i = local_index(self.locals, name);
-                    if !written.contains(i) {
-                        self.maybe_unset[i] = true;
+impl Observer for Interference {
+    fn store(&mut self, store: &Store, live_after: &Bits) {
+        match store {
+            Store::One { local, copy_of, .. } => {
+                let mut others = live_after.clone();
+                others.remove(*local);
+                if let Some(source) = *copy_of {
+                    others.remove(source);
+                    if source != *local {
+                        self.copies[*local].insert(source);
+                        self.copies[source].insert(*local);
                     }
                 }
-                for name in instr.local_writes() {
-                    written.insert(local_index(self.locals, name));
+                self.edges[*local].union(&others);
+            }
+            Store::Bind(locals) => {
+                let mut written = live_after.clone();
+                for &local in locals {
+                    written.insert(local);
+                }
+                for &local in locals {
+                    let mut others = written.clone();
+                    others.remove(local);
+                    self.edges[local].union(&others);
                 }
             }
         }
     }
-}
 
-/// The locals written on both paths; a path no execution reaches adds nothing.
-fn meet(a: Option<Bits>, b: Option<Bits>) -> Option<Bits> {
-    match (a, b) {
-        (Some(mut a), Some(b)) => {
-            a.intersect(&b);
-            Some(a)
-        }
-        (a, None) => a,
-        (None, b) => b,
-    }
-}
-
-/// A set of local indices, one bit each.
-#[derive(Clone)]
-struct Bits(Vec<u64>);
-
-impl Bits {
-    fn new(len: usize) -> Self {
-        Self(vec![0; len.div_ceil(64)])
+    // A loop pass whose head then moves sees less live than the final pass
+    // does, so what it records the final pass records too.
+    fn mark(&self) -> usize {
+        0
     }
 
-    fn insert(&mut self, i: usize) {
-        self.0[i / 64] |= 1 << (i % 64);
-    }
-
-    fn contains(&self, i: usize) -> bool {
-        self.0[i / 64] & (1 << (i % 64)) != 0
-    }
-
-    fn intersect(&mut self, other: &Self) {
-        for (word, other) in self.0.iter_mut().zip(&other.0) {
-            *word &= other;
-        }
-    }
+    fn rollback(&mut self, _: usize) {}
 }
 
 struct Rename<'a> {
@@ -531,8 +308,8 @@ mod tests {
         assert_eq!(renames(&typed, &[]), []);
     }
 
-    /// `x` is read at the top of each iteration after its last access in
-    /// order, so it stays live over the whole loop and `y` cannot take it.
+    /// `x` is read at the top of each iteration, so it is live over the whole
+    /// loop and `y` cannot take it.
     #[test]
     fn a_value_crossing_the_back_edge_holds_its_slot_over_the_loop() {
         let body = [
@@ -621,6 +398,24 @@ mod tests {
         assert_eq!(renames(&body, &[]), []);
     }
 
+    /// `a` is last read in the `then` arm before `b` is written there, and
+    /// read in the `else` arm, where `b` is never live.
+    #[test]
+    fn a_local_dead_on_one_arm_shares_with_one_written_there() {
+        let body = [
+            decl("a", WirType::I32),
+            decl("b", WirType::I32),
+            set("a", WirInstr::I32Const(1)),
+            WirInstr::If {
+                condition: Box::new(WirInstr::I32Const(1)),
+                then_body: vec![use_of("a"), set("b", WirInstr::I32Const(2)), use_of("b")],
+                else_body: Some(vec![use_of("a")]),
+                result: None,
+            },
+        ];
+        assert_eq!(renames(&body, &[]), [merged("b", "a")]);
+    }
+
     /// A multi-value bind writes its targets at once: a dead first target
     /// still holds its slot while the second is written.
     #[test]
@@ -687,6 +482,19 @@ mod tests {
         assert_eq!(renames(&body, &[("p", &WirType::I32)]), [merged("a", "p")]);
     }
 
+    /// A local read before any write would see the parameter's argument in
+    /// its slot, not its zero, though the argument itself is never read.
+    #[test]
+    fn a_local_live_at_the_entry_keeps_out_of_a_parameter() {
+        let body = [
+            decl("a", WirType::I32),
+            use_of("a"),
+            set("p", WirInstr::I32Const(1)),
+            use_of("p"),
+        ];
+        assert_eq!(renames(&body, &[("p", &WirType::I32)]), []);
+    }
+
     #[test]
     fn a_copy_between_merged_locals_disappears() {
         let mut body = vec![
@@ -702,5 +510,20 @@ mod tests {
         assert!(
             matches!(&body[2], WirInstr::Drop(read) if matches!(&**read, WirInstr::LocalGet { name, .. } if name == "a"))
         );
+    }
+
+    /// A copy whose ends are both live after it still shares a slot: they
+    /// hold one value until one is written again.
+    #[test]
+    fn a_copy_shares_a_slot_while_both_ends_are_live() {
+        let body = [
+            decl("a", WirType::I32),
+            decl("b", WirType::I32),
+            set("a", WirInstr::I32Const(1)),
+            set("b", get("a")),
+            use_of("a"),
+            use_of("b"),
+        ];
+        assert_eq!(renames(&body, &[]), [merged("b", "a")]);
     }
 }

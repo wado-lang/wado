@@ -199,6 +199,16 @@ impl ParamDef {
     }
 }
 
+/// What a blanket a derived impl stands for asks of its receiver: the bound on
+/// a reflection kind, with the pins it writes, in the blanket's space of
+/// `params` parameters.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Source {
+    pub bounds: Vec<ParamBound>,
+    pub pins: Vec<Pin>,
+    pub params: usize,
+}
+
 /// An `impl` block, reduced to what the rules read.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct ImplDef {
@@ -250,18 +260,6 @@ impl ImplOrigin {
 /// A module, as the asking side of a question.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ModuleId(pub u32);
-
-/// Who asks a question: code in a module, or an instance of a generic body.
-/// Only a `Reflect*` fact's visibility gate tells them apart. The use site that
-/// settled an instance's parameters proved its bounds where it stands
-/// (spec-reflection.md § Visibility), so the instance sees every member.
-/// Asking again from the module declaring the body refused an impl that use
-/// site had chosen (`reflect_derivation_nested_private_fields.wado`).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Asker {
-    Module(ModuleId),
-    Instance,
-}
 
 /// The default a trait's type parameter declares — the `Self` in
 /// `trait Mul<Rhs = Self>`.
@@ -369,7 +367,6 @@ pub struct Declaration {
     pub variadic: bool,
     /// Every field of a struct, or every payload of a variant.
     pub members: Vec<SolverType>,
-    pub module: ModuleId,
 }
 
 impl Declaration {
@@ -409,12 +406,9 @@ pub struct DerivationRequest {
 /// for every instance of it. Its answer owes the body, as a derived impl's does.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Fact {
-    /// The modules the fact holds when asked from; `None` is everywhere. A
-    /// `Reflect*` bound's visibility gate arrives this way.
-    pub visible_from: Option<Vec<ModuleId>>,
     /// The associated types the kind binds, spelled with the declaration's own
-    /// parameters: a struct's `FieldTypes`, what a pin like
-    /// `ReflectStruct<FieldTypes = [..F]>` reads.
+    /// parameters: a struct's `FieldTypes` and `FieldInputs`, what a pin like
+    /// `ReflectStruct<FieldInputs = [..F]>` reads.
     pub assoc: Vec<(AssocId, SolverType)>,
 }
 
@@ -455,6 +449,11 @@ pub struct Program {
     pub tuple: Option<TypeDeclId>,
     /// Each declaration's members, which a structural body owes the bodies of.
     pub declarations: IndexMap<TypeDeclId, Declaration>,
+    /// The sources of each structural trait's derived bodies, one per
+    /// reflection kind. A derived impl stands for its source, so
+    /// [`super::derive`] admits only a declaration one of them holds of
+    /// ([`super::sourced`]); the member bounds are its own fixpoint.
+    pub sources: IndexMap<TraitDeclId, Vec<Source>>,
     /// `Eq` and `Ord`, the pair the comparison table relates. Set by
     /// [`super::pair_comparisons`].
     pub comparisons: Option<(TraitDeclId, TraitDeclId)>,

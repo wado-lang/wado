@@ -52,7 +52,7 @@ struct Group {
 
 /// What a local's Wasm declaration says: the scalar a signedness or nominal
 /// type erases to, or the reference type itself.
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub(super) enum WasmClass {
     Scalar(WirScalarKind),
     Reference(WirType),

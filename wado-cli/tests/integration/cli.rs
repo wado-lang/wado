@@ -856,7 +856,7 @@ fn test_a_file_outside_the_package_is_another_package() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "symbol 'o_internal' is `internal` to '../other/o.wado' and cannot be imported from another package",
+            "symbol 'o_internal' is `internal` to 'wado:other@0.1.0/o.wado' and cannot be imported from another package",
         ));
 }
 
@@ -967,7 +967,7 @@ fn test_modules_in_no_package_share_one_scope() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "symbol 'p' is `internal` to '../pkg/p.wado' and cannot be imported from another package",
+            "symbol 'p' is `internal` to 'wado:pkg@0.1.0/p.wado' and cannot be imported from another package",
         ));
 }
 
@@ -2854,6 +2854,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "type `Node` is defined in ./a.wado and ./b.wado",
+            "type `Node` is defined in acme:dup@0.1.0/src/a.wado and acme:dup@0.1.0/src/b.wado",
         ));
 }

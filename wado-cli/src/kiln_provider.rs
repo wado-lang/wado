@@ -50,7 +50,7 @@ use sha2::{Digest, Sha256};
 
 use wado_compiler::kiln::{GeneratorModule, InvocationPath, OptionsDescriptor};
 use wado_compiler::remote::{Integrity, is_remote};
-use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel};
+use wado_compiler::{CompilerHost, CompilerOptions, Diagnostic, LogLevel, ModuleDir};
 use wado_lsp::host::discovery::normalize_path;
 use wado_manifest::registry_url;
 
@@ -581,7 +581,7 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
             // still carry `.`/`..` yields nonsense like `.././foo.wado`, which
             // resolves to nothing and quietly makes every later run a miss.
             let target = normalize_path(&base.join(&path));
-            (relative_to(&base, &target).unwrap_or(path), hash)
+            (relative_to(&base, &target), hash)
         })
         .collect()
 }
@@ -595,13 +595,19 @@ fn locked_digest(base: &Path, url: &str) -> Option<[u8; 32]> {
 }
 
 /// `target` expressed relative to `base`, with `..` for each level `target`
-/// sits above it. Both must already be normalized. `None` when the two share no
-/// root to walk between.
-pub(crate) fn relative_to(base: &Path, target: &Path) -> Option<String> {
+/// sits above it, and `.` for `base` itself. Both must already be normalized.
+/// Where the two share no root to walk between (another Windows drive), no
+/// relative spelling exists, and `target` is spelled as it is.
+pub(crate) fn relative_to(base: &Path, target: &Path) -> String {
     use std::path::Component;
 
-    if base.is_absolute() != target.is_absolute() {
-        return None;
+    fn root_of(path: &Path) -> Option<Component<'_>> {
+        path.is_absolute()
+            .then(|| path.components().next())
+            .flatten()
+    }
+    if root_of(base) != root_of(target) {
+        return target.to_string_lossy().into_owned();
     }
     let mut base_parts = base.components().peekable();
     let mut target_parts = target.components().peekable();
@@ -621,7 +627,10 @@ pub(crate) fn relative_to(base: &Path, target: &Path) -> Option<String> {
             out.push('/');
         }
     }
-    (!out.is_empty()).then_some(out)
+    if out.is_empty() {
+        return ".".to_string();
+    }
+    out
 }
 
 /// Provider-internal twin of [`ResolvedGenerator`]. Kept distinct so
@@ -698,8 +707,8 @@ impl CompilerHost for SilentHost {
         self.inner.serves_core()
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
-        self.inner.package_root(path)
+    fn module_dir(&self, path: &str) -> ModuleDir {
+        self.inner.module_dir(path)
     }
 
     fn package_index(&self, root: &str) -> wado_compiler::DependencyIndex {
@@ -1169,6 +1178,21 @@ mod tests {
             .enable_all()
             .build()
             .unwrap()
+    }
+
+    #[test]
+    fn relative_to_spells_the_base_itself_as_dot() {
+        assert_eq!(relative_to(Path::new("/p/gen"), Path::new("/p/gen")), ".");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn relative_to_keeps_a_target_on_another_drive_absolute() {
+        let target = Path::new("D:\\gen\\src\\generator.wado");
+        assert_eq!(
+            relative_to(Path::new("C:\\proj"), target),
+            target.to_string_lossy()
+        );
     }
 
     /// A recorded path has to resolve back to the file it names, since it is

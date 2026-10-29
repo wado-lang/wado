@@ -37,19 +37,11 @@ impl From<SignatureReachViolation> for Diagnostic {
             message: format!(
                 "`{item}` is {} but its signature names `{named}`, which is {}; \
                  widen `{named}`, or narrow `{item}`",
-                reach_phrase(item_reach),
-                reach_phrase(named_reach),
+                item_reach.reach_phrase(),
+                named_reach.reach_phrase(),
             ),
             span: Some(DiagnosticSpan::from_span(&span, None)),
         }
-    }
-}
-
-fn reach_phrase(visibility: Visibility) -> &'static str {
-    match visibility {
-        Visibility::Private => "private to its defining file",
-        Visibility::Internal => "`internal` to its package",
-        Visibility::Public => "`pub`",
     }
 }
 

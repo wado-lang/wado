@@ -1900,6 +1900,8 @@ pub mod lint {
     pub const DEAD_CODE: &str = "dead_code";
     /// A `use` bringing in a name its module never refers to.
     pub const UNUSED_IMPORTS: &str = "unused_imports";
+    /// A variable or parameter nothing reads.
+    pub const UNUSED_VARIABLES: &str = "unused_variables";
     /// A trait head that says nothing about what its impls may do.
     pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
     /// A comparison of an expression with itself: `x == x`.
@@ -2670,9 +2672,28 @@ impl Visibility {
         self <= other
     }
 
+    /// The first of `fields` reaching less far than a struct of reach `self`.
+    /// A struct with none is open: wherever it is named, its fields are too, so
+    /// building one from them bypasses nothing (spec-reflection.md
+    /// § Visibility).
+    pub fn first_hidden_field(self, fields: impl IntoIterator<Item = Self>) -> Option<usize> {
+        fields
+            .into_iter()
+            .position(|field| !self.reaches_no_further_than(field))
+    }
+
     /// The narrower reach of the two.
     pub fn narrower(self, other: Self) -> Self {
         self.min(other)
+    }
+
+    /// The reach as a diagnostic words it: "`x` is {phrase}".
+    pub fn reach_phrase(self) -> &'static str {
+        match self {
+            Visibility::Private => "private to its defining file",
+            Visibility::Internal => "`internal` to its package",
+            Visibility::Public => "`pub`",
+        }
     }
 
     /// Source keyword with a trailing space (`""` for file-private).
@@ -3355,6 +3376,16 @@ impl Expr {
             Expr::FieldAccess(fa) => fa.expr.place_root_ident(),
             Expr::Index(idx) => idx.expr.place_root_ident(),
             _ => None,
+        }
+    }
+
+    /// The places this expression writes by `=`, destructuring or a compound
+    /// assignment, in the order it writes them; none for any other expression.
+    pub fn assigned_places(&self) -> &[Expr] {
+        match self {
+            Expr::Assign(assign) => assign.places(),
+            Expr::CompoundAssign(compound) => std::slice::from_ref(&compound.target),
+            _ => &[],
         }
     }
 

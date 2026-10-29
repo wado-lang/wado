@@ -207,6 +207,11 @@ impl FieldPath {
     /// never packs to another's.
     const SLOT_BITS: u32 = 16;
 
+    /// The path of one field read straight off the root.
+    pub(super) fn of(field: u32) -> FieldPath {
+        Self::ROOT.then(field).expect("one field fits the packing")
+    }
+
     /// This path followed by `field`, or `None` past the four fields the
     /// packing holds.
     fn then(self, field: u32) -> Option<FieldPath> {

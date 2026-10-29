@@ -1,0 +1,48 @@
+// `loop_version_bce` deletes a bounds check against a list the loop reloads
+// inside an `if` arm, under a condition that may itself lower the bound:
+// `touch` may shorten the list, and the reload follows `reset` in the arm. The
+// fast loop re-tests the bound after the reload and after the whole `if`.
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<i32>,
+}
+
+impl Holder {
+    #[inline("never")]
+    fn touch(&mut self, i: i32) -> bool {
+        self.data.truncate(self.data.len());
+        return i == 0;
+    }
+
+    #[inline("never")]
+    fn reset(&mut self) {
+        self.data = [9, 9, 9, 9];
+    }
+}
+
+fn probe(sink: &mut Holder, h: &Holder, out: &mut List<i32>) {
+    let n = h.data.len();
+    for let mut i = 0; i < n; i += 1 {
+        out.push(h.data[i]);
+        if sink.touch(i) {
+            sink.reset();
+        }
+    }
+}
+
+export fn run() with Stdout {
+    let mut hh = Holder { data: [1, 2, 3] };
+    let mut out: List<i32> = [];
+    probe(&mut hh, &hh, &mut out);
+    println(`${out:?}`);
+}
+
+__DATA__
+{
+    "stdout": "[1, 9, 9]\n",
+    "wir_expect:O2": [
+        "break_if b{} i >= $bce_limit_{};",
+        "$load_0 = h.data;\n                    if n > $load_0.used {\n                        $bce_limit_{} = -2147483648;\n                    }\n                }\n                if n > $load_0.used {\n                    $bce_limit_{} = -2147483648;\n                }\n                i = i + 1;"
+    ]
+}

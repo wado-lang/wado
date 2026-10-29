@@ -194,15 +194,36 @@ impl Checkpoint {
     ) -> Result<List<U>, LoadError> {
         assert e.width == builtin::size_of::<U>();
         let [start, end] = self.range(e)?;
-        if end > bytes.byte_len() {
-            return Result::Err(
-                LoadError {
-                    reason: `${e.tensor}: the payload ends at byte ${end}, past the ${bytes.byte_len()} given`,
-                },
-            );
-        }
-        return Result::Ok(bytes.decoded::<U>(start, end));
+        return payload_at::<U, B>(bytes, e.tensor, start, end);
     }
+}
+
+/// Whether `bytes` are as long as the file the build found the weights in.
+pub fn expect_len<affine B: CheckpointBytes>(bytes: &B, len: i32) -> Result<(), LoadError> {
+    if bytes.byte_len() != len {
+        return Result::Err(
+            LoadError { reason: `the file is ${bytes.byte_len()} bytes, and the build found the weights in one of ${len}` },
+        );
+    }
+    return Result::Ok(());
+}
+
+/// `tensor`'s elements at bytes `start` to `end` of `bytes`, where the build
+/// found them.
+pub fn payload_at<U: FromLeBytes + AnyBits, affine B: CheckpointBytes>(
+    bytes: &B,
+    tensor: String,
+    start: i32,
+    end: i32,
+) -> Result<List<U>, LoadError>
+    contract 0 <= start <= end
+{
+    if end > bytes.byte_len() {
+        return Result::Err(
+            LoadError { reason: `${tensor}: the payload ends at byte ${end}, past the ${bytes.byte_len()} given` },
+        );
+    }
+    return Result::Ok(bytes.decoded::<U>(start, end));
 }
 
 /// A checkpoint published in shards, each shard's header read, keyed by the

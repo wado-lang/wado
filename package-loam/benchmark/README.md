@@ -68,7 +68,8 @@ Every arm generated "John. I'm a writer, and".
 
 Each run starts from an empty attention cache: the first token reads the
 prompt, and each one after it only itself against the cache. The Loam and
-onnxruntime arms read `example/gemma3-270m`'s checkpoint, in f32. llama.cpp
+onnxruntime arms read the weights `example/gemma3-270m/fetch.sh` downloads, in
+f32. llama.cpp
 reads GGUF in F16, the precision nearest it. Google ships no F16 GGUF and
 ggml-org only Q8_0, so it is unsloth's conversion.
 

@@ -1,0 +1,40 @@
+// `edited` changed after the profile was recorded (`x < 0` became `x <= 0`),
+// so its hash no longer matches and its counts are discarded, with a remark.
+// `kept` still matches, so its `then`, which never ran, is marked cold.
+use { println, Stdout } from "core:cli";
+
+fn edited(x: i32) -> i32 {
+    if x <= 0 {
+        return 0;
+    }
+    return x;
+}
+
+fn kept(x: i32) -> i32 {
+    if x < 0 {
+        return 0;
+    }
+    return x;
+}
+
+export fn run() with Stdout {
+    println(`${edited(1) + kept(1)}`);
+}
+
+__DATA__
+{
+  "profile": "testdata/pgo_stale_function.pgo",
+  "cold_regions": ["pgo_stale_function.wado:14:14 then"],
+  "remarks": {
+    "O2": [
+      {
+        "contains": [
+          "pgo_stale_function.wado:6:4 remark: the profile's counts for `edited` are discarded: its source or region plan changed since they were recorded"
+        ],
+        "count": 1
+      },
+      {"contains": ["remark:"], "count": 1}
+    ]
+  },
+  "stdout": "2\n"
+}

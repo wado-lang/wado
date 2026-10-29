@@ -8,7 +8,6 @@ use std::rc::Rc;
 use crate::builtin_facts::{ParamShape, ReturnShape};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-#[cfg(debug_assertions)]
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
@@ -190,7 +189,6 @@ pub fn link(package: Package) -> FlatPackage {
         builtin_registry: package.builtin_registry,
         wasm_assets: package.wasm_assets,
         trait_env: package.trait_env,
-        #[cfg(debug_assertions)]
         pruned: IndexSet::default(),
     }
 }

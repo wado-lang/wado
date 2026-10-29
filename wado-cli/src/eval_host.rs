@@ -23,7 +23,7 @@ use wasmtime_wasi::{I32Exit, WasiCtx, WasiCtxView, WasiView};
 
 use wado_compiler::hashmap::IndexMap;
 use wado_compiler::{
-    CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, Severity, SourceError,
+    CompilerHost, CompilerOptions, DependencyIndex, Diagnostic, ModuleDir, Severity, SourceError,
 };
 use wado_lsp::FilesystemCompilerHost;
 use wado_lsp::host::dependency_index_from;
@@ -495,9 +495,9 @@ impl CompilerHost for DependencyHost {
         self.deps.index.clone()
     }
 
-    fn package_root(&self, path: &str) -> Option<String> {
+    fn module_dir(&self, path: &str) -> ModuleDir {
         self.packages
-            .package_root_probing(path, |manifest, _| self.observe(manifest))
+            .module_dir_probing(path, |manifest, _| self.observe(manifest))
     }
 
     fn package_index(&self, root: &str) -> DependencyIndex {

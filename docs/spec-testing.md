@@ -360,19 +360,21 @@ A profile is text, one record per line:
 
 ```text
 wado-pgo 1
-module src/lib.wado
+module acme:app@0.1.0/src/lib.wado
 fn 3f2a9c0d1e2b4a59 12 pick
 0 5
 1 4
 ```
 
-A `module` line names a module the same way on any machine:
+A `module` line names a module the same way on any machine and from any entry
+of one package:
 
-- A file of the package is relative to the package's root, or for a program in
-  no package, to the program's directory.
-- A dependency's file is the dependency's `namespace:name@version`, then the
-  file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
-- A `core:` module is its import path.
+- A file of a package whose `wado.toml` has a `[package]`, the recording
+  package's own or a dependency's, is the package's `namespace:name@version`,
+  then the file relative to its root: `acme:dep@0.1.0/src/lib.wado`.
+- Any other file is relative to the recording package's root, or for a program
+  in no package, to the program's directory.
+- A `core:` module is its import path, and a remote module its URL.
 
 Each `fn` line gives a function's hash, its line and its name. The hash covers
 the function's source text, a CRLF read as LF, and its regions' kinds and
@@ -386,6 +388,28 @@ included, and each of its regions has a count, zero where no line gives one.
 A function with no `fn` line has no profile at all, and neither does one whose
 hash differs from its current source's: nothing measured it as it stands, so
 no count applies to it.
+
+### Applying a Profile
+
+A compile applying a profile marks cold, as
+[`builtin::cold_path()`](./spec-control-flow.md#branch-hints) does, the start
+of each region whose count is zero and whose enclosing region in the same
+function ran. A function that never ran is marked once, at its start. A
+function the profile has no count for is compiled as without one. Where that
+is because its hash differs, the compile says so at `--log-level info`.
+
+A profile never removes an author's `cold_path()`. Where the profile ran one,
+the marker stays, and the compile names it and the count at
+`--log-level info`.
+
+The compiler marks the failure path of a `?` cold as an author would. Where the
+profile ran that path in 1% or more of the runs of the region holding the `?`,
+the marker is dropped, and the compile names it, the count and the share at
+`--log-level info`. Below 1% the marker stays, and the compile says nothing.
+
+> Not yet implemented: a `?`'s marker is never dropped. Where the profile ran
+> its failure path at all, the marker stays and the compile names it and the
+> count.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 

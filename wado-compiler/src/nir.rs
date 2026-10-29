@@ -77,11 +77,6 @@ impl FunctionRef {
         }
     }
 
-    /// Get the module path (for backwards compatibility)
-    pub fn module_path(&self) -> Vec<String> {
-        self.module_source.to_path()
-    }
-
     pub fn intrinsic(&self) -> Option<&str> {
         DeclarationLookup::from(self).intrinsic()
     }

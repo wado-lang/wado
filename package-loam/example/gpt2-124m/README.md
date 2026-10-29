@@ -1,7 +1,7 @@
 # GPT-2 (124M)
 
 `gpt2.wado` continues a prompt with GPT-2's 124M-parameter model, whose weights
-load from a safetensors checkpoint at run time:
+load from the model file at run time:
 
     package-loam/example/gpt2-124m/fetch.sh
     cd package-loam/example/gpt2-124m
@@ -15,11 +15,6 @@ component.
 the tokens onnxruntime picks:
 
     wado run-webgpu webgpu.wado
-
-`hf2loam.mjs` writes the checkpoint from Hugging Face's `model.safetensors`
-without running Wado, laid out as `gpt2.onnxtext` declares its weights. Its
-`convert` function takes and returns byte arrays, so a browser page can run it
-too.
 
 ## What the build reads
 
@@ -36,21 +31,19 @@ from that commit:
   tokenizer gives each of a set of texts. `tokenize.mjs` writes it with
   `@huggingface/tokenizers` 0.2.0, reading `tokenizer.json` and the repository's
   `tokenizer_config.json`.
-- `gpt2.onnxtext` is `onnx/decoder_model.onnx` (SHA-256
-  `e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f`) with its
-  weights left out, as `tools/onnx_split.wado` writes it.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
   greedily after a prompt, and its time per token on the CPU. `generate.mjs`
   writes it, running `onnx/decoder_model.onnx` with `onnxruntime-node`.
 
-`fetch.sh` downloads the model, writes the checkpoint `gpt2.safetensors` beside
-them, and rewrites the graph from it. Git ignores the model and the checkpoint.
+`model.wado` imports `onnx/decoder_model.onnx` by its URL, pinned by its SHA-256.
+The build downloads it once into Wado's cache. Its weights are in the file, so
+`embed: false` leaves them there: the build reads past them, and
+`Prepared::load` reads them from the same file at run time. A program reaches no
+file the build read, so `fetch.sh` downloads the model as `model.onnx`, which
+Git ignores.
 
-`model.wado` names the checkpoint, and the build checks the graph against its
-header. The build reads the header and none of the weights behind it, but the
-file must be there, so the files naming the model compile only once `fetch.sh`
-has run, and `wado test` leaves them out. `tokenizer_test.wado` needs no
-download and runs. `generate_test.wado` checks Loam's tokens against
-`generate.json`, once `fetch.sh` has run:
+`wado test` leaves out the files naming the model, since building one downloads
+it. `tokenizer_test.wado` needs no download and runs. `generate_test.wado`
+checks Loam's tokens against `generate.json`, once `fetch.sh` has run:
 
     wado test generate_test.wado

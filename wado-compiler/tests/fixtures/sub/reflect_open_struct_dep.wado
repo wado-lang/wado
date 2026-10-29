@@ -1,0 +1,50 @@
+// One struct per cell of the open/closed table: a struct is open when no field
+// is less visible than the struct itself.
+
+pub struct PubAllPub {
+    pub a: i32,
+}
+
+pub struct PubInternalField {
+    internal a: i32,
+}
+
+pub struct PubPrivateField {
+    a: i32,
+}
+
+internal struct InternalInternalField {
+    internal a: i32,
+}
+
+internal struct InternalPubField {
+    pub a: i32,
+}
+
+internal struct InternalPrivateField {
+    a: i32,
+}
+
+pub fn pub_all_pub() -> PubAllPub {
+    return PubAllPub { a: 1 };
+}
+
+pub fn pub_internal_field() -> PubInternalField {
+    return PubInternalField { a: 2 };
+}
+
+pub fn pub_private_field() -> PubPrivateField {
+    return PubPrivateField { a: 3 };
+}
+
+internal fn internal_internal_field() -> InternalInternalField {
+    return InternalInternalField { a: 4 };
+}
+
+internal fn internal_pub_field() -> InternalPubField {
+    return InternalPubField { a: 5 };
+}
+
+internal fn internal_private_field() -> InternalPrivateField {
+    return InternalPrivateField { a: 6 };
+}

@@ -1,6 +1,6 @@
-use { HashMap } from "core:collections";
+use { HashMap, TreeMap } from "core:collections";
 use { EmitError, NameCollision, Placement, UnmappedDtype, emit, expr_source } from "./emit.wado";
-use { Attr, Dim, Elements, Graph, Known, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, Dim, Elements, Graph, InPlace, Known, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { BinaryOp, Expr, RowOp, UnaryOp, constant, operand } from "./runtime/tensor.wado";
@@ -309,6 +309,25 @@ test "a sharded checkpoint's weights are read each from the shard the index plac
     assert out.contains(
         "W2: backend.keep_rhs(&Tensor::<f32, [W11, Y1]> { data: header.payload::<f32>(shards, \"m-00002-of-00002.safetensors\", &Expected { tensor: \"W2\",",
     );
+}
+
+test "weights left in place are read where the build found them" {
+    let graph = read(&MLP).unwrap();
+    let mut ranges = TreeMap::<String, [i32, i32]>::new();
+    ranges["W1"] = [0, 48];
+    ranges["B1"] = [48, 60];
+    ranges["W2"] = [60, 84];
+    ranges["B2"] = [84, 92];
+    let in_place = InPlace { file: "model.onnx_data", ranges };
+    let out = emit(&graph, &infer(&graph).unwrap(), &RUNTIME, true, Placement::InPlace(in_place)).unwrap();
+
+    assert out.contains(
+        "    /// The weights, those the graph does not carry read from model.onnx_data where the build found them.\n    pub fn load<affine Ck: CheckpointBytes>(backend: &mut Bk, checkpoint: &Ck) -> Result<Prepared<Bk>, LoadError> with _ {\n        return Result::Ok(Prepared {\n",
+    );
+    assert out.contains(
+        "W2: backend.keep_rhs(&Tensor::<f32, [W11, Y1]> { data: payload_at::<f32, Ck>(checkpoint, \"W2\", 60, 84)?, extents: [3, 2] }),",
+    );
+    assert !out.contains("core:collections");
 }
 
 test "a single file's module imports no map" {

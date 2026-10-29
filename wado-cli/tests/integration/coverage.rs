@@ -74,6 +74,40 @@ fn plans_merge_across_test_files() {
 }
 
 #[test]
+fn a_module_tested_as_an_entry_and_imported_is_one_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("pkg/src");
+    fs::create_dir_all(&src).unwrap();
+    fs::create_dir(tmp.path().join("elsewhere")).unwrap();
+    fs::write(
+        tmp.path().join("pkg/wado.toml"),
+        "[package]\nname = \"cov\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        src.join("lib.wado"),
+        "pub fn one() -> i32 {\n    return 1;\n}\n\ntest \"own\" {\n    assert one() == 1;\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        src.join("lib_test.wado"),
+        "use { one } from \"./lib.wado\";\n\ntest \"other\" {\n    assert one() == 1;\n}\n",
+    )
+    .unwrap();
+
+    wado_in(&tmp.path().join("elsewhere"))
+        .args(["test", "--coverage=lcov", "../pkg"])
+        .assert()
+        .success();
+    let lcov = fs::read_to_string(tmp.path().join("elsewhere/build/coverage/lcov.info")).unwrap();
+    let files: Vec<&str> = lcov
+        .lines()
+        .filter(|line| line.starts_with("SF:"))
+        .collect();
+    assert_eq!(files.len(), 2, "{lcov}");
+}
+
+#[test]
 fn the_failure_recap_follows_the_coverage_summary() {
     let tmp = tempfile::tempdir().unwrap();
     write_package(tmp.path());
