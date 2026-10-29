@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793223400696,
+  "lastUpdate": 1793241666135,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -10619,6 +10619,360 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib/decompress (-O3)",
             "value": 20793977,
+            "unit": "fuel"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a2794f05827f61275771d4190ff3bff15efb1dbc",
+          "message": "Merge pull request #2492 from wado-lang/claude/determined-keller-oxytgd\n\nperf(wir): remove dead stores and coalesce locals by liveness",
+          "timestamp": "2026-10-29T11:28:14+09:00",
+          "tree_id": "ba8a94aac493631b9d936cadf074a5b7c14539de",
+          "url": "https://github.com/wado-lang/wado/commit/a2794f05827f61275771d4190ff3bff15efb1dbc"
+        },
+        "date": 1793241664145,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "cbor/canada/de (-O1)",
+            "value": 78986195,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O2)",
+            "value": 78652809,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/de (-O3)",
+            "value": 78652807,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O1)",
+            "value": 55974433,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O2)",
+            "value": 52844940,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/canada/ser (-O3)",
+            "value": 52622396,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O1)",
+            "value": 26472985,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O2)",
+            "value": 26326051,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/de (-O3)",
+            "value": 26320218,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O1)",
+            "value": 10219173,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O2)",
+            "value": 9274714,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/catalog/ser (-O3)",
+            "value": 8780272,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O1)",
+            "value": 17343748,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O2)",
+            "value": 17343776,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/de (-O3)",
+            "value": 17343776,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O1)",
+            "value": 5219514,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O2)",
+            "value": 4949213,
+            "unit": "fuel"
+          },
+          {
+            "name": "cbor/twitter/ser (-O3)",
+            "value": 4686082,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O1)",
+            "value": 1156271722,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O2)",
+            "value": 1143271714,
+            "unit": "fuel"
+          },
+          {
+            "name": "fts/format (-O3)",
+            "value": 1143271712,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O1)",
+            "value": 685836895,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O2)",
+            "value": 626119835,
+            "unit": "fuel"
+          },
+          {
+            "name": "gale_gen/generate (-O3)",
+            "value": 621392982,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O1)",
+            "value": 188651281,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O2)",
+            "value": 183295551,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/de (-O3)",
+            "value": 173653729,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O1)",
+            "value": 147729437,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O2)",
+            "value": 145056529,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_canada/ser (-O3)",
+            "value": 145056525,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O1)",
+            "value": 76271808,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O2)",
+            "value": 68484454,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/de (-O3)",
+            "value": 67687953,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O1)",
+            "value": 25019312,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O2)",
+            "value": 24531934,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_catalog/ser (-O3)",
+            "value": 24531932,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O1)",
+            "value": 40972876,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O2)",
+            "value": 39528829,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/de (-O3)",
+            "value": 39410087,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O1)",
+            "value": 24197365,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O2)",
+            "value": 23998569,
+            "unit": "fuel"
+          },
+          {
+            "name": "json_twitter/ser (-O3)",
+            "value": 23998221,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O1)",
+            "value": 1930724364,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O2)",
+            "value": 1930724356,
+            "unit": "fuel"
+          },
+          {
+            "name": "mandelbrot/render (-O3)",
+            "value": 1930724354,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O1)",
+            "value": 509332344,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O2)",
+            "value": 498755056,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/infer (-O3)",
+            "value": 501678446,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O1)",
+            "value": 760747110,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O2)",
+            "value": 754694345,
+            "unit": "fuel"
+          },
+          {
+            "name": "microgpt/train (-O3)",
+            "value": 756378610,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O1)",
+            "value": 142441276,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O2)",
+            "value": 93054139,
+            "unit": "fuel"
+          },
+          {
+            "name": "sieve/count (-O3)",
+            "value": 93054137,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O1)",
+            "value": 9070629,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O2)",
+            "value": 9032481,
+            "unit": "fuel"
+          },
+          {
+            "name": "sqlite_parse/parse (-O3)",
+            "value": 9032477,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O1)",
+            "value": 12225209,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O2)",
+            "value": 11364659,
+            "unit": "fuel"
+          },
+          {
+            "name": "syntax_highlight/highlight (-O3)",
+            "value": 11288229,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 100742206,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 100741951,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 100741940,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 20823806,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 20792255,
+            "unit": "fuel"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 20792252,
             "unit": "fuel"
           }
         ]
