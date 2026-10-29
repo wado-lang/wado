@@ -1159,12 +1159,32 @@ pub(crate) struct OperatorDispatch {
 
 impl OperatorDispatch {
     /// Whether the answering impl is written for a reference (`impl Eq for
-    /// &T`), whose `&self` holds one more layer than the operand.
+    /// &T`).
     pub(crate) fn is_ref_impl(&self) -> bool {
         self.function_ref
             .method_info
             .as_ref()
             .is_some_and(|info| info.ref_receiver().is_some())
+    }
+
+    /// [`impl_self_layers`] of the answering impl.
+    pub(crate) fn self_layers(&self, receiver: TypeId, type_table: &TypeTable) -> usize {
+        impl_self_layers(&self.function_ref, receiver, type_table)
+    }
+}
+
+/// How many references the `Self` of the impl `func` belongs to holds over
+/// `receiver`'s pointee: none for a value's impl, one for `&X`'s, and every one
+/// `receiver` holds for a blanket `&T`'s, whose `T` takes the rest.
+pub(crate) fn impl_self_layers(
+    func: &FunctionRef,
+    receiver: TypeId,
+    type_table: &TypeTable,
+) -> usize {
+    match func.method_info.as_ref().map(|info| &info.receiver) {
+        None | Some(Receiver::Type(_)) => 0,
+        Some(Receiver::RefTo(..)) => 1,
+        Some(Receiver::Ref(_)) => type_table.ref_depth(receiver),
     }
 }
 

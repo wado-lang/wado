@@ -1,5 +1,7 @@
-// An impl written for a reference takes `&self` as `&&T`: a receiver holding
-// more references than that passes the two innermost, not one more over all.
+// An impl written for `&P` takes `&self` as `&&P`: a receiver holding more
+// references than that passes the two innermost, not one more over all. A
+// blanket `&T` impl's `Self` is the receiver at every depth, so `&self` takes
+// one more over all.
 
 struct P {
     x: i32,
@@ -32,6 +34,18 @@ test "a ref impl's iterator through a reference to a reference" {
         n += *v;
     }
     assert n == 3;
+}
+
+test "a blanket reference impl's operator at every depth" {
+    let a = P { x: 1 };
+    let b = P { x: 1 };
+    let ra = &a;
+    let rb = &b;
+    let rra = &ra;
+    let rrb = &rb;
+    assert ra == rb;
+    assert rra == rrb;
+    assert &rra == &rrb;
 }
 
 __DATA__

@@ -3887,13 +3887,15 @@ impl TypeSystem {
     }
 }
 
-/// The type a receiver takes on once adjusted for the callee's `self` kind.
-/// The body walk needs only this; reify's `adjust_receiver_for_self_kind`
-/// builds the node that carries the same type.
+/// The type a receiver takes on once adjusted for the callee's `self` kind,
+/// where the impl's `Self` holds `self_layers` references
+/// ([`super::sem::types::impl_self_layers`]). The body walk needs only this;
+/// reify's `adjust_receiver_for_self_kind` builds the node that carries the
+/// same type.
 pub(super) fn adjusted_receiver_type(
     receiver: TypeId,
     self_kind: ast::SelfKind,
-    is_ref_impl: bool,
+    self_layers: usize,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TypeId {
     let mutable = match self_kind {
@@ -3903,11 +3905,11 @@ pub(super) fn adjusted_receiver_type(
         ast::SelfKind::Ref => false,
         ast::SelfKind::MutRef => true,
     };
-    // `self` holds the pointee under one reference, or two where the impl is a
-    // reference's (`Self` is `&T`, so `&self` is `&&T`). A receiver holding
-    // that many passes them, further layers read through; `&mut T` satisfies
-    // `&self`. Any other gets the declaration's reference over its own layers.
-    let layers = if is_ref_impl { 2 } else { 1 };
+    // `self` holds the pointee under one reference more than `Self` does. A
+    // receiver holding that many passes them, further layers read through;
+    // `&mut T` satisfies `&self`. Any other gets the declaration's reference
+    // over its own layers.
+    let layers = self_layers + 1;
     let held = type_table.borrow().ref_layers(receiver, layers);
     let fits = {
         let tt = type_table.borrow();

@@ -27,7 +27,7 @@ use super::instantiate::{InstanceKind, Instantiated, Instantiation};
 use super::method_lookup::{MethodInferenceInput, settled_impl_args};
 use super::reflect::ReflectDispatch;
 use super::scope::ScopedBound;
-use super::sem::types::{CalleeParams, StaticMethodDispatch};
+use super::sem::types::{CalleeParams, StaticMethodDispatch, impl_self_layers};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
@@ -894,7 +894,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.check_mut_receiver(receiver, receiver_ast, method_name, span, ctx);
         }
 
-        receiver = adjusted_receiver_type(receiver, self_kind, is_ref_impl, &self.tysys.type_table);
+        // The reference lookup admits an `&X` impl alone (`is_blanket_ref_impl`),
+        // whose `Self` holds one reference.
+        receiver = adjusted_receiver_type(
+            receiver,
+            self_kind,
+            usize::from(is_ref_impl),
+            &self.tysys.type_table,
+        );
 
         let (method_type_args, subst_ctx) = self.bind_method_type_args(
             type_args,
@@ -1379,10 +1386,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let (Some(dispatched), Some(sig)) = (outcome.dispatch, outcome.signature) {
             // `self` as the method declares it, which a reference's own impl
             // (`impl IntoIterator for &List<T>`) takes one layer deeper.
+            let self_layers = impl_self_layers(
+                &dispatched.func,
+                receiver_type,
+                &self.tysys.type_table.borrow(),
+            );
             let self_type = adjusted_receiver_type(
                 receiver_type,
                 sig.self_kind,
-                dispatched.is_ref_impl,
+                self_layers,
                 &self.tysys.type_table,
             );
             let (type_args, params) = sig.into_dispatch_parts(self_type);
