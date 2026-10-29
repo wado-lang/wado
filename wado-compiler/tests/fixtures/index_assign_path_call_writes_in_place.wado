@@ -1,0 +1,35 @@
+// `IndexAssign::index_assign(&mut xs, i, v)` is `xs[i] = v` spelled as a path
+// call. The ownership walk read a receiver only off the method spelling, so
+// the path call repointed the element and a reference taken to it kept the old
+// value.
+
+struct P {
+    a: i32,
+    b: i32,
+}
+
+impl P {
+    fn sum(&self) -> i32 {
+        return self.a + self.b;
+    }
+}
+
+fn in_frame(n: i32) -> i32 {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    IndexAssign::index_assign(&mut xs, 0, P { a: 3, b: n });
+    return r.sum();
+}
+
+fn in_closure(n: i32) -> i32 {
+    let mut xs: List<P> = [P { a: 1, b: 1 }];
+    let r = &xs[0];
+    let mut set = |v: P| IndexAssign::index_assign(&mut xs, 0, v);
+    set(P { a: 3, b: n });
+    return r.sum();
+}
+
+test "a path-spelled element write reaches an earlier reference" {
+    assert in_frame(builtin::black_box(3)) == 6;
+    assert in_closure(builtin::black_box(3)) == 6;
+}

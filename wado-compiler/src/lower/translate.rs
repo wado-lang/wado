@@ -974,6 +974,17 @@ impl FunctionTranslator<'_, '_> {
                 _ => {}
             }
         }
+        // `&*r` / `&mut *r` through a box is the box: a fresh one would hold a
+        // copy, and a write through it would be lost (`|| n.bump()` on a
+        // mut-captured `i32`).
+        if let TirExprKind::Unary {
+            op: TirUnaryOp::Deref,
+            expr: reference,
+        } = &inner.kind
+            && self.base.box_plan.box_type_ids.contains(&reference.type_id)
+        {
+            return Some(self.convert_expr(reference));
+        }
         // `&primitive_expr` → fresh `Box<T> { value: expr }`.
         let inner_nir = self.convert_operand(inner);
         Some(self.wrap_in_box(

@@ -2998,17 +2998,29 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
 
-                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef) {
-                    // The boxing pass (`lower::plan::boxing`) reads
-                    // `TirFunction::address_taken_locals` to retag a referenced
-                    // local's declaration to its box type, so that mutation
-                    // through the reference (e.g. `*slot = other_fn`) writes
-                    // back to the original slot. Without this the local stays
-                    // unboxed and `&mut local` boxes a throwaway copy.
-                    if let TirExprKind::Local { index, .. } = &inner.kind {
-                        ctx.address_taken_locals.insert(*index);
-                    }
-                    return reference_to(op, inner, recorded_type, span, &self.tysys.type_table);
+                // Track address-taken locals for `&x` / `&mut x`. The
+                // boxing pass (`lower::plan::boxing`) reads
+                // `TirFunction::address_taken_locals` to retag a referenced
+                // local's declaration to its box type, so that mutation
+                // through the reference (e.g. `*slot = other_fn`) writes
+                // back to the original slot. Without this the local stays
+                // unboxed and `&mut local` boxes a throwaway copy.
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Local { index, .. } = &inner.kind
+                {
+                    ctx.address_taken_locals.insert(*index);
+                }
+                // `&*r` / `&mut *r` names the storage `r` already refers to;
+                // taking `&` of the deref would box a copy of a scalar.
+                if matches!(op, TirUnaryOp::Ref | TirUnaryOp::MutRef)
+                    && let TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: referent,
+                    } = &inner.kind
+                    && self.tysys.type_table.borrow().type_key(referent.type_id)
+                        == self.tysys.type_table.borrow().type_key(recorded_type)
+                {
+                    return *referent.clone();
                 }
                 TirExpr::new(
                     TirExprKind::Unary {
@@ -4679,12 +4691,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         .type_table
                         .borrow_mut()
                         .intern(ResolvedType::Ref(arg.type_id));
-                    reference_to(
-                        TirUnaryOp::Ref,
-                        arg,
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(arg),
+                        },
                         arg_ref_type,
                         span,
-                        &self.tysys.type_table,
                     )
                 } else {
                     arg
@@ -10392,11 +10405,25 @@ fn adjust_receiver_node(
         return match self_kind {
             ast::SelfKind::Ref => {
                 let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                reference_to(TirUnaryOp::Ref, receiver, ref_type, span, type_table)
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Ref,
+                        expr: Box::new(receiver),
+                    },
+                    ref_type,
+                    span,
+                )
             }
             ast::SelfKind::MutRef => {
                 let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                reference_to(TirUnaryOp::MutRef, receiver, mut_ref_type, span, type_table)
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: Box::new(receiver),
+                    },
+                    mut_ref_type,
+                    span,
+                )
             }
             ast::SelfKind::None | ast::SelfKind::Value => {
                 deref_to_value(receiver, span, type_table)
@@ -10426,7 +10453,14 @@ fn adjust_receiver_node(
                 _ => {
                     // Value T, need to add &
                     let ref_type = type_table.borrow_mut().make_ref(receiver.type_id);
-                    reference_to(TirUnaryOp::Ref, receiver, ref_type, span, type_table)
+                    TirExpr::new(
+                        TirExprKind::Unary {
+                            op: TirUnaryOp::Ref,
+                            expr: Box::new(receiver),
+                        },
+                        ref_type,
+                        span,
+                    )
                 }
             }
         }
@@ -10438,38 +10472,17 @@ fn adjust_receiver_node(
             } else {
                 // Value T, need to add &mut
                 let mut_ref_type = type_table.borrow_mut().make_mut_ref(receiver.type_id);
-                reference_to(TirUnaryOp::MutRef, receiver, mut_ref_type, span, type_table)
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::MutRef,
+                        expr: Box::new(receiver),
+                    },
+                    mut_ref_type,
+                    span,
+                )
             }
         }
     }
-}
-
-/// `&place` / `&mut place`, typed `ref_type`. `&*r` / `&mut *r` names the
-/// storage `r` already refers to, so it is `r`: taking `&` of the deref would
-/// box a copy of a scalar, and a write through it would be lost.
-fn reference_to(
-    op: TirUnaryOp,
-    place: TirExpr,
-    ref_type: TypeId,
-    span: Span,
-    type_table: &std::cell::RefCell<TypeTable>,
-) -> TirExpr {
-    let reborrows = matches!(&place.kind, TirExprKind::Unary { op: TirUnaryOp::Deref, expr: referent }
-        if type_table.borrow().type_key(referent.type_id) == type_table.borrow().type_key(ref_type));
-    if reborrows {
-        let TirExprKind::Unary { expr: referent, .. } = place.kind else {
-            unreachable!("matched as a deref above")
-        };
-        return *referent;
-    }
-    TirExpr::new(
-        TirExprKind::Unary {
-            op,
-            expr: Box::new(place),
-        },
-        ref_type,
-        span,
-    )
 }
 
 /// The TIR read of a resolved binding: a local, a by-value capture, or a

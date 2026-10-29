@@ -603,6 +603,30 @@ pub fn unwrap_ref(argument: &TirExpr) -> &TirExpr {
     }
 }
 
+/// The place of this body a `&self` / `&mut self` receiver is taken of, or
+/// `None` where it reaches its referent through a reference: `&*r`, or a
+/// reference value such as a capture holding one. That referent is no place
+/// this body owns.
+#[must_use]
+pub fn receiver_place(receiver: &TirExpr) -> Option<&TirExpr> {
+    match &receiver.kind {
+        TirExprKind::Unary {
+            op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr,
+        } if !matches!(
+            expr.kind,
+            TirExprKind::Unary {
+                op: TirUnaryOp::Deref,
+                ..
+            }
+        ) =>
+        {
+            Some(expr)
+        }
+        _ => None,
+    }
+}
+
 /// The root local a place expression is taken over. Needs no types, so a
 /// consumer wanting only the root needs no resolver.
 #[must_use]
