@@ -17,8 +17,9 @@ use crate::type_table::TypeTable;
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
-/// re-running trait lookup or mangling, and `self_kind` plus `is_ref_impl` are
-/// what `adjust_receiver_for_self_kind` needs. Short-circuiting paths leave no
+/// re-running trait lookup or mangling, and `self_kind` plus its impl
+/// ([`impl_self_layers`]) are what `adjust_receiver_for_self_kind` needs.
+/// Short-circuiting paths leave no
 /// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
@@ -27,10 +28,6 @@ pub(crate) struct MethodDispatch {
     pub(crate) method_def: Option<DefId>,
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
-    /// True when the resolved method's impl was found on a reference type
-    /// (`impl Trait for &T`), whose `&self` / `&mut self` holds two layers
-    /// over the pointee.
-    pub(crate) is_ref_impl: bool,
     /// True when the method is the referent's, reached through the reference
     /// a newtype wraps (`type H = &mut T`): the receiver passes that
     /// reference, not one taken to the newtype.
@@ -1206,15 +1203,10 @@ pub(crate) struct ForOfIteratorInfo {
     pub(crate) into_iter: FunctionRef,
     /// Receiver-adjustment kind for the `.into_iter()` call.
     pub(crate) into_iter_self_kind: ast::SelfKind,
-    /// True when the `into_iter` impl was found on a reference-type
-    /// impl (cf. [`MethodDispatch::is_ref_impl`]).
-    pub(crate) into_iter_is_ref_impl: bool,
     /// Resolved `Iterator::next` dispatch target.
     pub(crate) next: FunctionRef,
     /// Receiver-adjustment kind for the `.next()` call.
     pub(crate) next_self_kind: ast::SelfKind,
-    /// True when the `next` impl was found on a reference-type impl.
-    pub(crate) next_is_ref_impl: bool,
     /// Item type — what the loop variable is bound to. Reify uses this
     /// to type-annotate the synthesised `let <var> = …;`.
     pub(crate) item_type: TypeId,

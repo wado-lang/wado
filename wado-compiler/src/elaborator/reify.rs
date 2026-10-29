@@ -67,7 +67,8 @@ use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
     BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
     IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch,
-    MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
+    MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, impl_self_layers,
+    with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -3751,10 +3752,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let label = format!("$for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
+        let into_iter_layers = impl_self_layers(
+            &info.into_iter,
+            into_iter_receiver.type_id,
+            &self.tysys.type_table.borrow(),
+        );
         let into_iter_receiver = self.adjust_receiver(
             into_iter_receiver,
             info.into_iter_self_kind,
-            usize::from(info.into_iter_is_ref_impl),
+            into_iter_layers,
             ctx,
         );
         let iter_type = info.iter_type;
@@ -3791,12 +3797,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             iter_type,
             span,
         );
-        let next_receiver = self.adjust_receiver(
-            iter_local_ref,
-            info.next_self_kind,
-            usize::from(info.next_is_ref_impl),
-            ctx,
-        );
+        let next_layers =
+            impl_self_layers(&info.next, iter_type, &self.tysys.type_table.borrow());
+        let next_receiver =
+            self.adjust_receiver(iter_local_ref, info.next_self_kind, next_layers, ctx);
         let option_type = self
             .tysys
             .type_table
@@ -8392,12 +8396,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             raw_receiver
         };
-        let adjusted_receiver = self.adjust_receiver(
-            raw_receiver,
-            dispatch.self_kind,
-            usize::from(dispatch.is_ref_impl),
-            ctx,
+        let self_layers = impl_self_layers(
+            &dispatch.function_ref,
+            raw_receiver.type_id,
+            &self.tysys.type_table.borrow(),
         );
+        let adjusted_receiver =
+            self.adjust_receiver(raw_receiver, dispatch.self_kind, self_layers, ctx);
 
         // Monomorphization queues instances off exactly what annotate resolved;
         // `monomorph_info.method_type_args` is zeroed for a blanket-impl turbofish.
@@ -10949,7 +10954,7 @@ fn ast_unary_op_to_tir(op: ast::UnaryOp) -> TirUnaryOp {
 }
 
 /// Map an AST [`ast::BinaryOp`] to its TIR counterpart. The mapping is
-/// 1:1 for the source-level ops; TIR adds `RefNotEq` as an internal
+/// 1:1 for the source-level ops; TIR adds `NotIdentical` as an internal
 /// variant that lowering synthesises, so this helper never produces it.
 fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
     match op {

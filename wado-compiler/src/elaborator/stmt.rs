@@ -2884,8 +2884,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // `<receiver>.start()` / `.into_iter()` — the synthetic call passes
         // `call_id == None` so `record_method_dispatch` skips it; the
-        // outcome's `dispatch` carries the `(self_kind, is_ref_impl,
-        // FunctionRef)` reify needs to reproduce the same call shape
+        // outcome's `dispatch` carries the `(self_kind, FunctionRef)` reify
+        // needs to reproduce the same call shape
         // (WEP 2026-05-26).
         let into_iter_outcome = self.resolve_method_call_with(
             MethodCallInput {
@@ -3036,11 +3036,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     into_iter_def: into_iter.method_def,
                     into_iter: into_iter.func,
                     into_iter_self_kind: into_iter.self_kind,
-                    into_iter_is_ref_impl: into_iter.is_ref_impl,
                     next_def: next.method_def,
                     next: next.func,
                     next_self_kind: next.self_kind,
-                    next_is_ref_impl: next.is_ref_impl,
                     item_type,
                     iter_type,
                 },

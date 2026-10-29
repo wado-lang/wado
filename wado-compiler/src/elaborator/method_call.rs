@@ -1219,7 +1219,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 dispatched_method_def,
                 &func,
                 self_kind,
-                is_ref_impl,
                 matches!(owner, MethodOwner::Referent(_)),
                 param_is_mut,
                 defaults,

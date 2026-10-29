@@ -893,8 +893,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Record a method-dispatch decision, centralised here rather than at the AST
     /// wrapper so every dispatched call leaves one uniform entry. A synthetic
-    /// call passes `ast_id == None` and records nothing. Reify feeds
-    /// `is_ref_impl` and `self_kind` to `adjust_receiver_for_self_kind`
+    /// call passes `ast_id == None` and records nothing. Reify feeds the
+    /// `function_ref`'s impl and `self_kind` to `adjust_receiver_for_self_kind`
     /// instead of re-running impl lookup.
     pub(super) fn record_method_dispatch(
         &mut self,
@@ -902,7 +902,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         method_def: Option<DefId>,
         function_ref: &tir::FunctionRef,
         self_kind: ast::SelfKind,
-        is_ref_impl: bool,
         through_referent: bool,
         param_is_mut: Vec<bool>,
         param_defaults: Vec<(String, Option<ast::Expr>)>,
@@ -920,7 +919,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 method_def,
                 function_ref: function_ref.clone(),
                 self_kind,
-                is_ref_impl,
                 through_referent,
                 param_is_mut,
                 param_defaults,
