@@ -218,9 +218,9 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterSkip<core:
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_worlds_command_args.wado/$tmpl$4075cfd812aab1dc,core:prelude/types.wado/Option<core:prelude/string.wado/String>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(75)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(76)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(76)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(77)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(77)
 
 type "functype//core:prelude/primitive.wado/i32::div_ceil$sroa[self.value]" = fn(i32, i32) -> i32;  // TypeId(78)
 
@@ -1341,19 +1341,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_worlds_c
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b138: block {
-        l139: loop {
-            break_if b138 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l139;
-        };
-    };
-}
-
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -1367,6 +1354,19 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         start_14 = out.used;
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
+    };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b139: block {
+        l140: loop {
+            break_if b139 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l140;
+        };
     };
 }
 

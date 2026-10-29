@@ -283,9 +283,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String^core:pr
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecked$spec0$dae[index]" = fn(ref Array<u8>, i32) -> u8;  // TypeId(108)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf.repr]" = fn(ref Array<u8>, i32, i32, char);  // TypeId(109)
+type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]$spec0$sroa[f.buf]" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(109)
 
-type "functype//core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]$spec0$sroa[f.buf]" = fn(f64, i32, ref "core:prelude/string.wado//String");  // TypeId(110)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf.repr]" = fn(ref Array<u8>, i32, i32, char);  // TypeId(110)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(111)
 
@@ -3051,84 +3051,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::byte_at$unchecke
     return builtin::array_get_value<u8>($mv$self$repr, $mv$self$start);
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf.repr]"(self, at, n, c) {
-    let fill_len: i32;
-    let encoded: ref "core:prelude/string.wado//String";
-    let k: i32;
-    let index_27: i32;
-    let value_28: u8;
-    let $licm_repr_48: ref Array<u8>;
-    let $licm_arith_50: i32;
-    if local.tee fill_len($inline_char__len_utf8_sroa_self_value__0: block -> i32 {
-        if c < 128 {
-            break $inline_char__len_utf8_sroa_self_value__0: 1;
-        }
-        if c < 2048 {
-            break $inline_char__len_utf8_sroa_self_value__0: 2;
-        }
-        if c < 65536 {
-            break $inline_char__len_utf8_sroa_self_value__0: 3;
-        }
-        break $inline_char__len_utf8_sroa_self_value__0: 4;
-    }) == 1 {
-        c = c & 255;
-        fill_len = 0;
-        b393: block {
-            l394: loop {
-                break_if b393 fill_len >= n;
-                builtin::array_set_u8(self, at + fill_len, c);
-                fill_len = fill_len + 1;
-                continue l394;
-            };
-        };
-        return;
-    }
-    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
-    c = 0;
-    $licm_repr_48 = encoded.repr;
-    b395: block {
-        l396: loop {
-            break_if b395 c >= n;
-            k = 0;
-            $licm_arith_50 = at + (c * fill_len);
-            b397: block {
-                l398: loop {
-                    break_if b397 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
-                    index_27 = $licm_arith_50 + k;
-                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
-                    builtin::array_set_u8(self, index_27, value_28);
-                    k = k + 1;
-                    index_27 = $licm_arith_50 + k;
-                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
-                    builtin::array_set_u8(self, index_27, value_28);
-                    k = k + 1;
-                    index_27 = $licm_arith_50 + k;
-                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
-                    builtin::array_set_u8(self, index_27, value_28);
-                    k = k + 1;
-                    index_27 = $licm_arith_50 + k;
-                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
-                    builtin::array_set_u8(self, index_27, value_28);
-                    k = k + 1;
-                    continue l398;
-                };
-            };
-            b399: block {
-                l400: loop {
-                    break_if b399 k >= fill_len;
-                    index_27 = $licm_arith_50 + k;
-                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
-                    builtin::array_set_u8(self, index_27, value_28);
-                    k = k + 1;
-                    continue l400;
-                };
-            };
-            c = c + 1;
-            continue l396;
-        };
-    };
-}
-
 fn "core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]$spec0$sroa[f.buf]"(self, precision, f) {
     let $load_9: ref Array<u8>;
     let bits: u64;
@@ -3261,6 +3183,84 @@ fn "core:prelude/primitive.wado/f64::fmt_fixed$sroa[self.value]$spec0$sroa[f.buf
     } else {
     }
     "core:prelude/fpfmt.wado/write_decimal_prec"(f, bits, $sroa_slot_180, $sroa_slot_182, precision);
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$sroa[self.buf.repr]"(self, at, n, c) {
+    let fill_len: i32;
+    let encoded: ref "core:prelude/string.wado//String";
+    let k: i32;
+    let index_27: i32;
+    let value_28: u8;
+    let $licm_repr_48: ref Array<u8>;
+    let $licm_arith_50: i32;
+    if local.tee fill_len($inline_char__len_utf8_sroa_self_value__0: block -> i32 {
+        if c < 128 {
+            break $inline_char__len_utf8_sroa_self_value__0: 1;
+        }
+        if c < 2048 {
+            break $inline_char__len_utf8_sroa_self_value__0: 2;
+        }
+        if c < 65536 {
+            break $inline_char__len_utf8_sroa_self_value__0: 3;
+        }
+        break $inline_char__len_utf8_sroa_self_value__0: 4;
+    }) == 1 {
+        c = c & 255;
+        fill_len = 0;
+        b411: block {
+            l412: loop {
+                break_if b411 fill_len >= n;
+                builtin::array_set_u8(self, at + fill_len, c);
+                fill_len = fill_len + 1;
+                continue l412;
+            };
+        };
+        return;
+    }
+    "core:prelude/string.wado/core:prelude/string.wado/String::push"(local.tee encoded(struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(4), used: 0 }), c);
+    c = 0;
+    $licm_repr_48 = encoded.repr;
+    b413: block {
+        l414: loop {
+            break_if b413 c >= n;
+            k = 0;
+            $licm_arith_50 = at + (c * fill_len);
+            b415: block {
+                l416: loop {
+                    break_if b415 (((k >= fill_len) | ((k + 1) >= fill_len)) | (((k + 1) + 1) >= fill_len)) | ((((k + 1) + 1) + 1) >= fill_len);
+                    index_27 = $licm_arith_50 + k;
+                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, index_27, value_28);
+                    k = k + 1;
+                    index_27 = $licm_arith_50 + k;
+                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, index_27, value_28);
+                    k = k + 1;
+                    index_27 = $licm_arith_50 + k;
+                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, index_27, value_28);
+                    k = k + 1;
+                    index_27 = $licm_arith_50 + k;
+                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, index_27, value_28);
+                    k = k + 1;
+                    continue l416;
+                };
+            };
+            b417: block {
+                l418: loop {
+                    break_if b417 k >= fill_len;
+                    index_27 = $licm_arith_50 + k;
+                    value_28 = builtin::array_get_value<u8>($licm_repr_48, k);
+                    builtin::array_set_u8(self, index_27, value_28);
+                    k = k + 1;
+                    continue l418;
+                };
+            };
+            c = c + 1;
+            continue l414;
+        };
+    };
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$spec0$sroa[self.buf]$dae[alt_prefix]"(self, is_negative, digit_count) {

@@ -6,12 +6,12 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(2)
-    mut value: bool,
+struct core:prelude//$Resource {  // TypeId(2)
+    mut value: i32,
 }
 
-struct core:prelude//$Resource {  // TypeId(3)
-    mut value: i32,
+struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
+    mut value: bool,
 }
 
 struct core:prelude/types.wado//CopyBuffer {  // TypeId(4)
@@ -302,9 +302,9 @@ type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(93)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b,core:prelude/slice.wado/Slice<u8>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> [ref Array<u8>, i32, i32];  // TypeId(94)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(94)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(95)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b,core:prelude/slice.wado/Slice<u8>>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> [ref Array<u8>, i32, i32];  // TypeId(95)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(96)
 
@@ -1249,10 +1249,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     }
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b,core:prelude/slice.wado/Slice<u8>>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("effect_handler_resource_stream_self_delegation.wado/$template_segment$effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
-}
-
 fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
     let n_8: i32;
     let new_used: i32;
@@ -1267,6 +1263,10 @@ fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/str
         out.used = new_used;
         builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
     };
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b,core:prelude/slice.wado/Slice<u8>>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("effect_handler_resource_stream_self_delegation.wado/$template_segment$effect_handler_resource_stream_self_delegation.wado/$tmpl$cdb440ff7333898b"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0"(self, other) {

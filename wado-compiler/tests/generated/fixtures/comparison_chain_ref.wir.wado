@@ -183,9 +183,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/&comparison_chain_ref.wado/P^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "comparison_chain_ref.wado//P", ref "core:prelude/format.wado//Formatter");  // TypeId(62)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<comparison_chain_ref.wado/$tmpl$aef4133aae7da3f6,bool>::lit$sroa[self.index]" = fn(i32, ref "comparison_chain_ref.wado//$tmpl$aef4133aae7da3f6") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(63)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(63)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(64)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<comparison_chain_ref.wado/$tmpl$aef4133aae7da3f6,bool>::lit$sroa[self.index]" = fn(i32, ref "comparison_chain_ref.wado//$tmpl$aef4133aae7da3f6") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(64)
 
 type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
@@ -1045,23 +1045,23 @@ fn "core:prelude/format.wado/&comparison_chain_ref.wado/P^core:prelude/traits.wa
     "core:prelude/traits.wado/comparison_chain_ref.wado/P^core:prelude/traits.wado/Inspect::inspect$sroa[self.x]"(self.x, f);
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b114: block {
+        l115: loop {
+            break_if b114 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l115;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<comparison_chain_ref.wado/$tmpl$aef4133aae7da3f6,bool>::lit$sroa[self.index]"(self, t) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("comparison_chain_ref.wado/$template_segment$comparison_chain_ref.wado/$tmpl$aef4133aae7da3f6"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b115: block {
-        l116: loop {
-            break_if b115 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l116;
-        };
     };
 }
 

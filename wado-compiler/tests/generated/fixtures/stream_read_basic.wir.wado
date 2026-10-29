@@ -6,20 +6,20 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(2)
+struct core:prelude//$Resource {  // TypeId(2)
+    mut value: i32,
+}
+
+struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
     mut value: bool,
 }
 
-struct core:prelude/types.wado//Box<&mut bool> {  // TypeId(3)
+struct core:prelude/types.wado//Box<&mut bool> {  // TypeId(4)
     mut value: ref "core:prelude/types.wado//Box<bool>",
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>> {  // TypeId(4)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>> {  // TypeId(5)
     mut value: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>",
-}
-
-struct core:prelude//$Resource {  // TypeId(5)
-    mut value: i32,
 }
 
 struct core:prelude/types.wado//ReadyEvent::Copied {  // TypeId(6)
@@ -321,19 +321,19 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StartedRead<u8>:
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//ReadCopy<u8>");  // TypeId(101)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(102)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<stream_read_basic.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(102)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<stream_read_basic.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(103)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(103)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(104)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(104)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(105)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(106)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(106)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(107)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(107)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(108)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(108)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec0" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(109)
 
@@ -382,9 +382,9 @@ global mut global:core:prelude/types.wado::SETTLED_COPIES: ref null "core:prelud
 global mut global:stream_read_basic.wado::$modules_initialized: bool = 0;
 global global:stream_read_basic.wado::$const_obj_1: ref Array<u8> = array.new_fixed<u8>(114, 101, 97, 100, 32, 111, 107);
 global global:core:prelude/format.wado::$const_obj_11: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(38, 109, 117, 116, 32), used: 5 };
-global global:core:prelude/primitive.wado::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_13: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
-global mut global:core:prelude/traits.wado::$const_obj_16: ref null "tuple//[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>]" = ref.null none;
+global global:core:prelude/traits.wado::$const_obj_12: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 58), used: 2 };
+global mut global:core:prelude/traits.wado::$const_obj_15: ref null "tuple//[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>]" = ref.null none;
+global global:core:prelude/primitive.wado::$const_obj_16: ref "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 global global:core:builtin::$unit_case$core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>$0: ref "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>" = struct.new "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u8>,core:prelude/types.wado/StartedRead<u8>]>" { 0 };
 
 fn "stream_read_basic.wado/run"() with Stdout {
@@ -1683,23 +1683,58 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u8>^core:prelude/tr
     }
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b187: block {
-        l188: loop {
-            break_if b187 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l188;
-        };
-    };
-}
-
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<stream_read_basic.wado/$tmpl$ebaa20f4a908b504,i32>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("stream_read_basic.wado/$template_segment$stream_read_basic.wado/$tmpl$ebaa20f4a908b504"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
     };
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b188: block {
+        l189: loop {
+            break_if b188 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l189;
+        };
+    };
+}
+
+fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
+    let s_11: ref "core:prelude/string.wado//String";
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_15) {
+        let $mv_0_1: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
+        let $mv_1_2: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
+        let $mv_2_3: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
+        multivalue_bind [$mv_0_1, $mv_1_2, $mv_2_3] = "core:prelude/types.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::members"();
+        global:core:prelude/traits.wado::$const_obj_15 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_15.0;
+    if self == 0 {
+        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_12);
+        s_11 = $mv_0_1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_15.1;
+    if self == 1 {
+        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_12);
+        s_11 = $mv_0_1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
+    }
+    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_15.2;
+    if self == 2 {
+        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_12);
+        s_11 = $mv_0_1.case_name;
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
+    }
 }
 
 fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
@@ -1717,54 +1752,19 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let abs_val: u64;
     is_negative = self < 0;
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
-    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_12, self);
+    is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_16, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
-}
-
-fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
-    let s_11: ref "core:prelude/string.wado//String";
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_16) {
-        let $mv_0_1: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
-        let $mv_1_2: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
-        let $mv_2_3: ref "core:prelude/traits.wado//EnumCase<core:prelude/types.wado/CopyResult>";
-        multivalue_bind [$mv_0_1, $mv_1_2, $mv_2_3] = "core:prelude/types.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/ReflectEnum::members"();
-        global:core:prelude/traits.wado::$const_obj_16 = struct.new "tuple//[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>, core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>]" { 0: $mv_0_1, 1: $mv_1_2, 2: $mv_2_3 };
-    }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_16.0;
-    if self == 0 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_13);
-        s_11 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
-    }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_16.1;
-    if self == 1 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_13);
-        s_11 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
-    }
-    $mv_0_1 = global:core:prelude/traits.wado::$const_obj_16.2;
-    if self == 2 {
-        s_11 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("CopyResult"), used: 10 };
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec1"(f, s_11);
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string$spec2"(f, global:core:prelude/traits.wado::$const_obj_13);
-        s_11 = $mv_0_1.case_name;
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_string"(f, s_11);
-    }
-}
-
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
-    };
 }
 
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/types.wado/$template_segment$core:prelude/types.wado/$tmpl$b7f89f2160c441f4"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, 2 * self)).repr, $mv$t$s0.used);
+    };
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:prelude/list.wado/$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, $mv$t$s2, $mv$t$r2, $mv$t$s3, $mv$t$r3, 2 * self)).repr, $mv$t$s0.used);
     };
 }
 

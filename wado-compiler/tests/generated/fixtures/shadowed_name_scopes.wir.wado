@@ -195,9 +195,9 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<s
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<i32>,()>", ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<i32>,i32>"];  // TypeId(61)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<shadowed_name_scopes.wado/$tmpl$83bc72156f1f7315,i32>::lit$sroa[self.index]" = fn(i32, ref "shadowed_name_scopes.wado//$tmpl$83bc72156f1f7315") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(62)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(62)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(63)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<shadowed_name_scopes.wado/$tmpl$83bc72156f1f7315,i32>::lit$sroa[self.index]" = fn(i32, ref "shadowed_name_scopes.wado//$tmpl$83bc72156f1f7315") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(63)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
@@ -1071,23 +1071,23 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Option<i32>^core:prelude/tra
     return struct.new "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<i32>,()>" { index: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(78, 111, 110, 101), used: 4 }, wire_override: ref.null none, is_unit: 1 }, struct.new "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Option<i32>,i32>" { index: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 111, 109, 101), used: 4 }, wire_override: ref.null none, is_unit: 0 };
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b132: block {
+        l133: loop {
+            break_if b132 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l133;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<shadowed_name_scopes.wado/$tmpl$83bc72156f1f7315,i32>::lit$sroa[self.index]"(self, t) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         let $mv_arg_1: ref "core:prelude/string.wado//String";
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("shadowed_name_scopes.wado/$template_segment$shadowed_name_scopes.wado/$tmpl$83bc72156f1f7315"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b133: block {
-        l134: loop {
-            break_if b133 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l134;
-        };
     };
 }
 

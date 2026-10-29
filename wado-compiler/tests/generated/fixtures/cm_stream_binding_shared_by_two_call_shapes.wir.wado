@@ -6,16 +6,16 @@ enum core:prelude/format.wado//enum:Alignment { Left = 0, Center = 1, Right = 2 
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(1)
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(2)
+struct core:prelude//$Resource {  // TypeId(2)
+    mut value: i32,
+}
+
+struct core:prelude/types.wado//Box<bool> {  // TypeId(3)
     mut value: bool,
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u32>,core:prelude/types.wado/StartedRead<u32>]>> {  // TypeId(3)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<u32>,core:prelude/types.wado/StartedRead<u32>]>> {  // TypeId(4)
     mut value: ref null "core:prelude/types.wado//Option<[core:prelude/types.wado/Stream<u32>,core:prelude/types.wado/StartedRead<u32>]>",
-}
-
-struct core:prelude//$Resource {  // TypeId(4)
-    mut value: i32,
 }
 
 struct core:prelude/types.wado//ReadyEvent::Copied {  // TypeId(5)
@@ -242,9 +242,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow_to
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u32>^core:prelude/traits.wado/Drop::drop" = fn(ref null "core:prelude/types.wado//ReadCopy<u32>");  // TypeId(80)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(81)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(81)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(82)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]" = fn("core:prelude/types.wado//enum:CopyResult", ref "core:prelude/string.wado//String");  // TypeId(82)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(83)
 
@@ -1324,6 +1324,19 @@ fn "core:prelude/types.wado/core:prelude/types.wado/ReadCopy<u32>^core:prelude/t
     }
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b145: block {
+        l146: loop {
+            break_if b145 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l146;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/traits.wado/Inspect::inspect$sroa[self.value,f.buf]"(self, f) {
     let $load_3: ref Array<u8>;
     let new_used_24: i32;
@@ -1397,19 +1410,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/CopyResult^core:prelude/tra
         f.used = self;
         builtin::array_copy<u8>(f.repr, new_used_24, global:core:prelude/traits.wado::$const_obj_25, 0, 9);
     }
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b157: block {
-        l158: loop {
-            break_if b157 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l158;
-        };
-    };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {

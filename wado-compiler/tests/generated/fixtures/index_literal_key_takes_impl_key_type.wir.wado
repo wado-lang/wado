@@ -304,19 +304,19 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" =
 
 type "functype//core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(99)
 
-type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(100)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i8,i32>", i8, i32) -> i32;  // TypeId(100)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<i8,i32>", i8, i32) -> i32;  // TypeId(101)
+type "functype//core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]" = fn(u32, ref "core:prelude/format.wado//Formatter");  // TypeId(101)
 
 type "functype//core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]" = fn(u64, ref "core:prelude/format.wado//Formatter");  // TypeId(102)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<u32,i32>", u32, i32) -> i32;  // TypeId(103)
+type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(103)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$6ccfa36539e614d6,u64>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(104)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>::place$sroa[key.value]" = fn(ref "core:collections/treemap.wado//TreeMap<u32,i32>", u32, i32) -> i32;  // TypeId(104)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$576bd8df3e04b3b6,i8>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(105)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$6ccfa36539e614d6,u64>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(105)
 
-type "functype//core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String");  // TypeId(106)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$576bd8df3e04b3b6,i8>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(106)
 
 type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16269228f9c88,core:prelude/string.wado/String>::lit$sroa[self.index]" = fn(i32, ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(107)
 
@@ -2296,14 +2296,6 @@ fn "core:prelude/primitive.wado/i32::fmt_into$sroa[self.value]"(self, f) {
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, x, self);
 }
 
-fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
-    let value: u64;
-    let offset: i32;
-    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
-    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, 0, self);
-    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
-}
-
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>::place$sroa[key.value]"(self, key, e) {
     let $load_0: i32;
     let $load_4: ref Array<i32>;
@@ -2422,12 +2414,36 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<i8,i32>:
     };
 }
 
+fn "core:prelude/primitive.wado/u32::fmt_decimal$sroa[self.value]"(self, f) {
+    let value: u64;
+    let offset: i32;
+    self = "core:prelude/primitive.wado/count_digits_u64"(local.tee value(builtin::i64_extend_i32_u(self)));
+    offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, 0, self);
+    "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, value, self);
+}
+
 fn "core:prelude/primitive.wado/u64::fmt_decimal$sroa[self.value]"(self, f) {
     let digit_count: i32;
     let offset: i32;
     digit_count = "core:prelude/primitive.wado/count_digits_u64"(self);
     offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$dae[alt_prefix]"(f, 0, digit_count);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, offset, self, digit_count);
+}
+
+fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
+    let n_8: i32;
+    let new_used: i32;
+    let start_14: i32;
+    $inline_core_prelude_string_wado_String__internal_push_view_2: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_view_2 local.tee n_8(self.end - self.start) == 0;
+        if @unlikely(local.tee new_used(out.used + n_8) > builtin::array_len(out.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
+        }
+        start_14 = out.used;
+        out.used = new_used;
+        builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
+    };
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>::place$sroa[key.value]"(self, key, e) {
@@ -2462,15 +2478,15 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>
     $load_0 = self.root;
     n_19 = 0;
     block {
-        l283: loop {
+        l284: loop {
             if local.tee base_62($inline_core_collections_treemap_wado_TreeMap_u32_i32___search_node_sroa_key_value__0: block -> i32 {
                 base_62 = $load_0 * 31;
                 lo = 0;
                 hi = builtin::array_get_value<i32>(self.lens, $load_0);
                 $licm_nkeys_14 = self.nkeys;
-                b285: block {
-                    l286: loop {
-                        break_if b285 lo >= hi;
+                b286: block {
+                    l287: loop {
+                        break_if b286 lo >= hi;
                         mid = (lo + hi) >> 1;
                         if local.tee other_70($inline_core_collections_treemap_wado_TreeMap_u32_i32___search_node_sroa_key_value__0__$inline_u32_core_prelude_traits_wado_Ord__cmp_sroa_self_value_other_value__1: block -> "core:prelude/traits.wado//enum:Ordering" {
                             other_70 = builtin::array_get_value<u32>($licm_nkeys_14, base_62 + mid);
@@ -2488,7 +2504,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>
                         } else {
                             break $inline_core_collections_treemap_wado_TreeMap_u32_i32___search_node_sroa_key_value__0: mid;
                         }
-                        continue l286;
+                        continue l287;
                     };
                 };
                 break $inline_core_collections_treemap_wado_TreeMap_u32_i32___search_node_sroa_key_value__0: -1 - lo;
@@ -2543,7 +2559,7 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<u32,i32>
             }
             $load_0 = builtin::array_get_value<i32>(self.kids, ($load_0 * 32) + base_62);
             n_19 = n_19 + 1;
-            continue l283;
+            continue l284;
         };
     };
 }
@@ -2557,22 +2573,6 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collecti
 fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<core:collections/entries.wado/$tmpl$576bd8df3e04b3b6,i8>::lit$sroa[self.index]"(self, $mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1) {
     return block -> ref "core:prelude/string.wado//StrSlice" {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv$t$s0("core:collections/entries.wado/$template_segment$core:collections/entries.wado/$tmpl$576bd8df3e04b3b6"($mv$t$s0, $mv$t$r0, $mv$t$s1, $mv$t$r1, 2 * self)).repr, $mv$t$s0.used);
-    };
-}
-
-fn "core:prelude/string.wado/&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to$sroa[self.value]"(self, out) {
-    let n_8: i32;
-    let new_used: i32;
-    let start_14: i32;
-    $inline_core_prelude_string_wado_String__internal_push_view_2: block {
-        break_if $inline_core_prelude_string_wado_String__internal_push_view_2 local.tee n_8(self.end - self.start) == 0;
-        if @unlikely(local.tee new_used(out.used + n_8) > builtin::array_len(out.repr)) {
-            cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out, new_used);
-        }
-        start_14 = out.used;
-        out.used = new_used;
-        builtin::array_copy<u8>(out.repr, start_14, self.repr, self.start, n_8);
     };
 }
 

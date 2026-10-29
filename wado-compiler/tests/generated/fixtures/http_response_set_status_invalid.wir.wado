@@ -8,24 +8,24 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 enum core:prelude/types.wado//enum:FutureWriteResult { Completed = 0, Dropped = 1, Pending = 2 };  // TypeId(2)
 
-struct core:prelude/types.wado//Box<u16> {  // TypeId(3)
+struct core:prelude//$Resource {  // TypeId(3)
+    mut value: i32,
+}
+
+struct core:prelude/types.wado//Box<u16> {  // TypeId(4)
     mut value: u16,
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>> {  // TypeId(4)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>> {  // TypeId(5)
     mut value: ref null "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>",
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>> {  // TypeId(5)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>> {  // TypeId(6)
     mut value: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>",
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>> {  // TypeId(6)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>> {  // TypeId(7)
     mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>>",
-}
-
-struct core:prelude//$Resource {  // TypeId(7)
-    mut value: i32,
 }
 
 struct core:prelude/string.wado//StrSlice {  // TypeId(8)
@@ -448,9 +448,9 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<h
 
 type "functype//core:prelude/types.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/ReflectVariant::members" = fn() -> [ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<(),()>,()>", ref "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<(),()>,()>"];  // TypeId(117)
 
-type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<(),()>", ref "core:prelude/format.wado//Formatter");  // TypeId(118)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(118)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(119)
+type "functype//core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]" = fn(ref "core:prelude/types.wado//Result<(),()>", ref "core:prelude/format.wado//Formatter");  // TypeId(119)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(120)
 
@@ -1604,6 +1604,19 @@ fn "core:prelude/types.wado/core:prelude/types.wado/Result<(),()>^core:prelude/t
     return struct.new "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<(),()>,()>" { index: 0, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(79, 107), used: 2 }, wire_override: ref.null none, is_unit: 0 }, struct.new "core:prelude/traits.wado//VariantCase<core:prelude/types.wado/Result<(),()>,()>" { index: 1, case_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 114, 114), used: 3 }, wire_override: ref.null none, is_unit: 0 };
 }
 
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
+    let i: i32;
+    i = 0;
+    b168: block {
+        l169: loop {
+            break_if b168 i >= n;
+            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
+            i = i + 1;
+            continue l169;
+        };
+    };
+}
+
 fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/traits.wado/Inspect::inspect$sroa[self.value]"(self, f) {
     let $load_0: i32;
     let $load_1: ref "core:prelude/string.wado//String";
@@ -1634,19 +1647,6 @@ fn "core:prelude/traits.wado/core:prelude/types.wado/Result<(),()>^core:prelude/
         "core:prelude/types.wado/$case_ref$core:prelude/types.wado/Result<(),()>$()$sroa[v.value]$spec1$dae[index]"(self);
         "core:prelude/traits.wado/core:prelude/traits.wado/inspect_variant_payload<()>"(f);
     }
-}
-
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
-    let i: i32;
-    i = 0;
-    b171: block {
-        l172: loop {
-            break_if b171 i >= n;
-            "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
-            i = i + 1;
-            continue l172;
-        };
-    };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
