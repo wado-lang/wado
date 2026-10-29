@@ -1133,7 +1133,7 @@ pub(crate) struct OperatorDispatch {
     /// The declaration the dispatch selected.
     pub(crate) method_def: Option<DefId>,
     /// Self-kind of the trait method's receiver, which reify feeds with
-    /// [`Self::is_ref_impl`] into `adjust_receiver_for_self_kind`.
+    /// [`Self::self_layers`] into `adjust_receiver_for_self_kind`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the
