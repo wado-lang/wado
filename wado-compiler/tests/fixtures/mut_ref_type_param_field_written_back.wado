@@ -1,0 +1,46 @@
+// `&mut self.v` with `v: T` is checked in the generic body, where `T` is no
+// replace-on-assign type, so the reference-site refusal never sees an instance
+// whose `T` is one. There the reference is a detached copy, and the call writes
+// the callee's replacement back to the field.
+
+struct P {
+    n: i32,
+}
+
+struct Cell<T> {
+    v: T,
+}
+
+fn put<T>(slot: &mut T, v: T) {
+    *slot = v;
+}
+
+impl<T> Cell<T> {
+    fn set(&mut self, x: T) {
+        put(&mut self.v, x);
+    }
+}
+
+test "a reference field rebinds" {
+    let a = P { n: 1 };
+    let b = P { n: 2 };
+    let mut c = Cell { v: &a };
+    c.set(&b);
+    assert c.v.n == 2;
+    assert a.n == 1;
+}
+
+test "a primitive field is replaced" {
+    let mut c = Cell { v: 1 };
+    c.set(2);
+    assert c.v == 2;
+}
+
+test "a struct field is replaced in place" {
+    let mut c = Cell { v: P { n: 1 } };
+    c.set(P { n: 3 });
+    assert c.v.n == 3;
+}
+
+__DATA__
+{"test": {}}

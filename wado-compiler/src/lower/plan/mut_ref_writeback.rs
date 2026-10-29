@@ -1,5 +1,7 @@
-//! Take a `&mut` to a variant field through a temp and store it back after the
-//! call. See `docs/wep-2026-06-13-reference-representation.md`.
+//! Take a `&mut` to a field of a replace-on-assign type through a temp and
+//! store it back after the call: a `variant`'s, or any other a generic body
+//! hid from the reference site. See
+//! `docs/wep-2026-06-13-reference-representation.md`.
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::reach::ClosureCaptures;
@@ -78,8 +80,9 @@ pub fn insert_write_backs(
                     severity: Severity::Error,
                     code: Code::ImmutableAssignment,
                     message: format!(
-                        "a mutable reference to a field or element of a variant is a detached \
-                         copy, so a whole-value write through it would be lost: {reason}"
+                        "a mutable reference to a field or element of a replace-on-assign \
+                         type is a detached copy, so a whole-value write through it would be \
+                         lost: {reason}"
                     ),
                     span: Some(DiagnosticSpan::from_span(span, None)),
                 },
@@ -266,11 +269,13 @@ impl WriteBack<'_> {
         changed
     }
 
-    /// Whether a `&mut` to `place` is a detached box — of the replace types
-    /// only a `variant` gets here, generic or not. A field or an element boxed
-    /// by [`TypeTable::boxes_slot`] is its own box, which `*r` reaches.
+    /// Whether a `&mut` to `place` is a detached box: a replace type's. Only a
+    /// `variant` is written so, and only a generic body hides the rest — the
+    /// reference site refuses theirs where it can read the type. A field or an
+    /// element boxed by [`TypeTable::boxes_slot`] is its own box, which `*r`
+    /// reaches.
     fn detaches(&self, place: &TirExpr) -> bool {
-        self.type_table.is_variant_value(place.type_id)
+        self.type_table.is_boxed_reference_target(place.type_id)
             && !(matches!(
                 place.kind,
                 TirExprKind::FieldAccess { .. }
@@ -279,6 +284,26 @@ impl WriteBack<'_> {
                         ..
                     }
             ) && self.type_table.boxes_slot(place.type_id))
+    }
+
+    /// How a temp of `ty` tells that the callee replaced it: by identity for a
+    /// GC value, by value for a Wasm number, which has no identity. `None` for
+    /// a scalar no operator compares (`v128`, the half floats), stored back
+    /// unconditionally — undoing a write the callee made to the place through
+    /// another route, a gap of the generic case alone.
+    fn replacement_witness(&self, ty: TypeId) -> Option<TirBinaryOp> {
+        let tt = self.type_table;
+        if tt.is_wide_int(ty) {
+            Some(TirBinaryOp::RefNotEq)
+        } else if tt.is_scalar_primitive_like(ty)
+            || matches!(tt.get(tt.representation_head(ty)), ResolvedType::Enum { .. })
+        {
+            Some(TirBinaryOp::NotEq)
+        } else if tt.primitive_head(ty).is_some() {
+            None
+        } else {
+            Some(TirBinaryOp::RefNotEq)
+        }
     }
 
     /// Whether `arg` *takes* a detached reference, by any route. Forwarding one it
@@ -626,25 +651,38 @@ impl WriteBack<'_> {
             // Store back only what the callee replaced. An unconditional store
             // would also undo a write the callee made through another route to
             // the same place — `self`, or a sibling `&mut` argument.
-            write_backs.push(TirStmt::new(
-                TirStmtKind::If {
-                    condition: TirExpr::new(
-                        TirExprKind::Binary {
-                            left: Box::new(temp.read()),
-                            op: TirBinaryOp::RefNotEq,
-                            right: Box::new(before.read()),
+            write_backs.push(match self.replacement_witness(temp.type_id) {
+                Some(op) => TirStmt::new(
+                    TirStmtKind::If {
+                        condition: TirExpr::new(
+                            TirExprKind::Binary {
+                                left: Box::new(temp.read()),
+                                op,
+                                right: Box::new(before.read()),
+                            },
+                            TypeTable::BOOL,
+                            span,
+                        ),
+                        then_block: TirBlock {
+                            stmts: store_back,
+                            span,
                         },
-                        TypeTable::BOOL,
-                        span,
-                    ),
-                    then_block: TirBlock {
-                        stmts: store_back,
-                        span,
+                        else_block: None,
                     },
-                    else_block: None,
-                },
-                span,
-            ));
+                    span,
+                ),
+                None => TirStmt::new(
+                    TirStmtKind::Expr(TirExpr::new(
+                        TirExprKind::Block(TirBlock {
+                            stmts: store_back,
+                            span,
+                        }),
+                        TypeTable::UNIT,
+                        span,
+                    )),
+                    span,
+                ),
+            });
             *arg = TirExpr::new(
                 TirExprKind::Unary {
                     op: TirUnaryOp::MutRef,
