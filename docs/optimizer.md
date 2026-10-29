@@ -145,7 +145,7 @@ Variants and references:
 - `labeled_block_fusion` — remove the `Option` or `Result` an inlined helper
   builds only for its caller to test, as `?` and `if let` do.
 - `slot_temp_sroa` — split the aggregate an inlined helper leaves where fusion
-  cannot reach.
+  cannot reach, or a `match`, `if` or `switch` leaves when each arm builds it.
 - `closure_devirt` — call a closure directly when its callee is known.
 - `ref_elim` — replace a reference read only through fields with its source.
 - `aggregate_forward` — hand a freshly built aggregate to its consumer directly.
