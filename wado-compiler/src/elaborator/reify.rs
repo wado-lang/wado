@@ -3752,15 +3752,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let label = format!("$for_of_{unique_id}");
 
         let into_iter_receiver = self.reify_expr(&for_of.iterable, ctx, None);
-        let into_iter_layers = impl_self_layers(
-            &info.into_iter,
-            into_iter_receiver.type_id,
-            &self.tysys.type_table.borrow(),
-        );
-        let into_iter_receiver = self.adjust_receiver(
+        let into_iter_receiver = self.adjust_receiver_for(
             into_iter_receiver,
             info.into_iter_self_kind,
-            into_iter_layers,
+            &info.into_iter,
             ctx,
         );
         let iter_type = info.iter_type;
@@ -3797,10 +3792,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             iter_type,
             span,
         );
-        let next_layers =
-            impl_self_layers(&info.next, iter_type, &self.tysys.type_table.borrow());
         let next_receiver =
-            self.adjust_receiver(iter_local_ref, info.next_self_kind, next_layers, ctx);
+            self.adjust_receiver_for(iter_local_ref, info.next_self_kind, &info.next, ctx);
         let option_type = self
             .tysys
             .type_table
@@ -4702,7 +4695,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             (left, right)
         };
-        let self_layers = dispatch.self_layers(left.type_id, &self.tysys.type_table.borrow());
+        let self_layers = impl_self_layers(
+            &dispatch.function_ref,
+            left.type_id,
+            &self.tysys.type_table.borrow(),
+        );
         let receiver = adjust_receiver_for_self_kind(
             left,
             dispatch.self_kind,
@@ -5743,15 +5740,27 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         adjust_receiver_for_self_kind(receiver, self_kind, self_layers, &self.tysys.type_table)
     }
 
-    /// [`Self::adjust_receiver`] for the receiver of an operator's impl.
+    /// [`Self::adjust_receiver`] for a call of `func`, whose impl says how many
+    /// references its `Self` holds.
+    fn adjust_receiver_for(
+        &self,
+        receiver: TirExpr,
+        self_kind: ast::SelfKind,
+        func: &FunctionRef,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let self_layers = impl_self_layers(func, receiver.type_id, &self.tysys.type_table.borrow());
+        self.adjust_receiver(receiver, self_kind, self_layers, ctx)
+    }
+
+    /// [`Self::adjust_receiver_for`] the receiver of an operator's impl.
     fn adjust_operator_receiver(
         &self,
         receiver: TirExpr,
         dispatch: &OperatorDispatch,
         ctx: &mut FunctionContext,
     ) -> TirExpr {
-        let self_layers = dispatch.self_layers(receiver.type_id, &self.tysys.type_table.borrow());
-        self.adjust_receiver(receiver, dispatch.self_kind, self_layers, ctx)
+        self.adjust_receiver_for(receiver, dispatch.self_kind, &dispatch.function_ref, ctx)
     }
 
     /// `[c[i], c[j]] = [c[j], c[i]]` as `{ let $da_N = j; c.index_swap(i, $da_N) }`,
@@ -8192,8 +8201,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         // Step 1: build the `container.index_mut(idx)` call.
         let container = self.reify_expr(&index_expr.expr, ctx, None);
-        let receiver_for_index_mut =
-            self.adjust_receiver(container, inner_dispatch.self_kind, 0, ctx);
+        let receiver_for_index_mut = self.adjust_operator_receiver(container, &inner_dispatch, ctx);
         let index_resolved = self.reify_expr(&index_expr.index, ctx, None);
         let index_mut_call = build_tir_method_call(
             receiver_for_index_mut,
@@ -8396,13 +8404,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         } else {
             raw_receiver
         };
-        let self_layers = impl_self_layers(
+        let adjusted_receiver = self.adjust_receiver_for(
+            raw_receiver,
+            dispatch.self_kind,
             &dispatch.function_ref,
-            raw_receiver.type_id,
-            &self.tysys.type_table.borrow(),
+            ctx,
         );
-        let adjusted_receiver =
-            self.adjust_receiver(raw_receiver, dispatch.self_kind, self_layers, ctx);
 
         // Monomorphization queues instances off exactly what annotate resolved;
         // `monomorph_info.method_type_args` is zeroed for a blanket-impl turbofish.

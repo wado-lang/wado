@@ -1091,8 +1091,7 @@ pub(crate) struct ImplFacts {
     /// match the binding's instantiation.
     pub(crate) trait_type_args: Vec<tir::TypeId>,
     /// True iff the impl target is `&T` / `&mut T`, whose `&self` holds two
-    /// layers over the pointee; mirrors [`MethodDispatch::is_ref_impl`] but is
-    /// decided at impl-block scope.
+    /// layers over the pointee.
     pub(crate) is_ref_impl: bool,
     /// Mangled struct name the elaborator feeds into
     /// [`crate::name::MethodName::format_local`] when naming the impl's methods.
@@ -1130,7 +1129,7 @@ pub(crate) struct OperatorDispatch {
     /// The declaration the dispatch selected.
     pub(crate) method_def: Option<DefId>,
     /// Self-kind of the trait method's receiver, which reify feeds with
-    /// [`Self::self_layers`] into `adjust_receiver_for_self_kind`.
+    /// [`impl_self_layers`] into `adjust_receiver_for_self_kind`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the
@@ -1162,11 +1161,6 @@ impl OperatorDispatch {
             .method_info
             .as_ref()
             .is_some_and(|info| info.ref_receiver().is_some())
-    }
-
-    /// [`impl_self_layers`] of the answering impl.
-    pub(crate) fn self_layers(&self, receiver: TypeId, type_table: &TypeTable) -> usize {
-        impl_self_layers(&self.function_ref, receiver, type_table)
     }
 }
 

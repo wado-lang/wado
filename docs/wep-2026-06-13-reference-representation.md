@@ -271,10 +271,9 @@ refused because a labeled block's value is read from its tail alone.
 The write-back stores the temp back only when the callee replaced it — the
 temp aliases the place, so an unconditional store would also undo a write the
 callee made through another route to the same place (`self`, a sibling `&mut`
-argument), which lands on its own. The temp is replaced where its bits differ
-from what it held: a GC value by identity, a scalar by its bits. A scalar's
-`!=` would miss a replacement it reads as equal: `-0.0` over `0.0`, or another
-NaN.
+argument), which lands on its own. A replacement is a temp that differs from
+what it held bit for bit, a GC value by identity: `!=` reads `-0.0` and `0.0`,
+or two NaNs, as equal.
 
 A store back is still late for a route the callee takes after replacing.
 Until the store back runs, the new value is in the temp alone, so another

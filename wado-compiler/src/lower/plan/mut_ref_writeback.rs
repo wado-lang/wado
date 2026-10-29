@@ -602,8 +602,7 @@ impl WriteBack<'_> {
             // would also undo a write the callee made through another route to
             // the same place — `self`, or a sibling `&mut` argument. The witness
             // aliases what the temp held, never copies it: a copy would make
-            // every call look like a whole-value write. It compares bits, not
-            // values: a callee writing `-0.0` over `0.0` replaced the value.
+            // every call look like a whole-value write.
             let before = self.bind(
                 &mut prefix,
                 "before_",
