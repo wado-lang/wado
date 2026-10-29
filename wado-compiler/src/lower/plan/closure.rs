@@ -1079,31 +1079,33 @@ impl ClosureLowerer {
                 .map(|(arg_idx, _)| arg_idx + param_offset)
                 .collect();
 
-            if let Some(body) = &callee.body {
-                let mut check = UnspecializableFnParam {
-                    fn_param_indices: &fn_param_indices,
-                    found: false,
-                };
-                check.visit_block(body);
-                if check.found {
-                    continue;
-                }
+            // A bodyless callee (an intrinsic such as `builtin::black_box`, or
+            // an import) has no body to clone, so the call keeps the canonical
+            // closure.
+            let Some(body) = &callee.body else {
+                continue;
+            };
+            let mut check = UnspecializableFnParam {
+                fn_param_indices: &fn_param_indices,
+                found: false,
+            };
+            check.visit_block(body);
+            if check.found {
+                continue;
             }
             // The clone's body is the callee's, so what it passes on is read here.
-            if let Some(body) = &callee.body {
-                FnParamSpecCollector {
-                    func_by_name: &func_by_name,
-                    type_table,
-                    functor_infos: &self.functor_infos,
-                    forwarded: fn_param_indices
-                        .iter()
-                        .zip(&key.functor_types)
-                        .map(|(&local, &(_, functor_type))| (local, functor_type))
-                        .collect(),
-                    requests: &mut spec_requests,
-                }
-                .visit_block(body);
+            FnParamSpecCollector {
+                func_by_name: &func_by_name,
+                type_table,
+                functor_infos: &self.functor_infos,
+                forwarded: fn_param_indices
+                    .iter()
+                    .zip(&key.functor_types)
+                    .map(|(&local, &(_, functor_type))| (local, functor_type))
+                    .collect(),
+                requests: &mut spec_requests,
             }
+            .visit_block(body);
             drop(callee);
 
             let specialized_name = self.generate_specialized_function(&key, &callee_rc, type_table);

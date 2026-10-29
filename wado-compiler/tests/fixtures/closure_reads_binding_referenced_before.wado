@@ -1,0 +1,25 @@
+// A binding whose address was taken before a closure captured it: reify read
+// the capture through a box, but the environment annotate recorded holds the
+// value, so the closure read a snapshot (`i32`), or loaded the `f64` out of the
+// box a `&f64` binding holds and passed it as the reference (invalid Wasm).
+
+test "a closure reads a write made through an earlier reference" {
+    let mut n = builtin::black_box(1);
+    let r = &mut n;
+    let read = || n + 1;
+    *r = 5;
+    assert read() == 6;
+    n = 7;
+    assert read() == 8;
+}
+
+test "a closure reads a reference binding whose address was taken" {
+    let x = builtin::black_box(1.5);
+    let rx = &x;
+    builtin::black_box(&rx);
+    let read = || *rx + 1.0;
+    assert read() == 2.5;
+}
+
+__DATA__
+{}

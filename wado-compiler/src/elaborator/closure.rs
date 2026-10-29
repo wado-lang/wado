@@ -203,7 +203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
                 let ref_name = capture_ref_name(var_name);
                 ctx.add_local(ref_name.clone(), ref_type, false, None);
-                ctx.address_taken_locals.insert(outer_index);
+                ctx.mut_captured_locals.insert(outer_index);
 
                 mut_captures.push(MutCapture {
                     var_name: var_name.clone(),

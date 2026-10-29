@@ -6324,6 +6324,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let outer_index = outer.index;
             let ref_index = ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
             ctx.address_taken_locals.insert(outer_index);
+            ctx.mut_captured_locals.insert(outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),

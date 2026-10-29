@@ -1,0 +1,17 @@
+// Regression: the fn-param specialization cloned a callee with no body
+// (`builtin::black_box`) for a closure argument, so the call named a function
+// nothing defines and WIR building panicked.
+
+fn id<T>(v: T) -> T {
+    builtin::black_box(v);
+    return v;
+}
+
+test "a closure reaches an intrinsic from its caller and from a specialized clone" {
+    let f = id(|x: i32| x + 1);
+    builtin::black_box(f);
+    assert f(1) == 2;
+}
+
+__DATA__
+{}
