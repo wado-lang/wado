@@ -2215,22 +2215,14 @@ fn plan_slot_temp_sroa(
         return None;
     };
     let temp_local = *temp_local;
-    // `let_block_flatten` normalises `let x = { stmts…; tail }`, but this tail
-    // is a labeled block rather than a plain value, so the wrapper can still be
-    // in place: look through it and carry its leading statements out ahead of
-    // the block.
     let lv = let_value.as_expr()?;
-    let found = match labeled_source(body, lv) {
-        // Ordered ahead of the read census below, which walks the whole body.
-        Some((_, _, lb_block)) if body.falls_through(lb_block) => return None,
-        Some((lead, label, lb_block)) => Found::Labeled {
-            lead,
-            label,
-            lb_block,
-        },
-        None if is_merge(body, lv) => Found::Merge(lv),
-        None => return None,
-    };
+    let labeled = labeled_source(body, lv);
+    // Ordered ahead of the read census below, which walks the whole body.
+    match &labeled {
+        Some((_, _, lb_block)) if body.falls_through(*lb_block) => return None,
+        None if !is_merge(body, lv) => return None,
+        _ => {}
+    }
 
     // Every read of the temp must be a `temp.k` projection — the block has no
     // aggregate left to hand any other — and exactly one `let` may declare it:
@@ -2278,34 +2270,28 @@ fn plan_slot_temp_sroa(
         struct_arity: None,
         saw_materialize: false,
     };
-    let source = match found {
-        Found::Labeled {
-            lead,
+    let source = if let Some((lead, label, lb_block)) = labeled {
+        let exits = walk_exits(body, lb_block, &label, &mut sink)?;
+        SlotSource::Labeled {
             label,
             lb_block,
-        } => {
-            let exits = walk_exits(body, lb_block, &label, &mut sink)?;
-            SlotSource::Labeled {
-                label,
-                lb_block,
-                lead,
-                exits,
-            }
+            lead,
+            exits,
         }
-        Found::Merge(merge) => {
-            let mut walk = TailWalk {
-                sink: &mut sink,
-                merges: Vec::new(),
-                tails: Vec::new(),
-            };
-            if !walk.merge(body, merge) {
-                return None;
-            }
-            SlotSource::Merge {
-                merge,
-                merges: walk.merges,
-                tails: walk.tails,
-            }
+    } else {
+        let mut walk = TailWalk {
+            sink: &mut sink,
+            type_table,
+            merges: Vec::new(),
+            tails: Vec::new(),
+        };
+        if !walk.merge(body, lv) {
+            return None;
+        }
+        SlotSource::Merge {
+            merge: lv,
+            merges: walk.merges,
+            tails: walk.tails,
         }
     };
     if !sink.admissible() {
@@ -2332,16 +2318,6 @@ fn plan_slot_temp_sroa(
         zeros,
         span,
     })
-}
-
-/// A temp's value source before its exits are walked.
-enum Found {
-    Labeled {
-        lead: Vec<StmtId>,
-        label: String,
-        lb_block: BlockId,
-    },
-    Merge(ExprId),
 }
 
 /// `L: { … }`, or `{ lead…; L: { … } }`: the statements ahead of the labeled
@@ -2386,6 +2362,7 @@ fn is_merge(body: &Body, e: ExprId) -> bool {
 /// accepted the value each hands over. An arm that diverges hands over none.
 struct TailWalk<'s, S> {
     sink: &'s mut S,
+    type_table: &'s TypeTable,
     merges: Vec<ExprId>,
     tails: Vec<Tail>,
 }
@@ -2426,7 +2403,7 @@ impl<S: ExitSink> TailWalk<'_, S> {
 
     fn tail(&mut self, body: &Body, value: Operand, at: Tail) -> bool {
         if let Some(e) = value.as_expr() {
-            if body.exprs[e].type_id == TypeTable::NEVER {
+            if self.type_table.is_never(body.exprs[e].type_id) {
                 return true;
             }
             if is_merge(body, e) || body.unbroken_block(e).is_some() {
