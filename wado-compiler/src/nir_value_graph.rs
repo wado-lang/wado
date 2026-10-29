@@ -517,7 +517,7 @@ pub fn neutral_int(op: NirBinaryOp, n: u64, side: Side) -> bool {
         | NirBinaryOp::GtEq
         | NirBinaryOp::And
         | NirBinaryOp::Or
-        | NirBinaryOp::RefNotEq => false,
+        | NirBinaryOp::NotIdentical => false,
     }
 }
 

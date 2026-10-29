@@ -1,7 +1,9 @@
 // `&mut self.v` with `v: T` is checked in the generic body, where `T` is no
 // replace-on-assign type, so the reference-site refusal never sees an instance
 // whose `T` is one. There the reference is a detached copy, and the call writes
-// the callee's replacement back to the field.
+// the callee's replacement back to the field: any value whose bits differ, so
+// `-0.0` replaces `0.0`, which `==` takes for the same.
+use { f32x4 } from "core:simd";
 
 struct P {
     n: i32,
@@ -36,10 +38,25 @@ test "a primitive field is replaced" {
     assert c.v == 2;
 }
 
-test "a half float field, which no operator compares, is stored back" {
+test "a float field takes a zero of the other sign" {
+    let mut c = Cell { v: 0.0 };
+    c.set(-0.0);
+    assert c.v.to_bits() == (-0.0).to_bits();
+    let mut d = Cell { v: 0.0 as f32 };
+    d.set(-0.0 as f32);
+    assert d.v.to_bits() == (-0.0 as f32).to_bits();
+}
+
+test "a half float field is replaced" {
     let mut c = Cell { v: 1.5 as f16 };
     c.set(2.5 as f16);
     assert c.v == 2.5 as f16;
+}
+
+test "a v128 field is replaced" {
+    let mut c = Cell { v: f32x4::splat(1.0) };
+    c.set(f32x4::splat(2.0));
+    assert c.v.extract_lane(3) == 2.0;
 }
 
 test "a struct field is replaced in place" {

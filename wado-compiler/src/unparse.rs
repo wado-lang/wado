@@ -5197,7 +5197,7 @@ fn tir_binary_op_str(op: TirBinaryOp) -> &'static str {
         TirBinaryOp::BitXor => "^",
         TirBinaryOp::Shl => "<<",
         TirBinaryOp::Shr => ">>",
-        TirBinaryOp::RefNotEq => "ref.ne",
+        TirBinaryOp::NotIdentical => "!==",
     }
 }
 

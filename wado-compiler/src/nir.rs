@@ -139,7 +139,8 @@ pub enum NirBinaryOp {
     BitXor,
     Shl,
     Shr,
-    RefNotEq,
+    /// [`crate::tir::TirBinaryOp::NotIdentical`].
+    NotIdentical,
 }
 
 impl NirBinaryOp {
@@ -176,7 +177,7 @@ impl NirBinaryOp {
             | Self::BitXor
             | Self::Shl
             | Self::Shr
-            | Self::RefNotEq => None,
+            | Self::NotIdentical => None,
         }
     }
 

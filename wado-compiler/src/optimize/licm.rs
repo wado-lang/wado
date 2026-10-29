@@ -1841,7 +1841,7 @@ fn find_hoist_candidates(
 /// loop-invariant instance can be speculatively computed once in the
 /// pre-header. `Div` / `Mod` are excluded (trap on a zero divisor — hoisting
 /// out of a possibly-zero-iteration loop could trap where the original would
-/// not). `RefNotEq` is excluded (reference operands, not arithmetic).
+/// not).
 fn is_hoistable_binop(op: NirBinaryOp) -> bool {
     matches!(
         op,
@@ -1850,6 +1850,7 @@ fn is_hoistable_binop(op: NirBinaryOp) -> bool {
             | NirBinaryOp::Mul
             | NirBinaryOp::Eq
             | NirBinaryOp::NotEq
+            | NirBinaryOp::NotIdentical
             | NirBinaryOp::Lt
             | NirBinaryOp::LtEq
             | NirBinaryOp::Gt

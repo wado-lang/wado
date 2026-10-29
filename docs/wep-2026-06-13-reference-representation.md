@@ -35,7 +35,8 @@ follows from _how_ the value is mutated through the reference:
 The axis is mutation mode, not "scalar vs heap". A `variant` is a heap GC struct
 yet is replace-on-assign (see below). Mutability (`&` vs `&mut`) is a type-level
 distinction, not a representational one: a reference to a replace-on-assign type
-is `Box<T>` whether `&` or `&mut`.
+is `Box<T>` whether `&` or `&mut`, and the box of a `&U` is the box of a
+`&mut U`, at any depth.
 
 Since both collapse onto one wrapper, the resolved type no longer says which is
 which. The rewrite records the shared-`&T` origin separately, and anything asking
@@ -218,9 +219,7 @@ fix to conform; none should be preserved.
   source order, so a preceding one's write is not read past. A type parameter's
   field reaches the reference site as no replace type at all, so its instances
   take the `variant` rules from the write-back pass, which reads the
-  substituted type. A scalar has no identity to witness a replacement by, so its
-  value does; `v128` and the half floats, which no operator compares, store back
-  unconditionally, undoing a write the callee made through another route.
+  substituted type.
 
   Both halves follow the reference, not its spelling: a variable bound to one
   carries it to whatever sink it reaches, and a whole-value write names its
@@ -272,7 +271,10 @@ refused because a labeled block's value is read from its tail alone.
 The write-back stores the temp back only when the callee replaced it — the
 temp aliases the place, so an unconditional store would also undo a write the
 callee made through another route to the same place (`self`, a sibling `&mut`
-argument), which lands on its own.
+argument), which lands on its own. The temp is replaced where its bits differ
+from what it held: a GC value by identity, a scalar by its bits. A scalar's
+`!=` would miss a replacement it reads as equal: `-0.0` over `0.0`, or another
+NaN.
 
 A store back is still late for a route the callee takes after replacing.
 Until the store back runs, the new value is in the temp alone, so another

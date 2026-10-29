@@ -286,29 +286,6 @@ impl WriteBack<'_> {
             ) && self.type_table.boxes_slot(place.type_id))
     }
 
-    /// How a temp of `ty` tells that the callee replaced it: by identity for a
-    /// GC value, by value for a Wasm number, which has no identity. `None` for
-    /// a scalar no operator compares (`v128`, the half floats), stored back
-    /// unconditionally — undoing a write the callee made to the place through
-    /// another route, a gap of the generic case alone.
-    fn replacement_witness(&self, ty: TypeId) -> Option<TirBinaryOp> {
-        let tt = self.type_table;
-        if tt.is_wide_int(ty) {
-            Some(TirBinaryOp::RefNotEq)
-        } else if tt.is_scalar_primitive_like(ty)
-            || matches!(
-                tt.get(tt.representation_head(ty)),
-                ResolvedType::Enum { .. }
-            )
-        {
-            Some(TirBinaryOp::NotEq)
-        } else if tt.primitive_head(ty).is_some() {
-            None
-        } else {
-            Some(TirBinaryOp::RefNotEq)
-        }
-    }
-
     /// Whether `arg` *takes* a detached reference, by any route. Forwarding one it
     /// was already handed is not taking one — the box is the caller's, and
     /// whether that detached is the caller's question. This is the safety test;
@@ -625,17 +602,15 @@ impl WriteBack<'_> {
             // would also undo a write the callee made through another route to
             // the same place — `self`, or a sibling `&mut` argument. The witness
             // aliases what the temp held, never copies it: a copy would make
-            // every call look like a whole-value write.
-            let witness = self.replacement_witness(temp.type_id).map(|op| {
-                let before = self.bind(
-                    &mut prefix,
-                    "before_",
-                    temp.read(),
-                    false,
-                    LetStorage::Aliased,
-                );
-                (op, before)
-            });
+            // every call look like a whole-value write. It compares bits, not
+            // values: a callee writing `-0.0` over `0.0` replaced the value.
+            let before = self.bind(
+                &mut prefix,
+                "before_",
+                temp.read(),
+                false,
+                LetStorage::Aliased,
+            );
             // The store is the temp's last read, so it hands the storage over
             // rather than copying the whole payload.
             let mut store_back: Vec<TirStmt> = Vec::new();
@@ -657,38 +632,25 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
-            write_backs.push(match witness {
-                Some((op, before)) => TirStmt::new(
-                    TirStmtKind::If {
-                        condition: TirExpr::new(
-                            TirExprKind::Binary {
-                                left: Box::new(temp.read()),
-                                op,
-                                right: Box::new(before.read()),
-                            },
-                            TypeTable::BOOL,
-                            span,
-                        ),
-                        then_block: TirBlock {
-                            stmts: store_back,
-                            span,
+            write_backs.push(TirStmt::new(
+                TirStmtKind::If {
+                    condition: TirExpr::new(
+                        TirExprKind::Binary {
+                            left: Box::new(temp.read()),
+                            op: TirBinaryOp::NotIdentical,
+                            right: Box::new(before.read()),
                         },
-                        else_block: None,
-                    },
-                    span,
-                ),
-                None => TirStmt::new(
-                    TirStmtKind::Expr(TirExpr::new(
-                        TirExprKind::Block(TirBlock {
-                            stmts: store_back,
-                            span,
-                        }),
-                        TypeTable::UNIT,
+                        TypeTable::BOOL,
                         span,
-                    )),
-                    span,
-                ),
-            });
+                    ),
+                    then_block: TirBlock {
+                        stmts: store_back,
+                        span,
+                    },
+                    else_block: None,
+                },
+                span,
+            ));
             *arg = TirExpr::new(
                 TirExprKind::Unary {
                     op: TirUnaryOp::MutRef,

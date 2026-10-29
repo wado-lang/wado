@@ -141,9 +141,8 @@ impl FunctionTranslator<'_, '_> {
         right: Box<WirInstr>,
         left_type_id: TypeId,
     ) -> WirInstr {
-        // The reference-identity operator takes operands with no scalar kind.
-        if let NirBinaryOp::RefNotEq = op {
-            return WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right)));
+        if let NirBinaryOp::NotIdentical = op {
+            return self.not_identical(left, right, left_type_id);
         }
         let kind = self.scalar_kind(left_type_id, op);
         let right = if matches!(op, NirBinaryOp::Shl | NirBinaryOp::Shr) {
@@ -311,7 +310,37 @@ impl FunctionTranslator<'_, '_> {
                 PrimitiveKind::I32Signed => WirInstr::I32ShrS(left, right),
             },
             // Returned above, before the operand kind is classified.
-            NirBinaryOp::RefNotEq => unreachable!(),
+            NirBinaryOp::NotIdentical => unreachable!(),
+        }
+    }
+
+    /// `NotIdentical` at `type_id`'s representation. It also takes the operands
+    /// [`PrimitiveKind`] leaves out: a GC reference, a `v128`, and a half
+    /// float, which is a `u16` in Wasm.
+    fn not_identical(&self, left: Box<WirInstr>, right: Box<WirInstr>, type_id: TypeId) -> WirInstr {
+        match PrimitiveKind::from_type_id(self.type_table, type_id) {
+            Some(PrimitiveKind::F32) => WirInstr::I32Ne(
+                Box::new(WirInstr::I32ReinterpretF32(left)),
+                Box::new(WirInstr::I32ReinterpretF32(right)),
+            ),
+            Some(PrimitiveKind::F64) => WirInstr::I64Ne(
+                Box::new(WirInstr::I64ReinterpretF64(left)),
+                Box::new(WirInstr::I64ReinterpretF64(right)),
+            ),
+            Some(PrimitiveKind::I64Signed | PrimitiveKind::I64Unsigned) => {
+                WirInstr::I64Ne(left, right)
+            }
+            Some(PrimitiveKind::I32Signed | PrimitiveKind::I32Unsigned) => {
+                WirInstr::I32Ne(left, right)
+            }
+            None => match self.type_table.primitive_head(type_id) {
+                Some(PrimitiveType::V128) => {
+                    WirInstr::V128AnyTrue(Box::new(WirInstr::V128Xor(left, right)))
+                }
+                Some(PrimitiveType::F16 | PrimitiveType::Bf16) => WirInstr::I32Ne(left, right),
+                Some(other) => unreachable!("{other:?} has a scalar kind"),
+                None => WirInstr::I32Eqz(Box::new(WirInstr::RefEq(left, right))),
+            },
         }
     }
 

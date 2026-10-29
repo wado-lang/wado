@@ -1516,7 +1516,10 @@ pub enum TirBinaryOp {
     BitXor,
     Shl,
     Shr,
-    RefNotEq,
+    /// Whether two values differ bit for bit: a reference by identity, a number
+    /// by its bits, so `-0.0` differs from `0.0`. Lowering mints it; no source
+    /// operator spells it.
+    NotIdentical,
 }
 
 impl TirBinaryOp {
