@@ -910,7 +910,7 @@ impl Poly {
         }
         let mut sum: Option<String> = null;
         for let t of &self.terms {
-            let mut product: Option<String> = if t.coefficient != 1 || t.symbols.is_empty() {
+            let mut written: Option<String> = if t.coefficient != 1 || t.symbols.is_empty() {
                 Option::Some(to.constant(t.coefficient));
             } else {
                 null;
@@ -923,14 +923,14 @@ impl Poly {
                     },
                     None => to.symbol(&s.name),
                 };
-                product = Option::Some(match product {
+                written = Option::Some(match written {
                     Some(p) => to.mul(p, factor),
                     None => factor,
                 });
             }
             sum = Option::Some(match sum {
-                Some(s) => to.add(s, product.unwrap()),
-                None => product.unwrap(),
+                Some(s) => to.add(s, written.unwrap()),
+                None => written.unwrap(),
             });
         }
         return sum.unwrap();

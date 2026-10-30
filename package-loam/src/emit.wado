@@ -1450,13 +1450,13 @@ fn emit_compute(
     arguments.push("weights");
     let built = `build(${arguments.join(", ")})`;
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
-        let mut read = `backend.download(&${place})`;
+        let mut downloaded = `backend.download(&${place})`;
         if converted(checked, held, tensor) {
-            read = `narrow(&${read})`;
+            downloaded = `narrow(&${downloaded})`;
         }
         let shape = shapes[*tensor];
         let cut = shape.axes.into_iter().any(|a| a.extent.poly().symbols().into_iter().any(|s| padded.contains(&s)));
-        return Result::Ok(if cut { `resized(&${read}, ${symbols.spell_shape(&shape)?})` } else { read });
+        return Result::Ok(if cut { `resized(&${downloaded}, ${symbols.spell_shape(&shape)?})` } else { downloaded });
     };
     let returned_type = if crossing.several() {
         let mut idents: List<String> = [];
@@ -2815,12 +2815,12 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     // Stage 0 owed these already.
     let window = settled(window_of(node, &x, shapes, &mut [], &Axes {}));
     let spatial = x.rank() - 2;
-    let mut padding: List<String> = [];
+    let mut pads: List<String> = [];
     for let i of 0..<spatial {
-        padding.push(symbols.spell_extent(&window.pads[i])?);
-        padding.push(symbols.spell_extent(&window.pads[spatial + i])?);
+        pads.push(symbols.spell_extent(&window.pads[i])?);
+        pads.push(symbols.spell_extent(&window.pads[spatial + i])?);
     }
-    let conv = `&Convolution { window_strides: ${window.strides}, padding: [${padding.join(
+    let conv = `&Convolution { window_strides: ${window.strides}, padding: [${pads.join(
         ", ",
     )}], rhs_dilation: ${window.dilations}, feature_group_count: ${settled(conv_group(node, &w))} }`;
     let call = `backend.convolution::<[${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${exprs.reference(
@@ -2857,7 +2857,7 @@ fn built_max_pool(
     let mut dimensions: List<i32> = [1, 1];
     let mut strides: List<i32> = [1, 1];
     let mut dilations: List<i32> = [1, 1];
-    let mut padding: List<String> = ["0", "0", "0", "0"];
+    let mut pads: List<String> = ["0", "0", "0", "0"];
     for let i of 0..<x.rank() - 2 {
         let [k, s, d] = [window.kernel[i], window.strides[i], window.dilations[i]];
         dimensions.push(k);
@@ -2868,10 +2868,10 @@ fn built_max_pool(
         let last_start = window.output[i].try_sub(&Poly::constant(1)).unwrap().try_mul(&Poly::constant(s as i64)).unwrap();
         let reached = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
         let high = Poly::max_of(&reached, &Poly::constant(0), &node.site());
-        padding.push(symbols.spell_extent(&low)?);
-        padding.push(symbols.spell_extent(&high)?);
+        pads.push(symbols.spell_extent(&low)?);
+        pads.push(symbols.spell_extent(&high)?);
     }
-    let reduce = `&WindowReduce { window_dimensions: ${dimensions}, window_strides: ${strides}, window_dilations: ${dilations}, padding: [${padding.join(
+    let reduce = `&WindowReduce { window_dimensions: ${dimensions}, window_strides: ${strides}, window_dilations: ${dilations}, padding: [${pads.join(
         ", ",
     )}] }`;
     return Result::Ok(
@@ -3035,7 +3035,7 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
     let element = checked.primitives[node.inputs[0]];
     let mut cuts: List<Cut> = [];
     let mut gathered: Option<String> = null;
-    let operand_of = |gathered: &Option<String>| match gathered {
+    let operand_of = |so_far: &Option<String>| match so_far {
         Some(call) => `&${*call}`,
         None => exprs.reference(&node.inputs[0]),
     };

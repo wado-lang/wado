@@ -168,6 +168,11 @@ test "resizing pads each axis past its extent with zeros and cuts it short of it
     assert resized(&x, [1, 2]).data == [1, 2] as List<i64>;
 }
 
+test "resizing takes an element only stored, as a half-precision input is" {
+    let x = Tensor::<f16, [A]> { data: [1.5], extents: [1] };
+    assert resized(&x, [2]).data == [1.5, 0.0] as List<f16>;
+}
+
 test "iota counts along its dimension" {
     let g = &mut Cpu {};
     let rows: Tensor<i64, [A, B]> = g.iota([2, 3], 0);

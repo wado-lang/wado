@@ -41,7 +41,7 @@ impl Display for Why {
 
 /// The node that keeps a length from being padded: its first output, its
 /// operator, and why.
-pub struct Refusal {
+pub struct PadRefusal {
     pub node: String,
     pub op: String,
     pub why: Why,
@@ -50,7 +50,7 @@ pub struct Refusal {
 /// One symbol an input's axes read, padded unless a node refused it.
 pub struct Judged {
     pub symbol: String,
-    pub refused: Option<Refusal> = null,
+    pub refused: Option<PadRefusal> = null,
 }
 
 impl Display for Judged {
@@ -64,7 +64,7 @@ impl Display for Judged {
 
 /// Each symbol an input's axes read, in the order they first read it.
 pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
-    let mut refusals = HashMap::<String, Refusal>::new();
+    let mut refusals = HashMap::<String, PadRefusal>::new();
     judge_scope(graph, checked, &mut refusals);
     let mut symbols: List<Judged> = [];
     for let vi of &graph.inputs {
@@ -80,12 +80,12 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
 }
 
 /// Each refusal the nodes of a scope make, the first one per symbol kept.
-fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, Refusal>) {
+fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, PadRefusal>) {
     for let node of &graph.nodes {
         let mut refuse = |read: List<String>, why: Why| {
             for let symbol of read {
                 if !refusals.contains_key(symbol) {
-                    refusals[symbol] = Refusal { node: node.outputs[0], op: node.op, why };
+                    refusals[symbol] = PadRefusal { node: node.outputs[0], op: node.op, why };
                 }
             }
         };

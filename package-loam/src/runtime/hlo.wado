@@ -537,7 +537,8 @@ pub fn capacity_of(length: i32) -> i32
 
 /// `t` under `extents`, each axis cut to its extent or padded past it with
 /// zeros: an input padded to its capacities, or an output cut to its lengths.
-pub fn resized<E: Element, Axes>(t: &Tensor<E, Axes>, extents: List<i32>) -> Tensor<E, Axes>
+/// An element need only be stored, since an input held in half precision is.
+pub fn resized<E: Default, Axes>(t: &Tensor<E, Axes>, extents: List<i32>) -> Tensor<E, Axes>
     contract extents.len() == t.extents.len()
 {
     let own = row_major_strides(&t.extents);
@@ -551,7 +552,7 @@ pub fn resized<E: Element, Axes>(t: &Tensor<E, Axes>, extents: List<i32>) -> Ten
             inside = inside && i < t.extents[a];
             at += i * own[a];
         }
-        data.push(if inside { t.data[at] } else { E::from_i64(0) });
+        data.push(if inside { t.data[at] } else { E::default() });
         advance(&mut index, &extents);
     }
     return Tensor { data, extents };
