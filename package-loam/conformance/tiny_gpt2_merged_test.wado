@@ -49,7 +49,11 @@ fn run(
             [o.logits, o.cache];
         },
         Graph(params) => {
-            let o = merged::build(&mut Cpu {}, &ids, &mask, &branch, cache, params);
+            // Nothing is padded, so each length is its extent.
+            let lengths = merged::Lengths::<Cpu> {
+                dim_sequence_length: Tensor { data: [ids.extents[1] as i64], extents: [] },
+            };
+            let o = merged::build(&mut Cpu {}, &ids, &mask, &branch, cache, &lengths, params);
             [o.logits, o.cache];
         },
     };
