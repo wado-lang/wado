@@ -2538,8 +2538,8 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
 
 /// A `MaxPool` as `reduce_window` by the greatest, the batch and channel axes
 /// windows of one. Each high padding is what the last window reaches past the
-/// input, which `ceil_mode` may take past the padding the node declares. A
-/// floor-mode pool leaves a tail no window reaches, which a padding of 0 does too.
+/// input, which `ceil_mode` may take past the padding the node declares, or 0
+/// where the last window ends short of the input's end.
 fn built_max_pool(
     node: &Node,
     shapes: &HashMap<String, Shape>,
