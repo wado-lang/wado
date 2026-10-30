@@ -22,6 +22,9 @@ pub enum Why {
     SplitAlong,
     /// A window reads padding beside the valid elements.
     Window,
+    /// An extent may fall as the length rises, so a capacity past the length
+    /// may hold fewer elements than the length's own extent.
+    Shrinks,
 }
 
 impl Display for Why {
@@ -31,6 +34,7 @@ impl Display for Why {
             Unaligned => "the regrouping lines up with it at no axis",
             SplitAlong => "it splits along it",
             Window => "a window reads across it",
+            Shrinks => "an extent may fall as it rises",
         });
     }
 }
@@ -78,24 +82,44 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
 /// Each refusal the nodes of a scope make, the first one per symbol kept.
 fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, Refusal>) {
     for let node of &graph.nodes {
-        if node.outputs.into_iter().all(|t| checked.known.contains_key(t)) {
-            continue;
+        let mut refuse = |read: List<String>, why: Why| {
+            for let symbol of read {
+                if !refusals.contains_key(symbol) {
+                    refusals[symbol] = Refusal { node: node.outputs[0], op: node.op, why };
+                }
+            }
+        };
+        let folded = node.outputs.into_iter().all(|t| checked.known.contains_key(t));
+        if !folded && let Some([read, why]) = refused_by(node, checked) {
+            refuse(read, why);
         }
-        if checked.branches.contains_key(node.outputs[0]) {
+        // A folded output is spelled at the capacity too.
+        refuse(shrinking(node, checked), Why::Shrinks);
+        if !folded && checked.branches.contains_key(node.outputs[0]) {
             for let b of branches(node, checked) {
                 judge_scope(&b.graph, &b.checked, refusals);
             }
-            continue;
         }
-        let Some([read, why]) = refused_by(node, checked) else {
+    }
+}
+
+/// The symbols some extent of `node`'s outputs may fall as they rise.
+fn shrinking(node: &Node, checked: &Checked) -> List<String> {
+    let mut read: List<String> = [];
+    for let output of node.outputs {
+        let Some(shape) = checked.shapes.get(output) else {
             continue;
         };
-        for let symbol of read {
-            if !refusals.contains_key(symbol) {
-                refusals[symbol] = Refusal { node: node.outputs[0], op: node.op, why };
+        for let axis of shape.axes {
+            let extent = axis.extent.poly();
+            for let symbol of extent.symbols() {
+                if !extent.grows_with(&symbol) {
+                    read.push(symbol);
+                }
             }
         }
     }
+    return read;
 }
 
 /// The symbols `node` keeps from being padded, and why, where it keeps any.

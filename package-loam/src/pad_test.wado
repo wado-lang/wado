@@ -71,6 +71,17 @@ test "a window over a length refuses it, and the batch it runs over stays padded
     assert judged(source) == ["N: padded", "L: refused at Y = Conv: a window reads across it"] as List<String>;
 }
 
+test "an extent that falls as a length rises refuses it" {
+    let source = `g (float[N] X) => (int64[?] P) {
+        S = Shape(X)
+        Zero = Constant<value_int = 0>()
+        Eight = Constant<value_int = 8>()
+        L = Gather(S, Zero)
+        P = Range(Zero, Eight, L)
+    }`;
+    assert judged(source) == ["N: refused at P = Range: an extent may fall as it rises"] as List<String>;
+}
+
 test "a branch's nodes are judged as the graph's are" {
     let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Shape = {-1, 4}> {
         Y = If <then_branch = merged () => (float[?, 4] T) {

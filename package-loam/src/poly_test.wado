@@ -1,5 +1,5 @@
 use { HashMap } from "core:collections";
-use { Condition, Poly } from "./poly.wado";
+use { Condition, Lowers, Op, Poly } from "./poly.wado";
 
 fn s(name: String) -> Poly {
     return Poly::symbol(&name);
@@ -305,4 +305,55 @@ test "a derived symbol presumed is the operand it takes unchanged, under what th
     let count = minus(n, Poly::max_of(&minus(n, c(1)), &c(0), &ORIGIN));
     assert count.presumed(&mut none) == Option::Some(c(1));
     assert none.len() == 1 && none[0].reason == "Y = Slice: N - 1 must be at least 0";
+}
+
+test "an extent grows with a symbol it reads only through terms that rise with it" {
+    let [n, m] = [s("N"), s("M")];
+    let name = "N";
+    assert plus(times(c(2), n), c(1)).grows_with(&name);
+    assert times(n, m).grows_with(&name);
+    assert m.grows_with(&name);
+    assert Poly::min_of(&n, &c(8), &ORIGIN).grows_with(&name);
+    assert Poly::ceil_div(&n, &c(2), &ORIGIN).grows_with(&name);
+    assert !minus(c(8), n).grows_with(&name);
+    assert !Poly::ceil_div(&c(8), &n, &ORIGIN).grows_with(&name);
+    assert !Poly::wrapped32(&times(n, c(3_000_000_000)), &ORIGIN).grows_with(&name);
+    // `min(M - 4, 0)` may be negative, so a product with it may fall.
+    assert !times(n, Poly::min_of(&minus(m, c(4)), &c(0), &ORIGIN)).grows_with(&name);
+}
+
+/// Each step as the operation's name over its operands, in parentheses.
+struct Written {
+}
+
+impl Lowers for Written {
+    fn constant(&mut self, c: i64) -> String {
+        return `${c}`;
+    }
+
+    fn symbol(&mut self, name: &String) -> String {
+        return *name;
+    }
+
+    fn add(&mut self, a: String, b: String) -> String {
+        return `(add ${a} ${b})`;
+    }
+
+    fn mul(&mut self, a: String, b: String) -> String {
+        return `(mul ${a} ${b})`;
+    }
+
+    fn derived(&mut self, op: Op, operands: List<String>) -> String {
+        return `(${op:?} ${operands.join(" ")})`;
+    }
+}
+
+test "a polynomial lowers term by term, each derived symbol over its operands lowered" {
+    let n = s("N");
+    let mut written = Written {};
+    assert c(0).lowered(&mut written) == "0";
+    assert n.lowered(&mut written) == "N";
+    assert minus(times(n, n), c(1)).lowered(&mut written) == "(add (mul N N) -1)";
+    let half = Poly::floor_div(&plus(n, c(1)), &c(2), &ORIGIN);
+    assert times(c(3), half).lowered(&mut written) == "(mul 3 (Op::FloorDiv (add N 1) 2))";
 }
