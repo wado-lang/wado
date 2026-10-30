@@ -1743,7 +1743,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let unreachable_calls = if coverage.is_some() || profile.is_some() {
             rt_unreachable_calls(state, symbols)
         } else {
-            Default::default()
+            IndexSet::default()
         };
         state.coverage = coverage.map(|scope| {
             CoverageMap::build(

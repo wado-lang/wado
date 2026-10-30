@@ -2289,8 +2289,8 @@ impl CompilerItems {
             Some(existing) if existing == &resolved => Ok(()),
             Some(existing) => Err(RegisterError::Duplicate {
                 item,
-                existing_module: existing.module_source().clone(),
-                new_module: resolved.module_source().clone(),
+                existing_module: Box::new(existing.module_source().clone()),
+                new_module: Box::new(resolved.module_source().clone()),
             }),
             None => {
                 let inverse = match &resolved {
@@ -2767,8 +2767,8 @@ pub enum RegisterError {
     /// annotation for each `x`.
     Duplicate {
         item: CompilerItem,
-        existing_module: ModuleSource,
-        new_module: ModuleSource,
+        existing_module: Box<ModuleSource>,
+        new_module: Box<ModuleSource>,
     },
 }
 

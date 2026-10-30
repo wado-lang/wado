@@ -2151,7 +2151,7 @@ impl Rewriter<'_, '_> {
             IndexRead {
                 other: u32,
                 idx: Operand,
-                sig: SigKey,
+                sig: Box<SigKey>,
                 span: Span,
             },
         }
@@ -2205,7 +2205,7 @@ impl Rewriter<'_, '_> {
                 Source::IndexRead {
                     other,
                     idx: idx_expr,
-                    sig,
+                    sig: Box::new(sig),
                     span: engine.body.exprs[expr].span,
                 }
             }
