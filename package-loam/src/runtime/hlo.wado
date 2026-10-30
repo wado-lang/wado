@@ -424,7 +424,10 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     let extents = g.extents_of(x);
     let half = g.extents_of(cos)[1];
     let columns = |from: i32, to: i32| -> [List<i32>, List<i32>] {
-        return [[0, 0, 0, from], [extents[0], extents[1], extents[2], to]];
+        return [
+            [0, 0, 0, from],
+            [extents[0], extents[1], extents[2], to],
+        ];
     };
     let [a_start, a_limit] = columns(0, half);
     let [b_start, b_limit] = columns(half, 2 * half);
@@ -456,9 +459,9 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     let position = g.binary(Binary::Add, &row, &full::<G, i64, [S, T]>(g, past as i64, plane));
     let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
     let mut masked: G::Tensor<bool, [S, T]> = if options.causal {
-        g.compare(Comparison::Gt, &key, &position)
+        g.compare(Comparison::Gt, &key, &position);
     } else {
-        full::<G, bool, [S, T]>(g, false, plane)
+        full::<G, bool, [S, T]>(g, false, plane);
     };
     if options.window > 0 {
         let behind = g.binary(Binary::Subtract, &position, &key);

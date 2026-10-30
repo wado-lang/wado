@@ -376,12 +376,27 @@ test "the attention composite decomposes to what the kernel computes" {
         extents: [batch, kv, past, d],
     };
     for let [half, options] of [
-        [d / 2, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true }],
-        [d / 2, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true }],
-        [1, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: 2, causal: false }],
+        [
+            d / 2,
+            Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
+        ],
+        [
+            d / 2,
+            Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true },
+        ],
+        [
+            1,
+            Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: 2, causal: false },
+        ],
     ] as List<[i32, Attention]> {
-        let cos = Tensor::<f32, [Pos, Half]> { data: noise(positions * half, 6), extents: [positions, half] };
-        let sin = Tensor::<f32, [Pos, Half]> { data: noise(positions * half, 7), extents: [positions, half] };
+        let cos = Tensor::<f32, [Pos, Half]> {
+            data: noise(positions * half, 6),
+            extents: [positions, half],
+        };
+        let sin = Tensor::<f32, [Pos, Half]> {
+            data: noise(positions * half, 7),
+            extents: [positions, half],
+        };
         let want = group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
             &q,
             &k,

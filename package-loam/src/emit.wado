@@ -1152,7 +1152,11 @@ fn emit_forward(
     forward.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // `forward` takes each input on the host and uploads it once the pass has
     // begun. The weights are the backend's already.
-    let [has_cache, several, returned] = [crossing.has_cache(), crossing.several(), crossing.returned];
+    let [has_cache, several, returned] = [
+        crossing.has_cache(),
+        crossing.several(),
+        crossing.returned,
+    ];
     let mut uploads: List<String> = [];
     let mut arguments: List<String> = ["backend"];
     for let vi of &graph.inputs {
@@ -1306,7 +1310,11 @@ fn emit_entry(
     let mut entry = FnSpec::new(holder.entry(), Vis::Pub);
     entry.add_generic(holder.bound()).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
-    let [has_cache, several, returned] = [crossing.has_cache(), crossing.several(), crossing.returned];
+    let [has_cache, several, returned] = [
+        crossing.has_cache(),
+        crossing.several(),
+        crossing.returned,
+    ];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = ident;
