@@ -181,11 +181,13 @@ time, so they cost no AST either.
 A single-file compile and the editor keep the compilation rules above, so
 `pub` and `internal` items stay roots there.
 
-A declared method carrying a default body is an edge rather than a root, so a
-free function that only an unreached default body calls is dead.
+A trait's default body follows its trait's visibility, as a free function
+follows its own. An offered trait's is a root, since an impl beyond the package
+may inherit it. Any other is an edge rather than a root, so a free function
+that only an unreached one calls is dead.
 [Elaborator Architecture](./wep-2026-05-26-elaborator-rearchitecture.md)
-§Liveness says which dispatch fact it rides, why the two kinds above have none,
-and what the rule leaves open for a library's `pub trait`.
+§Liveness says which dispatch fact the edge rides and why the two kinds above
+have none.
 
 ### Stdlib and dependency exclusion
 

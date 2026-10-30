@@ -519,8 +519,15 @@ A declared method carrying a default body is a node like any other, not a root.
 The call that lands on it records a dispatch fact, so the body rides that edge.
 A program reaching neither the method nor an impl of its trait therefore needs
 none of what the body calls. That is what keeps `core:prelude`'s parse and
-format closures out of a program that parses and formats nothing. Two kinds of
-declared method have no fact to ride, and each is a root:
+format closures out of a program that parses and formats nothing.
+
+A `pub` item is a root, being the package's external surface, and an offered
+trait's default body is part of it: an impl beyond the package may inherit the
+body. So the body is a root of the production closure, which decides what is
+reported dead, and stays a node of the emitted one, which still takes it only on
+a call.
+
+Two kinds of declared method have no fact to ride, and each is a root:
 
 - an operation of an `interface` or a `resource`, whose dispatch wrapper
   `synthesis::effect_dispatch` mints after this pass;
@@ -766,23 +773,6 @@ the silent drop and that diagnostic go away. Until then, the slot is filtered
 rather than refused, which is what
 `tests/fixtures/data_decl_non_real_type_param_slot.wado` and
 `tests/fixtures/impl_assoc_type_non_real_param_slot.wado` pin.
-
-### A trait's default body answers to no package boundary
-
-Two rules meet here. A `pub` free function is a root, being the package's
-external surface. An impl method rides on the call that reaches it, whatever its
-visibility. A declared method with a default body follows the second, so a
-private helper that only a `pub trait`'s unreached default body calls is
-reported dead. That is right for a program and a false positive for a library,
-whose consumer would reach the method. No package in the tree hits it:
-`wado check` over the `lib` entry of `package-gale`, `package-jade`,
-`package-marl` and `package-cm-catalog` reports no such warning.
-
-Finishing it means a decision on which rule a declared method follows. The
-question behind it is whether liveness roots a package's external surface at all
-once the compile has an entry program, whose world exports are the only roots
-the emitted component keeps. `Item::Impl` leaves the same question open, rooting
-no method however visible.
 
 ### What the compiler names after liveness is not in one list
 
