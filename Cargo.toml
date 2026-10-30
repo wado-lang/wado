@@ -41,7 +41,7 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 # instead of carrying parallel 0.x trees. `wat` needs the tilde pin so a bare
 # "1" cannot float up to a newer generation and drag a parallel wast/wasm-encoder
 # tree back in through both wado and wasmtime's wasm-compose. `mise run
-# check-deps` enforces this and lists the irreducible exceptions. When bumping
+# check-deps` enforces this in CI and lists the irreducible exceptions. When bumping
 # wasmtime, find its generation (`cargo tree -i wasmparser@<ver>`), re-pin these
 # to it (`wat = "~1.<gen>"`, the rest `"0.<gen>"`), then `cargo update` and
 # `mise run check-deps`.
@@ -176,7 +176,6 @@ strip = "symbols"
 # `cargo build --profile profiling --bin wado`. It lives in its own
 # `target/profiling/` dir, so it never invalidates the `release` cache
 # the way overriding release via `CARGO_PROFILE_RELEASE_*` would.
-# See the `profile-compiler` skill.
 #
 # `lto`/`codegen-units` are pinned, not inherited: `release`'s
 # `codegen-units = 1` puts the final link past ten minutes of CPU. Thin LTO
@@ -197,7 +196,6 @@ strip = false
 # being stepped through, at the cost of a slower binary. Build with
 # `cargo build --profile debugger --bin wado`; it lives in its own
 # `target/debugger/` dir, so it never invalidates the `dev` cache.
-# See the `debugger` skill.
 #
 # It is not Cargo's built-in `debug` profile (as of Rust 1.99), which serves
 # the same purpose: `--profile debug` writes to `target/debug/`, the directory

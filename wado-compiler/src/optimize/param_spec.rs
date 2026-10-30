@@ -45,8 +45,7 @@ use crate::parallel::Executor;
 /// cannot trade unbounded code size for constant propagation;
 /// `--optimize-specializations` overrides it. Clones are minted first come,
 /// first served and a dead one still counts, so a cap a real program reaches
-/// decides by visit order which calls specialize. The wado-performance skill's
-/// `trade-offs.md` records what the value was measured against. Reaching it is
+/// decides by visit order which calls specialize. Reaching it is
 /// reported as a remark ([`SpecializationCapHit`]).
 pub(super) const MAX_TOTAL_SPECIALIZATIONS: usize = 4096;
 

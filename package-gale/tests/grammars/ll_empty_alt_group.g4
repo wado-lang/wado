@@ -7,8 +7,7 @@
 // `('else' statement)??`: the empty alternative comes first, so the
 // decision prefers to skip. Input `if y if y x else x` must bind the
 // `else` to the OUTER ifStatement (same as Binding1). Tracked in
-// package-gale/TODO.md "ATN-class grammars" and status.toml as
-// `ParserExec/IfIfElseNonGreedyBinding2`.
+// status.toml as `ParserExec/IfIfElseNonGreedyBinding2`.
 
 grammar LlEmptyAltGroup;
 

@@ -241,10 +241,7 @@ test "parse_document keeps a backslash-escaped pipe in a table cell's plain text
 test "parse_document lazily continues a nested list item's paragraph at less than its content column" {
     // A continuation line only needs to clear the OUTER container's indent,
     // not the nested item's own content column, to remain part of the same
-    // paragraph — CommonMark's "lazy continuation line" rule. Found via a
-    // real corpus idempotency check against wado-lsp/AGENTS.md's nested
-    // `use { Eff::{f, g} }` list item, whose second line is indented only
-    // to the outer task item's column.
+    // paragraph — CommonMark's "lazy continuation line" rule.
     let source = "- [ ] outer\n  - inner one line\n  - inner two lines\n  continued\n";
     let children = doc_children(&source);
     if let Some(Node::List(outer)) = children.get(0) {

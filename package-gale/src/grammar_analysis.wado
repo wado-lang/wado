@@ -1412,7 +1412,7 @@ impl GrammarAnalysis {
     /// reachability — a rule is non-scannable iff it can reach a reference to a
     /// name that is not a parser rule, the only `false` source in
     /// `is_element_scannable_at` — so one O(V+E) fixpoint replaces the recursive
-    /// check, which was exponential on large mutual-recursion SCCs (see perf.md).
+    /// check, which was exponential on large mutual-recursion SCCs.
     pub fn precompute_scannability(&mut self) {
         let callees = self.scannable_callees();
         let mut undefined_ref: List<bool> = [];

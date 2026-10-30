@@ -1086,7 +1086,7 @@ fn is_json_ws(b: i32) -> bool
 }
 
 /// Whether a whitespace scan stops on `b`. Testing the space first wins on
-/// indented input and loses on minified (`dead-ends.md`).
+/// indented input and loses on minified.
 internal fn json_ws_end(b: i32) -> bool {
     return b != b' ' && (b > b' ' || !is_json_ws(b));
 }
@@ -1102,7 +1102,7 @@ fn digit_value(b: i32) -> u32 {
 global I64_SAFE_DIGITS: i32 = 18;
 
 // The three digit-accumulating loops below are deliberately not shared: the
-// body is a loop, so the inliner declines the call (`dead-ends.md`).
+// body is a loop, so the inliner declines the call.
 
 /// The error for a token that stops at `pos` short of what it needs, in an
 /// input of `len` bytes: the end of input, else `message` about the byte there.

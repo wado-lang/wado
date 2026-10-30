@@ -1,8 +1,7 @@
 //! ATN (Augmented Transition Network) model and builder.
 //!
 //! This is the codegen-side representation of the grammar as an NFA, the
-//! foundation of the hybrid runtime ATN simulator (see the "ATN-class
-//! grammars" section of `TODO.md`). The simulator runs only at the cold
+//! foundation of the hybrid runtime ATN simulator. The simulator runs only at the cold
 //! decisions static prediction cannot settle, each keyed to its own decision
 //! number (`assign_atn_decisions` -> `Atn.decision_sites`). The ATN is the data
 //! it walks, and what every grammar's recovery sets are read off.
@@ -10,7 +9,7 @@
 //! Clean-room: the construction here follows the textbook Thompson-style
 //! NFA-for-a-grammar (rule-start/stop states, alternation block-start
 //! decision states, EBNF loop states). It does NOT read ANTLR4's
-//! implementation (License hygiene, `AGENTS.md`).
+//! implementation.
 //!
 //! Embedding (decided design): the ATN is serialized to a packed,
 //! column-oriented byte blob (`atn_blob_bytes`) that the generated parser

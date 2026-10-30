@@ -48,8 +48,9 @@ parser grammar RustParser;
 // One flag, not a stack, so the ban does not resume after a bracket that ends
 // inside the same head: `if f(x) + P { y: 1 }` is accepted where Rust rejects
 // it. That direction only ever accepts more, which is the safe one for a
-// parser. A stack in a members field is a documented dead end — see
-// `AGENTS.md`, "Failed approaches".
+// parser. A stack in a members field cannot replace it: error recovery rolls
+// back the position but not the members, so a push whose pop never runs
+// shifts the stack for the rest of the file.
 @parser::members {
     int noStruct = 0;
 }

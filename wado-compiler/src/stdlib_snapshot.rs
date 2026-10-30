@@ -165,7 +165,7 @@ fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<&Profile>) ->
     let logger = Logger::new(&host, LogLevel::Error);
 
     // `wado-compiler` has no async runtime dependency (it must compile
-    // to `wasm32-unknown-unknown`, see crate-level `AGENTS.md`).  The
+    // to `wasm32-unknown-unknown`).  The
     // loader future is driven by hand with a no-op waker: every `await`
     // inside it bottoms out either at a `cached_stdlib_module()` lookup or at
     // `SnapshotHost::load_source` (which returns immediately), so a

@@ -1,6 +1,7 @@
 // A hosted compiler (LSP, browser, Kiln generator) has no stream to write to,
-// and a `run` / `serve` driver has a user's program to keep quiet for. See
-// `AGENTS.md` for where each kind of message goes instead. Not in `Cargo.toml`:
+// and a `run` / `serve` driver has a user's program to keep quiet for. A
+// user-facing message goes through `Logger`, a developer trace through
+// `compiler_trace!`. Not in `Cargo.toml`:
 // cargo refuses a `[lints]` table that both inherits the workspace's and adds
 // to it.
 #![deny(clippy::print_stdout, clippy::print_stderr, clippy::dbg_macro)]

@@ -1,6 +1,5 @@
 // A minimal combined grammar that exercises parser-level features that
-// were uncovered by the existing driver-test grammars — see TODO.md
-// "Driver-level verification (remaining gaps)":
+// were uncovered by the existing driver-test grammars:
 //
 //   - A1: parser-side `~TOK` and `~( block )` (set complement of a token).
 //   - A2: list labels `items += ITEM` (vs. single-valued labels).

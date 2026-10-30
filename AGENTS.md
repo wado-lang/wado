@@ -80,7 +80,7 @@ mise run format          # format Rust, Markdown, and Wado files
 ## General Rules
 
 - Write all documentation and comments in clear, simple English.
-  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it.
+  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it. A comment cites a specification or a bug, never a process document (an `AGENTS.md`, a `TODO.md`, a skill, a dead-ends log).
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Contract messages: write one only for what the condition cannot say, such as a concept's name or a reason, and phrase it as what must hold (`"slots must be a power of two"`). A message that restates the condition is left out.
   - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
@@ -98,7 +98,7 @@ mise run format          # format Rust, Markdown, and Wado files
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries.
 - Merge origin/main only through the `git-upstream-sync` skill, conflicts or not; a clean merge still ends with its sanity check.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
-- Test the language from an e2e fixture; `wado-compiler/AGENTS.md` says how to write one. Nearly everything the language does is stated there, diagnostics included.
+- Test the language from an e2e fixture. The fixtures state nearly everything the language does, diagnostics included; `wado-compiler/AGENTS.md` says how to write one.
 - Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. Each test target statically links the compiler and wasmtime for another ~150 MB, so a file in `wado-cli/tests/` becomes one, and one in `wado-compiler/tests/` is not compiled at all: that package lists its targets.
 - A test of generated source checks what the text means by running it (`core:eval`), and matches the text only for what running cannot show, such as layout. A text match alone passes a wrong escape against an equally wrong expectation.
 - A regression fixture's shape is its point: when a harness cannot classify one, fix the harness, not the fixture.
@@ -117,8 +117,7 @@ obvious, deducible from another rule, or common knowledge.
 
 History, design notes, procedures and open work go elsewhere, linked from
 `AGENTS.md` with a one-line summary: a package's into its own directory, a
-crate's internals into its module docs. A Markdown file is named in lowercase,
-except `README.md`, `AGENTS.md` and `TODO.md`.
+crate's internals into its module docs.
 
 ## The Wado Language
 
@@ -141,7 +140,8 @@ subcommand; read it before invoking `wado`.
 The Wado formatter skips `wado-compiler/tests/**`, so an e2e fixture keeps its
 hand-authored layout. Naming a file bypasses the exclusion, so never
 `wado format -w` a fixture file directly. When the syntax changes, add tests to
-`wado-compiler/tests/format.rs`.
+`wado-compiler/tests/format.rs` and the construct to
+`wado-compiler/tests/format.fixtures/all_dirty.wado`.
 
 ## Repository Map
 

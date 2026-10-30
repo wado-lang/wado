@@ -235,8 +235,6 @@ impl Engine {
     /// modules, so queries resolve generated symbols even when no on-disk
     /// artifact existed beforehand. Without this, a document falls back to
     /// consume-only on-disk discovery (see [`kiln::prepare_invocations`]).
-    /// `update_document` drops the index with the snapshot, so a changed
-    /// document falls back the same way.
     pub fn open_document_with_invocations(
         &mut self,
         uri: &str,
@@ -778,7 +776,6 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.load_source(path).await
     }
 
-    // The trait default would turn the inner host's stat back into a full read.
     async fn source_exists(&self, path: &str) -> bool {
         self.inner.source_exists(path).await
     }
@@ -825,7 +822,8 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     // Delegate every non-diagnostic capability to the wrapped host — the
     // collector only intercepts diagnostics. Falling back to the trait defaults
     // here would silently drop the host's dependency index (path *and* component
-    // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path.
+    // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path,
+    // and would turn `source_exists`'s stat back into a full read.
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         self.inner.dependency_index()
     }
