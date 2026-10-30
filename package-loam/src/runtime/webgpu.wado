@@ -1694,6 +1694,13 @@ impl Holds for WebGpuBackend {
             Device(d) => d.extents,
         };
     }
+
+    fn download<E: Element, Axes>(
+        &mut self,
+        t: &Placed<E, Axes>,
+    ) -> Tensor<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return self.host(t);
+    }
 }
 
 impl Backend for WebGpuBackend {
@@ -1767,13 +1774,6 @@ impl Backend for WebGpuBackend {
         if let Device(d) = t && d.slot >= 0 {
             self.retaining.insert(d.slot);
         }
-    }
-
-    fn download<E: Element, Axes>(
-        &mut self,
-        t: &Placed<E, Axes>,
-    ) -> Tensor<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        return self.host(t);
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Placed<E, Axes> {

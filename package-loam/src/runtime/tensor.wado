@@ -2199,6 +2199,8 @@ pub affine trait Holds with _ {
     }
     /// `t`'s extents.
     fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
+    /// `t` back on the host.
+    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -2215,8 +2217,6 @@ pub affine trait Backend: Holds with _ {
     /// alone, which no other kernel reads.
     affine type Rhs<K, N>;
 
-    /// `t` back on the host.
-    fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
     /// `t`, a weight read only as a matrix product's right operand, held for
     /// every pass in the layout [`Self::matmul_rhs`] reads it in.
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Self::Rhs<K, N>;
@@ -2482,15 +2482,15 @@ impl Holds for Cpu {
     fn extents_of<E: Element, Axes>(&self, t: &Tensor<E, Axes>) -> List<i32> {
         return t.extents;
     }
+
+    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        return *t;
+    }
 }
 
 impl Backend for Cpu {
     type Operand<Axes> = Read<Axes>;
     type Rhs<K, N> = Packed<K, N>;
-
-    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        return *t;
-    }
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
         let cols = t.extents[1];
