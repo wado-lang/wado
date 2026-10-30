@@ -338,7 +338,8 @@ impl Names {
         for let c of carriers {
             tensors.push(symbol_key(&c.solved.symbol));
         }
-        // `Cache::empty` takes the length of each axis a past leaves open.
+        // Every symbol of an input's axes, of which `Cache::empty` takes the
+        // ones a past leaves open.
         for let vi of &graph.inputs {
             for let axis of checked.shapes[vi.name].axes {
                 for let symbol of axis.extent.poly().symbols() {
