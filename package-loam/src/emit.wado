@@ -10,6 +10,7 @@ use {
     CHECKPOINT_PARAM,
     KEPT,
     MAP,
+    OUTPUTS,
     PASSED,
     PREPARED,
     RUNTIME_NAMES,
@@ -1070,9 +1071,9 @@ fn emit_forward(
     let returned: List<String> = graph.outputs.into_iter().map(|vi| vi.name).filter(|o| !presents.contains(o)).collect();
     let several = returned.len() > 1 || has_cache;
     let returned_type = if has_cache {
-        `Outputs<${BACKEND_PARAM}>`;
+        `${OUTPUTS}<${BACKEND_PARAM}>`;
     } else if several {
-        "Outputs";
+        OUTPUTS;
     } else {
         tensor_type(checked, held, &returned[0]);
     };
@@ -1167,7 +1168,7 @@ fn emit_forward(
             fields.push("cache: cache");
         }
         w.line(`let ${PASSED} { ${idents.join(", ")} } = ${passed};`);
-        w.line(`return Outputs { ${fields.join(", ")} };`);
+        w.line(`return ${OUTPUTS} { ${fields.join(", ")} };`);
     }
     w.end();
     return Result::Ok(());
@@ -1565,7 +1566,7 @@ fn emit_outputs(
     names: &Names,
     held: &HashMap<String, String>,
 ) {
-    let mut outputs = StructSpec::new("Outputs", Vis::Pub);
+    let mut outputs = StructSpec::new(OUTPUTS, Vis::Pub);
     if has_cache {
         outputs.add_generic(BACKEND_BOUND);
     }

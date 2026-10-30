@@ -2,7 +2,7 @@
 
 Open work on Loam. [`AGENTS.md`](./AGENTS.md) says how to work here, and
 [`design.md`](./design.md) holds the design and names the documents it builds
-on. A section name below, such as A Decoder's Cache Is One Value, is one of
+on. A section name below, such as The Graph Is ONNX, is one of
 [WEP: Loam](../docs/wep-2026-09-20-loam.md)'s.
 
 The roadmap is ordered, and each item says what finishing it means. A known gap
