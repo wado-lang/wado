@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793329125937,
+  "lastUpdate": 1793347719904,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72393,6 +72393,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/37b9a0afc878aac87a7a79c76ac7b71841231346"
         },
         "date": 1793329124878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4cf348cee6dfa2a5248a32281c893ec75b7d8dc3",
+          "message": "Merge pull request #2497 from wado-lang/docs/agents-md-refactor\n\ndocs: keep each AGENTS.md to what to keep in mind there, and rebalance CI",
+          "timestamp": "2026-10-30T16:53:58+09:00",
+          "tree_id": "ea23925090929845df05ea2cce69e30efc200161",
+          "url": "https://github.com/wado-lang/wado/commit/4cf348cee6dfa2a5248a32281c893ec75b7d8dc3"
+        },
+        "date": 1793347719317,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
