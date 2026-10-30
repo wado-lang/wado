@@ -1,7 +1,6 @@
 # Testing Gale
 
-The rules every change follows are in [`AGENTS.md`](./AGENTS.md). This document
-describes the suites and the oracle procedures.
+The rules for writing a test are in [`AGENTS.md`](./AGENTS.md#tests).
 
 ## Test Layers
 
