@@ -10,11 +10,14 @@ use {
     Tensor,
     Window,
     advance,
-    carries,
     conv_grouped,
     element_count,
     max_pool,
+    permute,
+    reshape,
     sigmoid_f32,
+    stretched_strides,
+    walked,
 } from "./tensor.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
@@ -217,7 +220,7 @@ pub affine trait Graph: Holds with _ {
         let mut key = heads_first::<Self, B, S, K, H, D>(self, k, kv, d);
         let value = heads_first::<Self, B, S, K, H, D>(self, v, kv, d);
         if let Some(c) = cos && let Some(n) = sin {
-            let half = d / 2;
+            let half = self.extents_of(c)[1];
             let cos_rows: Self::Tensor<f32, [S, Half]> = self.slice(c, [past, 0], [past + s, half], [1, 1]);
             let sin_rows: Self::Tensor<f32, [S, Half]> = self.slice(n, [past, 0], [past + s, half], [1, 1]);
             query = turned::<Self, B, Heads, S, D, Half>(self, &query, &cos_rows, &sin_rows);
@@ -409,8 +412,9 @@ struct Rows {
 struct Row {
 }
 
-/// `x`'s rows `[a, b]` of halves turned by `(a cos − b sin, b cos + a sin)` of
-/// the row of `cos` and `sin` at each row's position.
+/// `x`'s rows `[a, b, rest]`, `a` and `b` as wide as a row of `cos`, turned
+/// by `(a cos − b sin, b cos + a sin)` of the row of `cos` and `sin` at each
+/// row's position, and `rest` as it is.
 fn turned<affine G: Graph, B, N, S, D, Half>(
     g: &mut G,
     x: &G::Tensor<f32, [B, N, S, D]>,
@@ -418,17 +422,25 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     sin: &G::Tensor<f32, [S, Half]>,
 ) -> G::Tensor<f32, [B, N, S, D]> with _ {
     let extents = g.extents_of(x);
-    let half = extents[3] / 2;
-    let halves: List<i32> = [extents[0], extents[1], extents[2], half];
-    let a: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, [0, 0, 0, 0], [extents[0], extents[1], extents[2], half], [
-        1, 1, 1, 1,
-    ]);
-    let b: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, [0, 0, 0, half], extents, [1, 1, 1, 1]);
-    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, halves, [2, 3]);
-    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, halves, [2, 3]);
+    let half = g.extents_of(cos)[1];
+    let columns = |from: i32, to: i32| -> [List<i32>, List<i32>] {
+        return [[0, 0, 0, from], [extents[0], extents[1], extents[2], to]];
+    };
+    let [a_start, a_limit] = columns(0, half);
+    let [b_start, b_limit] = columns(half, 2 * half);
+    let a: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, a_start, a_limit, [1, 1, 1, 1]);
+    let b: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, b_start, b_limit, [1, 1, 1, 1]);
+    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, a_limit, [2, 3]);
+    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, a_limit, [2, 3]);
     let first = g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n));
     let second = g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n));
-    return g.concatenate(&first, &second, 3);
+    let rotated: G::Tensor<f32, [B, N, S, D]> = g.concatenate(&first, &second, 3);
+    if 2 * half == extents[3] {
+        return rotated;
+    }
+    let [rest_start, rest_limit] = columns(2 * half, extents[3]);
+    let rest: G::Tensor<f32, [B, N, S, D]> = g.slice(x, rest_start, rest_limit, [1, 1, 1, 1]);
+    return g.concatenate(&rotated, &rest, 3);
 }
 
 /// Where a query at row `i` after `past` positions may not read key `j`: past
@@ -443,10 +455,11 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
     let position = g.binary(Binary::Add, &row, &full::<G, i64, [S, T]>(g, past as i64, plane));
     let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
-    let mut masked: G::Tensor<bool, [S, T]> = g.compare(Comparison::Gt, &key, &position);
-    if !options.causal {
-        masked = g.compare(Comparison::Ne, &key, &key);
-    }
+    let mut masked: G::Tensor<bool, [S, T]> = if options.causal {
+        g.compare(Comparison::Gt, &key, &position)
+    } else {
+        full::<G, bool, [S, T]>(g, false, plane)
+    };
     if options.window > 0 {
         let behind = g.binary(Binary::Subtract, &position, &key);
         let far = g.compare(Comparison::Ge, &behind, &full::<G, i64, [S, T]>(g, options.window as i64, plane));
@@ -548,22 +561,14 @@ impl Graph for Cpu {
     }
 
     fn reshape<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
-        assert element_count(&extents) == x.data.len(), "a reshape keeps the element count";
-        return Tensor { data: x.data, extents };
+        return reshape(x, extents);
     }
 
     fn transpose<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
-        let own = row_major_strides(&x.extents);
-        let mut extents: List<i32> = [];
-        let mut strides: List<i32> = [];
-        for let p of perm {
-            extents.push(x.extents[p]);
-            strides.push(own[p]);
-        }
         if is_identity(&perm) {
-            return Tensor { data: x.data, extents };
+            return Tensor { data: x.data, extents: x.extents };
         }
-        return Tensor { data: walked(&x.data, 0, &strides, &extents), extents };
+        return permute(x, perm);
     }
 
     fn slice<E: Element, In, Out>(
@@ -814,9 +819,6 @@ impl Graph for Cpu {
             base += (x.extents[d] - 1) * strides[d];
             strides[d] = -strides[d];
         }
-        if element_count(&x.extents) == 0 {
-            return *x;
-        }
         return Tensor { data: walked(&x.data, base, &strides, &x.extents), extents: x.extents };
     }
 
@@ -904,33 +906,10 @@ fn compared_i64(direction: Comparison, a: i64, b: i64) -> bool {
     };
 }
 
-/// Each axis's step through a row-major tensor of `extents`.
+/// Each axis's step through a row-major tensor of `extents`. An axis of 1
+/// steps by zero, which reads the same elements.
 fn row_major_strides(extents: &List<i32>) -> List<i32> {
-    let mut strides = List::<i32>::filled(extents.len(), 0);
-    let mut step = 1;
-    for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
-        strides[axis] = step;
-        step *= extents[axis];
-    }
-    return strides;
-}
-
-/// The elements of `data` an offset from `base` reaches stepping by `strides`
-/// over `extents`, in row-major order.
-fn walked<E>(data: &List<E>, base: i32, strides: &List<i32>, extents: &List<i32>) -> List<E> {
-    let count = element_count(extents);
-    let mut out = List::<E>::with_capacity(count);
-    let steps = carries(strides, extents);
-    let mut index = List::<i32>::filled(extents.len(), 0);
-    let mut at = base;
-    for let _ of 0..<count {
-        out.push(data[at]);
-        let axis = advance(&mut index, extents);
-        if axis >= 0 {
-            at += steps[axis];
-        }
-    }
-    return out;
+    return stretched_strides(extents, extents.len());
 }
 
 fn is_identity(perm: &List<i32>) -> bool {

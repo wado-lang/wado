@@ -242,7 +242,7 @@ pub fn emit(
         rhs,
         paired: together.paired,
     };
-    let pairs = cache_pairs(graph)?;
+    let crossing = Crossing::of(graph, cache_pairs(graph)?);
     emit_forward(
         &mut w,
         graph,
@@ -255,9 +255,9 @@ pub fn emit(
         &kept.kernels,
         Symbols::of(&carriers, &names),
         fuse,
-        &pairs,
+        &crossing,
     )?;
-    emit_build(&mut w, graph, checked, &decided, &names, &built, &kept.graph, Symbols::of(&carriers, &names), &pairs)?;
+    emit_build(&mut w, graph, checked, &decided, &names, &built, &kept.graph, Symbols::of(&carriers, &names), &crossing)?;
     return Result::Ok(w.to_string());
 }
 
@@ -454,13 +454,12 @@ global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
 /// The same parameter as a graph `build` adds its operations to.
 global GRAPH_BOUND: String = `affine ${BACKEND_PARAM}: Graph`;
 
-/// The same parameter where a struct serves the kernels and the graph alike:
-/// `Cache`, `Passed` and `Kept`.
+/// The same parameter where code serves the kernels and the graph alike:
+/// `Cache`, `Passed` and `Kept`'s functions.
 global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
 
-/// `Prepared` and `Kept` over the backend.
+/// `Prepared` over the backend.
 global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
-global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
 
 /// Which entry a struct of prepared weights serves: the kernels' `pass`, which
 /// reads `Prepared`, or the graph's `build`, which reads `Params`.
@@ -597,7 +596,6 @@ fn emit_weights(
             "backend",
             `&mut ${BACKEND_PARAM}`,
         ).set_return_type(holder.ty()).add_effect("_").emit_begin(w);
-        emit_kept_binding(w, &kept.of(holder));
         w.begin(`return ${holder.name()}`);
         emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
         emit_kept_fields(w, names, &kept.of(holder));
@@ -732,46 +730,30 @@ fn concat_weights(decided: &Plan, weight_of: &HashMap<String, String>) -> HashMa
     return concat;
 }
 
-/// `Kept`, the `kept` literals as the backend holds them, built once by
-/// `Kept::new` for each constructor of `Prepared` and `Params` to take apart:
-/// spelled in each, a mask's data would be in the module twice.
+/// `Kept`, one function per `kept` literal keeping it on the backend, for the
+/// constructors of `Prepared` and `Params` to call each its own: spelled in
+/// each, a mask's data would be in the module twice.
 fn emit_kept(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
-    let mut held = StructSpec::new(KEPT);
-    held.add_generic(HOLDS_BOUND);
-    for let tensor of kept {
-        held.add_field(names.get(tensor), prepared_type(checked, tensor));
-    }
     w.blank();
     w.line("/// The folded tensors `Prepared` and `Params` hold, which no symbol enters.");
-    held.emit(w);
+    StructSpec::new(KEPT).emit(w);
     w.blank();
-    let mut block = ImplSpec::new(KEPT_TYPE);
-    block.add_generic(HOLDS_BOUND);
-    block.emit_begin(w);
-    FnSpec::new("new").add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(KEPT_TYPE).add_effect("_").emit_begin(
-        w,
-    );
-    w.begin(`return ${KEPT}`);
+    ImplSpec::new(KEPT).emit_begin(w);
     for let tensor of kept {
-        w.line(`${names.get(tensor)}: ${kept_literal(checked, tensor)},`);
+        FnSpec::new(names.get(tensor)).add_generic(HOLDS_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
+            prepared_type(checked, tensor),
+        ).add_effect("_").emit_begin(w);
+        w.line(`return ${kept_literal(checked, tensor)};`);
+        w.end();
     }
-    w.end_with(";");
-    w.end();
     w.end();
 }
 
-/// The binding of `Kept` a constructor of `Prepared` reads its fields from.
-fn emit_kept_binding(w: &mut CodeWriter, kept: &List<String>) {
-    if !kept.is_empty() {
-        w.line(`let kept = ${KEPT}::new(backend);`);
-    }
-}
-
-/// The `Prepared` fields of the `kept` literals, read from that binding.
+/// The `Prepared` or `Params` fields of the `kept` literals.
 fn emit_kept_fields(w: &mut CodeWriter, names: &Names, kept: &List<String>) {
     for let tensor of kept {
         let ident = names.get(tensor);
-        w.line(`${ident}: kept.${ident},`);
+        w.line(`${ident}: ${KEPT}::${ident}(backend),`);
     }
 }
 
@@ -908,14 +890,12 @@ fn emit_constructor(
         if let Some(line) = first {
             w.line(line);
         }
-        emit_kept_binding(w, kept);
         w.begin(`return Result::Ok(${holder.name()}`);
     } else {
         w.line("/// The weights the graph carries.");
         FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
             holder.ty(),
         ).add_effect("_").emit_begin(w);
-        emit_kept_binding(w, kept);
         w.begin(`return ${holder.name()}`);
     }
     let mut hosts = HashMap::<String, String>::new();
@@ -1166,18 +1146,17 @@ fn emit_forward(
     kept: &List<String>,
     symbols: Symbols,
     fuse: bool,
-    pairs: &List<[String, String]>,
+    crossing: &Crossing,
 ) -> Result<(), EmitError> {
     let mut forward = FnSpec::new("forward", Vis::Pub);
     forward.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // `forward` takes each input on the host and uploads it once the pass has
     // begun. The weights are the backend's already.
-    let cached = pasts(pairs);
-    let has_cache = !pairs.is_empty();
+    let [has_cache, several, returned] = [crossing.has_cache(), crossing.several(), crossing.returned];
     let mut uploads: List<String> = [];
     let mut arguments: List<String> = ["backend"];
     for let vi of &graph.inputs {
-        if cached.contains(vi.name) {
+        if crossing.cached.contains(vi.name) {
             continue;
         }
         let ident = names.get(&vi.name);
@@ -1190,8 +1169,6 @@ fn emit_forward(
         arguments.push("cache");
     }
     arguments.push("weights");
-    let returned = returned_outputs(graph, pairs);
-    let several = returned.len() > 1 || has_cache;
     let returned_type = if has_cache {
         `${OUTPUTS}<${BACKEND_PARAM}>`;
     } else if several {
@@ -1202,7 +1179,7 @@ fn emit_forward(
     forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
 
     if has_cache {
-        emit_cache(w, pairs, checked, names)?;
+        emit_cache(w, &crossing.pairs, checked, names)?;
     }
     if several {
         emit_outputs(w, &returned, has_cache, checked, names, held);
@@ -1214,14 +1191,14 @@ fn emit_forward(
     w.line("/// computed them, for a caller to read only the part it needs. The caller");
     w.line("/// begins the pass, `backend.begin()`, before it uploads the inputs. The next");
     w.line("/// begin releases what the pass computed, but for what `backend.retain` keeps.");
-    emit_entry(w, graph, checked, decided, names, Holder::Kernels, exprs, literals, kept, symbols, fuse, pairs)?;
+    emit_entry(w, graph, checked, decided, names, Holder::Kernels, exprs, literals, kept, symbols, fuse, crossing)?;
 
     w.blank();
     w.line("/// [`pass`] over inputs on the host, its outputs read back to the host.");
     forward.emit_begin(w);
     // The cache was computed before the pass this call begins.
     let keep_cache: List<String> = if has_cache { ["cache.retain(backend);"] } else { [] };
-    let host = input_checks(graph, &checked.shapes, names, &cached).host;
+    let host = input_checks(graph, &checked.shapes, names, &crossing.cached).host;
     for let lines of [host, keep_cache, ["backend.begin();"] as List<String>, uploads] as List<List<String>> {
         for let line of lines {
             w.line(&line);
@@ -1263,7 +1240,7 @@ fn emit_build(
     literals: &Literals,
     kept: &List<String>,
     symbols: Symbols,
-    pairs: &List<[String, String]>,
+    crossing: &Crossing,
 ) -> Result<(), EmitError> {
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
@@ -1273,22 +1250,39 @@ fn emit_build(
     w.blank();
     w.line("/// The graph's forward pass, each operation added to the graph `backend`");
     w.line("/// builds, over inputs it holds.");
-    return emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, pairs);
+    return emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, crossing);
 }
 
-/// The pasts the cache holds, which an entry reads from it rather than taking.
-fn pasts(pairs: &List<[String, String]>) -> HashSet<String> {
-    let mut cached = HashSet::<String>::new();
-    for let [past, _] of *pairs {
-        cached.insert(past);
+/// What crosses a pass's boundary beside its inputs and weights, which every
+/// entry and the structs around them agree on.
+struct Crossing {
+    /// Each past and the present that replaces it in the cache.
+    pairs: List<[String, String]>,
+    /// The pasts, which an entry reads from the cache rather than taking.
+    cached: HashSet<String>,
+    /// The outputs a pass returns, a present aside: the cache holds it.
+    returned: List<String>,
+}
+
+impl Crossing {
+    fn of(graph: &Graph, pairs: List<[String, String]>) -> Crossing {
+        let mut cached = HashSet::<String>::new();
+        for let [past, _] of pairs {
+            cached.insert(past);
+        }
+        let presents: List<String> = pairs.into_iter().map(|p| p.1).collect();
+        let returned = graph.outputs.into_iter().map(|vi| vi.name).filter(|o| !presents.contains(&o)).collect();
+        return Crossing { pairs, cached, returned };
     }
-    return cached;
-}
 
-/// The outputs a pass returns, a present aside: the cache holds it.
-fn returned_outputs(graph: &Graph, pairs: &List<[String, String]>) -> List<String> {
-    let presents: List<String> = pairs.into_iter().map(|p| p.1).collect();
-    return graph.outputs.into_iter().map(|vi| vi.name).filter(|o| !presents.contains(&o)).collect();
+    fn has_cache(&self) -> bool {
+        return !self.pairs.is_empty();
+    }
+
+    /// Whether a pass returns its outputs in `Passed`, and `forward` in `Outputs`.
+    fn several(&self) -> bool {
+        return self.returned.len() > 1 || self.has_cache();
+    }
 }
 
 /// `holder`'s entry: the inputs as the backend holds them, the cache and the
@@ -1306,19 +1300,18 @@ fn emit_entry(
     kept: &List<String>,
     mut symbols: Symbols,
     fuse: bool,
-    pairs: &List<[String, String]>,
+    crossing: &Crossing,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let mut entry = FnSpec::new(holder.entry(), Vis::Pub);
     entry.add_generic(holder.bound()).add_param("backend", `&mut ${BACKEND_PARAM}`);
     // The pasts cross in one `Cache`, and the presents replace them in it.
-    let cached = pasts(pairs);
-    let has_cache = !pairs.is_empty();
+    let [has_cache, several, returned] = [crossing.has_cache(), crossing.several(), crossing.returned];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = ident;
         exprs.borrowed.insert(vi.name);
-        if !cached.contains(vi.name) {
+        if !crossing.cached.contains(vi.name) {
             entry.add_param(ident, `&${prepared_type(checked, &vi.name)}`);
         }
     }
@@ -1331,16 +1324,14 @@ fn emit_entry(
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;
     }
-    let returned = returned_outputs(graph, pairs);
-    let several = returned.len() > 1 || has_cache;
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
     entry.add_param("weights", `&${holder.ty()}`).set_return_type(passed_type).add_effect("_");
     entry.emit_begin(w);
-    for let [past, _] of *pairs {
+    for let [past, _] of crossing.pairs {
         let ident = names.get(&past);
         w.line(`let ${ident} = &cache.${ident};`);
     }
-    let checks = input_checks(graph, shapes, names, &cached);
+    let checks = input_checks(graph, shapes, names, &crossing.cached);
     for let line of checks.held {
         w.line(&line);
     }
@@ -1366,7 +1357,7 @@ fn emit_entry(
         if has_cache {
             // Each present under its past's axes, as the next pass reads it.
             let mut parts: List<String> = [];
-            for let [past, present] of *pairs {
+            for let [past, present] of crossing.pairs {
                 let at = exprs.reference(&present);
                 let element = checked.primitives.get(present).unwrap();
                 let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(&shapes.get(past).unwrap())}]`;

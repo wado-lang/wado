@@ -1358,18 +1358,25 @@ pub fn permute<E, In, Out>(t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out>
         extents.push(t.extents[p]);
         strides.push(in_strides[p]);
     }
-    let steps = carries(&strides, &extents);
-    let mut out = List::<E>::with_capacity(t.data.len());
-    let mut index = List::<i32>::filled(rank, 0);
-    let mut at = 0;
-    for let _ of 0..<t.data.len() {
-        out.push(t.data[at]);
-        let axis = advance(&mut index, &extents);
+    return Tensor { data: walked(&t.data, 0, &strides, &extents), extents };
+}
+
+/// The elements of `data` an offset from `base` reaches stepping by `strides`
+/// over `extents`, in row-major order.
+internal fn walked<E>(data: &List<E>, base: i32, strides: &List<i32>, extents: &List<i32>) -> List<E> {
+    let count = element_count(extents);
+    let mut out = List::<E>::with_capacity(count);
+    let steps = carries(strides, extents);
+    let mut index = List::<i32>::filled(extents.len(), 0);
+    let mut at = base;
+    for let _ of 0..<count {
+        out.push(data[at]);
+        let axis = advance(&mut index, extents);
         if axis >= 0 {
             at += steps[axis];
         }
     }
-    return Tensor { data: out, extents };
+    return out;
 }
 
 /// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum.

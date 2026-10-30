@@ -25,7 +25,8 @@ pub global PARAMS: String = "Params";
 /// The struct a decoder's state crosses from one pass to the next in.
 pub global CACHE: String = "Cache";
 
-/// The struct the constructors of `Prepared` take its kept literals from.
+/// The functions the constructors of `Prepared` and `Params` keep each folded
+/// literal with.
 pub global KEPT: String = "Kept";
 
 /// The map a sharded `load` takes the shards in, keyed by file name.
@@ -66,15 +67,14 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(KEPT);
     reserved.insert(CACHE);
     reserved.insert("cache");
-    // The methods `Weights`, `Prepared`, `Params`, `Kept` and `Cache` carry,
-    // which a field must not share.
+    // The methods `Weights`, `Prepared`, `Params` and `Cache` carry, which a
+    // field must not share.
     reserved.insert("empty");
     reserved.insert("retain");
     reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
     reserved.insert("embedded_data");
-    reserved.insert("new");
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     reserved.insert(CHECKPOINT_PARAM);

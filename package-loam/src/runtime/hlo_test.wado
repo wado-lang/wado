@@ -350,8 +350,9 @@ struct Pos {
 struct Half {
 }
 
-/// The composite's decomposition against the kernel it replaces, with rotation,
-/// a past, grouped heads, a window and a cap.
+/// The composite's decomposition against the kernel it replaces, with rotation
+/// of the whole head or of its first columns only, a past, grouped heads, a
+/// window, a cap and no causal mask.
 test "the attention composite decomposes to what the kernel computes" {
     let [batch, s, heads, kv, past, d, positions] = [2, 3, 4, 2, 2, 4, 8];
     let q = Tensor::<f32, [Bt, St, Qt]> {
@@ -374,18 +375,13 @@ test "the attention composite decomposes to what the kernel computes" {
         data: noise(batch * kv * past * d, 5),
         extents: [batch, kv, past, d],
     };
-    let cos = Tensor::<f32, [Pos, Half]> {
-        data: noise(positions * d / 2, 6),
-        extents: [positions, d / 2],
-    };
-    let sin = Tensor::<f32, [Pos, Half]> {
-        data: noise(positions * d / 2, 7),
-        extents: [positions, d / 2],
-    };
-    for let options of [
-        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
-        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true },
-    ] as List<Attention> {
+    for let [half, options] of [
+        [d / 2, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true }],
+        [d / 2, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true }],
+        [1, Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: 2, causal: false }],
+    ] as List<[i32, Attention]> {
+        let cos = Tensor::<f32, [Pos, Half]> { data: noise(positions * half, 6), extents: [positions, half] };
+        let sin = Tensor::<f32, [Pos, Half]> { data: noise(positions * half, 7), extents: [positions, half] };
         let want = group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
             &q,
             &k,
