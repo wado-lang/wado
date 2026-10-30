@@ -3,7 +3,10 @@
 The language service engine and the stdio LSP server. Scope and build targets
 are in [WEP: LSP Architecture](../docs/wep-2026-04-18-lsp-architecture.md); how
 each part works is in its module doc. Open work is in [TODO.md](./TODO.md), and
-the LSP specification in [lsp.md](./lsp.md).
+the LSP specification at
+<https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/>.
+[lsp.md](./lsp.md) is its source, whose message definitions are unexpanded
+`{% include %}`s.
 
 ## Rules
 

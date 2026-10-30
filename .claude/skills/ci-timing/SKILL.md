@@ -38,8 +38,8 @@ pull request added is invisible to `--step`. Print every step of the runs on
 either side of the jump and compare them:
 
 ```sh
-mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <before> --job 'Test \(O3\)'
-mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <after>  --job 'Test \(O3\)'
+mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <before> --job 'Test \(O3\)|stdlib O3'
+mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <after>  --job 'Test \(O3\)|stdlib O3'
 ```
 
 `--run <run id>` does the same for a run that is not on `main`, such as a pull

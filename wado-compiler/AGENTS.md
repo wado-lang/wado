@@ -55,10 +55,11 @@ trailing `__DATA__` JSON section whose fields are the `serde` structs in
 directory. `tests/` is a package of its own, `wado-compiler-tests`; its
 `Cargo.toml` says why.
 
-- A rejection is stated two ways. `{"compile_error": "…"}` matches the whole
-  report, so writing `":4:13: parse error: …"` pins the position as well as
-  the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code`
-  it was raised under.
+- `{"compile_error": "…"}` states a rejection: the report must contain it, so
+  writing `":4:13: parse error: …"` pins the position as well as the message.
+  `{"compile_error_codes": ["INVALID_SYNTAX"]}` adds the `Code` an error was
+  raised under; without `compile_error`, a failed compile still fails the
+  fixture.
 - A fixture may name a Kiln generator by a `./` path, or by a
   `[build-dependencies]` nickname its `build_dependencies` key maps to a
   generator file. The harness runs it, and the clauses in the generator's own

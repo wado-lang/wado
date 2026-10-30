@@ -91,9 +91,10 @@ impl std::error::Error for SymbolQueryError {}
 /// changed what `foo.wado` resolves to, so per-document invalidation
 /// would silently return stale answers for `foo.wado`.
 ///
-/// The cache is keyed by document text, not by host identity, so callers
-/// pass the same `CompilerHost` across queries to keep cross-file
-/// resolution consistent.
+/// The cache is keyed by document text, not by host identity or what the
+/// host reads: callers pass the same `CompilerHost` across queries, and an
+/// import edited outside the engine (an unopened file on disk) stays stale
+/// until a document mutation invalidates the snapshots.
 pub struct Engine {
     documents: IndexMap<String, Document>,
     /// Position encoding negotiated with the LSP client. Defaults to

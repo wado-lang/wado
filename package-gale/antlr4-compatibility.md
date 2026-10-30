@@ -451,8 +451,9 @@ separates (`compound` vs `factored`, `delete_stmt` vs
 `'(' expr ')'`, the `FROM` comma-list vs `join_clause` tie, `type_name`'s
 non-greedy `name+?`, and the `expr` precedence climb.
 
-Adding a grammar is config + a cases file, but only for a **clean single
-combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
+Adding a grammar takes a `Target` in `targets()`, a parse branch in
+`gale_tree()` (both in `regen_oracle.wado`) and a cases file, but only for a
+**clean single combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
 in `regen_oracle.wado`:
 
 - split lexer/parser grammars — `regen_oracle.wado` hands the oracle one
