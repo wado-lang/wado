@@ -22,7 +22,9 @@ release build embeds them, as does any `wasm32` build.
   clock that is.
 - Choose between `builtin::select` and `if` on eagerness, not on copies.
   `select` evaluates both operands and is planned as the merge it is, so it pays
-  the same copy the `if` does.
+  the same copy the `if` does. `src/optimize/select_lowering.rs` goes the other
+  way, rewriting an `if` into a branchless select only where both arms are
+  duplicable pure leaves.
 - A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
   renders it as the module's `## Synopsis`. Write the shortest program that
   shows what the module is for, not a tour of its API. Leave it out only where
