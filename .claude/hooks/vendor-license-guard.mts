@@ -84,15 +84,7 @@ function onlyLists({ name, args }: Command): boolean {
 type Shell = { dir: string | null; previous: string | null; stack: (string | null)[] };
 
 /** A word's leading `$NAME`, `${NAME}`, `~+`, `~-` or `~user`. */
-const PREFIX = /^(?:\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))|~([^/]*))(?=\/|$)/;
-const TILDES: Record<string, string> = { "+": "PWD", "-": "OLDPWD" };
-
-/** The directory a leading expansion named `name` stands for, if the guard knows it. */
-function expanded(name: string, shell: Shell): string | null {
-  if (name === "PWD") return shell.dir;
-  if (name === "OLDPWD") return shell.previous;
-  return null;
-}
+const PREFIX = /^(?:\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))|(~[^/]*))(?=\/|$)/;
 
 /** The absolute path `word` names, as the shell expands it where it stands. A
  * word is resolved only where the guard knows every expansion in it: none, or a
@@ -106,8 +98,10 @@ function locate(word: string, raw: string, shell: Shell): string | null {
   const substituted = raw.includes("$(") || raw.includes("`");
   let base: string | null = null;
   if (!substituted && !rest.includes("$")) {
-    if (prefix) base = expanded(prefix[1] ?? prefix[2] ?? TILDES[prefix[3]] ?? "", shell);
-    else if (path.isAbsolute(word)) return word;
+    if (prefix) {
+      const known: Record<string, string | null> = { PWD: shell.dir, "~+": shell.dir, OLDPWD: shell.previous, "~-": shell.previous };
+      base = known[prefix[1] ?? prefix[2] ?? prefix[3]] ?? null;
+    } else if (path.isAbsolute(word)) return word;
     else base = shell.dir;
   }
   if (base !== null) return path.resolve(base, rest);
