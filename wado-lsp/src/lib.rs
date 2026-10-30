@@ -90,6 +90,10 @@ impl std::error::Error for SymbolQueryError {}
 /// snapshot: cross-file imports mean editing `bar.wado` may have
 /// changed what `foo.wado` resolves to, so per-document invalidation
 /// would silently return stale answers for `foo.wado`.
+///
+/// The cache is keyed by document text, not by host identity, so callers
+/// pass the same `CompilerHost` across queries to keep cross-file
+/// resolution consistent.
 pub struct Engine {
     documents: IndexMap<String, Document>,
     /// Position encoding negotiated with the LSP client. Defaults to
@@ -231,6 +235,8 @@ impl Engine {
     /// modules, so queries resolve generated symbols even when no on-disk
     /// artifact existed beforehand. Without this, a document falls back to
     /// consume-only on-disk discovery (see [`kiln::prepare_invocations`]).
+    /// `update_document` drops the index with the snapshot, so a changed
+    /// document falls back the same way.
     pub fn open_document_with_invocations(
         &mut self,
         uri: &str,
@@ -671,7 +677,16 @@ impl Engine {
     /// document, so one whose `span.file` names an imported module would draw
     /// its squiggle at that file's line and column inside the open one; the
     /// imported file reports its own errors when the client opens it. A
-    /// span-less diagnostic is about the request itself and is always kept.
+    /// span-less diagnostic is about the request itself and is always kept,
+    /// anchored at the document start: the loader reports its hard failures
+    /// (`ModuleNotFound` above all) without a span, and the same failure
+    /// returns `Semantics::empty`, so dropping it leaves a file that looks
+    /// clean and answers nothing.
+    ///
+    /// A diagnostic with a span but no file is dropped, so the compiler owes
+    /// every located diagnostic its module (`Elaborator::emit` /
+    /// `Logger::error_in`, never `Logger::error`). Its e2e host asserts that
+    /// on emit.
     ///
     /// Kept columns are re-encoded in the negotiated position encoding.
     ///
@@ -763,6 +778,7 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         self.inner.load_source(path).await
     }
 
+    // The trait default would turn the inner host's stat back into a full read.
     async fn source_exists(&self, path: &str) -> bool {
         self.inner.source_exists(path).await
     }
@@ -880,6 +896,7 @@ async fn build_semantics<H: CompilerHost>(
     // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
+    // `tests/parse_error.rs` pins this.
     for e in &parsed.lex_errors {
         host.emit_diagnostic(e.diagnostic(Some(filename)));
     }

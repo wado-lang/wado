@@ -546,6 +546,17 @@ impl AstVisitor<'_> for SpanCollector {
 // --- Lexer token classification ---
 
 /// The class of one token, or `None` where nothing should be coloured.
+///
+/// A contextual keyword takes the reading the parse gave it, which only the
+/// parse can answer: `type Alias = i32;` and `let type = 1;` spell the same
+/// token in the same position, and no AST node records the reading.
+/// `Module::contextual_keywords` holds every token read against its lexical
+/// class, and it is checked before the keyword category.
+///
+/// `self` and `Self` lex as identifiers and are keywords everywhere but a
+/// member's name (`self.self`, `fn Self()`), so they are recognised lexically
+/// unless the span is a field or method name. Otherwise `self` would resolve
+/// to its parameter binding and colour as a parameter.
 fn classify_token(
     tokens: &[Token],
     index: usize,
@@ -610,6 +621,10 @@ fn classify_token(
 
 /// The class of a name, in precedence order: a field name, then the resolved
 /// symbol class from `sem_classes`, then the lexer/AST heuristics.
+///
+/// A field name comes first because the shorthand `{ state }` resolves to the
+/// binding it reads: deferring to the symbol would colour it `variable` with a
+/// snapshot and `property` without.
 fn classify_name(
     tokens: &[Token],
     index: usize,
