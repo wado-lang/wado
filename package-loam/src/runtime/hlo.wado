@@ -331,6 +331,28 @@ pub fn softmax<affine G: Graph, Axes>(g: &mut G, x: &G::Tensor<f32, Axes>, axis:
     return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept));
 }
 
+/// `Softmax` before opset 13: the axes from `axis` on normalized as one.
+pub fn softmax_flattened<affine G: Graph, Axes>(
+    g: &mut G,
+    x: &G::Tensor<f32, Axes>,
+    axis: i32,
+) -> G::Tensor<f32, Axes> with _ {
+    let extents = g.extents_of(x);
+    let rows = element_count(&extents[0..<axis].to_list());
+    let flat: G::Tensor<f32, [Rows, Row]> = g.reshape(x, [rows, element_count(&extents[axis..<extents.len()].to_list())]);
+    let normalized = softmax::<G, [Rows, Row]>(g, &flat, 1);
+    return g.reshape(&normalized, extents);
+}
+
+/// `x`'s elements under `rank` axes, those added leading at extent 1, and
+/// under the axes `Out` names: a branch's output, say, under the `If`'s.
+pub fn lifted<affine G: Graph, E: Element, In, Out>(g: &mut G, x: &G::Tensor<E, In>, rank: i32) -> G::Tensor<E, Out> with _ {
+    let own = g.extents_of(x);
+    let mut extents = List::<i32>::filled(rank - own.len(), 1);
+    extents.extend(&own);
+    return g.reshape(x, extents);
+}
+
 /// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over the
 /// count of elements each sums.
 pub fn reduce_mean<affine G: Graph, In, Out>(
@@ -368,8 +390,16 @@ pub fn from_end_indices<affine G: Graph, I>(
     return g.select(&negative, &wrapped, indices);
 }
 
-/// The axes left once a reduction drops one, inside these helpers.
+/// An axis of extent 1 a built pass adds, as a matrix product does to an
+/// operand of rank 1.
+pub struct One {
+}
+
+/// The axes left once a reduction drops one, inside these helpers, and the
+/// axis it drops where they flatten a tensor into rows.
 struct Rows {
+}
+struct Row {
 }
 
 /// `x`'s rows `[a, b]` of halves turned by `(a cos − b sin, b cos + a sin)` of
@@ -618,23 +648,24 @@ impl Graph for Cpu {
         let mut lhs_order = dims.lhs_batch;
         lhs_order.extend(&lhs_free);
         lhs_order.extend(&dims.lhs_contracting);
-        let a: Tensor<f32, A> = self.transpose(lhs, lhs_order);
-        // A weight stored with its contracting axes last, as a tied embedding
-        // is, is read in place rather than transposed on every call.
-        let mut by_rows = dims.rhs_batch;
-        by_rows.extend(&rhs_free);
-        by_rows.extend(&dims.rhs_contracting);
+        let a = laid_out(lhs, &lhs_order);
         let mut extents = picked(&lhs.extents, &dims.lhs_batch);
         extents.extend(&picked(&lhs.extents, &lhs_free));
         extents.extend(&picked(&rhs.extents, &rhs_free));
+        // A weight is read in place in either order it is stored in, rather
+        // than copied on every call: by rows where its contracting axes are
+        // last, as a tied embedding's are, and by columns where they lead.
+        let mut by_rows = dims.rhs_batch;
+        by_rows.extend(&rhs_free);
+        by_rows.extend(&dims.rhs_contracting);
         if is_identity(&by_rows) {
-            return Tensor { data: product_by_rows(&a.data, &rhs.data, batch, m, k, n), extents };
+            return Tensor { data: product_by_rows(a.of(lhs), &rhs.data, batch, m, k, n), extents };
         }
         let mut by_columns = dims.rhs_batch;
         by_columns.extend(&dims.rhs_contracting);
         by_columns.extend(&rhs_free);
-        let b: Tensor<f32, B> = self.transpose(rhs, by_columns);
-        return Tensor { data: product_by_columns(&a.data, &b.data, batch, m, k, n), extents };
+        let b = laid_out(rhs, &by_columns);
+        return Tensor { data: product_by_columns(a.of(lhs), b.of(rhs), batch, m, k, n), extents };
     }
 
     fn gather<E: Element, D, I, Out>(
@@ -902,6 +933,31 @@ fn is_identity(perm: &List<i32>) -> bool {
         }
     }
     return true;
+}
+
+/// An operand's elements walked in another order of its axes, or none where
+/// that order is its own.
+struct Laid {
+    data: Option<List<f32>>,
+}
+
+impl Laid {
+    /// The elements in the order asked for, read from `x` where they are its own.
+    fn of<Axes>(&self, x: &Tensor<f32, Axes>) -> &List<f32> {
+        return match &self.data {
+            Some(walked) => walked,
+            None => &x.data,
+        };
+    }
+}
+
+/// `x`'s elements with its axes in `order`.
+fn laid_out<Axes>(x: &Tensor<f32, Axes>, order: &List<i32>) -> Laid {
+    if is_identity(order) {
+        return Laid { data: null };
+    }
+    let strides = picked(&row_major_strides(&x.extents), order);
+    return Laid { data: Option::Some(walked(&x.data, 0, &strides, &picked(&x.extents, order))) };
 }
 
 /// The extents of the axes `axes`, in that order.

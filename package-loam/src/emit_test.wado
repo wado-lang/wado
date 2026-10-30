@@ -36,6 +36,11 @@ fn generate(source: String, fuse: bool = true) -> Result<String, EmitError> {
     return emit(&graph, &infer(&graph).unwrap(), &RUNTIME, fuse);
 }
 
+/// The kernels' entries, `pass` and `forward`, out of the module `out`.
+fn kernel_entries(out: &String) -> String {
+    return out.substr_bytes(out.find("pub fn pass").unwrap(), out.find("pub fn build").unwrap());
+}
+
 /// The same two-layer graph at any boundary element type, which is the one
 /// thing that changes between the f32 tests and the half precision ones. Its
 /// axes are `N`, the batch; `X1`, the input; `W11`, the hidden layer; and
@@ -99,8 +104,9 @@ test "a product takes the elementwise operators after it as its epilogue" {
     assert out.contains(
         `let Y = backend.matmul_rhs(&A, &weights.W2, Option::Some(Epilogue { operands: [backend.read_suffix::<[N], [Y1]>(&weights.B2)], op: ${sum()} }));`,
     );
-    assert !out.contains("let H ");
-    assert !out.contains("let HB ");
+    let kernels = kernel_entries(&out);
+    assert !kernels.contains("let H ");
+    assert !kernels.contains("let HB ");
 }
 
 test "an elementwise chain fuses into one kernel, an operand read twice read once" {
@@ -233,7 +239,7 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
         "pub fn forward<affine Bk: Backend>(backend: &mut Bk, A: &Tensor<f32, [N, A1]>, weights: &Prepared<Bk>) -> Outputs with _ {",
     );
     assert out.contains(
-        "pub struct Passed<affine Bk: Backend> {\n    pub Z: Bk::Tensor<f32, [N, A1]>,\n    pub Y: Bk::Tensor<f32, [N, A1]>,\n}",
+        "pub struct Passed<affine Bk: Holds> {\n    pub Z: Bk::Tensor<f32, [N, A1]>,\n    pub Y: Bk::Tensor<f32, [N, A1]>,\n}",
     );
     assert out.contains("return Passed { Z: Z, Y: Y };");
     assert out.contains("let Passed { Z, Y } = pass(backend, &A, weights);");
@@ -256,14 +262,14 @@ decoder (float[${batch}, N, 2] X, float[${batch}, P, 2] ${past_key}, float[3] pa
 test "the pasts and the presents they pair with are one Cache, which the pass takes and returns" {
     let out = generate(decoder("past_key", "present_key")).unwrap();
 
-    assert out.contains("pub struct Cache<affine Bk: Backend> {\n    pub past_key: Bk::Tensor<f32, [");
+    assert out.contains("pub struct Cache<affine Bk: Holds> {\n    pub past_key: Bk::Tensor<f32, [");
     assert out.contains("    pub past_state: Bk::Tensor<f32, [");
     let pass = out.substr_bytes(out.find("pub fn pass").unwrap(), out.find("pub fn forward").unwrap());
     assert pass.contains("cache: &Cache<Bk>, weights: &Prepared<Bk>) -> Passed<Bk> with _ {");
     assert !pass.contains("past_key: &Bk::Tensor");
     assert pass.contains("let past_key = &cache.past_key;");
     assert pass.contains("cache: Cache { past_key: backend.reshape::<f32, [");
-    assert out.contains("pub struct Passed<affine Bk: Backend> {\n    pub Y: Bk::Tensor<f32, [");
+    assert out.contains("pub struct Passed<affine Bk: Holds> {\n    pub Y: Bk::Tensor<f32, [");
     assert out.contains("    pub cache: Cache<Bk>,\n}");
     assert !out.contains("pub present_key");
     assert out.contains("    pub Y: Tensor<f32, [");
@@ -360,10 +366,12 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     assert out.contains(
         "impl<affine Bk: Backend> Prepared<Bk> {\n    /// The weights the graph carries.\n    pub fn embedded(backend: &mut Bk) -> Prepared<Bk> with _ {",
     );
-    // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian.
     assert out.contains(
-        "B: backend.keep(&Tensor::<f32, [X1]> { data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }),",
+        "B: backend.keep(&Tensor::<f32, [X1]> { data: List::<f32>::from_le_bytes(embedded_data(0)), extents: [2] }),",
     );
+    // 1.0 is 0x3f800000 and -2.5 is 0xc0200000, little-endian, held once for
+    // `Prepared` and `Params` both.
+    assert out.split("0 => b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\",").count() == 2;
 }
 
 test "weights the graph lacks are read from a checkpoint by Prepared::load" {
@@ -432,7 +440,8 @@ bias (float[N, 2] X) => (float[N, 2] Y)
     let out = generate(source).unwrap();
 
     assert out.contains("tensor: \"W\", dtype: \"F32\", axes: [\"X1\", \"Y1\"], extents: [2, 2], elements: 4, width: 4");
-    assert out.contains("data: List::<f32>::from_le_bytes(b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\"), extents: [2] }");
+    assert out.contains("data: List::<f32>::from_le_bytes(embedded_data(1)), extents: [2] }");
+    assert out.contains("1 => b\"\\x00\\x00\\x80?\\x00\\x00 \\xc0\",");
 }
 
 test "a tensor name is escaped where the loader spells it" {
@@ -918,7 +927,8 @@ lin (float[2, 4, 8] X, float[8, 6] W, float[6] B) => (float[2, 4, 6] Y)
 `;
     let out = generate(source).unwrap();
 
-    assert !out.contains("let F =") && !out.contains("let R =");
+    let kernels = kernel_entries(&out);
+    assert !kernels.contains("let F =") && !kernels.contains("let R =");
     assert out.contains(
         `let Y = backend.matmul_shared(X, W, Option::Some(Epilogue { operands: [backend.read_suffix::<[X0, X1], [W1]>(B)], op: ${src(
             operand(0).binary(BinaryOp::Add, &operand(1)).unary(UnaryOp::Relu),
@@ -1276,7 +1286,7 @@ test "a symbol is bound from the input axis carrying it, and spelled where an ex
 
 test "a symbol nothing spells is not bound" {
     let out = generate(mlp("float")).unwrap();
-    assert !out.contains("dim_");
+    assert !kernel_entries(&out).contains("dim_");
 }
 
 test "a Range over a symbolic length is a kernel call" {
@@ -1496,10 +1506,11 @@ test "a constant with no operator to fold into is a rank-0 literal" {
 
     assert out.contains("C: backend.keep(&Tensor::<f32, []> { data: [0.5 as f32], extents: [] }),");
     assert out.contains(`let Y = backend.fused::<[]>([backend.read(&weights.C)], &${unary(UnaryOp::Relu)});`);
-    // `Weights::prepare` and `Prepared::embedded` both hold it, from one copy
-    // of its data: a mask is as large as the context it covers.
+    // `Weights::prepare`, `Weights::params`, `Prepared::embedded` and
+    // `Params::embedded` each hold it, from one copy of its data: a mask is as
+    // large as the context it covers.
     assert out.split("data: [0.5 as f32]").count() == 2;
-    assert out.split("C: kept.C,").count() == 3;
+    assert out.split("C: kept.C,").count() == 5;
 }
 
 test "a one-element constant that raises the output's rank is a tensor, not a folded scalar" {

@@ -2,7 +2,7 @@
 //! that picks the next token greedily, keeping the attention cache between
 //! calls.
 
-use { Backend, CheckpointBytes, LoadError, Tensor } from "lib:loam";
+use { Backend, CheckpointBytes, Cpu, LoadError, Tensor } from "lib:loam";
 /// Gemma's SentencePiece-spelled BPE, which puts `<bos>` first.
 pub use {
     Tokenizer,
@@ -71,7 +71,7 @@ impl<affine Bk: Backend> Model<Bk> {
         for let id of ids {
             assert 0 <= *id < vocab, "every token id is in the vocabulary";
         }
-        if !self.extends(ids) {
+        if !extends(&self.seen, ids) {
             self.forget();
         }
         let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
@@ -102,17 +102,65 @@ impl<affine Bk: Backend> Model<Bk> {
         self.seen = *ids;
         return best;
     }
+}
 
-    /// Whether `ids` starts with the ids the cache holds, and adds some.
-    fn extends(&self, ids: &List<i32>) -> bool {
-        if ids.len() <= self.seen.len() {
-            return false;
+/// Gemma 3 as the graph `build` adds to, computed on the CPU as it is built.
+pub struct Built {
+    cpu: Cpu,
+    weights: gemma::Params<Cpu>,
+    seen: List<i32>,
+    cache: gemma::Cache<Cpu>,
+}
+
+impl Built {
+    /// Loads the weights from `data`, as `Model::load` does.
+    pub fn load<affine Ck: CheckpointBytes>(data: &Ck) -> Result<Built, LoadError> with _ {
+        let mut cpu = Cpu {};
+        let weights = gemma::Params::load(&mut cpu, data)?;
+        let cache = gemma::Cache::empty(&mut cpu);
+        return Ok(Built { cpu, weights, seen: [], cache });
+    }
+
+    /// The token the model ranks first after `ids`, as `Model::next_token`
+    /// picks it.
+    pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
+        if !extends(&self.seen, ids) {
+            self.seen = [];
+            self.cache = gemma::Cache::empty(&mut self.cpu);
         }
-        for let i of 0..<self.seen.len() {
-            if ids[i] != self.seen[i] {
-                return false;
+        let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
+        let input_ids = Tensor::<i64, [gemma::BatchSize, gemma::SequenceLength]> {
+            data: fresh,
+            extents: [gemma::BatchSize::EXTENT, fresh.len()],
+        };
+        let mask = Tensor::<i64, [gemma::BatchSize, gemma::TotalSequenceLength]> {
+            data: List::<i64>::filled(ids.len(), 1),
+            extents: [gemma::BatchSize::EXTENT, ids.len()],
+        };
+        let passed = gemma::build(&mut self.cpu, &input_ids, &mask, &self.cache, &self.weights);
+        // The graph's one position's logits, the first of the greatest.
+        let mut best = 0;
+        for let [i, v] of passed.logits.data.into_iter().enumerate() {
+            if v > passed.logits.data[best] {
+                best = i;
             }
         }
-        return true;
+        self.cache = passed.cache;
+        self.seen = *ids;
+        return best;
     }
+}
+
+/// Whether `ids` starts with the ids `seen`, those the cache holds, and adds
+/// some.
+fn extends(seen: &List<i32>, ids: &List<i32>) -> bool {
+    if ids.len() <= seen.len() {
+        return false;
+    }
+    for let i of 0..<seen.len() {
+        if ids[i] != seen[i] {
+            return false;
+        }
+    }
+    return true;
 }

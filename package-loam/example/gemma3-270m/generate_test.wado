@@ -6,7 +6,7 @@
 use fs from "core:fs";
 use { from_string } from "core:json";
 use { Cpu } from "lib:loam";
-use { Model } from "./model.wado";
+use { Built, Model } from "./model.wado";
 
 /// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
 /// writes them.
@@ -23,10 +23,22 @@ struct Oracle {
 test "each prompt continues with the tokens onnxruntime picks greedily" {
     let checkpoint = fs::read_linear("gemma3-270m/build/model.onnx_data").unwrap();
     let mut model = Model::load(Cpu {}, &checkpoint).unwrap();
+    continues_each(|ids| model.next_token(ids));
+}
+
+#[timeout_ms(1800000)]
+test "so does the graph build adds to" {
+    let checkpoint = fs::read_linear("gemma3-270m/build/model.onnx_data").unwrap();
+    let mut model = Built::load(&checkpoint).unwrap();
+    continues_each(|ids| model.next_token(ids));
+}
+
+/// Each prompt continued by the tokens `next_token` picks, against onnxruntime's.
+fn continues_each(next_token: fn mut(&List<i32>) -> i32 with _) with _ {
     for let case of from_string::<Oracle>(#include_str("./generate.json")).unwrap().generate {
         let mut ids = case.ids;
         for let _ of 0..<case.generated.len() {
-            ids.push(model.next_token(&ids));
+            ids.push(next_token(&ids));
         }
         assert ids[case.ids.len()..<ids.len()].to_list() == case.generated;
     }
