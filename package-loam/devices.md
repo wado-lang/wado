@@ -154,7 +154,9 @@ redefines what the pattern means.
 The compiler writes the graph as StableHLO text and compiles it through
 `wado:pjrt`. No Loam fusion runs; the composites are decomposed, since XLA
 fuses them again. The prepared weights and the cache are parameters, the cache
-donated. A compiled executable is serialized and kept on disk, keyed by the
+donated. A product's `precision_config` is an option of the backend, and
+`DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
+and holds less of f32's precision. A compiled executable is serialized and kept on disk, keyed by the
 program's text, the plugin and the topology, so a second process compiles
 nothing.
 
@@ -164,8 +166,14 @@ host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is.
 
 #### WebGPU
 
-Loam's device compiler takes the graph and the device's features, and makes a
-pass that runs from a list of dispatches:
+Loam's device compiler is part of the runtime library, so it ships in every
+program that uses WebGPU, as the shader writer does now: `WebGpuBackend`
+already writes each WGSL shader from its `Expr` when a pass first asks for it.
+Compiling ahead of time for a list of device profiles would multiply the
+variants by the profiles, which
+[research §11](../docs/research-ml-inference-webgpu.md#11-backend-abstraction)
+says does not scale. The compiler takes the graph and the device's features,
+and makes a pass that runs from a list of dispatches:
 
 - It fuses, by the rules [Loam on WebGPU](./webgpu.md) measured: elementwise
   chains, row groups, epilogues, prologues, products in pairs and
@@ -325,16 +333,6 @@ layout, so a backend can change a layout without changing the generated module.
 
 ## Open questions
 
-- Whether an f32 graph's products run on a TPU at the precision
-  `precision_config` `DEFAULT` gives, which is faster, or at `HIGHEST`, which
-  keeps f32. The tolerance decides it, and the tolerance is itself open (see
-  `TODO.md`).
-- Whether the device compiler ships in every program that uses WebGPU, or is
-  run ahead of time for a list of device profiles. Shipping it adds the
-  compiler to the module. Running it ahead of time makes the variants grow with
-  the profiles, which
-  [research §11](../docs/research-ml-inference-webgpu.md#11-backend-abstraction)
-  says does not scale.
 - Which composites to recognize first, and how far a recognized pattern may
   differ from the decomposition it names.
 
