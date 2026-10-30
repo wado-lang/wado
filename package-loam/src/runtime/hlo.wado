@@ -916,9 +916,7 @@ impl Graph for Cpu {
         let rank = operand.extents.len();
         let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
         let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
-        let scatter_axes: List<i32> = (0..<updates.extents.len())
-            .filter(|d| !dims.update_window_dims.contains(&d))
-            .collect();
+        let scatter_axes: List<i32> = (0..<updates.extents.len()).filter(|d| !dims.update_window_dims.contains(&d)).collect();
         let own = row_major_strides(&operand.extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if dims.index_vector_dim == indices.extents.len() {

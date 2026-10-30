@@ -239,11 +239,8 @@ pub fn emit(
         &crossing,
     )?;
     // A length is padded where no node refuses it and an input carries it.
-    let padded: List<String> = padding(graph, checked)
-        .into_iter()
-        .filter(|j| j.refused matches { None } && carriers.into_iter().any(|c| c.solved.symbol == j.symbol))
-        .map(|j| j.symbol)
-        .collect();
+    let padded: List<String> = padding(graph, checked).into_iter().filter(|j| j.refused matches { None }
+        && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
     let read = emit_build(
         &mut w,
         graph,
@@ -1154,9 +1151,7 @@ impl Lowers for Symbols {
         return match op {
             Min => value_binary("Minimum", a, operands[1]),
             Max => value_binary("Maximum", a, operands[1]),
-            CeilDiv | FloorDiv => `quotient::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]}, ${op matches {
-                CeilDiv
-            }})`,
+            CeilDiv | FloorDiv => `quotient::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]}, ${op matches { CeilDiv }})`,
             FromEnd => `from_end_indices::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]})`,
             // `a - 2^32 * floor((a + 2^31) / 2^32)`, as no tensor holds an `i32`.
             Wrap32 => {
@@ -1331,9 +1326,9 @@ fn emit_forward(
     return Result::Ok(());
 }
 
-/// The pass built as a graph: each node as the operations of `Graph` that
-/// compute it; and `Lengths`, which holds the padded lengths it reads as
-/// values, which it returns.
+/// The pass built as a graph, each node as the operations of `Graph` that
+/// compute it, and `Lengths`. Returns the padded symbols it reads the value
+/// of, which `Lengths` holds.
 fn emit_build(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -1354,7 +1349,20 @@ fn emit_build(
     w.blank();
     w.line("/// The graph's forward pass, each operation added to the graph `backend`");
     w.line("/// builds, over inputs it holds.");
-    let read = emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, crossing)?;
+    let read = emit_entry(
+        w,
+        graph,
+        checked,
+        decided,
+        names,
+        Holder::Built,
+        exprs,
+        literals,
+        kept,
+        symbols,
+        false,
+        crossing,
+    )?;
     if !read.is_empty() {
         let mut lengths = StructSpec::new(LENGTHS, Vis::Pub);
         lengths.add_generic(HOLDS_BOUND);
@@ -1447,10 +1455,8 @@ fn emit_compute(
             read = `narrow(&${read})`;
         }
         let shape = shapes[*tensor];
-        if !shape.axes.into_iter().any(|a| a.extent.poly().symbols().into_iter().any(|s| padded.contains(&s))) {
-            return Result::Ok(read);
-        }
-        return Result::Ok(`resized(&${read}, ${symbols.spell_shape(&shape)?})`);
+        let cut = shape.axes.into_iter().any(|a| a.extent.poly().symbols().into_iter().any(|s| padded.contains(&s)));
+        return Result::Ok(if cut { `resized(&${read}, ${symbols.spell_shape(&shape)?})` } else { read });
     };
     let returned_type = if crossing.several() {
         let mut idents: List<String> = [];
@@ -2239,7 +2245,12 @@ fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f3
 /// A folded tensor spelled out as a `Tensor` literal for this pass, under the
 /// shape stage 0 gave it. An element reading a valid length is a value the
 /// graph computes, so `build` assembles those in the graph.
-fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols, holder: Holder) -> Result<String, EmitError> {
+fn literal_tensor(
+    checked: &Checked,
+    tensor: &String,
+    symbols: &mut Symbols,
+    holder: Holder,
+) -> Result<String, EmitError> {
     let shape = checked.shapes.get(*tensor).unwrap();
     let extents = symbols.spell_shape(&shape)?;
     let data = match checked.known.get(*tensor).unwrap().elements {
@@ -2250,7 +2261,9 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols, hol
                     values.push(symbols.value(&p)?);
                 }
                 let typed = `${checked.primitives[*tensor]}, [${axis_list(&shape)}]`;
-                return Result::Ok(`assembled::<${BACKEND_PARAM}, ${typed}>(backend, [${values.join(", ")}], ${extents})`);
+                return Result::Ok(
+                    `assembled::<${BACKEND_PARAM}, ${typed}>(backend, [${values.join(", ")}], ${extents})`,
+                );
             }
             let mut spelled: List<String> = [];
             for let p of v {
@@ -2713,7 +2726,9 @@ fn dot_call(
         masked_along(*lhs, left, l, "0 as f32", symbols)?,
         masked_along(*rhs, right, r, "0 as f32", symbols)?,
     ];
-    return Result::Ok(`backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${a}, ${b}, ${dims})`);
+    return Result::Ok(
+        `backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${a}, ${b}, ${dims})`,
+    );
 }
 
 /// A `MatMul` as `dot_general`. A right operand of rank 2 or less, or a left
@@ -2960,13 +2975,21 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
 
 /// `operand`, of axes `shape`, its padding along `axis` read as `fill`, where
 /// a valid length enters that axis's extent.
-fn masked_along(operand: String, shape: &Shape, axis: i32, fill: String, symbols: &mut Symbols) -> Result<String, EmitError> {
+fn masked_along(
+    operand: String,
+    shape: &Shape,
+    axis: i32,
+    fill: String,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
     let extent = shape.axes[axis].extent.poly();
     if !symbols.reads_lengths(&extent) {
         return Result::Ok(operand);
     }
     let typed = `${KERNEL_ELEMENT}, [${axis_list(shape)}]`;
-    return Result::Ok(`&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.value(&extent)?}, ${fill})`);
+    return Result::Ok(
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.value(&extent)?}, ${fill})`,
+    );
 }
 
 /// The starts, limits and strides of a `slice` keeping every axis of `x` whole.
@@ -3026,9 +3049,11 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
         let mut to = x;
         to.axes[cut.axis] = out.axes[cut.axis];
         let typed = `${element}, [${axis_list(&x)}], [${axis_list(&to)}]`;
-        gathered = Option::Some(`strided_gather::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${cut.axis}, &${symbols.value(
-            &cut.start,
-        )?}, ${symbols.spell_extent(&length)?}, ${cut.step})`);
+        gathered = Option::Some(
+            `strided_gather::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${cut.axis}, &${symbols.value(
+                &cut.start,
+            )?}, ${symbols.spell_extent(&length)?}, ${cut.step})`,
+        );
         x = to;
     }
     if let Some(call) = gathered && cuts.is_empty() {

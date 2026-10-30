@@ -298,6 +298,9 @@ each symbolic axis whether it can promise that, at build time:
   length.
 - A merge of a padded axis with an axis after it keeps the valid elements a
   prefix.
+- An extent that may fall as a length rises, such as a `Range` by the length,
+  would hold fewer elements at the capacity than at the length, so the
+  generator refuses to pad that length.
 - Any other operation that reads across a padded axis, such as a merge with an
   axis before it, which would interleave the padding, makes the generator
   refuse to pad that axis. It then compiles one program per length of that
@@ -307,6 +310,16 @@ A valid length is one per row of the batch axis, since the rows of one pass are
 different requests (see
 [Requests share a pass through slots](#requests-share-a-pass-through-slots)).
 So each mask, count and write above reads its row's own.
+
+The generated module takes them so:
+
+- `build` takes `lengths: &Lengths<G>`, a value of `[]` for each padded length
+  it reads as a value. A build that reads none takes no `lengths`. Every
+  extent the inputs give is a capacity.
+- `compute` takes the inputs on the host. It checks them, and what the graph
+  owes, against their own lengths. It pads each padded length to its
+  capacity, the next power of two, builds, and cuts the outputs back to their
+  lengths.
 
 An `If` whose condition the shape class decides is chosen when the graph is
 built. One whose condition depends on a value is a `case` with both branches.
@@ -456,6 +469,13 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 ```
 
 ## Known gaps
+
+- A valid length is one value for every row, which is a batch of one, until
+  slots (step 7) give each row its own.
+- `build` checks what the graph owes against the capacities, not the lengths,
+  so a condition a length meets and its capacity misses refuses the call.
+- `compute` takes no capacities from the caller, and a graph with a cache has
+  no `compute` until the cache is one of fixed capacity.
 
 - The first call of a shape class waits for its program to compile. At build
   time no user waits on the generator, and at first use one does. The cache on

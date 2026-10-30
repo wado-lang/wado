@@ -599,10 +599,8 @@ impl Poly {
                 coefficient = t.coefficient;
                 continue;
             }
-            for let s of &t.symbols {
-                if Poly::of(*s).symbols().contains_str(name) {
-                    return null;
-                }
+            if t.symbols.into_iter().any(|s| s.reads(name)) {
+                return null;
             }
             rest.push(*t);
         }
