@@ -67,10 +67,11 @@ program gets. It names each region `<benchmark directory>/<label> (<level>)`.
 
 ### CI holds fuel exactly and records it
 
-`benchmark/fuel.json` is the baseline, every level included. CI's `test-fuel`
-job, a test like any other, fails on any difference from it, either way, and
-names each series that moved. Fuel has no noise to tolerate, so every level is
-held, not only `-O2` as the wall-clock gate was.
+`benchmark/fuel.json` is the baseline, `-O2` alone. CI's `test-fuel` job, a
+test like any other, fails on any difference from it, either way, and names
+each series that moved. `-O2` is the level a performance change answers for;
+`-O1` and `-O3` are for reference, so the `Benchmark` workflow records them and
+nothing holds them.
 
 The `Benchmark` workflow only records: a push to main stores the series on
 gh-pages under `benchmarks/fuel`, beside the wasm sizes. It no longer runs on a
