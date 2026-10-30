@@ -12,7 +12,7 @@ All are driven by `.g4` in `tests/grammars/` plus the descriptor corpus:
 
 A codegen test runs the generated parser through `parses`, `lexes`, `printed`
 or `traced`, which return the trees, tokens, action output or trace lines. Each
-run costs a few seconds of compile, cached across runs.
+compiles the generated parser, cached across runs.
 
 ## The `verify` Drivers
 

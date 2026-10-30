@@ -36,7 +36,6 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 - [ ] `textDocument/signatureHelp`
 - [ ] `textDocument/documentLink`
 - [ ] `textDocument/codeLens`
-- [x] `textDocument/inlayHint`
 - [ ] `textDocument/inlineValue`
 - [ ] `textDocument/moniker`
 
@@ -85,8 +84,7 @@ Progress tracker for LSP 3.18 feature kinds. Each item represents a protocol kin
 ## Jump-to-Definition Follow-ups
 
 Known gaps and quality debts in `src/definition.rs` / `src/location.rs` not tied
-to a specific LSP request kind. Each item identifies the symptom and the
-concrete code location involved.
+to a specific LSP request kind.
 
 - [ ] Narrow the `#include_str` / `#include_bytes` cursor match to the path
   literal. `Literal::IncludeStr(String)` / `IncludeBytes(String)` store
@@ -109,7 +107,7 @@ concrete code location involved.
   decl-bearing AST node a `name_span` so `name_span_of` becomes total,
   or accept the fallback and remove this TODO.
 - [ ] Serve bundled `.wat` / `.wasm` assets via `workspace/textDocumentContent`.
-  `core:` / `wasi:` source modules are now openable, but the
+  `core:` / `wasi:` source modules are openable, but the
   `ModuleSource::Wasm { path, .. }` arm of `module_uri` in
   `src/location.rs` still returns the import path verbatim — clients have
   no way to open `core:libm.wat`. Extend `Engine::text_document_content`
