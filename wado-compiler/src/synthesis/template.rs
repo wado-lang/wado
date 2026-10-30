@@ -21,14 +21,13 @@ use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, RefKind, hole_fmt_helper_name};
 use crate::synthesis::common::{
-    deref_expr, field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr,
-    ref_expr,
+    field_access, locals_from_params, make_synthetic_free_function, mut_ref_expr, ref_expr,
 };
 use crate::synthesis::traits::case_index_dispatch;
 use crate::tir::{
     CallArg, FunctionRef, MonomorphInfo, ResolvedType, StructDef, TemplateId, TemplateShape,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirModule, TirParam, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TypeId,
+    TirStruct, TirStructField, TypeId, deref_to_layers,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
@@ -242,7 +241,6 @@ fn build_hole_fmt_helper(
                 hole.field_type,
                 span,
             );
-            let value = deref_to_inner(field, hole.hole_type, span);
             let kind = hole
                 .spec
                 .as_ref()
@@ -255,8 +253,15 @@ fn build_hole_fmt_helper(
                 ),
                 None => f_local(),
             };
-            let dispatch =
-                interpolation_dispatch_type(hole.hole_type, kind, ctx.trait_env, &ctx.tt.borrow());
+            let (dispatch, value) = {
+                let tt = ctx.tt.borrow();
+                let dispatch =
+                    interpolation_dispatch_type(hole.hole_type, kind, ctx.trait_env, &tt);
+                (
+                    dispatch,
+                    deref_to_layers(field, tt.ref_depth(dispatch), &tt),
+                )
+            };
             let stmts = trait_fmt_call(dispatch, value, formatter, kind, span, ctx);
             TirExpr::new(
                 TirExprKind::Block(TirBlock::new(stmts, span)),
@@ -414,16 +419,6 @@ pub(crate) fn interpolation_dispatch_type(
     dispatch
 }
 
-/// Wrap `expr` in deref operations until its type matches `target_type`.
-/// If `expr.type_id` is already `target_type`, returns `expr` unchanged.
-fn deref_to_inner(expr: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
-    if expr.type_id == target_type {
-        return expr;
-    }
-    // Just wrap in a single Deref — the lower phase handles multi-layer deref
-    deref_expr(expr, target_type, span)
-}
-
 /// Peel a newtype receiver to its base type so a format call targets the
 /// inherited impl — a newtype renders its underlying value for every format
 /// kind except `Inspect` (which overrides it with the ` as Name` tag). A manual
@@ -471,12 +466,10 @@ fn trait_fmt_call(
     let (val, type_id) = if target == type_id {
         (val, type_id)
     } else {
-        // Strip any refs the interpolation carried, then cast to the base — a
-        // no-op on the transparent GC representation.
-        let normalized = deref_to_inner(val, type_id, span);
+        // A cast to the base is a no-op on the transparent GC representation.
         let cast = TirExpr::new(
             TirExprKind::Cast {
-                expr: Box::new(normalized),
+                expr: Box::new(val),
                 target_type: target,
             },
             target,
@@ -748,7 +741,7 @@ pub(crate) fn method_template_at(
     tt: &TypeTable,
 ) -> Option<TemplateId> {
     let receiver = if info.ref_receiver().is_some() {
-        tt.innermost_ref(receiver)
+        tt.ref_layers(receiver, 1)
     } else {
         tt.peel_refs(receiver)
     };

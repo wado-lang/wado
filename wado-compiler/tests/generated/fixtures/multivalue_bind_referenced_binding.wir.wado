@@ -72,7 +72,7 @@ fn "multivalue_bind_referenced_binding.wado/run"() with Stdout {
     let digit_count_83: i32;
     let arr: ref Array<u8>;
     let tens: i32;
-    let start_183: i32;
+    let start_186: i32;
     a = black_box(3_i64);
     let $mv_hi_2: i64;
     multivalue_bind [a, $mv_hi_2] = i64.mul_wide_u(a, a);
@@ -150,22 +150,22 @@ fn "multivalue_bind_referenced_binding.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
         }
-        start_183 = out_18.used;
+        start_186 = out_18.used;
         out_18.used = is_negative_81;
-        builtin::array_set_u8(out_18.repr, start_183, 45);
+        builtin::array_set_u8(out_18.repr, start_186, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_81(out_18.used + digit_count_83) > builtin::array_len(out_18.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_18, is_negative_81);
     }
-    start_183 = out_18.used;
+    start_186 = out_18.used;
     out_18.used = is_negative_81;
     arr = out_18.repr;
-    is_negative_81 = start_183 + digit_count_83;
+    is_negative_81 = start_186 + digit_count_83;
     b22: block {
         l23: loop {
-            break_if b22 (is_negative_81 - start_183) < 2;
+            break_if b22 (is_negative_81 - start_186) < 2;
             $mv_hi_2 = a /u 100_i64;
             tens = local.tee digit_count_83(builtin::i32_wrap_i64(a - ($mv_hi_2 * 100_i64))) / 10;
             builtin::array_set_u8(arr, is_negative_81 - 1, (48 + digit_count_83) - (tens * 10));
@@ -175,8 +175,8 @@ fn "multivalue_bind_referenced_binding.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if is_negative_81 > start_183 {
-        builtin::array_set_u8(arr, start_183, 48 + builtin::i32_wrap_i64(a %u 10_i64));
+    if is_negative_81 > start_186 {
+        builtin::array_set_u8(arr, start_186, 48 + builtin::i32_wrap_i64(a %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -184,11 +184,11 @@ fn "multivalue_bind_referenced_binding.wado/run"() with Stdout {
     is_negative_81 = builtin::i32_wrap_i64(local.tee a("wasi/stream-new"()));
     digit_count_83 = builtin::i32_wrap_i64(a >> 32_i64);
     is_negative_81 = "multivalue_bind_referenced_binding.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(is_negative_81);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_183(out_18.used) + 1)), 0, out_18.repr, 0, start_183);
-    builtin::array_set_u8(arr, start_183, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_186(out_18.used) + 1)), 0, out_18.repr, 0, start_186);
+    builtin::array_set_u8(arr, start_186, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_183 = start_183 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(digit_count_83, arr, 0, start_183);
+        start_186 = start_186 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(digit_count_83, arr, 0, start_186);
     });
     "wasi/stream-drop-writable"(digit_count_83);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(is_negative_81);

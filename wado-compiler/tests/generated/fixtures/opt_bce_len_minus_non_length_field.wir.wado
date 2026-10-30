@@ -101,7 +101,7 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
     let x: i64;
     let q: u64;
     let tens: i32;
-    let start_162: i32;
+    let start_165: i32;
     if @unlikely(local.tee idx(s - 1) >= s) {
         cold_path;
         "opt_bce_len_minus_non_length_field.wado/f$cold0$dae[s]"();
@@ -179,22 +179,22 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, s);
         }
-        start_162 = out_14.used;
+        start_165 = out_14.used;
         out_14.used = s;
-        builtin::array_set_u8(out_14.repr, start_162, 45);
+        builtin::array_set_u8(out_14.repr, start_165, 45);
     } else {
     }
     if @unlikely(local.tee s(out_14.used + idx) > builtin::array_len(out_14.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, s);
     }
-    start_162 = out_14.used;
+    start_165 = out_14.used;
     out_14.used = s;
     repr_43 = out_14.repr;
-    s = start_162 + idx;
+    s = start_165 + idx;
     b23: block {
         l24: loop {
-            break_if b23 (s - start_162) < 2;
+            break_if b23 (s - start_165) < 2;
             q = x /u 100_i64;
             tens = local.tee idx(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(repr_43, s - 1, (48 + idx) - (tens * 10));
@@ -204,8 +204,8 @@ fn "opt_bce_len_minus_non_length_field.wado/f$sroa[s.n]$dae[return]"(s) with Std
             continue l24;
         };
     };
-    if s > start_162 {
-        builtin::array_set_u8(repr_43, start_162, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if s > start_165 {
+        builtin::array_set_u8(repr_43, start_165, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_41: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_41;

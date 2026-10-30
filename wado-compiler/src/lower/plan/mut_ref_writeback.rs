@@ -1,5 +1,7 @@
-//! Take a `&mut` to a variant field through a temp and store it back after the
-//! call. See `docs/wep-2026-06-13-reference-representation.md`.
+//! Take a `&mut` to a field of a replace-on-assign type through a temp and
+//! store it back after the call: a `variant`'s, or any other a generic body
+//! hid from the reference site. See
+//! `docs/wep-2026-06-13-reference-representation.md`.
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::reach::ClosureCaptures;
@@ -78,8 +80,9 @@ pub fn insert_write_backs(
                     severity: Severity::Error,
                     code: Code::ImmutableAssignment,
                     message: format!(
-                        "a mutable reference to a field or element of a variant is a detached \
-                         copy, so a whole-value write through it would be lost: {reason}"
+                        "a mutable reference to a field or element of a replace-on-assign \
+                         type is a detached copy, so a whole-value write through it would be \
+                         lost: {reason}"
                     ),
                     span: Some(DiagnosticSpan::from_span(span, None)),
                 },
@@ -266,11 +269,13 @@ impl WriteBack<'_> {
         changed
     }
 
-    /// Whether a `&mut` to `place` is a detached box — of the replace types
-    /// only a `variant` gets here, generic or not. A field or an element boxed
-    /// by [`TypeTable::boxes_slot`] is its own box, which `*r` reaches.
+    /// Whether a `&mut` to `place` is a detached box: a replace type's. Only a
+    /// `variant` is written so, and only a generic body hides the rest — the
+    /// reference site refuses theirs where it can read the type. A field or an
+    /// element boxed by [`TypeTable::boxes_slot`] is its own box, which `*r`
+    /// reaches.
     fn detaches(&self, place: &TirExpr) -> bool {
-        self.type_table.is_variant_value(place.type_id)
+        self.type_table.is_boxed_reference_target(place.type_id)
             && !(matches!(
                 place.kind,
                 TirExprKind::FieldAccess { .. }
@@ -593,8 +598,11 @@ impl WriteBack<'_> {
             // without any store back.
             let temp = self.bind(&mut prefix, "", place.clone(), true, LetStorage::Aliased);
             self.ref_temps.push(temp.index);
-            // An identity witness, never a copy: a copy would make every call
-            // look like a whole-value write.
+            // Store back only what the callee replaced. An unconditional store
+            // would also undo a write the callee made through another route to
+            // the same place — `self`, or a sibling `&mut` argument. The witness
+            // aliases what the temp held, never copies it: a copy would make
+            // every call look like a whole-value write.
             let before = self.bind(
                 &mut prefix,
                 "before_",
@@ -623,15 +631,12 @@ impl WriteBack<'_> {
                 )),
                 span,
             ));
-            // Store back only what the callee replaced. An unconditional store
-            // would also undo a write the callee made through another route to
-            // the same place — `self`, or a sibling `&mut` argument.
             write_backs.push(TirStmt::new(
                 TirStmtKind::If {
                     condition: TirExpr::new(
                         TirExprKind::Binary {
                             left: Box::new(temp.read()),
-                            op: TirBinaryOp::RefNotEq,
+                            op: TirBinaryOp::NotIdentical,
                             right: Box::new(before.read()),
                         },
                         TypeTable::BOOL,

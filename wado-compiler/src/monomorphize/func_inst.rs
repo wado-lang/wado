@@ -14,7 +14,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, LetStorage, MonomorphInfo, ResolvedType,
     ShapeSubstitution, StructDef, TemplateId, TemplateShape, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, hold_hole, method_param_offset, transpose_tuple_expr,
+    TirUnaryOp, TypeId, deref_to_layers, hold_hole, method_param_offset, transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::{AnonStructId, TypeTable};
@@ -1848,6 +1848,7 @@ impl Monomorphizer {
             } => {
                 let (receiver, args) = args.split_mut();
                 let receiver = &mut receiver.expect("the arm above takes a free call").expr;
+                let written_layers = type_table.ref_depth(receiver.type_id);
                 self.substitute_types_in_expr(
                     receiver,
                     substitution,
@@ -1885,6 +1886,21 @@ impl Monomorphizer {
                     substitution,
                     type_table,
                 );
+                // A type parameter bound to a reference dispatches to its
+                // pointee's impl, which takes the receiver with the layers the
+                // generic body wrote over the parameter, not the reference's too.
+                if type_param_trait_info.is_some()
+                    && method_func
+                        .method_info
+                        .as_ref()
+                        .is_some_and(|info| info.ref_receiver().is_none())
+                {
+                    let substituted = std::mem::replace(
+                        receiver,
+                        TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, receiver.span),
+                    );
+                    *receiver = deref_to_layers(substituted, written_layers, type_table);
+                }
 
                 // Primitives use direct Wasm instructions, not trait methods.
                 // Convert back to a binary op when monomorphization concretized to a primitive.
@@ -4260,31 +4276,9 @@ fn try_lower_comparison(
 /// holding one — has no `&` node to drop, so it gets an explicit deref; leaving
 /// it alone handed codegen a `(ref $type)` where the instruction wanted an i32.
 fn unref_operand(operand: &TirExpr, type_table: &TypeTable) -> TirExpr {
-    let mut expr = if let TirExprKind::Unary {
-        op: TirUnaryOp::Ref,
-        expr: inner,
-    } = &operand.kind
-    {
-        (**inner).clone()
-    } else {
-        operand.clone()
-    };
-    // `T = &i32` leaves the inner value a reference of its own, so peel a
-    // layer at a time and type each `Deref` by what it yields.
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(expr.type_id)
-    {
-        let inner = *inner;
-        let span = expr.span;
-        expr = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Deref,
-                expr: Box::new(expr),
-            },
-            inner,
-            span,
-        );
-    }
-    expr
+    // `T = &i32` leaves the inner value a reference of its own, so every layer
+    // is peeled.
+    deref_to_layers(operand.clone(), 0, type_table)
 }
 
 /// Holds each template literal's holes as its concrete shape does, which reify

@@ -80,7 +80,7 @@ fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_177: i32;
+    let start_180: i32;
     let $hfs_v_557: i32;
     b = struct.new "hfs_if_condition_call_then_scalar.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
@@ -172,22 +172,22 @@ fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, $hfs_v_557);
         }
-        start_177 = out_14.used;
+        start_180 = out_14.used;
         out_14.used = $hfs_v_557;
-        builtin::array_set_u8(out_14.repr, start_177, 45);
+        builtin::array_set_u8(out_14.repr, start_180, 45);
     } else {
     }
     if @unlikely(local.tee $hfs_v_557(out_14.used + i_1) > builtin::array_len(out_14.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_14, $hfs_v_557);
     }
-    start_177 = out_14.used;
+    start_180 = out_14.used;
     out_14.used = $hfs_v_557;
     arr = out_14.repr;
-    i_1 = start_177 + i_1;
+    i_1 = start_180 + i_1;
     b25: block {
         l26: loop {
-            break_if b25 (i_1 - start_177) < 2;
+            break_if b25 (i_1 - start_180) < 2;
             q = x /u 100_i64;
             tens = local.tee $hfs_v_557(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_557) - (tens * 10));
@@ -197,8 +197,8 @@ fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if i_1 > start_177 {
-        builtin::array_set_u8(arr, start_177, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if i_1 > start_180 {
+        builtin::array_set_u8(arr, start_180, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -206,11 +206,11 @@ fn "hfs_if_condition_call_then_scalar.wado/run"() with Stdout {
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $hfs_v_557 = builtin::i32_wrap_i64(x >> 32_i64);
     i_1 = "hfs_if_condition_call_then_scalar.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_177(out_14.used) + 1)), 0, out_14.repr, 0, start_177);
-    builtin::array_set_u8(arr, start_177, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_180(out_14.used) + 1)), 0, out_14.repr, 0, start_180);
+    builtin::array_set_u8(arr, start_180, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_177 = start_177 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_557, arr, 0, start_177);
+        start_180 = start_180 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_557, arr, 0, start_180);
     });
     "wasi/stream-drop-writable"($hfs_v_557);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);

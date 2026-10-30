@@ -79,7 +79,7 @@ fn "hfs_inline_arm_mixed_with_call_arm.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_179: i32;
+    let start_182: i32;
     let $hfs_v_559: i32;
     b_0 = struct.new "hfs_inline_arm_mixed_with_call_arm.wado//Buf" { v: 0, pad: 0 };
     i_1 = 0;
@@ -172,22 +172,22 @@ fn "hfs_inline_arm_mixed_with_call_arm.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_559);
         }
-        start_179 = out_16.used;
+        start_182 = out_16.used;
         out_16.used = $hfs_v_559;
-        builtin::array_set_u8(out_16.repr, start_179, 45);
+        builtin::array_set_u8(out_16.repr, start_182, 45);
     } else {
     }
     if @unlikely(local.tee $hfs_v_559(out_16.used + i_1) > builtin::array_len(out_16.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_16, $hfs_v_559);
     }
-    start_179 = out_16.used;
+    start_182 = out_16.used;
     out_16.used = $hfs_v_559;
     arr = out_16.repr;
-    i_1 = start_179 + i_1;
+    i_1 = start_182 + i_1;
     b25: block {
         l26: loop {
-            break_if b25 (i_1 - start_179) < 2;
+            break_if b25 (i_1 - start_182) < 2;
             q = x /u 100_i64;
             tens = local.tee $hfs_v_559(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, i_1 - 1, (48 + $hfs_v_559) - (tens * 10));
@@ -197,8 +197,8 @@ fn "hfs_inline_arm_mixed_with_call_arm.wado/run"() with Stdout {
             continue l26;
         };
     };
-    if i_1 > start_179 {
-        builtin::array_set_u8(arr, start_179, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if i_1 > start_182 {
+        builtin::array_set_u8(arr, start_182, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;
@@ -206,11 +206,11 @@ fn "hfs_inline_arm_mixed_with_call_arm.wado/run"() with Stdout {
     i_1 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     $hfs_v_559 = builtin::i32_wrap_i64(x >> 32_i64);
     i_1 = "hfs_inline_arm_mixed_with_call_arm.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(i_1);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_179(out_16.used) + 1)), 0, out_16.repr, 0, start_179);
-    builtin::array_set_u8(arr, start_179, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_182(out_16.used) + 1)), 0, out_16.repr, 0, start_182);
+    builtin::array_set_u8(arr, start_182, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_179 = start_179 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_559, arr, 0, start_179);
+        start_182 = start_182 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"($hfs_v_559, arr, 0, start_182);
     });
     "wasi/stream-drop-writable"($hfs_v_559);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(i_1);

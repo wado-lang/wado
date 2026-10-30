@@ -1,6 +1,6 @@
 // Regression: a generic static trait call `T::deser(d)` whose method type
 // param `D` is inferred (no turbofish) from an argument that is a reference to
-// a reference (`&mut self.de`, where `self.de: &mut MyDe`) inferred `D = &mut
+// a reference (`&mut de`, where `de: &mut MyDe`) inferred `D = &mut
 // MyDe`. The generic impl's body projects `D::Acc`; resolving the projection on
 // a reference type found no impl and left an unsubstituted `AssocTypeProjection`
 // that reached codegen and panicked. Associated types are inherited through
@@ -62,7 +62,8 @@ struct Access {
 }
 impl Access {
     fn step<T: Deser>(&mut self) -> T {
-        return T::deser(&mut self.de);
+        let mut de = self.de;
+        return T::deser(&mut de);
     }
 }
 

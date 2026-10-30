@@ -64,7 +64,7 @@ pub(super) enum ImplKind {
 /// The values [`TypeSystem::is_replace_on_assign_place_type`] answers for, which
 /// every refused `&mut` into a larger value names.
 pub(super) const REPLACE_ON_ASSIGN_TYPE: &str =
-    "a replace-on-assign type (primitive, enum, flags, fn)";
+    "a replace-on-assign type (primitive, enum, flags, fn, reference)";
 
 /// Shared so the explicit `&mut x.f` and the implicit `&mut self` say
 /// the same thing about the same refusal.
@@ -296,9 +296,22 @@ fn target_arg_names(arg: &Type, name: &str) -> bool {
 impl TypeSystem {
     /// What a reference type refers to, `None` for anything else.
     pub(crate) fn pointee_of(&self, id: TypeId) -> Option<TypeId> {
-        match self.type_table.borrow().get(id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
-            _ => None,
+        self.type_table.borrow().ref_pointee(id)
+    }
+
+    /// Whether `id` is a newtype over a reference (`type H = &mut T`).
+    pub(crate) fn wraps_reference(&self, id: TypeId) -> bool {
+        let tt = self.type_table.borrow();
+        matches!(tt.get(id), ResolvedType::Newtype { .. })
+            && tt.ref_pointee(tt.representation_head(id)).is_some()
+    }
+
+    /// The reference a newtype over one wraps, or `id` itself.
+    pub(crate) fn wrapped_ref_type(&self, id: TypeId) -> TypeId {
+        if self.wraps_reference(id) {
+            self.type_table.borrow().representation_head(id)
+        } else {
+            id
         }
     }
 
@@ -1807,9 +1820,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // `operators.rs` refuses the explicit `&mut x.f`; the implicit `&mut`
-        // receiver must match it.
+        // receiver must match it. A field holding a reference hands the method
+        // its referent, which the write reaches.
         if receiver_ast
             .is_some_and(|e| matches!(e, ast::Expr::FieldAccess(_) | ast::Expr::Index(_)))
+            && self.reference_mutability(receiver).is_none()
             && self.tysys.is_replace_on_assign_place_type(receiver)
         {
             let _ = self.emit(TypeError::CannotMutate {
@@ -1826,7 +1841,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// layer `&mut`, read through newtypes at each. One `&` anywhere, as in
     /// `&mut &T` or `&&mut T`, makes it immutable. `None` for a type that is no
     /// reference at all.
-    fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
+    pub(super) fn reference_mutability(&self, ty: TypeId) -> Option<bool> {
         let table = self.tysys.type_table.borrow();
         let mut mutable = None;
         let mut layer = table.representation_head(ty);
@@ -3473,10 +3488,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_kind,
             param_types,
             param_is_mut: method_param_is_mut,
-            owner: _,
+            owner,
             cm_name: _,
             method_own_params,
-            is_ref_impl: method_is_ref_impl,
+            is_ref_impl: _,
             method_type_param_ids,
             impl_module,
             from_concrete_impl,
@@ -3681,7 +3696,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             method_def,
             &func,
             self_kind,
-            method_is_ref_impl,
+            matches!(owner, MethodOwner::Referent(_)),
             method_param_is_mut,
             defaults,
             param_types.clone(),
@@ -3840,23 +3855,18 @@ impl TypeSystem {
         self.type_table.borrow().resource_chain(def).collect()
     }
 
-    /// Whether mutation through a `&mut` copy of `type_id` is lost: a primitive, enum, flags
-    /// or fn, or a newtype over one. Not a `variant`, whose payload is a shared GC struct.
+    /// Whether mutation through a `&mut` copy of `type_id` is lost: a boxed
+    /// reference target other than a `variant`, whose payload is a shared GC
+    /// struct.
     pub(super) fn is_replace_on_assign_place_type(&self, type_id: TypeId) -> bool {
         let table = self.type_table.borrow();
-        let replaces_on_assign = |ty: &ResolvedType| {
-            matches!(
-                ty,
-                ResolvedType::Primitive(_)
-                    | ResolvedType::Enum { .. }
-                    | ResolvedType::Function { .. }
-            )
+        let head = table.representation_head(type_id);
+        let is_variant = match table.get(head) {
+            ResolvedType::Variant { .. } => true,
+            ResolvedType::GenericInstance { def, .. } => table.find_variant_type(*def).is_some(),
+            _ => false,
         };
-        if replaces_on_assign(table.get(type_id)) {
-            return true;
-        }
-        let base = table.representation_head(type_id);
-        replaces_on_assign(table.get(base))
+        table.is_boxed_reference_target(head) && !is_variant
     }
 
     /// Whether `type_id` is a `[K, V]` — the element a `{ k: v, … }` literal
@@ -3876,45 +3886,42 @@ impl TypeSystem {
     }
 }
 
-/// The type a receiver takes on once adjusted for the callee's `self` kind.
-/// The body walk needs only this; reify's `adjust_receiver_for_self_kind`
-/// builds the node that carries the same type.
+/// The type a receiver takes on once adjusted for the callee's `self` kind,
+/// where the impl's `Self` holds `self_layers` references
+/// ([`super::sem::types::impl_self_layers`]). The body walk needs only this;
+/// reify's `adjust_receiver_for_self_kind` builds the node that carries the
+/// same type.
 pub(super) fn adjusted_receiver_type(
     receiver: TypeId,
     self_kind: ast::SelfKind,
-    is_ref_impl: bool,
+    self_layers: usize,
     type_table: &std::cell::RefCell<TypeTable>,
 ) -> TypeId {
-    // A ref-target impl binds `Self` to `&T`, so `&self` is `&&T`: the receiver
-    // already carries one layer and the declaration asks for another.
-    if is_ref_impl {
-        return match self_kind {
-            ast::SelfKind::Ref => type_table.borrow_mut().make_ref(receiver),
-            ast::SelfKind::MutRef => type_table.borrow_mut().make_mut_ref(receiver),
-            ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
-        };
+    let mutable = match self_kind {
+        ast::SelfKind::None | ast::SelfKind::Value => {
+            return type_table.borrow().peel_refs(receiver);
+        }
+        ast::SelfKind::Ref => false,
+        ast::SelfKind::MutRef => true,
+    };
+    // `self` holds the pointee under one reference more than `Self` does. A
+    // receiver holding that many passes them, further layers read through;
+    // `&mut T` satisfies `&self`. Any other gets the declaration's reference
+    // over its own layers.
+    let layers = self_layers + 1;
+    let held = type_table.borrow().ref_layers(receiver, layers);
+    let fits = {
+        let tt = type_table.borrow();
+        tt.ref_depth(held) == layers
+            && (!mutable || matches!(tt.get(held), ResolvedType::MutRef(_)))
+    };
+    if fits {
+        return held;
     }
-    match self_kind {
-        ast::SelfKind::None | ast::SelfKind::Value => type_table.borrow().peel_refs(receiver),
-        // `&mut T` already satisfies `&self`; only a value needs the wrap.
-        ast::SelfKind::Ref => {
-            let already_ref = matches!(
-                type_table.borrow().get(receiver),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            );
-            if already_ref {
-                receiver
-            } else {
-                type_table.borrow_mut().make_ref(receiver)
-            }
-        }
-        ast::SelfKind::MutRef => {
-            let already_mut = matches!(type_table.borrow().get(receiver), ResolvedType::MutRef(_));
-            if already_mut {
-                receiver
-            } else {
-                type_table.borrow_mut().make_mut_ref(receiver)
-            }
-        }
+    let own = type_table.borrow().ref_layers(receiver, layers - 1);
+    if mutable {
+        type_table.borrow_mut().make_mut_ref(own)
+    } else {
+        type_table.borrow_mut().make_ref(own)
     }
 }

@@ -68,7 +68,7 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_152: i32;
-    let start_188: i32;
+    let start_191: i32;
     $sroa_t_h0_152 = i32x4.extract_lane(2, v128.const(316912650112397582603894390785));
     out_23 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_29: block {
@@ -142,22 +142,22 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, is_negative_87);
         }
-        start_188 = out_23.used;
+        start_191 = out_23.used;
         out_23.used = is_negative_87;
-        builtin::array_set_u8(out_23.repr, start_188, 45);
+        builtin::array_set_u8(out_23.repr, start_191, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_87(out_23.used + $sroa_t_h0_152) > builtin::array_len(out_23.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_23, is_negative_87);
     }
-    start_188 = out_23.used;
+    start_191 = out_23.used;
     out_23.used = is_negative_87;
     arr = out_23.repr;
-    $sroa_t_h0_152 = start_188 + $sroa_t_h0_152;
+    $sroa_t_h0_152 = start_191 + $sroa_t_h0_152;
     b22: block {
         l23: loop {
-            break_if b22 ($sroa_t_h0_152 - start_188) < 2;
+            break_if b22 ($sroa_t_h0_152 - start_191) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_87(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_t_h0_152 - 1, (48 + is_negative_87) - (tens * 10));
@@ -167,8 +167,8 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if $sroa_t_h0_152 > start_188 {
-        builtin::array_set_u8(arr, start_188, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_152 > start_191 {
+        builtin::array_set_u8(arr, start_191, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_48: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_48;
@@ -176,11 +176,11 @@ fn "simd_vector_literal_folds.wado/run"() with Stdout {
     $sroa_t_h0_152 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_87 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_t_h0_152 = "simd_vector_literal_folds.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_152);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_188(out_23.used) + 1)), 0, out_23.repr, 0, start_188);
-    builtin::array_set_u8(arr, start_188, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_191(out_23.used) + 1)), 0, out_23.repr, 0, start_191);
+    builtin::array_set_u8(arr, start_191, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_188 = start_188 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, arr, 0, start_188);
+        start_191 = start_191 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_87, arr, 0, start_191);
     });
     "wasi/stream-drop-writable"(is_negative_87);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_152);

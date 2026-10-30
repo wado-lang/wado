@@ -384,6 +384,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         origin: Option<ast::AstId>,
     ) -> TypeId {
+        // A newtype over a reference with no comparison impl of its own
+        // compares as that reference, whose operators are the impls written
+        // for references.
+        let own_impl = operator_compiler_item(&op)
+            .and_then(|item| self.tysys.compiler_trait_def(item))
+            .and_then(|trait_| self.tysys.own_impl_link(left, trait_));
+        let (left, right) = if op.is_comparison() && own_impl.is_none() {
+            (
+                self.tysys.wrapped_ref_type(left),
+                self.tysys.wrapped_ref_type(right),
+            )
+        } else {
+            (left, right)
+        };
         // Check if this is a comparison operation on a non-primitive type
         // Non-primitives use Eq/Ord traits instead of direct Wasm instructions
         let left_type = self.tysys.type_table.borrow().get(left).clone();
@@ -1379,9 +1393,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Result<TypeId, ()> {
         let projected = projected_subscripts_of_place(target);
         let resolved = self.resolve_expr(expr, &mut ctx.marking_mut_places(&projected), None);
-        if let Some(refusal) = projected
-            .iter()
-            .find_map(|id| self.subscript_write_refusal(*id))
+        if let Some(refusal) = self
+            .subscripts_written_through(target)
+            .find_map(|id| self.subscript_write_refusal(id))
         {
             let _ = self.emit(TypeError::CannotMutate {
                 message: refusal.to_string(),
@@ -1390,6 +1404,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Err(());
         }
         Ok(resolved)
+    }
+
+    /// The subscripts of [`projected_subscripts_of_place`] the write lands in.
+    /// One behind a reference is not: `l[0].a` on a `List<&mut P>` writes into
+    /// the `P` the element points to, whatever hands the element out.
+    fn subscripts_written_through<'a>(
+        &'a self,
+        target: &'a ast::Expr,
+    ) -> impl Iterator<Item = AstId> + 'a {
+        place_bases(target)
+            .take_while(|expr| {
+                self.sem
+                    .types
+                    .expression_types
+                    .get(&expr.id())
+                    .is_none_or(|ty| self.reference_mutability(*ty).is_none())
+            })
+            .filter_map(subscript_id)
     }
 
     /// Why a write cannot reach the element this subscript names, if it cannot.
@@ -2316,20 +2348,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 /// read. A target that is the subscript itself is excluded: `IndexAssign`
 /// writes into that one.
 fn projected_subscripts_of_place(target: &ast::Expr) -> Vec<AstId> {
-    let mut at = match target {
-        ast::Expr::FieldAccess(field) => &field.expr,
-        ast::Expr::Index(index) => &index.expr,
-        _ => return Vec::new(),
-    };
-    let mut subscripts = Vec::new();
-    loop {
-        match at {
-            ast::Expr::Index(index) => {
-                subscripts.push(index.id);
-                at = &index.expr;
-            }
-            ast::Expr::FieldAccess(field) => at = &field.expr,
-            _ => return subscripts,
+    place_bases(target).filter_map(subscript_id).collect()
+}
+
+/// The expressions a place projects from, innermost last: `o[0][0]`, `o[0]`
+/// and `o` for `o[0][0].n`, ending at the first that projects from nothing.
+fn place_bases(target: &ast::Expr) -> impl Iterator<Item = &ast::Expr> {
+    fn base_of(place: &ast::Expr) -> Option<&ast::Expr> {
+        match place {
+            ast::Expr::FieldAccess(field) => Some(&field.expr),
+            ast::Expr::Index(index) => Some(&index.expr),
+            _ => None,
         }
+    }
+    std::iter::successors(base_of(target), |&at| base_of(at))
+}
+
+fn subscript_id(expr: &ast::Expr) -> Option<AstId> {
+    match expr {
+        ast::Expr::Index(index) => Some(index.id),
+        _ => None,
     }
 }

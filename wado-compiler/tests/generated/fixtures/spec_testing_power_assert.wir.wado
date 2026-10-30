@@ -174,9 +174,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::wri
 
 type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(64)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd,bool>::lit$sroa[self.index]" = fn(i32, ref "spec_testing_power_assert.wado//$tmpl$2571e7db6d5fd3dd") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(65)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(65)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(66)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd,bool>::lit$sroa[self.index]" = fn(i32, ref "spec_testing_power_assert.wado//$tmpl$2571e7db6d5fd3dd") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(66)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(67)
 
@@ -1330,13 +1330,6 @@ fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text);
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd,bool>::lit$sroa[self.index]"(self, t) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("spec_testing_power_assert.wado/$template_segment$spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1344,6 +1337,13 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(self, f) {
     self = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val("core:prelude/primitive.wado/i64::abs"(builtin::i64_extend_i32_s(self))));
     is_negative = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_1, self);
     "core:prelude/primitive.wado/write_decimal_digits"(f.buf.repr, is_negative, abs_val, self);
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd,bool>::lit$sroa[self.index]"(self, t) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("spec_testing_power_assert.wado/$template_segment$spec_testing_power_assert.wado/$tmpl$2571e7db6d5fd3dd"(t, 2 * self)).repr, $mv_arg_1.used);
+    };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

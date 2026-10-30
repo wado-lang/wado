@@ -541,6 +541,86 @@ pub fn hold_hole(field: &mut TirStructField, hole_ty: TypeId, tt: &mut TypeTable
     taken
 }
 
+/// `expr` dereferenced until `layers` references remain over its pointee,
+/// folding `*&e` to `e`: how a receiver reaches the impl of its pointee through
+/// however many references hold it.
+pub fn deref_to_layers(mut expr: TirExpr, layers: usize, type_table: &TypeTable) -> TirExpr {
+    while type_table.ref_depth(expr.type_id) > layers {
+        let pointee = type_table
+            .ref_pointee(expr.type_id)
+            .expect("a type with a reference layer points at something");
+        expr = match expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: taken,
+            } => *taken,
+            kind => {
+                let span = expr.span;
+                TirExpr::new(
+                    TirExprKind::Unary {
+                        op: TirUnaryOp::Deref,
+                        expr: Box::new(TirExpr { kind, ..expr }),
+                    },
+                    pointee,
+                    span,
+                )
+            }
+        };
+    }
+    expr
+}
+
+/// `expr` holding as many references over its pointee as `target` does: a layer
+/// too many dereferenced, a missing one taken, as a receiver spelled as the
+/// first argument of `Trait::method(recv)` is adjusted to its `self`.
+pub fn to_layers_of(expr: TirExpr, target: TypeId, type_table: &TypeTable) -> TirExpr {
+    let want = type_table.ref_depth(target);
+    let have = type_table.ref_depth(expr.type_id);
+    if have >= want {
+        return deref_to_layers(expr, want, type_table);
+    }
+    let missing: Vec<TypeId> = std::iter::successors(Some(target), |&t| type_table.ref_pointee(t))
+        .take(want - have)
+        .collect();
+    missing.into_iter().rev().fold(expr, |expr, layer| {
+        let op = if matches!(type_table.get(layer), ResolvedType::MutRef(_)) {
+            TirUnaryOp::MutRef
+        } else {
+            TirUnaryOp::Ref
+        };
+        let span = expr.span;
+        TirExpr::new(
+            TirExprKind::Unary {
+                op,
+                expr: Box::new(expr),
+            },
+            layer,
+            span,
+        )
+    })
+}
+
+/// The reference the newtype `expr` holds wraps (`type H = &mut T`): `expr`'s
+/// own references dereferenced away, then each newtype cast to its base.
+pub fn wrapped_reference(expr: TirExpr, type_table: &TypeTable) -> TirExpr {
+    let mut expr = deref_to_layers(expr, 0, type_table);
+    while type_table.ref_pointee(expr.type_id).is_none() {
+        let ResolvedType::Newtype { base_type, .. } = *type_table.get(expr.type_id) else {
+            unreachable!("the caller passes a newtype over a reference");
+        };
+        let span = expr.span;
+        expr = TirExpr::new(
+            TirExprKind::Cast {
+                expr: Box::new(expr),
+                target_type: base_type,
+            },
+            base_type,
+            span,
+        );
+    }
+    expr
+}
+
 /// A written shape a substituted one is made from, and the substitution that
 /// makes it, over every parameter the origin mentions: what instantiating the
 /// origin's methods applies. Binding the two shapes again cannot recover it
@@ -1436,7 +1516,10 @@ pub enum TirBinaryOp {
     BitXor,
     Shl,
     Shr,
-    RefNotEq,
+    /// Whether two values differ bit for bit: a reference by identity, a number
+    /// by its bits, so `-0.0` differs from `0.0`. Lowering mints it; no source
+    /// operator spells it.
+    NotIdentical,
 }
 
 impl TirBinaryOp {

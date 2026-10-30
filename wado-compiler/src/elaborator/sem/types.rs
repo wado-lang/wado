@@ -17,8 +17,9 @@ use crate::type_table::TypeTable;
 
 /// Method-dispatch decision for a [`crate::ast::MethodCallExpr`]:
 /// `function_ref` is the resolved target, so reify emits the call without
-/// re-running trait lookup or mangling, and `self_kind` plus `is_ref_impl` are
-/// what `adjust_receiver_for_self_kind` needs. Short-circuiting paths leave no
+/// re-running trait lookup or mangling, and `self_kind` plus its impl
+/// ([`impl_self_layers`]) are what `adjust_receiver_for_self_kind` needs.
+/// Short-circuiting paths leave no
 /// entry: they rewrite the call into a shape reify reads off the receiver type.
 #[derive(Clone)]
 pub(crate) struct MethodDispatch {
@@ -27,10 +28,10 @@ pub(crate) struct MethodDispatch {
     pub(crate) method_def: Option<DefId>,
     pub(crate) function_ref: FunctionRef,
     pub(crate) self_kind: ast::SelfKind,
-    /// True when the resolved method's impl was found on a reference type
-    /// (`impl Trait for &T`). Reify wraps the receiver in an extra `&` /
-    /// `&mut` layer before passing it to the method.
-    pub(crate) is_ref_impl: bool,
+    /// True when the method is the referent's, reached through the reference
+    /// a newtype wraps (`type H = &mut T`): the receiver passes that
+    /// reference, not one taken to the newtype.
+    pub(crate) through_referent: bool,
     /// Per-argument `is_mut` flag off the dispatched method's own signature.
     /// Reify zips this with the reified argument exprs to build
     /// [`crate::tir::CallArg`]s with the same `is_mut` shape annotate produced.
@@ -1089,10 +1090,8 @@ pub(crate) struct ImplFacts {
     /// trait_type_args)`, so a generic-effect handler needs the args to
     /// match the binding's instantiation.
     pub(crate) trait_type_args: Vec<tir::TypeId>,
-    /// True iff the impl target is `&T` / `&mut T` (ref-type
-    /// impl). Method receivers `&self` get an extra `&` layer at
-    /// receiver-adjustment time; mirrors [`MethodDispatch::is_ref_impl`]
-    /// but is decided at impl-block scope.
+    /// True iff the impl target is `&T` / `&mut T`, whose `&self` holds two
+    /// layers over the pointee.
     pub(crate) is_ref_impl: bool,
     /// Mangled struct name the elaborator feeds into
     /// [`crate::name::MethodName::format_local`] when naming the impl's methods.
@@ -1129,10 +1128,8 @@ pub(crate) struct OperatorDispatch {
     pub(crate) function_ref: FunctionRef,
     /// The declaration the dispatch selected.
     pub(crate) method_def: Option<DefId>,
-    /// Self-kind of the trait method's receiver. Reify feeds this
-    /// (with `is_ref_impl = false` — operator trait methods are
-    /// always dispatched on the value type, not on a ref-impl) into
-    /// reify's `adjust_receiver_for_self_kind`.
+    /// Self-kind of the trait method's receiver, which reify feeds with
+    /// [`impl_self_layers`] into `adjust_receiver_for_self_kind`.
     pub(crate) self_kind: ast::SelfKind,
     /// Per-argument flag: `true` when the operator's trait parameter
     /// is declared as `&T` / `&mut T` and reify must wrap the
@@ -1156,6 +1153,32 @@ pub(crate) struct OperatorDispatch {
     pub(crate) needs_deref: bool,
 }
 
+impl OperatorDispatch {
+    /// Whether the answering impl is written for a reference (`impl Eq for
+    /// &T`).
+    pub(crate) fn is_ref_impl(&self) -> bool {
+        self.function_ref
+            .method_info
+            .as_ref()
+            .is_some_and(|info| info.ref_receiver().is_some())
+    }
+}
+
+/// How many references the `Self` of the impl `func` belongs to holds over
+/// `receiver`'s pointee: none for a value's impl, one for `&X`'s, and every one
+/// `receiver` holds for a blanket `&T`'s, whose `T` takes the rest.
+pub(crate) fn impl_self_layers(
+    func: &FunctionRef,
+    receiver: TypeId,
+    type_table: &TypeTable,
+) -> usize {
+    match func.method_info.as_ref().map(|info| &info.receiver) {
+        None | Some(Receiver::Type(_)) => 0,
+        Some(Receiver::RefTo(..)) => 1,
+        Some(Receiver::Ref(_)) => type_table.ref_depth(receiver),
+    }
+}
+
 /// `for x of expr` iterator dispatch result.
 /// Recorded only on the iterator path (`DesugarKind::ForOfIterator`);
 /// tuple and variadic paths don't dispatch, so they don't record here.
@@ -1174,15 +1197,10 @@ pub(crate) struct ForOfIteratorInfo {
     pub(crate) into_iter: FunctionRef,
     /// Receiver-adjustment kind for the `.into_iter()` call.
     pub(crate) into_iter_self_kind: ast::SelfKind,
-    /// True when the `into_iter` impl was found on a reference-type
-    /// impl (cf. [`MethodDispatch::is_ref_impl`]).
-    pub(crate) into_iter_is_ref_impl: bool,
     /// Resolved `Iterator::next` dispatch target.
     pub(crate) next: FunctionRef,
     /// Receiver-adjustment kind for the `.next()` call.
     pub(crate) next_self_kind: ast::SelfKind,
-    /// True when the `next` impl was found on a reference-type impl.
-    pub(crate) next_is_ref_impl: bool,
     /// Item type — what the loop variable is bound to. Reify uses this
     /// to type-annotate the synthesised `let <var> = …;`.
     pub(crate) item_type: TypeId,

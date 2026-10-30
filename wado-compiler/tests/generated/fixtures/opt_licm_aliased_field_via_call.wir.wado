@@ -98,7 +98,7 @@ fn "opt_licm_aliased_field_via_call.wado/run"() with Stdout {
     let q: u64;
     let tens: i32;
     let $sroa_t_h0_140: i32;
-    let start_176: i32;
+    let start_179: i32;
     $sroa_t_h0_140 = "opt_licm_aliased_field_via_call.wado/f"(local.tee n_0(struct.new "opt_licm_aliased_field_via_call.wado//Node" { value: 0, tag: 0 }), n_0);
     out_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_23: block {
@@ -172,22 +172,22 @@ fn "opt_licm_aliased_field_via_call.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, is_negative_75);
         }
-        start_176 = out_13.used;
+        start_179 = out_13.used;
         out_13.used = is_negative_75;
-        builtin::array_set_u8(out_13.repr, start_176, 45);
+        builtin::array_set_u8(out_13.repr, start_179, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_75(out_13.used + $sroa_t_h0_140) > builtin::array_len(out_13.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_13, is_negative_75);
     }
-    start_176 = out_13.used;
+    start_179 = out_13.used;
     out_13.used = is_negative_75;
     arr = out_13.repr;
-    $sroa_t_h0_140 = start_176 + $sroa_t_h0_140;
+    $sroa_t_h0_140 = start_179 + $sroa_t_h0_140;
     b24: block {
         l25: loop {
-            break_if b24 ($sroa_t_h0_140 - start_176) < 2;
+            break_if b24 ($sroa_t_h0_140 - start_179) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_75(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, $sroa_t_h0_140 - 1, (48 + is_negative_75) - (tens * 10));
@@ -197,8 +197,8 @@ fn "opt_licm_aliased_field_via_call.wado/run"() with Stdout {
             continue l25;
         };
     };
-    if $sroa_t_h0_140 > start_176 {
-        builtin::array_set_u8(arr, start_176, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if $sroa_t_h0_140 > start_179 {
+        builtin::array_set_u8(arr, start_179, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
@@ -206,11 +206,11 @@ fn "opt_licm_aliased_field_via_call.wado/run"() with Stdout {
     $sroa_t_h0_140 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_75 = builtin::i32_wrap_i64(x >> 32_i64);
     $sroa_t_h0_140 = "opt_licm_aliased_field_via_call.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"($sroa_t_h0_140);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_176(out_13.used) + 1)), 0, out_13.repr, 0, start_176);
-    builtin::array_set_u8(arr, start_176, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_179(out_13.used) + 1)), 0, out_13.repr, 0, start_179);
+    builtin::array_set_u8(arr, start_179, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_176 = start_176 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_75, arr, 0, start_176);
+        start_179 = start_179 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_75, arr, 0, start_179);
     });
     "wasi/stream-drop-writable"(is_negative_75);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"($sroa_t_h0_140);

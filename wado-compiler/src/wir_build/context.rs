@@ -864,6 +864,20 @@ impl<'a> WirContext<'a> {
             // A `Never`-typed expression diverges, so it leaves no value behind —
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
+            // A list instance is one wrapper struct whether spelled as the
+            // instance or as its monomorphized struct.
+            ResolvedType::Struct { type_args, .. }
+            | ResolvedType::GenericInstance { type_args, .. }
+                if type_args.len() == 1 && type_table.is_list(type_id) =>
+            {
+                let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
+                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
+                    return Err(UnregisteredType::struct_ref(format!(
+                        "list wrapper struct `{lookup_name}`"
+                    )));
+                };
+                Self::ref_to(type_id)
+            }
             ResolvedType::Struct { def, type_args } => {
                 let lookup_module = if type_table.is_string(type_id) {
                     ModuleSource::string()
@@ -879,17 +893,6 @@ impl<'a> WirContext<'a> {
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
                         "struct `{lookup_name}`"
-                    )));
-                };
-                Self::ref_to(type_id)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-                if type_args.len() == 1 && type_table.is_list(type_id) =>
-            {
-                let lookup_name = list_wrapper_struct_name(type_table, type_args[0]);
-                let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
-                    return Err(UnregisteredType::struct_ref(format!(
-                        "list wrapper struct `{lookup_name}`"
                     )));
                 };
                 Self::ref_to(type_id)

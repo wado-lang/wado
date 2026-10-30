@@ -79,7 +79,7 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_163: i32;
+    let start_166: i32;
     n_20 = $inline_probe_3: block -> i32 {
         x_19 = black_box(5_i64);
         n_20 = 0;
@@ -172,22 +172,22 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_77);
         }
-        start_163 = out_12.used;
+        start_166 = out_12.used;
         out_12.used = is_negative_77;
-        builtin::array_set_u8(out_12.repr, start_163, 45);
+        builtin::array_set_u8(out_12.repr, start_166, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_77(out_12.used + n_20) > builtin::array_len(out_12.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_12, is_negative_77);
     }
-    start_163 = out_12.used;
+    start_166 = out_12.used;
     out_12.used = is_negative_77;
     arr = out_12.repr;
-    n_20 = start_163 + n_20;
+    n_20 = start_166 + n_20;
     b26: block {
         l27: loop {
-            break_if b26 (n_20 - start_163) < 2;
+            break_if b26 (n_20 - start_166) < 2;
             q = x_19 /u 100_i64;
             tens = local.tee is_negative_77(builtin::i32_wrap_i64(x_19 - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, n_20 - 1, (48 + is_negative_77) - (tens * 10));
@@ -197,8 +197,8 @@ fn "array_bounds_elim_unsigned_bound_oob.wado/run"() with Stdout {
             continue l27;
         };
     };
-    if n_20 > start_163 {
-        builtin::array_set_u8(arr, start_163, 48 + builtin::i32_wrap_i64(x_19 %u 10_i64));
+    if n_20 > start_166 {
+        builtin::array_set_u8(arr, start_166, 48 + builtin::i32_wrap_i64(x_19 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_43: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_43;

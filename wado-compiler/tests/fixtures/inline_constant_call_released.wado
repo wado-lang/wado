@@ -2,15 +2,27 @@
 // and spliced once the loop converges with the call still standing. `label`
 // reads a mutable global, so the engine cannot fold `label(3)`; it is
 // loop-free, allocates, and has one call site, so the release splices it into
-// `show`.
+// `show`. `append` stays a call, so nothing spliced into `label` while it waits
+// grows it past what the release admits.
 use { println, Stdout } from "core:cli";
 
 global mut SEED: i32 = 7;
 
+#[inline(never)]
+fn append(s: &mut String, v: i32) {
+    s.push_str(`${v}`);
+}
+
 fn label(n: i32) -> String {
     let mut s = String::with_capacity(8);
-    s.push_str(`${SEED * 2}`);
-    s.push_str(`${n}`);
+    append(&mut s, SEED * 2);
+    append(&mut s, n);
+    if SEED > n {
+        append(&mut s, SEED - n);
+    }
+    if SEED > n * 2 {
+        append(&mut s, SEED - n * 2);
+    }
     return s;
 }
 
@@ -26,7 +38,7 @@ export fn run() with Stdout {
 
 __DATA__
 {
-    "stdout": "183\n",
+    "stdout": "18363\n",
     "wir_scope": "inline_constant_call_released.wado/show",
     "wir_expect:O2": ["builtin::array_new<u8>(8)"],
     "wir_not_expect:O2": ["/label"]

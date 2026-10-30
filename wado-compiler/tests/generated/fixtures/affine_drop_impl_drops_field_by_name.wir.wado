@@ -4,12 +4,12 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<bool> {  // TypeId(1)
-    mut value: bool,
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
 }
 
-struct core:prelude//$Resource {  // TypeId(2)
-    mut value: i32,
+struct core:prelude/types.wado//Box<bool> {  // TypeId(2)
+    mut value: bool,
 }
 
 struct core:prelude/types.wado//CopyBuffer {  // TypeId(3)
@@ -202,7 +202,7 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     let $local_1_218: ref null "affine_drop_impl_drops_field_by_name.wado//$Dispatch_core:prelude/types.wado/Stream<u8>";
     let q: u64;
     let tens: i32;
-    let start_302: i32;
+    let start_305: i32;
     c_0 = struct.new "affine_drop_impl_drops_field_by_name.wado//Counter" { drops: 0 };
     rx_181 = local.tee $local_2_189($inline__effect_dispatch__core_prelude_types_wado_Stream_u8___new_2: block -> ref null "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/StreamWritable<u8>]" {
         if ref.is_null(local.tee $local_0_187(global:affine_drop_impl_drops_field_by_name.wado::$effect_core:prelude/types.wado/Stream<u8>)) == 0 {
@@ -411,22 +411,22 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, is_negative_143);
         }
-        start_302 = out_81.used;
+        start_305 = out_81.used;
         out_81.used = is_negative_143;
-        builtin::array_set_u8(out_81.repr, start_302, 45);
+        builtin::array_set_u8(out_81.repr, start_305, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_143(out_81.used + used_17) > builtin::array_len(out_81.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_81, is_negative_143);
     }
-    start_302 = out_81.used;
+    start_305 = out_81.used;
     out_81.used = is_negative_143;
     repr_110 = out_81.repr;
-    used_17 = start_302 + used_17;
+    used_17 = start_305 + used_17;
     b42: block {
         l43: loop {
-            break_if b42 (used_17 - start_302) < 2;
+            break_if b42 (used_17 - start_305) < 2;
             q = $cm_pair_5_192 /u 100_i64;
             tens = local.tee is_negative_143(builtin::i32_wrap_i64($cm_pair_5_192 - (q * 100_i64))) / 10;
             builtin::array_set_u8(repr_110, used_17 - 1, (48 + is_negative_143) - (tens * 10));
@@ -436,8 +436,8 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
             continue l43;
         };
     };
-    if used_17 > start_302 {
-        builtin::array_set_u8(repr_110, start_302, 48 + builtin::i32_wrap_i64($cm_pair_5_192 %u 10_i64));
+    if used_17 > start_305 {
+        builtin::array_set_u8(repr_110, start_305, 48 + builtin::i32_wrap_i64($cm_pair_5_192 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_56: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_56;
@@ -460,9 +460,9 @@ fn "affine_drop_impl_drops_field_by_name.wado/run"() with Stdout {
     builtin::array_copy<u8>(local.tee repr_110(builtin::array_new<u8>(local.tee is_negative_143(out_81.used) + 1)), 0, out_81.repr, 0, is_negative_143);
     builtin::array_set_u8(repr_110, is_negative_143, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_302 = rx_193.value;
+        start_305 = rx_193.value;
         is_negative_143 = is_negative_143 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(start_302, repr_110, 0, is_negative_143);
+        "core:rt/cm_stream_write_raw_all_u8"(start_305, repr_110, 0, is_negative_143);
     });
     "wasi/stream-drop-writable"(rx_193.value);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(used_17);

@@ -77,7 +77,7 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     let tens: i32;
     let $sroa_h_xs_168: ref "core:prelude//List<i32>";
     let $sroa_h_ys_169: ref "core:prelude//List<i32>";
-    let start_206: i32;
+    let start_209: i32;
     $sroa_h_xs_168 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
     $sroa_h_ys_169 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 });
     n_26 = $sroa_h_xs_168.used + $sroa_h_ys_169.used;
@@ -153,22 +153,22 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, is_negative_101);
         }
-        start_206 = out_19.used;
+        start_209 = out_19.used;
         out_19.used = is_negative_101;
-        builtin::array_set_u8(out_19.repr, start_206, 45);
+        builtin::array_set_u8(out_19.repr, start_209, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_101(out_19.used + n_26) > builtin::array_len(out_19.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_19, is_negative_101);
     }
-    start_206 = out_19.used;
+    start_209 = out_19.used;
     out_19.used = is_negative_101;
     arr = out_19.repr;
-    n_26 = start_206 + n_26;
+    n_26 = start_209 + n_26;
     b22: block {
         l23: loop {
-            break_if b22 (n_26 - start_206) < 2;
+            break_if b22 (n_26 - start_209) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_101(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, n_26 - 1, (48 + is_negative_101) - (tens * 10));
@@ -178,8 +178,8 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
             continue l23;
         };
     };
-    if n_26 > start_206 {
-        builtin::array_set_u8(arr, start_206, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if n_26 > start_209 {
+        builtin::array_set_u8(arr, start_209, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_54: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_54;
@@ -187,11 +187,11 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     n_26 = builtin::i32_wrap_i64(local.tee x("wasi/stream-new"()));
     is_negative_101 = builtin::i32_wrap_i64(x >> 32_i64);
     n_26 = "reflect_member_read_shares.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(n_26);
-    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_206(out_19.used) + 1)), 0, out_19.repr, 0, start_206);
-    builtin::array_set_u8(arr, start_206, 10);
+    builtin::array_copy<u8>(local.tee arr(builtin::array_new<u8>(local.tee start_209(out_19.used) + 1)), 0, out_19.repr, 0, start_209);
+    builtin::array_set_u8(arr, start_209, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_206 = start_206 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(is_negative_101, arr, 0, start_206);
+        start_209 = start_209 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(is_negative_101, arr, 0, start_209);
     });
     "wasi/stream-drop-writable"(is_negative_101);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(n_26);

@@ -1230,7 +1230,7 @@ struct "$tmpl$f86a99973c5f619d" {
 
 struct "$tmpl$b7f89f2160c441f4" {
     pub h0: &core:prelude/string.wado/String,
-    pub h1: &core:prelude/types.wado/Box<bool>,
+    pub h1: core:prelude/types.wado/Box<bool>,
     pub s0: core:prelude/string.wado/String,
     pub r0: core:prelude/string.wado/String,
     pub s1: core:prelude/string.wado/String,
@@ -4406,12 +4406,24 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer
     value: core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>,
 }
 
+pub struct "Box<&Array<T>>" {
+    value: &Array<T>,
+}
+
+pub struct "Box<&T>" {
+    value: &T,
+}
+
 pub struct "Box<f16>" {
     value: f16,
 }
 
 pub struct "Box<bf16>" {
     value: bf16,
+}
+
+pub struct "Box<&core:prelude/list.wado/List<T>>" {
+    value: &core:prelude/list.wado/List<T>,
 }
 
 pub struct "Box<char>" {
@@ -4502,6 +4514,10 @@ pub struct "Box<core:prelude/format.wado/Alignment>" {
     value: core:prelude/format.wado/Alignment,
 }
 
+pub struct "Box<&mut core:prelude/string.wado/String>" {
+    value: &mut core:prelude/string.wado/String,
+}
+
 pub struct "Box<core:prelude/intparse.wado/IntErrorKind>" {
     value: core:prelude/intparse.wado/IntErrorKind,
 }
@@ -4516,6 +4532,10 @@ pub struct "Box<core:prelude/primitive.wado/CharErrorKind>" {
 
 pub struct "Box<core:prelude/types.wado/Option<i32>>" {
     value: core:prelude/types.wado/Option<i32>,
+}
+
+pub struct "Box<&Array<u8>>" {
+    value: &Array<u8>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/Future<T>,core:prelude/types.wado/CopyBuffer]>>>" {
@@ -4606,12 +4626,20 @@ pub struct "Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,c
     value: core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,
 }
 
+pub struct "Box<&mut bool>" {
+    value: core:prelude/types.wado/Box<bool>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/types.wado/Subtask>>>" {
     value: core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/types.wado/Subtask>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>>>" {
     value: core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>>,
+}
+
+pub struct "Box<&core:prelude/string.wado/StrSlice>" {
+    value: &core:prelude/string.wado/StrSlice,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T>,core:prelude/types.wado/StartedRead<T>]>>" {
@@ -4638,8 +4666,28 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/types.wado/Option<[c
     value: core:prelude/types.wado/Option<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>>,
 }
 
+pub struct "Box<&Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>>" {
+    value: &Array<[core:prelude/string.wado/String,core:prelude/string.wado/String]>,
+}
+
+pub struct "Box<&Array<core:prelude/string.wado/String>>" {
+    value: &Array<core:prelude/string.wado/String>,
+}
+
 pub struct "Box<fn(i32)->core:prelude/types.wado/Result<(),()>>" {
     value: fn(i32)->core:prelude/types.wado/Result<(),()>,
+}
+
+pub struct "Box<&Array<fn()->()>>" {
+    value: &Array<fn()->()>,
+}
+
+pub struct "Box<&Array<core:prelude/types.wado/Resolution>>" {
+    value: &Array<core:prelude/types.wado/Resolution>,
+}
+
+pub struct "Box<&Array<core:prelude/types.wado/CopySettlement>>" {
+    value: &Array<core:prelude/types.wado/CopySettlement>,
 }
 
 pub struct "Box<fn mut(char)->char>" {
@@ -4648,6 +4696,14 @@ pub struct "Box<fn mut(char)->char>" {
 
 pub struct "Box<fn mut(core:prelude/string.wado/String)->bool>" {
     value: fn mut(core:prelude/string.wado/String)->boolwith(E),
+}
+
+pub struct "Box<&Array<u32>>" {
+    value: &Array<u32>,
+}
+
+pub struct "Box<&Array<u64>>" {
+    value: &Array<u64>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<u64>>" {
@@ -8892,7 +8948,7 @@ fn "core:prelude/types.wado/ReadInto::landing"(self: &core:prelude/types.wado/Re
                 let $cond: bool = lending.value;
                 if !$cond {
                     "core:builtin::cold_path"();
-                    "core:rt::panic"("core:prelude/string.wado::core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"($tmpl$b7f89f2160c441f4 { h0: &String { repr: packed"a lent destination is written only while it is lent", used: 51 }, h1: &lending, s0: String { repr: packed"Assertion failed in ReadInto::landing at core:prelude/types.wado:472: ", used: 70 }, r0: String { repr: packed"Assertion failed in ReadInto::landing at core:prelude/types.wado:472: ", used: 70 }, s1: String { repr: packed"\ncondition: *lending\nlending: ", used: 30 }, r1: String { repr: packed"\ncondition: *lending\nlending: ", used: 30 }, s2: String { repr: packed"\n", used: 1 }, r2: String { repr: packed"\n", used: 1 } }));
+                    "core:rt::panic"("core:prelude/string.wado::core:prelude/string.wado/String::format<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,[core:prelude/string.wado/String,&mut bool]>"($tmpl$b7f89f2160c441f4 { h0: &String { repr: packed"a lent destination is written only while it is lent", used: 51 }, h1: lending, s0: String { repr: packed"Assertion failed in ReadInto::landing at core:prelude/types.wado:472: ", used: 70 }, r0: String { repr: packed"Assertion failed in ReadInto::landing at core:prelude/types.wado:472: ", used: 70 }, s1: String { repr: packed"\ncondition: *lending\nlending: ", used: 30 }, r1: String { repr: packed"\ncondition: *lending\nlending: ", used: 30 }, s2: String { repr: packed"\n", used: 1 }, r2: String { repr: packed"\n", used: 1 } }));
                 }
             }
             return [self.ptr, "core:prelude/primitive.wado::i32::min"(room, self.room), 0];
@@ -8995,7 +9051,7 @@ pub fn "$hole_fmt$core:prelude/types.wado/$tmpl$b7f89f2160c441f4"(t: &core:prelu
             *t.h0."core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(f);
         },
         1 => $block_1: {
-            *t.h1."&mut bool^core:prelude/traits.wado/Inspect::inspect"(f);
+            Box<core:prelude/types.wado/Box<bool>> { value: t.h1 }."&mut bool^core:prelude/traits.wado/Inspect::inspect"(f);
         },
         _ => "core:builtin::unreachable"(),
     };
@@ -9657,9 +9713,9 @@ pub fn "core:builtin/array_new<i64>"(len: i32) -> Array<i64>;
 
 pub fn "core:builtin/call_indirect_stderr_write_via_stream<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>"(rx: core:prelude/types.wado/Stream<u8>) -> core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>;
 
-pub fn "&mut bool^core:prelude/traits.wado/Inspect::inspect"(self: &core:prelude/types.wado/Box<bool>, f: &mut core:prelude/format.wado/Formatter) {
+pub fn "&mut bool^core:prelude/traits.wado/Inspect::inspect"(self: core:prelude/types.wado/Box<core:prelude/types.wado/Box<bool>>, f: &mut core:prelude/format.wado/Formatter) {
     f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"&mut ", used: 5 });
-    let inner: core:prelude/types.wado/Box<bool> = *self;
+    let inner: core:prelude/types.wado/Box<bool> = self.value;
     inner."bool^core:prelude/traits.wado/Inspect::inspect"(f);
 }
 
@@ -9757,7 +9813,7 @@ pub fn "core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/
 
 pub fn "core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(self: &core:prelude/string.wado/StrSlice, other: &core:prelude/string.wado/String) -> bool {
     let len: i32 = self."core:prelude/string.wado/StrSlice::len"();
-    let b: core:prelude/string.wado/StrSlice = other."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    let b: core:prelude/string.wado/StrSlice = Box<&mut core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
     if (len != b."core:prelude/string.wado/StrSlice::len"()) {
         return false;
     }
@@ -10833,7 +10889,7 @@ pub fn "core:prelude/string.wado/String::format<core:prelude/fpfmt.wado/$tmpl$b0
 }
 
 pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self: &mut core:prelude/string.wado/String, other: &core:prelude/string.wado/String) {
-    other."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+    Box<&mut core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
 pub fn "core:builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
@@ -11509,8 +11565,8 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/fpfmt.wado/$tmpl$f86a
     return "core:prelude/fpfmt.wado::$template_segment$core:prelude/fpfmt.wado/$tmpl$f86a99973c5f619d"(t, (2 * self.index))."core:prelude/string.wado/String::internal_view"();
 }
 
-fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &&core:prelude/string.wado/String, out: &mut core:prelude/string.wado/String) {
-    *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
+fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: core:prelude/types.wado/Box<&mut core:prelude/string.wado/String>, out: &mut core:prelude/string.wado/String) {
+    self.value."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
 }
 
 pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/fpfmt.wado/$tmpl$b0546651bf487e1a,u64>::fmt"(self: &core:prelude/traits.wado/TemplateHole<core:prelude/fpfmt.wado/$tmpl$b0546651bf487e1a,u64>, t: &core:prelude/fpfmt.wado/$tmpl$b0546651bf487e1a, f: &mut core:prelude/format.wado/Formatter) {
@@ -11909,8 +11965,8 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$b14
 }
 
 // retains: self
-fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &&core:prelude/string.wado/String) -> core:prelude/string.wado/StrSlice {
-    return *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: core:prelude/types.wado/Box<&mut core:prelude/string.wado/String>) -> core:prelude/string.wado/StrSlice {
+    return self.value."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
 }
 
 pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,&mut bool>::fmt"(self: &core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f89f2160c441f4,core:prelude/types.wado/Box<bool>>, t: &core:prelude/types.wado/$tmpl$b7f89f2160c441f4, f: &mut core:prelude/format.wado/Formatter) {
@@ -11922,7 +11978,7 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/types.wado/$tmpl$b7f8
 }
 
 pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/StrSlice>"(self: &mut core:prelude/string.wado/String, other: &core:prelude/string.wado/StrSlice) {
-    other."&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+    Box<&core:prelude/string.wado/StrSlice> { value: other }."&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
 // retains: t
@@ -12053,8 +12109,8 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$59e16
     return "core:prelude/list.wado::$template_segment$core:prelude/list.wado/$tmpl$59e16269228f9c88"(t, (2 * self.index))."core:prelude/string.wado/String::internal_view"();
 }
 
-fn "&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &&core:prelude/string.wado/StrSlice, out: &mut core:prelude/string.wado/String) {
-    *self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
+fn "&core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: core:prelude/types.wado/Box<&core:prelude/string.wado/StrSlice>, out: &mut core:prelude/string.wado/String) {
+    self.value."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
 }
 
 pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,i32>::fmt"(self: &core:prelude/traits.wado/TemplateHole<core:prelude/list.wado/$tmpl$4432d2d1cbeba55c,i32>, t: &core:prelude/list.wado/$tmpl$4432d2d1cbeba55c, f: &mut core:prelude/format.wado/Formatter) {

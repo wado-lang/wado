@@ -1,0 +1,34 @@
+// `&self` of an impl for `&Text` is a `&&Text`, a box holding the reference.
+// `part` retains `self`, but what it retains is the `Text` the box's payload
+// refers to, so the box scalarizes to the payload and no call allocates one.
+use { println, Stdout } from "core:cli";
+
+struct Text {
+    s: String,
+}
+
+trait View with () {
+    fn part(&self) -> StrSlice;
+}
+
+impl View for &Text {
+    #[inline(never)]
+    fn part(&self) -> StrSlice {
+        return self.s.as_str_slice();
+    }
+}
+
+fn measure<V: View>(v: V) -> i32 {
+    return v.part().len();
+}
+
+export fn run() with Stdout {
+    let t = Text { s: builtin::black_box("hello") };
+    println(`${measure(&t)}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n",
+    "wir_not_expect:O2": ["struct.new \"core:prelude/types.wado//Box<&"]
+}

@@ -1,0 +1,15 @@
+// A `&mut T` reaches a `&T` parameter at any depth: the box of a `&U` is the
+// box of a `&mut U`, so `&r` with `r: &mut String` is a `&&String`.
+
+fn len_of(x: &&String) -> i32 {
+    return x.len();
+}
+
+test "a reference to a mutable reference reaches a reference to a shared one" {
+    let mut s: String = "abc";
+    let r = &mut s;
+    assert len_of(&r) == 3;
+}
+
+__DATA__
+{"test": {}}

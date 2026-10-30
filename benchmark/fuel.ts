@@ -2,13 +2,14 @@
 //
 // Usage (from the repository root): node benchmark/fuel.ts series|check|write
 //
-//   series  prints the series
+//   series  prints the series at every level of RECORDED_LEVELS
 //   check   fails on any difference from benchmark/fuel.json, naming each
 //           row that moved
 //   write   rewrites benchmark/fuel.json
 //
 // Each mode first measures, under `wado test --report-fuel` (the dev build,
-// through scripts/dev-bin.sh), at each level of OPT_LEVELS. A series is named
+// through scripts/dev-bin.sh). Only `-O2` is held to a baseline: it is the
+// level a performance change answers for, and the others are for reference. A series is named
 // `<benchmark directory>/<region label> (<level>)` and holds the region's
 // fuel, in github-action-benchmark's `customSmallerIsBetter` form. Fuel does
 // not depend on the host, so a difference is the program's or wasmtime's,
@@ -18,7 +19,8 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-const OPT_LEVELS = ["-O1", "-O2", "-O3"];
+const RECORDED_LEVELS = ["-O1", "-O2", "-O3"];
+const BASELINE_LEVELS = ["-O2"];
 const REPORT = "build/fuel.json";
 const BASELINE = "benchmark/fuel.json";
 
@@ -50,8 +52,8 @@ function measure(level: string): Series[] {
   return series;
 }
 
-function measureAll(): Series[] {
-  const series = OPT_LEVELS.flatMap(measure);
+function measureAll(levels: string[]): Series[] {
+  const series = levels.flatMap(measure);
   if (new Set(series.map((s) => s.name)).size !== series.length) {
     throw new Error("two regions share a series name");
   }
@@ -86,7 +88,7 @@ function main(): void {
     console.error("usage: node benchmark/fuel.ts series|check|write");
     process.exit(1);
   }
-  const current = measureAll();
+  const current = measureAll(mode === "series" ? RECORDED_LEVELS : BASELINE_LEVELS);
   if (mode === "series") {
     process.stdout.write(render(current));
   } else if (mode === "write") {

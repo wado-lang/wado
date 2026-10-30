@@ -2632,7 +2632,7 @@ impl FunctionTranslator<'_, '_> {
                 | NirBinaryOp::GtEq
                 | NirBinaryOp::And
                 | NirBinaryOp::Or
-                | NirBinaryOp::RefNotEq
+                | NirBinaryOp::NotIdentical
         ) && let ResolvedType::Primitive(prim) = self.type_table.get(left_ty)
         {
             return Self::truncate_to_sub_i32(result, prim);

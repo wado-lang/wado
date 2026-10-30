@@ -357,7 +357,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
     let out_17: ref "core:prelude/string.wado//String";
     let new_used_24: i32;
     let start_25: i32;
-    let $sroa_$iter_0_repr_56: ref "Array<core:prelude/string.wado/String>";
+    let $sroa_$iter_0_repr_52: ref "Array<core:prelude/string.wado/String>";
     if @unlikely(local.tee new_used_24(local.tee out_17(s.buf).used + 1) > builtin::array_len(out_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_17, new_used_24);
@@ -371,12 +371,12 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
     })) {
         $local_6 = ref.cast "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>::Ok"($match_7).payload_0;
         new_used_24 = self.used;
-        $sroa_$iter_0_repr_56 = self.repr;
+        $sroa_$iter_0_repr_52 = self.repr;
         start_25 = 0;
         b21: block {
             l22: loop {
                 break_if b21 start_25 >= new_used_24;
-                out_17 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_56, start_25);
+                out_17 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_$iter_0_repr_52, start_25);
                 start_25 = start_25 + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<core:prelude/string.wado/String>"($local_6, out_17));
                 continue l22;
@@ -399,7 +399,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
     let new_used_24: i32;
     let start_25: i32;
     let ref_val: i32;
-    let $sroa_$iter_0_repr_56: ref Array<i32>;
+    let $sroa_$iter_0_repr_52: ref Array<i32>;
     if @unlikely(local.tee new_used_24(local.tee out_17(s.buf).used + 1) > builtin::array_len(out_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_17, new_used_24);
@@ -413,12 +413,12 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
     })) {
         $local_6 = ref.cast "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>::Ok"($match_7).payload_0;
         new_used_24 = self.used;
-        $sroa_$iter_0_repr_56 = self.repr;
+        $sroa_$iter_0_repr_52 = self.repr;
         start_25 = 0;
         b27: block {
             l28: loop {
                 break_if b27 start_25 >= new_used_24;
-                ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_56, start_25);
+                ref_val = builtin::array_get_value<i32>($sroa_$iter_0_repr_52, start_25);
                 start_25 = start_25 + 1;
                 drop("serde_serialize_array.wado/serde_serialize_array.wado/JsonSeqSerializer^serde_serialize_array.wado/SerializeSeq::element<i32>$sroa[value.value]"($local_6, ref_val));
                 continue l28;
@@ -553,7 +553,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_seria
     let arr: ref Array<u8>;
     let q: u64;
     let tens: i32;
-    let start_153: i32;
+    let start_156: i32;
     out_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_view_20: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_20;
@@ -626,22 +626,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_seria
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
         }
-        start_153 = out_3.used;
+        start_156 = out_3.used;
         out_3.used = is_negative_65;
-        builtin::array_set_u8(out_3.repr, start_153, 45);
+        builtin::array_set_u8(out_3.repr, start_156, 45);
     } else {
     }
     if @unlikely(local.tee is_negative_65(out_3.used + t) > builtin::array_len(out_3.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_3, is_negative_65);
     }
-    start_153 = out_3.used;
+    start_156 = out_3.used;
     out_3.used = is_negative_65;
     arr = out_3.repr;
-    t = start_153 + t;
+    t = start_156 + t;
     b61: block {
         l62: loop {
-            break_if b61 (t - start_153) < 2;
+            break_if b61 (t - start_156) < 2;
             q = x /u 100_i64;
             tens = local.tee is_negative_65(builtin::i32_wrap_i64(x - (q * 100_i64))) / 10;
             builtin::array_set_u8(arr, t - 1, (48 + is_negative_65) - (tens * 10));
@@ -651,8 +651,8 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::format<serde_seria
             continue l62;
         };
     };
-    if t > start_153 {
-        builtin::array_set_u8(arr, start_153, 48 + builtin::i32_wrap_i64(x %u 10_i64));
+    if t > start_156 {
+        builtin::array_set_u8(arr, start_156, 48 + builtin::i32_wrap_i64(x %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_39: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_39;

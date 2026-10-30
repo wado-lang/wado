@@ -542,6 +542,8 @@ fn field_slot_type(
 }
 
 fn register_box_structs(ctx: &mut WirContext<'_>) {
+    // A box of a reference to a resource holds the resource's object.
+    ctx.handle_box = Some(register_resource_object(ctx));
     let type_table = &*ctx.package.type_table.borrow();
     for s in &ctx.package.structs {
         if is_box_instance(s, type_table) {
@@ -553,7 +555,6 @@ fn register_box_structs(ctx: &mut WirContext<'_>) {
     // Option<Stream>, Option<Future>, etc., where the inner type maps to i32 at the
     // Wasm level but there's no explicit Option<i32> usage in the source code.
     ensure_box_type(ctx, "i32", WirType::I32);
-    ctx.handle_box = Some(register_resource_object(ctx));
 }
 
 /// The struct an affine resource is (WEP: Affine Types).

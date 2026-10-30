@@ -97,6 +97,22 @@ let val = **rr;       // double dereference
 assert val == 42;
 ```
 
+A reference is a value that assignment replaces, as a primitive is. So a
+`&mut &T` points to the variable holding the reference, and a write through it
+makes that variable refer elsewhere, leaving the old referent alone:
+
+<!-- {"fixture":"ref_to_ref_rebinds_the_binding.wado"} -->
+
+```wado
+let x = builtin::black_box(1);
+let y = builtin::black_box(2);
+let mut r = &x;
+let rr = &mut r;
+*rr = &y;
+assert *r == 2;
+assert x == 1;
+```
+
 ### Automatic Coercion (`&mut` to `&`)
 
 Mutable references automatically coerce to immutable references when needed:
@@ -168,11 +184,12 @@ Rationale: [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value
 
 ### Mutable References to Fields and Elements
 
-A primitive, `enum`, `flags` or `fn` field or element keeps nothing that a write
-through a `&mut` could reach, since assignment replaces it. So taking `&mut` of
-one is an error. That holds whether it is written `&mut x.f` or `&mut xs[i]`, or
-taken implicitly by a `&mut self` receiver. A `&mut` of a local is fine, since it
-writes to the variable itself.
+A primitive, `enum`, `flags`, `fn` or reference field or element keeps nothing
+that a write through a `&mut` could reach, since assignment replaces it. So
+taking `&mut` of one is an error. That holds whether it is written `&mut x.f` or
+`&mut xs[i]`, or taken implicitly by a `&mut self` receiver. A `&mut` of a local
+is fine, since it writes to the variable itself. A `&mut self` method called on
+a reference field reaches the referent, not the field, so it is fine too.
 
 A `variant` field or element admits `&mut`. The reference points to a copy of
 the variant that shares its payload with the original. So a mutation reached
@@ -218,9 +235,9 @@ ref_eq(&xs, &zs);               // false or true: the copy may be elided
 ```
 
 A `&` to a `List` element or a struct field of a type that assignment replaces
-(a primitive, `enum`, `flags`, `variant` or `fn`) points to a copy of the value,
-taken where the `&` is written. It does not see a later assignment to the
-element or field, and two such references are two places:
+(a primitive, `enum`, `flags`, `variant`, `fn` or reference) points to a copy
+of the value, taken where the `&` is written. It does not see a later
+assignment to the element or field, and two such references are two places:
 
 <!-- {"fixture": "spec_memory_ref_identity.wado"} -->
 

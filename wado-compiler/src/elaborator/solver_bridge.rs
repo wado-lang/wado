@@ -1456,15 +1456,13 @@ impl SolverBridge {
             program.traits.entry(id).or_default().holds_for_all = true;
         }
         // A reference is itself the thing a `Ref` bound asks for, and copies
-        // whatever it points to.
-        let holds_of_a_reference: Vec<DefId> = [
-            CompilerItem::Ref,
-            CompilerItem::RefMut,
-            CompilerItem::Copyable,
-        ]
-        .into_iter()
-        .filter_map(|item| tysys.compiler_trait_def(item))
-        .collect();
+        // whatever it points to. It is no `RefMut`: as a referent it is
+        // replaced on assign, so a `&mut` to one is a box (WEP 2026-06-13).
+        let holds_of_a_reference: Vec<DefId> = [CompilerItem::Ref, CompilerItem::Copyable]
+            .into_iter()
+            .filter_map(|item| tysys.compiler_trait_def(item))
+            .collect();
+        let ref_mut = tysys.compiler_trait_def(CompilerItem::RefMut);
         // A default naming another parameter is opaque to the solver.
         let closed = Written {
             resolutions: &tysys.resolutions,
@@ -1487,7 +1485,9 @@ impl SolverBridge {
                 .collect();
             let on_ref = if holds_of_a_reference.contains(&trait_) {
                 RefRule::Always
-            } else if tysys.ref_denies_bound(tysys.on_bound_of(trait_), trait_) {
+            } else if ref_mut == Some(trait_)
+                || tysys.ref_denies_bound(tysys.on_bound_of(trait_), trait_)
+            {
                 RefRule::Never
             } else {
                 RefRule::Inherits

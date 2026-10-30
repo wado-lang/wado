@@ -11,10 +11,12 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TypeId,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TypeId,
 };
+use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
-use crate::type_table::TypeTable;
+use crate::type_table::{TypeKey, TypeTable};
 
 /// Type-level boxing facts produced by [`prepare_types`].
 pub struct BoxPlan {
@@ -84,7 +86,7 @@ pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize
 }
 
 fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
-    let address_taken = func.address_taken_locals.clone();
+    let address_taken = still_taken(func);
     let param_count = u32::try_from(func.params.len()).unwrap();
 
     // (param_idx, shadow_local_idx, box_type_id, original_type_id, name)
@@ -174,6 +176,36 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
     func.address_taken_locals = effective_address_taken;
 }
 
+/// The recorded address-taken locals whose `&` the body still takes. A
+/// rewrite after the record may fold one away, as a receiver's `*&r` folds
+/// to `r`, and boxing that local would cost a box nothing reads through.
+fn still_taken(func: &TirFunction) -> IndexSet<u32> {
+    struct Taken(IndexSet<u32>);
+    impl TirRefVisitor for Taken {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if let TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } = &expr.kind
+                && let TirExprKind::Local { index, .. } = inner.kind
+            {
+                self.0.insert(index);
+            }
+            self.walk_expr_in_frame(expr);
+        }
+    }
+    let Some(body) = &func.body else {
+        return IndexSet::default();
+    };
+    let mut taken = Taken(IndexSet::default());
+    taken.visit_block(body);
+    func.address_taken_locals
+        .iter()
+        .copied()
+        .filter(|local| taken.0.contains(local))
+        .collect()
+}
+
 /// One `Ref` / `MutRef` `TypeId` about to be redefined onto its `Box<T>` struct.
 struct BoxRewrite {
     type_id: TypeId,
@@ -189,12 +221,15 @@ struct TypeBuilder {
     box_module_source: ModuleSource,
     /// `(arity, return type)` → the function `TypeId` its `Box` is keyed on.
     fn_box_repr: IndexMap<(usize, TypeId), TypeId>,
+    /// `(pointee, depth)` → the reference `TypeId` its `Box` is keyed on.
+    ref_box_repr: IndexMap<(TypeKey, usize), TypeId>,
 }
 
 impl TypeBuilder {
     fn new(box_module_source: ModuleSource) -> Self {
         Self {
             fn_box_repr: IndexMap::default(),
+            ref_box_repr: IndexMap::default(),
             box_struct_types: IndexMap::default(),
             box_type_ids: IndexSet::default(),
             generated_structs: Vec::new(),
@@ -202,22 +237,30 @@ impl TypeBuilder {
         }
     }
 
-    /// The `TypeId` a `Box` is keyed on: itself, or for a function type the
-    /// first one seen with its `(arity, return type)`. Every `Box<fn(...)>`
-    /// holds one `ref struct` field whatever the signature, so one serves all.
+    /// The `TypeId` a `Box` is keyed on: itself, or the first one seen with its
+    /// representation. Every `Box<fn(...)>` holds one `ref struct` field
+    /// whatever the signature, keyed by `(arity, return type)`; a box of `&X`
+    /// and one of `&mut X` hold the same reference, keyed by the pointee and the
+    /// depth, so a `&mut` argument reaches a `&` parameter at any depth.
     fn box_key(&mut self, inner: TypeId, type_table: &TypeTable) -> TypeId {
-        let ResolvedType::Function {
-            params,
-            return_type,
-            ..
-        } = type_table.get(inner)
-        else {
-            return inner;
-        };
-        *self
-            .fn_box_repr
-            .entry((params.len(), *return_type))
-            .or_insert(inner)
+        match type_table.get(inner) {
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => *self
+                .fn_box_repr
+                .entry((params.len(), *return_type))
+                .or_insert(inner),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
+                let pointee = type_table.type_key(type_table.peel_refs(inner));
+                *self
+                    .ref_box_repr
+                    .entry((pointee, type_table.ref_depth(inner)))
+                    .or_insert(inner)
+            }
+            _ => inner,
+        }
     }
 
     fn get_or_create_box_type(
@@ -322,9 +365,10 @@ impl TypeBuilder {
         let mut replacements: Vec<BoxRewrite> = Vec::new();
 
         for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
-            let inner = match *type_table.get(type_id) {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => inner,
-                _ => continue,
+            // A newtype over a reference reads as one once erased, but it is
+            // that reference's slot, which is redefined under its own id.
+            let Some((inner, _)) = type_table.spelled_ref(type_id) else {
+                continue;
             };
             let key = self.box_key(inner, type_table);
             if let Some(&box_type_id) = self.box_struct_types.get(&key) {
@@ -345,6 +389,7 @@ impl TypeBuilder {
             self.box_type_ids.insert(r.type_id);
             type_table.register_box_payload(r.type_id, r.payload);
         }
+        type_table.follow_redefinitions();
         for (&inner, &wrapper) in &self.box_struct_types {
             type_table.register_box_payload(wrapper, inner);
         }

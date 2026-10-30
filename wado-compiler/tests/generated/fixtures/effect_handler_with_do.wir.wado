@@ -4,20 +4,20 @@
 
 enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Cancelled = 2 };  // TypeId(0)
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>> {  // TypeId(1)
+struct core:prelude//$Resource {  // TypeId(1)
+    mut value: i32,
+}
+
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/Subtask>> {  // TypeId(2)
     mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/Subtask>",
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>> {  // TypeId(2)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ResultBuffer>> {  // TypeId(3)
     mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ResultBuffer>",
 }
 
-struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>> {  // TypeId(3)
+struct core:prelude/types.wado//Box<core:prelude/types.wado/Option<core:prelude/types.wado/ArgBuffer>> {  // TypeId(4)
     mut value: ref null "core:prelude/types.wado//Option<core:prelude/types.wado/ArgBuffer>",
-}
-
-struct core:prelude//$Resource {  // TypeId(4)
-    mut value: i32,
 }
 
 struct core:prelude/types.wado//ArgBuffer {  // TypeId(5)
@@ -188,8 +188,8 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     let digit_count_82: i32;
     let q: u64;
     let tens: i32;
-    let new_used_233: i32;
-    let start_234: i32;
+    let new_used_236: i32;
+    let start_237: i32;
     clock = struct.new "effect_handler_with_do.wado//FixedClock" { mark: 12345_i64 };
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = struct.new "effect_handler_with_do.wado//$Dispatch_wasi:clocks/monotonic_clock.wado/MonotonicClock" { outer: local.tee $save_wasi:clocks/monotonic_clock.wado/MonotonicClock(global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock), op_now: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_1" { $capture_0: clock }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_0" }, op_get_resolution: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_with_do.wado//$Closure_2" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_1" }, op_wait_until: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_with_do.wado//$Closure_3" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_2" }, op_wait_for: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_with_do.wado//$Closure_4" {  }, func: ref.func "closure/effect_handler_with_do.wado/$closure_wrapper_3" } };
     $local_2 = $inline__effect_dispatch__wasi_clocks_monotonic_clock_wado_MonotonicClock__now_1: block -> u64 {
@@ -270,42 +270,42 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
         }
         break $inline_count_digits_u64_1: 20;
     };
-    if @unlikely(local.tee new_used_233(out_20.used + digit_count_82) > builtin::array_len($load_4)) {
+    if @unlikely(local.tee new_used_236(out_20.used + digit_count_82) > builtin::array_len($load_4)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, new_used_233);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_20, new_used_236);
     }
-    start_234 = out_20.used;
-    out_20.used = new_used_233;
+    start_237 = out_20.used;
+    out_20.used = new_used_236;
     repr_49 = out_20.repr;
-    digit_count_82 = start_234 + digit_count_82;
+    digit_count_82 = start_237 + digit_count_82;
     b22: block {
         l23: loop {
-            break_if b22 (digit_count_82 - start_234) < 2;
+            break_if b22 (digit_count_82 - start_237) < 2;
             q = $local_2 /u 100_i64;
-            tens = local.tee new_used_233(builtin::i32_wrap_i64($local_2 - (q * 100_i64))) / 10;
-            builtin::array_set_u8(repr_49, digit_count_82 - 1, (48 + new_used_233) - (tens * 10));
+            tens = local.tee new_used_236(builtin::i32_wrap_i64($local_2 - (q * 100_i64))) / 10;
+            builtin::array_set_u8(repr_49, digit_count_82 - 1, (48 + new_used_236) - (tens * 10));
             builtin::array_set_u8(repr_49, digit_count_82 - 2, 48 + tens);
             digit_count_82 = digit_count_82 - 2;
             $local_2 = q;
             continue l23;
         };
     };
-    if digit_count_82 > start_234 {
-        builtin::array_set_u8(repr_49, start_234, 48 + builtin::i32_wrap_i64($local_2 %u 10_i64));
+    if digit_count_82 > start_237 {
+        builtin::array_set_u8(repr_49, start_237, 48 + builtin::i32_wrap_i64($local_2 %u 10_i64));
     }
     $inline_core_prelude_string_wado_String__internal_push_view_42: block {
         break $inline_core_prelude_string_wado_String__internal_push_view_42;
     };
     digit_count_82 = builtin::i32_wrap_i64(local.tee $local_2("wasi/stream-new"()));
-    new_used_233 = builtin::i32_wrap_i64($local_2 >> 32_i64);
+    new_used_236 = builtin::i32_wrap_i64($local_2 >> 32_i64);
     digit_count_82 = "effect_handler_with_do.wado/$cm_binding__wasi:cli/stdout@0.3.0#write-via-stream"(digit_count_82);
-    builtin::array_copy<u8>(local.tee repr_49(builtin::array_new<u8>(local.tee start_234(out_20.used) + 1)), 0, out_20.repr, 0, start_234);
-    builtin::array_set_u8(repr_49, start_234, 10);
+    builtin::array_copy<u8>(local.tee repr_49(builtin::array_new<u8>(local.tee start_237(out_20.used) + 1)), 0, out_20.repr, 0, start_237);
+    builtin::array_set_u8(repr_49, start_237, 10);
     drop(block -> "core:prelude/types.wado//enum:CopyResult" {
-        start_234 = start_234 + 1;
-        "core:rt/cm_stream_write_raw_all_u8"(new_used_233, repr_49, 0, start_234);
+        start_237 = start_237 + 1;
+        "core:rt/cm_stream_write_raw_all_u8"(new_used_236, repr_49, 0, start_237);
     });
-    "wasi/stream-drop-writable"(new_used_233);
+    "wasi/stream-drop-writable"(new_used_236);
     "wasi/future-drop-readable:transmission-wasi:cli/types.wado#ErrorCode"(digit_count_82);
     global:effect_handler_with_do.wado::$effect_wasi:clocks/monotonic_clock.wado/MonotonicClock = $save_wasi:clocks/monotonic_clock.wado/MonotonicClock;
 }
