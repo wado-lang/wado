@@ -262,6 +262,8 @@ nodes
 outputs
     Y: f32 [N=N, Y1=3]
     Z: f32 [N=N, Y1=3]
+padding
+    N: padded
 
 1 kernels, 1 fused, 1 folded, 1 aliases, 0 branches, 0 reshapes spread, 0 transposes viewed
 ";
@@ -320,6 +322,8 @@ test "dump reports as JSON, every kernel with where its output goes" {
     assert nodes[1].takes_in == ["H"] as List<String>;
     assert nodes[1].kept_bytes == Option::Some("12 * N");
     assert nodes[2].lowering matches { Alias } && nodes[2].written matches { None };
+    let padding = from_string::<Report>(&json).unwrap().padding;
+    assert padding.len() == 1 && padding[0].symbol == "N" && padding[0].refused matches { None };
 }
 
 test "dump's format is text or json" {

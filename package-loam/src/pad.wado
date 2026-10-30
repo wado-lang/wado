@@ -1,0 +1,175 @@
+//! Which lengths the run may pad to a capacity, decided at build time. A padded
+//! axis keeps its valid elements a prefix, so each operator keeps the padding
+//! apart, reads it masked to its identity, or refuses the length. See
+//! devices.md § "An extent that varies is a capacity".
+
+use { HashMap } from "core:collections";
+use { Graph, Node } from "./graph.wado";
+use { Checked, split_axis } from "./infer.wado";
+use { branches } from "./plan.wado";
+use { Poly } from "./poly.wado";
+use { Shape, short_of } from "./shape.wado";
+
+/// Why an operator keeps a length from being padded.
+#[wire(name_policy = "snake_case")]
+pub enum Why {
+    /// A regrouping puts the length behind an axis before it, which
+    /// interleaves the padding with the valid elements.
+    MergedBehind,
+    /// A regrouping lines its axes up with the length's at no point.
+    Unaligned,
+    /// A `Split` cuts along the length, so padding lands inside a part.
+    SplitAlong,
+    /// A window reads padding beside the valid elements.
+    Window,
+}
+
+impl Display for Why {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(match self {
+            MergedBehind => "it merges behind an axis before it",
+            Unaligned => "the regrouping lines up with it at no axis",
+            SplitAlong => "it splits along it",
+            Window => "a window reads across it",
+        });
+    }
+}
+
+/// The node that keeps a length from being padded: its first output, its
+/// operator, and why.
+pub struct Refusal {
+    pub node: String,
+    pub op: String,
+    pub why: Why,
+}
+
+/// One symbol an input's axes read, padded unless a node refused it.
+pub struct Judged {
+    pub symbol: String,
+    pub refused: Option<Refusal> = null,
+}
+
+impl Display for Judged {
+    fn fmt(&self, f: &mut Formatter) {
+        match &self.refused {
+            None => f.write_str(`${self.symbol}: padded`),
+            Some(r) => f.write_str(`${self.symbol}: refused at ${r.node} = ${r.op}: ${r.why}`),
+        }
+    }
+}
+
+/// Each symbol an input's axes read, in the order they first read it.
+pub struct Padding {
+    pub symbols: List<Judged>,
+}
+
+pub fn padding(graph: &Graph, checked: &Checked) -> Padding {
+    let mut refusals = HashMap::<String, Refusal>::new();
+    judge_scope(graph, checked, &mut refusals);
+    let mut symbols: List<Judged> = [];
+    for let vi of &graph.inputs {
+        for let axis of checked.shapes[vi.name].axes {
+            for let symbol of axis.extent.poly().symbols() {
+                if !symbols.into_iter().any(|j| j.symbol == symbol) {
+                    symbols.push(Judged { symbol, refused: refusals.get(symbol) });
+                }
+            }
+        }
+    }
+    return Padding { symbols };
+}
+
+/// Each refusal the nodes of a scope make, the first one per symbol kept.
+fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, Refusal>) {
+    for let node of &graph.nodes {
+        if node.outputs.into_iter().all(|t| checked.known.contains_key(t)) {
+            continue;
+        }
+        if checked.branches.contains_key(node.outputs[0]) {
+            for let b of branches(node, checked) {
+                judge_scope(&b.graph, &b.checked, refusals);
+            }
+            continue;
+        }
+        let Some([read, why]) = refused_by(node, checked) else {
+            continue;
+        };
+        for let symbol of read {
+            if !refusals.contains_key(symbol) {
+                refusals[symbol] = Refusal { node: node.outputs[0], op: node.op, why };
+            }
+        }
+    }
+}
+
+/// The symbols `node` keeps from being padded, and why, where it keeps any.
+fn refused_by(node: &Node, checked: &Checked) -> Option<[List<String>, Why]> {
+    let shapes = &checked.shapes;
+    let op = node.op;
+    let regroups = op == "Reshape" || op == "Flatten" || op == "Squeeze" || op == "Unsqueeze";
+    let windowed = op == "Conv" || op == "MaxPool";
+    // A folded operand stage 0 gives no axes holds no padding.
+    if !(regroups || windowed || op == "Split") || !shapes.contains_key(node.inputs[0]) {
+        return null;
+    }
+    let x = shapes[node.inputs[0]];
+    if regroups {
+        return misaligned(&x, &shapes[node.outputs[0]]);
+    }
+    if op == "Split" {
+        // Stage 0 resolved the axis already.
+        let axis = split_axis(node, x.rank()).unwrap();
+        return refusing(x.axes[axis].extent.poly().symbols(), Why::SplitAlong);
+    }
+    // A window runs over each row of the batch, axis 0, on its own.
+    let mut read: List<String> = [];
+    for let axis of x.axes.into_iter().skip(1) {
+        read.extend(&axis.extent.poly().symbols());
+    }
+    return refusing(read, Why::Window);
+}
+
+fn refusing(read: List<String>, why: Why) -> Option<[List<String>, Why]> {
+    return if read.is_empty() { null } else { Option::Some([read, why]) };
+}
+
+/// The symbols a regrouping of `from` into `to` reads behind the leading axis
+/// of some run, a run being the fewest axes on each side holding the same
+/// elements. Only a run's leading axis keeps its valid elements a prefix.
+/// Extent-1 axes hold no element, so they lead no run.
+fn misaligned(from: &Shape, to: &Shape) -> Option<[List<String>, Why]> {
+    let ins = extents_past_units(from);
+    let outs = extents_past_units(to);
+    let mut behind: List<String> = [];
+    let mut i = 0;
+    let mut j = 0;
+    while i < ins.len() && j < outs.len() {
+        let mut consumed = ins[i];
+        let mut produced = outs[j];
+        i += 1;
+        j += 1;
+        while consumed != produced {
+            if i < ins.len() && short_of(&consumed, &produced) && let Some(c) = consumed.try_mul(&ins[i]) {
+                behind.extend(&ins[i].symbols());
+                consumed = c;
+                i += 1;
+            } else if j < outs.len() && short_of(&produced, &consumed) && let Some(p) = produced.try_mul(&outs[j]) {
+                behind.extend(&outs[j].symbols());
+                produced = p;
+                j += 1;
+            } else {
+                let mut read = consumed.symbols();
+                read.extend(&produced.symbols());
+                for let e of ins.into_iter().skip(i).chain(outs.into_iter().skip(j)) {
+                    read.extend(&e.symbols());
+                }
+                return refusing(read, Why::Unaligned);
+            }
+        }
+    }
+    return refusing(behind, Why::MergedBehind);
+}
+
+fn extents_past_units(shape: &Shape) -> List<Poly> {
+    return shape.axes.into_iter().filter(|a| !a.extent.is_one()).map(|a| a.extent.poly()).collect();
+}
