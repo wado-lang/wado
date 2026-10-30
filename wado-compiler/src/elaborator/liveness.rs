@@ -267,6 +267,15 @@ pub(crate) fn compute(
                 }
                 Item::Trait(trait_decl) => {
                     seed_operations(&mut graph, &trait_decl.methods, references, Dispatch::Fact);
+                    // An impl this graph does not see may inherit a default
+                    // body, so one a module offers counts as used, as a `pub`
+                    // function does.
+                    let visibility = trait_decl.visibility;
+                    if roots.offers(visibility) || roots.undecided(visibility) {
+                        for method in trait_decl.methods.iter().filter(|m| m.body.is_some()) {
+                            graph.seed_export(method.id);
+                        }
+                    }
                 }
                 Item::Interface(interface_decl) => {
                     seed_operations(
