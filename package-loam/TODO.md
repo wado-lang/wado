@@ -99,8 +99,9 @@ leaves this file, and `design.md` states what it built.
     the host holds whole. Finished when a checkpoint larger than the guest's
     heap loads onto `WebGpuBackend`.
 14. [ ] onnxruntime's int4 operators, `MatMulNBits` and `GatherBlockQuantized`,
-    which onnx-community's `q4` exports use. A weight stays packed in the
-    backend, as `Bk::Rhs` or as the packed tensor a quantized gather reads.
+    which onnx-community's `q4` exports use. A weight stays packed on the
+    device, read by the quantized product composite or by a quantized gather
+    (see [Loam on TPU and WebGPU](./devices.md)).
     Finished when Gemma 3 (270M)'s `q4` export picks the tokens onnxruntime
     picks from it.
 15. [ ] Qwen 3.5 0.8B, a decoder whose layers are mostly recurrent. Finished
@@ -369,8 +370,9 @@ Every `WebGpuBackend` method spells the same ten `wasi:webgpu` resources, since
 an impl method's `with _` resolves to nothing at a caller.
 
 Whether the backend should be an effect after all. The trait is chosen because
-its cost is known to be zero and the effect's is unmeasured. A second backend
-makes the measurement possible.
+its cost is known to be zero and the effect's is unmeasured. Once a device
+builds the graph once per shape class ([Loam on TPU and WebGPU](./devices.md)),
+neither cost falls on a call.
 
 ### Beyond tier 1
 

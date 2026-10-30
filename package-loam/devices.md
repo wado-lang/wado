@@ -208,9 +208,9 @@ The compiler writes the graph as StableHLO text and compiles it through
 fuses them again. The prepared weights and the cache are parameters, the cache
 donated. A product's `precision_config` is an option of the backend, and
 `DEFAULT` unless the caller sets it, which on a TPU is faster than `HIGHEST`
-and holds less of f32's precision. A compiled executable is serialized and kept on disk, keyed by the
-program's text, the plugin and the topology, so a second process compiles
-nothing.
+and holds less of f32's precision. A compiled executable is serialized and kept
+on disk, keyed by the program's text, the plugin and the topology, so a second
+process compiles nothing.
 
 `wado:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
 execution with donated inputs, and the compiled program's memory and cost. It
@@ -302,8 +302,8 @@ A field of `Cache` whose axis the past's length gives holds the capacity of
 positions, and its valid length is a value. A step writes its new positions
 with a `scatter` at each row's valid length, which is ONNX's `TensorScatter`
 with its `write_indices`, and returns the cache: donated on PJRT, the same
-buffer on WebGPU. A cache that outgrows its capacity
-moves to the next shape class, copied once.
+buffer on WebGPU. A cache that outgrows its capacity moves to the next shape
+class, copied once.
 
 This builds on roadmap item 1, which gathers the cache into one value.
 
