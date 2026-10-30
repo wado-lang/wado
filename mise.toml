@@ -281,7 +281,7 @@ n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
 """
 
 [tasks.test-wado]
-description = "Run Wado module tests"
+description = "Run Wado module tests; arguments go to `wado test`"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
@@ -296,7 +296,7 @@ extra_args=(--exclude 'package-gale/**' --exclude 'wado-compiler/**')
 if [ -n "${CI:-}" ]; then
     extra_args+=(--format tap)
 fi
-./scripts/exclusive.sh test-wado scripts/dev-bin.sh wado test -O2 "${extra_args[@]}"
+./scripts/exclusive.sh test-wado scripts/dev-bin.sh wado test -O2 "${extra_args[@]}" "$@"
 """
 
 [tasks.test-stdlib]

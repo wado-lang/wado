@@ -161,24 +161,8 @@ jobs:
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
       - run: cargo test --locked --all -- --skip fixture_test_
-
-  # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so a
-  # lint with no automatic fix reaches main unless this job fails on it.
-  clippy:
-    name: Clippy
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
+      # a lint with no automatic fix reaches main unless this step fails on it.
       - run: mise run clippy
 
   # One job per optimization level: the e2e fixtures, then the stdlib, both
@@ -249,16 +233,9 @@ jobs:
       # programs in the system baseline, so it comes from apt, not mise.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - run: mise run check-wadopoet-vocabulary
-      - parallel:
-          - run: mise run check-rust-paths
-          - run: mise run check-spec-examples
-          - run: mise run check-grammar
-          - run: mise run check-highlight
-          - run: mise run test-web-glue
-
-      - run: mise run test-wado
-      - run: scripts/dev-bin.sh wado publish --dry-run
+      # benchmark/ runs in Test (fuel) and the corpus checks in Test (WebGPU):
+      # this job sets how long CI takes, and those two finish early.
+      - run: mise run test-wado --exclude 'benchmark/**'
 
   test-gale-o2:
     name: Test (Gale O2)
@@ -299,6 +276,9 @@ jobs:
           prebuilt: wado
 
       - run: mise run test-fuel
+      # The rest of benchmark/'s tests, moved here from Test (Wado).
+      - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
+      - run: scripts/dev-bin.sh wado publish --dry-run
 
   # The sandbox's escape tests, on what no other job runs: Seatbelt, and the
   # seccomp filter's arm64 branch, whose architecture check and system call
@@ -382,10 +362,19 @@ jobs:
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
 
+      # The corpus checks, moved here from Test (Wado): this job finishes early.
+      - run: mise run check-wadopoet-vocabulary
+      - parallel:
+          - run: mise run check-rust-paths
+          - run: mise run check-spec-examples
+          - run: mise run check-grammar
+          - run: mise run check-highlight
+          - run: mise run test-web-glue
+
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, clippy, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
+    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
