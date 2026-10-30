@@ -7,7 +7,7 @@ use { padding } from "./pad.wado";
 /// Each symbol `source`'s inputs read, as `loam dump` reports it.
 fn judged(source: String) -> List<String> {
     let graph = read(&source).unwrap();
-    return padding(&graph, &infer(&graph).unwrap()).symbols.into_iter().map(|j| `${j}`).collect();
+    return padding(&graph, &infer(&graph).unwrap()).into_iter().map(|j| `${j}`).collect();
 }
 
 test "a length every operator keeps apart, or reads masked, is padded" {

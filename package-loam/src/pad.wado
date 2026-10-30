@@ -59,11 +59,7 @@ impl Display for Judged {
 }
 
 /// Each symbol an input's axes read, in the order they first read it.
-pub struct Padding {
-    pub symbols: List<Judged>,
-}
-
-pub fn padding(graph: &Graph, checked: &Checked) -> Padding {
+pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     let mut refusals = HashMap::<String, Refusal>::new();
     judge_scope(graph, checked, &mut refusals);
     let mut symbols: List<Judged> = [];
@@ -76,7 +72,7 @@ pub fn padding(graph: &Graph, checked: &Checked) -> Padding {
             }
         }
     }
-    return Padding { symbols };
+    return symbols;
 }
 
 /// Each refusal the nodes of a scope make, the first one per symbol kept.
