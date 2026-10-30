@@ -123,7 +123,11 @@ impl Display for EmitError {
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
             Unpaired(tensor) => {
-                let side = if tensor.starts_with("past") { "no present pairs with this past" } else { "no past pairs with this present" };
+                let side = if tensor.starts_with("past") {
+                    "no present pairs with this past";
+                } else {
+                    "no past pairs with this present";
+                };
                 f.write_str(`${tensor}: ${side}, so the cache would be partial`);
             },
             OpenCache(e) => {
@@ -1124,7 +1128,9 @@ fn emit_forward(
                 let at = exprs.reference(&present);
                 let element = checked.primitives.get(present).unwrap();
                 let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(&shapes.get(past).unwrap())}]`;
-                parts.push(`${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`);
+                parts.push(
+                    `${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`,
+                );
             }
             fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
         }
@@ -1153,7 +1159,9 @@ fn emit_forward(
         w.line(`return ${downloaded(&returned[0], passed)};`);
     } else {
         let mut idents: List<String> = returned.into_iter().map(|o| names.get(&o)).collect();
-        let mut fields: List<String> = returned.into_iter().map(|o| `${names.get(&o)}: ${downloaded(&o, names.get(&o))}`).collect();
+        let mut fields: List<String> = returned.into_iter().map(
+            |o| `${names.get(&o)}: ${downloaded(&o, names.get(&o))}`,
+        ).collect();
         if has_cache {
             idents.push("cache");
             fields.push("cache: cache");
@@ -1167,7 +1175,12 @@ fn emit_forward(
 
 /// `Cache`, one field per pair, each held under its past's axes; its `empty`,
 /// the state before the first pass; and its `retain`.
-fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Checked, names: &Names) -> Result<(), EmitError> {
+fn emit_cache(
+    w: &mut CodeWriter,
+    pairs: &List<[String, String]>,
+    checked: &Checked,
+    names: &Names,
+) -> Result<(), EmitError> {
     let mut cache = StructSpec::new(CACHE, Vis::Pub);
     cache.add_generic(BACKEND_BOUND);
     let mut empties: List<String> = [];

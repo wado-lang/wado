@@ -18,7 +18,7 @@ The weights take more than half the heap, which is all the default copying
 collector can use, so it runs under `--collector drc`.
 
 `gemma3.wado` is the command line around `model.wado`, which holds the tokenizer
-and the model as a library. The model keeps each layer's attention cache between
+and the model as a library. The model keeps the attention cache between
 calls, so a call that extends the last one's ids runs only the new ones.
 
 ## What the build reads

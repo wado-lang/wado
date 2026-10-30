@@ -5,6 +5,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 REVISION=607a30d783dfa663caf39e06633721c8d4cfcd7e
-curl -fL -o model.onnx "https://huggingface.co/openai-community/gpt2/resolve/$REVISION/onnx/decoder_model.onnx"
+curl -fL -o model.onnx "https://huggingface.co/openai-community/gpt2/resolve/$REVISION/onnx/decoder_model_merged.onnx"
 if command -v sha256sum > /dev/null; then sha256=(sha256sum); else sha256=(shasum -a 256); fi
-echo "e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f  model.onnx" | "${sha256[@]}" -c -
+echo "e6fc046fe5a7cfeeb8bb3c7d4c1b6a8bd90ced7339a75d5567957e3bc9d48abe  model.onnx" | "${sha256[@]}" -c -

@@ -61,7 +61,9 @@ fn relabel<A, B>(t: &Tensor<f32, A>) -> Tensor<f32, B> {
 }
 
 /// The prompt's logits, and the keys and values it leaves as the step's cache.
-fn prefill(input_ids: ByteList) -> [Tensor<f32, [prompt::BatchSize, prompt::SequenceLength, prompt::Logits2]>, step::Cache<Cpu>] {
+fn prefill(
+    input_ids: ByteList,
+) -> [Tensor<f32, [prompt::BatchSize, prompt::SequenceLength, prompt::Logits2]>, step::Cache<Cpu>] {
     let [ids, extents] = ints_of(input_ids);
     let weights = prompt::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
     let o = prompt::forward(

@@ -65,9 +65,27 @@ example that wants a word of its own renames the axis where it imports it.
 `loam dump` opens with the axes, each beside where it took its name: a
 `dim_param`, or the tensor and position it was minted from.
 
-A caller names the inferred types, so a cache the examples carry between passes
-is relabelled to each layer's axes with `reshape`, until A Decoder's Cache Is
-One Value gathers it.
+## The Decoder's Cache
+
+`Cache<Bk>` is built as
+[WEP: Loam § A Decoder's Cache Is One Value](../docs/wep-2026-09-20-loam.md#a-decoders-cache-is-one-value)
+decided, with three choices it left open.
+
+- A field holds each past under the past's axes. A present's length axis is
+  minted apart from the past's, so `pass` relabels each present to its past's
+  axes with `reshape`, which moves no element, before it returns the cache.
+- `Cache::empty` takes the length axis to be the one symbolic axis on which
+  the past and its present differ, and gives it 0. Any other symbolic axis has
+  no extent an empty cache could take, so the build stops with `OpenCache` and
+  names it. The `dims` option fixes it, as `batch_size: 1` does in every
+  example.
+- `forward` retains the cache before it begins. A caller that drives `pass`
+  itself calls `cache.retain(&mut backend)` there, as the Gemma 3 and GPT-2
+  (124M) examples do.
+
+The GPT-2 (124M) example builds from `decoder_model_merged.onnx`, whose graph
+branches on whether it is given a past, so one set of weights runs the prompt
+and each token after it. No line of the examples names a layer.
 
 ## Sharded Checkpoints
 

@@ -27,23 +27,14 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
         },
     };
 
-/// The layers, each with a key and a value cache.
-global LAYERS: i32 = 18;
-
 /// Gemma 3 with its weights loaded where `Bk` runs the kernels.
 pub struct Model<affine Bk: Backend> {
     backend: Bk,
     weights: gemma::Prepared<Bk>,
-    /// The ids the caches hold the keys and values of.
+    /// The ids the cache holds the keys and values of.
     seen: List<i32>,
-    /// Each layer's key cache, then its value cache, as the last pass wrote
-    /// and retained them; none before the first. Each layer's heads and head
-    /// width are axes of their own, so every cache is held under layer 0's.
-    caches: List<Bk::Tensor<f32, Stored>>,
+    cache: gemma::Cache<Bk>,
 }
-
-/// The axes every cache is held under.
-type Stored = [gemma::BatchSize, gemma::PastKeyValues0Key1, gemma::PastSequenceLength, gemma::PastKeyValues0Key3];
 
 impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from `data`, the bytes of the
@@ -51,9 +42,8 @@ impl<affine Bk: Backend> Model<Bk> {
     pub fn load<affine Ck: CheckpointBytes>(backend: Bk, data: &Ck) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
         let weights = gemma::Prepared::load(&mut on, data)?;
-        let mut model = Model { backend: on, weights, seen: [], caches: [] };
-        model.forget();
-        return Ok(model);
+        let cache = gemma::Cache::empty(&mut on);
+        return Ok(Model { backend: on, weights, seen: [], cache });
     }
 
     /// The backend the model runs on.
@@ -66,10 +56,10 @@ impl<affine Bk: Backend> Model<Bk> {
         return i32::min(gemma::CosCacheLocal0::EXTENT, gemma::CosCacheGlobal0::EXTENT);
     }
 
-    /// Empties the caches, so the next call reads its ids from the start.
-    pub fn forget(&mut self) {
+    /// Empties the cache, so the next call reads its ids from the start.
+    pub fn forget(&mut self) with _ {
         self.seen = [];
-        self.caches = [];
+        self.cache = gemma::Cache::empty(&mut self.backend);
     }
 
     /// The token the model ranks first after `ids`. Where `ids` extends the
@@ -86,19 +76,10 @@ impl<affine Bk: Backend> Model<Bk> {
         }
         let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
         let total = ids.len();
-        // The caches still held live through this pass. Retained here rather
-        // than as the last pass wrote them, a forgotten cache is released.
-        for let cache of &self.caches {
-            self.backend.retain(cache);
-        }
+        // The cache still held lives through this pass. Retained here rather
+        // than as the last pass wrote it, a forgotten cache is released.
+        self.cache.retain(&mut self.backend);
         self.backend.begin();
-        if self.caches.is_empty() {
-            let extents: List<i32> = [
-                gemma::BatchSize::EXTENT, gemma::PastKeyValues0Key1::EXTENT, 0, gemma::PastKeyValues0Key3::EXTENT,
-            ];
-            let empty = self.backend.upload(&Tensor::<f32, Stored> { data: [], extents });
-            self.caches = List::filled(LAYERS * 2, empty);
-        }
         let input_ids = self.backend.upload(&Tensor::<i64, [gemma::BatchSize, gemma::SequenceLength]> {
             data: fresh,
             extents: [gemma::BatchSize::EXTENT, fresh.len()],
@@ -111,103 +92,18 @@ impl<affine Bk: Backend> Model<Bk> {
             &mut self.backend,
             &input_ids,
             &mask,
-            &self.past(0),
-            &self.past(1),
-            &self.past(2),
-            &self.past(3),
-            &self.past(4),
-            &self.past(5),
-            &self.past(6),
-            &self.past(7),
-            &self.past(8),
-            &self.past(9),
-            &self.past(10),
-            &self.past(11),
-            &self.past(12),
-            &self.past(13),
-            &self.past(14),
-            &self.past(15),
-            &self.past(16),
-            &self.past(17),
-            &self.past(18),
-            &self.past(19),
-            &self.past(20),
-            &self.past(21),
-            &self.past(22),
-            &self.past(23),
-            &self.past(24),
-            &self.past(25),
-            &self.past(26),
-            &self.past(27),
-            &self.past(28),
-            &self.past(29),
-            &self.past(30),
-            &self.past(31),
-            &self.past(32),
-            &self.past(33),
-            &self.past(34),
-            &self.past(35),
+            &self.cache,
             &self.weights,
         );
         // The backend ranks the last position, so one index is read back
         // rather than the vocabulary's logits.
         let best = self.backend.download(&self.backend.arg_max(&passed.logits, 2)).data[0] as i32;
-        // Each present becomes the next call's past where the backend holds it.
-        let p = passed;
-        self.caches = [
-            self.relabel(&p.present_0_key),
-            self.relabel(&p.present_0_value),
-            self.relabel(&p.present_1_key),
-            self.relabel(&p.present_1_value),
-            self.relabel(&p.present_2_key),
-            self.relabel(&p.present_2_value),
-            self.relabel(&p.present_3_key),
-            self.relabel(&p.present_3_value),
-            self.relabel(&p.present_4_key),
-            self.relabel(&p.present_4_value),
-            self.relabel(&p.present_5_key),
-            self.relabel(&p.present_5_value),
-            self.relabel(&p.present_6_key),
-            self.relabel(&p.present_6_value),
-            self.relabel(&p.present_7_key),
-            self.relabel(&p.present_7_value),
-            self.relabel(&p.present_8_key),
-            self.relabel(&p.present_8_value),
-            self.relabel(&p.present_9_key),
-            self.relabel(&p.present_9_value),
-            self.relabel(&p.present_10_key),
-            self.relabel(&p.present_10_value),
-            self.relabel(&p.present_11_key),
-            self.relabel(&p.present_11_value),
-            self.relabel(&p.present_12_key),
-            self.relabel(&p.present_12_value),
-            self.relabel(&p.present_13_key),
-            self.relabel(&p.present_13_value),
-            self.relabel(&p.present_14_key),
-            self.relabel(&p.present_14_value),
-            self.relabel(&p.present_15_key),
-            self.relabel(&p.present_15_value),
-            self.relabel(&p.present_16_key),
-            self.relabel(&p.present_16_value),
-            self.relabel(&p.present_17_key),
-            self.relabel(&p.present_17_value),
-        ];
+        self.cache = passed.cache;
         self.seen = *ids;
         return best;
     }
 
-    /// Cache `i`, under the axes of the input it is passed as.
-    fn past<A>(&mut self, i: i32) -> Bk::Tensor<f32, A> with _ {
-        return self.relabel(&self.caches[i]);
-    }
-
-    /// `t` under the axes `B`, with its extents.
-    fn relabel<A, B>(&mut self, t: &Bk::Tensor<f32, A>) -> Bk::Tensor<f32, B> with _ {
-        let extents = self.backend.extents_of(t);
-        return self.backend.reshape::<f32, A, B>(t, extents);
-    }
-
-    /// Whether `ids` starts with the ids the caches hold, and adds some.
+    /// Whether `ids` starts with the ids the cache holds, and adds some.
     fn extends(&self, ids: &List<i32>) -> bool {
         if ids.len() <= self.seen.len() {
             return false;

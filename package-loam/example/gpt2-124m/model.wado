@@ -1,5 +1,5 @@
 //! GPT-2 (124M) as a library: its tokenizer, and the model that picks the next
-//! token greedily.
+//! token greedily, keeping the attention cache between calls.
 
 use { Backend, CheckpointBytes, LoadError, Tensor } from "lib:loam";
 /// GPT-2's byte-level BPE, with `<|endoftext|>` as its one special token.
@@ -8,15 +8,16 @@ pub use { Tokenizer } from "./tokenizer.json"
         type: "hf-tokenizer",
         generator: { module: "lib:loam" },
     };
-use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/onnx/decoder_model.onnx"
+/// One graph that branches on whether it is given a past, so one set of weights
+/// runs both the prompt and each token after it.
+use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783dfa663caf39e06633721c8d4cfcd7e/onnx/decoder_model_merged.onnx"
     with {
         type: "onnx",
-        integrity: "sha256:e3fc9615868ff8f5e0429b892a0f6ca692784ba6c4ca31c4e9ee8218e7cce34f",
+        integrity: "sha256:e6fc046fe5a7cfeeb8bb3c7d4c1b6a8bd90ced7339a75d5567957e3bc9d48abe",
         generator: {
             module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
-                outputs: ["logits"],
                 // Only the last position ranks the next token.
                 last: { logits: 1 },
                 // 500 MB of weights is past what a module compiles in.
@@ -29,15 +30,19 @@ use gpt2 from "https://huggingface.co/openai-community/gpt2/resolve/607a30d783df
 pub struct Model<affine Bk: Backend> {
     backend: Bk,
     weights: gpt2::Prepared<Bk>,
+    /// The ids the cache holds the keys and values of.
+    seen: List<i32>,
+    cache: gpt2::Cache<Bk>,
 }
 
 impl<affine Bk: Backend> Model<Bk> {
     /// Loads the weights onto `backend` from `model`, the bytes of the
-    /// `decoder_model.onnx` the build read.
+    /// `decoder_model_merged.onnx` the build read.
     pub fn load<affine Ck: CheckpointBytes>(backend: Bk, model: &Ck) -> Result<Model<Bk>, LoadError> with _ {
         let mut on = backend;
         let weights = gpt2::Prepared::load(&mut on, model)?;
-        return Ok(Model { backend: on, weights });
+        let cache = gpt2::Cache::empty(&mut on);
+        return Ok(Model { backend: on, weights, seen: [], cache });
     }
 
     /// The backend the model runs on.
@@ -48,29 +53,71 @@ impl<affine Bk: Backend> Model<Bk> {
     /// How many positions the model reads: one per row of `wpe`, which the
     /// graph's causal mask covers. `forward` refuses a longer sequence.
     pub fn positions(&self) -> i32 {
-        return gpt2::TransformerWpeWeight0::EXTENT;
+        return gpt2::TransformerWpeWeightMerged00::EXTENT;
     }
 
-    /// The token the model ranks first after `ids`.
+    /// Empties the cache, so the next call reads its ids from the start.
+    pub fn forget(&mut self) with _ {
+        self.seen = [];
+        self.cache = gpt2::Cache::empty(&mut self.backend);
+    }
+
+    /// The token the model ranks first after `ids`. Where `ids` extends the
+    /// ids of the last call, only the new ones run, against the cached keys
+    /// and values of the rest.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
         let vocab = gpt2::Logits2::EXTENT;
         for let id of ids {
             assert 0 <= *id < vocab, "every token id is in the vocabulary";
         }
-        let input: List<i64> = ids.into_iter().map(|id| id as i64).collect();
-        let extents: List<i32> = [gpt2::BatchSize::EXTENT, ids.len()];
+        if !self.extends(ids) {
+            self.forget();
+        }
+        let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
+        let total = ids.len();
+        // The cache still held lives through this pass. Retained here rather
+        // than as the last pass wrote it, a forgotten cache is released.
+        self.cache.retain(&mut self.backend);
         self.backend.begin();
         let input_ids = self.backend.upload(&Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
-            data: input,
-            extents,
+            data: fresh,
+            extents: [gpt2::BatchSize::EXTENT, fresh.len()],
         });
-        let mask = self.backend.upload(
-            &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: List::<i64>::filled(ids.len(), 1), extents },
+        let mask = self.backend.upload(&Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> {
+            data: List::<i64>::filled(total, 1),
+            extents: [gpt2::BatchSize::EXTENT, total],
+        });
+        let use_cache_branch = self.backend.upload(&Tensor::<bool, [gpt2::UseCacheBranch0]> {
+            data: [!self.seen.is_empty()],
+            extents: [1],
+        });
+        let passed = gpt2::pass(
+            &mut self.backend,
+            &input_ids,
+            &mask,
+            &use_cache_branch,
+            &self.cache,
+            &self.weights,
         );
-        let logits = gpt2::pass(&mut self.backend, &input_ids, &mask, &self.weights);
         // The backend ranks the last position, so one index is read back
         // rather than the vocabulary's logits.
-        return self.backend.download(&self.backend.arg_max(&logits, 2)).data[0] as i32;
+        let best = self.backend.download(&self.backend.arg_max(&passed.logits, 2)).data[0] as i32;
+        self.cache = passed.cache;
+        self.seen = *ids;
+        return best;
+    }
+
+    /// Whether `ids` starts with the ids the cache holds, and adds some.
+    fn extends(&self, ids: &List<i32>) -> bool {
+        if ids.len() <= self.seen.len() {
+            return false;
+        }
+        for let i of 0..<self.seen.len() {
+            if ids[i] != self.seen[i] {
+                return false;
+            }
+        }
+        return true;
     }
 }

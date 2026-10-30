@@ -133,8 +133,8 @@ The graph's operations take their meaning from the StableHLO specification:
 `reshape`, `transpose`, `concatenate`, `slice`, `dynamic_slice`,
 `dynamic_update_slice`, `gather`, `scatter`, `sort`, `iota`, `convert`,
 `compare`, `case` and `while`. A specification fixes what each operation means, which Loam's own
-kernel set never did. The lowering to a TPU is then one to one. Roadmap
-item 24, the StableHLO front end, reads into the same graph.
+kernel set never did. The lowering to a TPU is then one to one. The StableHLO
+front end, a roadmap item, reads into the same graph.
 
 ### A composite is a computation no fusion reaches
 
@@ -305,7 +305,8 @@ with its `write_indices`, and returns the cache: donated on PJRT, the same
 buffer on WebGPU. A cache that outgrows its capacity moves to the next shape
 class, copied once.
 
-This builds on roadmap item 1, which gathers the cache into one value.
+This builds on [the decoder's cache](./design.md#the-decoders-cache), which is
+one value already.
 
 ### Requests share a pass through slots
 
