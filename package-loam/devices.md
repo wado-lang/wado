@@ -126,7 +126,7 @@ The generator keeps its own analyses at build time: stage 0, axis inference,
 which axes may be padded, and the cache's pairs. Each analysis is device
 independent, and `loam dump` reports it as now.
 
-### The operations are StableHLO's, and a pattern is a composite
+### The operations are StableHLO's
 
 The graph's operations take their meaning from the StableHLO specification:
 `dot_general`, the elementwise operators, `reduce`, `select`, `broadcast_in_dim`,
@@ -136,16 +136,68 @@ The graph's operations take their meaning from the StableHLO specification:
 kernel set never did. The lowering to a TPU is then one to one. Roadmap
 item 24, the StableHLO front end, reads into the same graph.
 
-A pattern a device can run better than its parts becomes a composite: a node
-that names the pattern and carries its decomposition, as StableHLO's
-`composite` does. Attention, a normalization, a gated product and a rotary
-embedding are composites. onnxruntime's `GroupQueryAttention` is already one.
-The generator recognizes a composite from the graph's operators, as it now
-recognizes fusions. A device that has a kernel for a composite runs that
-kernel. Any other device runs the decomposition.
+### A composite is a computation no fusion reaches
 
-A composite is checked against its decomposition on `Cpu`, so a kernel never
-redefines what the pattern means.
+A composite is a node that names a computation and carries its decomposition
+into the operations above, as StableHLO's `composite` does. A device that has a
+kernel for the composite runs that kernel, and any other device runs the
+decomposition. `Cpu` always runs the decomposition, so every kernel is held to
+it.
+
+A computation is a composite only where its fastest kernel computes in an order
+that no fusion of its parts' kernels reaches. Where fusion reaches the fastest
+kernel, the parts stay operations and the WebGPU compiler fuses them: a
+normalization becomes a row group or a product's prologue, a gated layer a
+pair of products, and attention's query, key and value one product. A rotary
+embedding is elementwise steps over a gather.
+
+| Composite          | What no fusion reaches                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| Attention          | An online softmax that never writes the scores. A product and a fold share no kernel, so fusion writes them.     |
+| Quantized product  | Unpacking each weight inside the product's inner loop. No rule fuses an operator into a product's right operand. |
+| Mixture of experts | Reading only the experts the routing picks.                                                                      |
+| Sampler            | Choosing a token among the logits. Loam adds it to the graph; no model carries one.                              |
+
+A TPU runs every composite as its decomposition. Its only hand-written kernels
+are reached from Pallas, which runs in Python, and XLA fuses the decomposition
+anyway. The composites pay on WebGPU.
+
+#### What a composite means
+
+A composite takes its meaning from the operator that names the computation,
+ONNX's where ONNX has one, and its decomposition is that operator's
+definition:
+
+- Attention is ONNX's `Attention`. Its `nonpad_kv_seqlen` gives each row a
+  valid length within a cache of fixed capacity, which is the cache this
+  design holds.
+- A quantized product is ONNX's `DequantizeLinear` with a `block_size`,
+  feeding a `MatMul`.
+- onnxruntime's operators map onto these. Its `GroupQueryAttention` is ONNX's
+  `RotaryEmbedding`, a cache update, and `Attention`. Its `MatMulNBits` is a
+  quantized product. Its `QMoE`, which ONNX has no operator for, is defined by
+  onnxruntime's documentation, with onnxruntime as the oracle where that
+  leaves a behavior open.
+- The sampler is Loam's own, defined by its decomposition.
+
+#### Where a composite is recognized
+
+A composite comes first from an operator that names it: `Attention`,
+`GroupQueryAttention`, `MatMulNBits`, `QMoE`, and `DequantizeLinear` with a
+`block_size` before a `MatMul`. A graph that spells the computation in parts,
+as GPT-2 spells its attention, is matched later, as a subgraph. The quantized
+product and the mixture of experts arrive with the roadmap items that bring
+their operators.
+
+A matched subgraph is the composite's decomposition as it stands, with every
+choice it makes kept: a scale applied by `Div` or by `Mul`, and a mask of f32's
+lowest value, as GPT-2's is, rather than negative infinity. So `Cpu` computes what the graph says.
+A kernel may differ from its decomposition only in what
+[WEP: Loam § Results Are Held to a Tolerance, Not to the Bit](../docs/wep-2026-09-20-loam.md#results-are-held-to-a-tolerance-not-to-the-bit)
+already allows: the order of a sum, a fused multiply-add, and an online
+softmax's rescaling, which reorders a sum. A kernel that replaced the mask by
+negative infinity, or skipped a `Cast`, would compute another function, so it
+does not.
 
 ### Each device compiles the program its own way
 
@@ -228,7 +280,8 @@ On WebGPU it reads the condition back, as today.
 
 A field of `Cache` whose axis the past's length gives holds the capacity of
 positions, and its valid length is a value. A step writes its new positions
-with `dynamic_update_slice` at the valid length, and returns the cache:
+with `dynamic_update_slice` at the valid length, which is ONNX's
+`TensorScatter`, and returns the cache:
 donated on PJRT, the same buffer on WebGPU. A cache that outgrows its capacity
 moves to the next shape class, copied once.
 
@@ -304,7 +357,8 @@ layout, so a backend can change a layout without changing the generated module.
 ## Plan
 
 1. [ ] The graph. `Graph` and its operations in the runtime library, with the
-   composites. The generated module builds through it, and `Cpu` computes
+   attention composite from `GroupQueryAttention` and `Attention`. The
+   generated module builds through it, and `Cpu` computes
    through it. Finished when every conformance case, the tiny GPT-2 and Gemma 3
    (270M) pass on `Cpu` through `build`, and the CPU time per token is recorded
    as a ratio to today's.
@@ -321,20 +375,19 @@ layout, so a backend can change a layout without changing the generated module.
    on `WebGpuBackend` is at most today's, with the host's time per token
    recorded beside the device's, and the generator's plan and the fused trait
    methods are deleted.
-5. [ ] The loop on the device. The sampler and the decoding program. Finished
+5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
+   as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
+   dispatches a layer are recorded beside the ten
+   [Loam on WebGPU](./webgpu.md#what-a-layer-costs) counts.
+6. [ ] The loop on the device. The sampler and the decoding program. Finished
    when Gemma 3 decodes several tokens per read back on both devices, with the
    tokens it picks one step at a time.
-6. [ ] Slots. Finished when the tokens per second at several numbers of slots
+7. [ ] Slots. Finished when the tokens per second at several numbers of slots
    are recorded on the CPU plugin and on `WebGpuBackend`, each request's
    tokens unchanged from its run alone.
-7. [ ] A TPU. Finished when Gemma 3 picks onnxruntime's tokens on a TPU VM, and
+8. [ ] A TPU. Finished when Gemma 3 picks onnxruntime's tokens on a TPU VM, and
    its time per token at one slot and at many is recorded beside
    `optimal_seconds`.
-
-## Open questions
-
-- Which composites to recognize first, and how far a recognized pattern may
-  differ from the decomposition it names.
 
 ## Known gaps
 
