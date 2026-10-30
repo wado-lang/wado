@@ -476,7 +476,6 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
   so a condition a length meets and its capacity misses refuses the call.
 - `compute` takes no capacities from the caller, and a graph with a cache has
   no `compute` until the cache is one of fixed capacity.
-
 - The first call of a shape class waits for its program to compile. At build
   time no user waits on the generator, and at first use one does. The cache on
   disk spares a second process on PJRT, and nothing spares a first call on
