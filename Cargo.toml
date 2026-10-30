@@ -41,7 +41,10 @@ tokio = { version = "1", features = ["rt", "rt-multi-thread", "sync"] }
 # instead of carrying parallel 0.x trees. `wat` needs the tilde pin so a bare
 # "1" cannot float up to a newer generation and drag a parallel wast/wasm-encoder
 # tree back in through both wado and wasmtime's wasm-compose. `mise run
-# check-deps` enforces this; re-align when bumping wasmtime (see AGENTS.md).
+# check-deps` enforces this and lists the irreducible exceptions. When bumping
+# wasmtime, find its generation (`cargo tree -i wasmparser@<ver>`), re-pin these
+# to it (`wat = "~1.<gen>"`, the rest `"0.<gen>"`), then `cargo update` and
+# `mise run check-deps`.
 wat = { version = "~1.261" }
 wasm-encoder = { version = "0.261" }
 wasmparser = { version = "0.261" }
