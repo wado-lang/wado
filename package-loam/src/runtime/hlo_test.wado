@@ -1,4 +1,17 @@
-use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, Unary, WindowReduce } from "./hlo.wado";
+use {
+    Binary,
+    Comparison,
+    Convolution,
+    DotDims,
+    GatherDims,
+    Graph,
+    Unary,
+    WindowReduce,
+    from_end_indices,
+    range_i64,
+    reduce_mean,
+    softmax,
+} from "./hlo.wado";
 use { Attention, Cpu, Holds, Tensor, group_query_attention } from "./tensor.wado";
 
 struct A {
@@ -12,6 +25,51 @@ struct D {
 
 fn t<E>(data: List<E>, extents: List<i32>) -> Tensor<E, [A]> {
     return Tensor { data, extents };
+}
+
+test "reverse reads each named axis back to front" {
+    let g = &mut Cpu {};
+    let x = Tensor::<i64, [A, B]> {
+        data: [1, 2, 3, 4, 5, 6],
+        extents: [2, 3],
+    };
+    assert g.reverse(&x, [1]).data == [3, 2, 1, 6, 5, 4] as List<i64>;
+    assert g.reverse(&x, [0, 1]).data == [6, 5, 4, 3, 2, 1] as List<i64>;
+}
+
+test "softmax normalizes along its axis" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f32, [A, B]> {
+        data: [0.0, 0.0, 1000.0, 1000.0],
+        extents: [2, 2],
+    };
+    assert softmax::<Cpu, [A, B]>(g, &x, 0).data == [0.0, 0.0, 1.0, 1.0] as List<f32>;
+    assert softmax::<Cpu, [A, B]>(g, &x, 1).data == [0.5, 0.5, 0.5, 0.5] as List<f32>;
+}
+
+test "reduce_mean divides each sum by the count it summed" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f32, [A, B]> {
+        data: [1.0, 2.0, 3.0, 6.0],
+        extents: [2, 2],
+    };
+    let mean = reduce_mean::<Cpu, [A, B], [A]>(g, &x, [1]);
+    assert mean.data == [1.5, 4.5] as List<f32>;
+}
+
+test "range_i64 steps from its start" {
+    let g = &mut Cpu {};
+    let r = range_i64::<Cpu, A>(g, 5, 3, -2);
+    assert r.data == [5, 3, 1] as List<i64>;
+}
+
+test "a negative index counts from the end" {
+    let g = &mut Cpu {};
+    let i = Tensor::<i64, [A]> {
+        data: [-1, 0, 2],
+        extents: [3],
+    };
+    assert from_end_indices::<Cpu, [A]>(g, &i, 3).data == [2, 0, 2] as List<i64>;
 }
 
 test "iota counts along its dimension" {
@@ -247,7 +305,7 @@ test "conditional runs the branch its predicate picks" {
             data: [p],
             extents: [1],
         };
-        return g.conditional(&pred, |c| c.unary(Unary::Negate, &x), |c| c.binary(Binary::Add, &x, &x)).data;
+        return g.conditional(&pred, || g.unary(Unary::Negate, &x), || g.binary(Binary::Add, &x, &x)).data;
     };
     assert pick(true) == [-1.0, -2.0] as List<f32>;
     assert pick(false) == [2.0, 4.0] as List<f32>;

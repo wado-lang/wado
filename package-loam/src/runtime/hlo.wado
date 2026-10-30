@@ -176,13 +176,17 @@ pub affine trait Graph: Holds with _ {
         init: f32,
         window: &WindowReduce,
     ) -> Self::Tensor<f32, Out>;
+    /// StableHLO's `reverse` along each of `dims`.
+    fn reverse<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>, dims: List<i32>) -> Self::Tensor<E, Axes>;
     /// StableHLO's `case` over two branches: `then` where the one element of
-    /// `pred` is true, `otherwise` where it is false.
+    /// `pred` is true, `otherwise` where it is false. Each branch adds its
+    /// operations through the graph it captured, which this call has set to
+    /// record into that branch.
     fn conditional<Axes, T>(
         &mut self,
         pred: &Self::Tensor<bool, Axes>,
-        then: fn(&mut Self) -> T with _,
-        otherwise: fn(&mut Self) -> T with _,
+        then: fn() -> T with _,
+        otherwise: fn() -> T with _,
     ) -> T with _;
 
     /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
@@ -234,10 +238,10 @@ pub affine trait Graph: Holds with _ {
         let mut scores = self.binary(
             Binary::Multiply,
             &raw,
-            &splat::<Self, [B, Heads, S, T]>(self, options.scale, &score_extents),
+            &full::<Self, f32, [B, Heads, S, T]>(self, options.scale, score_extents),
         );
         if options.softcap > 0.0 {
-            let cap = splat::<Self, [B, Heads, S, T]>(self, options.softcap, &score_extents);
+            let cap = full::<Self, f32, [B, Heads, S, T]>(self, options.softcap, score_extents);
             let tanh = self.unary(Unary::Tanh, &self.binary(Binary::Divide, &scores, &cap));
             scores = self.binary(Binary::Multiply, &cap, &tanh);
         }
@@ -247,10 +251,10 @@ pub affine trait Graph: Holds with _ {
         }
         if options.causal || options.window > 0 {
             let masked = attention_mask::<Self, B, Heads, S, T>(self, past, options, &score_extents);
-            let lowest = splat::<Self, [B, Heads, S, T]>(self, f32::NEG_INFINITY, &score_extents);
+            let lowest = full::<Self, f32, [B, Heads, S, T]>(self, f32::NEG_INFINITY, score_extents);
             scores = self.select(&masked, &lowest, &scores);
         }
-        let weights = softmax_last::<Self, [B, Heads, S, T], [B, Heads, S]>(self, &scores, &score_extents);
+        let weights = softmax::<Self, [B, Heads, S, T]>(self, &scores, 3);
         let attend = DotDims {
             lhs_batch: [0, 1],
             rhs_batch: [0, 1],
@@ -300,13 +304,72 @@ fn unpacked4(extents: &List<i32>) -> [i32, i32, i32, i32] {
     return [extents[0], extents[1], extents[2], extents[3]];
 }
 
-/// `value` at every position of `extents`.
-fn splat<affine G: Graph, Axes>(g: &mut G, value: f32, extents: &List<i32>) -> G::Tensor<f32, Axes> with _ {
-    let scalar: G::Tensor<f32, []> = g.upload(&Tensor::<f32, []> {
+/// `value` at every position of `extents`: a constant broadcast, as StableHLO
+/// spells one.
+pub fn full<affine G: Graph, E: Element, Axes>(g: &mut G, value: E, extents: List<i32>) -> G::Tensor<E, Axes> with _ {
+    let scalar: G::Tensor<E, []> = g.upload(&Tensor::<E, []> {
         data: [value],
         extents: [],
     });
-    return g.broadcast_in_dim(&scalar, *extents, []);
+    return g.broadcast_in_dim(&scalar, extents, []);
+}
+
+/// ONNX's `Softmax` along `axis`: less the greatest along it, exponentiated,
+/// over the sum along it.
+pub fn softmax<affine G: Graph, Axes>(g: &mut G, x: &G::Tensor<f32, Axes>, axis: i32) -> G::Tensor<f32, Axes> with _ {
+    let extents = g.extents_of(x);
+    let mut kept: List<i32> = [];
+    for let i of 0..<extents.len() {
+        if i != axis {
+            kept.push(i);
+        }
+    }
+    let top: G::Tensor<f32, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let shifted = g.binary(Binary::Subtract, x, &g.broadcast_in_dim(&top, extents, kept));
+    let e = g.unary(Unary::Exponential, &shifted);
+    let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [axis]);
+    return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, extents, kept));
+}
+
+/// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over the
+/// count of elements each sums.
+pub fn reduce_mean<affine G: Graph, In, Out>(
+    g: &mut G,
+    x: &G::Tensor<f32, In>,
+    dims: List<i32>,
+) -> G::Tensor<f32, Out> with _ {
+    let extents = g.extents_of(x);
+    let mut count = 1;
+    for let d of dims {
+        count *= extents[d];
+    }
+    let sum: G::Tensor<f32, Out> = g.reduce(x, Binary::Add, 0.0, dims);
+    let divisor = full::<G, f32, Out>(g, count as f32, g.extents_of(&sum));
+    return g.binary(Binary::Divide, &sum, &divisor);
+}
+
+/// ONNX's `Range` of `count` elements: `start`, then `delta` apart.
+pub fn range_i64<affine G: Graph, A>(g: &mut G, start: i64, count: i32, delta: i64) -> G::Tensor<i64, [A]> with _ {
+    let steps: G::Tensor<i64, [A]> = g.iota([count], 0);
+    let scaled = g.binary(Binary::Multiply, &steps, &full::<G, i64, [A]>(g, delta, [count]));
+    return g.binary(Binary::Add, &scaled, &full::<G, i64, [A]>(g, start, [count]));
+}
+
+/// ONNX's indices into an axis of `extent`, each negative one counted from the
+/// end, as StableHLO's `gather` reads none.
+pub fn from_end_indices<affine G: Graph, I>(
+    g: &mut G,
+    indices: &G::Tensor<i64, I>,
+    extent: i32,
+) -> G::Tensor<i64, I> with _ {
+    let extents = g.extents_of(indices);
+    let negative = g.compare(Comparison::Lt, indices, &full::<G, i64, I>(g, 0, extents));
+    let wrapped = g.binary(Binary::Add, indices, &full::<G, i64, I>(g, extent as i64, extents));
+    return g.select(&negative, &wrapped, indices);
+}
+
+/// The axes left once a reduction drops one, inside these helpers.
+struct Rows {
 }
 
 /// `x`'s rows `[a, b]` of halves turned by `(a cos − b sin, b cos + a sin)` of
@@ -341,7 +404,7 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
 ) -> G::Tensor<bool, [B, N, S, T]> with _ {
     let plane: List<i32> = [extents[2], extents[3]];
     let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
-    let position = g.binary(Binary::Add, &row, &filled_i64::<G, [S, T]>(g, past as i64, &plane));
+    let position = g.binary(Binary::Add, &row, &full::<G, i64, [S, T]>(g, past as i64, plane));
     let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
     let mut masked: G::Tensor<bool, [S, T]> = g.compare(Comparison::Gt, &key, &position);
     if !options.causal {
@@ -349,37 +412,10 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     }
     if options.window > 0 {
         let behind = g.binary(Binary::Subtract, &position, &key);
-        let far = g.compare(Comparison::Ge, &behind, &filled_i64::<G, [S, T]>(g, options.window as i64, &plane));
+        let far = g.compare(Comparison::Ge, &behind, &full::<G, i64, [S, T]>(g, options.window as i64, plane));
         masked = g.select(&far, &far, &masked);
     }
     return g.broadcast_in_dim(&masked, *extents, [2, 3]);
-}
-
-fn filled_i64<affine G: Graph, Axes>(g: &mut G, value: i64, extents: &List<i32>) -> G::Tensor<i64, Axes> with _ {
-    let scalar: G::Tensor<i64, []> = g.upload(&Tensor::<i64, []> {
-        data: [value],
-        extents: [],
-    });
-    return g.broadcast_in_dim(&scalar, *extents, []);
-}
-
-/// The softmax of `x` along its last axis, as StableHLO computes it: less each
-/// row's greatest, exponentiated, over its sum.
-fn softmax_last<affine G: Graph, Axes, Rows>(
-    g: &mut G,
-    x: &G::Tensor<f32, Axes>,
-    extents: &List<i32>,
-) -> G::Tensor<f32, Axes> with _ {
-    let last = extents.len() - 1;
-    let mut kept: List<i32> = [];
-    for let i of 0..<last {
-        kept.push(i);
-    }
-    let top: G::Tensor<f32, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [last]);
-    let shifted = g.binary(Binary::Subtract, x, &g.broadcast_in_dim(&top, *extents, kept));
-    let e = g.unary(Unary::Exponential, &shifted);
-    let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [last]);
-    return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, *extents, kept));
 }
 
 impl Graph for Cpu {
@@ -733,14 +769,27 @@ impl Graph for Cpu {
         return Tensor { data: t.data, extents: t.extents };
     }
 
+    fn reverse<E: Element, Axes>(&mut self, x: &Tensor<E, Axes>, dims: List<i32>) -> Tensor<E, Axes> {
+        let mut strides = row_major_strides(&x.extents);
+        let mut base = 0;
+        for let d of dims {
+            base += (x.extents[d] - 1) * strides[d];
+            strides[d] = -strides[d];
+        }
+        if element_count(&x.extents) == 0 {
+            return *x;
+        }
+        return Tensor { data: walked(&x.data, base, &strides, &x.extents), extents: x.extents };
+    }
+
     fn conditional<Axes, T>(
         &mut self,
         pred: &Tensor<bool, Axes>,
-        then: fn(&mut Cpu) -> T with _,
-        otherwise: fn(&mut Cpu) -> T with _,
+        then: fn() -> T with _,
+        otherwise: fn() -> T with _,
     ) -> T with _ {
         assert pred.data.len() == 1, "a condition is one element";
-        return if pred.data[0] { then(self) } else { otherwise(self) };
+        return if pred.data[0] { then() } else { otherwise() };
     }
 }
 
