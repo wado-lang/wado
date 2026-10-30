@@ -34,7 +34,7 @@ test "so does the graph build adds to" {
 }
 
 /// Each prompt continued by the tokens `next_token` picks, against onnxruntime's.
-fn continues_each(next_token: fn mut(&List<i32>) -> i32 with _) with _ {
+fn continues_each(mut next_token: fn mut(&List<i32>) -> i32 with _) with _ {
     for let case of from_string::<Oracle>(#include_str("./generate.json")).unwrap().generate {
         let mut ids = case.ids;
         for let _ of 0..<case.generated.len() {

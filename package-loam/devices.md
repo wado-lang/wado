@@ -394,12 +394,12 @@ layout, so a backend can change a layout without changing the generated module.
 
 ## Plan
 
-1. [ ] The graph. `Graph` and its operations in the runtime library, with the
+1. [x] The graph. `Graph` and its operations in the runtime library, with the
    attention composite from `GroupQueryAttention` and `Attention`. The
    generated module builds through it, and `Cpu` computes
    through it. Finished when every conformance case, the tiny GPT-2 and Gemma 3
    (270M) pass on `Cpu` through `build`, and the CPU time per token is recorded
-   as a ratio to today's.
+   as a ratio to today's ([measured](#the-graph-on-the-cpu)).
 2. [ ] Capacities and valid lengths. The padding analysis, the masks it adds,
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
@@ -431,6 +431,26 @@ layout, so a backend can change a layout without changing the generated module.
 8. [ ] A TPU. Finished when Gemma 3 picks onnxruntime's tokens on a TPU VM, and
    its time per token at one slot and at many is recorded beside
    `optimal_seconds`.
+
+## Measurements
+
+### The graph on the CPU
+
+Gemma 3 (270M) picking `generate.json`'s tokens greedily on `Cpu`, the test
+CPU time of each entry, the weights' loading included:
+
+| Entry                    | Ratio to `pass` |
+| ------------------------ | --------------- |
+| `pass`, the kernels      | 1               |
+| `build`, the graph's ops | 0.85            |
+
+Each is one test of `example/gemma3-270m/generate_test.wado`, run alone:
+
+```sh
+cd package-loam/example
+wado test --collector drc gemma3-270m/generate_test.wado --test-name greedily
+wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph build"
+```
 
 ## Known gaps
 
