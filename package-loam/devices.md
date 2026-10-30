@@ -122,6 +122,17 @@ graph being built.
 - `Cpu`'s `Graph` computes each node as it is added. So `Cpu` runs the same
   body as the devices and stays the reference they are held to.
 
+`Holds` is what a backend and a graph share: a tensor type, `upload` and
+`extents_of`. `Backend` and `Graph` both extend it, so `Cache<H>` and
+`Passed<H>` serve the kernels' `pass` and the graph's `build` alike until the
+WebGPU compiler replaces `pass`. The weights a graph reads are `Params<G>`, each
+a tensor of the graph in the element type it computes in.
+
+An operation whose output axes are not its operands' takes them as a type
+argument, as `reshape` does, and the generator spells them. Wado's packs cannot
+state where `dot_general`'s free axes go, so the type checks that each operand
+is the tensor the generator meant, and the generator states the result.
+
 The generator keeps its own analyses at build time: stage 0, axis inference,
 which axes may be padded, and the cache's pairs. Each analysis is device
 independent, and `loam dump` reports it as now.
@@ -132,9 +143,13 @@ The graph's operations take their meaning from the StableHLO specification:
 `dot_general`, the elementwise operators, `reduce`, `select`, `broadcast_in_dim`,
 `reshape`, `transpose`, `concatenate`, `slice`, `dynamic_slice`,
 `dynamic_update_slice`, `gather`, `scatter`, `sort`, `iota`, `convert`,
-`compare`, `case` and `while`. A specification fixes what each operation means, which Loam's own
-kernel set never did. The lowering to a TPU is then one to one. The StableHLO
-front end, a roadmap item, reads into the same graph.
+`compare`, `case`, `while`, and `convolution` and `reduce_window` for a
+convolutional network. A specification fixes what each operation means, which
+Loam's own kernel set never did. The lowering to a TPU is then one to one. The
+StableHLO front end, a roadmap item, reads into the same graph.
+
+StableHLO has no error function, which GELU reads. `erf` takes its meaning from
+CHLO, the dialect XLA lowers into StableHLO, as `chlo.erf`.
 
 ### A composite is a computation no fusion reaches
 
@@ -142,7 +157,8 @@ A composite is a node that names a computation and carries its decomposition
 into the operations above, as StableHLO's `composite` does. A device that has a
 kernel for the composite runs that kernel, and any other device runs the
 decomposition. `Cpu` always runs the decomposition, so every kernel is held to
-it.
+it. In `Graph` a composite is a method whose default body is the
+decomposition, which a device with a kernel overrides.
 
 A computation is a composite only where its fastest kernel computes in an order
 that no fusion of its parts' kernels reaches. Where fusion reaches the fastest

@@ -61,15 +61,27 @@ fn opened<Axes>(cpu: &mut Cpu, then: &Option<Epilogue<Handle<f32, Axes>>>) -> Op
     return Option::Some(Epilogue { operands, op: e.op });
 }
 
-impl Backend for Opaque {
+impl Holds for Opaque {
     type Tensor<E: Element, Axes> = Handle<E, Axes>;
-    type Operand<Axes> = Handle<f32, Axes>;
-    type Rhs<K, N> = Packed<K, N>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<E, Axes> {
         self.uploads += 1;
         return handle(*t);
     }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Handle<E, Axes>) -> List<i32> {
+        return t.held.extents;
+    }
+
+    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<f32, Axes> {
+        self.prepared += 1;
+        return handle(widen(t));
+    }
+}
+
+impl Backend for Opaque {
+    type Operand<Axes> = Handle<f32, Axes>;
+    type Rhs<K, N> = Packed<K, N>;
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {
         self.uploads += 1;
@@ -94,15 +106,6 @@ impl Backend for Opaque {
     fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
         self.downloads += 1;
         return t.held;
-    }
-
-    fn extents_of<E: Element, Axes>(&self, t: &Handle<E, Axes>) -> List<i32> {
-        return t.held.extents;
-    }
-
-    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Handle<f32, Axes> {
-        self.prepared += 1;
-        return handle(widen(t));
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Handle<E, Axes> {
