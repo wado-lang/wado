@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793273836441,
+  "lastUpdate": 1793329125937,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72369,6 +72369,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 316581,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "37b9a0afc878aac87a7a79c76ac7b71841231346",
+          "message": "Merge pull request #2496 from wado-lang/fix/ref-to-ref-representation\n\nfix(types): a reference to a reference rebinds the variable it names",
+          "timestamp": "2026-10-30T11:45:42+09:00",
+          "tree_id": "7458098d2d437d69ff74114bf143b70738e3634d",
+          "url": "https://github.com/wado-lang/wado/commit/37b9a0afc878aac87a7a79c76ac7b71841231346"
+        },
+        "date": 1793329124878,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
             "unit": "bytes"
           }
         ]
