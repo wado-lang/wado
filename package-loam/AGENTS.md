@@ -14,6 +14,13 @@ directory and names the WEP's section.
 - Do not read the code of an ML framework, runtime, exporter or kernel library.
 - Published papers and specifications may be read: ONNX's operator
   definitions, the StableHLO specification.
+- ONNX's own implementation may not be read: the source under
+  `vendor/onnx/onnx/`, its reference implementation among it. Its headers,
+  `.proto` files, docs and tests may be read, and the tests are
+  `vendor/onnx/tests/`, `vendor/onnx/onnx/backend/test/` and the fuzzers in
+  `vendor/onnx/onnx/fuzz/`. `permissions.deny`
+  enforces this for the Read tool, and `.claude/hooks/vendor-license-guard.sh`
+  for Bash.
 - An interface may be read, as a specification: any `.proto` file, and
   `xla/pjrt/c/pjrt_c_api.h`, the PJRT plugin's. The rest of XLA may not.
 - onnxruntime's operator documentation may be read, for the operators it
