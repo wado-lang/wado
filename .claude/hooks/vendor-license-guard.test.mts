@@ -33,6 +33,13 @@ const DENIED: [string, string?][] = [
   ["cat vendor/antlr4/runtime/Java/src/org/antlr/v4/runtime/atn/LL1Analyzer.java"],
   ["rg ParserATNSimulator vendor/antlr4/runtime"],
   ["bash -c 'cat vendor/onnx/onnx/helper.py'"],
+  ["git show HEAD:vendor/onnx/onnx/helper.py"],
+  ["git show :vendor/onnx/onnx/helper.py"],
+  ["git log -p -- vendor/onnx/onnx"],
+  ["git log --patch vendor/onnx/onnx"],
+  ['cat "$PWD/vendor/onnx/onnx/helper.py"'],
+  ["cat ${PWD}/vendor/onnx/onnx/helper.py"],
+  ["cat $REPO/vendor/onnx/onnx/helper.py"],
 ];
 
 const ALLOWED: [string, string?][] = [
@@ -50,6 +57,9 @@ const ALLOWED: [string, string?][] = [
   ["cd vendor/onnx && ls onnx"],
   ["git -C vendor/onnx ls-files onnx"],
   ["git submodule update --init --depth 1 vendor/onnx"],
+  ["git log --oneline -- vendor/onnx"],
+  ["git show HEAD:vendor/onnx/onnx/onnx.proto"],
+  ["cat $PWD/vendor/onnx/docs/Operators.md"],
   ["cat vendor/antlr4/doc/lexer-rules.md"],
   ["cat vendor/antlr4/tool/resources/org/antlr/v4/parse/ANTLRLexer.g4"],
   ["rg -n tpu --glob '!vendor' ."],

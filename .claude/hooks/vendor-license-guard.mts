@@ -64,23 +64,51 @@ function judge(rel: string, lists: boolean): string | null {
   return null;
 }
 
+/** `git log`'s options that print each commit's diff, which is the files' contents. */
+const GIT_PATCH = /^(-p|-u|-U\d*|--patch|--unified(=.*)?|--word-diff(=.*)?|--color-words(=.*)?|--cc|--patch-with-stat|--patch-with-raw)$/;
+
 /** Whether the command reads no file's contents, only names. */
 function onlyLists({ name, args }: Command): boolean {
   if (LISTS.has(name)) return true;
   if (name !== "git") return false;
   const sub = args.findIndex(({ value }, i) => !value.startsWith("-") && args[i - 1]?.value !== "-C" && args[i - 1]?.value !== "-c");
-  return sub >= 0 && GIT_LISTS.has(args[sub].value);
+  if (sub < 0 || !GIT_LISTS.has(args[sub].value)) return false;
+  return !(args[sub].value === "log" && args.slice(sub + 1).some(({ value }) => GIT_PATCH.test(value)));
 }
 
-/** The paths a word may name: itself, and what follows a `=` in it. */
-const candidates = (value: string) => [value, ...value.split("=").slice(1)].filter((v) => v !== "");
+/** A word's leading `$NAME`, `${NAME}` or `~`, which the shell expands before a file is opened. */
+const EXPANSION = /^(?:\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?|~)(?=\/|$)/;
+
+/** The paths a word may name, as git and the shell read it: itself, what follows
+ * a `=` or a git `<rev>:` in it, and what a leading expansion leaves. `$PWD` is
+ * `dir`; any other expansion is a directory unknown here, so what follows it is
+ * judged from its `vendor` on, as if the repository held it. */
+function candidates(value: string, dir: string): string[] {
+  const words = [value, ...value.split("=").slice(1), ...value.split(":").slice(1)];
+  const named: string[] = [];
+  for (const word of words.filter((w) => w !== "")) {
+    const expansion = word.match(EXPANSION);
+    if (!expansion) {
+      named.push(word);
+      continue;
+    }
+    const rest = word.slice(expansion[0].length);
+    if (expansion[1] === "PWD") {
+      named.push(path.join(dir, rest));
+      continue;
+    }
+    const vendor = rest.search(/\/vendor(\/|$)/);
+    if (vendor >= 0) named.push(path.join(ROOT, rest.slice(vendor + 1)));
+  }
+  return named;
+}
 
 /** Why the command is denied, or null when it reads no forbidden source. */
 export function denialReason(command: string, cwd: string = ROOT): string | null {
   let dir = cwd;
   for (const cmd of commands(command)) {
     const lists = onlyLists(cmd);
-    const named = [...cmd.args.flatMap(({ value }) => candidates(value)), ...cmd.redirects.map(({ value }) => value)];
+    const named = [...cmd.args, ...cmd.redirects].flatMap(({ value }) => candidates(value, dir));
     for (const word of named) {
       const reason = judge(path.relative(ROOT, path.resolve(dir, word)), lists);
       if (reason) return reason;
