@@ -5,6 +5,7 @@ use {
     DotDims,
     GatherDims,
     Graph,
+    ScatterDims,
     Unary,
     WindowReduce,
     from_end_indices,
@@ -258,6 +259,39 @@ test "gather along an inner axis puts the indices' axes where the axis was" {
     let y: Tensor<i64, [A, D, C]> = g.gather(&x, &indices, &dims);
     assert y.extents == [2, 2, 2] as List<i32>;
     assert y.data == [4, 5, 0, 1, 10, 11, 6, 7] as List<i64>;
+}
+
+test "scatter writes each row's window at that row's own position, and drops one outside" {
+    let g = &mut Cpu {};
+    // Two rows of four positions of two, written one position each, as a
+    // cache takes each row's new position at its own valid length.
+    let cache = Tensor::<f32, [A, B, C]> {
+        data: List::<f32>::filled(16, 0.0),
+        extents: [2, 4, 2],
+    };
+    let positions = Tensor::<i64, [A, D]> {
+        data: [0, 1, 1, 3],
+        extents: [2, 2],
+    };
+    let fresh = Tensor::<f32, [A, D, C]> {
+        data: [1.0, 2.0, 3.0, 4.0],
+        extents: [2, 1, 2],
+    };
+    let dims = ScatterDims {
+        update_window_dims: [1, 2],
+        inserted_window_dims: [0],
+        scatter_dims_to_operand_dims: [0, 1],
+        index_vector_dim: 1,
+    };
+    let y = g.scatter(&cache, &positions, &fresh, &dims);
+    assert y.extents == [2, 4, 2] as List<i32>;
+    assert y.data == [0.0, 0.0, 1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 4.0] as List<f32>;
+    let past_the_end = Tensor::<i64, [A, D]> {
+        data: [0, 4, 1, 0],
+        extents: [2, 2],
+    };
+    let z = g.scatter(&cache, &past_the_end, &fresh, &dims);
+    assert z.data == [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as List<f32>;
 }
 
 test "a convolution slides its kernel over the padded input" {

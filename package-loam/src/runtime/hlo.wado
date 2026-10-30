@@ -74,6 +74,14 @@ pub struct GatherDims {
     pub slice_sizes: List<i32>,
 }
 
+/// The attributes of a StableHLO `scatter`, without batching dimensions.
+pub struct ScatterDims {
+    pub update_window_dims: List<i32>,
+    pub inserted_window_dims: List<i32>,
+    pub scatter_dims_to_operand_dims: List<i32>,
+    pub index_vector_dim: i32,
+}
+
 /// The attributes of a StableHLO `convolution` whose input and output are laid
 /// out batch, feature, then the spatial axes, and whose kernel is laid out
 /// output feature, input feature, then the spatial axes. `padding` holds each
@@ -166,6 +174,16 @@ pub affine trait Graph: Holds with _ {
         indices: &Self::Tensor<i64, I>,
         dims: &GatherDims,
     ) -> Self::Tensor<E, Out>;
+    /// StableHLO's `scatter` whose update computation returns the update, so
+    /// each element an update reaches is replaced. The specification leaves an
+    /// update outside the operand to the implementation; here it is dropped.
+    fn scatter<E: Element, D, I, U>(
+        &mut self,
+        operand: &Self::Tensor<E, D>,
+        indices: &Self::Tensor<i64, I>,
+        updates: &Self::Tensor<E, U>,
+        dims: &ScatterDims,
+    ) -> Self::Tensor<E, D>;
     fn convolution<In, K, Out>(
         &mut self,
         x: &Self::Tensor<f32, In>,
@@ -747,6 +765,54 @@ impl Graph for Cpu {
             advance(&mut out, &extents);
         }
         return Tensor { data, extents };
+    }
+
+    fn scatter<E: Element, D, I, U>(
+        &mut self,
+        operand: &Tensor<E, D>,
+        indices: &Tensor<i64, I>,
+        updates: &Tensor<E, U>,
+        dims: &ScatterDims,
+    ) -> Tensor<E, D> {
+        let rank = operand.extents.len();
+        let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
+        let index_axes: List<i32> = (0..<indices.extents.len()).filter(|i| i != dims.index_vector_dim).collect();
+        let scatter_axes: List<i32> = (0..<updates.extents.len())
+            .filter(|d| !dims.update_window_dims.contains(&d))
+            .collect();
+        let own = row_major_strides(&operand.extents);
+        let index_strides = row_major_strides(&indices.extents);
+        let vector_stride = if dims.index_vector_dim == indices.extents.len() {
+            0;
+        } else {
+            index_strides[dims.index_vector_dim];
+        };
+        let mut data = operand.data;
+        let mut u = List::<i32>::filled(updates.extents.len(), 0);
+        for let n of 0..<element_count(&updates.extents) {
+            let mut index_base = 0;
+            for let [k, i] of index_axes.into_iter().enumerate() {
+                index_base += u[scatter_axes[k]] * index_strides[i];
+            }
+            let mut position = List::<i64>::filled(rank, 0);
+            for let [k, axis] of dims.scatter_dims_to_operand_dims.into_iter().enumerate() {
+                position[axis] = indices.data[index_base + k * vector_stride];
+            }
+            for let [j, d] of dims.update_window_dims.into_iter().enumerate() {
+                position[window_axes[j]] += u[d] as i64;
+            }
+            let mut at = 0;
+            let mut inside = true;
+            for let a of 0..<rank {
+                inside = inside && 0 <= position[a] < operand.extents[a] as i64;
+                at += position[a] as i32 * own[a];
+            }
+            if inside {
+                data[at] = updates.data[n];
+            }
+            advance(&mut u, &updates.extents);
+        }
+        return Tensor { data, extents: operand.extents };
     }
 
     fn convolution<In, K, Out>(

@@ -289,9 +289,10 @@ each symbolic axis whether it can promise that, at build time:
   of the axis yields the valid length, a value, and so does a `ReduceMean`'s
   divisor. A graph that computes from the count, as a causal mask's slice
   does, computes from the value. A slice whose start then depends on the value
-  becomes a `dynamic_slice`. That operation has no stride, so a slice of
-  `length` elements with a step other than 1 takes `(length - 1) * step + 1`
-  elements, and a strided `slice` follows it.
+  becomes a `gather` of each row's window, since each row has its own value
+  and a `dynamic_slice` takes one start for all of them. A `gather` has no
+  stride, so a slice of `length` elements with a step other than 1 takes
+  `(length - 1) * step + 1` elements, and a strided `slice` follows it.
 - A `Concat` along a padded axis would put padding between the parts, so it
   becomes a `scatter` that writes the second part at the first part's valid
   length.
