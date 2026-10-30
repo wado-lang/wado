@@ -240,6 +240,92 @@ pair (float[N, 2] A) => (float[N, 2] Z, float[N, 2] Y)
     assert out.contains("return Outputs { Z: backend.download(&Z), Y: backend.download(&Y) };");
 }
 
+/// A decoder whose keys grow by the positions each pass computes, beside a
+/// state of fixed extents, each handed from one pass to the next.
+fn decoder(past_key: String, present_key: String, batch: String = "1") -> String {
+    return `
+decoder (float[${batch}, N, 2] X, float[${batch}, P, 2] ${past_key}, float[3] past_state) => (float[${batch}, N, 2] Y, float[${batch}, ?, 2] ${present_key}, float[3] present_state)
+{
+    Y = Relu(X)
+    ${present_key} = Concat<axis = 1>(${past_key}, X)
+    present_state = Neg(past_state)
+}
+`;
+}
+
+test "the pasts and the presents they pair with are one Cache, which the pass takes and returns" {
+    let out = generate(decoder("past_key", "present_key")).unwrap();
+
+    assert out.contains("pub struct Cache<affine Bk: Backend> {\n    pub past_key: Bk::Tensor<f32, [");
+    assert out.contains("    pub past_state: Bk::Tensor<f32, [");
+    let pass = out.substr_bytes(out.find("pub fn pass").unwrap(), out.find("pub fn forward").unwrap());
+    assert pass.contains("cache: &Cache<Bk>, weights: &Prepared<Bk>) -> Passed<Bk> with _ {");
+    assert !pass.contains("past_key: &Bk::Tensor");
+    assert pass.contains("let past_key = &cache.past_key;");
+    assert pass.contains("cache: Cache { past_key: backend.reshape::<f32, [");
+    assert out.contains("pub struct Passed<affine Bk: Backend> {\n    pub Y: Bk::Tensor<f32, [");
+    assert out.contains("    pub cache: Cache<Bk>,\n}");
+    assert !out.contains("pub present_key");
+    assert out.contains("    pub Y: Tensor<f32, [");
+    assert out.contains("return Outputs { Y: backend.download(&Y), cache: cache };");
+}
+
+test "forward keeps the cache it is given through the pass it begins" {
+    let out = generate(decoder("past_key", "present_key")).unwrap();
+
+    let forward = out.substr_bytes(out.find("pub fn forward").unwrap(), out.len());
+    assert forward.contains("cache: &Cache<Bk>, weights: &Prepared<Bk>) -> Outputs<Bk> with _ {");
+    assert out.contains("pub struct Outputs<affine Bk: Backend> {");
+    assert forward.find("cache.retain(backend);").unwrap() < forward.find("backend.begin();").unwrap();
+    assert !forward.contains("input_mismatch(past_key");
+    assert forward.contains("let Passed { Y, cache } = pass(backend, &X, cache, weights);");
+}
+
+test "an empty cache holds no position along the past's length, and zeros of every other state" {
+    let out = generate(decoder("past_key", "present_key")).unwrap();
+
+    assert out.contains("    pub fn empty(backend: &mut Bk) -> Cache<Bk> with _ {");
+    assert out.contains("past_key: backend.upload(&Tensor::<f32, [");
+    assert out.contains("]> { data: [], extents: [1, 0, 2] }),");
+    assert out.contains("]> { data: List::<f32>::filled(3, 0 as f32), extents: [3] }),");
+    assert out.contains(
+        "    pub fn retain(&self, backend: &mut Bk) with _ {\n        backend.retain(&self.past_key);\n        backend.retain(&self.past_state);\n    }",
+    );
+}
+
+test "past_key_values pairs with present, the one irregular spelling" {
+    let out = generate(decoder("\"past_key_values.0.key\"", "\"present.0.key\"")).unwrap();
+
+    assert out.contains("pub past_key_values_0_key: Bk::Tensor<f32, [");
+}
+
+test "a past no present pairs with stops the build naming it" {
+    let err = generate(decoder("past_key", "present_keys")).unwrap_err();
+
+    assert `${err}` == "past_key: no present pairs with this past, so the cache would be partial";
+}
+
+test "a graph that names only presents keeps them as outputs" {
+    let source = `
+prompt (float[1, N, 2] X) => (float[1, N, 2] Y, float[1, N, 2] present_key)
+{
+    Y = Relu(X)
+    present_key = Neg(X)
+}
+`;
+    let out = generate(source).unwrap();
+
+    assert !out.contains("Cache");
+    assert out.contains("pub present_key: Tensor<f32, [");
+}
+
+test "a cache axis of no fixed length beside the past's own stops the build naming it" {
+    let err = generate(decoder("past_key", "present_key", "B")).unwrap_err();
+
+    assert `${err}`.starts_with("past_key: the cache's axis ");
+    assert `${err}`.ends_with(" has no fixed length for an empty cache to take; fix it with `dims`");
+}
+
 test "an output that is a graph input is downloaded into the outputs" {
     let source = `
 pass (float[N, 2] A) => (float[N, 2] A, float[N, 2] Y)

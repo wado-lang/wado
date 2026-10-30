@@ -4,7 +4,7 @@
 //! through the branch with one. Each reproduces the logits onnxruntime computes.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Cache, assert_close, ints_of, past, tensor_of } from "./oracle.wado";
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
@@ -20,10 +20,11 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
 /// by theirs. An empty cache takes the branch without a past.
 fn run(
     ids: List<i64>,
-    cache: &Cache,
+    cache: &merged::Cache<Cpu>,
     weights: &merged::Prepared<Cpu>,
-) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, Cache] {
-    let length = cache[0].1[2] + ids.len();
+) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
+    let past_length = cache.past_key_values_0_key.extents[2];
+    let length = past_length + ids.len();
     let o = merged::forward(
         &mut Cpu {},
         &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
@@ -34,46 +35,18 @@ fn run(
             data: List::<i64>::filled(length, 1),
             extents: [1, length],
         },
-        &past(cache, 0),
-        &past(cache, 1),
-        &past(cache, 2),
-        &past(cache, 3),
-        &past(cache, 4),
-        &past(cache, 5),
-        &past(cache, 6),
-        &past(cache, 7),
-        &past(cache, 8),
-        &past(cache, 9),
         &Tensor::<bool, [merged::UseCacheBranch0]> {
-            data: [cache[0].1[2] > 0],
+            data: [past_length > 0],
             extents: [1],
         },
+        cache,
         weights,
     );
-    let grown: Cache = [
-        [o.present_0_key.data, o.present_0_key.extents],
-        [o.present_0_value.data, o.present_0_value.extents],
-        [o.present_1_key.data, o.present_1_key.extents],
-        [o.present_1_value.data, o.present_1_value.extents],
-        [o.present_2_key.data, o.present_2_key.extents],
-        [o.present_2_value.data, o.present_2_value.extents],
-        [o.present_3_key.data, o.present_3_key.extents],
-        [o.present_3_value.data, o.present_3_value.extents],
-        [o.present_4_key.data, o.present_4_key.extents],
-        [o.present_4_value.data, o.present_4_value.extents],
-    ];
-    return [o.logits, grown];
+    return [o.logits, o.cache];
 }
 
-fn empty_cache() -> Cache {
-    let mut cache: Cache = [];
-    for let _ of 0..<10 {
-        cache.push([
-            [],
-            [1, 4, 0, 8],
-        ]);
-    }
-    return cache;
+fn empty_cache() -> merged::Cache<Cpu> {
+    return merged::Cache::empty(&mut Cpu {});
 }
 
 test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
@@ -102,7 +75,7 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
         let [logits, grown] = run(ids, &cache, &weights);
         assert logits.extents == want_extents;
         assert_close(&logits.data, &want);
-        assert grown[0].1 == [1, 4, length, 8] as List<i32>;
+        assert grown.past_key_values_0_key.extents == [1, 4, length, 8] as List<i32>;
         cache = grown;
     }
 }
@@ -123,20 +96,11 @@ test "a mask that is not as long as the past and the step stops the step" {
             data: [1],
             extents: [1, 1],
         },
-        &past(&cache, 0),
-        &past(&cache, 1),
-        &past(&cache, 2),
-        &past(&cache, 3),
-        &past(&cache, 4),
-        &past(&cache, 5),
-        &past(&cache, 6),
-        &past(&cache, 7),
-        &past(&cache, 8),
-        &past(&cache, 9),
         &Tensor::<bool, [merged::UseCacheBranch0]> {
             data: [true],
             extents: [1],
         },
+        &cache,
         &weights,
     );
 }

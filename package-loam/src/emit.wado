@@ -6,6 +6,7 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado }
 use { Extent, Solved, solved } from "./extent.wado";
 use {
     BACKEND_PARAM,
+    CACHE,
     CHECKPOINT_PARAM,
     KEPT,
     MAP,
@@ -83,9 +84,19 @@ pub struct NameCollision {
     pub ident: String,
 }
 
+/// An axis of a cache field that neither the graph fixes nor the past's length
+/// gives, so an empty cache has no extent to take along it.
+pub struct OpenCacheAxis {
+    pub tensor: String,
+    pub axis: String,
+}
+
 pub variant EmitError {
     Dtype(UnmappedDtype),
     Collision(NameCollision),
+    /// A past no present pairs with, or a present no past pairs with.
+    Unpaired(String),
+    OpenCache(OpenCacheAxis),
     /// A graph with nothing for `forward` to return.
     NoOutput,
     /// A symbol the run needs the value of, which no input's axis carries.
@@ -111,6 +122,15 @@ impl Display for EmitError {
         match self {
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
+            Unpaired(tensor) => {
+                let side = if tensor.starts_with("past") { "no present pairs with this past" } else { "no past pairs with this present" };
+                f.write_str(`${tensor}: ${side}, so the cache would be partial`);
+            },
+            OpenCache(e) => {
+                f.write_str(
+                    `${e.tensor}: the cache's axis ${e.axis} has no fixed length for an empty cache to take; fix it with \`dims\``,
+                );
+            },
             NoOutput => f.write_str("the graph declares no output for `forward` to return"),
             Unbound(symbol) => {
                 f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
@@ -209,7 +229,8 @@ pub fn emit(
         rhs,
         paired: together.paired,
     };
-    emit_forward(&mut w, graph, checked, &decided, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
+    let pairs = cache_pairs(graph)?;
+    emit_forward(&mut w, graph, checked, &decided, &names, &held, exprs, &literals, &kept, symbols, fuse, &pairs)?;
     return Result::Ok(w.to_string());
 }
 
@@ -236,6 +257,38 @@ fn boundary_extents(graph: &Graph, shapes: &HashMap<String, Shape>) -> HashMap<S
         fixed.remove(name);
     }
     return fixed;
+}
+
+/// Each past input and the present output it pairs with, by the names Hugging
+/// Face's exporters give them: `past<rest>` pairs with `present<rest>`, but
+/// `past_key_values.<rest>` with `present.<rest>`. A graph that names only one
+/// side keeps no cache.
+fn cache_pairs(graph: &Graph) -> Result<List<[String, String]>, EmitError> {
+    let pasts: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|n| n.starts_with("past")).collect();
+    let mut presents = HashSet::<String>::new();
+    for let vi of &graph.outputs {
+        if vi.name.starts_with("present") {
+            presents.insert(vi.name);
+        }
+    }
+    if pasts.is_empty() || presents.is_empty() {
+        return Result::Ok([]);
+    }
+    let mut pairs: List<[String, String]> = [];
+    for let past of pasts {
+        let rest = past.strip_prefix("past_key_values.").map(|r| `.${r}`).unwrap_or(past.substr_bytes(4, past.len()));
+        let present = `present${rest}`;
+        if !presents.remove(present) {
+            builtin::cold_path();
+            return Result::Err(EmitError::Unpaired(past));
+        }
+        pairs.push([past, present]);
+    }
+    for let present of presents {
+        builtin::cold_path();
+        return Result::Err(EmitError::Unpaired(present));
+    }
+    return Result::Ok(pairs);
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel
@@ -965,6 +1018,7 @@ fn emit_forward(
     kept: &List<String>,
     mut symbols: Symbols,
     fuse: bool,
+    pairs: &List<[String, String]>,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let mut pass = FnSpec::new("pass", Vis::Pub);
@@ -974,16 +1028,33 @@ fn emit_forward(
     // `pass` takes each input as the backend holds it, and `forward` takes it
     // on the host and uploads it once the pass has begun. The weights are the
     // backend's already.
+    // The pasts cross in one `Cache`, and the presents replace them in it.
+    let mut cached = HashSet::<String>::new();
+    let mut presents = HashSet::<String>::new();
+    for let [past, present] of *pairs {
+        cached.insert(past);
+        presents.insert(present);
+    }
+    let has_cache = !pairs.is_empty();
     let mut uploads: List<String> = [];
     let mut arguments: List<String> = ["backend"];
     for let vi of &graph.inputs {
         let ident = names.get(&vi.name);
+        exprs.values[vi.name] = ident;
+        exprs.borrowed.insert(vi.name);
+        if cached.contains(vi.name) {
+            continue;
+        }
         pass.add_param(ident, `&${prepared_type(checked, &vi.name)}`);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
         uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, Holding::Pass)};`);
-        exprs.values[vi.name] = ident;
-        exprs.borrowed.insert(vi.name);
         arguments.push(`&${ident}`);
+    }
+    let cache_type = `&${CACHE}<${BACKEND_PARAM}>`;
+    if has_cache {
+        pass.add_param("cache", cache_type);
+        forward.add_param("cache", cache_type);
+        arguments.push("cache");
     }
     arguments.push("weights");
     for let vi of &graph.initializers {
@@ -992,19 +1063,25 @@ fn emit_forward(
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;
     }
-    let several = graph.outputs.len() > 1;
-    let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
-    forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
-    let passed_type = if several {
-        `${PASSED}<${BACKEND_PARAM}>`;
+    let returned: List<String> = graph.outputs.into_iter().map(|vi| vi.name).filter(|o| !presents.contains(o)).collect();
+    let several = returned.len() > 1 || has_cache;
+    let returned_type = if has_cache {
+        `Outputs<${BACKEND_PARAM}>`;
+    } else if several {
+        "Outputs";
     } else {
-        prepared_type(checked, &graph.outputs[0].name);
+        tensor_type(checked, held, &returned[0]);
     };
+    forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
+    let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
     pass.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(passed_type).add_effect("_");
 
+    if has_cache {
+        emit_cache(w, pairs, checked, names)?;
+    }
     if several {
-        emit_outputs(w, graph, checked, names, held);
-        emit_passed(w, graph, checked, names);
+        emit_outputs(w, &returned, has_cache, checked, names, held);
+        emit_passed(w, &returned, has_cache, checked, names);
     }
     w.blank();
     w.line("/// The graph's forward pass over inputs the backend holds, one kernel call");
@@ -1013,7 +1090,11 @@ fn emit_forward(
     w.line("/// begins the pass, `backend.begin()`, before it uploads the inputs. The next");
     w.line("/// begin releases what the pass computed, but for what `backend.retain` keeps.");
     pass.emit_begin(w);
-    let checks = input_checks(graph, shapes, names);
+    for let [past, _] of *pairs {
+        let ident = names.get(&past);
+        w.line(`let ${ident} = &cache.${ident};`);
+    }
+    let checks = input_checks(graph, shapes, names, &cached);
     for let line of checks.held {
         w.line(&line);
     }
@@ -1033,11 +1114,20 @@ fn emit_forward(
         }
     }
     if !several {
-        w.line(`return ${exprs.value(&graph.outputs[0].name)};`);
+        w.line(`return ${exprs.value(&returned[0])};`);
     } else {
-        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
-            return `${names.get(&vi.name)}: ${exprs.value(&vi.name)}`;
-        }).collect();
+        let mut fields: List<String> = returned.into_iter().map(|o| `${names.get(&o)}: ${exprs.value(&o)}`).collect();
+        if has_cache {
+            // Each present under its past's axes, as the next pass reads it.
+            let mut parts: List<String> = [];
+            for let [past, present] of *pairs {
+                let at = exprs.reference(&present);
+                let element = checked.primitives.get(present).unwrap();
+                let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(&shapes.get(past).unwrap())}]`;
+                parts.push(`${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`);
+            }
+            fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
+        }
         w.line(`return ${PASSED} { ${fields.join(", ")} };`);
     }
     w.end();
@@ -1045,7 +1135,9 @@ fn emit_forward(
     w.blank();
     w.line("/// [`pass`] over inputs on the host, its outputs read back to the host.");
     forward.emit_begin(w);
-    for let lines of [checks.host, ["backend.begin();"] as List<String>, uploads] as List<List<String>> {
+    // The cache was computed before the pass this call begins.
+    let keep_cache: List<String> = if has_cache { ["cache.retain(backend);"] } else { [] };
+    for let lines of [checks.host, keep_cache, ["backend.begin();"] as List<String>, uploads] as List<List<String>> {
         for let line of lines {
             w.line(&line);
         }
@@ -1058,27 +1150,97 @@ fn emit_forward(
     // Bound to the outputs' own names, which the module's names already
     // keep apart, so `forward` reserves none of its own.
     if !several {
-        w.line(`return ${downloaded(&graph.outputs[0].name, passed)};`);
+        w.line(`return ${downloaded(&returned[0], passed)};`);
     } else {
-        let idents: List<String> = graph.outputs.into_iter().map(|vi| names.get(&vi.name)).collect();
+        let mut idents: List<String> = returned.into_iter().map(|o| names.get(&o)).collect();
+        let mut fields: List<String> = returned.into_iter().map(|o| `${names.get(&o)}: ${downloaded(&o, names.get(&o))}`).collect();
+        if has_cache {
+            idents.push("cache");
+            fields.push("cache: cache");
+        }
         w.line(`let ${PASSED} { ${idents.join(", ")} } = ${passed};`);
-        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
-            let ident = names.get(&vi.name);
-            return `${ident}: ${downloaded(&vi.name, ident)}`;
-        }).collect();
         w.line(`return Outputs { ${fields.join(", ")} };`);
     }
     w.end();
     return Result::Ok(());
 }
 
+/// `Cache`, one field per pair, each held under its past's axes; its `empty`,
+/// the state before the first pass; and its `retain`.
+fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Checked, names: &Names) -> Result<(), EmitError> {
+    let mut cache = StructSpec::new(CACHE, Vis::Pub);
+    cache.add_generic(BACKEND_BOUND);
+    let mut empties: List<String> = [];
+    let mut retains: List<String> = [];
+    for let [past, present] of *pairs {
+        let ident = names.get(&past);
+        cache.add_pub_field(ident, prepared_type(checked, &past));
+        let shape = checked.shapes[past];
+        let mut extents: List<i64> = [];
+        for let [i, axis] of shape.axes.into_iter().enumerate() {
+            let Symbolic(_) = axis.extent else {
+                extents.push(axis.static_extent() as i64);
+                continue;
+            };
+            // The past's length grows into the present's, and an empty cache
+            // holds none of it.
+            if checked.shapes[present].axes[i].name == axis.name {
+                builtin::cold_path();
+                return Result::Err(EmitError::OpenCache(OpenCacheAxis { tensor: past, axis: axis.name }));
+            }
+            extents.push(0);
+        }
+        let primitive = checked.primitives[past];
+        let count = extents.into_iter().fold(1 as i64, |n, e| n * e);
+        let data = if count == 0 { "[]" } else { `List::<${primitive}>::filled(${count}, ${zero_of(&primitive)})` };
+        empties.push(
+            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents} }),`,
+        );
+        retains.push(`backend.retain(&self.${ident});`);
+    }
+    w.blank();
+    w.line("/// The state the graph hands from one pass to the next, as the backend holds");
+    w.line("/// it: each past it reads, which the present it computes replaces.");
+    cache.emit(w);
+    w.blank();
+    let mut block = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
+    block.add_generic(BACKEND_BOUND);
+    block.emit_begin(w);
+    w.line("/// The state before the first pass: no position along a past's length,");
+    w.line("/// and zeros of every other state.");
+    w.line(`pub fn empty(backend: &mut ${BACKEND_PARAM}) -> ${CACHE}<${BACKEND_PARAM}> with _ {`);
+    w.line(`    return ${CACHE} {`);
+    for let line of empties {
+        w.line(`        ${line}`);
+    }
+    w.line("    };");
+    w.line("}");
+    w.blank();
+    w.line("/// Keeps the cache through the next `backend.begin()`.");
+    w.line(`pub fn retain(&self, backend: &mut ${BACKEND_PARAM}) with _ {`);
+    for let line of retains {
+        w.line(`    ${line}`);
+    }
+    w.line("}");
+    w.end();
+    return Result::Ok(());
+}
+
+/// A zero of `primitive`, as an empty state holds.
+fn zero_of(primitive: &String) -> String {
+    return if *primitive == "bool" { "false" } else { `0 as ${*primitive}` };
+}
+
 /// The struct `pass` returns a graph's several outputs in, each as the
 /// backend holds it.
-fn emit_passed(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names) {
+fn emit_passed(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, checked: &Checked, names: &Names) {
     let mut passed = StructSpec::new(PASSED, Vis::Pub);
     passed.add_generic(BACKEND_BOUND);
-    for let vi of &graph.outputs {
-        passed.add_pub_field(names.get(&vi.name), prepared_type(checked, &vi.name));
+    for let output of *returned {
+        passed.add_pub_field(names.get(&output), prepared_type(checked, &output));
+    }
+    if has_cache {
+        passed.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
     }
     w.blank();
     w.line("/// The graph's outputs as the backend holds them, in the order it declares them.");
@@ -1382,10 +1544,24 @@ fn indented(lines: List<String>) -> List<String> {
 }
 
 /// The struct `forward` returns a graph's several outputs in, one field each.
-fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &HashMap<String, String>) {
+fn emit_outputs(
+    w: &mut CodeWriter,
+    returned: &List<String>,
+    has_cache: bool,
+    checked: &Checked,
+    names: &Names,
+    held: &HashMap<String, String>,
+) {
     let mut outputs = StructSpec::new("Outputs", Vis::Pub);
-    for let vi of &graph.outputs {
-        outputs.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
+    if has_cache {
+        outputs.add_generic(BACKEND_BOUND);
+    }
+    for let output of *returned {
+        outputs.add_pub_field(names.get(&output), tensor_type(checked, held, &output));
+    }
+    if has_cache {
+        // The cache stays where the backend holds it, for the next pass.
+        outputs.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
     }
     w.blank();
     w.line("/// The graph's outputs, in the order it declares them.");
@@ -1555,14 +1731,15 @@ struct InputChecks {
     /// What `pass` checks of the inputs the backend holds: their extents.
     held: List<String>,
     /// What `forward` checks of the inputs on the host before it uploads them:
-    /// their extents, and that the data fills them.
+    /// their extents, and that the data fills them. A past the cache holds is
+    /// on the backend already, so only `pass` checks it.
     host: List<String>,
     /// The axes whose length is arithmetic over symbols, for `pass` to check
     /// once it has bound them.
     spelled: List<SpelledAxis>,
 }
 
-fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names) -> InputChecks {
+fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names, cached: &HashSet<String>) -> InputChecks {
     let mut checks = InputChecks { held: [], host: [], spelled: [] };
     let mut first_seen = HashMap::<String, String>::new();
     let mut agreements: List<String> = [];
@@ -1593,7 +1770,9 @@ fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names) -
         }
         let described = wado`"${vi.name}", [${axes.join(", ")}], ${stated}`;
         checks.held.push(`refuse(extents_mismatch(&backend.extents_of(${ident}), ${described}));`);
-        checks.host.push(`refuse(input_mismatch(${ident}, ${described}));`);
+        if !cached.contains(vi.name) {
+            checks.host.push(`refuse(input_mismatch(${ident}, ${described}));`);
+        }
     }
     checks.held.extend(&agreements);
     return checks;

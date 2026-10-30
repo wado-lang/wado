@@ -16,6 +16,9 @@ pub global PASSED: String = "Passed";
 /// The struct `forward` reads the weights from.
 pub global PREPARED: String = "Prepared";
 
+/// The struct a decoder's state crosses from one pass to the next in.
+pub global CACHE: String = "Cache";
+
 /// The struct the constructors of `Prepared` take its kept literals from.
 pub global KEPT: String = "Kept";
 
@@ -50,8 +53,12 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert("Weights");
     reserved.insert(PREPARED);
     reserved.insert(KEPT);
-    // The methods `Weights`, `Prepared` and `Kept` carry, which a field must
-    // not share.
+    reserved.insert(CACHE);
+    reserved.insert("cache");
+    // The methods `Weights`, `Prepared`, `Kept` and `Cache` carry, which a
+    // field must not share.
+    reserved.insert("empty");
+    reserved.insert("retain");
     reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
