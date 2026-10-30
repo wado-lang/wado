@@ -13,10 +13,20 @@ pub global CHECKPOINT_PARAM: String = "Ck";
 /// The struct `pass` returns several outputs in, as the backend holds them.
 pub global PASSED: String = "Passed";
 
+/// The struct `forward` returns several outputs in, on the host.
+pub global OUTPUTS: String = "Outputs";
+
 /// The struct `forward` reads the weights from.
 pub global PREPARED: String = "Prepared";
 
-/// The struct the constructors of `Prepared` take its kept literals from.
+/// The struct `build` reads the weights from, each a tensor of the graph.
+pub global PARAMS: String = "Params";
+
+/// The struct a decoder's state crosses from one pass to the next in.
+pub global CACHE: String = "Cache";
+
+/// The functions the constructors of `Prepared` and `Params` keep each folded
+/// literal with.
 pub global KEPT: String = "Kept";
 
 /// The map a sharded `load` takes the shards in, keyed by file name.
@@ -25,10 +35,12 @@ pub global MAP: String = "HashMap";
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "BinaryOp", "CheckpointBytes", "Columns", "Concat", "Epilogue", "Expected", "Expr",
-    "LoadError", "Merged", "Paired", "Prologue", "RowOp", "Step", "Tensor", "UnaryOp", "Window", "axis_mismatch",
-    "expect_len", "extent_mismatch", "extents_mismatch", "from_end", "input_mismatch", "narrow", "payload_at",
-    "read_checkpoint", "read_shards", "refuse", "to_extent", "unmet",
+    "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat", "Convolution",
+    "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Paired",
+    "Prologue", "RowOp", "Step", "Tensor", "Unary", "UnaryOp", "Window", "WindowReduce", "axis_mismatch", "expect_len",
+    "extent_mismatch", "extents_mismatch", "from_end", "from_end_indices", "full", "input_mismatch", "lifted", "narrow",
+    "payload_at", "range_i64", "read_checkpoint", "read_shards", "reduce_mean", "refuse", "softmax", "softmax_flattened",
+    "to_extent", "unmet",
 ];
 
 /// Whether `name` already means something in the generated module.
@@ -44,18 +56,25 @@ pub fn module_idents() -> HashSet<String> {
     }
     reserved.insert("forward");
     reserved.insert("pass");
-    reserved.insert("Outputs");
+    reserved.insert("build");
+    reserved.insert(PARAMS);
+    reserved.insert("params");
+    reserved.insert(OUTPUTS);
     reserved.insert(PASSED);
     reserved.insert("weights");
     reserved.insert("Weights");
     reserved.insert(PREPARED);
     reserved.insert(KEPT);
-    // The methods `Weights`, `Prepared` and `Kept` carry, which a field must
-    // not share.
+    reserved.insert(CACHE);
+    reserved.insert("cache");
+    // The methods `Weights`, `Prepared`, `Params` and `Cache` carry, which a
+    // field must not share.
+    reserved.insert("empty");
+    reserved.insert("retain");
     reserved.insert("prepare");
     reserved.insert("load");
     reserved.insert("embedded");
-    reserved.insert("new");
+    reserved.insert("embedded_data");
     reserved.insert("backend");
     reserved.insert(BACKEND_PARAM);
     reserved.insert(CHECKPOINT_PARAM);

@@ -1,0 +1,50 @@
+// A `pub` trait's default body is offered to impls beyond the package, so a
+// helper only it calls is live though every impl here overrides the method.
+// A private trait's is reached only by dispatch, so its helper stays dead.
+use { println, Stdout } from "core:cli";
+
+fn offered_helper() -> i32 {
+    return 1;
+}
+
+fn private_helper() -> i32 {
+    return 2;
+}
+
+pub trait Offered with () {
+    fn offered(&self) -> i32 {
+        return offered_helper();
+    }
+}
+
+trait Private with () {
+    fn private(&self) -> i32 {
+        return private_helper();
+    }
+}
+
+struct Square {}
+
+impl Offered for Square {
+    fn offered(&self) -> i32 {
+        return 3;
+    }
+}
+
+impl Private for Square {
+    fn private(&self) -> i32 {
+        return 4;
+    }
+}
+
+export fn run() with Stdout {
+    let s = Square {};
+    println(`${s.offered()} ${s.private()}`);
+}
+
+__DATA__
+{
+    "stdout": "3 4\n",
+    "warnings_contains": ["function `private_helper` is never used"],
+    "warnings_not_contains": ["function `offered_helper` is never used"]
+}

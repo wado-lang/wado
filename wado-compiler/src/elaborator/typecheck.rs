@@ -97,6 +97,11 @@ fn check_at(
     // the expected packs are in scope, which this layer cannot see;
     // `Elaborator::typecheck` adds that rule.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
+        // A hole inside decides nothing where the outermost types already
+        // part: `Result<i32, ?E>` is no `i32` whatever `?E` becomes.
+        if heads_apart(actual, expected, type_table) {
+            return TypeCheckResult::Incompatible;
+        }
         return TypeCheckResult::Deferred;
     }
 
@@ -272,6 +277,42 @@ fn check_at(
     }
 
     TypeCheckResult::Compatible
+}
+
+/// Whether `actual` and `expected` are apart at their outermost type, which no
+/// rule here relates across: two declarations, two primitives, or two kinds of
+/// type. A reference, a resource and `!` are not judged here, since a rule
+/// relates one to another of a different outermost type, and a hole or a
+/// parameter is no outermost type at all.
+fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    let head = |id: TypeId| match type_table.get(id) {
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Function { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Flags { .. } => Some(type_table.get(id)),
+        _ => None,
+    };
+    let (Some(a), Some(e)) = (head(actual), head(expected)) else {
+        return false;
+    };
+    match (a, e) {
+        (ResolvedType::Primitive(a), ResolvedType::Primitive(e)) => a != e,
+        (ResolvedType::Enum { def: a }, ResolvedType::Enum { def: e })
+        | (ResolvedType::Variant { def: a }, ResolvedType::Variant { def: e })
+        | (
+            ResolvedType::GenericInstance { def: a, .. },
+            ResolvedType::GenericInstance { def: e, .. },
+        )
+        | (ResolvedType::Newtype { def: a, .. }, ResolvedType::Newtype { def: e, .. })
+        | (ResolvedType::Flags { def: a }, ResolvedType::Flags { def: e }) => a != e,
+        (a, e) => std::mem::discriminant(a) != std::mem::discriminant(e),
+    }
 }
 
 /// The declaration `id` instantiates and its type arguments, where it is a

@@ -4,7 +4,7 @@
 //! through the branch with one. Each reproduces the logits onnxruntime computes.
 
 use { Cpu, Tensor } from "lib:loam";
-use { Cache, assert_close, ints_of, past, tensor_of } from "./oracle.wado";
+use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
     with {
         type: "onnx",
@@ -16,68 +16,59 @@ use merged from "../tests/models/tiny-gpt2/merged/model.onnx"
         },
     };
 
+/// The weights a step computes through: the kernels' or the graph's.
+affine variant Through {
+    Kernels(merged::Prepared<Cpu>),
+    Graph(merged::Params<Cpu>),
+}
+
 /// The logits for `ids` after the positions `cache` holds, and the cache grown
 /// by theirs. An empty cache takes the branch without a past.
 fn run(
     ids: List<i64>,
-    cache: &Cache,
-    weights: &merged::Prepared<Cpu>,
-) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, Cache] {
-    let length = cache[0].1[2] + ids.len();
-    let o = merged::forward(
-        &mut Cpu {},
-        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-            data: ids,
-            extents: [1, ids.len()],
+    cache: &merged::Cache<Cpu>,
+    weights: &Through,
+) -> [Tensor<f32, [merged::BatchSize, merged::SequenceLength, merged::Logits2]>, merged::Cache<Cpu>] {
+    let past_length = cache.past_key_values_0_key.extents[2];
+    let length = past_length + ids.len();
+    let ids = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+        data: ids,
+        extents: [1, ids.len()],
+    };
+    let mask = Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
+        data: List::<i64>::filled(length, 1),
+        extents: [1, length],
+    };
+    let branch = Tensor::<bool, [merged::UseCacheBranch0]> {
+        data: [past_length > 0],
+        extents: [1],
+    };
+    return match weights {
+        Kernels(prepared) => {
+            let o = merged::forward(&mut Cpu {}, &ids, &mask, &branch, cache, prepared);
+            [o.logits, o.cache];
         },
-        &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
-            data: List::<i64>::filled(length, 1),
-            extents: [1, length],
+        Graph(params) => {
+            let o = merged::build(&mut Cpu {}, &ids, &mask, &branch, cache, params);
+            [o.logits, o.cache];
         },
-        &past(cache, 0),
-        &past(cache, 1),
-        &past(cache, 2),
-        &past(cache, 3),
-        &past(cache, 4),
-        &past(cache, 5),
-        &past(cache, 6),
-        &past(cache, 7),
-        &past(cache, 8),
-        &past(cache, 9),
-        &Tensor::<bool, [merged::UseCacheBranch0]> {
-            data: [cache[0].1[2] > 0],
-            extents: [1],
-        },
-        weights,
-    );
-    let grown: Cache = [
-        [o.present_0_key.data, o.present_0_key.extents],
-        [o.present_0_value.data, o.present_0_value.extents],
-        [o.present_1_key.data, o.present_1_key.extents],
-        [o.present_1_value.data, o.present_1_value.extents],
-        [o.present_2_key.data, o.present_2_key.extents],
-        [o.present_2_value.data, o.present_2_value.extents],
-        [o.present_3_key.data, o.present_3_key.extents],
-        [o.present_3_value.data, o.present_3_value.extents],
-        [o.present_4_key.data, o.present_4_key.extents],
-        [o.present_4_value.data, o.present_4_value.extents],
-    ];
-    return [o.logits, grown];
+    };
 }
 
-fn empty_cache() -> Cache {
-    let mut cache: Cache = [];
-    for let _ of 0..<10 {
-        cache.push([
-            [],
-            [1, 4, 0, 8],
-        ]);
-    }
-    return cache;
+fn empty_cache() -> merged::Cache<Cpu> {
+    return merged::Cache::empty(&mut Cpu {});
 }
 
 test "the prompt and each step after it reproduce onnxruntime's logits through one module" {
-    let weights = merged::Prepared::embedded(&mut Cpu {});
+    reproduces_steps(&Through::Kernels(merged::Prepared::embedded(&mut Cpu {})));
+}
+
+test "so do the steps through the graph build adds to" {
+    reproduces_steps(&Through::Graph(merged::Params::embedded(&mut Cpu {})));
+}
+
+/// Each data set's step after those before it, against onnxruntime's logits.
+fn reproduces_steps(weights: &Through) {
     let data: List<[ByteList, ByteList]> = [
         [
             #include_bytes("../tests/models/tiny-gpt2/merged/test_data_set_0/input_0.pb"),
@@ -99,10 +90,10 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
         let [ids, _] = ints_of(input);
         let [want, want_extents] = tensor_of(output);
         length += ids.len();
-        let [logits, grown] = run(ids, &cache, &weights);
+        let [logits, grown] = run(ids, &cache, weights);
         assert logits.extents == want_extents;
         assert_close(&logits.data, &want);
-        assert grown[0].1 == [1, 4, length, 8] as List<i32>;
+        assert grown.past_key_values_0_key.extents == [1, 4, length, 8] as List<i32>;
         cache = grown;
     }
 }
@@ -112,7 +103,7 @@ test "the prompt and each step after it reproduce onnxruntime's logits through o
 #[expect_trap]
 test "a mask that is not as long as the past and the step stops the step" {
     let weights = merged::Prepared::embedded(&mut Cpu {});
-    let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &weights);
+    let [_, cache] = run([1, 5, 42, 7], &empty_cache(), &Through::Kernels(merged::Prepared::embedded(&mut Cpu {})));
     merged::forward(
         &mut Cpu {},
         &Tensor::<i64, [merged::BatchSize, merged::SequenceLength]> {
@@ -123,20 +114,11 @@ test "a mask that is not as long as the past and the step stops the step" {
             data: [1],
             extents: [1, 1],
         },
-        &past(&cache, 0),
-        &past(&cache, 1),
-        &past(&cache, 2),
-        &past(&cache, 3),
-        &past(&cache, 4),
-        &past(&cache, 5),
-        &past(&cache, 6),
-        &past(&cache, 7),
-        &past(&cache, 8),
-        &past(&cache, 9),
         &Tensor::<bool, [merged::UseCacheBranch0]> {
             data: [true],
             extents: [1],
         },
+        &cache,
         &weights,
     );
 }

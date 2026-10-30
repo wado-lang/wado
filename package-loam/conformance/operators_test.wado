@@ -67,8 +67,9 @@ impl Case {
 }
 
 /// What Loam computes from `model` on the case's inputs, as an `output` line
-/// spells it, or why it computes nothing: the build's refusal, or how the run
-/// stopped.
+/// spells it, once through the kernels' `forward` and once through the graph
+/// `build` adds to on `Cpu`, or why it computes nothing: the build's refusal,
+/// or how the run stopped.
 fn computed(model: ByteList, case: &Case) -> String {
     let graph = read(model).unwrap();
     let source = match generated(&graph) {
@@ -78,38 +79,53 @@ fn computed(model: ByteList, case: &Case) -> String {
         },
     };
     let mut args = "";
+    let mut held = "";
     for let input of case.inputs {
-        args.push_str(`&Tensor { data: ${input.literal()}, extents: ${input.extents} }, `);
+        let host = `&Tensor { data: ${input.literal()} as List<${input.element}>, extents: ${input.extents} }`;
+        args.push_str(`${host}, `);
+        held.push_str(`&cpu.upload(${host}), `);
     }
-    let shown = if case.output.element == "f32" { "v.to_bits()" } else { "v" };
+    let element = case.output.element;
+    let shown = if element == "f32" { "v.to_bits()" } else { "v" };
     let program = `${program_over(&source)}
 export fn run() with Stdout {
     let mut opaque = Opaque::new();
     let weights = Prepared::embedded(&mut opaque);
-    let got = forward(&mut opaque, ${args}&weights);
+    printed(&forward(&mut opaque, ${args}&weights));
+    let mut cpu = Cpu {};
+    let params = Params::embedded(&mut cpu);
+    printed(&build(&mut cpu, ${held}&params));
+}
+
+fn printed<Axes>(got: &Tensor<${element}, Axes>) with Stdout {
     let extents: List<String> = got.extents.into_iter().map(|e| \`\${e}\`).collect();
     let data: List<String> = got.data.into_iter().map(|v| \`\${${shown}}\`).collect();
-    println(\`output ${case.output.element} [\${extents.join(",")}] [\${data.join(",")}]\`);
+    println(\`output ${element} [\${extents.join(",")}] [\${data.join(",")}]\`);
 }
 `;
     return ran(program).trim_end().to_string();
 }
 
-/// Loam computes from `model` what onnxruntime did, which `oracle` states: the
-/// same elements, a float within `TOLERANCE` of onnxruntime's.
+/// Loam computes from `model` what onnxruntime did, which `oracle` states,
+/// through `forward` and through `build` alike: the same elements, a float
+/// within `TOLERANCE` of onnxruntime's.
 fn assert_agrees(model: ByteList, oracle: String) {
     let case = Case::of(&oracle);
     let want = case.output;
     let got = computed(model, &case);
-    let fields: List<String> = got.split_whitespace().map(|f| f.to_string()).collect();
-    // A refusal or a trap is no output line, and shows as it stands.
-    assert fields.len() == 4 && fields[0] == "output";
-    let found = Spelled::of(&fields);
-    assert found.element == want.element && found.extents == want.extents;
-    if want.element == "f32" {
-        assert_close(&found.floats(), &want.floats());
-    } else {
-        assert found.values == want.values;
+    let lines: List<String> = got.lines().map(|l| l.to_string()).collect();
+    // A refusal or a trap is no pair of output lines, and shows as it stands.
+    assert lines.len() == 2, got;
+    for let line of lines {
+        let fields: List<String> = line.split_whitespace().map(|f| f.to_string()).collect();
+        assert fields.len() == 4 && fields[0] == "output";
+        let found = Spelled::of(&fields);
+        assert found.element == want.element && found.extents == want.extents;
+        if want.element == "f32" {
+            assert_close(&found.floats(), &want.floats());
+        } else {
+            assert found.values == want.values;
+        }
     }
 }
 

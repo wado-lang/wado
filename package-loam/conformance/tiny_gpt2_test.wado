@@ -7,23 +7,26 @@ use { assert_close, ints_of, tensor_of } from "./oracle.wado";
 use { StoredTensor, write_safetensors } from "lib:loam/src/safetensors.wado";
 use gpt2 from "./tiny_gpt2.wado";
 
-/// The logits `forward` computes from one data set's inputs, against the ones
-/// onnxruntime computed.
+/// The logits `forward` computes from one data set's inputs, and those the
+/// graph `build` adds to computes, against the ones onnxruntime computed.
 fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     let [ids, ids_extents] = ints_of(input_ids);
     let [mask, mask_extents] = ints_of(attention_mask);
     let [want, want_extents] = tensor_of(logits);
+    let ids = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: ids, extents: ids_extents };
+    let mask = Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: mask, extents: mask_extents };
+    let checkpoint = #include_bytes("../tests/models/tiny-gpt2/model.safetensors");
 
-    let weights = gpt2::Prepared::load(&mut Cpu {}, &#include_bytes("../tests/models/tiny-gpt2/model.safetensors")).unwrap();
-    let got = gpt2::forward(
-        &mut Cpu {},
-        &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: ids, extents: ids_extents },
-        &Tensor::<i64, [gpt2::BatchSize, gpt2::SequenceLength]> { data: mask, extents: mask_extents },
-        &weights,
-    );
-
+    let mut cpu = Cpu {};
+    let weights = gpt2::Prepared::load(&mut cpu, &checkpoint).unwrap();
+    let got = gpt2::forward(&mut cpu, &ids, &mask, &weights);
     assert got.extents == want_extents;
     assert_close(&got.data, &want);
+
+    let params = gpt2::Params::load(&mut cpu, &checkpoint).unwrap();
+    let built = gpt2::build(&mut cpu, &ids, &mask, &params);
+    assert built.extents == want_extents;
+    assert_close(&built.data, &want);
 }
 
 test "a tiny GPT-2 reproduces the logits onnxruntime computes for four tokens" {

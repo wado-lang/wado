@@ -723,6 +723,8 @@ struct OwnedEffectData {
     /// The traits that leave their effects to the impl — a `with _` head, or a
     /// bare one, which reads as the same.
     open_traits: IndexSet<DefId>,
+    /// Each trait's transitive supertraits, whose methods a bound on it reaches.
+    supertraits: IndexMap<DefId, Vec<DefId>>,
     /// Per type-parameter slot of a function declaration, the traits bounding
     /// it, so a call site can read what its type arguments implement.
     fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>>,
@@ -825,6 +827,11 @@ impl OwnedEffectData {
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
+        let mut supertraits: IndexMap<DefId, Vec<DefId>> = IndexMap::default();
+        // The trait methods that write no clause of their own, so the head's
+        // effects are theirs. An impl of one of these alone brings what the
+        // head resolves to; a method's own clause overrides the head.
+        let mut head_methods: IndexSet<TraitMethodKey> = IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
@@ -834,6 +841,10 @@ impl OwnedEffectData {
                 if trait_decl.head.is_open() {
                     open_traits.insert(def);
                 }
+                let supers: Vec<DefId> = state.tysys.trait_env.supertrait_decls(&def).collect();
+                if !supers.is_empty() {
+                    supertraits.insert(def, supers);
+                }
                 for method in &trait_decl.methods {
                     let effects = method
                         .effects
@@ -841,6 +852,9 @@ impl OwnedEffectData {
                         .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
                     trait_method_effects.insert((def, method.name.clone()), effects);
+                    if method.effects_source == ast::EffectsSource::Inherited {
+                        head_methods.insert((def, method.name.clone()));
+                    }
                 }
             }
         }
@@ -889,6 +903,20 @@ impl OwnedEffectData {
                             .cloned()
                             .collect();
                         let facts = annotations.and_then(|ann| ann.impl_facts.get(&block.id));
+                        let brought_to_head = |trait_key: DefId| -> Vec<EffectRef> {
+                            let mut brought: Vec<EffectRef> = Vec::new();
+                            for method in &block.methods {
+                                if !head_methods.contains(&(trait_key, method.name.clone())) {
+                                    continue;
+                                }
+                                for effect in fn_effects.get(&method.id).into_iter().flatten() {
+                                    if !brought.contains(effect) {
+                                        brought.push(effect.clone());
+                                    }
+                                }
+                            }
+                            brought
+                        };
                         // Waiting on an `AsyncCall` demands what its methods declare.
                         if facts.is_some_and(|facts| {
                             facts.trait_name.is_none()
@@ -912,7 +940,7 @@ impl OwnedEffectData {
                                 .entry(trait_key)
                                 .or_default()
                                 .push(BlanketImpl {
-                                    declared: declared.iter().cloned().collect(),
+                                    declared: brought_to_head(trait_key),
                                     bounds,
                                 });
                         }
@@ -920,14 +948,15 @@ impl OwnedEffectData {
                             let trait_name = facts.trait_name.as_ref()?;
                             impl_key(&facts.struct_name, trait_name)
                         }) {
+                            let brought = brought_to_head(key.1);
                             let entry = impl_effects.entry(key).or_insert_with(|| ImplEffects {
                                 declared: Vec::new(),
                                 target_args: spelled_target_args(&sem.types, defs.def_at(block.id)),
                                 bounds: Rc::clone(&bounds),
                             });
-                            for effect in &declared {
-                                if !entry.declared.contains(effect) {
-                                    entry.declared.push(effect.clone());
+                            for effect in brought {
+                                if !entry.declared.contains(&effect) {
+                                    entry.declared.push(effect);
                                 }
                             }
                         }
@@ -988,6 +1017,7 @@ impl OwnedEffectData {
             mangled_params,
             trait_method_effects,
             open_traits,
+            supertraits,
             fn_bound_traits,
             receiver_bounds: receiver_bounds_by_method,
             receiver_methods,
@@ -1017,6 +1047,7 @@ impl OwnedEffectData {
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
             open_traits: &self.open_traits,
+            supertraits: &self.supertraits,
             fn_bound_traits: &self.fn_bound_traits,
             receiver_bounds: &self.receiver_bounds,
             receiver_methods: &self.receiver_methods,
@@ -1057,6 +1088,8 @@ struct EffectIndex<'a> {
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
+    /// Each trait's transitive supertraits.
+    supertraits: &'a IndexMap<DefId, Vec<DefId>>,
     /// Per type-parameter slot of a function or method declaration, the traits
     /// bounding it.
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
@@ -2141,7 +2174,10 @@ impl EffectIndex<'_> {
     /// `arg` lists the argument's spellings, a newtype before the base it
     /// inherits its impls from; the first with an impl of the trait answers.
     fn bring(&self, traits: &[DefId], arg: &[TypeArg<'_>], brought: &mut Brought) {
-        for key in traits.iter().filter(|key| self.open_traits.contains(*key)) {
+        let reached = traits.iter().flat_map(|key| {
+            std::iter::once(key).chain(self.supertraits.get(key).into_iter().flatten())
+        });
+        for key in reached.filter(|key| self.open_traits.contains(*key)) {
             brought.determined = true;
             match arg.iter().find_map(|(head, args)| {
                 Some((*args, self.impl_effects.get(&(head.clone(), *key))?))

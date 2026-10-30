@@ -12,6 +12,7 @@ use {
     Attention,
     Backend,
     BinaryOp,
+    Holds,
     Cpu,
     Element,
     Epilogue,
@@ -1675,12 +1676,8 @@ impl WebGpuBackend {
     }
 }
 
-impl Backend for WebGpuBackend {
+impl Holds for WebGpuBackend {
     type Tensor<E: Element, Axes> = Placed<E, Axes>;
-    type Operand<Axes> = PlacedRead<Axes>;
-    /// A matrix kept column by column where one binding holds it, of bf16
-    /// elements where those hold every value: see `kept_matrix`.
-    type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, false);
@@ -1690,6 +1687,20 @@ impl Backend for WebGpuBackend {
     fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Placed<E, Axes> with (GpuDevice, GpuQueue, GpuBuffer) {
         return self.stored(t, true);
     }
+
+    fn extents_of<E: Element, Axes>(&self, t: &Placed<E, Axes>) -> List<i32> {
+        return match t {
+            Host(h) => h.extents,
+            Device(d) => d.extents,
+        };
+    }
+}
+
+impl Backend for WebGpuBackend {
+    type Operand<Axes> = PlacedRead<Axes>;
+    /// A matrix kept column by column where one binding holds it, of bf16
+    /// elements where those hold every value: see `kept_matrix`.
+    type Rhs<K, N> = Placed<f32, [K, N]>;
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
         let [k, n] = [t.extents[0], t.extents[1]];
@@ -1756,13 +1767,6 @@ impl Backend for WebGpuBackend {
         if let Device(d) = t && d.slot >= 0 {
             self.retaining.insert(d.slot);
         }
-    }
-
-    fn extents_of<E: Element, Axes>(&self, t: &Placed<E, Axes>) -> List<i32> {
-        return match t {
-            Host(h) => h.extents,
-            Device(d) => d.extents,
-        };
     }
 
     fn download<E: Element, Axes>(

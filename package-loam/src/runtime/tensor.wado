@@ -844,7 +844,7 @@ pub fn expand<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Ou
 
 /// Moves a row-major `index` over `extents` one position on and returns the
 /// axis that advanced, every later one having wrapped to 0; -1 past the end.
-fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
+internal fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
     for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
         index[axis] += 1;
         if index[axis] < extents[axis] {
@@ -857,7 +857,7 @@ fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
 
 /// How far an offset stepping by `strides` moves when `advance` names each
 /// axis: that axis's stride, less the span every later axis wound back.
-fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
+internal fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
     let mut carry = List::<i32>::filled(extents.len(), 0);
     let mut unwound = 0;
     for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
@@ -1358,18 +1358,25 @@ pub fn permute<E, In, Out>(t: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out>
         extents.push(t.extents[p]);
         strides.push(in_strides[p]);
     }
-    let steps = carries(&strides, &extents);
-    let mut out = List::<E>::with_capacity(t.data.len());
-    let mut index = List::<i32>::filled(rank, 0);
-    let mut at = 0;
-    for let _ of 0..<t.data.len() {
-        out.push(t.data[at]);
-        let axis = advance(&mut index, &extents);
+    return Tensor { data: walked(&t.data, 0, &strides, &extents), extents };
+}
+
+/// The elements of `data` an offset from `base` reaches stepping by `strides`
+/// over `extents`, in row-major order.
+internal fn walked<E>(data: &List<E>, base: i32, strides: &List<i32>, extents: &List<i32>) -> List<E> {
+    let count = element_count(extents);
+    let mut out = List::<E>::with_capacity(count);
+    let steps = carries(strides, extents);
+    let mut index = List::<i32>::filled(extents.len(), 0);
+    let mut at = base;
+    for let _ of 0..<count {
+        out.push(data[at]);
+        let axis = advance(&mut index, extents);
         if axis >= 0 {
             at += steps[axis];
         }
     }
-    return Tensor { data: out, extents };
+    return out;
 }
 
 /// ONNX's `Softmax` along `axis`: each lane's exponentials over their sum.
@@ -2172,13 +2179,34 @@ fn stretched_to<E>(data: &List<E>, from: &List<i32>, to: &List<i32>) -> List<E> 
     return out;
 }
 
+/// What a backend and a graph share: how a tensor is held, which a generated
+/// `Cache` and `Passed` are generic over.
+pub affine trait Holds with _ {
+    type Tensor<E: Element, Axes>;
+
+    /// `t`, held on the host, as this holds it.
+    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
+    /// `t`, a weight every pass reads, as this holds it for as long as it
+    /// lives: on a device, where its kernels run.
+    fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
+        return self.upload(t);
+    }
+    /// `t`, held in half precision on the host, as this computes with it. How
+    /// it stores the result is its own: the type says only that what reads it
+    /// reads it as f32.
+    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
+        return self.keep(&widen(t));
+    }
+    /// `t`'s extents.
+    fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
+}
+
 /// Where the kernels run. `forward` is instantiated at each backend, and the
 /// backend owns how a tensor is held: as a `Tensor` on the CPU, as a buffer on
 /// a GPU. Each kernel's signature is its function's, `Tensor` read as
 /// `Self::Tensor`, so a generated call is checked through the trait as it is
 /// against the function.
-pub affine trait Backend with _ {
-    type Tensor<E: Element, Axes>;
+pub affine trait Backend: Holds with _ {
     /// An operand of an elementwise kernel whose output has the axes `Axes`.
     /// Each `read` checks a tensor against the output's axes, so `fused`
     /// takes its operands as one list.
@@ -2187,15 +2215,8 @@ pub affine trait Backend with _ {
     /// alone, which no other kernel reads.
     affine type Rhs<K, N>;
 
-    /// `t`, held on the host, as this backend holds it.
-    fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes>;
     /// `t` back on the host.
     fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
-    /// `t`, a weight every pass reads, as this backend holds it for as long as
-    /// the backend lives: on a device, where its kernels run.
-    fn keep<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
-        return self.upload(t);
-    }
     /// `t`, a weight read only as a matrix product's right operand, held for
     /// every pass in the layout [`Self::matmul_rhs`] reads it in.
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Self::Rhs<K, N>;
@@ -2210,14 +2231,6 @@ pub affine trait Backend with _ {
     fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Self::Rhs<K, N> {
         return self.keep_rhs_transposed(&widen(t));
     }
-    /// `t`, held in half precision on the host, as this backend computes with
-    /// it. How it stores the result is its own: the type says only that the
-    /// kernels read it as f32.
-    fn prepare<E: Held, Axes>(&mut self, t: &Tensor<E, Axes>) -> Self::Tensor<f32, Axes> {
-        return self.keep(&widen(t));
-    }
-    /// `t`'s extents.
-    fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
     /// The start of a forward pass. What the pass before computed is dead,
     /// but for what it retained: a caller of `pass` reads its outputs before
     /// the next pass, and `forward` has downloaded them, so a backend may
@@ -2459,21 +2472,24 @@ pub affine trait Backend with _ {
 pub struct Cpu {
 }
 
-impl Backend for Cpu {
+impl Holds for Cpu {
     type Tensor<E: Element, Axes> = Tensor<E, Axes>;
-    type Operand<Axes> = Read<Axes>;
-    type Rhs<K, N> = Packed<K, N>;
 
     fn upload<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
         return *t;
     }
 
-    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        return *t;
-    }
-
     fn extents_of<E: Element, Axes>(&self, t: &Tensor<E, Axes>) -> List<i32> {
         return t.extents;
+    }
+}
+
+impl Backend for Cpu {
+    type Operand<Axes> = Read<Axes>;
+    type Rhs<K, N> = Packed<K, N>;
+
+    fn download<E: Element, Axes>(&mut self, t: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        return *t;
     }
 
     fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Packed<K, N> {

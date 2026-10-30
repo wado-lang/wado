@@ -5,11 +5,23 @@ Loam compiles an ONNX graph into Wado source through Kiln. Its design is in
 and the known gaps are in [TODO.md](./TODO.md). `loam gen`, `loam dump`, the
 onnxruntime oracles and the benchmarks are in [tools.md](./tools.md).
 
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) is complete, and nothing edits it
+any more. A design that changes one of its decisions is written in this
+directory and names the WEP's section.
+
 ## Sources
 
 - Do not read the code of an ML framework, runtime, exporter or kernel library.
 - Published papers and specifications may be read: ONNX's operator
   definitions, the StableHLO specification.
+- ONNX's own source may not be read: the code under `vendor/onnx/onnx/`, its
+  reference implementation among it, `vendor/onnx/tools/` and
+  `vendor/onnx/docs/docsgen/`. Its headers, `.proto` files, docs and tests may
+  be read, and the tests are `vendor/onnx/tests/`,
+  `vendor/onnx/onnx/backend/test/` and the fuzzers in `vendor/onnx/onnx/fuzz/`.
+  `permissions.deny` enforces this for the Read tool, and
+  `.claude/hooks/vendor-license-guard.mts` for Bash, which also refuses a
+  search of a directory holding that source: name the doc to search.
 - An interface may be read, as a specification: any `.proto` file, and
   `xla/pjrt/c/pjrt_c_api.h`, the PJRT plugin's. The rest of XLA may not.
 - onnxruntime's operator documentation may be read, for the operators it

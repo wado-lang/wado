@@ -44,7 +44,8 @@ type Source = { text: string; offset: number | null };
 type Word = { value: string; subs: Source[]; end: number };
 /** An argument word: the text it resolves to, and the source that spells it. */
 export type Arg = { value: string; raw: string; start: number | null };
-export type Command = { name: string; args: Arg[] };
+/** `redirects`: the files the command's redirections name, which are no argument. */
+export type Command = { name: string; args: Arg[]; redirects: Arg[] };
 type Heredoc = { delimiter: string; stripsTabs: boolean; expands: boolean; script: boolean };
 
 /** Text between `open` and its matching `close`, skipping quoted spans. Inside
@@ -231,6 +232,8 @@ export function commands(src: string, base: number | null = 0): Command[] {
   const nested: Source[] = [];
   const heredocs: Heredoc[] = [];
   let current: Command | null = null;
+  // A redirection may come before the command word it feeds.
+  let redirects: Arg[] = [];
   let atCommand = true;
   let runner = "";
   let skipValue = false;
@@ -240,6 +243,7 @@ export function commands(src: string, base: number | null = 0): Command[] {
 
   const startCommand = () => {
     current = null;
+    redirects = [];
     atCommand = true;
     runner = "";
     skipValue = false;
@@ -313,8 +317,14 @@ export function commands(src: string, base: number | null = 0): Command[] {
     }
     let i = at + (src.startsWith("<<<", at) ? 3 : 1);
     while (src[i] === ">" || src[i] === "&") i++;
-    const target = readWord(src, skipBlanks(src, i));
+    const targetStart = skipBlanks(src, i);
+    const target = readWord(src, targetStart);
     nested.push(...target.subs);
+    redirects.push({
+      value: target.value,
+      raw: src.slice(targetStart, target.end),
+      start: base === null ? null : base + targetStart,
+    });
     return target.end;
   }
 
@@ -347,7 +357,7 @@ export function commands(src: string, base: number | null = 0): Command[] {
         runner = "";
         return;
       }
-      current = { name, args: [] };
+      current = { name, args: [], redirects };
       found.push(current);
       previous = name;
       runner = RUNNERS.has(name) ? name : "";

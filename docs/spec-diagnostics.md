@@ -240,9 +240,10 @@ import.
 
 An item is used when one of these roots reaches it:
 
-- What an entry offers: its `pub` and `export` items, and what it re-exports
-  with `pub use`. A `pub` item of any other module is not a root, since only an
-  entry's are offered beyond the package. Neither is an `internal` item.
+- What an entry offers: its `pub` and `export` items, the default bodies of
+  its `pub` traits, and what it re-exports with `pub use`. A `pub` item of any
+  other module is not a root, since only an entry's are offered beyond the
+  package. Neither is an `internal` item.
 - An `export` function in any module, since any module may be compiled as an
   entry of its own, as `wado run` runs a script.
 - A function of an entry whose name a world export names, so a misdeclared
@@ -253,8 +254,10 @@ An item is used when one of these roots reaches it:
 - A struct field default, an associated constant's value, and the default body
   of an `interface` or `resource` operation.
 
-A trait's default body counts as reached only where a call lands on it, so a
-function that only an unreached default body calls is unused.
+An impl beyond the package may inherit an offered trait's default body, so the
+body is used though every impl in the package overrides it. Any other trait's
+default body counts as reached only where a call lands on it, so a function
+that only an unreached one calls is unused.
 
 An item the roots do not reach is reported one of two ways:
 
@@ -267,7 +270,8 @@ An item the roots do not reach is reported one of two ways:
 `wado check` given a package, or given nothing inside one, decides the lint
 over the whole package. A compilation of one file loads only what that file
 reaches, so it decides what it can see: every `pub` item counts as used, and
-so does every `internal` one, since a module it did not load may use it.
+so does every `internal` one, since a module it did not load may use it. A
+`pub` or `internal` trait's default bodies count as used with them.
 
 Rationale: [WEP: Unused Diagnostics](./wep-2026-05-16-unused-diagnostics.md).
 

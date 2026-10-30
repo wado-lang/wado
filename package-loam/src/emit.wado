@@ -6,9 +6,12 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis, byte_string_literal, wado }
 use { Extent, Solved, solved } from "./extent.wado";
 use {
     BACKEND_PARAM,
+    CACHE,
     CHECKPOINT_PARAM,
     KEPT,
     MAP,
+    OUTPUTS,
+    PARAMS,
     PASSED,
     PREPARED,
     RUNTIME_NAMES,
@@ -33,12 +36,14 @@ use {
 use { fill_of } from "./fold.wado";
 use {
     IfBranch,
+    Lowering,
     Plan,
     Spread,
     branch_plan,
     branches,
     branches_of,
     is_alias,
+    lowering_of,
     plan,
     reduces_rows,
     row_fold,
@@ -184,9 +189,12 @@ pub fn emit(
 
     let axes = axis_names(graph, checked);
     let scalars = scalar_literals(checked);
-    let literals = literal_tensors(graph, checked, &scalars);
+    let literals = kernel_literals(graph, checked, &scalars);
+    let built = graph_literals(graph, checked);
     let carriers = symbol_carriers(graph, shapes);
-    let names = Names::of(graph, checked, &literals.spelled, &axes, &carriers, imports_map)?;
+    let mut spelled = literals.spelled;
+    spelled.extend(&built.spelled);
+    let names = Names::of(graph, checked, &spelled, &axes, &carriers, imports_map)?;
     let fixed = boundary_extents(graph, shapes);
     for let axis of axes {
         StructSpec::new(axis, Vis::Pub).emit(&mut w);
@@ -197,19 +205,36 @@ pub fn emit(
         }
     }
 
-    let kept = kept_literals(&literals, checked);
+    let kept = KeptLiterals {
+        kernels: kept_literals(&literals, checked),
+        graph: kept_literals(&built, checked),
+    };
     let decided = plan(graph, checked, fuse);
     let rhs = decided.rhs;
     let together = Together::of(graph, &decided);
     emit_weights(&mut w, graph, checked, &names, &held, &kept, &rhs, &together, &placement);
-    let symbols = Symbols::of(&carriers, &names);
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
         scalars,
         rhs,
         paired: together.paired,
     };
-    emit_forward(&mut w, graph, checked, &decided, &names, &held, exprs, &literals, &kept, symbols, fuse)?;
+    let crossing = Crossing::of(graph, cache_pairs(graph));
+    emit_forward(
+        &mut w,
+        graph,
+        checked,
+        &decided,
+        &names,
+        &held,
+        exprs,
+        &literals,
+        &kept.kernels,
+        Symbols::of(&carriers, &names),
+        fuse,
+        &crossing,
+    )?;
+    emit_build(&mut w, graph, checked, &decided, &names, &built, &kept.graph, Symbols::of(&carriers, &names), &crossing)?;
     return Result::Ok(w.to_string());
 }
 
@@ -236,6 +261,28 @@ fn boundary_extents(graph: &Graph, shapes: &HashMap<String, Shape>) -> HashMap<S
         fixed.remove(name);
     }
     return fixed;
+}
+
+/// Each past input and the present output it pairs with, by the names Hugging
+/// Face's exporters give them: `past<rest>` pairs with `present<rest>`, but
+/// `past_key_values.<rest>` with `present.<rest>`. A past no present pairs
+/// with stays an input, as a decoder's encoder keys or `past_sequence_length`
+/// do, and a present no past pairs with stays an output.
+fn cache_pairs(graph: &Graph) -> List<[String, String]> {
+    let outputs: List<String> = graph.outputs.into_iter().map(|vi| vi.name).collect();
+    let mut pairs: List<[String, String]> = [];
+    for let vi of &graph.inputs {
+        let past = vi.name;
+        if !past.starts_with("past") {
+            continue;
+        }
+        let rest = past.strip_prefix("past_key_values.").map(|r| `.${r}`).unwrap_or(past.substr_bytes(4, past.len()));
+        let present = `present${rest}`;
+        if outputs.contains(&present) {
+            pairs.push([past, present]);
+        }
+    }
+    return pairs;
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel
@@ -290,6 +337,15 @@ impl Names {
         scope_tensors(&mut tensors, graph, checked, literals);
         for let c of carriers {
             tensors.push(symbol_key(&c.solved.symbol));
+        }
+        // Every symbol of an input's axes, of which `Cache::empty` takes the
+        // ones a past leaves open.
+        for let vi of &graph.inputs {
+            for let axis of checked.shapes[vi.name].axes {
+                for let symbol of axis.extent.poly().symbols() {
+                    tensors.push(symbol_key(&symbol));
+                }
+            }
         }
         // In first-seen order, each tensor once.
         let mut sanitized = HashMap::<String, String>::new();
@@ -361,7 +417,8 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
     }
     tensors.extend(literals);
     for let [branch_graph, branch] of branches_of(graph, checked) {
-        let spelled = literal_tensors(&branch_graph, &branch, &scalar_literals(&branch)).spelled;
+        let mut spelled = kernel_literals(&branch_graph, &branch, &scalar_literals(&branch)).spelled;
+        spelled.extend(&graph_literals(&branch_graph, &branch).spelled);
         scope_tensors(tensors, &branch_graph, &branch, &spelled);
     }
 }
@@ -370,9 +427,77 @@ fn scope_tensors(tensors: &mut List<String>, graph: &Graph, checked: &Checked, l
 /// device resources.
 global BACKEND_BOUND: String = `affine ${BACKEND_PARAM}: Backend`;
 
-/// `Prepared` and `Kept` over the backend.
+/// The same parameter as a graph `build` adds its operations to.
+global GRAPH_BOUND: String = `affine ${BACKEND_PARAM}: Graph`;
+
+/// The same parameter where code serves the kernels and the graph alike:
+/// `Cache`, `Passed` and `Kept`'s functions.
+global HOLDS_BOUND: String = `affine ${BACKEND_PARAM}: Holds`;
+
+/// `Prepared` over the backend.
 global PREPARED_TYPE: String = `${PREPARED}<${BACKEND_PARAM}>`;
-global KEPT_TYPE: String = `${KEPT}<${BACKEND_PARAM}>`;
+
+/// Which entry a struct of prepared weights serves: the kernels' `pass`, which
+/// reads `Prepared`, or the graph's `build`, which reads `Params`.
+enum Holder {
+    Kernels,
+    Built,
+}
+
+impl Holder {
+    fn name(&self) -> String {
+        return match *self {
+            Kernels => PREPARED,
+            Built => PARAMS,
+        };
+    }
+
+    fn bound(&self) -> String {
+        return match *self {
+            Kernels => BACKEND_BOUND,
+            Built => GRAPH_BOUND,
+        };
+    }
+
+    fn ty(&self) -> String {
+        return `${self.name()}<${BACKEND_PARAM}>`;
+    }
+
+    /// The function that computes a pass through what this holds.
+    fn entry(&self) -> String {
+        return match *self {
+            Kernels => "pass",
+            Built => "build",
+        };
+    }
+}
+
+/// The folded tensors each entry reads from its weights' struct rather than
+/// building them per pass. `Kept` holds both.
+struct KeptLiterals {
+    kernels: List<String>,
+    graph: List<String>,
+}
+
+impl KeptLiterals {
+    fn of(&self, holder: Holder) -> List<String> {
+        return match holder {
+            Kernels => self.kernels,
+            Built => self.graph,
+        };
+    }
+
+    /// Each kept tensor once, the kernels' first.
+    fn all(&self) -> List<String> {
+        let mut all = self.kernels;
+        for let tensor of self.graph {
+            if !all.contains(&tensor) {
+                all.push(tensor);
+            }
+        }
+        return all;
+    }
+}
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
 /// one, and a name may start with a digit.
@@ -394,17 +519,18 @@ fn sanitize(name: &String) -> String {
     return `t_${out}`;
 }
 
-/// The graph's initializers twice: `Weights` on the host as the graph holds
-/// them, and `Prepared`, which `forward` reads, as the backend computes with
-/// them. `Prepared` holds the `kept` literals too, which need no host copy,
-/// and the `rhs` weights as a product's right operand.
+/// The graph's initializers three times: `Weights` on the host as the graph
+/// holds them; `Prepared`, which `forward` reads, as the backend's kernels
+/// compute with them; and `Params`, which `build` reads, each a tensor of the
+/// graph. `Prepared` and `Params` hold the `kept` literals too, which need no
+/// host copy, and `Prepared` the `rhs` weights as a product's right operand.
 fn emit_weights(
     w: &mut CodeWriter,
     graph: &Graph,
     checked: &Checked,
     names: &Names,
     held: &HashMap<String, String>,
-    kept: &List<String>,
+    kept: &KeptLiterals,
     rhs: &HashMap<String, bool>,
     together: &Together,
     placement: &Placement,
@@ -412,48 +538,64 @@ fn emit_weights(
     let mut weights = StructSpec::new("Weights", Vis::Pub);
     let mut prepared = StructSpec::new(PREPARED, Vis::Pub);
     prepared.add_generic(BACKEND_BOUND);
+    let mut params = StructSpec::new(PARAMS, Vis::Pub);
+    params.add_generic(GRAPH_BOUND);
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         weights.add_pub_field(ident, tensor_type(checked, held, &vi.name));
         if !together.elsewhere.contains(vi.name) {
             prepared.add_pub_field(ident, weight_type(checked, rhs, together, &vi.name));
         }
+        params.add_pub_field(ident, prepared_type(checked, &vi.name));
     }
-    for let tensor of kept {
-        prepared.add_pub_field(names.get(tensor), prepared_type(checked, tensor));
+    for let tensor of kept.kernels {
+        prepared.add_pub_field(names.get(&tensor), prepared_type(checked, &tensor));
+    }
+    for let tensor of kept.graph {
+        params.add_pub_field(names.get(&tensor), prepared_type(checked, &tensor));
     }
     w.blank();
     w.line("/// The graph's initializers, held on the host as the graph holds them.");
     weights.emit(w);
     w.blank();
     ImplSpec::new("Weights").emit_begin(w);
-    w.line("/// These weights as `backend` computes with them.");
-    FnSpec::new("prepare", Vis::Pub).add_generic(BACKEND_BOUND).set_receiver("&self").add_param(
-        "backend",
-        `&mut ${BACKEND_PARAM}`,
-    ).set_return_type(PREPARED_TYPE).add_effect("_").emit_begin(w);
-    emit_kept_binding(w, kept);
-    w.begin(`return ${PREPARED}`);
     let mut hosts = HashMap::<String, String>::new();
     for let vi of &graph.initializers {
         hosts[vi.name] = `&self.${names.get(&vi.name)}`;
     }
-    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts);
-    emit_kept_fields(w, names, kept);
-    w.end_with(";");
-    w.end();
+    for let [holder, method, doc] of [
+        [Holder::Kernels, "prepare", "/// These weights as `backend`'s kernels compute with them."],
+        [Holder::Built, "params", "/// These weights as tensors of the graph `backend` builds."],
+    ] as List<[Holder, String, String]> {
+        w.line(doc);
+        FnSpec::new(method, Vis::Pub).add_generic(holder.bound()).set_receiver("&self").add_param(
+            "backend",
+            `&mut ${BACKEND_PARAM}`,
+        ).set_return_type(holder.ty()).add_effect("_").emit_begin(w);
+        w.begin(`return ${holder.name()}`);
+        emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
+        emit_kept_fields(w, names, &kept.of(holder));
+        w.end_with(";");
+        w.end();
+    }
     w.end();
     w.blank();
     w.line("/// The graph's initializers as the backend `forward` runs on computes with them.");
     prepared.emit(w);
-    emit_constructor(w, graph, checked, names, held, rhs, together, kept, placement);
-    if !kept.is_empty() {
-        emit_kept(w, checked, names, kept);
+    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.kernels, placement, Holder::Kernels);
+    w.blank();
+    w.line("/// The graph's initializers as tensors of the graph `build` adds operations to.");
+    params.emit(w);
+    emit_constructor(w, graph, checked, names, held, rhs, together, &kept.graph, placement, Holder::Built);
+    if !kept.all().is_empty() {
+        emit_kept(w, checked, names, &kept.all());
     }
+    emit_embedded_data(w, graph);
 }
 
-/// Each initializer's `Prepared` field, from its host tensor in `hosts`, and
-/// each pair or concatenation `together` holds from its weights.
+/// Each initializer's field in `holder`'s struct, from its host tensor in
+/// `hosts`. `Prepared` holds each pair or concatenation `together` names
+/// from its weights.
 fn emit_prepared_fields(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -463,13 +605,18 @@ fn emit_prepared_fields(
     rhs: &HashMap<String, bool>,
     together: &Together,
     hosts: &HashMap<String, String>,
+    holder: Holder,
 ) {
     for let vi of &graph.initializers {
+        let ident = names.get(&vi.name);
+        let host = hosts[vi.name];
+        if holder matches { Built } {
+            w.line(`${ident}: ${preparation(checked, held, &vi.name, host, Holding::Keep)},`);
+            continue;
+        }
         if together.elsewhere.contains(vi.name) {
             continue;
         }
-        let ident = names.get(&vi.name);
-        let host = hosts[vi.name];
         let call = if let Some(second) = together.paired.get(vi.name) {
             let verb = if converted(checked, held, &vi.name) { "prepare_rhs_paired" } else { "keep_rhs_paired" };
             `backend.${verb}(${host}, ${hosts[second]})`;
@@ -559,46 +706,30 @@ fn concat_weights(decided: &Plan, weight_of: &HashMap<String, String>) -> HashMa
     return concat;
 }
 
-/// `Kept`, the `kept` literals as the backend holds them, built once by
-/// `Kept::new` for each constructor of `Prepared` to take apart: spelled in
+/// `Kept`, one function per `kept` literal keeping it on the backend, for the
+/// constructors of `Prepared` and `Params` to call each its own: spelled in
 /// each, a mask's data would be in the module twice.
 fn emit_kept(w: &mut CodeWriter, checked: &Checked, names: &Names, kept: &List<String>) {
-    let mut held = StructSpec::new(KEPT);
-    held.add_generic(BACKEND_BOUND);
-    for let tensor of kept {
-        held.add_field(names.get(tensor), prepared_type(checked, tensor));
-    }
     w.blank();
-    w.line("/// The folded tensors `Prepared` holds, which no symbol enters.");
-    held.emit(w);
+    w.line("/// The folded tensors `Prepared` and `Params` hold, which no symbol enters.");
+    StructSpec::new(KEPT).emit(w);
     w.blank();
-    let mut block = ImplSpec::new(KEPT_TYPE);
-    block.add_generic(BACKEND_BOUND);
-    block.emit_begin(w);
-    FnSpec::new("new").add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(KEPT_TYPE).add_effect("_").emit_begin(
-        w,
-    );
-    w.begin(`return ${KEPT}`);
+    ImplSpec::new(KEPT).emit_begin(w);
     for let tensor of kept {
-        w.line(`${names.get(tensor)}: ${kept_literal(checked, tensor)},`);
+        FnSpec::new(names.get(tensor)).add_generic(HOLDS_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
+            prepared_type(checked, tensor),
+        ).add_effect("_").emit_begin(w);
+        w.line(`return ${kept_literal(checked, tensor)};`);
+        w.end();
     }
-    w.end_with(";");
-    w.end();
     w.end();
 }
 
-/// The binding of `Kept` a constructor of `Prepared` reads its fields from.
-fn emit_kept_binding(w: &mut CodeWriter, kept: &List<String>) {
-    if !kept.is_empty() {
-        w.line(`let kept = ${KEPT}::new(backend);`);
-    }
-}
-
-/// The `Prepared` fields of the `kept` literals, read from that binding.
+/// The `Prepared` or `Params` fields of the `kept` literals.
 fn emit_kept_fields(w: &mut CodeWriter, names: &Names, kept: &List<String>) {
     for let tensor of kept {
         let ident = names.get(tensor);
-        w.line(`${ident}: kept.${ident},`);
+        w.line(`${ident}: ${KEPT}::${ident}(backend),`);
     }
 }
 
@@ -680,11 +811,11 @@ fn loads_weights(graph: &Graph) -> bool {
     return false;
 }
 
-/// `Prepared::embedded` where the graph carries every initializer's data, and
-/// `Prepared::load` reading the rest from a safetensors checkpoint otherwise.
-/// Each tensor is prepared as it is read, so the host copy of one weight at a
-/// time, or of the weights held together, is all that lives beside the
-/// prepared ones.
+/// `embedded` of `holder`'s struct where the graph carries every
+/// initializer's data, and `load` reading the rest from a safetensors
+/// checkpoint otherwise. Each tensor is prepared as it is read, so the host
+/// copy of one weight at a time, or of the weights held together, is all that
+/// lives beside the prepared ones.
 fn emit_constructor(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -695,11 +826,12 @@ fn emit_constructor(
     together: &Together,
     kept: &List<String>,
     placement: &Placement,
+    holder: Holder,
 ) {
     let loads = loads_weights(graph);
     w.blank();
-    let mut block = ImplSpec::new(PREPARED_TYPE);
-    block.add_generic(BACKEND_BOUND);
+    let mut block = ImplSpec::new(holder.ty());
+    block.add_generic(holder.bound());
     block.emit_begin(w);
     if loads {
         // What `load` checks of its file before reading a weight out of it.
@@ -729,36 +861,61 @@ fn emit_constructor(
             load.add_generic(`affine ${CHECKPOINT_PARAM}: CheckpointBytes`);
         }
         load.add_param("backend", `&mut ${BACKEND_PARAM}`).add_param(param, ty).set_return_type(
-            `Result<${PREPARED_TYPE}, LoadError>`,
+            `Result<${holder.ty()}, LoadError>`,
         ).add_effect("_").emit_begin(w);
         if let Some(line) = first {
             w.line(line);
         }
-        emit_kept_binding(w, kept);
-        w.begin(`return Result::Ok(${PREPARED}`);
+        w.begin(`return Result::Ok(${holder.name()}`);
     } else {
         w.line("/// The weights the graph carries.");
         FnSpec::new("embedded", Vis::Pub).add_param("backend", `&mut ${BACKEND_PARAM}`).set_return_type(
-            PREPARED_TYPE,
+            holder.ty(),
         ).add_effect("_").emit_begin(w);
-        emit_kept_binding(w, kept);
-        w.begin(`return ${PREPARED}`);
+        w.begin(`return ${holder.name()}`);
     }
     let mut hosts = HashMap::<String, String>::new();
-    for let vi of &graph.initializers {
+    for let [at, vi] of graph.initializers.into_iter().enumerate() {
         let primitive = held.get(vi.name).unwrap();
         let shape = checked.shapes.get(vi.name).unwrap();
-        let e = expected(vi, &shape);
+        let e = expected(&vi, &shape);
         let data = match vi.data {
-            Some(bytes) => `List::<${primitive}>::from_le_bytes(${byte_string_literal(&bytes)})`,
+            Some(_) => `List::<${primitive}>::from_le_bytes(${EMBEDDED_DATA}(${at}))`,
             None => checkpoint_payload(&e, &primitive, placement),
         };
         hosts[vi.name] = `&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${e.extents} }`;
     }
-    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts);
+    emit_prepared_fields(w, graph, checked, names, held, rhs, together, &hosts, holder);
     emit_kept_fields(w, names, kept);
     w.end_with(if loads { ");" } else { ";" });
     w.end();
+    w.end();
+}
+
+/// The function holding the bytes of each weight the graph carries, by its
+/// position among the initializers, so `Prepared` and `Params` both read the
+/// one copy in the module.
+global EMBEDDED_DATA: String = "embedded_data";
+
+fn emit_embedded_data(w: &mut CodeWriter, graph: &Graph) {
+    let mut arms: List<String> = [];
+    for let [at, vi] of graph.initializers.into_iter().enumerate() {
+        if let Some(bytes) = vi.data {
+            arms.push(`${at} => ${byte_string_literal(&bytes)},`);
+        }
+    }
+    if arms.is_empty() {
+        return;
+    }
+    w.blank();
+    w.line("/// The bytes of the weight at each position among the initializers the graph carries.");
+    w.begin(`fn ${EMBEDDED_DATA}(at: i32) -> ByteList`);
+    w.begin("return match at");
+    for let arm of arms {
+        w.line(arm);
+    }
+    w.line("_ => unreachable(),");
+    w.end_with(";");
     w.end();
 }
 
@@ -951,8 +1108,8 @@ impl Operands {
     }
 }
 
-/// The forward pass: the graph's nodes in order, each a kernel call or a step
-/// of the kernel the plan fuses it into.
+/// The forward pass: `pass`, the graph's nodes in order, each a kernel call or
+/// a step of the kernel the plan fuses it into; and `forward` around it.
 fn emit_forward(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -960,51 +1117,53 @@ fn emit_forward(
     decided: &Plan,
     names: &Names,
     held: &HashMap<String, String>,
-    mut exprs: Operands,
+    exprs: Operands,
     literals: &Literals,
     kept: &List<String>,
-    mut symbols: Symbols,
+    symbols: Symbols,
     fuse: bool,
+    crossing: &Crossing,
 ) -> Result<(), EmitError> {
-    let shapes = &checked.shapes;
-    let mut pass = FnSpec::new("pass", Vis::Pub);
-    pass.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut forward = FnSpec::new("forward", Vis::Pub);
     forward.add_generic(BACKEND_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
-    // `pass` takes each input as the backend holds it, and `forward` takes it
-    // on the host and uploads it once the pass has begun. The weights are the
-    // backend's already.
+    // `forward` takes each input on the host and uploads it once the pass has
+    // begun. The weights are the backend's already.
+    let [has_cache, several, returned] = [
+        crossing.has_cache(),
+        crossing.several(),
+        crossing.returned,
+    ];
     let mut uploads: List<String> = [];
     let mut arguments: List<String> = ["backend"];
     for let vi of &graph.inputs {
+        if crossing.cached.contains(vi.name) {
+            continue;
+        }
         let ident = names.get(&vi.name);
-        pass.add_param(ident, `&${prepared_type(checked, &vi.name)}`);
         forward.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
         uploads.push(`let ${ident} = ${preparation(checked, held, &vi.name, ident, Holding::Pass)};`);
-        exprs.values[vi.name] = ident;
-        exprs.borrowed.insert(vi.name);
         arguments.push(`&${ident}`);
     }
+    if has_cache {
+        forward.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+        arguments.push("cache");
+    }
     arguments.push("weights");
-    for let vi of &graph.initializers {
-        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
-    }
-    for let tensor of kept {
-        exprs.values[*tensor] = `weights.${names.get(tensor)}`;
-    }
-    let several = graph.outputs.len() > 1;
-    let returned_type = if several { "Outputs" } else { tensor_type(checked, held, &graph.outputs[0].name) };
-    forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
-    let passed_type = if several {
-        `${PASSED}<${BACKEND_PARAM}>`;
+    let returned_type = if has_cache {
+        `${OUTPUTS}<${BACKEND_PARAM}>`;
+    } else if several {
+        OUTPUTS;
     } else {
-        prepared_type(checked, &graph.outputs[0].name);
+        tensor_type(checked, held, &returned[0]);
     };
-    pass.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(passed_type).add_effect("_");
+    forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
 
+    if has_cache {
+        emit_cache(w, &crossing.pairs, checked, names);
+    }
     if several {
-        emit_outputs(w, graph, checked, names, held);
-        emit_passed(w, graph, checked, names);
+        emit_outputs(w, &returned, has_cache, checked, names, held);
+        emit_passed(w, &returned, has_cache, checked, names);
     }
     w.blank();
     w.line("/// The graph's forward pass over inputs the backend holds, one kernel call");
@@ -1012,13 +1171,156 @@ fn emit_forward(
     w.line("/// computed them, for a caller to read only the part it needs. The caller");
     w.line("/// begins the pass, `backend.begin()`, before it uploads the inputs. The next");
     w.line("/// begin releases what the pass computed, but for what `backend.retain` keeps.");
-    pass.emit_begin(w);
-    let checks = input_checks(graph, shapes, names);
+    emit_entry(w, graph, checked, decided, names, Holder::Kernels, exprs, literals, kept, symbols, fuse, crossing)?;
+
+    w.blank();
+    w.line("/// [`pass`] over inputs on the host, its outputs read back to the host.");
+    forward.emit_begin(w);
+    // The cache was computed before the pass this call begins.
+    let keep_cache: List<String> = if has_cache { ["cache.retain(backend);"] } else { [] };
+    let host = input_checks(graph, &checked.shapes, names, &crossing.cached).host;
+    for let lines of [host, keep_cache, ["backend.begin();"] as List<String>, uploads] as List<List<String>> {
+        for let line of lines {
+            w.line(&line);
+        }
+    }
+    let passed = `pass(${arguments.join(", ")})`;
+    let downloaded = |tensor: &String, place: String| {
+        let read = `backend.download(&${place})`;
+        return if converted(checked, held, tensor) { `narrow(&${read})` } else { read };
+    };
+    // Bound to the outputs' own names, which the module's names already
+    // keep apart, so `forward` reserves none of its own.
+    if !several {
+        w.line(`return ${downloaded(&returned[0], passed)};`);
+    } else {
+        let mut idents: List<String> = returned.into_iter().map(|o| names.get(&o)).collect();
+        let mut fields: List<String> = returned.into_iter().map(
+            |o| `${names.get(&o)}: ${downloaded(&o, names.get(&o))}`,
+        ).collect();
+        if has_cache {
+            idents.push("cache");
+            fields.push("cache: cache");
+        }
+        w.line(`let ${PASSED} { ${idents.join(", ")} } = ${passed};`);
+        w.line(`return ${OUTPUTS} { ${fields.join(", ")} };`);
+    }
+    w.end();
+    return Result::Ok(());
+}
+
+/// The pass built as a graph: each node as the operations of `Graph` that
+/// compute it.
+fn emit_build(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    decided: &Plan,
+    names: &Names,
+    literals: &Literals,
+    kept: &List<String>,
+    symbols: Symbols,
+    crossing: &Crossing,
+) -> Result<(), EmitError> {
+    let exprs = Operands {
+        values: HashMap::<String, String>::new(),
+        scalars: HashMap::<String, f32>::new(),
+        rhs: HashMap::<String, bool>::new(),
+    };
+    w.blank();
+    w.line("/// The graph's forward pass, each operation added to the graph `backend`");
+    w.line("/// builds, over inputs it holds.");
+    return emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, crossing);
+}
+
+/// What crosses a pass's boundary beside its inputs and weights, which every
+/// entry and the structs around them agree on.
+struct Crossing {
+    /// Each past and the present that replaces it in the cache.
+    pairs: List<[String, String]>,
+    /// The pasts, which an entry reads from the cache rather than taking.
+    cached: HashSet<String>,
+    /// The outputs a pass returns, a present aside: the cache holds it.
+    returned: List<String>,
+}
+
+impl Crossing {
+    fn of(graph: &Graph, pairs: List<[String, String]>) -> Crossing {
+        let mut cached = HashSet::<String>::new();
+        for let [past, _] of pairs {
+            cached.insert(past);
+        }
+        let presents: List<String> = pairs.into_iter().map(|p| p.1).collect();
+        let returned = graph.outputs.into_iter().map(|vi| vi.name).filter(|o| !presents.contains(&o)).collect();
+        return Crossing { pairs, cached, returned };
+    }
+
+    fn has_cache(&self) -> bool {
+        return !self.pairs.is_empty();
+    }
+
+    /// Whether a pass returns its outputs in `Passed`, and `forward` in `Outputs`.
+    fn several(&self) -> bool {
+        return self.returned.len() > 1 || self.has_cache();
+    }
+}
+
+/// `holder`'s entry: the inputs as the backend holds them, the cache and the
+/// weights in; the checks of what the inputs owe; the body; and the outputs
+/// out, the presents as the next pass's cache.
+fn emit_entry(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    decided: &Plan,
+    names: &Names,
+    holder: Holder,
+    mut exprs: Operands,
+    literals: &Literals,
+    kept: &List<String>,
+    mut symbols: Symbols,
+    fuse: bool,
+    crossing: &Crossing,
+) -> Result<(), EmitError> {
+    let shapes = &checked.shapes;
+    let mut entry = FnSpec::new(holder.entry(), Vis::Pub);
+    entry.add_generic(holder.bound()).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    // The pasts cross in one `Cache`, and the presents replace them in it.
+    let [has_cache, several, returned] = [
+        crossing.has_cache(),
+        crossing.several(),
+        crossing.returned,
+    ];
+    for let vi of &graph.inputs {
+        let ident = names.get(&vi.name);
+        exprs.values[vi.name] = ident;
+        exprs.borrowed.insert(vi.name);
+        if !crossing.cached.contains(vi.name) {
+            entry.add_param(ident, `&${prepared_type(checked, &vi.name)}`);
+        }
+    }
+    if has_cache {
+        entry.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+    }
+    for let vi of &graph.initializers {
+        exprs.values[vi.name] = `weights.${names.get(&vi.name)}`;
+    }
+    for let tensor of kept {
+        exprs.values[*tensor] = `weights.${names.get(tensor)}`;
+    }
+    let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
+    entry.add_param("weights", `&${holder.ty()}`).set_return_type(passed_type).add_effect("_");
+    entry.emit_begin(w);
+    for let [past, _] of crossing.pairs {
+        let ident = names.get(&past);
+        w.line(`let ${ident} = &cache.${ident};`);
+    }
+    let checks = input_checks(graph, shapes, names, &crossing.cached);
     for let line of checks.held {
         w.line(&line);
     }
     // A symbol is bound once something spells it, which the body decides.
-    let body = scope_body(graph, checked, decided, names, &mut exprs, literals, &mut symbols, fuse)?;
+    let body = scope_body(graph, checked, decided, names, &mut exprs, literals, &mut symbols, holder, fuse)?;
     let mut owed: List<String> = [];
     for let spelled of checks.spelled {
         let SpelledAxis { tensor, axis, extent, length } = spelled;
@@ -1033,52 +1335,145 @@ fn emit_forward(
         }
     }
     if !several {
-        w.line(`return ${exprs.value(&graph.outputs[0].name)};`);
+        w.line(`return ${exprs.value(&returned[0])};`);
     } else {
-        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
-            return `${names.get(&vi.name)}: ${exprs.value(&vi.name)}`;
-        }).collect();
-        w.line(`return ${PASSED} { ${fields.join(", ")} };`);
-    }
-    w.end();
-
-    w.blank();
-    w.line("/// [`pass`] over inputs on the host, its outputs read back to the host.");
-    forward.emit_begin(w);
-    for let lines of [checks.host, ["backend.begin();"] as List<String>, uploads] as List<List<String>> {
-        for let line of lines {
-            w.line(&line);
+        let mut fields: List<String> = returned.into_iter().map(|o| `${names.get(&o)}: ${exprs.value(&o)}`).collect();
+        if has_cache {
+            // Each present under its past's axes, as the next pass reads it.
+            let mut parts: List<String> = [];
+            for let [past, present] of crossing.pairs {
+                let at = exprs.reference(&present);
+                let element = checked.primitives.get(present).unwrap();
+                let axes = `[${axis_list(&shapes.get(present).unwrap())}], [${axis_list(&shapes.get(past).unwrap())}]`;
+                parts.push(
+                    `${names.get(&past)}: backend.reshape::<${element}, ${axes}>(${at}, backend.extents_of(${at}))`,
+                );
+            }
+            fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
         }
-    }
-    let passed = `pass(${arguments.join(", ")})`;
-    let downloaded = |tensor: &String, place: String| {
-        let read = `backend.download(&${place})`;
-        return if converted(checked, held, tensor) { `narrow(&${read})` } else { read };
-    };
-    // Bound to the outputs' own names, which the module's names already
-    // keep apart, so `forward` reserves none of its own.
-    if !several {
-        w.line(`return ${downloaded(&graph.outputs[0].name, passed)};`);
-    } else {
-        let idents: List<String> = graph.outputs.into_iter().map(|vi| names.get(&vi.name)).collect();
-        w.line(`let ${PASSED} { ${idents.join(", ")} } = ${passed};`);
-        let fields: List<String> = graph.outputs.into_iter().map(|vi| {
-            let ident = names.get(&vi.name);
-            return `${ident}: ${downloaded(&vi.name, ident)}`;
-        }).collect();
-        w.line(`return Outputs { ${fields.join(", ")} };`);
+        w.line(`return ${PASSED} { ${fields.join(", ")} };`);
     }
     w.end();
     return Result::Ok(());
 }
 
+/// `Cache`, one field per pair, each held under its past's axes; its `empty`,
+/// the state before the first pass, which takes the length of each axis the
+/// graph leaves open; and its `retain`.
+fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Checked, names: &Names) {
+    let mut cache = StructSpec::new(CACHE, Vis::Pub);
+    cache.add_generic(HOLDS_BOUND);
+    let mut opened: List<String> = [];
+    let mut empties: List<String> = [];
+    let mut retains: List<String> = [];
+    for let [past, present] of *pairs {
+        let ident = names.get(&past);
+        cache.add_pub_field(ident, prepared_type(checked, &past));
+        let shape = checked.shapes[past];
+        let mut extents: List<String> = [];
+        let mut empty = false;
+        let mut fixed = 1;
+        let mut open: List<String> = [];
+        for let [i, axis] of shape.axes.into_iter().enumerate() {
+            let Symbolic(p) = axis.extent else {
+                extents.push(`${axis.static_extent()}`);
+                fixed *= axis.static_extent();
+                continue;
+            };
+            // The past's length grows into the present's, and an empty cache
+            // holds none of it.
+            if checked.shapes[present].axes[i].name != axis.name {
+                extents.push("0");
+                empty = true;
+                continue;
+            }
+            let length = open_length(&p, names, &mut opened);
+            extents.push(length);
+            open.push(length);
+        }
+        let primitive = checked.primitives[past];
+        let data = if empty {
+            "[]";
+        } else {
+            if fixed != 1 || open.is_empty() {
+                open.push(`${fixed}`);
+            }
+            `List::<${primitive}>::filled(${open.join(" * ")}, ${zero_of(&primitive)})`;
+        };
+        empties.push(
+            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: [${extents.join(
+                ", ",
+            )}] }),`,
+        );
+        retains.push(`backend.retain(&self.${ident});`);
+    }
+    let mut params: List<String> = [`backend: &mut ${BACKEND_PARAM}`];
+    for let length of opened {
+        params.push(`${length}: i32`);
+    }
+    w.blank();
+    w.line("/// The state the graph hands from one pass to the next, as the backend holds");
+    w.line("/// it: each past it reads, which the present it computes replaces.");
+    cache.emit(w);
+    w.blank();
+    let mut held = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
+    held.add_generic(HOLDS_BOUND);
+    held.emit_begin(w);
+    w.line("/// The state before the first pass: no position along a past's length,");
+    w.line("/// and zeros of every other state.");
+    w.line(`pub fn empty(${params.join(", ")}) -> ${CACHE}<${BACKEND_PARAM}> with _ {`);
+    w.line(`    return ${CACHE} {`);
+    for let line of empties {
+        w.line(`        ${line}`);
+    }
+    w.line("    };");
+    w.line("}");
+    w.end();
+    w.blank();
+    let mut block = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
+    block.add_generic(BACKEND_BOUND);
+    block.emit_begin(w);
+    w.line("/// Keeps the cache through the next `backend.begin()`.");
+    w.line(`pub fn retain(&self, backend: &mut ${BACKEND_PARAM}) with _ {`);
+    for let line of retains {
+        w.line(`    ${line}`);
+    }
+    w.line("}");
+    w.end();
+}
+
+/// The `i32` length `Cache::empty` gives an open axis of extent `p`, each
+/// symbol in it a parameter of `empty`, which `opened` lists once.
+fn open_length(p: &Poly, names: &Names, opened: &mut List<String>) -> String {
+    let mut spelled = HashMap::<String, String>::new();
+    for let symbol of p.symbols() {
+        let ident = names.get(&symbol_key(&symbol));
+        if !opened.contains(&ident) {
+            opened.push(ident);
+        }
+        if *p == Poly::symbol(&symbol) {
+            return ident;
+        }
+        spelled[symbol] = `(${ident} as i64)`;
+    }
+    return `to_extent(${p.spelled(&spelled)})`;
+}
+
+/// A zero of `primitive`, as an empty state holds.
+fn zero_of(primitive: &String) -> String {
+    return if *primitive == "bool" { "false" } else { `0 as ${*primitive}` };
+}
+
 /// The struct `pass` returns a graph's several outputs in, each as the
 /// backend holds it.
-fn emit_passed(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names) {
+fn emit_passed(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, checked: &Checked, names: &Names) {
     let mut passed = StructSpec::new(PASSED, Vis::Pub);
-    passed.add_generic(BACKEND_BOUND);
-    for let vi of &graph.outputs {
-        passed.add_pub_field(names.get(&vi.name), prepared_type(checked, &vi.name));
+    passed.add_generic(HOLDS_BOUND);
+    for let output of *returned {
+        passed.add_pub_field(names.get(&output), prepared_type(checked, &output));
+    }
+    if has_cache {
+        passed.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
     }
     w.blank();
     w.line("/// The graph's outputs as the backend holds them, in the order it declares them.");
@@ -1095,8 +1490,10 @@ fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>,
 }
 
 /// One scope's statements: the literals it spells that no scope around it
-/// did, then each kernel's call as `decided`, the scope's plan, lowers it.
-/// `fuse` plans the branches inside it.
+/// did, then each node as `holder`'s entry computes it. `pass` calls the
+/// kernels as `decided`, the scope's plan, lowers them, and `fuse` plans the
+/// branches inside it. `build` adds each node's operations, but for a weight's
+/// transpose, which the product reading it reads past.
 fn scope_body(
     graph: &Graph,
     checked: &Checked,
@@ -1105,6 +1502,7 @@ fn scope_body(
     exprs: &mut Operands,
     literals: &Literals,
     symbols: &mut Symbols,
+    holder: Holder,
     fuse: bool,
 ) -> Result<List<String>, EmitError> {
     let mut body: List<String> = [];
@@ -1122,7 +1520,15 @@ fn scope_body(
         }
     }
     for let [at, node] of graph.nodes.into_iter().enumerate() {
-        match decided.lowering(at) {
+        let lowering = match holder {
+            Kernels => decided.lowering(at),
+            Built => if decided.lowering(at) matches { Transposed } {
+                Lowering::Transposed;
+            } else {
+                lowering_of(&node, checked);
+            },
+        };
+        match lowering {
             Folded | Flattened => {
             },
             Transposed => exprs.transposed[node.outputs[0]] = node.inputs[0],
@@ -1140,15 +1546,19 @@ fn scope_body(
                     }
                 }
             },
-            Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, fuse)?),
+            Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, holder, fuse)?),
             Kernel => {
+                if holder matches { Built } {
+                    body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset, holder)?);
+                    continue;
+                }
                 // The first product of a concatenation binds this one.
                 if decided.of(&node.outputs[0]) matches { Concatenated(_) } {
                     continue;
                 }
                 let spread = decided.spread_of(&node.outputs[0]);
                 let Some(term) = node_term(&node, checked, exprs, symbols, graph.opset, &spread)? else {
-                    body.extend(&kernel_calls(&node, checked, names, exprs, symbols, graph.opset)?);
+                    body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset, holder)?);
                     continue;
                 };
                 let output = node.outputs[0];
@@ -1192,14 +1602,16 @@ fn concat_parts(checked: &Checked, parts: &List<String>, names: &Names, exprs: &
     return views;
 }
 
-/// A node's kernel calls, each bound to the output it computes.
-fn kernel_calls(
+/// A node's kernel calls, or its operations, as `holder`'s entry computes it,
+/// each bound to the output it computes.
+fn node_calls(
     node: &Node,
     checked: &Checked,
     names: &Names,
     exprs: &mut Operands,
     symbols: &mut Symbols,
     opset: Option<i64>,
+    holder: Holder,
 ) -> Result<List<String>, EmitError> {
     if node.op == GROUP_QUERY_ATTENTION {
         let mut bound: List<String> = [];
@@ -1212,16 +1624,18 @@ fn kernel_calls(
             exprs.values[output] = ident;
             bound.push(ident);
         }
-        // The kernel computes every output, so an unnamed one is dropped.
+        // The kernel and the composite each compute every output, so an
+        // unnamed one is dropped.
         while bound.len() < 3 {
             bound.push("_");
         }
         return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`]);
     }
-    let calls = if node.op == "Split" {
-        split_calls(node, checked, exprs, symbols)?;
-    } else {
-        [node_call(node, checked, exprs, symbols, opset)?] as List<String>;
+    let calls = match [holder, node.op == "Split"] {
+        [Kernels, true] => split_calls(node, checked, exprs, symbols)?,
+        [Built, true] => built_split(node, checked, exprs, symbols)?,
+        [Kernels, false] => [node_call(node, checked, exprs, symbols, opset)?] as List<String>,
+        [Built, false] => [built_call(node, checked, exprs, symbols, opset)?] as List<String>,
     };
     let mut lines: List<String> = [];
     for let [i, call] of calls.into_iter().enumerate() {
@@ -1286,27 +1700,38 @@ fn bound_to(output: &String, call: String, names: &Names, exprs: &mut Operands) 
     return `let ${ident} = ${call};`;
 }
 
-/// An `If` as one `if` over its condition's element, each branch a block
-/// that checks what it owes, computes its outputs, and yields them under the
-/// axes the node's outputs carry.
+/// An `If`, each branch a block that checks what it owes, computes its
+/// outputs, and yields them under the axes the node's outputs carry. `pass`
+/// reads the condition's element and takes one block; `build` adds a
+/// conditional whose branches are the blocks.
 fn branch_block(
     node: &Node,
     checked: &Checked,
     names: &Names,
     exprs: &mut Operands,
     symbols: &mut Symbols,
+    holder: Holder,
     fuse: bool,
 ) -> Result<List<String>, EmitError> {
     let [then_branch, else_branch] = branches(node, checked);
     let outputs: List<String> = node.outputs.into_iter().map(|o| names.get(&o)).collect();
     let bound = if outputs.len() == 1 { outputs[0] } else { `[${outputs.join(", ")}]` };
-    // The condition is read on the host, which on a GPU is a synchronization.
-    let condition = `backend.download(${exprs.reference(&node.inputs[0])}).data[0]`;
-    let mut lines: List<String> = [`let ${bound} = if ${condition} {`];
-    lines.extend(&indented(branch_lines(node, &then_branch, checked, names, exprs, symbols, fuse)?));
-    lines.push("} else {");
-    lines.extend(&indented(branch_lines(node, &else_branch, checked, names, exprs, symbols, fuse)?));
-    lines.push("};");
+    let condition = exprs.reference(&node.inputs[0]);
+    let [opening, between, closing] = match holder {
+        // The condition is read on the host, which on a GPU is a synchronization.
+        Kernels => [`let ${bound} = if backend.download(${condition}).data[0] {`, "} else {", "};"],
+        Built => {
+            let types: List<String> = node.outputs.into_iter().map(|o| prepared_type(checked, &o)).collect();
+            let yielded = if types.len() == 1 { types[0] } else { `[${types.join(", ")}]` };
+            let axes = axis_list(&checked.shapes[node.inputs[0]]);
+            [`let ${bound} = backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`, "}, || {", "});"];
+        },
+    };
+    let mut lines: List<String> = [opening];
+    lines.extend(&indented(branch_lines(node, &then_branch, checked, names, exprs, symbols, holder, fuse)?));
+    lines.push(between);
+    lines.extend(&indented(branch_lines(node, &else_branch, checked, names, exprs, symbols, holder, fuse)?));
+    lines.push(closing);
     for let [i, output] of node.outputs.into_iter().enumerate() {
         exprs.values[output] = outputs[i];
     }
@@ -1321,6 +1746,7 @@ fn branch_lines(
     names: &Names,
     exprs: &Operands,
     symbols: &mut Symbols,
+    holder: Holder,
     fuse: bool,
 ) -> Result<List<String>, EmitError> {
     let graph = &taken.graph;
@@ -1342,11 +1768,20 @@ fn branch_lines(
             // A branch checks against a copy of the shapes around it, and only
             // the outermost graph declares weights.
             assert !exprs.rhs.contains_key(*tensor), "a branch renames no weight's axes";
-            inner.values[*tensor] = relabeled(&around.primitives[*tensor], &from, &to, &exprs.reference(tensor));
+            inner.values[*tensor] = relabeled(
+                holder,
+                &around.primitives[*tensor],
+                &from,
+                &to,
+                &exprs.reference(tensor),
+            );
             inner.borrowed.remove(*tensor);
         }
     }
-    let literals = literal_tensors(graph, branch, &inner.scalars);
+    let literals = match holder {
+        Kernels => kernel_literals(graph, branch, &inner.scalars),
+        Built => graph_literals(graph, branch),
+    };
     let mut lines = owed_checks(branch, symbols)?;
     lines.extend(&scope_body(
         graph,
@@ -1356,6 +1791,7 @@ fn branch_lines(
         &mut inner,
         &literals,
         symbols,
+        holder,
         fuse,
     )?);
     let mut yielded: List<String> = [];
@@ -1366,15 +1802,21 @@ fn branch_lines(
             yielded.push(inner.value(&vi.name));
             continue;
         }
-        yielded.push(relabeled(&around.primitives[node.outputs[i]], &from, &to, &inner.reference(&vi.name)));
+        yielded.push(relabeled(holder, &around.primitives[node.outputs[i]], &from, &to, &inner.reference(&vi.name)));
     }
-    lines.push(if yielded.len() == 1 { yielded[0] } else { `[${yielded.join(", ")}]` });
+    let value = if yielded.len() == 1 { yielded[0] } else { `[${yielded.join(", ")}]` };
+    // A conditional's branch is a closure, which returns its value.
+    lines.push(if holder matches { Built } { `return ${value};` } else { value });
     return Result::Ok(lines);
 }
 
 /// The tensor `operand` refers to, of axes `from`, as one of axes `to`.
-fn relabeled(element: &String, from: &Shape, to: &Shape, operand: &String) -> String {
-    return `backend.lift::<${*element}, [${axis_list(from)}], [${axis_list(to)}]>(${*operand}, ${to.rank()})`;
+fn relabeled(holder: Holder, element: &String, from: &Shape, to: &Shape, operand: &String) -> String {
+    let axes = `${*element}, [${axis_list(from)}], [${axis_list(to)}]`;
+    return match holder {
+        Kernels => `backend.lift::<${axes}>(${*operand}, ${to.rank()})`,
+        Built => `lifted::<${BACKEND_PARAM}, ${axes}>(backend, ${*operand}, ${to.rank()})`,
+    };
 }
 
 fn indented(lines: List<String>) -> List<String> {
@@ -1382,10 +1824,24 @@ fn indented(lines: List<String>) -> List<String> {
 }
 
 /// The struct `forward` returns a graph's several outputs in, one field each.
-fn emit_outputs(w: &mut CodeWriter, graph: &Graph, checked: &Checked, names: &Names, held: &HashMap<String, String>) {
-    let mut outputs = StructSpec::new("Outputs", Vis::Pub);
-    for let vi of &graph.outputs {
-        outputs.add_pub_field(names.get(&vi.name), tensor_type(checked, held, &vi.name));
+fn emit_outputs(
+    w: &mut CodeWriter,
+    returned: &List<String>,
+    has_cache: bool,
+    checked: &Checked,
+    names: &Names,
+    held: &HashMap<String, String>,
+) {
+    let mut outputs = StructSpec::new(OUTPUTS, Vis::Pub);
+    if has_cache {
+        outputs.add_generic(BACKEND_BOUND);
+    }
+    for let output of *returned {
+        outputs.add_pub_field(names.get(&output), tensor_type(checked, held, &output));
+    }
+    if has_cache {
+        // The cache stays where the backend holds it, for the next pass.
+        outputs.add_pub_field("cache", `${CACHE}<${BACKEND_PARAM}>`);
     }
     w.blank();
     w.line("/// The graph's outputs, in the order it declares them.");
@@ -1412,9 +1868,70 @@ struct Literals {
     aliases: HashMap<String, String>,
 }
 
-/// The folded tensors something reads as a tensor: all a kernel reads or the
+/// The folded tensors `pass` reads as a tensor: all a kernel reads or the
 /// graph returns, save a scalar an `Expr` folds.
-fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f32>) -> Literals {
+fn kernel_literals(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f32>) -> Literals {
+    return literal_tensors(
+        graph,
+        checked,
+        |name| !scalars.contains_key(*name) || read_as_tensor(graph, checked, scalars, name),
+    );
+}
+
+/// The folded tensors `build` reads as a tensor: all an operation reads as
+/// one or the graph returns.
+fn graph_literals(graph: &Graph, checked: &Checked) -> Literals {
+    let mut read = HashSet::<String>::new();
+    read_by_graph(&mut read, graph, checked);
+    return literal_tensors(graph, checked, |name| read.contains(*name));
+}
+
+/// Into `read`, what the graph returns and what an operation `build` adds
+/// reads as a tensor, in a branch's scope among them.
+fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
+    for let vi of &graph.outputs {
+        read.insert(vi.name);
+    }
+    for let node of graph.nodes {
+        let lowering = lowering_of(&node, checked);
+        if lowering matches { Folded } {
+            continue;
+        }
+        if lowering matches { Branch } {
+            for let b of branches(&node, checked) {
+                read_by_graph(read, &b.graph, &b.checked);
+            }
+        }
+        for let index of graph_operands(&node) {
+            if node.has_operand(index) {
+                read.insert(node.inputs[index]);
+            }
+        }
+    }
+}
+
+/// The operands of `node` its operations read as tensors. The rest are
+/// extents, positions or axes, which the build reads from the folded values.
+fn graph_operands(node: &Node) -> List<i32> {
+    if node.op == GROUP_QUERY_ATTENTION {
+        let mut read: List<i32> = [0, 1, 2, 3, 4];
+        if settled(attention_options(node)).rotary {
+            read.push(ROTARY_COS);
+            read.push(ROTARY_SIN);
+        }
+        read.push(ATTENTION_BIAS);
+        return read;
+    }
+    return match node.op.as_str_slice() {
+        "ConstantOfShape" | "Range" => [],
+        "Reshape" | "Squeeze" | "Unsqueeze" | "Slice" | "Expand" | "Split" | "ReduceSum" | "ReduceMean" | "If" => [0],
+        _ => (0..<node.inputs.len()).collect(),
+    };
+}
+
+/// The folded tensors something reads as a tensor, those `wanted` keeps, each
+/// spelled once under its axes.
+fn literal_tensors(graph: &Graph, checked: &Checked, wanted: fn(&String) -> bool) -> Literals {
     let mut sources = HashMap::<String, String>::new();
     for let node of &graph.nodes {
         if is_alias(node, checked) && checked.known.contains_key(node.outputs[0]) {
@@ -1424,8 +1941,7 @@ fn literal_tensors(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f
     let mut literals = Literals { spelled: [], aliases: HashMap::<String, String>::new() };
     let mut spelled_for = HashMap::<String, String>::new();
     for let [name, _] of checked.known.entries() {
-        if !checked.shapes.contains_key(*name)
-            || scalars.contains_key(*name) && !read_as_tensor(graph, checked, scalars, name) {
+        if !checked.shapes.contains_key(*name) || !wanted(name) {
             continue;
         }
         let mut root = *name;
@@ -1555,14 +2071,15 @@ struct InputChecks {
     /// What `pass` checks of the inputs the backend holds: their extents.
     held: List<String>,
     /// What `forward` checks of the inputs on the host before it uploads them:
-    /// their extents, and that the data fills them.
+    /// their extents, and that the data fills them. A past the cache holds is
+    /// on the backend already, so only `pass` checks it.
     host: List<String>,
     /// The axes whose length is arithmetic over symbols, for `pass` to check
     /// once it has bound them.
     spelled: List<SpelledAxis>,
 }
 
-fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names) -> InputChecks {
+fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names, cached: &HashSet<String>) -> InputChecks {
     let mut checks = InputChecks { held: [], host: [], spelled: [] };
     let mut first_seen = HashMap::<String, String>::new();
     let mut agreements: List<String> = [];
@@ -1593,7 +2110,9 @@ fn input_checks(graph: &Graph, shapes: &HashMap<String, Shape>, names: &Names) -
         }
         let described = wado`"${vi.name}", [${axes.join(", ")}], ${stated}`;
         checks.held.push(`refuse(extents_mismatch(&backend.extents_of(${ident}), ${described}));`);
-        checks.host.push(`refuse(input_mismatch(${ident}, ${described}));`);
+        if !cached.contains(vi.name) {
+            checks.host.push(`refuse(input_mismatch(${ident}, ${described}));`);
+        }
     }
     checks.held.extend(&agreements);
     return checks;
@@ -1735,6 +2254,512 @@ fn node_call(
     }
     // `node_term` took every other operator stage 0 lowers.
     unreachable();
+}
+
+/// One node as the operations of `Graph` that compute it, nested in one
+/// expression. The operand expressions are already in scope, since a graph's
+/// nodes are in topological order.
+fn built_call(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    opset: Option<i64>,
+) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let op = node.op;
+    let out = shapes[node.outputs[0]];
+    let axes = axis_list(&out);
+    let element = checked.primitives[node.outputs[0]];
+    let operand = |index: i32| exprs.reference(&node.inputs[index]);
+    if op == "Reshape" || op == "Flatten" || op == "Unsqueeze" || op == "Squeeze" {
+        return reshaped(node, checked, &operand(0), symbols);
+    }
+    if op == "Slice" {
+        return built_slice(node, checked, exprs, symbols);
+    }
+    if op == "ConstantOfShape" {
+        let value = element_literal(&fill_of(node).unwrap().elements);
+        return Result::Ok(
+            `full::<${BACKEND_PARAM}, ${element}, [${axes}]>(backend, ${value}, ${symbols.spell_shape(&out)?})`,
+        );
+    }
+    if op == "Range" {
+        let [start, _, delta] = settled(range_bounds(node, &checked.known));
+        let count = symbols.spell_extent(&out.axes[0].extent.poly())?;
+        return Result::Ok(
+            `range_i64::<${BACKEND_PARAM}, ${axes}>(backend, ${symbols.spell(&start)?}, ${count}, ${symbols.spell(
+                &delta,
+            )?})`,
+        );
+    }
+    if op == "Cast" {
+        let from = checked.primitives[node.inputs[0]];
+        return Result::Ok(`backend.convert::<${from}, ${element}, [${axes}]>(${operand(0)})`);
+    }
+    if op == "Gather" {
+        return built_gather(node, checked, exprs, symbols);
+    }
+    if op == "MaxPool" {
+        return built_max_pool(node, shapes, exprs, symbols);
+    }
+    if op == "Where" {
+        let mut operands: List<String> = [];
+        for let tensor of node.inputs {
+            operands.push(stretched(checked, exprs, symbols, &tensor, &out, 0)?);
+        }
+        return Result::Ok(`backend.select::<${element}, [${axes}]>(${operands.join(", ")})`);
+    }
+    if op == "Softmax" {
+        let lane = settled(softmax_lane(node, out.rank(), opset));
+        let helper = if lane.flattened { "softmax_flattened" } else { "softmax" };
+        return Result::Ok(`${helper}::<${BACKEND_PARAM}, [${axes}]>(backend, ${operand(0)}, ${lane.axis})`);
+    }
+    if is_reduction(&op) {
+        return built_reduction(node, checked, exprs, symbols);
+    }
+    if op == "Concat" {
+        return Result::Ok(built_concat(node, checked, exprs));
+    }
+    if op == "Expand" {
+        return broadcast_call(&element, &shapes[node.inputs[0]], &out, &operand(0), 0, symbols);
+    }
+    if op == "Transpose" {
+        let x = shapes[node.inputs[0]];
+        let perm = settled(transpose_perm(node, x.rank()));
+        if is_identity(&perm) {
+            return Result::Ok(exprs.value(&node.inputs[0]));
+        }
+        return Result::Ok(`backend.transpose::<${element}, [${axis_list(&x)}], [${axes}]>(${operand(0)}, ${perm})`);
+    }
+    if op == "MatMul" {
+        return built_matmul(node, checked, exprs, symbols);
+    }
+    if op == "Gemm" {
+        return built_gemm(node, checked, exprs, symbols);
+    }
+    if op == "Conv" {
+        return built_conv(node, checked, exprs, symbols);
+    }
+    if let Some(binary) = case_named::<BinaryOp>(&op) {
+        let trailing = settled(trailing_axes(node, shapes[node.inputs[0]].rank(), shapes[node.inputs[1]].rank()));
+        let a = stretched(checked, exprs, symbols, &node.inputs[0], &out, 0)?;
+        let b = stretched(checked, exprs, symbols, &node.inputs[1], &out, trailing)?;
+        let name = match binary {
+            Add => "Add",
+            Sub => "Subtract",
+            Mul => "Multiply",
+            Div => "Divide",
+            Pow => "Power",
+        };
+        return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
+    }
+    // Stage 0 refuses every operator the graph lowers no other way.
+    let unary = case_named::<UnaryOp>(&op).unwrap();
+    if unary matches { Relu } {
+        let zero = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, 0 as f32, ${symbols.spell_shape(&out)?})`;
+        return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Maximum, ${operand(0)}, ${zero})`);
+    }
+    let name = match unary {
+        Relu => unreachable(),
+        Sigmoid => "Logistic",
+        Tanh => "Tanh",
+        Erf => "Erf",
+        Exp => "Exponential",
+        Log => "Log",
+        Sqrt => "Sqrt",
+        Neg => "Negate",
+        Abs => "Abs",
+    };
+    return Result::Ok(`backend.unary::<[${axes}]>(Unary::${name}, ${operand(0)})`);
+}
+
+/// `operand`, of axes `from`, broadcast to `to`'s axes, its axes meeting
+/// `to`'s `trailing` axes before the end.
+fn broadcast_call(
+    element: &String,
+    from: &Shape,
+    to: &Shape,
+    operand: &String,
+    trailing: i32,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    let first = to.rank() - from.rank() - trailing;
+    let dims: List<i32> = (first..<first + from.rank()).collect();
+    return Result::Ok(
+        `backend.broadcast_in_dim::<${*element}, [${axis_list(from)}], [${axis_list(to)}]>(${*operand}, ${symbols.spell_shape(
+            to,
+        )?}, ${dims})`,
+    );
+}
+
+/// `tensor` read under `out`'s axes: as it is where they are its own, and
+/// broadcast to them otherwise. An axis of 1 may share its name with the one
+/// it stretches over, so the names alone do not say they are one.
+fn stretched(
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    tensor: &String,
+    out: &Shape,
+    trailing: i32,
+) -> Result<String, EmitError> {
+    let shape = checked.shapes[*tensor];
+    if same_axes(&shape, out) {
+        return Result::Ok(exprs.reference(tensor));
+    }
+    let element = checked.primitives[*tensor];
+    return Result::Ok(`&${broadcast_call(&element, &shape, out, &exprs.reference(tensor), trailing, symbols)?}`);
+}
+
+/// The value `operand` refers to, of axes `shape`, times `factor`.
+fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let axes = axis_list(shape);
+    let by = `&full::<${BACKEND_PARAM}, f32, [${axes}]>(backend, ${float_literal(factor)}, ${symbols.spell_shape(shape)?})`;
+    return Result::Ok(`backend.binary::<f32, [${axes}]>(Binary::Multiply, ${*operand}, ${by})`);
+}
+
+/// `dot_general` of `lhs`, of axes `left`, by `rhs`, of axes `right`, into
+/// `out`, over the axes `batch` on both sides, contracting the left's axis
+/// `contracting.0` with the right's `contracting.1`.
+fn dot_call(
+    left: &Shape,
+    right: &Shape,
+    out: &Shape,
+    lhs: &String,
+    rhs: &String,
+    batch: List<i32>,
+    contracting: [i32, i32],
+) -> String {
+    let [l, r] = contracting;
+    let dims = `&DotDims { lhs_batch: ${batch}, rhs_batch: ${batch}, lhs_contracting: [${l}], rhs_contracting: [${r}] }`;
+    return `backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${*lhs}, ${*rhs}, ${dims})`;
+}
+
+/// A `MatMul` as `dot_general`. A right operand of rank 2 or less, or a left
+/// one of rank 1, leaves no batch axis; otherwise both stretch their batch
+/// axes to the output's. A weight's transpose is read as the weight, its rows
+/// the product's columns.
+fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let out = shapes[node.outputs[0]];
+    let left = shapes[node.inputs[0]];
+    let a = exprs.reference(&node.inputs[0]);
+    let last = left.rank() - 1;
+    if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
+        return Result::Ok(dot_call(&left, &shapes[weight], &out, &a, &exprs.reference(&weight), [], [last, 1]));
+    }
+    let right = shapes[node.inputs[1]];
+    let b = exprs.reference(&node.inputs[1]);
+    if right.rank() <= 2 || left.rank() == 1 {
+        let contracted = if right.rank() == 1 { 0 } else { right.rank() - 2 };
+        return Result::Ok(dot_call(&left, &right, &out, &a, &b, [], [last, contracted]));
+    }
+    let batch = out.rank() - 2;
+    let under_batch = |matrix: &Shape| {
+        let mut axes = out.axes[0..<batch].to_list();
+        axes.extend(&matrix.axes[matrix.rank() - 2..<matrix.rank()].to_list());
+        return Shape { axes };
+    };
+    let [lhs, rhs] = [
+        under_batch(&left),
+        under_batch(&right),
+    ];
+    return Result::Ok(dot_call(
+        &lhs,
+        &rhs,
+        &out,
+        &stretched(checked, exprs, symbols, &node.inputs[0], &lhs, 0)?,
+        &stretched(checked, exprs, symbols, &node.inputs[1], &rhs, 0)?,
+        (0..<batch).collect(),
+        [batch + 1, batch],
+    ));
+}
+
+/// `Gemm`'s `alpha * A' * B' + beta * C`: `dot_general` contracting the axes
+/// `transA` and `transB` choose, its scalars, and its bias broadcast to the
+/// output, whose axes the bias may rename where they meet at an extent of 1.
+fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let [alpha, beta, trans_a, trans_b] = settled(gemm_options(node));
+    let product = gemm_product(node, shapes);
+    let mut call = dot_call(
+        &shapes[node.inputs[0]],
+        &shapes[node.inputs[1]],
+        &product,
+        &exprs.reference(&node.inputs[0]),
+        &exprs.reference(&node.inputs[1]),
+        [],
+        [if trans_a { 0 } else { 1 }, if trans_b { 1 } else { 0 }],
+    );
+    if alpha != 1.0 {
+        call = scaled(&`&${call}`, &product, alpha, symbols)?;
+    }
+    if !has_bias(node) {
+        return Result::Ok(call);
+    }
+    let out = shapes[node.outputs[0]];
+    if !same_axes(&product, &out) {
+        call = broadcast_call(&KERNEL_ELEMENT, &product, &out, &`&${call}`, 0, symbols)?;
+    }
+    let mut bias = stretched(checked, exprs, symbols, &node.inputs[2], &out, 0)?;
+    if beta != 1.0 {
+        bias = `&${scaled(&bias, &out, beta, symbols)?}`;
+    }
+    return Result::Ok(`backend.binary::<f32, [${axis_list(&out)}]>(Binary::Add, &${call}, ${bias})`);
+}
+
+/// A `Conv` as `convolution`, its bias broadcast along the output's channels.
+fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let x = shapes[node.inputs[0]];
+    let w = shapes[node.inputs[1]];
+    let y = shapes[node.outputs[0]];
+    // Stage 0 owed these already.
+    let window = settled(window_of(node, &x, shapes, &mut [], &Axes {}));
+    let spatial = x.rank() - 2;
+    let mut padding: List<String> = [];
+    for let i of 0..<spatial {
+        padding.push(symbols.spell_extent(&window.pads[i])?);
+        padding.push(symbols.spell_extent(&window.pads[spatial + i])?);
+    }
+    let conv = `&Convolution { window_strides: ${window.strides}, padding: [${padding.join(
+        ", ",
+    )}], rhs_dilation: ${window.dilations}, feature_group_count: ${settled(conv_group(node, &w))} }`;
+    let call = `backend.convolution::<[${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${exprs.reference(
+        &node.inputs[0],
+    )}, ${exprs.reference(&node.inputs[1])}, ${conv})`;
+    if !has_bias(node) {
+        return Result::Ok(call);
+    }
+    let bias = broadcast_call(
+        &KERNEL_ELEMENT,
+        &shapes[node.inputs[2]],
+        &y,
+        &exprs.reference(&node.inputs[2]),
+        spatial,
+        symbols,
+    )?;
+    return Result::Ok(`backend.binary::<f32, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`);
+}
+
+/// A `MaxPool` as `reduce_window` by the greatest, the batch and channel axes
+/// windows of one. Each high padding is what the last window reaches past the
+/// input, which `ceil_mode` may take past the padding the node declares, or 0
+/// where the last window ends short of the input's end.
+fn built_max_pool(
+    node: &Node,
+    shapes: &HashMap<String, Shape>,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    let x = shapes[node.inputs[0]];
+    let y = shapes[node.outputs[0]];
+    // Stage 0 owed these already.
+    let window = settled(window_of(node, &x, shapes, &mut [], &Axes {}));
+    let mut dimensions: List<i32> = [1, 1];
+    let mut strides: List<i32> = [1, 1];
+    let mut dilations: List<i32> = [1, 1];
+    let mut padding: List<String> = ["0", "0", "0", "0"];
+    for let i of 0..<x.rank() - 2 {
+        let [k, s, d] = [window.kernel[i], window.strides[i], window.dilations[i]];
+        dimensions.push(k);
+        strides.push(s);
+        dilations.push(d);
+        let low = window.pads[i];
+        let reach = Poly::constant(((k - 1) * d + 1) as i64);
+        let last_start = window.output[i].try_sub(&Poly::constant(1)).unwrap().try_mul(&Poly::constant(s as i64)).unwrap();
+        let reached = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
+        let high = Poly::max_of(&reached, &Poly::constant(0), &node.site());
+        padding.push(symbols.spell_extent(&low)?);
+        padding.push(symbols.spell_extent(&high)?);
+    }
+    let reduce = `&WindowReduce { window_dimensions: ${dimensions}, window_strides: ${strides}, window_dilations: ${dilations}, padding: [${padding.join(
+        ", ",
+    )}] }`;
+    return Result::Ok(
+        `backend.reduce_window::<[${axis_list(&x)}], [${axis_list(&y)}]>(${exprs.reference(&node.inputs[0])}, Binary::Maximum, ${float_literal(
+            f32::NEG_INFINITY,
+        )}, ${reduce})`,
+    );
+}
+
+/// A `Gather` as StableHLO's, each index counted from the end where negative:
+/// one start index per index element, the gathered axis collapsed, and the
+/// operand's other axes kept whole around the index's.
+fn built_gather(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let shapes = &checked.shapes;
+    let data = shapes[node.inputs[0]];
+    let indices = shapes[node.inputs[1]];
+    let out = shapes[node.outputs[0]];
+    let axis = settled(gather_axis(node, data.rank()));
+    let rank = indices.rank();
+    let offset_dims: List<i32> = (0..<out.rank()).filter(|d| d < axis || d >= axis + rank).collect();
+    let mut sizes: List<String> = [];
+    for let [a, extent] of data.extents().into_iter().enumerate() {
+        sizes.push(if a == axis { "1" } else { symbols.spell_extent(&extent.poly())? });
+    }
+    let index_axes = axis_list(&indices);
+    let wrapped = `&from_end_indices::<${BACKEND_PARAM}, [${index_axes}]>(backend, ${exprs.reference(
+        &node.inputs[1],
+    )}, ${symbols.spell_extent(&data.axes[axis].extent.poly())?})`;
+    let dims = `&GatherDims { offset_dims: ${offset_dims}, collapsed_slice_dims: [${axis}], start_index_map: [${axis}], index_vector_dim: ${rank}, slice_sizes: [${sizes.join(
+        ", ",
+    )}] }`;
+    let element = checked.primitives[node.inputs[0]];
+    return Result::Ok(
+        `backend.gather::<${element}, [${axis_list(&data)}], [${index_axes}], [${axis_list(&out)}]>(${exprs.reference(
+            &node.inputs[0],
+        )}, ${wrapped}, ${dims})`,
+    );
+}
+
+/// A `ReduceMean` or `ReduceSum` as `reduce`, which drops the reduced axes, and
+/// a reshape where the node keeps them.
+fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let x = checked.shapes[node.inputs[0]];
+    let out = checked.shapes[node.outputs[0]];
+    let reduced = settled(reduced_axes(node, &checked.known, x.rank()));
+    let mut kept = Shape { axes: [] };
+    for let [i, axis] of x.axes.into_iter().enumerate() {
+        if !reduced.contains(&i) {
+            kept.axes.push(axis);
+        }
+    }
+    let types = `[${axis_list(&x)}], [${axis_list(&kept)}]`;
+    let a = exprs.reference(&node.inputs[0]);
+    let call = if node.op == "ReduceMean" {
+        `reduce_mean::<${BACKEND_PARAM}, ${types}>(backend, ${a}, ${reduced})`;
+    } else {
+        `backend.reduce::<${types}>(${a}, Binary::Add, 0 as f32, ${reduced})`;
+    };
+    if axis_list(&kept) == axis_list(&out) {
+        return Result::Ok(call);
+    }
+    return Result::Ok(
+        `backend.reshape::<f32, [${axis_list(&kept)}], [${axis_list(&out)}]>(&${call}, ${symbols.spell_shape(&out)?})`,
+    );
+}
+
+/// A `Concat` as `concatenate` folded over its operands from the left, each
+/// partial join under the output's axes.
+fn built_concat(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+    let shapes = &checked.shapes;
+    let out = axis_list(&shapes[node.outputs[0]]);
+    let axis = settled(concat_axis(node, shapes[node.outputs[0]].rank()));
+    let element = checked.primitives[node.outputs[0]];
+    // A single operand is joined to nothing, and every result is bound as a value.
+    let mut call = exprs.value(&node.inputs[0]);
+    let mut left = exprs.reference(&node.inputs[0]);
+    let mut left_axes = axis_list(&shapes[node.inputs[0]]);
+    for let input of node.inputs[1..<node.inputs.len()].to_list() {
+        let right_axes = axis_list(&shapes[input]);
+        call = `backend.concatenate::<${element}, [${left_axes}], [${right_axes}], [${out}]>(${left}, ${exprs.reference(
+            &input,
+        )}, ${axis})`;
+        left = `&${call}`;
+        left_axes = out;
+    }
+    return call;
+}
+
+/// The starts, limits and strides of a `slice` keeping every axis of `x` whole.
+struct Bounds {
+    starts: List<String>,
+    limits: List<String>,
+    strides: List<i64>,
+}
+
+impl Bounds {
+    fn whole(x: &Shape, symbols: &mut Symbols) -> Result<Bounds, EmitError> {
+        let mut limits: List<String> = [];
+        for let extent of x.extents() {
+            limits.push(symbols.spell_extent(&extent.poly())?);
+        }
+        return Result::Ok(Bounds {
+            starts: List::<String>::filled(x.rank(), "0"),
+            limits,
+            strides: List::<i64>::filled(x.rank(), 1),
+        });
+    }
+
+    /// `slice` over `operand`, of axes `x`, into `out`.
+    fn sliced(&self, element: &String, x: &Shape, out: &Shape, operand: &String) -> String {
+        return `backend.slice::<${*element}, [${axis_list(x)}], [${axis_list(out)}]>(${*operand}, [${self.starts.join(
+            ", ",
+        )}], [${self.limits.join(", ")}], ${self.strides})`;
+    }
+}
+
+/// A `Slice` as one `slice`. An axis cut backwards is reversed first, where
+/// its cut starts at the mirror of its start; an empty cut starts at 0.
+fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let x = checked.shapes[node.inputs[0]];
+    let cuts = settled(slice_cuts(node, &checked.known, &x));
+    // A slice that narrows nothing is its operand, read as a value.
+    if cuts.is_empty() {
+        return Result::Ok(exprs.value(&node.inputs[0]));
+    }
+    let element = checked.primitives[node.inputs[0]];
+    let mut bounds = Bounds::whole(&x, symbols)?;
+    let mut reversed: List<i32> = [];
+    for let cut of cuts {
+        let a = cut.axis;
+        let stride = i64::abs(cut.step);
+        bounds.strides[a] = stride;
+        let length = cut.extent.poly();
+        if length.as_constant() == Option::Some(0) {
+            bounds.starts[a] = "0";
+            bounds.limits[a] = "0";
+            continue;
+        }
+        let start = if cut.step < 0 {
+            reversed.push(a);
+            x.axes[a].extent.poly().try_sub(&Poly::constant(1)).unwrap().try_sub(&cut.start).unwrap();
+        } else {
+            cut.start;
+        };
+        let from = symbols.spell_extent(&start)?;
+        bounds.limits[a] = if let Some(n) = length.as_constant() {
+            symbols.spell_extent(&start.try_add(&Poly::constant((n - 1) * stride + 1)).unwrap())?;
+        } else {
+            // The cut's last element is within the axis, and one stride past it may not be.
+            `i32::min(${from} + ${symbols.spell_extent(&length)?} * ${stride}, ${bounds.limits[a]})`;
+        };
+        bounds.starts[a] = from;
+    }
+    let mut operand = exprs.reference(&node.inputs[0]);
+    if !reversed.is_empty() {
+        operand = `&backend.reverse::<${element}, [${axis_list(&x)}]>(${operand}, ${reversed})`;
+    }
+    return Result::Ok(bounds.sliced(&element, &x, &checked.shapes[node.outputs[0]], &operand));
+}
+
+/// A `Split` as one `slice` per output, each taking the next run of the axis.
+fn built_split(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
+    let x = checked.shapes[node.inputs[0]];
+    // Stage 0 owed these already.
+    let parts = settled(split_parts(node, &checked.known, &x, &mut []));
+    let axis = settled(split_axis(node, x.rank()));
+    let element = checked.primitives[node.inputs[0]];
+    let operand = exprs.reference(&node.inputs[0]);
+    let mut bounds = Bounds::whole(&x, symbols)?;
+    let mut calls: List<String> = [];
+    let mut start = Poly::constant(0);
+    for let [i, part] of parts.into_iter().enumerate() {
+        // The parts sum to the axis, so every running sum is within it.
+        let limit = start.try_add(&part).unwrap();
+        bounds.starts[axis] = symbols.spell_extent(&start)?;
+        bounds.limits[axis] = symbols.spell_extent(&limit)?;
+        calls.push(bounds.sliced(&element, &x, &checked.shapes[node.outputs[i]], &operand));
+        start = limit;
+    }
+    return Result::Ok(calls);
 }
 
 /// One node as the `Term` it computes, for an elementwise operator, a
@@ -2524,6 +3549,19 @@ fn is_identity(perm: &List<i32>) -> bool {
 /// one `forward` checks.
 fn same_axis(left: &Axis, right: &Axis) -> bool {
     return left.name == right.name && left.extent.agreement(&right.extent) matches { Some(_) };
+}
+
+/// Whether each axis of `left` can stand for `right`'s at its position.
+fn same_axes(left: &Shape, right: &Shape) -> bool {
+    if left.rank() != right.rank() {
+        return false;
+    }
+    for let i of 0..<left.rank() {
+        if !same_axis(&left.axes[i], &right.axes[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether two `MatMul` operands' batch axes are one list, which is what the

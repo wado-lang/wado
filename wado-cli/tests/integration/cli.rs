@@ -1003,6 +1003,38 @@ fn test_check_reports_a_test_excluded_module_the_package_reaches() {
         .stderr(predicate::str::contains("`dead_one` is never used"));
 }
 
+/// A `pub` trait the entry re-exports offers its default bodies beyond the
+/// package, so a helper only one of them calls is used, though the trait is
+/// declared in a module the manifest does not name.
+#[test]
+fn test_check_counts_a_re_exported_trait_default_body_as_used() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "pub use { Shape } from \"./shape.wado\";\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("shape.wado"),
+        "pub trait Shape with () {\n    fn area(&self) -> i32;\n    fn doubled(&self) -> i32 {\n        return twice(self.area());\n    }\n}\n\n\
+         fn twice(n: i32) -> i32 {\n    return n * 2;\n}\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .arg("check")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("never used").not());
+}
+
 /// `--no-lint`, `--lint` and `--lint-generated` set one value, so the last one
 /// given decides where the lints report.
 #[test]
