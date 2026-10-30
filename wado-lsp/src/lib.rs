@@ -771,6 +771,11 @@ impl<'a, H> DiagnosticCollector<'a, H> {
     }
 }
 
+// Delegate every non-diagnostic capability to the wrapped host — the collector
+// only intercepts diagnostics. Falling back to the trait defaults would silently
+// drop the host's dependency index (path *and* component deps), so
+// `use { … } from "<dep>"` would fail to resolve on the LSP path, and would turn
+// `source_exists`'s stat back into a full read.
 impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_source(path).await
@@ -819,11 +824,6 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         }
     }
 
-    // Delegate every non-diagnostic capability to the wrapped host — the
-    // collector only intercepts diagnostics. Falling back to the trait defaults
-    // here would silently drop the host's dependency index (path *and* component
-    // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path,
-    // and would turn `source_exists`'s stat back into a full read.
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         self.inner.dependency_index()
     }

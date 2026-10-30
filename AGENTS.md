@@ -80,7 +80,7 @@ mise run format          # format Rust, Markdown, and Wado files
 ## General Rules
 
 - Write all documentation and comments in clear, simple English.
-  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. Make the code say what it can: rename and decompose until the comment is redundant, then delete it. A comment cites a specification or a bug, never a process document (an `AGENTS.md`, a `TODO.md`, a skill, a dead-ends log).
+  - Comments: write one only for what the code cannot say, and make it say why: why this way, a tradeoff, a constraint, a spec or bug reference. It cites no process document (an `AGENTS.md`, a `TODO.md`, a skill, a dead-ends log): those move, and the pointer dangles. Make the code say what it can: rename and decompose until the comment is redundant, then delete it.
   - Invariants: state them as assertions, not comments. An assert is checked; a comment goes stale.
   - Contract messages: write one only for what the condition cannot say, such as a concept's name or a reason, and phrase it as what must hold (`"slots must be a power of two"`). A message that restates the condition is left out.
   - Markdown: the `markdown` skill holds the rules. Read it before writing or editing any `.md` file.
