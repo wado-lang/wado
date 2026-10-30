@@ -374,11 +374,6 @@ makes the measurement possible.
 
 ### Beyond tier 1
 
-Tier 2, the bucketed JIT. Residual sequence and batch extents need a
-shape-class cache populated on first use. Closing it needs a cache key design, a
-warmup story, and an answer to generation latency becoming user-visible. At
-build time no user waits on the generator; at first use one does.
-
 Tier 3, dynamic dispatch. Speculative decoding and early exit are
 data-dependent and no bucketing covers them. Closing it needs the escalation
 boundary drawn as a decidability question, as Gale's is, rather than as a

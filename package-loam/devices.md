@@ -110,11 +110,8 @@ length.
 
 The generator still emits Wado, and the ordinary compiler still checks every
 call it generates against the axes. What the generated body does changes:
-rather than computing, it adds nodes to a graph.
-
-```wado
-fn build<G: Graph>(g: &mut G, inputs: &In<G>, weights: &Weights<G>, cache: &Cache<G>) -> Out<G>
-```
+rather than computing, it adds nodes to a graph. `build<G: Graph>` takes the
+inputs, the weights and the cache as nodes of `G`, and returns the outputs.
 
 `Graph` is a trait whose methods are the operations below, each typed by its
 axes as the kernels are today. A tensor is `G::Value<E, Axes>`, a node of the
@@ -188,14 +185,6 @@ A call writes those fields in one write, encodes the list (pipeline, bind
 group, dispatch, and nothing else), and submits it. WebGPU offers no reusable
 compute command buffer, so the list is encoded on each call, from objects that
 already exist.
-
-The plan in the generator and the fused trait methods go away once the device
-compiler matches today's speed.
-
-#### Cpu
-
-`Cpu` computes each node as it is added. It compiles nothing and keeps no
-program.
 
 ### An extent that varies is a capacity
 
@@ -351,6 +340,10 @@ layout, so a backend can change a layout without changing the generated module.
 
 ## Known gaps
 
+- The first call of a shape class waits for its program to compile. At build
+  time no user waits on the generator, and at first use one does. The cache on
+  disk spares a second process on PJRT, and nothing spares a first call on
+  WebGPU.
 - A model larger than one chip needs its weights split across several, and
   StableHLO states that through sharding. Nothing here places a tensor on more
   than one device.
