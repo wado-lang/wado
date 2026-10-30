@@ -40,6 +40,10 @@ const DENIED: [string, string?][] = [
   ['cat "$PWD/vendor/onnx/onnx/helper.py"'],
   ["cat ${PWD}/vendor/onnx/onnx/helper.py"],
   ["cat $REPO/vendor/onnx/onnx/helper.py"],
+  ['cd "$PWD/vendor/onnx/onnx" && cat helper.py'],
+  ['cd "$PWD" && cat vendor/onnx/onnx/helper.py'],
+  ["cd $REPO/vendor/onnx/onnx && cat helper.py"],
+  ["cd ~ && cat vendor/onnx/onnx/helper.py"],
 ];
 
 const ALLOWED: [string, string?][] = [

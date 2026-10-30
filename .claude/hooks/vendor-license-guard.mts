@@ -79,43 +79,47 @@ function onlyLists({ name, args }: Command): boolean {
 /** A word's leading `$NAME`, `${NAME}` or `~`, which the shell expands before a file is opened. */
 const EXPANSION = /^(?:\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?|~)(?=\/|$)/;
 
-/** The paths a word may name, as git and the shell read it: itself, what follows
- * a `=` or a git `<rev>:` in it, and what a leading expansion leaves. `$PWD` is
- * `dir`; any other expansion is a directory unknown here, so what follows it is
- * judged from its `vendor` on, as if the repository held it. */
-function candidates(value: string, dir: string): string[] {
+/** The absolute path `word` names from `dir`, as the shell expands it. `$PWD` is
+ * `dir`. A start unknown here (another expansion, or a `dir` that `cd` took
+ * somewhere unknown, as `null`) is taken as the repository from the word's
+ * `vendor` on; a word naming no `vendor` below it names nothing judged. */
+function locate(word: string, dir: string | null): string | null {
+  const expansion = word.match(EXPANSION);
+  if (!expansion && path.isAbsolute(word)) return word;
+  const rest = expansion ? word.slice(expansion[0].length).replace(/^\//, "") : word;
+  const base = expansion && expansion[1] !== "PWD" ? null : dir;
+  if (base !== null) return path.resolve(base, rest);
+  const from = `/${rest}`.search(/\/vendor(\/|$)/);
+  return from >= 0 ? path.join(ROOT, `/${rest}`.slice(from + 1)) : null;
+}
+
+/** The paths a word may name, as git and the shell read it: itself, and what
+ * follows a `=` or a git `<rev>:` in it. */
+function candidates(value: string, dir: string | null): string[] {
   const words = [value, ...value.split("=").slice(1), ...value.split(":").slice(1)];
-  const named: string[] = [];
-  for (const word of words.filter((w) => w !== "")) {
-    const expansion = word.match(EXPANSION);
-    if (!expansion) {
-      named.push(word);
-      continue;
-    }
-    const rest = word.slice(expansion[0].length);
-    if (expansion[1] === "PWD") {
-      named.push(path.join(dir, rest));
-      continue;
-    }
-    const vendor = rest.search(/\/vendor(\/|$)/);
-    if (vendor >= 0) named.push(path.join(ROOT, rest.slice(vendor + 1)));
-  }
-  return named;
+  return words.flatMap((word) => (word === "" ? [] : (locate(word, dir) ?? [])));
+}
+
+/** The directory a command leaves the shell in, or `dir` where it changes none.
+ * One whose target the command does not spell (`cd`, `cd -`, `popd`) is unknown. */
+function entered({ name, args }: Command, dir: string | null): string | null {
+  if (name === "popd") return null;
+  if (name !== "cd" && name !== "pushd") return dir;
+  const target = args.at(-1)?.value;
+  return target === undefined || target === "-" ? null : locate(target, dir);
 }
 
 /** Why the command is denied, or null when it reads no forbidden source. */
 export function denialReason(command: string, cwd: string = ROOT): string | null {
-  let dir = cwd;
+  let dir: string | null = cwd;
   for (const cmd of commands(command)) {
     const lists = onlyLists(cmd);
     const named = [...cmd.args, ...cmd.redirects].flatMap(({ value }) => candidates(value, dir));
-    for (const word of named) {
-      const reason = judge(path.relative(ROOT, path.resolve(dir, word)), lists);
+    for (const target of named) {
+      const reason = judge(path.relative(ROOT, target), lists);
       if (reason) return reason;
     }
-    if ((cmd.name === "cd" || cmd.name === "pushd") && cmd.args.length > 0) {
-      dir = path.resolve(dir, cmd.args[cmd.args.length - 1].value);
-    }
+    dir = entered(cmd, dir);
   }
   return null;
 }
