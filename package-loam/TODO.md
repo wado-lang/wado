@@ -369,7 +369,7 @@ an impl method's `with _` resolves to nothing at a caller.
 Whether the backend should be an effect after all. The trait is chosen because
 its cost is known to be zero and the effect's is unmeasured. Once a device
 builds the graph once per shape class ([Loam on TPU and WebGPU](./devices.md)),
-neither cost falls on a call.
+either cost falls only on the first call of a shape class, which builds it.
 
 ### Beyond tier 1
 

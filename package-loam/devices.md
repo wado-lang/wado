@@ -149,7 +149,9 @@ Loam's own kernel set never did. The lowering to a TPU is then one to one. The
 StableHLO front end, a roadmap item, reads into the same graph.
 
 StableHLO has no error function, which GELU reads. `erf` takes its meaning from
-CHLO, the dialect XLA lowers into StableHLO, as `chlo.erf`.
+CHLO, the dialect XLA lowers into StableHLO, as `chlo.erf`. It is the one
+operation the TPU lowering cannot copy across, and how it writes one is open
+until that step.
 
 ### A composite is a computation no fusion reaches
 

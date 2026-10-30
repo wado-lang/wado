@@ -53,7 +53,7 @@ impl<affine Bk: Backend> Model<Bk> {
 
     /// How many positions the model reads: one per row of the rotary caches.
     pub fn positions(&self) -> i32 {
-        return i32::min(gemma::CosCacheLocal0::EXTENT, gemma::CosCacheGlobal0::EXTENT);
+        return positions();
     }
 
     /// Empties the cache, so the next call reads its ids from the start.
@@ -66,11 +66,7 @@ impl<affine Bk: Backend> Model<Bk> {
     /// ids of the last call, only the new ones run, against the cached keys
     /// and values of the rest.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
-        assert 1 <= ids.len() <= self.positions(), "the model reads 1 to positions() tokens";
-        let vocab = gemma::Logits2::EXTENT;
-        for let id of ids {
-            assert 0 <= *id < vocab, "every token id is in the vocabulary";
-        }
+        assert_readable(ids);
         if !extends(&self.seen, ids) {
             self.forget();
         }
@@ -124,6 +120,7 @@ impl Built {
     /// The token the model ranks first after `ids`, as `Model::next_token`
     /// picks it.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
+        assert_readable(ids);
         if !extends(&self.seen, ids) {
             self.seen = [];
             self.cache = gemma::Cache::empty(&mut self.cpu);
@@ -148,6 +145,17 @@ impl Built {
         self.cache = passed.cache;
         self.seen = *ids;
         return best;
+    }
+}
+
+fn positions() -> i32 {
+    return i32::min(gemma::CosCacheLocal0::EXTENT, gemma::CosCacheGlobal0::EXTENT);
+}
+
+fn assert_readable(ids: &List<i32>) {
+    assert 1 <= ids.len() <= positions(), "the model reads 1 to positions() tokens";
+    for let id of ids {
+        assert 0 <= *id < gemma::Logits2::EXTENT, "every token id is in the vocabulary";
     }
 }
 
