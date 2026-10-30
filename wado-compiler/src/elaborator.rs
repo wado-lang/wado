@@ -285,7 +285,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         {
             self.infer_holes.note_mismatch(span.clone());
         }
-        self.logger.error_in(&self.current_module_source, diagnostic)
+        self.logger
+            .error_in(&self.current_module_source, diagnostic)
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site

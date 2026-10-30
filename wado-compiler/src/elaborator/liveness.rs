@@ -133,8 +133,6 @@ pub(crate) fn compute(
             .or_default()
             .extend(impl_methods);
     }
-    // Every impl of a method its trait binds by a `contract` opens with a call
-    // to the clauses' holder, which reify mints after this pass.
     let mut default_bodies: IndexMap<AstId, Vec<AstId>> = IndexMap::default();
     for module in modules.values() {
         for item in &module.items {
@@ -150,6 +148,8 @@ pub(crate) fn compute(
                     .map(|m| m.id)
                     .collect(),
             );
+            // Every impl of a method its trait binds by a `contract` opens with
+            // a call to the clauses' holder, which reify mints after this pass.
             for holder in &trait_decl.methods {
                 let Some(held) = holder.holds_contracts_of else {
                     continue;

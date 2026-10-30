@@ -1015,7 +1015,11 @@ fn test_check_counts_a_re_exported_trait_default_body_as_used() {
         "[package]\nname = \"pkg\"\nnamespace = \"wado\"\nversion = \"0.1.0\"\nlib = \"lib.wado\"\n",
     )
     .unwrap();
-    std::fs::write(dir.join("lib.wado"), "pub use { Shape } from \"./shape.wado\";\n").unwrap();
+    std::fs::write(
+        dir.join("lib.wado"),
+        "pub use { Shape } from \"./shape.wado\";\n",
+    )
+    .unwrap();
     std::fs::write(
         dir.join("shape.wado"),
         "pub trait Shape with () {\n    fn area(&self) -> i32;\n    fn doubled(&self) -> i32 {\n        return twice(self.area());\n    }\n}\n\n\
