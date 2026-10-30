@@ -5,6 +5,10 @@ Loam compiles an ONNX graph into Wado source through Kiln. Its design is in
 and the known gaps are in [TODO.md](./TODO.md). `loam gen`, `loam dump`, the
 onnxruntime oracles and the benchmarks are in [tools.md](./tools.md).
 
+[WEP: Loam](../docs/wep-2026-09-20-loam.md) is complete, and nothing edits it
+any more. A design that changes one of its decisions is written in this
+directory and names the WEP's section.
+
 ## Sources
 
 - Do not read the code of an ML framework, runtime, exporter or kernel library.
