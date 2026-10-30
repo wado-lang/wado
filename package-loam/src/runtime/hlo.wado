@@ -1,0 +1,926 @@
+//! The graph a pass is built as. Its operations take their meaning from the
+//! StableHLO specification, so a compiler of the graph lowers each one to one
+//! operation, and `Cpu` computes each as it is added.
+
+use {
+    Attention,
+    Cpu,
+    Element,
+    Holds,
+    Tensor,
+    Window,
+    advance,
+    carries,
+    conv_grouped,
+    element_count,
+    max_pool,
+    sigmoid_f32,
+} from "./tensor.wado";
+
+/// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
+/// StableHLO has no error function.
+pub enum Unary {
+    Abs,
+    Erf,
+    Exponential,
+    Log,
+    Logistic,
+    Negate,
+    Rsqrt,
+    Sqrt,
+    Tanh,
+}
+
+/// A StableHLO elementwise operation of two operands.
+pub enum Binary {
+    Add,
+    Divide,
+    Maximum,
+    Minimum,
+    Multiply,
+    Power,
+    Subtract,
+}
+
+/// The direction of a StableHLO `compare`, which on floats is IEEE's: a NaN
+/// equals nothing.
+pub enum Comparison {
+    Eq,
+    Ne,
+    Ge,
+    Gt,
+    Le,
+    Lt,
+}
+
+/// The dimension numbers of a StableHLO `dot_general`. The result's axes are
+/// the batch axes, then the left operand's free axes, then the right's.
+pub struct DotDims {
+    pub lhs_batch: List<i32>,
+    pub rhs_batch: List<i32>,
+    pub lhs_contracting: List<i32>,
+    pub rhs_contracting: List<i32>,
+}
+
+/// The attributes of a StableHLO `gather`, without batching dimensions.
+pub struct GatherDims {
+    pub offset_dims: List<i32>,
+    pub collapsed_slice_dims: List<i32>,
+    pub start_index_map: List<i32>,
+    pub index_vector_dim: i32,
+    pub slice_sizes: List<i32>,
+}
+
+/// The attributes of a StableHLO `convolution` whose input and output are laid
+/// out batch, feature, then the spatial axes, and whose kernel is laid out
+/// output feature, input feature, then the spatial axes. `padding` holds each
+/// spatial axis's low then high padding.
+pub struct Convolution {
+    pub window_strides: List<i32>,
+    pub padding: List<i32>,
+    pub rhs_dilation: List<i32>,
+    pub feature_group_count: i32,
+}
+
+/// The attributes of a StableHLO `reduce_window`, one entry per axis.
+/// `padding` holds each axis's low then high padding.
+pub struct WindowReduce {
+    pub window_dimensions: List<i32>,
+    pub window_strides: List<i32>,
+    pub window_dilations: List<i32>,
+    pub padding: List<i32>,
+}
+
+/// A pass built as a graph. Each method adds one operation and returns the
+/// tensor it computes. An operation whose output axes are not its operands'
+/// takes them as `Out`, which the caller spells.
+pub affine trait Graph: Holds with _ {
+    /// StableHLO's `iota`: each element its index along `dimension`.
+    fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Self::Tensor<E, Axes>;
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
+    fn unary<Axes>(&mut self, op: Unary, x: &Self::Tensor<f32, Axes>) -> Self::Tensor<f32, Axes>;
+    fn binary<E: Element, Axes>(
+        &mut self,
+        op: Binary,
+        a: &Self::Tensor<E, Axes>,
+        b: &Self::Tensor<E, Axes>,
+    ) -> Self::Tensor<E, Axes>;
+    fn compare<E: Element, Axes>(
+        &mut self,
+        direction: Comparison,
+        a: &Self::Tensor<E, Axes>,
+        b: &Self::Tensor<E, Axes>,
+    ) -> Self::Tensor<bool, Axes>;
+    fn select<E: Element, Axes>(
+        &mut self,
+        pred: &Self::Tensor<bool, Axes>,
+        on_true: &Self::Tensor<E, Axes>,
+        on_false: &Self::Tensor<E, Axes>,
+    ) -> Self::Tensor<E, Axes>;
+    /// StableHLO's `broadcast_in_dim`: operand axis `i` becomes result axis
+    /// `dims[i]`, stretched where its extent is 1.
+    fn broadcast_in_dim<E: Element, In, Out>(
+        &mut self,
+        x: &Self::Tensor<E, In>,
+        extents: List<i32>,
+        dims: List<i32>,
+    ) -> Self::Tensor<E, Out>;
+    fn reshape<E: Element, In, Out>(&mut self, x: &Self::Tensor<E, In>, extents: List<i32>) -> Self::Tensor<E, Out>;
+    /// StableHLO's `transpose`: result axis `i` is operand axis `perm[i]`.
+    fn transpose<E: Element, In, Out>(&mut self, x: &Self::Tensor<E, In>, perm: List<i32>) -> Self::Tensor<E, Out>;
+    fn slice<E: Element, In, Out>(
+        &mut self,
+        x: &Self::Tensor<E, In>,
+        start: List<i32>,
+        limit: List<i32>,
+        strides: List<i32>,
+    ) -> Self::Tensor<E, Out>;
+    fn concatenate<E: Element, A, B, Out>(
+        &mut self,
+        a: &Self::Tensor<E, A>,
+        b: &Self::Tensor<E, B>,
+        dimension: i32,
+    ) -> Self::Tensor<E, Out>;
+    /// StableHLO's `reduce` whose body is `op`, from `init`. The result drops
+    /// the axes `dims`.
+    fn reduce<In, Out>(
+        &mut self,
+        x: &Self::Tensor<f32, In>,
+        op: Binary,
+        init: f32,
+        dims: List<i32>,
+    ) -> Self::Tensor<f32, Out>;
+    fn dot_general<A, B, Out>(
+        &mut self,
+        lhs: &Self::Tensor<f32, A>,
+        rhs: &Self::Tensor<f32, B>,
+        dims: &DotDims,
+    ) -> Self::Tensor<f32, Out>;
+    /// StableHLO's `gather`, which clamps each start index into the operand.
+    fn gather<E: Element, D, I, Out>(
+        &mut self,
+        operand: &Self::Tensor<E, D>,
+        indices: &Self::Tensor<i64, I>,
+        dims: &GatherDims,
+    ) -> Self::Tensor<E, Out>;
+    fn convolution<In, K, Out>(
+        &mut self,
+        x: &Self::Tensor<f32, In>,
+        kernel: &Self::Tensor<f32, K>,
+        conv: &Convolution,
+    ) -> Self::Tensor<f32, Out>;
+    fn reduce_window<In, Out>(
+        &mut self,
+        x: &Self::Tensor<f32, In>,
+        op: Binary,
+        init: f32,
+        window: &WindowReduce,
+    ) -> Self::Tensor<f32, Out>;
+    /// StableHLO's `case` over two branches: `then` where the one element of
+    /// `pred` is true, `otherwise` where it is false.
+    fn conditional<Axes, T>(
+        &mut self,
+        pred: &Self::Tensor<bool, Axes>,
+        then: fn(&mut Self) -> T with _,
+        otherwise: fn(&mut Self) -> T with _,
+    ) -> T with _;
+
+    /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
+    /// as `group_query_attention` in the kernels computes it, decomposed into
+    /// the operations above. Returns the attended queries, then the past key
+    /// and value with the new (turned) positions after them.
+    fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+        &mut self,
+        q: &Self::Tensor<f32, [B, S, Q]>,
+        k: &Self::Tensor<f32, [B, S, K]>,
+        v: &Self::Tensor<f32, [B, S, K]>,
+        past_k: &Self::Tensor<f32, [B, H, P, D]>,
+        past_v: &Self::Tensor<f32, [B, H, P, D]>,
+        cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
+        sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
+        bias: Option<&Self::Tensor<f32, [BB, BH, S, T]>>,
+        options: &Attention,
+    ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>] {
+        let [batch, s, past, d] = [
+            self.extents_of(q)[0],
+            self.extents_of(q)[1],
+            self.extents_of(past_k)[2],
+            self.extents_of(past_k)[3],
+        ];
+        let [heads, kv] = [options.heads, options.kv_heads];
+        let total = past + s;
+        let mut query = heads_first::<Self, B, S, Q, Heads, D>(self, q, heads, d);
+        let mut key = heads_first::<Self, B, S, K, H, D>(self, k, kv, d);
+        let value = heads_first::<Self, B, S, K, H, D>(self, v, kv, d);
+        if let Some(c) = cos && let Some(n) = sin {
+            let half = d / 2;
+            let cos_rows: Self::Tensor<f32, [S, Half]> = self.slice(c, [past, 0], [past + s, half], [1, 1]);
+            let sin_rows: Self::Tensor<f32, [S, Half]> = self.slice(n, [past, 0], [past + s, half], [1, 1]);
+            query = turned::<Self, B, Heads, S, D, Half>(self, &query, &cos_rows, &sin_rows);
+            key = turned::<Self, B, H, S, D, Half>(self, &key, &cos_rows, &sin_rows);
+        }
+        let present_k: Self::Tensor<f32, [B, H, T, D]> = self.concatenate(past_k, &key, 2);
+        let present_v: Self::Tensor<f32, [B, H, T, D]> = self.concatenate(past_v, &value, 2);
+        let keys = grouped::<Self, B, H, T, D, Heads>(self, &present_k, heads);
+        let values = grouped::<Self, B, H, T, D, Heads>(self, &present_v, heads);
+        let product = DotDims {
+            lhs_batch: [0, 1],
+            rhs_batch: [0, 1],
+            lhs_contracting: [3],
+            rhs_contracting: [3],
+        };
+        let raw: Self::Tensor<f32, [B, Heads, S, T]> = self.dot_general(&query, &keys, &product);
+        let score_extents: List<i32> = [batch, heads, s, total];
+        let mut scores = self.binary(
+            Binary::Multiply,
+            &raw,
+            &splat::<Self, [B, Heads, S, T]>(self, options.scale, &score_extents),
+        );
+        if options.softcap > 0.0 {
+            let cap = splat::<Self, [B, Heads, S, T]>(self, options.softcap, &score_extents);
+            let tanh = self.unary(Unary::Tanh, &self.binary(Binary::Divide, &scores, &cap));
+            scores = self.binary(Binary::Multiply, &cap, &tanh);
+        }
+        if let Some(b) = bias {
+            let stretched: Self::Tensor<f32, [B, Heads, S, T]> = self.broadcast_in_dim(b, score_extents, [0, 1, 2, 3]);
+            scores = self.binary(Binary::Add, &scores, &stretched);
+        }
+        if options.causal || options.window > 0 {
+            let masked = attention_mask::<Self, B, Heads, S, T>(self, past, options, &score_extents);
+            let lowest = splat::<Self, [B, Heads, S, T]>(self, f32::NEG_INFINITY, &score_extents);
+            scores = self.select(&masked, &lowest, &scores);
+        }
+        let weights = softmax_last::<Self, [B, Heads, S, T], [B, Heads, S]>(self, &scores, &score_extents);
+        let attend = DotDims {
+            lhs_batch: [0, 1],
+            rhs_batch: [0, 1],
+            lhs_contracting: [3],
+            rhs_contracting: [2],
+        };
+        let attended: Self::Tensor<f32, [B, Heads, S, D]> = self.dot_general(&weights, &values, &attend);
+        let back: Self::Tensor<f32, [B, S, Heads, D]> = self.transpose(&attended, [0, 2, 1, 3]);
+        return [self.reshape(&back, [batch, s, heads * d]), present_k, present_v];
+    }
+}
+
+/// The query heads, the key heads' groups, and the head width, inside the
+/// attention composite's decomposition.
+struct Heads {
+}
+struct Group {
+}
+
+/// `[batch, sequence, heads × width]` as `[batch, heads, sequence, width]`.
+fn heads_first<affine G: Graph, B, S, X, N, D>(
+    g: &mut G,
+    x: &G::Tensor<f32, [B, S, X]>,
+    heads: i32,
+    width: i32,
+) -> G::Tensor<f32, [B, N, S, D]> with _ {
+    let extents = g.extents_of(x);
+    let split: G::Tensor<f32, [B, S, N, D]> = g.reshape(x, [extents[0], extents[1], heads, width]);
+    return g.transpose(&split, [0, 2, 1, 3]);
+}
+
+/// Each of `x`'s key heads repeated for the `heads / kv` query heads it serves,
+/// in order, so query head `h` reads key head `h / (heads / kv)`.
+fn grouped<affine G: Graph, B, H, T, D, N>(
+    g: &mut G,
+    x: &G::Tensor<f32, [B, H, T, D]>,
+    heads: i32,
+) -> G::Tensor<f32, [B, N, T, D]> with _ {
+    let [batch, kv, total, width] = unpacked4(&g.extents_of(x));
+    let repeated: G::Tensor<f32, [B, H, Group, T, D]> = g.broadcast_in_dim(x, [batch, kv, heads / kv, total, width], [
+        0, 1, 3, 4,
+    ]);
+    return g.reshape(&repeated, [batch, heads, total, width]);
+}
+
+fn unpacked4(extents: &List<i32>) -> [i32, i32, i32, i32] {
+    return [extents[0], extents[1], extents[2], extents[3]];
+}
+
+/// `value` at every position of `extents`.
+fn splat<affine G: Graph, Axes>(g: &mut G, value: f32, extents: &List<i32>) -> G::Tensor<f32, Axes> with _ {
+    let scalar: G::Tensor<f32, []> = g.upload(&Tensor::<f32, []> {
+        data: [value],
+        extents: [],
+    });
+    return g.broadcast_in_dim(&scalar, *extents, []);
+}
+
+/// `x`'s rows `[a, b]` of halves turned by `(a cos − b sin, b cos + a sin)` of
+/// the row of `cos` and `sin` at each row's position.
+fn turned<affine G: Graph, B, N, S, D, Half>(
+    g: &mut G,
+    x: &G::Tensor<f32, [B, N, S, D]>,
+    cos: &G::Tensor<f32, [S, Half]>,
+    sin: &G::Tensor<f32, [S, Half]>,
+) -> G::Tensor<f32, [B, N, S, D]> with _ {
+    let extents = g.extents_of(x);
+    let half = extents[3] / 2;
+    let halves: List<i32> = [extents[0], extents[1], extents[2], half];
+    let a: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, [0, 0, 0, 0], [extents[0], extents[1], extents[2], half], [
+        1, 1, 1, 1,
+    ]);
+    let b: G::Tensor<f32, [B, N, S, Half]> = g.slice(x, [0, 0, 0, half], extents, [1, 1, 1, 1]);
+    let c: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(cos, halves, [2, 3]);
+    let n: G::Tensor<f32, [B, N, S, Half]> = g.broadcast_in_dim(sin, halves, [2, 3]);
+    let first = g.binary(Binary::Subtract, &g.binary(Binary::Multiply, &a, &c), &g.binary(Binary::Multiply, &b, &n));
+    let second = g.binary(Binary::Add, &g.binary(Binary::Multiply, &b, &c), &g.binary(Binary::Multiply, &a, &n));
+    return g.concatenate(&first, &second, 3);
+}
+
+/// Where a query at row `i` after `past` positions may not read key `j`: past
+/// it where `causal`, and `window` or more before it where there is a window.
+fn attention_mask<affine G: Graph, B, N, S, T>(
+    g: &mut G,
+    past: i32,
+    options: &Attention,
+    extents: &List<i32>,
+) -> G::Tensor<bool, [B, N, S, T]> with _ {
+    let plane: List<i32> = [extents[2], extents[3]];
+    let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
+    let position = g.binary(Binary::Add, &row, &filled_i64::<G, [S, T]>(g, past as i64, &plane));
+    let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
+    let mut masked: G::Tensor<bool, [S, T]> = g.compare(Comparison::Gt, &key, &position);
+    if !options.causal {
+        masked = g.compare(Comparison::Ne, &key, &key);
+    }
+    if options.window > 0 {
+        let behind = g.binary(Binary::Subtract, &position, &key);
+        let far = g.compare(Comparison::Ge, &behind, &filled_i64::<G, [S, T]>(g, options.window as i64, &plane));
+        masked = g.select(&far, &far, &masked);
+    }
+    return g.broadcast_in_dim(&masked, *extents, [2, 3]);
+}
+
+fn filled_i64<affine G: Graph, Axes>(g: &mut G, value: i64, extents: &List<i32>) -> G::Tensor<i64, Axes> with _ {
+    let scalar: G::Tensor<i64, []> = g.upload(&Tensor::<i64, []> {
+        data: [value],
+        extents: [],
+    });
+    return g.broadcast_in_dim(&scalar, *extents, []);
+}
+
+/// The softmax of `x` along its last axis, as StableHLO computes it: less each
+/// row's greatest, exponentiated, over its sum.
+fn softmax_last<affine G: Graph, Axes, Rows>(
+    g: &mut G,
+    x: &G::Tensor<f32, Axes>,
+    extents: &List<i32>,
+) -> G::Tensor<f32, Axes> with _ {
+    let last = extents.len() - 1;
+    let mut kept: List<i32> = [];
+    for let i of 0..<last {
+        kept.push(i);
+    }
+    let top: G::Tensor<f32, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [last]);
+    let shifted = g.binary(Binary::Subtract, x, &g.broadcast_in_dim(&top, *extents, kept));
+    let e = g.unary(Unary::Exponential, &shifted);
+    let sum: G::Tensor<f32, Rows> = g.reduce(&e, Binary::Add, 0.0, [last]);
+    return g.binary(Binary::Divide, &e, &g.broadcast_in_dim(&sum, *extents, kept));
+}
+
+impl Graph for Cpu {
+    fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Tensor<E, Axes> {
+        let mut data = List::<E>::with_capacity(element_count(&extents));
+        let mut index = List::<i32>::filled(extents.len(), 0);
+        for let _ of 0..<element_count(&extents) {
+            data.push(E::from_i64(index[dimension] as i64));
+            advance(&mut index, &extents);
+        }
+        return Tensor { data, extents };
+    }
+
+    fn convert<A: Element, B: Element, Axes>(&mut self, x: &Tensor<A, Axes>) -> Tensor<B, Axes> {
+        let mut data = List::<B>::with_capacity(x.data.len());
+        for let v of x.data {
+            data.push(v.cast_to::<B>());
+        }
+        return Tensor { data, extents: x.extents };
+    }
+
+    fn unary<Axes>(&mut self, op: Unary, x: &Tensor<f32, Axes>) -> Tensor<f32, Axes> {
+        let mut data = List::<f32>::with_capacity(x.data.len());
+        for let v of x.data {
+            data.push(unary_f32(op, v));
+        }
+        return Tensor { data, extents: x.extents };
+    }
+
+    fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Tensor<E, Axes>, b: &Tensor<E, Axes>) -> Tensor<E, Axes> {
+        assert a.extents == b.extents, "the operands of an elementwise operation share their extents";
+        let mut data = List::<E>::with_capacity(a.data.len());
+        if E::is_f32() {
+            for let i of 0..<a.data.len() {
+                data.push(E::from_f32(binary_f32(op, a.data[i].cast_to::<f32>(), b.data[i].cast_to::<f32>())));
+            }
+        } else {
+            for let i of 0..<a.data.len() {
+                data.push(E::from_i64(binary_i64(op, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>())));
+            }
+        }
+        return Tensor { data, extents: a.extents };
+    }
+
+    fn compare<E: Element, Axes>(
+        &mut self,
+        direction: Comparison,
+        a: &Tensor<E, Axes>,
+        b: &Tensor<E, Axes>,
+    ) -> Tensor<bool, Axes> {
+        assert a.extents == b.extents, "the operands of a comparison share their extents";
+        let mut data = List::<bool>::with_capacity(a.data.len());
+        for let i of 0..<a.data.len() {
+            data.push(if E::is_f32() {
+                compared_f32(direction, a.data[i].cast_to::<f32>(), b.data[i].cast_to::<f32>());
+            } else {
+                compared_i64(direction, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>());
+            });
+        }
+        return Tensor { data, extents: a.extents };
+    }
+
+    fn select<E: Element, Axes>(
+        &mut self,
+        pred: &Tensor<bool, Axes>,
+        on_true: &Tensor<E, Axes>,
+        on_false: &Tensor<E, Axes>,
+    ) -> Tensor<E, Axes> {
+        assert pred.extents == on_true.extents && pred.extents == on_false.extents, "a select's operands share their extents";
+        let mut data = List::<E>::with_capacity(pred.data.len());
+        for let i of 0..<pred.data.len() {
+            data.push(if pred.data[i] { on_true.data[i] } else { on_false.data[i] });
+        }
+        return Tensor { data, extents: pred.extents };
+    }
+
+    fn broadcast_in_dim<E: Element, In, Out>(
+        &mut self,
+        x: &Tensor<E, In>,
+        extents: List<i32>,
+        dims: List<i32>,
+    ) -> Tensor<E, Out> {
+        assert dims.len() == x.extents.len(), "broadcast_in_dim maps every operand axis";
+        let own = row_major_strides(&x.extents);
+        let mut strides = List::<i32>::filled(extents.len(), 0);
+        for let [i, d] of dims.into_iter().enumerate() {
+            assert x.extents[i] == 1 || x.extents[i] == extents[d], "an operand axis is 1 or the result's";
+            if x.extents[i] != 1 {
+                strides[d] = own[i];
+            }
+        }
+        return Tensor { data: walked(&x.data, 0, &strides, &extents), extents };
+    }
+
+    fn reshape<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Out> {
+        assert element_count(&extents) == x.data.len(), "a reshape keeps the element count";
+        return Tensor { data: x.data, extents };
+    }
+
+    fn transpose<E: Element, In, Out>(&mut self, x: &Tensor<E, In>, perm: List<i32>) -> Tensor<E, Out> {
+        let own = row_major_strides(&x.extents);
+        let mut extents: List<i32> = [];
+        let mut strides: List<i32> = [];
+        for let p of perm {
+            extents.push(x.extents[p]);
+            strides.push(own[p]);
+        }
+        if is_identity(&perm) {
+            return Tensor { data: x.data, extents };
+        }
+        return Tensor { data: walked(&x.data, 0, &strides, &extents), extents };
+    }
+
+    fn slice<E: Element, In, Out>(
+        &mut self,
+        x: &Tensor<E, In>,
+        start: List<i32>,
+        limit: List<i32>,
+        strides: List<i32>,
+    ) -> Tensor<E, Out> {
+        let own = row_major_strides(&x.extents);
+        let mut base = 0;
+        let mut extents: List<i32> = [];
+        let mut steps: List<i32> = [];
+        for let i of 0..<x.extents.len() {
+            assert 0 <= start[i] <= limit[i] <= x.extents[i] && strides[i] > 0, "a slice lies within its operand";
+            base += start[i] * own[i];
+            extents.push((limit[i] - start[i]).div_ceil(strides[i]));
+            steps.push(own[i] * strides[i]);
+        }
+        return Tensor { data: walked(&x.data, base, &steps, &extents), extents };
+    }
+
+    fn concatenate<E: Element, A, B, Out>(
+        &mut self,
+        a: &Tensor<E, A>,
+        b: &Tensor<E, B>,
+        dimension: i32,
+    ) -> Tensor<E, Out> {
+        let mut extents = a.extents;
+        extents[dimension] = a.extents[dimension] + b.extents[dimension];
+        for let i of 0..<extents.len() {
+            assert i == dimension || a.extents[i] == b.extents[i], "concatenated operands agree off the joined axis";
+        }
+        let outer = element_count(&a.extents[0..<dimension].to_list());
+        let [a_run, b_run] = [
+            element_count(&a.extents[dimension..<a.extents.len()].to_list()),
+            element_count(&b.extents[dimension..<b.extents.len()].to_list()),
+        ];
+        let mut data = List::<E>::with_capacity(element_count(&extents));
+        for let o of 0..<outer {
+            data.extend_from_slice(a.data[o * a_run..<(o + 1) * a_run]);
+            data.extend_from_slice(b.data[o * b_run..<(o + 1) * b_run]);
+        }
+        return Tensor { data, extents };
+    }
+
+    fn reduce<In, Out>(&mut self, x: &Tensor<f32, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<f32, Out> {
+        let mut kept: List<i32> = [];
+        let mut reduced: List<i32> = [];
+        for let i of 0..<x.extents.len() {
+            if dims.contains(&i) {
+                reduced.push(i);
+            } else {
+                kept.push(i);
+            }
+        }
+        let mut perm = kept;
+        perm.extend(&reduced);
+        let laid: Tensor<f32, In> = self.transpose(x, perm);
+        let extents = picked(&x.extents, &kept);
+        let rows = element_count(&extents);
+        let width = if rows == 0 { 0 } else { laid.data.len() / rows };
+        let mut data = List::<f32>::with_capacity(rows);
+        for let r of 0..<rows {
+            let mut acc = init;
+            for let j of 0..<width {
+                acc = binary_f32(op, acc, laid.data[r * width + j]);
+            }
+            data.push(acc);
+        }
+        return Tensor { data, extents };
+    }
+
+    fn dot_general<A, B, Out>(&mut self, lhs: &Tensor<f32, A>, rhs: &Tensor<f32, B>, dims: &DotDims) -> Tensor<f32, Out> {
+        let lhs_free = free_axes(lhs.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
+        let rhs_free = free_axes(rhs.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
+        let batch = element_count(&picked(&lhs.extents, &dims.lhs_batch));
+        let [m, k, n] = [
+            element_count(&picked(&lhs.extents, &lhs_free)),
+            element_count(&picked(&lhs.extents, &dims.lhs_contracting)),
+            element_count(&picked(&rhs.extents, &rhs_free)),
+        ];
+        for let [i, a] of dims.lhs_batch.into_iter().enumerate() {
+            assert lhs.extents[a] == rhs.extents[dims.rhs_batch[i]], "the batch axes agree";
+        }
+        for let [i, a] of dims.lhs_contracting.into_iter().enumerate() {
+            assert lhs.extents[a] == rhs.extents[dims.rhs_contracting[i]], "the contracting axes agree";
+        }
+        let mut lhs_order = dims.lhs_batch;
+        lhs_order.extend(&lhs_free);
+        lhs_order.extend(&dims.lhs_contracting);
+        let a: Tensor<f32, A> = self.transpose(lhs, lhs_order);
+        // A weight stored with its contracting axes last, as a tied embedding
+        // is, is read in place rather than transposed on every call.
+        let mut by_rows = dims.rhs_batch;
+        by_rows.extend(&rhs_free);
+        by_rows.extend(&dims.rhs_contracting);
+        let mut extents = picked(&lhs.extents, &dims.lhs_batch);
+        extents.extend(&picked(&lhs.extents, &lhs_free));
+        extents.extend(&picked(&rhs.extents, &rhs_free));
+        if is_identity(&by_rows) {
+            return Tensor { data: product_by_rows(&a.data, &rhs.data, batch, m, k, n), extents };
+        }
+        let mut by_columns = dims.rhs_batch;
+        by_columns.extend(&dims.rhs_contracting);
+        by_columns.extend(&rhs_free);
+        let b: Tensor<f32, B> = self.transpose(rhs, by_columns);
+        return Tensor { data: product_by_columns(&a.data, &b.data, batch, m, k, n), extents };
+    }
+
+    fn gather<E: Element, D, I, Out>(
+        &mut self,
+        operand: &Tensor<E, D>,
+        indices: &Tensor<i64, I>,
+        dims: &GatherDims,
+    ) -> Tensor<E, Out> {
+        let rank = operand.extents.len();
+        let implicit = dims.index_vector_dim == indices.extents.len();
+        let mut batch_extents: List<i32> = [];
+        for let i of 0..<indices.extents.len() {
+            if i != dims.index_vector_dim {
+                batch_extents.push(indices.extents[i]);
+            }
+        }
+        let mut offset_extents: List<i32> = [];
+        let mut offset_axes: List<i32> = [];
+        for let a of 0..<rank {
+            if !dims.collapsed_slice_dims.contains(&a) {
+                offset_extents.push(dims.slice_sizes[a]);
+                offset_axes.push(a);
+            }
+        }
+        let out_rank = batch_extents.len() + offset_extents.len();
+        let mut extents = List::<i32>::filled(out_rank, 0);
+        let mut batch_at: List<i32> = [];
+        let [mut b, mut o] = [0, 0];
+        for let d of 0..<out_rank {
+            if dims.offset_dims.contains(&d) {
+                extents[d] = offset_extents[o];
+                o += 1;
+            } else {
+                extents[d] = batch_extents[b];
+                batch_at.push(d);
+                b += 1;
+            }
+        }
+        let own = row_major_strides(&operand.extents);
+        let index_strides = row_major_strides(&indices.extents);
+        let vector_stride = if implicit { 0 } else { index_strides[dims.index_vector_dim] };
+        let mut data = List::<E>::with_capacity(element_count(&extents));
+        let mut out = List::<i32>::filled(out_rank, 0);
+        for let _ of 0..<element_count(&extents) {
+            let mut index_base = 0;
+            let mut batch_axis = 0;
+            for let i of 0..<indices.extents.len() {
+                if i == dims.index_vector_dim {
+                    continue;
+                }
+                index_base += out[batch_at[batch_axis]] * index_strides[i];
+                batch_axis += 1;
+            }
+            let mut at = 0;
+            for let [k, axis] of dims.start_index_map.into_iter().enumerate() {
+                let start = indices.data[index_base + k * vector_stride];
+                let room = (operand.extents[axis] - dims.slice_sizes[axis]) as i64;
+                at += i64::clamp(start, 0, room) as i32 * own[axis];
+            }
+            for let [j, d] of dims.offset_dims.into_iter().enumerate() {
+                at += out[d] * own[offset_axes[j]];
+            }
+            data.push(operand.data[at]);
+            advance(&mut out, &extents);
+        }
+        return Tensor { data, extents };
+    }
+
+    fn convolution<In, K, Out>(
+        &mut self,
+        x: &Tensor<f32, In>,
+        kernel: &Tensor<f32, K>,
+        conv: &Convolution,
+    ) -> Tensor<f32, Out> {
+        let spatial = x.extents.len() - 2;
+        let mut window = Window {
+            kernel: [],
+            strides: conv.window_strides,
+            dilations: conv.rhs_dilation,
+            pads: [],
+            output: [],
+        };
+        let mut ends: List<i32> = [];
+        for let i of 0..<spatial {
+            let k = kernel.extents[2 + i];
+            let [lo, hi] = [conv.padding[2 * i], conv.padding[2 * i + 1]];
+            window.kernel.push(k);
+            window.pads.push(lo);
+            ends.push(hi);
+            let span = (k - 1) * conv.rhs_dilation[i] + 1;
+            window.output.push((x.extents[2 + i] + lo + hi - span) / conv.window_strides[i] + 1);
+        }
+        window.pads.extend(&ends);
+        let t = conv_grouped::<Batch, Feature, Feature, Feature, [Spatial], [Spatial], [Spatial]>(
+            &Tensor { data: x.data, extents: x.extents },
+            &Tensor { data: kernel.data, extents: kernel.extents },
+            conv.feature_group_count,
+            &window,
+            &null,
+        );
+        return Tensor { data: t.data, extents: t.extents };
+    }
+
+    fn reduce_window<In, Out>(
+        &mut self,
+        x: &Tensor<f32, In>,
+        op: Binary,
+        init: f32,
+        window: &WindowReduce,
+    ) -> Tensor<f32, Out>
+        contract op matches { Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
+    {
+        let spatial = x.extents.len() - 2;
+        let mut pooled = Window { kernel: [], strides: [], dilations: [], pads: [], output: [] };
+        let mut ends: List<i32> = [];
+        for let a of 0..<2 {
+            assert window.window_dimensions[a] == 1 && window.window_strides[a] == 1, "the batch and feature axes are windows of one";
+        }
+        for let i of 2..<spatial + 2 {
+            let k = window.window_dimensions[i];
+            let [lo, hi] = [window.padding[2 * i], window.padding[2 * i + 1]];
+            pooled.kernel.push(k);
+            pooled.strides.push(window.window_strides[i]);
+            pooled.dilations.push(window.window_dilations[i]);
+            pooled.pads.push(lo);
+            ends.push(hi);
+            let span = (k - 1) * window.window_dilations[i] + 1;
+            pooled.output.push((x.extents[i] + lo + hi - span) / window.window_strides[i] + 1);
+        }
+        pooled.pads.extend(&ends);
+        let t = max_pool::<Batch, Feature, [Spatial], [Spatial]>(&Tensor { data: x.data, extents: x.extents }, &pooled);
+        return Tensor { data: t.data, extents: t.extents };
+    }
+
+    fn conditional<Axes, T>(
+        &mut self,
+        pred: &Tensor<bool, Axes>,
+        then: fn(&mut Cpu) -> T with _,
+        otherwise: fn(&mut Cpu) -> T with _,
+    ) -> T with _ {
+        assert pred.data.len() == 1, "a condition is one element";
+        return if pred.data[0] { then(self) } else { otherwise(self) };
+    }
+}
+
+/// The axes a convolution's kernels type their operands by, which the CPU
+/// reads only through extents, a window's spatial axes being one pack of any
+/// rank.
+struct Batch {
+}
+struct Feature {
+}
+struct Spatial {
+}
+
+fn unary_f32(op: Unary, v: f32) -> f32 {
+    return match op {
+        Abs => f32::abs(v),
+        Erf => f32::erf(v),
+        Exponential => f32::exp(v),
+        Log => f32::ln(v),
+        Logistic => sigmoid_f32(v),
+        Negate => -v,
+        Rsqrt => 1.0 / f32::sqrt(v),
+        Sqrt => f32::sqrt(v),
+        Tanh => f32::tanh(v),
+    };
+}
+
+/// StableHLO's float arithmetic: `maximum` and `minimum` are NaN where either
+/// operand is.
+fn binary_f32(op: Binary, a: f32, b: f32) -> f32 {
+    return match op {
+        Add => a + b,
+        Divide => a / b,
+        Maximum => f32::ieee754_max(a, b),
+        Minimum => f32::ieee754_min(a, b),
+        Multiply => a * b,
+        Power => f32::pow(a, b),
+        Subtract => a - b,
+    };
+}
+
+/// StableHLO's integer arithmetic, which wraps and divides toward zero.
+fn binary_i64(op: Binary, a: i64, b: i64) -> i64 {
+    return match op {
+        Add => a + b,
+        Divide => a / b,
+        Maximum => i64::max(a, b),
+        Minimum => i64::min(a, b),
+        Multiply => a * b,
+        Power => unreachable(),
+        Subtract => a - b,
+    };
+}
+
+fn compared_f32(direction: Comparison, a: f32, b: f32) -> bool {
+    return match direction {
+        Eq => a.ieee754_eq(b),
+        Ne => !a.ieee754_eq(b),
+        Ge => a.ieee754_ge(b),
+        Gt => a.ieee754_gt(b),
+        Le => a.ieee754_le(b),
+        Lt => a.ieee754_lt(b),
+    };
+}
+
+fn compared_i64(direction: Comparison, a: i64, b: i64) -> bool {
+    return match direction {
+        Eq => a == b,
+        Ne => a != b,
+        Ge => a >= b,
+        Gt => a > b,
+        Le => a <= b,
+        Lt => a < b,
+    };
+}
+
+/// Each axis's step through a row-major tensor of `extents`.
+fn row_major_strides(extents: &List<i32>) -> List<i32> {
+    let mut strides = List::<i32>::filled(extents.len(), 0);
+    let mut step = 1;
+    for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
+        strides[axis] = step;
+        step *= extents[axis];
+    }
+    return strides;
+}
+
+/// The elements of `data` an offset from `base` reaches stepping by `strides`
+/// over `extents`, in row-major order.
+fn walked<E>(data: &List<E>, base: i32, strides: &List<i32>, extents: &List<i32>) -> List<E> {
+    let count = element_count(extents);
+    let mut out = List::<E>::with_capacity(count);
+    let steps = carries(strides, extents);
+    let mut index = List::<i32>::filled(extents.len(), 0);
+    let mut at = base;
+    for let _ of 0..<count {
+        out.push(data[at]);
+        let axis = advance(&mut index, extents);
+        if axis >= 0 {
+            at += steps[axis];
+        }
+    }
+    return out;
+}
+
+fn is_identity(perm: &List<i32>) -> bool {
+    for let [i, p] of perm.into_iter().enumerate() {
+        if *p != i {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// The extents of the axes `axes`, in that order.
+fn picked(extents: &List<i32>, axes: &List<i32>) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let a of *axes {
+        out.push(extents[a]);
+    }
+    return out;
+}
+
+/// The axes of a `rank` operand of `dot_general` neither batch nor contracting.
+fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32> {
+    let mut free: List<i32> = [];
+    for let a of 0..<rank {
+        if !batch.contains(&a) && !contracting.contains(&a) {
+            free.push(a);
+        }
+    }
+    return free;
+}
+
+/// `batch` products of an `[m, k]` matrix by a `[k, n]` one, each output row
+/// a sum of the right operand's rows.
+fn product_by_columns(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, n: i32) -> List<f32>
+    contract a.len() == batch * m * k && b.len() == batch * k * n
+{
+    let mut out = List::<f32>::filled(batch * m * n, 0.0);
+    for let s of 0..<batch {
+        for let r of 0..<m {
+            let row = (s * m + r) * n;
+            for let j of 0..<k {
+                let av = unchecked a[(s * m + r) * k + j];
+                let from = (s * k + j) * n;
+                for let c of 0..<n {
+                    out[row + c] += av * unchecked b[from + c];
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/// `batch` products of an `[m, k]` matrix by the transpose of an `[n, k]` one,
+/// each output element a dot product of two contiguous rows.
+fn product_by_rows(a: &List<f32>, b: &List<f32>, batch: i32, m: i32, k: i32, n: i32) -> List<f32>
+    contract a.len() == batch * m * k && b.len() == batch * n * k
+{
+    let mut out = List::<f32>::with_capacity(batch * m * n);
+    for let s of 0..<batch {
+        for let r of 0..<m {
+            let a_at = (s * m + r) * k;
+            for let c of 0..<n {
+                let b_at = (s * n + c) * k;
+                let [mut s0, mut s1, mut s2, mut s3]: [f32, f32, f32, f32] = [0.0, 0.0, 0.0, 0.0];
+                let quads = k - k % 4;
+                for let mut j = 0; j < quads; j += 4 {
+                    s0 += unchecked a[a_at + j] * unchecked b[b_at + j];
+                    s1 += unchecked a[a_at + j + 1] * unchecked b[b_at + j + 1];
+                    s2 += unchecked a[a_at + j + 2] * unchecked b[b_at + j + 2];
+                    s3 += unchecked a[a_at + j + 3] * unchecked b[b_at + j + 3];
+                }
+                for let j of quads..<k {
+                    s0 += unchecked a[a_at + j] * unchecked b[b_at + j];
+                }
+                out.push(s0 + s1 + (s2 + s3));
+            }
+        }
+    }
+    return out;
+}

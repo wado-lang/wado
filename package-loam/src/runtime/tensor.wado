@@ -844,7 +844,7 @@ pub fn expand<E, In, Out>(t: &Tensor<E, In>, extents: List<i32>) -> Tensor<E, Ou
 
 /// Moves a row-major `index` over `extents` one position on and returns the
 /// axis that advanced, every later one having wrapped to 0; -1 past the end.
-fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
+internal fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
     for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
         index[axis] += 1;
         if index[axis] < extents[axis] {
@@ -857,7 +857,7 @@ fn advance(index: &mut List<i32>, extents: &List<i32>) -> i32 {
 
 /// How far an offset stepping by `strides` moves when `advance` names each
 /// axis: that axis's stride, less the span every later axis wound back.
-fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
+internal fn carries(strides: &List<i32>, extents: &List<i32>) -> List<i32> {
     let mut carry = List::<i32>::filled(extents.len(), 0);
     let mut unwound = 0;
     for let mut axis = extents.len() - 1; axis >= 0; axis -= 1 {
