@@ -825,6 +825,10 @@ impl OwnedEffectData {
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
+        // The trait methods that write no clause of their own, so the head's
+        // effects are theirs. An impl of one of these alone brings what the
+        // head resolves to; a method's own clause overrides the head.
+        let mut head_methods: IndexSet<TraitMethodKey> = IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
@@ -841,6 +845,9 @@ impl OwnedEffectData {
                         .map(|effect| resolutions.effect_named(effect, src))
                         .collect();
                     trait_method_effects.insert((def, method.name.clone()), effects);
+                    if method.effects_source == ast::EffectsSource::Inherited {
+                        head_methods.insert((def, method.name.clone()));
+                    }
                 }
             }
         }
@@ -889,6 +896,20 @@ impl OwnedEffectData {
                             .cloned()
                             .collect();
                         let facts = annotations.and_then(|ann| ann.impl_facts.get(&block.id));
+                        let brought_to_head = |trait_key: DefId| -> Vec<EffectRef> {
+                            let mut brought: Vec<EffectRef> = Vec::new();
+                            for method in &block.methods {
+                                if !head_methods.contains(&(trait_key, method.name.clone())) {
+                                    continue;
+                                }
+                                for effect in fn_effects.get(&method.id).into_iter().flatten() {
+                                    if !brought.contains(effect) {
+                                        brought.push(effect.clone());
+                                    }
+                                }
+                            }
+                            brought
+                        };
                         // Waiting on an `AsyncCall` demands what its methods declare.
                         if facts.is_some_and(|facts| {
                             facts.trait_name.is_none()
@@ -912,7 +933,7 @@ impl OwnedEffectData {
                                 .entry(trait_key)
                                 .or_default()
                                 .push(BlanketImpl {
-                                    declared: declared.iter().cloned().collect(),
+                                    declared: brought_to_head(trait_key),
                                     bounds,
                                 });
                         }
@@ -920,14 +941,15 @@ impl OwnedEffectData {
                             let trait_name = facts.trait_name.as_ref()?;
                             impl_key(&facts.struct_name, trait_name)
                         }) {
+                            let brought = brought_to_head(key.1);
                             let entry = impl_effects.entry(key).or_insert_with(|| ImplEffects {
                                 declared: Vec::new(),
                                 target_args: spelled_target_args(&sem.types, defs.def_at(block.id)),
                                 bounds: Rc::clone(&bounds),
                             });
-                            for effect in &declared {
-                                if !entry.declared.contains(effect) {
-                                    entry.declared.push(effect.clone());
+                            for effect in brought {
+                                if !entry.declared.contains(&effect) {
+                                    entry.declared.push(effect);
                                 }
                             }
                         }

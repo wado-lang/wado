@@ -866,7 +866,9 @@ impl Resolver<'_> {
         self_binder: Option<AstId>,
         walk: impl FnOnce(&mut Self),
     ) {
-        for p in params {
+        // A param the compiler minted, `with _`'s among them, is fresh per
+        // signature and names nothing a reader could confuse.
+        for p in params.iter().filter(|p| p.is_written()) {
             self.visit_attributed(&p.attrs, |s| s.check_shadowing(&p.name, p.name_span));
         }
         self.push_binders(params, self_binder);

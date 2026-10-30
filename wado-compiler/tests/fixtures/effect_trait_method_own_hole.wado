@@ -1,0 +1,49 @@
+// A method of an open trait that writes its own `with _` takes its effects
+// from each call's closure, not from the impl, so the impl's other methods
+// alone decide what the head resolves to. A generic caller of them on an impl
+// that declares nothing demands nothing, and the method's `_` shadows nothing.
+use { println, Stdout } from "core:cli";
+
+struct Quiet {
+    n: i32,
+}
+
+trait Graph with _ {
+    fn next(&mut self) -> i32;
+
+    fn branch<T>(&mut self, f: fn() -> T with _) -> T with _;
+}
+
+impl Graph for Quiet {
+    fn next(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+
+    fn branch<T>(&mut self, f: fn() -> T with _) -> T with _ {
+        return f();
+    }
+}
+
+fn step<G: Graph>(g: &mut G) -> i32 with _ {
+    return g.next();
+}
+
+fn pure_step() -> i32 {
+    let mut quiet = Quiet { n: 0 };
+    return step(&mut quiet);
+}
+
+export fn run() with Stdout {
+    let mut quiet = Quiet { n: 0 };
+    println(`${step(&mut quiet)}`);
+    let two = quiet.branch(|| {
+        println("inside");
+        return 2;
+    });
+    println(`${two}`);
+    assert pure_step() == 1;
+}
+
+__DATA__
+{"stdout": "1\ninside\n2\n", "warnings_not_contains": ["shadows"]}
