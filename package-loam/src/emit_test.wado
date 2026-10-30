@@ -1303,6 +1303,29 @@ test "a symbol nothing spells is not bound" {
     assert !kernel_entries(&out).contains("dim_");
 }
 
+test "a build reads the valid length where it sums, normalizes, contracts or joins along a padded axis" {
+    let source = `g (float[N] X, float[N, 4] P) => (float[] S, float[N] M, float[4] C, float[?] J) {
+        S = ReduceSum <keepdims = 0> (X)
+        M = Softmax <axis = 0> (X)
+        C = MatMul(X, P)
+        J = Concat <axis = 0> (X, X)
+    }`;
+    let out = generate(source).unwrap();
+    let built = out.substr_bytes(out.find("pub fn build").unwrap(), out.len());
+    assert built.contains("lengths: &Lengths<Bk>");
+    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, 0 as f32)");
+    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, -f32::INFINITY)");
+    assert built.contains("masked::<Bk, f32, [N, P1]>(backend, P, 0, &lengths.dim_N, 0 as f32)");
+    assert built.contains("(backend, X, X, 0, &lengths.dim_N)");
+    assert built.contains("pub fn compute<");
+}
+
+test "a build whose lengths enter no value takes none" {
+    let out = generate(mlp("float")).unwrap();
+    assert !out.contains("Lengths");
+    assert out.contains("pub fn compute<");
+}
+
 test "a Range over a symbolic length is a kernel call" {
     let source = `g (int64[N] X) => (int64[N] Y) {
         S = Shape(X)

@@ -3,13 +3,14 @@
 //! it, wrote beside it what onnxruntime computes from it at each length of `X`.
 //! Here the case builds as the generator would build it and runs under `eval`,
 //! printing the same lines, so a refused build, a trap and a wrong answer each
-//! show as a difference from them. A case Loam does not match yet is a
-//! `#[TODO]` test, so the run lists where the two part.
+//! show as a difference from them: once through `forward`, and once through
+//! `compute`, which pads each length to a capacity past it. A case Loam does
+//! not match yet is a `#[TODO]` test, so the run lists where the two part.
 
 use { HashMap } from "core:collections";
 use { Graph } from "lib:loam/src/graph.wado";
 use { read } from "lib:loam/src/onnx_proto.wado";
-use { generated, program_over, ran } from "./oracle.wado";
+use { TOLERANCE, generated, program_over, ran } from "./oracle.wado";
 
 /// The lengths of `X` the oracle ran each case at.
 global LENGTHS: List<i32> = [3, 10];
@@ -24,20 +25,41 @@ global INPUTS: HashMap<String, String> = {
     W: "Tensor { data: iota(0.0, 12), extents: [3, 2, 2] }",
 } as HashMap<String, String>;
 
-/// What Loam computes from `model` at each of `LENGTHS`, in the oracle's
-/// lines, and past them why it computes nothing more: the build's refusal, or
-/// how the run stopped.
-fn loam(model: ByteList) -> String {
+/// How a case's `run` calls the module at length `n`, given each input as an
+/// argument: `forward` through the kernels, or `compute`, which pads every
+/// length to its capacity, through the graph.
+enum Entry {
+    Forward,
+    Compute,
+}
+
+impl Entry {
+    fn call(&self, args: &String) -> String {
+        return match *self {
+            Forward => `let mut opaque = Opaque::new();
+        let weights = Prepared::embedded(&mut opaque);
+        let got = forward(&mut opaque, ${*args}&weights);`,
+            Compute => `let mut cpu = Cpu {};
+        let params = Params::embedded(&mut cpu);
+        let got = compute(&mut cpu, ${*args}&params);`,
+        };
+    }
+}
+
+/// What Loam computes from `model` through `entry` at each of `LENGTHS`, in
+/// the oracle's lines, and past them why it computes nothing more: the build's
+/// refusal, or how the run stopped.
+fn loam(model: ByteList, entry: Entry) -> String {
     let graph = read(model).unwrap();
     return match generated(&graph) {
-        Ok(source) => run(source, &graph),
+        Ok(source) => run(source, &graph, entry),
         Err(reason) => `refused: ${reason}`,
     };
 }
 
-/// `source` with a `run` that calls its `forward` at each of `LENGTHS` and
-/// prints what it returns, run under `eval`.
-fn run(source: String, graph: &Graph) -> String {
+/// `source` with a `run` that calls `entry` at each of `LENGTHS` and prints
+/// what it returns, run under `eval`.
+fn run(source: String, graph: &Graph, entry: Entry) -> String {
     let mut args = "";
     for let vi of graph.inputs {
         args.push_str(`&${INPUTS[vi.name]}, `);
@@ -58,9 +80,7 @@ fn joined<T: Display>(values: List<T>) -> String {
 
 export fn run() with Stdout {
     for let n of ${LENGTHS:?} as List<i32> {
-        let mut opaque = Opaque::new();
-        let weights = Prepared::embedded(&mut opaque);
-        let got = forward(&mut opaque, ${args}&weights);
+        ${entry.call(&args)}
         println(\`N = \${n}: extents [\${joined(got.extents)}], data [\${joined(got.data)}]\`);
     }
 }
@@ -68,9 +88,68 @@ export fn run() with Stdout {
     return ran(program);
 }
 
-/// Loam computes from `model` what onnxruntime does, which `onnx` states.
+/// Loam computes from `model` what onnxruntime does, which `onnx` states,
+/// through either entry.
 fn assert_agrees(model: ByteList, onnx: String) {
-    assert loam(model) == onnx;
+    let [forward, compute] = [
+        loam(model, Entry::Forward),
+        loam(model, Entry::Compute),
+    ];
+    assert agrees(&forward, &onnx);
+    assert agrees(&compute, &onnx);
+}
+
+/// Whether Loam's lines, `got`, say what the oracle's, `want`, do: each the
+/// same but for its data, each element within `TOLERANCE` of the oracle's. The
+/// oracle writes an f32 as the f64 that holds it, and Loam as the shortest
+/// text that reads back as it.
+fn agrees(got: &String, want: &String) -> bool {
+    let [lines, wanted] = [
+        got.split("\n").collect::<List<String>>(),
+        want.split("\n").collect::<List<String>>(),
+    ];
+    if lines.len() != wanted.len() {
+        return false;
+    }
+    for let [i, line] of lines.into_iter().enumerate() {
+        if line == wanted[i] {
+            continue;
+        }
+        let [Some([head, data]), Some([want_head, want_data])] = [
+            data_of(&line),
+            data_of(&wanted[i]),
+        ] else {
+            return false;
+        };
+        if head != want_head || data.len() != want_data.len() {
+            return false;
+        }
+        for let [j, v] of data.into_iter().enumerate() {
+            let w = want_data[j];
+            if f64::abs(v - w) > TOLERANCE as f64 * f64::max(1.0, f64::abs(w)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// A line's text up to its data, and the data's elements.
+fn data_of(line: &String) -> Option<[String, List<f64>]> {
+    let marker = "data [";
+    let at = line.find(marker)?;
+    let head = line.substr_bytes(0, at);
+    let inner = line.substr_bytes(at + marker.len(), line.len() - 1);
+    let mut data: List<f64> = [];
+    if inner.len() > 0 {
+        for let element of inner.split(",") {
+            let Ok(v) = f64::from_str(element) else {
+                return null;
+            };
+            data.push(v);
+        }
+    }
+    return Option::Some([head, data]);
 }
 
 test "Slice to N takes the first N, clamping to the axis's end" {
@@ -214,6 +293,36 @@ test "Reshape reads 0 as the operand's extent and -1 as what remains" {
         #include_bytes("./semantics/ReshapeKeepSplit.onnx"),
         #include_str("./semantics/ReshapeKeepSplit.txt"),
     );
+}
+
+test "ReduceSum over N sums the N rows" {
+    assert_agrees(
+        #include_bytes("./semantics/ReduceSumOverLength.onnx"),
+        #include_str("./semantics/ReduceSumOverLength.txt"),
+    );
+}
+
+test "ReduceMean over N divides by N" {
+    assert_agrees(
+        #include_bytes("./semantics/ReduceMeanOverLength.onnx"),
+        #include_str("./semantics/ReduceMeanOverLength.txt"),
+    );
+}
+
+test "Softmax over N normalizes the N elements" {
+    assert_agrees(#include_bytes("./semantics/SoftmaxOverLength.onnx"), #include_str("./semantics/SoftmaxOverLength.txt"));
+}
+
+test "MatMul contracting N sums N products" {
+    assert_agrees(#include_bytes("./semantics/MatMulOverLength.onnx"), #include_str("./semantics/MatMulOverLength.txt"));
+}
+
+test "Concat along N puts the second part right after the first's N" {
+    assert_agrees(#include_bytes("./semantics/ConcatAlongLength.onnx"), #include_str("./semantics/ConcatAlongLength.txt"));
+}
+
+test "Gather of -1 along N takes the last of the N" {
+    assert_agrees(#include_bytes("./semantics/GatherLast.onnx"), #include_str("./semantics/GatherLast.txt"));
 }
 
 test "Reshape reads a leading -1 as what the rest leaves" {

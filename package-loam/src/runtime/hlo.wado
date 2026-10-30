@@ -381,41 +381,180 @@ pub fn lifted<affine G: Graph, E: Element, In, Out>(
     return g.reshape(x, extents);
 }
 
-/// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over the
-/// count of elements each sums.
+/// ONNX's `ReduceMean` over `dims`, which the result drops: the sum over
+/// `count`, the elements each sums, a value the graph computes where a valid
+/// length is among them.
 pub fn reduce_mean<affine G: Graph, In, Out>(
     g: &mut G,
     x: &G::Tensor<f32, In>,
     dims: List<i32>,
+    count: &G::Tensor<i64, []>,
 ) -> G::Tensor<f32, Out> with _ {
-    let extents = g.extents_of(x);
-    let mut count = 1;
-    for let d of dims {
-        count *= extents[d];
-    }
     let sum: G::Tensor<f32, Out> = g.reduce(x, Binary::Add, 0.0, dims);
-    let divisor = full::<G, f32, Out>(g, count as f32, g.extents_of(&sum));
+    let divisor: G::Tensor<f32, Out> = g.broadcast_in_dim(&g.convert::<i64, f32, []>(count), g.extents_of(&sum), []);
     return g.binary(Binary::Divide, &sum, &divisor);
 }
 
-/// ONNX's `Range` of `count` elements: `start`, then `delta` apart.
-pub fn range_i64<affine G: Graph, A>(g: &mut G, start: i64, count: i32, delta: i64) -> G::Tensor<i64, [A]> with _ {
-    let steps: G::Tensor<i64, [A]> = g.iota([count], 0);
-    let scaled = g.binary(Binary::Multiply, &steps, &full::<G, i64, [A]>(g, delta, [count]));
-    return g.binary(Binary::Add, &scaled, &full::<G, i64, [A]>(g, start, [count]));
+/// `x` with each position along `axis` at or past `length` replaced by
+/// `fill`: the padding of a valid length read as what a reduction over it
+/// leaves unchanged.
+pub fn masked<affine G: Graph, E: Element, Axes>(
+    g: &mut G,
+    x: &G::Tensor<E, Axes>,
+    axis: i32,
+    length: &G::Tensor<i64, []>,
+    fill: E,
+) -> G::Tensor<E, Axes> with _ {
+    let extents = g.extents_of(x);
+    let positions: G::Tensor<i64, Axes> = g.iota(extents, axis);
+    let valid = g.compare(Comparison::Lt, &positions, &g.broadcast_in_dim(length, extents, []));
+    return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }
 
-/// ONNX's indices into an axis of `extent`, each negative one counted from the
-/// end, as StableHLO's `gather` reads none.
+/// `a` joined by `b` along `axis`, `b` written from `a`'s valid length
+/// `length` on: a `Concat` along a padded length, which would otherwise put
+/// `a`'s padding between the two.
+pub fn joined_at<affine G: Graph, E: Element, A, B, Out>(
+    g: &mut G,
+    a: &G::Tensor<E, A>,
+    b: &G::Tensor<E, B>,
+    axis: i32,
+    length: &G::Tensor<i64, []>,
+) -> G::Tensor<E, Out> with _ {
+    let joined: G::Tensor<E, Out> = g.concatenate(a, b, axis);
+    let at: G::Tensor<i64, [Row]> = g.broadcast_in_dim(length, [1], []);
+    let dims = ScatterDims {
+        update_window_dims: (0..<g.extents_of(b).len()).collect(),
+        inserted_window_dims: [],
+        scatter_dims_to_operand_dims: [axis],
+        index_vector_dim: 0,
+    };
+    return g.scatter(&joined, &at, b, &dims);
+}
+
+/// ONNX's `Range` of `count` elements: `start`, then `delta` apart, each a
+/// value the graph computes, as a valid length is.
+pub fn range_i64<affine G: Graph, A>(
+    g: &mut G,
+    start: &G::Tensor<i64, []>,
+    count: i32,
+    delta: &G::Tensor<i64, []>,
+) -> G::Tensor<i64, [A]> with _ {
+    let steps: G::Tensor<i64, [A]> = g.iota([count], 0);
+    let scaled = g.binary(Binary::Multiply, &steps, &g.broadcast_in_dim(delta, [count], []));
+    return g.binary(Binary::Add, &scaled, &g.broadcast_in_dim(start, [count], []));
+}
+
+/// ONNX's indices into an axis of `extent` elements, each negative one counted
+/// from the end, as StableHLO's `gather` reads none.
 pub fn from_end_indices<affine G: Graph, I>(
     g: &mut G,
     indices: &G::Tensor<i64, I>,
-    extent: i32,
+    extent: &G::Tensor<i64, []>,
 ) -> G::Tensor<i64, I> with _ {
     let extents = g.extents_of(indices);
     let negative = g.compare(Comparison::Lt, indices, &full::<G, i64, I>(g, 0, extents));
-    let wrapped = g.binary(Binary::Add, indices, &full::<G, i64, I>(g, extent as i64, extents));
+    let wrapped = g.binary(Binary::Add, indices, &g.broadcast_in_dim(extent, extents, []));
     return g.select(&negative, &wrapped, indices);
+}
+
+/// `a / d` rounded down, or up where `up`, as shape arithmetic divides.
+/// StableHLO's `divide` rounds toward zero, which is the other way where the
+/// remainder is not zero: down where it and `d` differ in sign, up where they
+/// agree.
+pub fn quotient<affine G: Graph, Axes>(
+    g: &mut G,
+    a: &G::Tensor<i64, Axes>,
+    d: &G::Tensor<i64, Axes>,
+    up: bool,
+) -> G::Tensor<i64, Axes> with _ {
+    let extents = g.extents_of(a);
+    let toward_zero = g.binary(Binary::Divide, a, d);
+    let rest = g.binary(Binary::Subtract, a, &g.binary(Binary::Multiply, &toward_zero, d));
+    let zero = full::<G, i64, Axes>(g, 0, extents);
+    let signs = g.compare(
+        if up { Comparison::Eq } else { Comparison::Ne },
+        &g.compare(Comparison::Lt, &rest, &zero),
+        &g.compare(Comparison::Lt, d, &zero),
+    );
+    let off = g.select(&g.compare(Comparison::Ne, &rest, &zero), &signs, &full::<G, bool, Axes>(g, false, extents));
+    let step = full::<G, i64, Axes>(g, if up { 1 } else { -1 }, extents);
+    return g.select(&off, &g.binary(Binary::Add, &toward_zero, &step), &toward_zero);
+}
+
+/// A tensor of `extents` holding `elements` in row-major order: a literal of
+/// shape arithmetic whose elements are values the graph computes.
+pub fn assembled<affine G: Graph, E: Element, Axes>(
+    g: &mut G,
+    elements: List<G::Tensor<i64, []>>,
+    extents: List<i32>,
+) -> G::Tensor<E, Axes> with _ {
+    let count = elements.len();
+    let positions: G::Tensor<i64, [Row]> = g.iota([count], 0);
+    let mut flat = full::<G, i64, [Row]>(g, 0, [count]);
+    for let [i, e] of elements.into_iter().enumerate() {
+        let here = g.compare(Comparison::Eq, &positions, &full::<G, i64, [Row]>(g, i as i64, [count]));
+        flat = g.select(&here, &g.broadcast_in_dim(&e, [count], []), &flat);
+    }
+    let shaped: G::Tensor<i64, Axes> = g.reshape(&flat, extents);
+    return g.convert(&shaped);
+}
+
+/// `x`'s elements at `start + i * step` along `axis`, for each `i` below
+/// `count`: a `Slice` whose start is a value the graph computes, which no
+/// `slice` takes.
+pub fn strided_gather<affine G: Graph, E: Element, In, Out>(
+    g: &mut G,
+    x: &G::Tensor<E, In>,
+    axis: i32,
+    start: &G::Tensor<i64, []>,
+    count: i32,
+    step: i64,
+) -> G::Tensor<E, Out> with _ {
+    let indices = range_i64::<G, Row>(g, start, count, &full::<G, i64, []>(g, step, []));
+    let mut sizes = g.extents_of(x);
+    sizes[axis] = 1;
+    let dims = GatherDims {
+        offset_dims: (0..<sizes.len()).filter(|d| d != axis).collect(),
+        collapsed_slice_dims: [axis],
+        start_index_map: [axis],
+        index_vector_dim: 1,
+        slice_sizes: sizes,
+    };
+    return g.gather(x, &indices, &dims);
+}
+
+/// The capacity a length pads to: the next power of two, and 0 its own.
+pub fn capacity_of(length: i32) -> i32
+    contract 0 <= length <= 1 << 30, "a capacity is a power of two an i32 holds"
+{
+    let mut capacity = if length == 0 { 0 } else { 1 };
+    while capacity < length {
+        capacity *= 2;
+    }
+    return capacity;
+}
+
+/// `t` under `extents`, each axis cut to its extent or padded past it with
+/// zeros: an input padded to its capacities, or an output cut to its lengths.
+pub fn resized<E: Element, Axes>(t: &Tensor<E, Axes>, extents: List<i32>) -> Tensor<E, Axes>
+    contract extents.len() == t.extents.len()
+{
+    let own = row_major_strides(&t.extents);
+    let count = element_count(&extents);
+    let mut data = List::<E>::with_capacity(count);
+    let mut index = List::<i32>::filled(extents.len(), 0);
+    for let _ of 0..<count {
+        let mut at = 0;
+        let mut inside = true;
+        for let [a, i] of index.into_iter().enumerate() {
+            inside = inside && i < t.extents[a];
+            at += i * own[a];
+        }
+        data.push(if inside { t.data[at] } else { E::from_i64(0) });
+        advance(&mut index, &extents);
+    }
+    return Tensor { data, extents };
 }
 
 /// An axis of extent 1 a built pass adds, as a matrix product does to an
