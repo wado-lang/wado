@@ -4414,10 +4414,6 @@ pub struct "Box<&T>" {
     value: &T,
 }
 
-pub struct "Box<&mut T>" {
-    value: &mut T,
-}
-
 pub struct "Box<f16>" {
     value: f16,
 }
@@ -4428,10 +4424,6 @@ pub struct "Box<bf16>" {
 
 pub struct "Box<&core:prelude/list.wado/List<T>>" {
     value: &core:prelude/list.wado/List<T>,
-}
-
-pub struct "Box<&mut core:prelude/list.wado/List<T>>" {
-    value: &mut core:prelude/list.wado/List<T>,
 }
 
 pub struct "Box<char>" {
@@ -4646,10 +4638,6 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<core:
     value: core:prelude/types.wado/Option<core:prelude/list.wado/List<core:prelude/types.wado/Ready<core:prelude/types.wado/Subtask>>>,
 }
 
-pub struct "Box<&core:prelude/string.wado/String>" {
-    value: &core:prelude/string.wado/String,
-}
-
 pub struct "Box<&core:prelude/string.wado/StrSlice>" {
     value: &core:prelude/string.wado/StrSlice,
 }
@@ -4660,14 +4648,6 @@ pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<T
 
 pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>>" {
     value: core:prelude/types.wado/Option<[core:prelude/types.wado/StreamWritable<T>,core:prelude/types.wado/StartedWrite<T>]>,
-}
-
-pub struct "Box<&core:prelude/list.wado/List<T>>" {
-    value: &core:prelude/list.wado/List<T>,
-}
-
-pub struct "Box<&mut core:prelude/list.wado/List<T>>" {
-    value: &mut core:prelude/list.wado/List<T>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<[core:prelude/types.wado/Stream<?32>,core:prelude/types.wado/StartedRead<?32>]>>" {
@@ -9833,7 +9813,7 @@ pub fn "core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/
 
 pub fn "core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>"(self: &core:prelude/string.wado/StrSlice, other: &core:prelude/string.wado/String) -> bool {
     let len: i32 = self."core:prelude/string.wado/StrSlice::len"();
-    let b: core:prelude/string.wado/StrSlice = Box<&core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    let b: core:prelude/string.wado/StrSlice = Box<&mut core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
     if (len != b."core:prelude/string.wado/StrSlice::len"()) {
         return false;
     }
@@ -10909,7 +10889,7 @@ pub fn "core:prelude/string.wado/String::format<core:prelude/fpfmt.wado/$tmpl$b0
 }
 
 pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(self: &mut core:prelude/string.wado/String, other: &core:prelude/string.wado/String) {
-    Box<&core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+    Box<&mut core:prelude/string.wado/String> { value: other }."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
 pub fn "core:builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
@@ -11585,7 +11565,7 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/fpfmt.wado/$tmpl$f86a
     return "core:prelude/fpfmt.wado::$template_segment$core:prelude/fpfmt.wado/$tmpl$f86a99973c5f619d"(t, (2 * self.index))."core:prelude/string.wado/String::internal_view"();
 }
 
-fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: core:prelude/types.wado/Box<&core:prelude/string.wado/String>, out: &mut core:prelude/string.wado/String) {
+fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: core:prelude/types.wado/Box<&mut core:prelude/string.wado/String>, out: &mut core:prelude/string.wado/String) {
     self.value."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
 }
 
@@ -11985,7 +11965,7 @@ pub fn "core:prelude/traits.wado/TemplateHole<core:prelude/string.wado/$tmpl$b14
 }
 
 // retains: self
-fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: core:prelude/types.wado/Box<&core:prelude/string.wado/String>) -> core:prelude/string.wado/StrSlice {
+fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: core:prelude/types.wado/Box<&mut core:prelude/string.wado/String>) -> core:prelude/string.wado/StrSlice {
     return self.value."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
 }
 
