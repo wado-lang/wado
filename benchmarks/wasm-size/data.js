@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793347719904,
+  "lastUpdate": 1793393064842,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72437,6 +72437,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4cf348cee6dfa2a5248a32281c893ec75b7d8dc3"
         },
         "date": 1793347719317,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "45f3599f200dc79dd6ef8df6fab32e823e3582ab",
+          "message": "Merge pull request #2498 from wado-lang/loam/graph\n\nfeat(loam): a generated module builds its pass as a StableHLO graph, which Cpu computes",
+          "timestamp": "2026-10-31T05:29:23+09:00",
+          "tree_id": "d8a3a6be0cb608d9abc13dac5c9ef7be09d8d346",
+          "url": "https://github.com/wado-lang/wado/commit/45f3599f200dc79dd6ef8df6fab32e823e3582ab"
+        },
+        "date": 1793393063675,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
