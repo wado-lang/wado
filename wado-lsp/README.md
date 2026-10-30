@@ -65,4 +65,4 @@ cargo build -p wado-lsp --target wasm32-wasip2 --release  # VS Code / playground
 
 - [LSP Architecture WEP](../docs/wep-2026-04-18-lsp-architecture.md)
 - [Language Server Protocol](https://microsoft.github.io/language-server-protocol/)
-- [lsp.md](./lsp.md) — local copy of the LSP 3.18 specification
+- [lsp.md](./lsp.md) — the source of the LSP 3.18 specification, with its message definitions left as unexpanded `{% include %}` directives; read [the rendered one](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.18/specification/)

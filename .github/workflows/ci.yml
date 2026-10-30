@@ -138,7 +138,7 @@ jobs:
   # compiler and the LSP engine can run in the browser (the playground), with
   # every I/O call delegated to the wado-cli host.
   test-core:
-    name: Test (Core)
+    name: Test (Rust)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
@@ -161,13 +161,16 @@ jobs:
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
       - run: cargo test --locked --all -- --skip fixture_test_
+      # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
+      # a lint with no automatic fix reaches main unless this step fails on it.
+      - run: mise run clippy
 
   # One job per optimization level: the e2e fixtures, then the stdlib, both
   # compiled at that level. An optimizer bug reachable from `core:*` shows at
   # some levels and not others, so `fail-fast: false` lets every level finish —
   # which ones break says where the bug is.
   test-level:
-    name: Test (E2E+stdlib ${{ matrix.level }})
+    name: Test (${{ matrix.level }})
     needs: [build-wado, build-e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -209,9 +212,10 @@ jobs:
       - run: mise run test-log-levels "$LEVEL"
 
   # Every Wado program the repository runs as a tool or a test, outside the
-  # stdlib and Gale, which have jobs of their own.
+  # stdlib, Gale and benchmark/, which have jobs of their own. This job sets how
+  # long CI takes, so work that fits elsewhere goes to a job that finishes early.
   test-wado:
-    name: Test (Wado)
+    name: Test (packages)
     needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -230,19 +234,10 @@ jobs:
       # programs in the system baseline, so it comes from apt, not mise.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      - run: mise run check-wadopoet-vocabulary
-      - parallel:
-          - run: mise run check-rust-paths
-          - run: mise run check-spec-examples
-          - run: mise run check-grammar
-          - run: mise run check-highlight
-          - run: mise run test-web-glue
-
-      - run: mise run test-wado
-      - run: scripts/dev-bin.sh wado publish --dry-run
+      - run: mise run test-wado --exclude 'benchmark/**'
 
   test-gale-o2:
-    name: Test (Gale O2)
+    name: Test (Gale)
     needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -260,10 +255,11 @@ jobs:
 
       - run: mise run test-gale-o2
 
-  # Fuel does not depend on the host, so the benchmarks' `test "fuel"` regions
-  # are held to `benchmark/fuel.json` exactly, at -O2.
+  # benchmark/'s tests. Fuel does not depend on the host, so the `test "fuel"`
+  # regions are held to `benchmark/fuel.json` exactly, at -O2. The publish dry
+  # run rides here because this job finishes early.
   test-fuel:
-    name: Test (fuel)
+    name: Test (benchmark)
     needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -280,6 +276,8 @@ jobs:
           prebuilt: wado
 
       - run: mise run test-fuel
+      - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
+      - run: scripts/dev-bin.sh wado publish --dry-run
 
   # The sandbox's escape tests, on what no other job runs: Seatbelt, and the
   # seccomp filter's arm64 branch, whose architecture check and system call
@@ -325,9 +323,9 @@ jobs:
             done
 
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
-  # tests it. See `wado-run-webgpu/AGENTS.md`.
+  # tests it. The corpus checks ride here because this job finishes early.
   test-webgpu:
-    name: Test (WebGPU)
+    name: Test (WebGPU, corpus)
     needs: build-wado
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -362,6 +360,14 @@ jobs:
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
+
+      - run: mise run check-wadopoet-vocabulary
+      - parallel:
+          - run: mise run check-rust-paths
+          - run: mise run check-spec-examples
+          - run: mise run check-grammar
+          - run: mise run check-highlight
+          - run: mise run test-web-glue
 
   test:
     name: Test

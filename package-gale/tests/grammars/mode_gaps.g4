@@ -1,6 +1,5 @@
 // Minimal grammar that exercises lexer-command features uncovered by the
-// existing driver-test grammars — see TODO.md "Driver-level verification
-// (remaining gaps)":
+// existing driver-test grammars:
 //
 //   - A3: bare `mode(X)` command (replaces top of stack, unlike pushMode).
 //   - A4: `more` semantics when the mode is entered via a lexer-command-only

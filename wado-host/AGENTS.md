@@ -17,8 +17,6 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
 
 - `timezone.rs` — the host for `wasi:clocks/timezone`, which wasmtime binds but
   does not implement.
-- `tls_trust.rs` — the rustls crypto provider and the trust store for outbound
-  TLS.
 - `stub_host.rs` — `StubHost`, `wado-lsp`'s `FilesystemCompilerHost` with the
   dependency index and environment answered from `HostStubs`. It compiles the
   e2e fixtures for both the tests and the golden dumps.
@@ -41,7 +39,6 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
   baseline, for `core:process`: Landlock and seccomp in `sandbox/linux.rs`,
   `sandbox-exec` in `sandbox/macos.rs`. `wado-cli`'s `process_host` is its
   caller. See [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
-- `atomic_write.rs` — write a file through a staged sibling and a rename.
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine
   generators and `core:eval` run on.

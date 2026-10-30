@@ -5,8 +5,8 @@
 // Regression for non-greedy `(e)??` prefer-skip dispatch.
 // Input `if y if y x else x` should bind the `else` to the OUTER
 // ifStatement (not the inner one), per ANTLR4's non-greedy `??`
-// semantics. Tracked in package-gale/TODO.md "ATN-class grammars"
-// and status.toml as `[stage_a_todo] ParserExec/IfIfElseNonGreedyBinding1`.
+// semantics. Tracked in status.toml as
+// `[stage_a_todo] ParserExec/IfIfElseNonGreedyBinding1`.
 
 grammar LlOptionalNonGreedy;
 

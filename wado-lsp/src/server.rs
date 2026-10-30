@@ -26,7 +26,9 @@ use crate::server::transport::ReadError;
 ///
 /// Returns the process exit code LSP 3.18 §exit prescribes — `0` when the
 /// client ran `shutdown` first or the transport closed cleanly, `1` when it
-/// exited without shutting down. See [`Lifecycle::exit_code`].
+/// exited without shutting down. See [`Lifecycle::exit_code`]. It returns
+/// rather than exiting so `wado lsp` keeps one exit path and the loop stays
+/// testable.
 pub async fn run_stdio() -> i32 {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();

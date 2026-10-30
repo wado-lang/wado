@@ -13,8 +13,7 @@ inside this directory:
 
 The rules come from the specification, `vendor/protobuf-spec`:
 `content/programming-guides/encoding.md` is the wire format, and
-`content/reference/protobuf/` the grammar. An implementation may be run as an
-oracle, but its code is not where a rule comes from.
+`content/reference/protobuf/` the grammar.
 
 ## Layout
 

@@ -25,21 +25,5 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   says so and exits rather than letting the guest see `request-adapter` answer
   `none`. On Linux `mesa-vulkan-drivers` supplies the lavapipe software adapter,
   which is what CI installs; macOS answers with Metal and Windows with D3D12.
-- The Rust rules in `.claude/skills/rust/SKILL.md` apply here too, except that
-  dependencies live in this crate's own `Cargo.toml`, there being no workspace
-  above it to hold them.
-
-## Module Map
-
-- `args.rs` — the command line: `-O<level>`, `--dir`, `--no-dir`,
-  `--gpu-adapter`, `--log-level`, `--profile guest[,path[,interval_ms]]`, and
-  the program's own arguments after the input file.
-- `compile.rs` — the input as a component: a `.wasm` is taken as given, a
-  `.wado` goes through `WADO compile` into a temporary directory.
-- `host.rs` — the wasmtime engine, the WASI P3 and `wasi:webgpu` linkers, the
-  guest profiler `--profile` starts, and the wgpu instance `wasi:webgpu` draws
-  on, whose adapters `--help` lists under the indices `--gpu-adapter` takes. It replaces two of the host crate's
-  functions. `request-adapter` has no hook for `--gpu-adapter` to pin an adapter
-  or for `--log-level info` to name the one returned.
-  `on-submitted-work-done` awaits a callback no device poll ever fires,
-  so the guest would hang.
+- Dependencies live in this crate's own `Cargo.toml`, there being no workspace
+  above it to hold them. The other Rust rules apply as written.

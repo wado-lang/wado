@@ -48,7 +48,7 @@ on, run `mise run update-baselines` and commit the update: the compiler, the
 stdlib, `benchmark/`, a `package-*` a benchmark imports (Gale), or wasmtime in
 `Cargo.lock`. CI fails on any difference from either baseline: the stdlib
 coverage, a region a test now reaches included, and the fuel benchmarks.
-`wado-compiler/AGENTS.md` says what the coverage baseline may change.
+`wado-compiler/lib/AGENTS.md` says what the coverage baseline may change.
 
 ## Title
 

@@ -145,7 +145,9 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     add_webgpu_to_linker(&mut linker)?;
     // Named by the guest's import rather than spelled here: a version the host
     // crate does not serve then fails to instantiate instead of leaving this
-    // override on an interface nothing imports.
+    // override on an interface nothing imports. The host crate's
+    // `request-adapter` has no hook for `--gpu-adapter` to pin an adapter or
+    // for `--log-level info` to name the one returned.
     if let Some(interface) = webgpu_import(&engine, &component) {
         linker.allow_shadowing(true);
         linker.instance(&interface)?.func_wrap_concurrent(

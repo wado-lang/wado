@@ -88,16 +88,15 @@ fn rule_needs_latn(grammar: &Grammar, rule: &LexerRule) -> bool {
 /// (`calls_recursive_ng_rule`, a raw string). Plain non-greedy (`.*? '*/'`) and
 /// non-recursive rule refs stay on the static path.
 ///
-/// Deliberately narrow (cf. the documented static-prediction edges in
-/// AGENTS.md, "Failed Approaches" — broadening a trigger past today's
-/// grammar set has repeatedly broken real grammars):
+/// Deliberately narrow, since broadening a trigger past today's grammar set
+/// has repeatedly broken real grammars:
 /// - The recursive repeat must be non-greedy. A *greedy* recursive repeat
 ///   is not routed here; no corpus grammar needs it, and the runtime VM is
 ///   greedy/non-greedy agnostic, so the trigger can be widened with a
 ///   fixture if one appears.
 /// - A greedy repeat whose body arms can both match at a position and reach
 ///   different lengths (`'"' (~["] | '\\' ['"])* '"'`). No static policy
-///   decides it; see AGENTS.md, "Failed approaches".
+///   decides it.
 pub fn lexer_rule_is_atn_class(rule: &LexerRule, all_rules: &List<LexerRule>, ci: bool) -> bool {
     let mut visiting: List<String> = [rule.name];
     // Not seeded with `rule.name`. Fold the two rules below into one and the

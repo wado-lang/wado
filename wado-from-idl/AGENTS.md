@@ -22,5 +22,3 @@ Generates Wado binding modules from IDL files: the stdlib from WIT, and
   `scripts/webidl/snapshot.mjs` takes from `@webref/idl`; widen the slice
   there and run `mise run update-webidl-snapshot`. See
   `docs/wep-2026-04-01-web.md`.
-
-Never edit a generated file. Change this crate and regenerate.

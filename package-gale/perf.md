@@ -879,6 +879,6 @@ cache does not by itself close the gap to the scan.
   sites are not all this shape (`typeParameter : identifier constraint? | …` is
   an at-end gap, not a repeat one). Worth revisiting only if a profile puts one
   of them on top; the repair is not cheap either, since a second config per alt
-  collides with the `alt_index` dedup key — the failed approach `AGENTS.md`
+  collides with the `alt_index` dedup key — the failed approach `dead-ends.md`
   names first — so it wants dedup keyed by position, which is walk work the
   runtime simulator is the complete form of.

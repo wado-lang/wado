@@ -1,6 +1,7 @@
 # wado-compiler
 
-The Wado compiler crate.
+The Wado compiler crate. The standard library under `lib/` has its own
+[AGENTS.md](./lib/AGENTS.md).
 
 ## Rules
 
@@ -38,83 +39,33 @@ The Wado compiler crate.
 - Optimize to the limit correctness allows, and nothing short of it. Wrong code
   is never a trade for speed. A conservatism is not caution but a defect:
   measure what it buys, and delete it when that is nothing.
-- `cargo check --all-targets` while iterating, or a type the crate changes
-  breaks the uncompiled unit tests where nothing looks. Run `mise run test-e2e`
-  for anything the language touches: it covers O2 and leaves the other levels
-  to CI, whose `ignored` lines are that split and not a gap. Run one of them
-  with `mise run test-e2e-level <LEVEL>` only when asked, and never set
-  `WADO_FULL_TEST` unless asked by name. `mise run test` and
-  `mise run test-wado` are the slowest runs there are: run them at the end.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
   OS-dependent `std` modules out of production code.
-
-## Standard Libraries
-
-`src/stdlib.rs` maps every import to its file under `lib/`. A dev build reads
-them from disk, so editing one takes effect on the next `wado` run with no
-rebuild. A release build embeds them, as does any `wasm32` build, which has no
-filesystem. `lib/wasi/`, `lib/core/kiln/`, `lib/core/eval/`,
-`lib/core/coverage/`, `lib/core/fuel/` and `lib/core/process/` are generated from WIT: read `wado-from-idl/AGENTS.md`
-first.
-
-The stdlib carries no inline hints (`#[inline(...)]`). A hint that makes code
-faster marks a case the optimizer misses, so the fix belongs in the optimizer.
-A hint that trades run time for compile time hides no such case, and may stay:
-`core:rt`'s coverage probe is the one.
-
-A module re-exports an effect only where it owns it: `core:cli` hands out
-`Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an
-ambient effect imports it privately, and its callers take the name from
-`wasi:*` too. `pub use` keeps the identity, so re-exporting an effect abstracts
-nothing — it only adds a second path to one type, and a reader of
-`use { MonotonicClock } from "core:benchmark"` has to go and find out which
-clock that is.
-
-A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
-renders it as the module's `## Synopsis`. Write the shortest program that shows
-what the module is for, not a tour of its API. Leave it out only where such a
-program cannot be written.
-
-Tests for a module live in `<module>_test.wado` beside it. The test file
-joins `core:*`'s package, so it reaches `internal` items as well as `pub`
-ones. A private item cannot be reached from there, so its test goes in the
-module. A facade puts each test beside the file that implements it, which is why
-`core:collections` is tested from `collections/treemap_test.wado` and
-`collections/treeset_test.wado`.
-
-`core:prelude` owes no synopsis. Every program already imports it, so a synopsis
-has nothing to show.
-
-A language feature is tested from an e2e fixture, even where the prelude
-implements it. The same holds for a prelude item the compiler knows by name,
-such as a trait an operator calls. The rest of the prelude is ordinary library
-code, tested from `<module>_test.wado` like any other module.
-
-The stdlib tests aim at 100% coverage of the stdlib, whatever the fixtures
-cover. `mise run test-stdlib-coverage` holds the stdlib to
-`scripts/stdlib-coverage.json`, the regions its tests leave unrun, and fails on
-a difference either way. `mise run update-baselines` rewrites it, with the
-fuel baseline (`benchmark/AGENTS.md`).
-
-Coverage serves the code, not the reverse: never bend correct, fast code to fit
-the baseline. New code gets a test. A region that never runs says so in the code
-(`unreachable()`, `#[coverage(off)]`). One that runs, but under no stdlib test,
-is added to the baseline.
-
-`builtin::select` evaluates both operands and hands one back, so it is planned
-as the merge it is: the copy keeping a composite result independent lands on the
-result, as the equivalent `if` pays. Choose between them on eagerness, not on
-copies. `src/optimize/select_lowering.rs` goes the other way, rewriting an `if`
-into a branchless select only where both arms are duplicable pure leaves.
+- `cargo check --all-targets` while iterating, or a type the crate changes
+  breaks the uncompiled unit tests where nothing looks. `mise run test-e2e`
+  covers O2 and leaves the other levels to CI, whose `ignored` lines are that
+  split and not a gap. Run one of them with `mise run test-e2e-level <LEVEL>`
+  only when asked, and never set `WADO_FULL_TEST` unless asked by name.
 
 ## E2E Tests
 
-`.wado` files in `tests/fixtures/`, expectations in a trailing `__DATA__` JSON
-section whose fields are the `serde` structs in `tests/e2e.rs`.
+A fixture is a `.wado` file in `tests/fixtures/`, its expectations in a
+trailing `__DATA__` JSON section whose fields are the `serde` structs in
+`tests/e2e.rs`. A path in `__DATA__` is relative to the fixture's own
+directory. `tests/` is a package of its own, `wado-compiler-tests`; its
+`Cargo.toml` says why.
 
-`tests/` is a package of its own, `wado-compiler-tests`; its `Cargo.toml` says
-why. A path in `__DATA__` is relative to the fixture's own directory.
-
+- `{"compile_error": "…"}` states a rejection: the report must contain it, so
+  writing `":4:13: parse error: …"` pins the position as well as the message.
+  `{"compile_error_codes": ["INVALID_SYNTAX"]}` adds the `Code` an error was
+  raised under; without `compile_error`, a failed compile still fails the
+  fixture.
+- A fixture may name a Kiln generator by a `./` path, or by a
+  `[build-dependencies]` nickname its `build_dependencies` key maps to a
+  generator file. The harness runs it, and the clauses in the generator's own
+  source, and writes their outputs under `build/kiln/` in the fixture's
+  directory. Fixtures share that directory, so a clause naming its own
+  `output_dir` is refused.
 - Run `touch tests/e2e.rs` after adding or removing a fixture, or after changing
   `WADO_FULL_TEST`. `datatest_mini` resolves fixtures at macro-expansion time and
   an incremental `cargo test` will not re-expand on its own.

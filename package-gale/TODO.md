@@ -3,7 +3,8 @@
 Open work towards full ANTLR4 compatibility and the performance budget it implies. Read this together with:
 
 - [`antlr4-compatibility.md`](./antlr4-compatibility.md) — the compatibility contract, prediction / codegen design, soundness invariants, descriptor pipeline, and triage workflow.
-- [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials and the prediction failed approaches.
+- [`AGENTS.md`](./AGENTS.md) — the rules for every change.
+- [`dead-ends.md`](./dead-ends.md) — the prediction, predicate and lexer approaches that failed.
 - [`import.md`](./import.md) — grammar composition: how `import S;` resolves and what a delegate contributes.
 - [`perf.md`](./perf.md) — runtime performance: benchmark state, live profile, what would move the needle, and measured perf dead-ends.
 
@@ -108,7 +109,7 @@ Remaining:
 
 ## LL prediction — parked gaps
 
-Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`AGENTS.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
+Not queued work: both are known edges of the static path, and the complete answer is the runtime ATN simulator (`dead-ends.md` records three over-broad static repairs that each silently broke a real grammar). Revisit only when a descriptor or a real grammar surfaces a regression, and pair any repair with a rejection-case fixture.
 
 ### Iter-body K-prefix for `Repeat` inner rule references
 

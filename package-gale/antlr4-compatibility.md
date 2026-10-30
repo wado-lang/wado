@@ -6,7 +6,7 @@ The central reference for **how** Gale verifies it stays compatible with the ups
 - **The descriptor pipeline** — how the upstream `runtime-testsuite/` is turned into a Wado test suite.
 - **Triage** — how to read results, classify failures, and close gaps.
 
-Prediction and codegen design (LL prediction, soundness invariants, the ATN escalation) lives below; the failed approaches that shaped it are in [`AGENTS.md`](./AGENTS.md). Open work (remaining gaps, performance) lives in [`TODO.md`](./TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
+Prediction and codegen design (LL prediction, soundness invariants, the ATN escalation) lives below; the failed approaches that shaped it are in [`dead-ends.md`](./dead-ends.md). Open work (remaining gaps, performance) lives in [`TODO.md`](./TODO.md). Live pass/fail numbers come from CI; this document does not snapshot them.
 
 ## The Compatibility Contract
 
@@ -451,8 +451,9 @@ separates (`compound` vs `factored`, `delete_stmt` vs
 `'(' expr ')'`, the `FROM` comma-list vs `join_clause` tie, `type_name`'s
 non-greedy `name+?`, and the `expr` precedence climb.
 
-Adding a grammar is config + a cases file, but only for a **clean single
-combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
+Adding a grammar takes a `Target` in `targets()`, a parse branch in
+`gale_tree()` (both in `regen_oracle.wado`) and a cases file, but only for a
+**clean single combined grammar with `WS -> skip`**. Out of scope, with reasons recorded
 in `regen_oracle.wado`:
 
 - split lexer/parser grammars — `regen_oracle.wado` hands the oracle one
@@ -1009,7 +1010,7 @@ non-terminating recursive-descent scan/parse, so they are rejected loudly
 at generation time rather than emitted as looping code.
 
 The static-path failed approaches that led here (RuleRef expansion, LL(\*)
-static variant emit) are recorded in [`AGENTS.md`](./AGENTS.md).
+static variant emit) are recorded in [`dead-ends.md`](./dead-ends.md).
 
 ## ATN-class prediction — the hybrid LR loop-entry decision
 
@@ -1203,7 +1204,7 @@ descriptors.
 The second is a greedy loop whose body arms overlap and reach different
 lengths, `STR : '"' (~["] | ESC)* '"'`. Which arm to take depends on
 whether the loop can go on after it, so no fixed policy over the arms
-answers it; AGENTS.md, "Failed approaches", lists the ones that fail.
+answers it; [`dead-ends.md`](./dead-ends.md) lists the ones that fail.
 
 Gale reproduces ANTLR4's result: leftmost-first alternation and the usual
 greedy / non-greedy loop semantics (greedy takes the longest match,
@@ -1476,8 +1477,8 @@ diagnostic environment variables (`WADO_TRACE`,
 
 ## See Also
 
-- [`AGENTS.md`](./AGENTS.md) — dev-cycle essentials: compatibility principle, license hygiene, standing codegen rules, debugging tools, failed approaches.
+- [`AGENTS.md`](./AGENTS.md) — the rules for every change: compatibility principle, license hygiene, codegen, inlined runtime, tests.
+- [`dead-ends.md`](./dead-ends.md) — the prediction, predicate and lexer approaches that failed.
 - [`TODO.md`](./TODO.md) — open compatibility / performance work.
 - [`docs/wep-2026-03-02-gale.md`](../docs/wep-2026-03-02-gale.md) — Gale's overall design rationale, including the long-term plan for Stage C (action-body translation).
 - `vendor/antlr4/doc/` — the upstream `antlr4` documentation (vendored as a shallow git submodule). Read this for the canonical semantics of any `.g4` construct.
-- `vendor/antlr4/tool/src/org/antlr/v4/parse/ANTLRParser.g` — the upstream grammar file, the ground truth for Stage A.

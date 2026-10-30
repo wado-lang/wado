@@ -90,6 +90,11 @@ impl std::error::Error for SymbolQueryError {}
 /// snapshot: cross-file imports mean editing `bar.wado` may have
 /// changed what `foo.wado` resolves to, so per-document invalidation
 /// would silently return stale answers for `foo.wado`.
+///
+/// The cache is keyed by document text, not by host identity or what the
+/// host reads: callers pass the same `CompilerHost` across queries, and an
+/// import edited outside the engine (an unopened file on disk) stays stale
+/// until a document mutation invalidates the snapshots.
 pub struct Engine {
     documents: IndexMap<String, Document>,
     /// Position encoding negotiated with the LSP client. Defaults to
@@ -671,7 +676,16 @@ impl Engine {
     /// document, so one whose `span.file` names an imported module would draw
     /// its squiggle at that file's line and column inside the open one; the
     /// imported file reports its own errors when the client opens it. A
-    /// span-less diagnostic is about the request itself and is always kept.
+    /// span-less diagnostic is about the request itself and is always kept,
+    /// anchored at the document start: the loader reports its hard failures
+    /// (`ModuleNotFound` above all) without a span, and the same failure
+    /// returns `Semantics::empty`, so dropping it leaves a file that looks
+    /// clean and answers nothing.
+    ///
+    /// A diagnostic with a span but no file is dropped, so the compiler owes
+    /// every located diagnostic its module (`Elaborator::emit` /
+    /// `Logger::error_in`, never `Logger::error`). Its e2e host asserts that
+    /// on emit.
     ///
     /// Kept columns are re-encoded in the negotiated position encoding.
     ///
@@ -758,6 +772,11 @@ impl<'a, H> DiagnosticCollector<'a, H> {
     }
 }
 
+// Delegate every non-diagnostic capability to the wrapped host — the collector
+// only intercepts diagnostics. Falling back to the trait defaults would silently
+// drop the host's dependency index (path *and* component deps), so
+// `use { … } from "<dep>"` would fail to resolve on the LSP path, and would turn
+// `source_exists`'s stat back into a full read.
 impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
     async fn load_source(&self, path: &str) -> Result<Vec<u8>, wado_compiler::SourceError> {
         self.inner.load_source(path).await
@@ -806,10 +825,6 @@ impl<H: CompilerHost> CompilerHost for DiagnosticCollector<'_, H> {
         }
     }
 
-    // Delegate every non-diagnostic capability to the wrapped host — the
-    // collector only intercepts diagnostics. Falling back to the trait defaults
-    // here would silently drop the host's dependency index (path *and* component
-    // deps), so `use { … } from "<dep>"` would fail to resolve on the LSP path.
     fn dependency_index(&self) -> wado_compiler::DependencyIndex {
         self.inner.dependency_index()
     }
@@ -880,6 +895,7 @@ async fn build_semantics<H: CompilerHost>(
     // AST so position queries resolve in the regions outside the error. A
     // load/bind failure on the partial AST still degrades to
     // `Semantics::empty()` below; recovery helps only when binding succeeds.
+    // `tests/parse_error.rs` pins this.
     for e in &parsed.lex_errors {
         host.emit_diagnostic(e.diagnostic(Some(filename)));
     }
