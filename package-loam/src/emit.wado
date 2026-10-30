@@ -88,19 +88,9 @@ pub struct NameCollision {
     pub ident: String,
 }
 
-/// An axis of a cache field that neither the graph fixes nor the past's length
-/// gives, so an empty cache has no extent to take along it.
-pub struct OpenCacheAxis {
-    pub tensor: String,
-    pub axis: String,
-}
-
 pub variant EmitError {
     Dtype(UnmappedDtype),
     Collision(NameCollision),
-    /// A past no present pairs with, or a present no past pairs with.
-    Unpaired(String),
-    OpenCache(OpenCacheAxis),
     /// A graph with nothing for `forward` to return.
     NoOutput,
     /// A symbol the run needs the value of, which no input's axis carries.
@@ -126,19 +116,6 @@ impl Display for EmitError {
         match self {
             Dtype(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
-            Unpaired(tensor) => {
-                let side = if tensor.starts_with("past") {
-                    "no present pairs with this past";
-                } else {
-                    "no past pairs with this present";
-                };
-                f.write_str(`${tensor}: ${side}, so the cache would be partial`);
-            },
-            OpenCache(e) => {
-                f.write_str(
-                    `${e.tensor}: the cache's axis ${e.axis} has no fixed length for an empty cache to take; fix it with \`dims\``,
-                );
-            },
             NoOutput => f.write_str("the graph declares no output for `forward` to return"),
             Unbound(symbol) => {
                 f.write_str(`${Poly::symbol(symbol)}: the run needs this length, and no input's axis gives it`);
@@ -242,7 +219,7 @@ pub fn emit(
         rhs,
         paired: together.paired,
     };
-    let crossing = Crossing::of(graph, cache_pairs(graph)?);
+    let crossing = Crossing::of(graph, cache_pairs(graph));
     emit_forward(
         &mut w,
         graph,
@@ -288,34 +265,24 @@ fn boundary_extents(graph: &Graph, shapes: &HashMap<String, Shape>) -> HashMap<S
 
 /// Each past input and the present output it pairs with, by the names Hugging
 /// Face's exporters give them: `past<rest>` pairs with `present<rest>`, but
-/// `past_key_values.<rest>` with `present.<rest>`. A graph that names only one
-/// side keeps no cache.
-fn cache_pairs(graph: &Graph) -> Result<List<[String, String]>, EmitError> {
-    let past_inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|n| n.starts_with("past")).collect();
-    let mut presents = HashSet::<String>::new();
-    for let vi of &graph.outputs {
-        if vi.name.starts_with("present") {
-            presents.insert(vi.name);
-        }
-    }
-    if past_inputs.is_empty() || presents.is_empty() {
-        return Result::Ok([]);
-    }
+/// `past_key_values.<rest>` with `present.<rest>`. A past no present pairs
+/// with stays an input, as a decoder's encoder keys or `past_sequence_length`
+/// do, and a present no past pairs with stays an output.
+fn cache_pairs(graph: &Graph) -> List<[String, String]> {
+    let outputs: List<String> = graph.outputs.into_iter().map(|vi| vi.name).collect();
     let mut pairs: List<[String, String]> = [];
-    for let past of past_inputs {
+    for let vi of &graph.inputs {
+        let past = vi.name;
+        if !past.starts_with("past") {
+            continue;
+        }
         let rest = past.strip_prefix("past_key_values.").map(|r| `.${r}`).unwrap_or(past.substr_bytes(4, past.len()));
         let present = `present${rest}`;
-        if !presents.remove(present) {
-            builtin::cold_path();
-            return Result::Err(EmitError::Unpaired(past));
+        if outputs.contains(&present) {
+            pairs.push([past, present]);
         }
-        pairs.push([past, present]);
     }
-    for let present of presents {
-        builtin::cold_path();
-        return Result::Err(EmitError::Unpaired(present));
-    }
-    return Result::Ok(pairs);
+    return pairs;
 }
 
 /// What each boundary tensor is held in, and where an element type no kernel
@@ -370,6 +337,14 @@ impl Names {
         scope_tensors(&mut tensors, graph, checked, literals);
         for let c of carriers {
             tensors.push(symbol_key(&c.solved.symbol));
+        }
+        // `Cache::empty` takes the length of each axis a past leaves open.
+        for let vi of &graph.inputs {
+            for let axis of checked.shapes[vi.name].axes {
+                for let symbol of axis.extent.poly().symbols() {
+                    tensors.push(symbol_key(&symbol));
+                }
+            }
         }
         // In first-seen order, each tensor once.
         let mut sanitized = HashMap::<String, String>::new();
@@ -1183,7 +1158,7 @@ fn emit_forward(
     forward.add_param("weights", `&${PREPARED_TYPE}`).set_return_type(returned_type).add_effect("_");
 
     if has_cache {
-        emit_cache(w, &crossing.pairs, checked, names)?;
+        emit_cache(w, &crossing.pairs, checked, names);
     }
     if several {
         emit_outputs(w, &returned, has_cache, checked, names, held);
@@ -1382,42 +1357,58 @@ fn emit_entry(
 }
 
 /// `Cache`, one field per pair, each held under its past's axes; its `empty`,
-/// the state before the first pass; and its `retain`.
-fn emit_cache(
-    w: &mut CodeWriter,
-    pairs: &List<[String, String]>,
-    checked: &Checked,
-    names: &Names,
-) -> Result<(), EmitError> {
+/// the state before the first pass, which takes the length of each axis the
+/// graph leaves open; and its `retain`.
+fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Checked, names: &Names) {
     let mut cache = StructSpec::new(CACHE, Vis::Pub);
     cache.add_generic(HOLDS_BOUND);
+    let mut opened: List<String> = [];
     let mut empties: List<String> = [];
     let mut retains: List<String> = [];
     for let [past, present] of *pairs {
         let ident = names.get(&past);
         cache.add_pub_field(ident, prepared_type(checked, &past));
         let shape = checked.shapes[past];
-        let mut extents: List<i64> = [];
+        let mut extents: List<String> = [];
+        let mut empty = false;
+        let mut fixed = 1;
+        let mut open: List<String> = [];
         for let [i, axis] of shape.axes.into_iter().enumerate() {
-            let Symbolic(_) = axis.extent else {
-                extents.push(axis.static_extent() as i64);
+            let Symbolic(p) = axis.extent else {
+                extents.push(`${axis.static_extent()}`);
+                fixed *= axis.static_extent();
                 continue;
             };
             // The past's length grows into the present's, and an empty cache
             // holds none of it.
-            if checked.shapes[present].axes[i].name == axis.name {
-                builtin::cold_path();
-                return Result::Err(EmitError::OpenCache(OpenCacheAxis { tensor: past, axis: axis.name }));
+            if checked.shapes[present].axes[i].name != axis.name {
+                extents.push("0");
+                empty = true;
+                continue;
             }
-            extents.push(0);
+            let length = open_length(&p, names, &mut opened);
+            extents.push(length);
+            open.push(length);
         }
         let primitive = checked.primitives[past];
-        let count = extents.into_iter().fold(1 as i64, |n, e| n * e);
-        let data = if count == 0 { "[]" } else { `List::<${primitive}>::filled(${count}, ${zero_of(&primitive)})` };
+        let data = if empty {
+            "[]";
+        } else {
+            if fixed != 1 || open.is_empty() {
+                open.push(`${fixed}`);
+            }
+            `List::<${primitive}>::filled(${open.join(" * ")}, ${zero_of(&primitive)})`;
+        };
         empties.push(
-            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: ${extents} }),`,
+            `${ident}: backend.upload(&Tensor::<${primitive}, [${axis_list(&shape)}]> { data: ${data}, extents: [${extents.join(
+                ", ",
+            )}] }),`,
         );
         retains.push(`backend.retain(&self.${ident});`);
+    }
+    let mut params: List<String> = [`backend: &mut ${BACKEND_PARAM}`];
+    for let length of opened {
+        params.push(`${length}: i32`);
     }
     w.blank();
     w.line("/// The state the graph hands from one pass to the next, as the backend holds");
@@ -1429,7 +1420,7 @@ fn emit_cache(
     held.emit_begin(w);
     w.line("/// The state before the first pass: no position along a past's length,");
     w.line("/// and zeros of every other state.");
-    w.line(`pub fn empty(backend: &mut ${BACKEND_PARAM}) -> ${CACHE}<${BACKEND_PARAM}> with _ {`);
+    w.line(`pub fn empty(${params.join(", ")}) -> ${CACHE}<${BACKEND_PARAM}> with _ {`);
     w.line(`    return ${CACHE} {`);
     for let line of empties {
         w.line(`        ${line}`);
@@ -1448,7 +1439,23 @@ fn emit_cache(
     }
     w.line("}");
     w.end();
-    return Result::Ok(());
+}
+
+/// The `i32` length `Cache::empty` gives an open axis of extent `p`, each
+/// symbol in it a parameter of `empty`, which `opened` lists once.
+fn open_length(p: &Poly, names: &Names, opened: &mut List<String>) -> String {
+    let mut spelled = HashMap::<String, String>::new();
+    for let symbol of p.symbols() {
+        let ident = names.get(&symbol_key(&symbol));
+        if !opened.contains(&ident) {
+            opened.push(ident);
+        }
+        if *p == Poly::symbol(&symbol) {
+            return ident;
+        }
+        spelled[symbol] = `(${ident} as i64)`;
+    }
+    return `to_extent(${p.spelled(&spelled)})`;
 }
 
 /// A zero of `primitive`, as an empty state holds.

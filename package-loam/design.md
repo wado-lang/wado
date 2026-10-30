@@ -69,16 +69,24 @@ example that wants a word of its own renames the axis where it imports it.
 
 `Cache<Bk>` is built as
 [WEP: Loam § A Decoder's Cache Is One Value](../docs/wep-2026-09-20-loam.md#a-decoders-cache-is-one-value)
-decided, with three choices it left open.
+decided, but for two departures, and with three choices it left open.
+
+The WEP stops the build at a past no present pairs with, or the reverse. Such
+a tensor is not a mistake in the export: a decoder's encoder keys are pasts
+that no step replaces, and `past_sequence_length` is a past of one number. So
+only the names that pair are the cache, and the rest stay inputs and outputs.
+
+The WEP's `Cache::empty(&mut backend)` takes nothing but the backend. Most
+exports leave the batch open, so `empty` also takes the length of each axis the
+graph leaves open beside the past's own, as `Cache::empty(&mut backend,
+batch_size)`. A graph whose `dims` fix every such axis keeps the WEP's
+signature.
 
 - A field holds each past under the past's axes. A present's length axis is
   minted apart from the past's, so `pass` relabels each present to its past's
   axes with `reshape`, which moves no element, before it returns the cache.
 - `Cache::empty` takes the length axis to be the one symbolic axis on which
-  the past and its present differ, and gives it 0. Any other symbolic axis has
-  no extent an empty cache could take, so the build stops with `OpenCache` and
-  names it. The `dims` option fixes it, as `batch_size: 1` does in every
-  example.
+  the past and its present differ, and gives it 0.
 - `forward` retains the cache before it begins. A caller that drives `pass`
   itself calls `cache.retain(&mut backend)` there, as the Gemma 3 and GPT-2
   (124M) examples do.
