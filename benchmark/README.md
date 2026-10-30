@@ -378,15 +378,22 @@ mise run benchmark-zlib             # compression
 # parsing
 mise run benchmark-sqlite-parse     # SQL parsing
 mise run benchmark-syntax-highlight # syntax highlighting
+mise run benchmark-gale-highlight-html # HTML with embedded CSS/JS
 mise run benchmark-gale-gen         # Gale generator over the Rust grammar
 
 # application server
 mise run benchmark-http-routing     # HTTP routing (wado serve vs Hono vs Axum)
+mise run -C benchmark http-routing-wado # wado serve alone, one worker, GET /user
 ```
 
 Prerequisites: `cc` and `cargo` (system); `node`, `bun` and `java` (managed by
 `mise install`). The ANTLR4 reference rows (gale-gen, sqlite-parse) fetch the
 jar to `~/.cache/gale`, and are skipped if `java` or `javac` is absent.
+
+Each benchmark has its own directory with every implementation side by side.
+Each `json_*` directory defines a schema module (`twitter_schema.wado`,
+`canada_schema.wado`, `catalog_schema.wado`) that the JSON and CBOR benchmarks
+both import, so the two codecs are compared over identical data types.
 
 ### GC heap size
 
