@@ -135,11 +135,21 @@ pub(crate) fn compute(
     }
     // Every impl of a method its trait binds by a `contract` opens with a call
     // to the clauses' holder, which reify mints after this pass.
+    let mut default_bodies: IndexMap<AstId, Vec<AstId>> = IndexMap::default();
     for module in modules.values() {
         for item in &module.items {
             let Item::Trait(trait_decl) = item else {
                 continue;
             };
+            default_bodies.insert(
+                trait_decl.id,
+                trait_decl
+                    .methods
+                    .iter()
+                    .filter(|m| m.body.is_some())
+                    .map(|m| m.id)
+                    .collect(),
+            );
             for holder in &trait_decl.methods {
                 let Some(held) = holder.holds_contracts_of else {
                     continue;
@@ -267,14 +277,9 @@ pub(crate) fn compute(
                 }
                 Item::Trait(trait_decl) => {
                     seed_operations(&mut graph, &trait_decl.methods, references, Dispatch::Fact);
-                    // An impl this graph does not see may inherit a default
-                    // body, so one a module offers counts as used, as a `pub`
-                    // function does.
                     let visibility = trait_decl.visibility;
                     if roots.offers(visibility) || roots.undecided(visibility) {
-                        for method in trait_decl.methods.iter().filter(|m| m.body.is_some()) {
-                            graph.seed_export(method.id);
-                        }
+                        graph.seed_offered(trait_decl.id, &default_bodies);
                     }
                 }
                 Item::Interface(interface_decl) => {
@@ -315,7 +320,7 @@ pub(crate) fn compute(
                     });
                     for site in sites {
                         if let Some(def) = references.direct.get(&site) {
-                            graph.seed_export(*def);
+                            graph.seed_offered(*def, &default_bodies);
                         }
                     }
                 }
@@ -406,6 +411,14 @@ impl Graph {
 
     fn seed_export(&mut self, key: AstId) {
         self.export_seeds.push(key);
+    }
+
+    /// Seed what a module offers: a trait's default bodies come with it, since
+    /// an impl this graph does not see may inherit one.
+    fn seed_offered(&mut self, key: AstId, default_bodies: &IndexMap<AstId, Vec<AstId>>) {
+        self.seed_export(key);
+        self.export_seeds
+            .extend(default_bodies.get(&key).into_iter().flatten());
     }
 
     fn seed_test(&mut self, key: AstId) {
