@@ -212,7 +212,8 @@ jobs:
       - run: mise run test-log-levels "$LEVEL"
 
   # Every Wado program the repository runs as a tool or a test, outside the
-  # stdlib and Gale, which have jobs of their own.
+  # stdlib, Gale and benchmark/, which have jobs of their own. This job sets how
+  # long CI takes, so work that fits elsewhere goes to a job that finishes early.
   test-wado:
     name: Test (packages)
     needs: build-wado
@@ -233,9 +234,6 @@ jobs:
       # programs in the system baseline, so it comes from apt, not mise.
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
 
-      # benchmark/ runs in Test (benchmark) and the corpus checks in
-      # Test (WebGPU, corpus):
-      # this job sets how long CI takes, and those two finish early.
       - run: mise run test-wado --exclude 'benchmark/**'
 
   test-gale-o2:
@@ -257,8 +255,9 @@ jobs:
 
       - run: mise run test-gale-o2
 
-  # Fuel does not depend on the host, so the benchmarks' `test "fuel"` regions
-  # are held to `benchmark/fuel.json` exactly, at -O2.
+  # benchmark/'s tests. Fuel does not depend on the host, so the `test "fuel"`
+  # regions are held to `benchmark/fuel.json` exactly, at -O2. The publish dry
+  # run rides here because this job finishes early.
   test-fuel:
     name: Test (benchmark)
     needs: build-wado
@@ -277,7 +276,6 @@ jobs:
           prebuilt: wado
 
       - run: mise run test-fuel
-      # The rest of benchmark/'s tests, moved here from Test (packages).
       - run: scripts/dev-bin.sh wado test -O2 --format tap benchmark
       - run: scripts/dev-bin.sh wado publish --dry-run
 
@@ -325,7 +323,7 @@ jobs:
             done
 
   # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
-  # tests it. See `wado-run-webgpu/AGENTS.md`.
+  # tests it. The corpus checks ride here because this job finishes early.
   test-webgpu:
     name: Test (WebGPU, corpus)
     needs: build-wado
@@ -363,8 +361,6 @@ jobs:
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
 
-      # The corpus checks, moved here from Test (packages): this job finishes
-      # early.
       - run: mise run check-wadopoet-vocabulary
       - parallel:
           - run: mise run check-rust-paths
