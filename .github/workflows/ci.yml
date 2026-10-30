@@ -162,6 +162,25 @@ jobs:
 
       - run: cargo test --locked --all -- --skip fixture_test_
 
+  # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so a
+  # lint with no automatic fix reaches main unless this job fails on it.
+  clippy:
+    name: Clippy
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - run: mise run clippy
+
   # One job per optimization level: the e2e fixtures, then the stdlib, both
   # compiled at that level. An optimizer bug reachable from `core:*` shows at
   # some levels and not others, so `fail-fast: false` lets every level finish —
@@ -366,7 +385,7 @@ jobs:
   test:
     name: Test
     if: always()
-    needs: [changes, build-wado, build-e2e, test-core, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
+    needs: [changes, build-wado, build-e2e, test-core, clippy, test-wado, test-gale-o2, test-fuel, test-level, test-webgpu, test-sandbox]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}
