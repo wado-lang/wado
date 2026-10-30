@@ -1743,11 +1743,7 @@ fn branch_block(
             let types: List<String> = node.outputs.into_iter().map(|o| prepared_type(checked, &o)).collect();
             let yielded = if types.len() == 1 { types[0] } else { `[${types.join(", ")}]` };
             let axes = axis_list(&checked.shapes[node.inputs[0]]);
-            [
-                `let ${bound} = backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`,
-                "}, || {",
-                "});",
-            ];
+            [`let ${bound} = backend.conditional::<[${axes}], ${yielded}>(${condition}, || {`, "}, || {", "});"];
         },
     };
     let mut lines: List<String> = [opening];
@@ -2312,7 +2308,9 @@ fn built_call(
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
         let count = symbols.spell_extent(&out.axes[0].extent.poly())?;
         return Result::Ok(
-            `range_i64::<${BACKEND_PARAM}, ${axes}>(backend, ${symbols.spell(&start)?}, ${count}, ${symbols.spell(&delta)?})`,
+            `range_i64::<${BACKEND_PARAM}, ${axes}>(backend, ${symbols.spell(&start)?}, ${count}, ${symbols.spell(
+                &delta,
+            )?})`,
         );
     }
     if op == "Cast" {
@@ -2483,7 +2481,10 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         axes.extend(&matrix.axes[matrix.rank() - 2..<matrix.rank()].to_list());
         return Shape { axes };
     };
-    let [lhs, rhs] = [under_batch(&left), under_batch(&right)];
+    let [lhs, rhs] = [
+        under_batch(&left),
+        under_batch(&right),
+    ];
     return Result::Ok(dot_call(
         &lhs,
         &rhs,
@@ -2551,7 +2552,14 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     if !has_bias(node) {
         return Result::Ok(call);
     }
-    let bias = broadcast_call(&KERNEL_ELEMENT, &shapes[node.inputs[2]], &y, &exprs.reference(&node.inputs[2]), spatial, symbols)?;
+    let bias = broadcast_call(
+        &KERNEL_ELEMENT,
+        &shapes[node.inputs[2]],
+        &y,
+        &exprs.reference(&node.inputs[2]),
+        spatial,
+        symbols,
+    )?;
     return Result::Ok(`backend.binary::<f32, [${axis_list(&y)}]>(Binary::Add, &${call}, &${bias})`);
 }
 
@@ -2746,7 +2754,12 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
 }
 
 /// A `Split` as one `slice` per output, each taking the next run of the axis.
-fn built_split(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<List<String>, EmitError> {
+fn built_split(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+) -> Result<List<String>, EmitError> {
     let x = checked.shapes[node.inputs[0]];
     // Stage 0 owed these already.
     let parts = settled(split_parts(node, &checked.known, &x, &mut []));

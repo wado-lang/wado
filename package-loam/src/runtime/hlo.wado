@@ -339,14 +339,21 @@ pub fn softmax_flattened<affine G: Graph, Axes>(
 ) -> G::Tensor<f32, Axes> with _ {
     let extents = g.extents_of(x);
     let rows = element_count(&extents[0..<axis].to_list());
-    let flat: G::Tensor<f32, [Rows, Row]> = g.reshape(x, [rows, element_count(&extents[axis..<extents.len()].to_list())]);
+    let flat: G::Tensor<f32, [Rows, Row]> = g.reshape(
+        x,
+        [rows, element_count(&extents[axis..<extents.len()].to_list())],
+    );
     let normalized = softmax::<G, [Rows, Row]>(g, &flat, 1);
     return g.reshape(&normalized, extents);
 }
 
 /// `x`'s elements under `rank` axes, those added leading at extent 1, and
 /// under the axes `Out` names: a branch's output, say, under the `If`'s.
-pub fn lifted<affine G: Graph, E: Element, In, Out>(g: &mut G, x: &G::Tensor<E, In>, rank: i32) -> G::Tensor<E, Out> with _ {
+pub fn lifted<affine G: Graph, E: Element, In, Out>(
+    g: &mut G,
+    x: &G::Tensor<E, In>,
+    rank: i32,
+) -> G::Tensor<E, Out> with _ {
     let own = g.extents_of(x);
     let mut extents = List::<i32>::filled(rank - own.len(), 1);
     extents.extend(&own);

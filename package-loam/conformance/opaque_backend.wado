@@ -253,7 +253,12 @@ impl Backend for Opaque {
         indices: &Handle<i64, [..Ix]>,
         axis: i32,
     ) -> Handle<E, [..Pre, ..Ix, ..Post]> {
-        return handle(Backend::gather::<E, [..Pre], Along, [..Post], [..Ix]>(&mut self.cpu, &data.held, &indices.held, axis));
+        return handle(Backend::gather::<E, [..Pre], Along, [..Post], [..Ix]>(
+            &mut self.cpu,
+            &data.held,
+            &indices.held,
+            axis,
+        ));
     }
 
     fn slice_axis<E: Element, ..Pre, In, Out, ..Post>(
