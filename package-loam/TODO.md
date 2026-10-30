@@ -14,12 +14,12 @@ leaves this file, and `design.md` states what it built.
 1. [ ] The decoder's cache as one value. See A Decoder's Cache Is One Value.
    Finished when the GPT-2 and Gemma 3 examples pass a `Cache` and no line of
    theirs names a layer.
-2. [ ] The PJRT backend. A third `Backend` over `wado:pjrt`, served by
-   `wado-run-pjrt`, which traces a pass into StableHLO once per set of
-   extents and replays it, with the seam changes it needs. See
-   [Loam on TPU](./tpu.md), whose plan lists the steps. It runs on XLA's CPU
-   plugin, since only a backend that really runs through PJRT shows the
-   architecture right. Finished when every step of that plan is.
+2. [ ] TPU and WebGPU at their best speed. A pass is a graph built once per
+   shape class and compiled for each device: StableHLO through `wado:pjrt` for
+   a TPU, Loam's own compiler for WebGPU. See
+   [Loam on TPU and WebGPU](./devices.md), whose plan lists the steps, a TPU
+   run and many requests at once among them. Finished when every step of that
+   plan is.
 3. [ ] Narrowed outputs. A use site can name an output that each call reads at
    one position per row, and optionally only at some token ids. The call gives
    the positions and the ids. The generated module then computes only those
@@ -162,14 +162,6 @@ leaves this file, and `design.md` states what it built.
     feeds, which is what makes a model small enough to download. Finished when
     an int4 checkpoint from GPTQ or AWQ produces the f16 checkpoint's output
     within tolerance.
-26. [ ] Gemma 3 on a TPU, through the PJRT backend. Finished when it picks
-    onnxruntime's tokens on a TPU VM, and its time a token is recorded beside
-    the compiler's `optimal_seconds` for the same program.
-27. [ ] Many requests at once. A pass takes a batch of rows of different
-    lengths, each with its own position and valid length (see
-    [Loam on TPU](./tpu.md)). Finished when the tokens a second at several
-    numbers of concurrent requests are recorded on a TPU and on
-    `WebGpuBackend`, each request's tokens unchanged from its run alone.
 
 ## Known gaps
 
