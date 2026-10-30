@@ -3,8 +3,11 @@
 // AGENTS.md forbids unread. `permissions.deny` covers the Read tool; this covers
 // `cat`, `grep`, `find -exec` and friends, which reach the same bytes.
 //
-// Every path a command names is resolved against the directory it runs in, `cd`
-// included, so `..` and a relative name reach the file they mean. A directory is
+// Every path a command names is resolved against the directory it runs in, `cd`,
+// `cd -`, `pushd` and `popd` included, so `..` and a relative name reach the file
+// they mean. What the guard cannot evaluate, an expansion or a directory it lost
+// track of, is judged from the word's `vendor` on: the guard catches a command
+// aimed at the source, not one written to evade it. A directory is
 // a search root: naming one that holds forbidden source is denied unless the
 // command only lists it. Whether a path is a directory is read from its name
 // (no extension), since CI checks out no submodule. A search from above
@@ -12,7 +15,7 @@
 
 import path from "node:path";
 
-import { type Command, commands, denial, readStdin } from "./shell-commands.mts";
+import { type Arg, type Command, commands, denial, readStdin } from "./shell-commands.mts";
 
 type Vendor = {
   /** Directories whose files of `extensions` are forbidden. */
@@ -76,18 +79,37 @@ function onlyLists({ name, args }: Command): boolean {
   return !(args[sub].value === "log" && args.slice(sub + 1).some(({ value }) => GIT_PATCH.test(value)));
 }
 
-/** A word's leading `$NAME`, `${NAME}` or `~`, which the shell expands before a file is opened. */
-const EXPANSION = /^(?:\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?|~)(?=\/|$)/;
+/** Where the shell stands: its directory, the one `cd -` returns to, and
+ * `pushd`'s stack. `null` is a directory the guard cannot know. */
+type Shell = { dir: string | null; previous: string | null; stack: (string | null)[] };
 
-/** The absolute path `word` names from `dir`, as the shell expands it. `$PWD` is
- * `dir`. A start unknown here (another expansion, or a `dir` that `cd` took
- * somewhere unknown, as `null`) is taken as the repository from the word's
- * `vendor` on; a word naming no `vendor` below it names nothing judged. */
-function locate(word: string, dir: string | null): string | null {
-  const expansion = word.match(EXPANSION);
-  if (!expansion && path.isAbsolute(word)) return word;
-  const rest = expansion ? word.slice(expansion[0].length).replace(/^\//, "") : word;
-  const base = expansion && expansion[1] !== "PWD" ? null : dir;
+/** A word's leading `$NAME`, `${NAME}`, `~+`, `~-` or `~user`. */
+const PREFIX = /^(?:\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))|~([^/]*))(?=\/|$)/;
+const TILDES: Record<string, string> = { "+": "PWD", "-": "OLDPWD" };
+
+/** The directory a leading expansion named `name` stands for, if the guard knows it. */
+function expanded(name: string, shell: Shell): string | null {
+  if (name === "PWD") return shell.dir;
+  if (name === "OLDPWD") return shell.previous;
+  return null;
+}
+
+/** The absolute path `word` names, as the shell expands it where it stands. A
+ * word is resolved only where the guard knows every expansion in it: none, or a
+ * leading `$PWD` or `$OLDPWD` and their tildes. Any other start (an expansion, a
+ * substitution, an unknown directory) is taken as the repository from the
+ * word's `vendor` on, and a word naming no `vendor` names nothing judged.
+ * `raw` is the word as written: a substitution in it is gone from `word`. */
+function locate(word: string, raw: string, shell: Shell): string | null {
+  const prefix = word.match(PREFIX);
+  const rest = prefix ? word.slice(prefix[0].length).replace(/^\//, "") : word;
+  const substituted = raw.includes("$(") || raw.includes("`");
+  let base: string | null = null;
+  if (!substituted && !rest.includes("$")) {
+    if (prefix) base = expanded(prefix[1] ?? prefix[2] ?? TILDES[prefix[3]] ?? "", shell);
+    else if (path.isAbsolute(word)) return word;
+    else base = shell.dir;
+  }
   if (base !== null) return path.resolve(base, rest);
   const from = `/${rest}`.search(/\/vendor(\/|$)/);
   return from >= 0 ? path.join(ROOT, `/${rest}`.slice(from + 1)) : null;
@@ -95,31 +117,48 @@ function locate(word: string, dir: string | null): string | null {
 
 /** The paths a word may name, as git and the shell read it: itself, and what
  * follows a `=` or a git `<rev>:` in it. */
-function candidates(value: string, dir: string | null): string[] {
+function candidates({ value, raw }: Arg, shell: Shell): string[] {
   const words = [value, ...value.split("=").slice(1), ...value.split(":").slice(1)];
-  return words.flatMap((word) => (word === "" ? [] : (locate(word, dir) ?? [])));
+  return words.flatMap((word) => (word === "" ? [] : (locate(word, raw, shell) ?? [])));
 }
 
-/** The directory a command leaves the shell in, or `dir` where it changes none.
- * One whose target the command does not spell (`cd`, `cd -`, `popd`) is unknown. */
-function entered({ name, args }: Command, dir: string | null): string | null {
-  if (name === "popd") return null;
-  if (name !== "cd" && name !== "pushd") return dir;
-  const target = args.at(-1)?.value;
-  return target === undefined || target === "-" ? null : locate(target, dir);
+/** Where the shell stands once `cmd` has run. */
+function entered({ name, args }: Command, shell: Shell): Shell {
+  const target = args.at(-1);
+  const enter = (dir: string | null, stack = shell.stack): Shell => ({ dir, previous: shell.dir, stack });
+  const at = ({ value, raw }: Arg) => locate(value, raw, shell);
+  switch (name) {
+    case "cd":
+      if (target === undefined) return enter(null);
+      return target.value === "-" ? enter(shell.previous) : enter(at(target));
+    case "pushd":
+      if (target === undefined) {
+        const top = shell.stack.at(-1);
+        return top === undefined ? shell : enter(top, [...shell.stack.slice(0, -1), shell.dir]);
+      }
+      // `+N` and `-N` rotate the stack.
+      if (/^[+-]\d/.test(target.value)) return enter(null, []);
+      return enter(at(target), [...shell.stack, shell.dir]);
+    case "popd": {
+      const top = shell.stack.at(-1);
+      if (target !== undefined || top === undefined) return enter(null, []);
+      return enter(top, shell.stack.slice(0, -1));
+    }
+    default:
+      return shell;
+  }
 }
 
 /** Why the command is denied, or null when it reads no forbidden source. */
 export function denialReason(command: string, cwd: string = ROOT): string | null {
-  let dir: string | null = cwd;
+  let shell: Shell = { dir: cwd, previous: null, stack: [] };
   for (const cmd of commands(command)) {
     const lists = onlyLists(cmd);
-    const named = [...cmd.args, ...cmd.redirects].flatMap(({ value }) => candidates(value, dir));
-    for (const target of named) {
+    for (const target of [...cmd.args, ...cmd.redirects].flatMap((arg) => candidates(arg, shell))) {
       const reason = judge(path.relative(ROOT, target), lists);
       if (reason) return reason;
     }
-    dir = entered(cmd, dir);
+    shell = entered(cmd, shell);
   }
   return null;
 }

@@ -44,6 +44,13 @@ const DENIED: [string, string?][] = [
   ['cd "$PWD" && cat vendor/onnx/onnx/helper.py'],
   ["cd $REPO/vendor/onnx/onnx && cat helper.py"],
   ["cd ~ && cat vendor/onnx/onnx/helper.py"],
+  ["cd vendor/onnx/onnx && cd /tmp && cd - && cat helper.py"],
+  ["pushd vendor/onnx/onnx && pushd /tmp && popd && cat helper.py"],
+  ["cd vendor/onnx/onnx && cd /tmp && cat ~-/helper.py"],
+  ["cat ~+/vendor/onnx/onnx/helper.py"],
+  ["cat ${REPO:-.}/vendor/onnx/onnx/helper.py"],
+  ["cat $(git rev-parse --show-toplevel)/vendor/onnx/onnx/helper.py"],
+  ["cat `pwd`/vendor/onnx/onnx/helper.py"],
 ];
 
 const ALLOWED: [string, string?][] = [
@@ -64,6 +71,8 @@ const ALLOWED: [string, string?][] = [
   ["git log --oneline -- vendor/onnx"],
   ["git show HEAD:vendor/onnx/onnx/onnx.proto"],
   ["cat $PWD/vendor/onnx/docs/Operators.md"],
+  ["cd vendor/onnx/onnx && cd - && cat helper.py"],
+  ["pushd vendor/onnx/onnx && popd && cat helper.py"],
   ["cat vendor/antlr4/doc/lexer-rules.md"],
   ["cat vendor/antlr4/tool/resources/org/antlr/v4/parse/ANTLRLexer.g4"],
   ["rg -n tpu --glob '!vendor' ."],
