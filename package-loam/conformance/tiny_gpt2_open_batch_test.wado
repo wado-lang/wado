@@ -5,9 +5,7 @@ use { Cpu, Tensor } from "lib:loam";
 use step from "../tests/models/tiny-gpt2/with-past/model.onnx"
     with {
         type: "onnx",
-        generator: {
-            module: "lib:loam",
-        },
+        generator: { module: "lib:loam" },
     };
 
 test "a step whose batch the graph leaves open starts from an empty cache of the batch asked for" {
@@ -17,8 +15,14 @@ test "a step whose batch the graph leaves open starts from an empty cache of the
 
     let o = step::forward(
         &mut cpu,
-        &Tensor::<i64, [step::BatchSize, step::InputIds1]> { data: [11, 12], extents: [2, 1] },
-        &Tensor::<i64, [step::BatchSize, step::AttentionMask1]> { data: [1, 1], extents: [2, 1] },
+        &Tensor::<i64, [step::BatchSize, step::InputIds1]> {
+            data: [11, 12],
+            extents: [2, 1],
+        },
+        &Tensor::<i64, [step::BatchSize, step::AttentionMask1]> {
+            data: [1, 1],
+            extents: [2, 1],
+        },
         &cache,
         &step::Prepared::embedded(&mut cpu),
     );

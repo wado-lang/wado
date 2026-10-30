@@ -305,7 +305,10 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
         (ResolvedType::Primitive(a), ResolvedType::Primitive(e)) => a != e,
         (ResolvedType::Enum { def: a }, ResolvedType::Enum { def: e })
         | (ResolvedType::Variant { def: a }, ResolvedType::Variant { def: e })
-        | (ResolvedType::GenericInstance { def: a, .. }, ResolvedType::GenericInstance { def: e, .. })
+        | (
+            ResolvedType::GenericInstance { def: a, .. },
+            ResolvedType::GenericInstance { def: e, .. },
+        )
         | (ResolvedType::Newtype { def: a, .. }, ResolvedType::Newtype { def: e, .. })
         | (ResolvedType::Flags { def: a }, ResolvedType::Flags { def: e }) => a != e,
         (a, e) => std::mem::discriminant(a) != std::mem::discriminant(e),

@@ -78,8 +78,7 @@ only the names that pair are the cache, and the rest stay inputs and outputs.
 
 The WEP's `Cache::empty(&mut backend)` takes nothing but the backend. Most
 exports leave the batch open, so `empty` also takes the length of each axis the
-graph leaves open beside the past's own, as `Cache::empty(&mut backend,
-batch_size)`. A graph whose `dims` fix every such axis keeps the WEP's
+graph leaves open beside the past's own, as `Cache::empty(&mut backend, batch_size)`. A graph whose `dims` fix every such axis keeps the WEP's
 signature.
 
 - A field holds each past under the past's axes. A present's length axis is
