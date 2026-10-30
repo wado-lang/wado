@@ -15,9 +15,13 @@ Sweep the runs on `main`, one row per run, oldest first:
 
 ```sh
 mise exec -- node .claude/skills/ci-timing/ci-times.mjs \
-  --since 2026-09-01 --job 'E2E\+stdlib' --step stdlib \
+  --since 2026-09-01 --job 'Test \(O|E2E\+stdlib' --step stdlib \
   > scratchpad/ci-times.tsv
 ```
+
+Jobs are named by what they hold, so a rebalance renames them. A sweep across
+one names both: the level jobs were `Test (E2E+stdlib O2)` before 2026-10-30
+and `Test (O2)` after.
 
 Each matched job prints as `name=STEP/JOB` in seconds. `-` means the step did
 not run or there was no `--step`. The row ends with the run's title, which
@@ -34,8 +38,8 @@ pull request added is invisible to `--step`. Print every step of the runs on
 either side of the jump and compare them:
 
 ```sh
-mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <before> --job 'stdlib O3'
-mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <after>  --job 'stdlib O3'
+mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <before> --job 'Test \(O3\)'
+mise exec -- node .claude/skills/ci-timing/ci-times.mjs --sha <after>  --job 'Test \(O3\)'
 ```
 
 `--run <run id>` does the same for a run that is not on `main`, such as a pull
