@@ -42,6 +42,10 @@ pub(crate) struct InferHoleTable {
     /// spelling alone loses the site, and the re-check then has nothing to
     /// enforce against.
     bounds: IndexMap<TypeId, (String, Vec<DeclaredBound>, Span)>,
+    /// The holes of a value already reported as a mismatch, which says what
+    /// was wrong with it: an unsolved one there reports nothing more. Recorded
+    /// where a check reads the table, so behind a cell.
+    excused: std::cell::RefCell<IndexSet<TypeId>>,
 }
 
 /// A trait bound a slot declared: the trait its reference site names, with the
@@ -245,6 +249,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.infer_holes.diags.contains_key(var)
                     && self.infer_holes.solutions.get(var) == Some(&None)
             })
+    }
+
+    /// Excuse the holes in `ty`, the type of a value just reported as a
+    /// mismatch, from reporting themselves too.
+    pub(super) fn excuse_holes_in(&self, ty: TypeId) {
+        let holes = self.tysys.type_table.borrow().infer_vars_in(ty);
+        self.infer_holes.excused.borrow_mut().extend(holes);
     }
 
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
@@ -541,6 +552,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let diags = std::mem::take(&mut self.infer_holes.diags);
+        let excused = self.infer_holes.excused.take();
         // Group by what the variables belong to, in mint order, so one use
         // site's unsolved slots become one message naming them all.
         let mut groups: IndexMap<(Span, String), Vec<Option<String>>> = IndexMap::default();
@@ -551,6 +563,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .solutions
                 .get(&hole)
                 .is_some_and(Option::is_none)
+                || excused.contains(&hole)
             {
                 continue;
             }

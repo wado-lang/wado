@@ -1,0 +1,16 @@
+// A value whose type an argument leaves open is still a mismatch where its
+// outermost type cannot be the one expected, whatever the open part becomes:
+// `Result::Ok(1)` is no `i32`, whichever error type it would take. The
+// mismatch says so, and the parameters left open add nothing to it.
+
+fn wrong() -> i32 {
+    let x: i32 = Result::Ok(1);
+    return x;
+}
+
+export fn run() {
+    wrong();
+}
+
+__DATA__
+{"compile_error": ":7:18: analysis error: type mismatch: expected 'i32', found 'Result<T, E>'", "compile_errors_not_contains": ["cannot infer"]}
