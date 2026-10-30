@@ -4,7 +4,7 @@
 //! *flexible* [`ResolvedType::InferVar`] and lets the holey type flow up until
 //! one solves it; the module-end sweep substitutes it or errors.
 
-use crate::compiler_host::CompilerHost;
+use crate::compiler_host::{CompilerHost, DiagnosticSpan};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{InferVarId, ResolvedType, TypeId};
 use crate::token::Span;
@@ -42,10 +42,27 @@ pub(crate) struct InferHoleTable {
     /// spelling alone loses the site, and the re-check then has nothing to
     /// enforce against.
     bounds: IndexMap<TypeId, (String, Vec<DeclaredBound>, Span)>,
-    /// The holes of a value already reported as a mismatch, which says what
-    /// was wrong with it: an unsolved one there reports nothing more. Recorded
+    /// Where a type mismatch was reported. The mismatch says what was wrong
+    /// there, so an unsolved hole inside one reports nothing more. Recorded
     /// where a check reads the table, so behind a cell.
-    excused: std::cell::RefCell<IndexSet<TypeId>>,
+    mismatches: std::cell::RefCell<Vec<DiagnosticSpan>>,
+}
+
+impl InferHoleTable {
+    pub(super) fn note_mismatch(&self, span: DiagnosticSpan) {
+        self.mismatches.borrow_mut().push(span);
+    }
+}
+
+/// Whether the reported `outer` covers `inner`, both in one parse.
+fn covers(outer: &DiagnosticSpan, inner: &Span) -> bool {
+    let end = (
+        outer.end_line.unwrap_or(outer.line),
+        outer.end_column.unwrap_or(outer.column),
+    );
+    outer.space == inner.space
+        && (outer.line, outer.column) <= (inner.line, inner.column)
+        && (inner.end_line, inner.end_column) <= end
 }
 
 /// A trait bound a slot declared: the trait its reference site names, with the
@@ -249,13 +266,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.infer_holes.diags.contains_key(var)
                     && self.infer_holes.solutions.get(var) == Some(&None)
             })
-    }
-
-    /// Excuse the holes in `ty`, the type of a value just reported as a
-    /// mismatch, from reporting themselves too.
-    pub(super) fn excuse_holes_in(&self, ty: TypeId) {
-        let holes = self.tysys.type_table.borrow().infer_vars_in(ty);
-        self.infer_holes.excused.borrow_mut().extend(holes);
     }
 
     /// [`Self::attach_infer_var_diag`] for a variable standing in for a named
@@ -552,7 +562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let diags = std::mem::take(&mut self.infer_holes.diags);
-        let excused = self.infer_holes.excused.take();
+        let mismatches = self.infer_holes.mismatches.take();
         // Group by what the variables belong to, in mint order, so one use
         // site's unsolved slots become one message naming them all.
         let mut groups: IndexMap<(Span, String), Vec<Option<String>>> = IndexMap::default();
@@ -563,7 +573,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .solutions
                 .get(&hole)
                 .is_some_and(Option::is_none)
-                || excused.contains(&hole)
+                || mismatches.iter().any(|outer| covers(outer, &blame.span))
             {
                 continue;
             }

@@ -58,7 +58,7 @@ use crate::hashmap::IndexMap;
 use crate::ast::{
     self, AstId, AstVisitor, Block, Expr, IdentExpr, ImplBlock, Item, Module, Visibility,
 };
-use crate::compiler_host::{CompilerHost, Diagnostic};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::divergence;
 use crate::elaborator::item::OperationOwner;
@@ -279,7 +279,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// A located one names the file its span indexes; `current_module_source`
     /// answers only for a span no parse produced.
     pub(super) fn emit(&self, err: impl Into<Diagnostic>) -> Result<(), Bail> {
-        self.logger.error_in(&self.current_module_source, err)
+        let diagnostic: Diagnostic = err.into();
+        if diagnostic.code == Code::TypeMismatch
+            && let Some(span) = &diagnostic.span
+        {
+            self.infer_holes.note_mismatch(span.clone());
+        }
+        self.logger.error_in(&self.current_module_source, diagnostic)
     }
 
     /// The symbol `name` reaches from `module`, for a caller whose reference site

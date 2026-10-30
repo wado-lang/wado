@@ -509,7 +509,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         if let Err(payload) = self.tysys.typecheck(actual, expected) {
             let _ = self.emit(mismatch(payload));
-            self.excuse_holes_in(actual);
             return;
         }
         self.record_row_flows(actual, expected, span, frame);
