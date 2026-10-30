@@ -291,18 +291,18 @@ fn boundary_extents(graph: &Graph, shapes: &HashMap<String, Shape>) -> HashMap<S
 /// `past_key_values.<rest>` with `present.<rest>`. A graph that names only one
 /// side keeps no cache.
 fn cache_pairs(graph: &Graph) -> Result<List<[String, String]>, EmitError> {
-    let pasts: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|n| n.starts_with("past")).collect();
+    let past_inputs: List<String> = graph.inputs.into_iter().map(|vi| vi.name).filter(|n| n.starts_with("past")).collect();
     let mut presents = HashSet::<String>::new();
     for let vi of &graph.outputs {
         if vi.name.starts_with("present") {
             presents.insert(vi.name);
         }
     }
-    if pasts.is_empty() || presents.is_empty() {
+    if past_inputs.is_empty() || presents.is_empty() {
         return Result::Ok([]);
     }
     let mut pairs: List<[String, String]> = [];
-    for let past of pasts {
+    for let past of past_inputs {
         let rest = past.strip_prefix("past_key_values.").map(|r| `.${r}`).unwrap_or(past.substr_bytes(4, past.len()));
         let present = `present${rest}`;
         if !presents.remove(present) {
@@ -1276,7 +1276,7 @@ fn emit_build(
     return emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, pairs);
 }
 
-/// The pasts the cache holds, which `pass` reads from it rather than taking.
+/// The pasts the cache holds, which an entry reads from it rather than taking.
 fn pasts(pairs: &List<[String, String]>) -> HashSet<String> {
     let mut cached = HashSet::<String>::new();
     for let [past, _] of *pairs {
@@ -1542,7 +1542,7 @@ fn scope_body(
             Branch => body.extend(&branch_block(&node, checked, names, exprs, symbols, holder, fuse)?),
             Kernel => {
                 if holder matches { Built } {
-                    body.extend(&built_calls(&node, checked, names, exprs, symbols, graph.opset)?);
+                    body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset, holder)?);
                     continue;
                 }
                 // The first product of a concatenation binds this one.
@@ -1551,7 +1551,7 @@ fn scope_body(
                 }
                 let spread = decided.spread_of(&node.outputs[0]);
                 let Some(term) = node_term(&node, checked, exprs, symbols, graph.opset, &spread)? else {
-                    body.extend(&kernel_calls(&node, checked, names, exprs, symbols, graph.opset)?);
+                    body.extend(&node_calls(&node, checked, names, exprs, symbols, graph.opset, holder)?);
                     continue;
                 };
                 let output = node.outputs[0];
@@ -1595,72 +1595,46 @@ fn concat_parts(checked: &Checked, parts: &List<String>, names: &Names, exprs: &
     return views;
 }
 
-/// A node's kernel calls, each bound to the output it computes.
-fn kernel_calls(
+/// A node's kernel calls, or its operations, as `holder`'s entry computes it,
+/// each bound to the output it computes.
+fn node_calls(
     node: &Node,
     checked: &Checked,
     names: &Names,
     exprs: &mut Operands,
     symbols: &mut Symbols,
     opset: Option<i64>,
+    holder: Holder,
 ) -> Result<List<String>, EmitError> {
     if node.op == GROUP_QUERY_ATTENTION {
-        return Result::Ok([attention_bound(node, checked, names, exprs)]);
+        let mut bound: List<String> = [];
+        for let output of node.outputs {
+            if output == "" {
+                bound.push("_");
+                continue;
+            }
+            let ident = names.get(&output);
+            exprs.values[output] = ident;
+            bound.push(ident);
+        }
+        // The kernel and the composite each compute every output, so an
+        // unnamed one is dropped.
+        while bound.len() < 3 {
+            bound.push("_");
+        }
+        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`]);
     }
-    let calls = if node.op == "Split" {
-        split_calls(node, checked, exprs, symbols)?;
-    } else {
-        [node_call(node, checked, exprs, symbols, opset)?] as List<String>;
+    let calls = match [holder, node.op == "Split"] {
+        [Kernels, true] => split_calls(node, checked, exprs, symbols)?,
+        [Built, true] => built_split(node, checked, exprs, symbols)?,
+        [Kernels, false] => [node_call(node, checked, exprs, symbols, opset)?] as List<String>,
+        [Built, false] => [built_call(node, checked, exprs, symbols, opset)?] as List<String>,
     };
-    return Result::Ok(each_bound(node, calls, names, exprs));
-}
-
-/// A node's operations, each output bound to what computes it.
-fn built_calls(
-    node: &Node,
-    checked: &Checked,
-    names: &Names,
-    exprs: &mut Operands,
-    symbols: &mut Symbols,
-    opset: Option<i64>,
-) -> Result<List<String>, EmitError> {
-    if node.op == GROUP_QUERY_ATTENTION {
-        return Result::Ok([attention_bound(node, checked, names, exprs)]);
-    }
-    let calls = if node.op == "Split" {
-        built_split(node, checked, exprs, symbols)?;
-    } else {
-        [built_call(node, checked, exprs, symbols, opset)?] as List<String>;
-    };
-    return Result::Ok(each_bound(node, calls, names, exprs));
-}
-
-/// Each of `calls` bound to the output of `node` at its position.
-fn each_bound(node: &Node, calls: List<String>, names: &Names, exprs: &mut Operands) -> List<String> {
     let mut lines: List<String> = [];
     for let [i, call] of calls.into_iter().enumerate() {
         lines.push(bound_to(&node.outputs[i], call, names, exprs));
     }
-    return lines;
-}
-
-/// A `GroupQueryAttention` bound to its outputs. The kernel and the composite
-/// each compute every output, so an unnamed one is dropped.
-fn attention_bound(node: &Node, checked: &Checked, names: &Names, exprs: &mut Operands) -> String {
-    let mut bound: List<String> = [];
-    for let output of node.outputs {
-        if output == "" {
-            bound.push("_");
-            continue;
-        }
-        let ident = names.get(&output);
-        exprs.values[output] = ident;
-        bound.push(ident);
-    }
-    while bound.len() < 3 {
-        bound.push("_");
-    }
-    return `let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`;
+    return Result::Ok(lines);
 }
 
 /// A `GroupQueryAttention` as its kernel's call. An optional operand absent
@@ -1900,14 +1874,16 @@ fn kernel_literals(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f
 /// The folded tensors `build` reads as a tensor: all an operation reads as
 /// one or the graph returns.
 fn graph_literals(graph: &Graph, checked: &Checked) -> Literals {
-    return literal_tensors(graph, checked, |name| read_by_graph(graph, checked, name));
+    let mut read = HashSet::<String>::new();
+    read_by_graph(&mut read, graph, checked);
+    return literal_tensors(graph, checked, |name| read.contains(*name));
 }
 
-/// Whether the graph returns `tensor`, or an operation `build` adds reads it
-/// as a tensor, in a branch's scope among them.
-fn read_by_graph(graph: &Graph, checked: &Checked, tensor: &String) -> bool {
-    if graph.outputs.position(|vi| vi.name == *tensor) matches { Some(_) } {
-        return true;
+/// Into `read`, what the graph returns and what an operation `build` adds
+/// reads as a tensor, in a branch's scope among them.
+fn read_by_graph(read: &mut HashSet<String>, graph: &Graph, checked: &Checked) {
+    for let vi of &graph.outputs {
+        read.insert(vi.name);
     }
     for let node of graph.nodes {
         let lowering = lowering_of(&node, checked);
@@ -1916,18 +1892,15 @@ fn read_by_graph(graph: &Graph, checked: &Checked, tensor: &String) -> bool {
         }
         if lowering matches { Branch } {
             for let b of branches(&node, checked) {
-                if read_by_graph(&b.graph, &b.checked, tensor) {
-                    return true;
-                }
+                read_by_graph(read, &b.graph, &b.checked);
             }
         }
         for let index of graph_operands(&node) {
-            if node.inputs[index] == *tensor {
-                return true;
+            if node.has_operand(index) {
+                read.insert(node.inputs[index]);
             }
         }
     }
-    return false;
 }
 
 /// The operands of `node` its operations read as tensors. The rest are
@@ -2565,7 +2538,8 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
 
 /// A `MaxPool` as `reduce_window` by the greatest, the batch and channel axes
 /// windows of one. Each high padding is what the last window reaches past the
-/// input, which `ceil_mode` may take past the padding the node declares.
+/// input, which `ceil_mode` may take past the padding the node declares. A
+/// floor-mode pool leaves a tail no window reaches, which a padding of 0 does too.
 fn built_max_pool(
     node: &Node,
     shapes: &HashMap<String, Shape>,
@@ -2588,7 +2562,8 @@ fn built_max_pool(
         let low = window.pads[i];
         let reach = Poly::constant(((k - 1) * d + 1) as i64);
         let last_start = window.output[i].try_sub(&Poly::constant(1)).unwrap().try_mul(&Poly::constant(s as i64)).unwrap();
-        let high = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
+        let reached = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
+        let high = Poly::max_of(&reached, &Poly::constant(0), &node.site());
         padding.push(symbols.spell_extent(&low)?);
         padding.push(symbols.spell_extent(&high)?);
     }
