@@ -131,8 +131,8 @@ independent, and `loam dump` reports it as now.
 The graph's operations take their meaning from the StableHLO specification:
 `dot_general`, the elementwise operators, `reduce`, `select`, `broadcast_in_dim`,
 `reshape`, `transpose`, `concatenate`, `slice`, `dynamic_slice`,
-`dynamic_update_slice`, `gather`, `iota`, `convert`, `compare`, `case` and
-`while`. A specification fixes what each operation means, which Loam's own
+`dynamic_update_slice`, `gather`, `scatter`, `sort`, `iota`, `convert`,
+`compare`, `case` and `while`. A specification fixes what each operation means, which Loam's own
 kernel set never did. The lowering to a TPU is then one to one. Roadmap
 item 24, the StableHLO front end, reads into the same graph.
 
@@ -213,8 +213,11 @@ program's text, the plugin and the topology, so a second process compiles
 nothing.
 
 `wado:pjrt` mirrors the PJRT C API: compile, a buffer from and to the host, an
-execution with donated inputs, and the compiled program's memory and cost. The
-host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is.
+execution with donated inputs, and the compiled program's memory and cost. It
+is not `wasi:`, which is reserved for WASI, and PJRT is no WASI proposal. The
+host is `wado-run-pjrt`, a workspace of its own as `wado-run-webgpu` is, since
+it loads a vendor's plugin the rest of the toolchain never needs. The same
+backend reaches NVIDIA GPUs through XLA's CUDA plugin.
 
 #### WebGPU
 
@@ -239,9 +242,10 @@ and makes a pass that runs from a list of dispatches:
   reused once the tensor in it is dead.
 - It creates the pipelines and the bind groups, and lays out one parameter
   buffer. The fields that change per call, such as positions and valid lengths,
-  sit at known offsets in it.
+  sit at known offsets in one block of it. A submission of several steps holds
+  a block for each step, and each step binds its own by a dynamic offset.
 
-A call writes those fields in one write, encodes the list (pipeline, bind
+A call writes those blocks in one write, encodes the list (pipeline, bind
 group, dispatch, and nothing else), and submits it. WebGPU offers no reusable
 compute command buffer, so the list is encoded on each call, from objects that
 already exist.
@@ -259,30 +263,46 @@ each symbolic axis whether it can promise that, at build time:
 
 - An elementwise operation, a regrouping that keeps the axis whole, and a
   reduction over another axis keep the padding apart from the valid elements.
-- A reduction or a contraction over a padded axis reads the padding. The
-  compiled program masks the padding with the reduction's identity first: 0
-  for a sum or a product, negative infinity for a maximum or a softmax.
-- A `Shape` of a padded axis yields its valid length, a value. A graph that
-  computes from it, as a causal mask's slice does, computes from the value. A
-  slice whose start then depends on that value becomes a `dynamic_slice`.
+- A reduction or a contraction over a padded axis reads the padding, so the
+  compiled program sets the padding to the reduction's identity first: 0 for
+  a sum and a contraction, 1 for a product, negative infinity for a maximum and
+  a softmax, positive infinity for a minimum.
+- A count of a padded axis is its valid length, never its capacity. A `Shape`
+  of the axis yields the valid length, a value, and so does a `ReduceMean`'s
+  divisor. A graph that computes from the count, as a causal mask's slice
+  does, computes from the value. A slice whose start then depends on the value
+  becomes a `dynamic_slice`. That operation has no stride, so a slice of
+  `length` elements with a step other than 1 takes `(length - 1) * step + 1`
+  elements, and a strided `slice` follows it.
 - A `Concat` along a padded axis would put padding between the parts, so it
-  becomes a `dynamic_update_slice` at the first part's valid length.
+  becomes a `scatter` that writes the second part at the first part's valid
+  length.
 - A merge of a padded axis with an axis after it keeps the valid elements a
-  prefix. A merge with an axis before it would interleave the padding, so the
-  generator refuses to pad that axis. It then compiles one program per length
-  of that axis, and `loam dump` says which node refused.
+  prefix.
+- Any other operation that reads across a padded axis, such as a merge with an
+  axis before it, which would interleave the padding, makes the generator
+  refuse to pad that axis. It then compiles one program per length of that
+  axis, and `loam dump` says which node refused.
+
+A valid length is one per row of the batch axis, since the rows of one pass are
+different requests (see
+[Requests share a pass through slots](#requests-share-a-pass-through-slots)).
+So each mask, count and write above reads its row's own.
 
 An `If` whose condition the shape class decides is chosen when the graph is
 built. One whose condition depends on a value is a `case` with both branches.
-On WebGPU it reads the condition back, as today.
+On WebGPU each branch's dispatches are indirect: a kernel writes each branch's
+workgroup counts from the condition, none for the branch not taken, and both
+branches write the `If`'s outputs to one place. So no condition is read back,
+and the pass stays one list.
 
 ### The cache is a buffer of fixed capacity, written in place
 
 A field of `Cache` whose axis the past's length gives holds the capacity of
 positions, and its valid length is a value. A step writes its new positions
-with `dynamic_update_slice` at the valid length, which is ONNX's
-`TensorScatter`, and returns the cache:
-donated on PJRT, the same buffer on WebGPU. A cache that outgrows its capacity
+with a `scatter` at each row's valid length, which is ONNX's `TensorScatter`
+with its `write_indices`, and returns the cache: donated on PJRT, the same
+buffer on WebGPU. A cache that outgrows its capacity
 moves to the next shape class, copied once.
 
 This builds on roadmap item 1, which gathers the cache into one value.
@@ -318,8 +338,8 @@ nothing else.
   one read back for all of them.
 - On WebGPU the steps are the pass's list encoded once per step in one
   submission. The sampler writes its token where the next step's gather reads
-  it. Positions and valid lengths go up by one a step, so the host writes all
-  of them before it submits.
+  it. Positions and valid lengths go up by one a step, so the host writes each
+  step's block of the parameter buffer before it submits.
 - A slot that picks an end token stops writing its cache and keeps returning
   the end token. The host discards what follows it.
 
@@ -328,8 +348,8 @@ nothing else.
 How a weight is stored is the device compiler's choice, made per model and per
 device, not per shape class, since every shape class reads the same weights.
 On WebGPU that covers the layouts measured today, column by column, in pairs,
-concatenated, and in bf16 where nothing is lost. On a TPU it is bf16 or the
-graph's own type. `Prepared` holds the stored weights without spelling their
+concatenated, and in bf16 where nothing is lost. On a TPU it is bf16 where
+nothing is lost, and the graph's own type otherwise. `Prepared` holds the stored weights without spelling their
 layout, so a backend can change a layout without changing the generated module.
 
 ### What a call does
@@ -344,15 +364,16 @@ layout, so a backend can change a layout without changing the generated module.
 
 ### What this changes
 
-| WEP section                                 | Change                                                                                                  |
-| ------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                          |
-| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.          |
-| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.        |
-| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                 |
-| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Prepared` no longer spells it.                          |
-| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.       |
-| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs. |
+| WEP section                                 | Change                                                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                             |
+| A Decoder's Cache Is One Value              | A field the past's length gives holds a capacity of positions and a valid length, and is written in place. |
+| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.             |
+| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.           |
+| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                    |
+| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Prepared` no longer spells it.                             |
+| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.          |
+| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.    |
 
 ## Plan
 
@@ -366,14 +387,19 @@ layout, so a backend can change a layout without changing the generated module.
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
-3. [ ] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2
-   and Gemma 3 run on XLA's CPU plugin within the tolerance of `Cpu`, with one
-   compile per shape class and the cache donated. CI compiles the same programs
-   for a TPU topology through `libtpu.so` and records `optimal_seconds`.
+3. [ ] `wado-run-pjrt` and the StableHLO writer. Finished when the tiny GPT-2,
+   Gemma 3 and the conformance cases with an `If` run on XLA's CPU plugin
+   within the tolerance of `Cpu`, with one
+   compile per shape class. CI compiles the same programs for a TPU topology
+   through `libtpu.so` and records `optimal_seconds`. There
+   `PJRT_Executable_GetCompiledMemoryStats` reports argument bytes that hold
+   Gemma 3's weights at half their f32 size, every product weight of it being
+   bf16 without loss, and alias bytes equal to the cache's size.
 4. [ ] The WebGPU compiler. Fusion, kernel variants, the memory plan and the
    recorded dispatch list over the graph. Finished when Gemma 3's time per token
    on `WebGpuBackend` is at most today's, with the host's time per token
-   recorded beside the device's, and the generator's plan and the fused trait
+   recorded beside the device's, the conformance cases with an `If` pass with
+   no read back but the outputs, and the generator's plan and the fused trait
    methods are deleted.
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
@@ -405,5 +431,6 @@ layout, so a backend can change a layout without changing the generated module.
   ([research §4](../docs/research-tpu.md#4-the-program)).
 - `libtpu.so` aborts the process on an unknown extent rather than returning an
   error, so a host cannot recover from a program that carries one.
+- No step here runs the CUDA plugin, so no run on an NVIDIA GPU is measured.
 - The CPU plugin CI runs is ZML's build of XLA's `pjrt_c_api_cpu_plugin`. The
   XLA project publishes no CPU plugin.
