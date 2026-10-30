@@ -1820,7 +1820,7 @@ impl TraitEnv {
 
     /// Which traits `key`'s transitive supertraits are. The clause's arguments
     /// do not change that, so no caller of this owes them.
-    pub(super) fn supertrait_decls(&self, key: &DefId) -> impl Iterator<Item = DefId> + '_ {
+    pub(crate) fn supertrait_decls(&self, key: &DefId) -> impl Iterator<Item = DefId> + '_ {
         self.supertrait_closure(key)
             .iter()
             .map(|inherited| inherited.decl)

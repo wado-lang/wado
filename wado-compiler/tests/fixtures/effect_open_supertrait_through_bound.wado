@@ -1,0 +1,43 @@
+// A call through a bound reaches the supertraits' methods too, so what the
+// type's impl of an open supertrait brings is demanded where the call's type
+// argument is known: `pure_call` cannot run `Loud`'s `up` without `Stdout`.
+use { println, Stdout } from "core:cli";
+
+trait Base with _ {
+    fn up(&mut self) -> i32;
+}
+
+trait Sub: Base with _ {
+    fn down(&mut self) -> i32;
+}
+
+struct Loud {}
+
+impl Base for Loud {
+    fn up(&mut self) -> i32 with Stdout {
+        println("loud");
+        return 1;
+    }
+}
+
+impl Sub for Loud {
+    fn down(&mut self) -> i32 {
+        return 0;
+    }
+}
+
+fn through<S: Sub>(s: &mut S) -> i32 with _ {
+    return s.up();
+}
+
+fn pure_call() -> i32 {
+    let mut l = Loud {};
+    return through(&mut l);
+}
+
+export fn run() with Stdout {
+    println(`${pure_call()}`);
+}
+
+__DATA__
+{"compile_error": ":35:12: error: missing effect 'Stdout' required by 'through'"}

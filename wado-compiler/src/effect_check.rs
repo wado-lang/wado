@@ -723,6 +723,8 @@ struct OwnedEffectData {
     /// The traits that leave their effects to the impl — a `with _` head, or a
     /// bare one, which reads as the same.
     open_traits: IndexSet<DefId>,
+    /// Each trait's transitive supertraits, whose methods a bound on it reaches.
+    supertraits: IndexMap<DefId, Vec<DefId>>,
     /// Per type-parameter slot of a function declaration, the traits bounding
     /// it, so a call site can read what its type arguments implement.
     fn_bound_traits: IndexMap<AstId, Vec<Vec<DefId>>>,
@@ -825,6 +827,7 @@ impl OwnedEffectData {
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         let mut open_traits: IndexSet<DefId> = IndexSet::default();
+        let mut supertraits: IndexMap<DefId, Vec<DefId>> = IndexMap::default();
         // The trait methods that write no clause of their own, so the head's
         // effects are theirs. An impl of one of these alone brings what the
         // head resolves to; a method's own clause overrides the head.
@@ -837,6 +840,10 @@ impl OwnedEffectData {
                 let def = defs.def_at(trait_decl.id);
                 if trait_decl.head.is_open() {
                     open_traits.insert(def);
+                }
+                let supers: Vec<DefId> = state.tysys.trait_env.supertrait_decls(&def).collect();
+                if !supers.is_empty() {
+                    supertraits.insert(def, supers);
                 }
                 for method in &trait_decl.methods {
                     let effects = method
@@ -1010,6 +1017,7 @@ impl OwnedEffectData {
             mangled_params,
             trait_method_effects,
             open_traits,
+            supertraits,
             fn_bound_traits,
             receiver_bounds: receiver_bounds_by_method,
             receiver_methods,
@@ -1039,6 +1047,7 @@ impl OwnedEffectData {
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
             open_traits: &self.open_traits,
+            supertraits: &self.supertraits,
             fn_bound_traits: &self.fn_bound_traits,
             receiver_bounds: &self.receiver_bounds,
             receiver_methods: &self.receiver_methods,
@@ -1079,6 +1088,8 @@ struct EffectIndex<'a> {
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
     /// The traits that leave their effects to the impl.
     open_traits: &'a IndexSet<DefId>,
+    /// Each trait's transitive supertraits.
+    supertraits: &'a IndexMap<DefId, Vec<DefId>>,
     /// Per type-parameter slot of a function or method declaration, the traits
     /// bounding it.
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<DefId>>>,
@@ -2163,7 +2174,10 @@ impl EffectIndex<'_> {
     /// `arg` lists the argument's spellings, a newtype before the base it
     /// inherits its impls from; the first with an impl of the trait answers.
     fn bring(&self, traits: &[DefId], arg: &[TypeArg<'_>], brought: &mut Brought) {
-        for key in traits.iter().filter(|key| self.open_traits.contains(*key)) {
+        let reached = traits.iter().flat_map(|key| {
+            std::iter::once(key).chain(self.supertraits.get(key).into_iter().flatten())
+        });
+        for key in reached.filter(|key| self.open_traits.contains(*key)) {
             brought.determined = true;
             match arg.iter().find_map(|(head, args)| {
                 Some((*args, self.impl_effects.get(&(head.clone(), *key))?))
