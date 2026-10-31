@@ -95,13 +95,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::place" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>", ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(30)
 
-type "functype//core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow" = fn(ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>", i32);  // TypeId(31)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::split_child" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>", i32, i32, bool);  // TypeId(31)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::split_child" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>", i32, i32, bool);  // TypeId(32)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::insert_slot" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>", i32, i32, i32, ref "core:prelude/string.wado//String");  // TypeId(32)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::insert_slot" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>", i32, i32, i32, ref "core:prelude/string.wado//String");  // TypeId(33)
+type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::make_root_room" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>");  // TypeId(33)
 
-type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::make_root_room" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>");  // TypeId(34)
+type "functype//core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow" = fn(ref "core:collections/entries.wado//EntryLog<core:prelude/string.wado/String,()>", i32);  // TypeId(34)
 
 type "functype//core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::grow_nodes" = fn(ref "core:collections/treemap.wado//TreeMap<core:prelude/string.wado/String,()>");  // TypeId(35)
 
@@ -652,21 +652,6 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     };
 }
 
-fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"(self, cap) {
-    let keys: ref "Array<core:prelude/string.wado/String>";
-    let values: ref Array<()>;
-    let alive: ref Array<bool>;
-    let $av_13: i32;
-    keys = builtin::array_new<ref "core:prelude/string.wado//String">(cap);
-    $av_13 = self.count;
-    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, self.keys, 0, $av_13);
-    self.keys = keys;
-    builtin::array_copy<()>(local.tee values(builtin::array_new<()>(cap)), 0, self.values, 0, $av_13);
-    self.values = values;
-    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_13);
-    self.alive = alive;
-}
-
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::split_child"(self, p, i, leaf) {
     let $load_2: ref Array<i32>;
     let $load_3: ref Array<i32>;
@@ -806,6 +791,21 @@ fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:pre
     "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::split_child"(self, n_11, 0, local.tee $load_0(self.height) == 0);
     self.root = n_11;
     self.height = $load_0 + 1;
+}
+
+fn "core:collections/entries.wado/core:collections/entries.wado/EntryLog<core:prelude/string.wado/String,()>::grow"(self, cap) {
+    let keys: ref "Array<core:prelude/string.wado/String>";
+    let values: ref Array<()>;
+    let alive: ref Array<bool>;
+    let $av_13: i32;
+    keys = builtin::array_new<ref "core:prelude/string.wado//String">(cap);
+    $av_13 = self.count;
+    builtin::array_copy<ref "core:prelude/string.wado//String">(keys, 0, self.keys, 0, $av_13);
+    self.keys = keys;
+    builtin::array_copy<()>(local.tee values(builtin::array_new<()>(cap)), 0, self.values, 0, $av_13);
+    self.values = values;
+    builtin::array_copy<bool>(local.tee alive(builtin::array_new<bool>(cap)), 0, self.alive, 0, $av_13);
+    self.alive = alive;
 }
 
 fn "core:collections/treemap.wado/core:collections/treemap.wado/TreeMap<core:prelude/string.wado/String,()>::grow_nodes"(self) {
