@@ -293,8 +293,9 @@ See
 [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
 A package commits a profile, `pgo/default.pgo`, that `wado test --pgo` records
-from its `#[workload]` tests. A compile marks each outermost region the
-workloads never ran with `cold_path()`, so every pass that reads a marker
+from its `#[workload]` tests. A compile marks with `cold_path()` each
+outermost region the workloads never ran in a function they entered, so every
+pass that reads a marker
 treats it as it treats one the author wrote. The test world reads no profile
 unless `-f pgo` asks. `-f no-pgo` ignores the profile, and `-f no-cold-paths`
 ignores every marker, so three builds of one program can be compared.

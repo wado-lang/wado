@@ -400,7 +400,8 @@ without one, and under `-f pgo` says so at `--log-level info`.
 A compile applying a profile marks cold, as
 [`builtin::cold_path()`](./spec-control-flow.md#branch-hints) does, the start
 of each region whose count is zero and whose enclosing region in the same
-function ran. A function that never ran is marked once, at its start. A
+function ran. A function that never ran gets no marker: workloads are tests,
+so a build's own entry, and whatever only it reaches, never runs under them. A
 function the profile has no count for is compiled as without one. Where that
 is because its hash differs, the compile says so at `--log-level info`.
 
