@@ -710,6 +710,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         )
     }
 
+    /// [`Self::with_body_ownership`] for one element of a tuple `for-of`: its
+    /// overlay holds the types and dispatches that decide which places of
+    /// `body` move, and the enclosing body's walk saw none of them.
+    fn with_element_ownership<R>(
+        &mut self,
+        body: &ast::Block,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let affine_params = self
+            .body_ownership
+            .as_ref()
+            .expect("a tuple `for-of` is reified inside a body")
+            .affine_params
+            .clone();
+        self.with_body_ownership(body, affine_params, reify)
+    }
+
     /// [`Self::with_body_ownership`] for an expression reified where no body
     /// is: a default, a global's initializer, an associated constant.
     fn with_expr_ownership<R>(
@@ -4047,7 +4064,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                 }
 
-                let body = this.reify_block(&for_of.body, ctx, None);
+                let body = this.with_element_ownership(&for_of.body, |this| {
+                    this.reify_block(&for_of.body, ctx, None)
+                });
                 block_stmts.extend(body.stmts);
                 block_stmts
             });
