@@ -63,6 +63,8 @@ test "a locale CLDR tailors nothing for falls back to the root collation" {
 }
 
 test "a tag that does not parse is refused" {
-    let refused = icu::Collator::new("not a tag!");
-    assert refused matches { Err(_) };
+    let Err(e) = icu::Collator::new("not a tag!") else {
+        panic("an unparsable tag must be refused");
+    };
+    assert !`${e}`.is_empty();
 }
