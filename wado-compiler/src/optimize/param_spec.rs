@@ -1337,7 +1337,10 @@ fn constant_field_read(
         .filter(|value| {
             matches!(
                 value,
-                FieldConst::Int(..) | FieldConst::Float(..) | FieldConst::Bool(_) | FieldConst::Char(_)
+                FieldConst::Int(..)
+                    | FieldConst::Float(..)
+                    | FieldConst::Bool(_)
+                    | FieldConst::Char(_)
             )
         })
         .cloned()
