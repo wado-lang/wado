@@ -143,38 +143,68 @@ fn attrs_force_multiline(u: &UseDecl) -> bool {
     })
 }
 
-/// Append each item separated by `", "` via `emit`.
-fn comma_sep_into<I, F>(items: I, output: &mut String, emit: F)
-where
-    I: IntoIterator,
-    F: FnMut(I::Item, &mut String),
-{
-    comma_sep_with_into(", ", items, output, emit);
-}
+/// The separated lists every printer writes, each item by a closure that
+/// writes through the printer itself.
+pub(crate) trait ListWriter: Sized {
+    fn output(&mut self) -> &mut String;
 
-/// Like `comma_sep_into`, but with a custom separator.
-fn comma_sep_with_into<I, F>(separator: &str, items: I, output: &mut String, mut emit: F)
-where
-    I: IntoIterator,
-    F: FnMut(I::Item, &mut String),
-{
-    for (i, item) in items.into_iter().enumerate() {
-        if i > 0 {
-            output.push_str(separator);
+    /// `f(self, item)` for each item, separated by `", "`.
+    fn comma_sep<I, F>(&mut self, items: I, f: F)
+    where
+        I: IntoIterator,
+        F: FnMut(&mut Self, I::Item),
+    {
+        self.comma_sep_with(", ", items, f);
+    }
+
+    /// Like `comma_sep`, but with a custom `separator` between items.
+    fn comma_sep_with<I, F>(&mut self, separator: &str, items: I, mut f: F)
+    where
+        I: IntoIterator,
+        F: FnMut(&mut Self, I::Item),
+    {
+        for (i, item) in items.into_iter().enumerate() {
+            if i > 0 {
+                self.output().push_str(separator);
+            }
+            f(self, item);
         }
-        emit(item, output);
+    }
+
+    /// `open`, the comma-separated items, then `close`.
+    fn delimited<I, F>(&mut self, open: &str, close: &str, items: I, f: F)
+    where
+        I: IntoIterator,
+        F: FnMut(&mut Self, I::Item),
+    {
+        self.output().push_str(open);
+        self.comma_sep(items, f);
+        self.output().push_str(close);
+    }
+
+    /// `{ a, b }`, or `{}` with no items.
+    fn braced<I, F>(&mut self, items: I, f: F)
+    where
+        I: IntoIterator,
+        F: FnMut(&mut Self, I::Item),
+    {
+        let mut items = items.into_iter().peekable();
+        if items.peek().is_none() {
+            self.output().push_str("{}");
+        } else {
+            self.delimited("{ ", " }", items, f);
+        }
     }
 }
 
-/// Append `open`, comma-separated items, then `close`.
-fn delimited_into<I, F>(open: &str, close: &str, items: I, output: &mut String, emit: F)
+/// [`ListWriter::delimited`] for the `*_into` writers, which take the item
+/// first.
+fn delimited_into<I, F>(open: &str, close: &str, items: I, output: &mut String, mut emit: F)
 where
     I: IntoIterator,
     F: FnMut(I::Item, &mut String),
 {
-    output.push_str(open);
-    comma_sep_into(items, output, emit);
-    output.push_str(close);
+    output.delimited(open, close, items, |out, item| emit(item, out));
 }
 
 /// Append `kw` to `output` if `cond` is true. Free-function counterpart of
@@ -333,6 +363,18 @@ enum Trailing {
     Of(AstId),
     /// Pending comments on the line this span ends, for an entry with no id.
     After(Span),
+}
+
+impl ListWriter for String {
+    fn output(&mut self) -> &mut String {
+        self
+    }
+}
+
+impl ListWriter for Unparser<'_> {
+    fn output(&mut self) -> &mut String {
+        &mut self.output
+    }
 }
 
 impl<'a> Unparser<'a> {
@@ -725,9 +767,8 @@ impl<'a> Unparser<'a> {
         } else if use_is_wildcard(u) {
             self.output.push_str("use _");
         } else {
-            self.output.push_str("use { ");
-            self.comma_sep(&u.items, Unparser::unparse_use_item);
-            self.output.push_str(" }");
+            self.output.push_str("use ");
+            self.braced(&u.items, Unparser::unparse_use_item);
         }
     }
 
@@ -866,13 +907,11 @@ impl<'a> Unparser<'a> {
                 self.delimited("[", "]", items, |s, item| s.unparse_attr_value(&item.value));
             }
             AttrValue::Object(obj) => {
-                self.output.push_str("{ ");
-                self.comma_sep(obj, |s, (k, entry)| {
+                self.braced(obj, |s, (k, entry)| {
                     s.output.push_str(k);
                     s.output.push_str(": ");
                     s.unparse_attr_value(&entry.value);
                 });
-                self.output.push_str(" }");
             }
         }
     }
@@ -2487,9 +2526,8 @@ impl<'a> Unparser<'a> {
         let snap = self.snapshot();
         self.output.push_str("match ");
         self.unparse_expr(&m.expr);
-        self.output.push_str(" { ");
-        self.comma_sep(&m.arms, Unparser::emit_match_arm_body);
-        self.output.push_str(" }");
+        self.output.push(' ');
+        self.braced(&m.arms, Unparser::emit_match_arm_body);
 
         if self.added_since(snap).contains('\n') || self.exceeds_width_since(snap) {
             self.rollback(snap);
@@ -2595,8 +2633,13 @@ impl<'a> Unparser<'a> {
                     self.output.push_str(name);
                     self.output.push(' ');
                 }
-                self.output.push_str("{ ");
-                self.comma_sep(fields, |s, field| {
+                // `None` is the `..` after the fields.
+                let entries = fields.iter().map(Some).chain(has_rest.then_some(None));
+                self.braced(entries, |s, entry| {
+                    let Some(field) = entry else {
+                        s.output.push_str("..");
+                        return;
+                    };
                     let bare_name = is_valid_ident(&field.field_name);
                     s.output.push_str(&format_field_name(&field.field_name));
                     let is_shorthand = bare_name
@@ -2606,13 +2649,6 @@ impl<'a> Unparser<'a> {
                         s.unparse_pattern(&field.pattern);
                     }
                 });
-                if *has_rest {
-                    if !fields.is_empty() {
-                        self.output.push_str(", ");
-                    }
-                    self.output.push_str("..");
-                }
-                self.output.push_str(" }");
             }
             Pattern::Or(alternatives) => {
                 self.comma_sep_with(" | ", alternatives, Unparser::unparse_pattern);
@@ -2780,39 +2816,6 @@ impl<'a> Unparser<'a> {
         }
     }
 
-    /// Emit `f(self, item)` for each item separated by `", "`.
-    fn comma_sep<I, F>(&mut self, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.comma_sep_with(", ", items, f);
-    }
-
-    /// Like `comma_sep`, but with a custom `separator` between items.
-    fn comma_sep_with<I, F>(&mut self, separator: &str, items: I, mut f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        for (i, item) in items.into_iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(separator);
-            }
-            f(self, item);
-        }
-    }
-
-    /// Emit `open`, then `f(self, item)` for each item separated by `", "`, then `close`.
-    fn delimited<I, F>(&mut self, open: &str, close: &str, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.output.push_str(open);
-        self.comma_sep(items, f);
-        self.output.push_str(close);
-    }
 
     /// Emit `kw` if `cond` is true. Used for modifiers like `pub `, `mut `, `async `.
     fn emit_kw_if(&mut self, cond: bool, kw: &str) {
@@ -3878,26 +3881,25 @@ pub fn unparse_struct_signature(s: &StructDecl, public_only: bool) -> String {
         &s.type_params,
         &mut out,
     );
-    out.push_str(" { ");
+    out.push(' ');
     let hidden = |f: &StructField| public_only && !f.visibility.is_public();
     let has_hidden = s.fields.iter().any(hidden);
-    let mut first = true;
-    for field in s.fields.iter().filter(|f| !hidden(f)) {
-        if !first {
-            out.push_str(", ");
-        }
-        first = false;
+    // `None` is the `..` standing for the hidden fields.
+    let entries = s
+        .fields
+        .iter()
+        .filter(|f| !hidden(f))
+        .map(Some)
+        .chain(has_hidden.then_some(None));
+    out.braced(entries, |out, entry| {
+        let Some(field) = entry else {
+            out.push_str("..");
+            return;
+        };
         out.push_str(&field.name);
         out.push_str(": ");
-        unparse_type_into(&field.ty, &mut out);
-    }
-    if has_hidden {
-        if !first {
-            out.push_str(", ");
-        }
-        out.push_str("..");
-    }
-    out.push_str(" }");
+        unparse_type_into(&field.ty, out);
+    });
     out
 }
 
@@ -3974,14 +3976,8 @@ pub fn unparse_enum_signature(e: &EnumDecl) -> String {
         &e.type_params,
         &mut out,
     );
-    out.push_str(" { ");
-    for (i, case) in e.cases.iter().enumerate() {
-        if i > 0 {
-            out.push_str(", ");
-        }
-        out.push_str(&case.name);
-    }
-    out.push_str(" }");
+    out.push(' ');
+    out.braced(&e.cases, |out, case| out.push_str(&case.name));
     out
 }
 
@@ -4196,6 +4192,12 @@ pub struct TirUnparser<'a> {
     mut_locals: Vec<bool>,
 }
 
+impl ListWriter for TirUnparser<'_> {
+    fn output(&mut self) -> &mut String {
+        &mut self.output
+    }
+}
+
 impl<'a> TirUnparser<'a> {
     pub fn new(type_table: &'a TypeTable) -> Self {
         Self {
@@ -4248,40 +4250,6 @@ impl<'a> TirUnparser<'a> {
         if cond {
             self.output.push_str(kw);
         }
-    }
-
-    /// Emit `f(self, item)` for each item separated by `", "`.
-    fn comma_sep<I, F>(&mut self, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.comma_sep_with(", ", items, f);
-    }
-
-    /// Like `comma_sep`, but with a custom `separator` between items.
-    fn comma_sep_with<I, F>(&mut self, separator: &str, items: I, mut f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        for (i, item) in items.into_iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(separator);
-            }
-            f(self, item);
-        }
-    }
-
-    /// Emit `open`, comma-separated items, then `close`.
-    fn delimited<I, F>(&mut self, open: &str, close: &str, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.output.push_str(open);
-        self.comma_sep(items, f);
-        self.output.push_str(close);
     }
 
     /// Emit a turbofish `::<T1, T2, ...>` for a list of monomorphized type ids.
@@ -4683,8 +4651,7 @@ impl<'a> TirUnparser<'a> {
             }
             TirPattern::Enum { case_name, .. } => self.output.push_str(case_name),
             TirPattern::Struct { fields, .. } => {
-                self.output.push_str("{ ");
-                self.comma_sep(fields, |s, field| {
+                self.braced(fields, |s, field| {
                     s.output.push_str(&field.field_name);
                     if !matches!(&field.pattern, TirPattern::Binding { name, local_index, .. }
                         if name == &field.field_name && !s.binds_mut(*local_index))
@@ -4693,7 +4660,6 @@ impl<'a> TirUnparser<'a> {
                         s.unparse_tir_pattern(&field.pattern);
                     }
                 });
-                self.output.push_str(" }");
             }
             TirPattern::Or(alternatives) => {
                 self.comma_sep_with(" | ", alternatives, TirUnparser::unparse_tir_pattern);
@@ -4979,13 +4945,12 @@ impl<'a> TirUnparser<'a> {
                     self.output.push('&');
                 }
                 self.output.push_str(struct_name);
-                self.output.push_str(" { ");
-                self.comma_sep(fields, |s, field| {
+                self.output.push(' ');
+                self.braced(fields, |s, field| {
                     s.output.push_str(&field.name);
                     s.output.push_str(": ");
                     s.unparse_expr(&field.value);
                 });
-                self.output.push_str(" }");
             }
             TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
                 self.delimited("[", "]", elements, TirUnparser::unparse_expr);

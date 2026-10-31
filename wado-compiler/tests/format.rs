@@ -250,6 +250,22 @@ fn test_format_keeps_interface_type_paths() {
     assert_format_preserves_ast(source);
 }
 
+/// An empty brace list prints as `{}`, as an empty struct literal does: in a
+/// `use` that loads a module for its impls, and in a struct pattern.
+#[test]
+fn test_format_prints_an_empty_brace_list_as_two_braces() {
+    let source = concat!(
+        "use {} from \"./impls.wado\";\n",
+        "\n",
+        "fn f(s: S) {\n",
+        "    let S {} = s;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// A string outside an expression keeps its escapes as written, as an
 /// expression's string literal does, though the compiler reads its value.
 #[test]

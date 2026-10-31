@@ -17,7 +17,7 @@ use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::tir::{EffectRef, ResolvedType};
 use crate::type_table::TypeTable;
-use crate::unparse::unparse_with_row_into;
+use crate::unparse::{ListWriter, unparse_with_row_into};
 use crate::{nir, tir};
 
 /// Unparses NIR back to pseudo-Wado source code.
@@ -35,6 +35,12 @@ pub struct NirUnparser<'a> {
     /// its own name; a promoted `Opaque(Local)` carries only the index, so it
     /// reads the name from here, as a pattern binding reads its mutability.
     locals: Vec<nir::NirLocal>,
+}
+
+impl ListWriter for NirUnparser<'_> {
+    fn output(&mut self) -> &mut String {
+        &mut self.output
+    }
 }
 
 impl<'a> NirUnparser<'a> {
@@ -78,40 +84,6 @@ impl<'a> NirUnparser<'a> {
         if cond {
             self.output.push_str(kw);
         }
-    }
-
-    /// Emit `f(self, item)` for each item separated by `", "`.
-    fn comma_sep<I, F>(&mut self, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.comma_sep_with(", ", items, f);
-    }
-
-    /// Like `comma_sep`, but with a custom `separator` between items.
-    fn comma_sep_with<I, F>(&mut self, separator: &str, items: I, mut f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        for (i, item) in items.into_iter().enumerate() {
-            if i > 0 {
-                self.output.push_str(separator);
-            }
-            f(self, item);
-        }
-    }
-
-    /// Emit `open`, comma-separated items, then `close`.
-    fn delimited<I, F>(&mut self, open: &str, close: &str, items: I, f: F)
-    where
-        I: IntoIterator,
-        F: FnMut(&mut Self, I::Item),
-    {
-        self.output.push_str(open);
-        self.comma_sep(items, f);
-        self.output.push_str(close);
     }
 
     /// Emit a turbofish `::<T1, T2, ...>` for a list of monomorphized type ids.
@@ -506,8 +478,7 @@ impl<'a> NirUnparser<'a> {
             PatKind::Enum { case_name, .. } => self.output.push_str(case_name),
             PatKind::Struct { fields, .. } => {
                 let fields = fields.clone();
-                self.output.push_str("{ ");
-                self.comma_sep(fields.iter(), |s, field| {
+                self.braced(fields.iter(), |s, field| {
                     s.output.push_str(&field.field_name);
                     if !matches!(&body.pats[field.pattern].kind, PatKind::Binding { name, local_index, .. }
                         if name == &field.field_name && !s.binds_mut(*local_index))
@@ -516,7 +487,6 @@ impl<'a> NirUnparser<'a> {
                         s.unparse_nir_pattern(body, field.pattern);
                     }
                 });
-                self.output.push_str(" }");
             }
             PatKind::Or(alternatives) => {
                 let alternatives = alternatives.clone();
@@ -829,13 +799,12 @@ impl<'a> NirUnparser<'a> {
                     self.output.push('&');
                 }
                 self.output.push_str(&struct_name);
-                self.output.push_str(" { ");
-                self.comma_sep(field_data, |s, (name, value)| {
+                self.output.push(' ');
+                self.braced(field_data, |s, (name, value)| {
                     s.output.push_str(&name);
                     s.output.push_str(": ");
                     s.unparse_operand(body, value);
                 });
-                self.output.push_str(" }");
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 let elements = elements.clone();
