@@ -18,7 +18,7 @@ impl GuestCollator for CollatorRes {
     fn create(locale: String) -> Result<CollatorHandle, String> {
         let locale = Locale::try_from_str(&locale).map_err(|e| e.to_string())?;
         let inner = Collator::try_new(CollatorPreferences::from(&locale), CollatorOptions::default())
-            .map_err(|e| e.to_string())?;
+            .expect("compiled data falls back to the root collation for every locale");
         Ok(CollatorHandle::new(CollatorRes { inner }))
     }
 
