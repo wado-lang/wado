@@ -14,10 +14,11 @@ use std::io;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::ptr;
 use std::sync::OnceLock;
 
+use super::terminal::give_terminal;
 use super::{Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
@@ -56,6 +57,14 @@ const PROFILE_BASE: &str = r#"(version 1)
 ; itself can be read.
 (allow file-read-data (literal "/"))
 (allow file-read-metadata (literal "/etc") (literal "/tmp") (literal "/var"))
+; A descriptor the child already holds, opened again by its number: no access
+; it lacks.
+(allow file-read* file-write-data (subpath "/dev/fd"))
+(allow file-read-metadata (literal "/dev/stdin") (literal "/dev/stdout") (literal "/dev/stderr"))
+; Where the `/usr/bin` developer tool stubs find the developer directory
+; `xcode-select` chose. Root sets the link; the directory it names is a grant
+; of its own.
+(allow file-read-metadata (literal "/private/var/db/xcode_select_link"))
 (allow mach-lookup
     (global-name "com.apple.system.opendirectoryd.libinfo")
     (global-name "com.apple.system.notification_center")
@@ -63,13 +72,17 @@ const PROFILE_BASE: &str = r#"(version 1)
     (global-name "com.apple.logd"))
 "#;
 
-/// The rules for a network grant: IP sockets, and the one UNIX socket by path
-/// name resolution goes through.
+/// The rules for a network grant: IP sockets, the one UNIX socket by path name
+/// resolution goes through, and the services that decide whether to trust a
+/// TLS certificate, which may fetch over the network for the child.
 const PROFILE_NETWORK: &str = r#"(allow system-socket)
 (allow network-outbound (remote ip))
 (allow network-inbound (local ip))
 (allow network-bind (local ip))
 (allow network-outbound (literal "/private/var/run/mDNSResponder"))
+(allow mach-lookup
+    (global-name "com.apple.trustd.agent")
+    (global-name "com.apple.TrustEvaluationAgent"))
 "#;
 
 /// The profile for `policy`, and the parameters it reads. Seatbelt matches the
@@ -78,9 +91,10 @@ const PROFILE_NETWORK: &str = r#"(allow system-socket)
 fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     let mut text = PROFILE_BASE.to_owned();
     let mut params = Vec::new();
-    // Resolving a path stats each directory above it, so a grant's ancestors
-    // show their metadata and nothing else.
-    let mut ancestors = BTreeSet::new();
+    // Resolving a path stats each directory above it and reads each link on
+    // the way, so a grant's ancestors and those links show their metadata and
+    // nothing else.
+    let mut traversed = BTreeSet::new();
     for rule in policy.rules() {
         let real = match rule.real_path() {
             Ok(real) => real,
@@ -97,21 +111,78 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
             Access::ReadWrite => "file-read* file-write* process-exec",
         };
         allow(&mut text, &mut params, operations, "subpath", &real);
-        ancestors.extend(real.ancestors().skip(1).map(Path::to_path_buf));
+        traversed.extend(real.ancestors().skip(1).map(Path::to_path_buf));
+        traversed.extend(links_on(&rule.path));
     }
-    for ancestor in &ancestors {
+    for path in &traversed {
         allow(
             &mut text,
             &mut params,
             "file-read-metadata",
             "literal",
-            ancestor,
+            path,
         );
     }
+    // What a program that inherits a terminal does with it, as a child of an
+    // unconfined spawn can: set its mode, and ask its line discipline and
+    // foreground group. `TIOCSTI` stays refused.
+    writeln!(
+        text,
+        "(allow file-ioctl (ioctl-command #x{:x} #x{:x} #x{:x} #x{:x} #x{:x}))",
+        libc::TIOCSETA,
+        libc::TIOCSETAW,
+        libc::TIOCSETAF,
+        libc::TIOCGETD,
+        libc::TIOCGPGRP,
+    )
+    .expect("writing to a String cannot fail");
     if policy.network() == Network::Granted {
         text.push_str(PROFILE_NETWORK);
     }
     Ok((text, params))
+}
+
+/// Darwin's `MAXSYMLINKS`: how many links one lookup follows before `ELOOP`.
+const SYMLINKS_MAX: usize = 32;
+
+/// Each symbolic link that resolving `path` reads, at the real path Seatbelt
+/// matches it by: those `path` names, and those its links lead through.
+fn links_on(path: &Path) -> Vec<PathBuf> {
+    let mut links = Vec::new();
+    let mut resolved = PathBuf::from("/");
+    // The names still to resolve, the next one last.
+    let mut pending: Vec<OsString> = names_reversed(path).collect();
+    while let Some(name) = pending.pop() {
+        if name == ".." {
+            resolved.pop();
+            continue;
+        }
+        let next = resolved.join(&name);
+        let Ok(target) = std::fs::read_link(&next) else {
+            resolved = next;
+            continue;
+        };
+        if links.len() == SYMLINKS_MAX {
+            break;
+        }
+        links.push(next);
+        if target.is_absolute() {
+            resolved = PathBuf::from("/");
+        }
+        pending.extend(names_reversed(&target));
+    }
+    links
+}
+
+/// The names `path` steps through, `..` among them, from the last.
+fn names_reversed(path: &Path) -> impl Iterator<Item = OsString> + '_ {
+    path.components()
+        .rev()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_owned()),
+            Component::ParentDir => Some(OsString::from("..")),
+            Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
+        })
 }
 
 /// Appends a rule allowing `operations` on `path`, which reaches the profile as
@@ -151,7 +222,7 @@ fn c_string(bytes: &OsStr) -> io::Result<CString> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "an argument holds a NUL byte"))
 }
 
-pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
     // `sandbox-exec` reports a missing program only on its own stderr, so the
     // host asks first.
     std::fs::metadata(command.program)?;
@@ -208,7 +279,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         actions.fchdir(dir.as_raw_fd())?;
     }
 
-    let attr = SpawnAttr::new()?;
+    let attr = SpawnAttr::new(terminal.is_some())?;
     let mut pid: libc::pid_t = 0;
     let program = c_string(OsStr::new(SANDBOX_EXEC))?;
     // SAFETY: every pointer is to memory alive for the call, the arrays
@@ -227,9 +298,16 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     if ret != 0 {
         return Err(io::Error::from_raw_os_error(ret));
     }
+    let child = Child::new(pid);
+    if let Some(terminal) = terminal {
+        give_terminal(terminal, pid);
+        child
+            .signal_group(libc::SIGCONT)
+            .expect("a child just spawned can be continued");
+    }
     let [stdin, stdout, stderr] = parent_ends;
     Ok(Spawned {
-        child: Child::new(pid),
+        child,
         stdin,
         stdout,
         stderr,
@@ -314,20 +392,28 @@ impl Drop for FileActions {
 }
 
 /// A process group of its own, default signal handling, an empty mask, and
-/// every descriptor past the file actions closed.
+/// every descriptor past the file actions closed. A child that takes the
+/// terminal starts suspended, until its group holds it: a use before then
+/// would find it in the background.
 struct SpawnAttr(libc::posix_spawnattr_t);
 
 impl SpawnAttr {
-    fn new() -> io::Result<Self> {
+    fn new(takes_terminal: bool) -> io::Result<Self> {
         let mut attr = MaybeUninit::uninit();
         // SAFETY: init fills the value it is handed.
         check(unsafe { libc::posix_spawnattr_init(attr.as_mut_ptr()) })?;
         // SAFETY: initialized just above.
         let mut attr = Self(unsafe { attr.assume_init() });
+        let suspended = if takes_terminal {
+            libc::POSIX_SPAWN_START_SUSPENDED
+        } else {
+            0
+        };
         let flags = libc::POSIX_SPAWN_CLOEXEC_DEFAULT
             | libc::POSIX_SPAWN_SETPGROUP
             | libc::POSIX_SPAWN_SETSIGDEF
-            | libc::POSIX_SPAWN_SETSIGMASK;
+            | libc::POSIX_SPAWN_SETSIGMASK
+            | suspended;
         // SAFETY: each call below sets one field of the initialized attributes.
         check(unsafe { libc::posix_spawnattr_setflags(&raw mut attr.0, flags as libc::c_short) })?;
         check(unsafe { libc::posix_spawnattr_setpgroup(&raw mut attr.0, 0) })?;

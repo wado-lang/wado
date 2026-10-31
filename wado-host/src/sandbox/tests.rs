@@ -8,9 +8,9 @@
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::os::unix::fs::{PermissionsExt, symlink};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -70,13 +70,13 @@ fn under_an_enclosing_listener_a_child_runs_unobserved() {
 }
 
 /// Whether the test `test` passes in this binary re-executed with `var` set,
-/// after `setup` runs between `fork` and `exec`.
+/// after `setup` runs between `fork` and `exec`. A re-execution that runs past
+/// a deadline is killed and fails.
 ///
 /// # Safety
 ///
 /// `setup` must be safe in the child of a multithreaded process: system calls
 /// on memory built before the fork alone.
-#[cfg(target_os = "linux")]
 unsafe fn reexecute(
     test: &str,
     var: &str,
@@ -84,13 +84,160 @@ unsafe fn reexecute(
 ) -> bool {
     use std::os::unix::process::CommandExt;
 
+    const DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
     command
         .args(["--exact", test, "--test-threads=1", "--quiet"])
         .env(var, "1");
     // SAFETY: as the caller vouches.
     unsafe { command.pre_exec(setup) };
-    command.status().unwrap().success()
+    let mut child = command.spawn().unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status.success();
+        }
+        if start.elapsed() > DEADLINE {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// Set in a re-execution whose standard input is a terminal it controls.
+const TERMINAL_VAR: &str = "WADO_SANDBOX_TERMINAL";
+
+/// A child that inherits the host's terminal holds it while it runs, as the
+/// child of an unconfined spawn does: it reads the terminal and sets its mode.
+/// The host holds it again once the child exits.
+#[test]
+fn a_child_holds_the_terminal_it_inherits() {
+    assert_available();
+    // SAFETY: plain calls on the pseudo-terminal they open.
+    let (master, slave) = unsafe {
+        let master = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
+        assert!(master >= 0);
+        assert_eq!(libc::grantpt(master), 0);
+        assert_eq!(libc::unlockpt(master), 0);
+        let name = libc::ptsname(master);
+        assert!(!name.is_null());
+        let slave = std::ffi::CStr::from_ptr(name).to_owned();
+        (OwnedFd::from_raw_fd(master), slave)
+    };
+    // Darwin blocks a write to the master until the slave is open.
+    let _open = File::options()
+        .read(true)
+        .custom_flags(libc::O_NOCTTY)
+        .open(slave.to_str().unwrap())
+        .unwrap();
+    // Typed before the child reads it: the terminal holds the line.
+    File::from(master.try_clone().unwrap())
+        .write_all(b"typed\nfirst\nsecond\n")
+        .unwrap();
+    // The terminal echoes, and closing the slave waits until its output is
+    // read.
+    let mut echo = File::from(master.try_clone().unwrap());
+    std::thread::spawn(move || std::io::copy(&mut echo, &mut std::io::sink()));
+    // SAFETY: the closure makes only system calls, on a path built before the
+    // fork.
+    let passed = unsafe {
+        reexecute("sandbox::tests::terminal", TERMINAL_VAR, move || {
+            if libc::setsid() < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // A session leader with no terminal takes the first it opens.
+            let fd = libc::open(slave.as_ptr(), libc::O_RDWR);
+            if fd < 0 || libc::dup2(fd, 0) < 0 || libc::dup2(fd, 1) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
+    };
+    drop(master);
+    assert!(passed);
+}
+
+/// Not a test of its own: the half of the test above that holds a terminal.
+#[test]
+fn terminal() {
+    if std::env::var_os(TERMINAL_VAR).is_none() {
+        return;
+    }
+    let tree = Tree::new();
+    let mut policy = tree.policy(Network::Denied);
+    policy.grant_terminal();
+    let dir = File::open(tree.granted()).unwrap();
+    let on_terminal = |program: &str, script: &str| {
+        spawn_with(
+            &policy,
+            Some(&dir),
+            Path::new(program),
+            script,
+            [Stdio::Inherit, Stdio::Piped, Stdio::Inherit],
+        )
+    };
+    // Read while waiting, as `wado` does: `wait` follows a child's stops, and
+    // a stopped child closes no pipe.
+    let output = |spawned: Spawned| {
+        let mut stdout = File::from(spawned.stdout.unwrap());
+        let reader = std::thread::spawn(move || {
+            let mut out = String::new();
+            stdout.read_to_string(&mut out).unwrap();
+            out
+        });
+        (spawned.child.wait().unwrap(), reader.join().unwrap())
+    };
+    // SAFETY: plain system calls.
+    let holds_terminal = || unsafe { libc::tcgetpgrp(0) == libc::getpgrp() };
+    let echoes = || {
+        // SAFETY: `mode` is plain data the call fills.
+        let mut mode: libc::termios = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::tcgetattr(0, &raw mut mode) }, 0);
+        mode.c_lflag & libc::ECHO != 0
+    };
+
+    let child = on_terminal(
+        "/bin/sh",
+        "stty -echo && stty echo && stty size > /dev/null && read line && printf %s \"$line\"",
+    );
+    assert_eq!(output(child.unwrap()), (OK, "typed".to_owned()));
+    assert!(holds_terminal());
+
+    // One child holds the terminal at a time; the next reads it in its turn.
+    let first = on_terminal("/bin/sh", "read line && printf %s \"$line\"").unwrap();
+    let second = on_terminal("/bin/sh", "read line && printf %s \"$line\"").unwrap();
+    assert_eq!(output(first), (OK, "first".to_owned()));
+    assert_eq!(output(second), (OK, "second".to_owned()));
+    assert!(holds_terminal());
+
+    // A child killed with the terminal in its own mode leaves the host's.
+    let killed = on_terminal("/bin/sh", "stty -echo && kill -9 $$").unwrap();
+    assert_eq!(output(killed).0, ExitStatus::Signaled(libc::SIGKILL as u8));
+    assert!(echoes());
+    assert!(holds_terminal());
+
+    // A child that only writes to the terminal holds it too.
+    let writer = spawn_with(
+        &policy,
+        Some(&dir),
+        Path::new("/bin/sh"),
+        "stty -echo <&1 && stty echo <&1",
+        [Stdio::Null, Stdio::Inherit, Stdio::Inherit],
+    );
+    assert_eq!(writer.unwrap().child.wait().unwrap(), OK);
+    assert!(holds_terminal());
+
+    // This host leads its session, so its group is orphaned: a stop would be
+    // discarded, and the child's Ctrl-Z does nothing, as it would sharing it.
+    let stopped = on_terminal("/bin/sh", "kill -TSTP $$ && printf continued").unwrap();
+    assert_eq!(output(stopped), (OK, "continued".to_owned()));
+    assert!(holds_terminal());
+
+    // A spawn that fails gives the terminal back, wherever it failed.
+    assert!(on_terminal("/nonexistent/program", "").is_err());
+    assert!(holds_terminal());
 }
 
 /// Set in a re-execution that may not read a non-dumpable child's memory.
@@ -454,6 +601,47 @@ fn sh_traced_paths(policy: &Policy, script: &str) -> BTreeSet<Refusal> {
         .collect()
 }
 
+/// `sh -c script` started under `policy` in `cwd`, its output where asked.
+fn spawn_sh(
+    policy: &Policy,
+    cwd: Option<&File>,
+    script: &str,
+    stdout: Stdio,
+    stderr: Stdio,
+) -> Spawned {
+    spawn_with(
+        policy,
+        cwd,
+        Path::new("/bin/sh"),
+        script,
+        [Stdio::Null, stdout, stderr],
+    )
+    .unwrap()
+}
+
+/// `program -c script` started under `policy` in `cwd`, with `streams` as its
+/// stdin, stdout and stderr.
+fn spawn_with(
+    policy: &Policy,
+    cwd: Option<&File>,
+    program: &Path,
+    script: &str,
+    [stdin, stdout, stderr]: [Stdio; 3],
+) -> std::io::Result<Spawned> {
+    let args: Vec<OsString> = ["-c", script].iter().map(OsString::from).collect();
+    spawn(&Command {
+        program,
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd,
+        stdin,
+        stdout,
+        stderr,
+        policy,
+        trace: Trace::Off,
+    })
+}
+
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
     run(
         policy,
@@ -521,6 +709,125 @@ fn reads_the_system_configuration() {
     assert_available();
     let tree = Tree::new();
     assert_eq!(sh(&tree.policy(Network::Denied), "cat /etc/passwd"), OK);
+}
+
+#[test]
+fn a_shell_starts_without_complaint() {
+    assert_available();
+    let tree = Tree::new();
+    let dir = File::open(tree.granted()).unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        Some(&dir),
+        "true",
+        Stdio::Null,
+        Stdio::Piped,
+    );
+    let mut err = String::new();
+    File::from(spawned.stderr.unwrap())
+        .read_to_string(&mut err)
+        .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
+    assert_eq!(err, "");
+}
+
+#[test]
+fn reaches_its_own_streams_through_their_device_paths() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    assert_eq!(
+        sh(
+            &policy,
+            "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1"
+        ),
+        OK
+    );
+}
+
+#[test]
+fn reads_a_grant_through_the_link_that_names_it() {
+    assert_available();
+    let tree = Tree::new();
+    fs::write(tree.outside().join("f.txt"), "f").unwrap();
+    // A link to a relative one, so resolving reads a link the grant's path
+    // never names.
+    let hop = tree.granted().join("hop");
+    symlink("../outside", &hop).unwrap();
+    let link = tree.root.path().join("link");
+    symlink(&hop, &link).unwrap();
+    let mut policy = Policy::new(Network::Denied);
+    policy.grant_path(&link, Access::ReadExecute);
+    assert_eq!(
+        sh(&policy, &format!("cat '{}'", link.join("f.txt").display())),
+        OK
+    );
+}
+
+/// The `/usr/bin` stubs run the developer tools `xcode-select` names: the
+/// Command Line Tools from the baseline, or an Xcode the user grants.
+#[cfg(target_os = "macos")]
+#[test]
+fn runs_the_developer_tools_through_their_stubs() {
+    assert_available();
+    // Unlike a stub, `xcode-select` offers no installer where nothing is
+    // installed.
+    let selected = std::process::Command::new("/usr/bin/xcode-select")
+        .arg("-p")
+        .output()
+        .unwrap();
+    if !selected.status.success() {
+        return;
+    }
+    let developer = PathBuf::from(String::from_utf8(selected.stdout).unwrap().trim_end());
+    let tree = Tree::new();
+    let scratch = tree.granted().display().to_string();
+    let env = [("TMPDIR", scratch.as_str()), ("HOME", scratch.as_str())];
+    let mut policy = tree.policy(Network::Denied);
+    if !developer.starts_with("/Library/Developer/CommandLineTools") {
+        // `Xcode.app/Contents/Developer`: the stubs read the whole bundle.
+        let bundle = developer.ancestors().nth(2).unwrap();
+        policy.grant_path(bundle, Access::ReadExecute);
+    }
+    assert_eq!(
+        run(&policy, Path::new("/usr/bin/git"), &["--version"], &env),
+        OK
+    );
+}
+
+/// A TLS client asks a system service whether to trust a certificate, and that
+/// service may fetch over the network for it.
+#[cfg(target_os = "macos")]
+#[test]
+fn evaluates_certificate_trust_only_with_the_network() {
+    assert_available();
+    let tree = Tree::new();
+    let pem = std::process::Command::new("/usr/bin/security")
+        .args([
+            "find-certificate",
+            "-p",
+            "-c",
+            "ISRG Root X1",
+            "/System/Library/Keychains/SystemRootCertificates.keychain",
+        ])
+        .output()
+        .unwrap();
+    assert!(pem.status.success());
+    let root = tree.granted().join("root.pem");
+    fs::write(&root, pem.stdout).unwrap();
+    let root = root.display().to_string();
+    let scratch = tree.granted().display().to_string();
+    let env = [("TMPDIR", scratch.as_str()), ("HOME", scratch.as_str())];
+    let verify = |network| {
+        run(
+            &tree.policy(network),
+            Path::new("/usr/bin/security"),
+            &["verify-cert", "-c", &root, "-L", "-q"],
+            &env,
+        )
+    };
+    assert_eq!(verify(Network::Granted), OK);
+    assert_ne!(verify(Network::Denied), OK);
 }
 
 #[test]
@@ -1018,21 +1325,14 @@ fn starts_in_the_directory_it_is_given() {
     assert_available();
     let tree = Tree::new();
     fs::write(tree.granted().join("here.txt"), "here").unwrap();
-    let policy = tree.policy(Network::Denied);
     let dir = File::open(tree.granted()).unwrap();
-    let args: Vec<OsString> = ["-c", "cat here.txt"].iter().map(OsString::from).collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[],
-        cwd: Some(&dir),
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        Some(&dir),
+        "cat here.txt",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     let mut out = String::new();
     File::from(spawned.stdout.unwrap())
         .read_to_string(&mut out)
@@ -1045,23 +1345,13 @@ fn starts_in_the_directory_it_is_given() {
 fn a_group_kill_ends_every_descendant() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
-    let args: Vec<OsString> = ["-c", "sleep 60 & sleep 60; wait"]
-        .iter()
-        .map(OsString::from)
-        .collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: None,
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        None,
+        "sleep 60 & sleep 60; wait",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     spawned.child.signal_group(libc::SIGKILL).unwrap();
     assert_eq!(
         spawned.child.wait().unwrap(),
@@ -1080,20 +1370,13 @@ fn a_group_kill_ends_every_descendant() {
 fn no_descendant_outlives_the_child() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
-    let args: Vec<OsString> = ["-c", "sleep 60 &"].iter().map(OsString::from).collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: None,
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        None,
+        "sleep 60 &",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     assert_eq!(spawned.child.wait().unwrap(), OK);
     // The background `sleep` held the pipe's write end; EOF means it is gone.
     let mut rest = Vec::new();

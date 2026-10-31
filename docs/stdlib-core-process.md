@@ -58,6 +58,9 @@ child so that spawning never extends the guest's authority.
   with no preopened directory starts its children in that `HOME`.
 - `terminate` sends the child's process group `SIGTERM`, and `kill`
   `SIGKILL`.
+- A child that inherits the terminal holds it while it runs, as a shell's
+  job does: it reads it and sets its mode. Ctrl-C ends the child alone, and
+  Ctrl-Z stops `wado` with it. One child holds the terminal at a time.
 - A child that fails after the sandbox refused it something is reported on
   `wado`'s stderr, with the grant that would allow it. `--process-trace`
   also names each file refused, on Linux.

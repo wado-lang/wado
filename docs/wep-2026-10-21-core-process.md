@@ -134,8 +134,13 @@ followed by one rule per grant, `(subpath (param "P0"))`, and each path reaches
 it as a parameter, `-D P0=/path`. No path is spliced into SBPL, so no escaping
 can rewrite the policy. Seatbelt matches the real path, so each parameter is
 one: the path a grant's descriptor names (`F_GETPATH`), or the baseline path
-canonicalized. The profile allows no `file-ioctl`, so no input reaches a
-terminal.
+canonicalized. A path is resolved through a link only where the link itself can
+be read. So each link that resolving a grant's path reads shows its metadata and
+nothing else: the links the path names, and the links those lead through. An
+example is `/Applications/Xcode.app` on a machine with several Xcodes. The
+profile allows `file-ioctl` only for what a program does with a terminal it
+inherits: setting its mode and asking its line discipline and foreground group.
+`TIOCSTI` stays refused, so no input reaches a terminal.
 
 `sandbox-exec` reports a program it cannot start only on its own stderr, so
 the host checks that the program exists before spawning it.
@@ -214,19 +219,33 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                        | Linux                                                                                         | macOS                                   |
-| ------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Loader and shared libraries    | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache   |
-| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`   |
-| System configuration           | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the keychain            |
-| Name resolution (network only) | nothing beyond `/etc`                                                                         | mDNSResponder                           |
-| Locale and time zones          | `/usr/share/zoneinfo`, locale data                                                            | the same                                |
-| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same                                |
-| System and own process state   | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl` |
-| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                |
+| Purpose                                              | Linux                                                                                         | macOS                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Loader and shared libraries                          | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache                                      |
+| Installed programs                                   | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`, the developer tools                 |
+| System configuration                                 | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the shell `/bin/sh` runs                                   |
+| Name resolution and certificate trust (network only) | nothing beyond `/etc`                                                                         | mDNSResponder, `trustd`                                                    |
+| Locale and time zones                                | `/usr/share/zoneinfo`, locale data                                                            | the same                                                                   |
+| Devices                                              | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same, and `/dev/fd` with `/dev/stdin`, `/dev/stdout` and `/dev/stderr` |
+| System and own process state                         | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl`                                    |
+| Scratch                                              | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                                                   |
 
 - The baseline is read and execute only. The writable entries are the private
-  `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
+  `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited. On
+  macOS `/dev/fd` is writable too: opening `/dev/fd/N` copies descriptor `N`,
+  which the child already holds, with no access it lacks.
+- On macOS the developer tools are the Command Line Tools, which the `/usr/bin`
+  stubs (`git`, `cc`, `python3`) run, and the plist that records that the Xcode
+  license was accepted. A stub reads the link `xcode-select` keeps, but not the
+  directory it names. Xcode itself is not in the baseline: `/Applications` is
+  writable by every admin user, root or not, so the entry could be swapped for
+  a link to anywhere. A stub that finds no Xcode falls back to the Command Line
+  Tools, and a user who wants Xcode grants its bundle, such as
+  `--process-read /Applications/Xcode.app`.
+- Each entry sits in a directory only root can write, so no other user can
+  swap the entry for a link. What lies inside may be the user's, as under
+  `/opt/homebrew`. A link there leads only to its real path, which the sandbox
+  judges on its own.
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
@@ -259,7 +278,13 @@ child may read more than the guest. It is defined, not open-ended:
   `java.security` lives in `/etc/java-*`), and what it holds is the system's,
   readable by every user. A secret under it, such as `/etc/shadow` or an SSH
   host key, is readable by root alone, which the guest's user is not.
-- With the network not granted, mDNSResponder's socket drops out.
+- On macOS a TLS client asks `trustd` whether to trust a certificate, through
+  `com.apple.trustd.agent` (Security.framework, Go) or
+  `com.apple.TrustEvaluationAgent` (the system `curl`). `trustd` may fetch what
+  the certificate names, such as an intermediate or a revocation list, over the
+  network on the child's behalf.
+- With the network not granted, mDNSResponder's socket and the trust services
+  drop out.
 
 ### Grants
 
@@ -390,6 +415,28 @@ comments for the interface. What follows is why it takes the shape it does.
   process. Once the child exits, the host kills what is left of its group before
   reaping it, so no descendant keeps the child's grants with nobody watching,
   and none holds a pipe the guest is reading open.
+- A child of an unconfined spawn shares its parent's process group, and with it
+  the parent's place on the terminal: it reads the terminal and sets its mode.
+  A group of its own reads and sets the terminal only as its foreground group,
+  so the `wado` host treats a child that inherits a stream from its terminal as
+  a shell treats the job it runs:
+  - Holding the terminal, the host hands it to the child's group before the
+    program starts, and takes it back once the child ends. Ctrl-C then reaches
+    the child alone, where a shared group would end the host too: the guest
+    sees the child end by `SIGINT` and carries on.
+  - One child holds the terminal at a time. Another starts in the background
+    and writes there freely. If it reads the terminal or sets its mode, it waits
+    until the first is done, then gets it.
+  - The host stops where a shared group would stop: when Ctrl-Z stops the child
+    holding the terminal, and when a child uses the terminal while the host is
+    in the background. Continued in the foreground, the host hands the terminal
+    over again. The kernel discards a stop sent to an orphaned group, so a host
+    whose group is orphaned does not stop: Ctrl-Z does nothing, as it would to
+    a shared group.
+  - A child that stops, or that a signal ends, leaves the terminal in the
+    host's mode, as a shell restores its own. A child that exits leaves the
+    mode it chose. A host that exits while a child holds the terminal takes it
+    back in its own mode first.
 
 ### The timeout is the guest's
 
@@ -506,9 +553,20 @@ the program accepts it.
 
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
-- On macOS, whether a child can change the mode of an inherited terminal is
-  untested. The profile allows no `file-ioctl`, and `tcsetattr` is an `ioctl`,
-  so a full-screen editor under `inherit_stdio` may fail there.
+- A child waiting its turn for the terminal that the guest kills ends at once,
+  but its exit reaches the guest only once the child holding the terminal is
+  done: the host waits on the terminal for it then, not on the child.
+- A host whose group is orphaned in the background leaves a child that uses
+  the terminal stopped, and the guest's wait does not return until the guest
+  kills it. A child sharing the group would instead fail its read with `EIO`.
+- On macOS a child reads the arguments of every process its user runs, through
+  `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
+  reads the whole environment too, `wado`'s own among them, so a token in the
+  environment that started `wado` reaches every child. Seatbelt mediates
+  neither this call nor `proc_pidinfo` under `(deny default)`, and an explicit
+  `deny` of `sysctl-read` or `process-info*` still lets `KERN_PROCARGS2`
+  through. On Linux, Landlock keeps a child out of every other process's
+  `/proc` entry.
 
 - WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
   tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:
