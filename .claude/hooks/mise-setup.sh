@@ -81,14 +81,18 @@ install_mise_from_github() {
 # Install the latest mise into $LOCAL_BIN, replacing any older one there.
 install_mise() {
     log "Installing mise to $LOCAL_BIN..."
-    if curl -fsSL https://mise.run | sh; then
-        return 0
+    # Fetched first: `curl | sh` reports success when curl fails, since `sh`
+    # runs the empty script.
+    local installer
+    if ! { installer=$(curl -fsSL https://mise.run) && printf '%s\n' "$installer" | sh; }; then
+        log "mise.run installer failed; falling back to GitHub Releases"
+        if ! install_mise_from_github; then
+            log "Failed to install mise (both mise.run and GitHub fallback)"
+            return 1
+        fi
     fi
-    log "mise.run installer failed; falling back to GitHub Releases"
-    if ! install_mise_from_github; then
-        log "Failed to install mise (both mise.run and GitHub fallback)"
-        exit 1
-    fi
+    # Bash remembers where it last found `mise`, which may be the stale one.
+    hash -r
 }
 
 install_tools() {
@@ -101,15 +105,14 @@ install_tools() {
 export PATH="$LOCAL_BIN:$PATH"
 
 if ! command -v mise &>/dev/null; then
-    install_mise
+    install_mise || exit 1
 fi
 
 # A mise older than mise.toml's `min_version` fails every command, so a failed
 # install is retried once on the latest mise.
 if install_tools || {
     log "mise install failed; retrying on the latest mise"
-    install_mise
-    install_tools
+    install_mise && install_tools
 }; then
     log "Project tools installed successfully"
 else
