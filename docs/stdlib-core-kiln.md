@@ -55,7 +55,7 @@ response.
 
 ## Structs
 
-### `pub struct KilnLogSink`
+### `pub struct KilnLogSink {}`
 
 The `core:log` handler a generator runs under. A generator has no stderr
 for the default sink to write to, so the compiler installs this one around
@@ -67,7 +67,7 @@ for the default sink to write to, so the compiler installs this one around
 
 ##### `fn event(&mut self, event: Event)`
 
-### `pub struct NoOptions`
+### `pub struct NoOptions {}`
 
 The options type of a generator that takes no configuration. It is the
 default type argument of `Request`, so a generator with no `Options`
