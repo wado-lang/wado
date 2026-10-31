@@ -16,7 +16,7 @@ pub struct CollatorRes {
 
 impl GuestCollator for CollatorRes {
     fn create(locale: String) -> Result<CollatorHandle, String> {
-        let locale: Locale = locale.parse().map_err(|e| e.to_string())?;
+        let locale = Locale::try_from_str(&locale).map_err(|e| e.to_string())?;
         let inner = Collator::try_new(CollatorPreferences::from(&locale), CollatorOptions::default())
             .map_err(|e| e.to_string())?;
         Ok(CollatorHandle::new(CollatorRes { inner }))
