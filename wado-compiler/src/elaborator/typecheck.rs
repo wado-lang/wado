@@ -148,7 +148,13 @@ fn check_at(
             } else {
                 position
             };
-            return check_at(actual_inner, expected_inner, type_table, inner_position, true);
+            return check_at(
+                actual_inner,
+                expected_inner,
+                type_table,
+                inner_position,
+                true,
+            );
         }
         return TypeCheckResult::Compatible;
     }
@@ -202,13 +208,7 @@ fn check_at(
             if needs_rebuild(actual_t, expected_t, fixed) {
                 return TypeCheckResult::Incompatible;
             }
-            return check_at(
-                actual_t,
-                expected_t,
-                type_table,
-                Position::Invariant,
-                fixed,
-            );
+            return check_at(actual_t, expected_t, type_table, Position::Invariant, fixed);
         }
         (Some(_), None) | (None, Some(_)) => {
             return TypeCheckResult::Incompatible;

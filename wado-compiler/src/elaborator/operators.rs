@@ -143,7 +143,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             right = self.apply_infer_holes(right);
         }
         // An operand holding an `Option<!>` is one of its sibling's type.
-        let widens_to = |from: TypeId, to: TypeId| widens(from, to, &self.tysys.type_table.borrow());
+        let widens_to =
+            |from: TypeId, to: TypeId| widens(from, to, &self.tysys.type_table.borrow());
         if widens_to(right, left) {
             self.record_widening(binary.right.id(), right, left);
             right = left;

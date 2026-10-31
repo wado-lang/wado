@@ -2861,7 +2861,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // whose recorder fires only at the stmt level). A `null` is built at
         // the type expected of it; any other value holding an `Option<!>` is
         // built at its own and widened where it goes (`reify_expr`).
-        let is_null = matches!(expr, ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null));
+        let is_null =
+            matches!(expr, ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null));
         let recorded_type = self
             .ann_expression_types(expr.id())
             .or(expected_type.filter(|_| is_null))

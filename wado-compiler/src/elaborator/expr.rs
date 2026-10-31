@@ -835,12 +835,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let result_type =
             expected_type.unwrap_or_else(|| self.tysys.representative_branch_type(&branch_types));
 
-        // Report a `break label: null` whose `Option<...>` inner could not be
-        // inferred against a resolved non-`Option` result. A type still UNKNOWN
-        // means every break was a bare `null`, which the first call reports.
-        if !self.report_uninferable_result(result_type, lb.span, "labeled block") {
-            self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
-        }
+        self.report_unresolved_null_breaks(result_type, &lb.block, &lb.label);
 
         for &branch_type in &branch_types {
             if branch_type != TypeTable::NEVER {
@@ -2596,15 +2591,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         };
 
-        // Both branches a bare `null` leaves the type indefinite, which is
-        // reported instead of the tails.
-        if !self.report_uninferable_result(type_id, if_expr.span, "if expression") {
-            let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
-            if let Some(eb) = &if_expr.else_block {
-                blocks.push(eb);
-            }
-            self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
+        let mut blocks: Vec<&ast::Block> = vec![&if_expr.then_block];
+        if let Some(eb) = &if_expr.else_block {
+            blocks.push(eb);
         }
+        self.report_unresolved_null_tails_in_blocks(type_id, &blocks);
 
         // A settled expectation skipped agreement, so each branch is checked here
         // lest one push the wrong type; `Unit` is statement position, where none is kept.
@@ -2647,27 +2638,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-    }
-
-    /// Reports a `CannotInferType` error when the branches of a construct left
-    /// its result holding `unknown`. Branches agreeing only on an `Option<!>`
-    /// (each a `null`) settle on it, as a `let` bound to `null` does. Returns
-    /// `true` when an error was reported, so the caller can skip the
-    /// `null`-patching pass (which requires a resolved target type).
-    fn report_uninferable_result(
-        &mut self,
-        result_type: TypeId,
-        span: Span,
-        construct: &str,
-    ) -> bool {
-        if !self.tysys.type_table.borrow().contains_unknown(result_type) {
-            return false;
-        }
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!("cannot infer the type of this {construct}; add a type annotation"),
-            span,
-        });
-        true
     }
 
     /// Reports each `null` branch value that could not be reconciled with a
@@ -3099,15 +3069,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
         };
 
-        // Report any `null`-bodied arm whose `Option<???>` inner could not be
-        // inferred against a resolved non-`Option` result — AST mirror of the
-        // old `patch_unresolved_null` pass (whose TIR mutation was dead). When
-        // the match type itself stayed UNKNOWN (every arm a bare `null`)
-        // `report_uninferable_result` already fired and the null pass is
-        // skipped.
-        if !self.report_uninferable_result(type_id, match_expr.span, "match expression") {
-            self.report_unresolved_null_match_arms(type_id, match_expr);
-        }
+        self.report_unresolved_null_match_arms(type_id, match_expr);
 
         // Retarget literal arms to the unified type before the arm-agreement
         // check below would reject their `i32`/`f64` default.

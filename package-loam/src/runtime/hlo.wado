@@ -466,7 +466,11 @@ pub fn masked<affine G: Graph, E: Element, Axes>(
     let extents = g.extents_of(x);
     let along = [extents[axis]] as List<i32>;
     let positions: G::Tensor<i64, [Along]> = g.iota(along, 0);
-    let valid_along: G::Tensor<bool, [Along]> = g.compare(Comparison::Lt, &positions, &g.broadcast_in_dim(length, along, []));
+    let valid_along: G::Tensor<bool, [Along]> = g.compare(Comparison::Lt, &positions, &g.broadcast_in_dim(
+        length,
+        along,
+        [],
+    ));
     let valid: G::Tensor<bool, Axes> = g.broadcast_in_dim(&valid_along, extents, [axis]);
     return g.select(&valid, x, &full::<G, E, Axes>(g, fill, extents));
 }

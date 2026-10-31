@@ -2028,11 +2028,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
             args
         };
-        let mut arg_sites: Vec<ArgSite> = static_call
-            .args
-            .iter()
-            .map(ArgSite::written)
-            .collect();
+        let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
         let declaring_trait = callee_sig

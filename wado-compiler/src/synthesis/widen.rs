@@ -54,12 +54,9 @@ struct Widener<'a> {
 impl TirMutVisitor for Widener<'_> {
     fn visit_expr(&mut self, expr: &mut TirExpr) {
         self.walk_expr(expr);
-        if let TirExprKind::Widen { .. } = expr.kind {
-            let TirExprKind::Widen { value } = std::mem::replace(&mut expr.kind, TirExprKind::Unit)
-            else {
-                unreachable!()
-            };
-            *expr = self.rebuilt(*value, expr.type_id);
+        match std::mem::replace(&mut expr.kind, TirExprKind::Unit) {
+            TirExprKind::Widen { value } => *expr = self.rebuilt(*value, expr.type_id),
+            kind => expr.kind = kind,
         }
     }
 }
@@ -74,7 +71,10 @@ impl Widener<'_> {
             if tt.type_key(from) == tt.type_key(to) {
                 return value;
             }
-            (tt.mangle_type_arg_erased(from), tt.mangle_type_arg_erased(to))
+            (
+                tt.mangle_type_arg_erased(from),
+                tt.mangle_type_arg_erased(to),
+            )
         };
         let name = widen_helper_name(&from_name, &to_name);
         if self.named.insert(name.clone()) {
@@ -92,17 +92,15 @@ impl Widener<'_> {
     fn helper(&mut self, name: String, from: TypeId, to: TypeId) -> TirFunction {
         let v = || local_ref(0, "v", from);
         let mut locals = vec![param_local("v", from, false)];
-        let (from_head, to_head) = {
+        let (from_head, to_head, tuples, resolved) = {
             let tt = self.tt.borrow();
-            (tt.representation_head(from), tt.representation_head(to))
-        };
-        let tuples = {
-            let tt = self.tt.borrow();
-            tt.as_tuple(from_head).zip(tt.as_tuple(to_head))
-        };
-        let resolved = {
-            let tt = self.tt.borrow();
-            (tt.get(from_head).clone(), tt.get(to_head).clone())
+            let (from_head, to_head) = (tt.representation_head(from), tt.representation_head(to));
+            (
+                from_head,
+                to_head,
+                tt.as_tuple(from_head).zip(tt.as_tuple(to_head)),
+                (tt.get(from_head).clone(), tt.get(to_head).clone()),
+            )
         };
         let stmts = if let Some((from_elems, to_elems)) = tuples {
             let elements = from_elems
@@ -110,7 +108,10 @@ impl Widener<'_> {
                 .zip(&to_elems)
                 .enumerate()
                 .map(|(i, (&f, &t))| {
-                    self.rebuilt(field_access(v(), i as u32, i.to_string(), f, synth_span()), t)
+                    self.rebuilt(
+                        field_access(v(), i as u32, i.to_string(), f, synth_span()),
+                        t,
+                    )
                 })
                 .collect();
             vec![return_stmt(Some(TirExpr::new(
@@ -220,11 +221,7 @@ impl Widener<'_> {
         let in_range = binary(TirBinaryOp::Lt, index(), len(), TypeTable::BOOL);
         let body = TirBlock::new(
             vec![
-                if_stmt(
-                    not_expr(in_range, span),
-                    block(vec![break_stmt()]),
-                    None,
-                ),
+                if_stmt(not_expr(in_range, span), block(vec![break_stmt()]), None),
                 expr_stmt(set),
                 expr_stmt(assign(
                     index(),
@@ -240,12 +237,7 @@ impl Widener<'_> {
                 TypeTable::I32,
                 builtin_call("array_len", vec![v()], TypeTable::I32),
             ),
-            let_mut_stmt(
-                "out",
-                2,
-                to,
-                builtin_call("array_new", vec![len()], to),
-            ),
+            let_mut_stmt("out", 2, to, builtin_call("array_new", vec![len()], to)),
             let_mut_stmt("index", 3, TypeTable::I32, i32_const(0)),
             loop_stmt(body),
             return_stmt(Some(out())),
@@ -262,8 +254,11 @@ impl Widener<'_> {
         let mut tt = self.tt.borrow_mut();
         let def = tt.nominal_def(from)?;
         let cases = tt.variant_template_cases(def)?.to_vec();
-        let from_args = tt.nominal_type_args(from).unwrap_or_default();
-        let to_args = tt.nominal_type_args(to).unwrap_or_default();
+        let args = |id| {
+            tt.nominal_type_args(id)
+                .expect("two instances of one variant part by their arguments")
+        };
+        let [from_args, to_args] = [args(from), args(to)];
         Some(
             cases
                 .into_iter()
@@ -303,10 +298,13 @@ impl Widener<'_> {
         let list_element = self.tt.borrow().list_element(id);
         if let Some(elem) = list_element {
             let backing = self.tt.borrow_mut().make_builtin_array(elem);
-            return [(SeqField::Backing, backing), (SeqField::Len, TypeTable::I32)]
-                .into_iter()
-                .map(|(field, ty)| (field.index(), field.field_name().to_string(), ty))
-                .collect();
+            return [
+                (SeqField::Backing, backing),
+                (SeqField::Len, TypeTable::I32),
+            ]
+            .into_iter()
+            .map(|(field, ty)| (field.index(), field.field_name().to_string(), ty))
+            .collect();
         }
         let tt = self.tt.borrow();
         let (def, type_args) = match tt.get(id) {
