@@ -18,7 +18,7 @@ use crate::ast::{
 };
 use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::{Code, CompilerHost, DiagnosticSpan};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
@@ -30,6 +30,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, positional_substitution};
 use crate::type_table::TypeTable;
 use crate::world_registry::WorldRegistry;
 
+use super::declaration_attrs::internal_tag_faults;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::types::{
@@ -1697,17 +1698,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // `unchecked` reads the callees the body walks settled, so it waits
         // for every module's walk. Only a clean walk settled them all.
+        // `#[wire(tag)]` reads its cases' payloads and their `Serialize` impls,
+        // so it waits for the same.
         reify_eligible.retain(|module_source| {
-            let misplaced = misplaced_unchecked(
-                &modules[module_source],
+            let module = &modules[module_source];
+            let faults: Vec<Diagnostic> = misplaced_unchecked(
+                module,
                 &state.module_semantics[module_source],
                 &state.tysys.resolutions,
                 modules,
-            );
-            for diagnostic in &misplaced {
+            )
+            .into_iter()
+            .chain(internal_tag_faults(module, &state.tysys, modules))
+            .collect();
+            for diagnostic in &faults {
                 let _ = logger.error_in(module_source, diagnostic.clone());
             }
-            misplaced.is_empty()
+            faults.is_empty()
         });
 
         // Liveness — source-level reachability over every module's recorded
@@ -1801,13 +1808,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .module_semantics
                         .get(module_source)
                         .expect("populated by Phase 1");
-                    let mut reify = Reify::new(
+                    let mut reify = Reify::<H>::new(
                         state.tysys.clone(),
                         sem_ref,
                         &state.module_semantics,
                         symbols,
                         modules,
-                        logger,
                         // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
                         // `reify_module`). The semantic diagnostics (effect
@@ -1821,9 +1827,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                     reify.coverage = state.coverage.as_ref();
                     reify.cold = state.cold.as_ref();
-                    if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
-                        result.insert(module_source.clone(), reified);
-                    }
+                    let reified = reify.reify_module(module, module_source.clone());
+                    result.insert(module_source.clone(), reified);
                 }
             }
         }

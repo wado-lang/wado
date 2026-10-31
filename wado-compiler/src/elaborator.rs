@@ -9,6 +9,7 @@ mod callee;
 mod closure;
 pub(crate) mod coercion;
 mod control_flow;
+mod declaration_attrs;
 mod exhaustiveness;
 mod expr;
 pub(crate) mod float_literal;

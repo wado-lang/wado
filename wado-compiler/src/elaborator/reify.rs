@@ -4,6 +4,7 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
+use std::marker::PhantomData;
 use std::ops::ControlFlow;
 use std::rc::Rc;
 
@@ -11,15 +12,14 @@ use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    self, ALLOC, AMBIENT, CM, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, SECRET, SIDE_EFFECT, STORAGE,
-    WIRE,
+    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
+    wire_value,
 };
-use crate::builtin_facts::{self, BuiltinFacts, ParamShape, ReturnShape};
 use crate::call_args::CallArgs;
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
+use crate::compiler_host::CompilerHost;
+use crate::compiler_item::parse_compiler_item_attrs;
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::logger::{Bail, Logger};
 use crate::lower::contract_checks::is_contract_clause;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
 use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
@@ -51,7 +51,7 @@ use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::RangeKind;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
+use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
@@ -62,10 +62,9 @@ use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
-use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
+    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
     IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch,
     MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, impl_self_layers,
     with_body_facts,
@@ -495,8 +494,9 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
     pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// Diagnostics logger.
-    pub(crate) logger: &'a Logger<'a, H>,
+    /// The host the `Elaborator` helpers reify shares are generic over. Reify
+    /// holds no logger: every diagnostic is annotate's, so it cannot fail.
+    host: PhantomData<fn() -> H>,
     /// Source module currently being reified.
     pub(crate) current_module_source: ModuleSource,
     /// The module whose TIR is being built, which `current_module_source`
@@ -664,7 +664,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
-        logger: &'a Logger<'a, H>,
         emit_live: Option<&'a IndexSet<AstId>>,
     ) -> Self {
         Self {
@@ -674,7 +673,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             all_module_semantics,
             symbols,
             loaded_modules,
-            logger,
+            host: PhantomData,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             emitted_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
@@ -835,6 +834,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_fn_param_types => fn_param_types: Vec<tir::TypeId>,
             ann_fn_affine_params => fn_affine_params: Vec<tir::TypeId>,
             ann_fn_return_type => fn_return_types: tir::TypeId,
+            ann_fn_declared_attrs => fn_declared_attrs: DeclaredAttrs,
             ann_effect_ops => effect_ops: Vec<TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<TirTypeParam>,
             ann_struct_field_types => struct_field_types: Vec<tir::TypeId>,
@@ -946,7 +946,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         module: &'a Module,
         module_source: ModuleSource,
-    ) -> Result<TirModule, Bail> {
+    ) -> TirModule {
         self.current_module_source = module_source.clone();
         self.emitted_module_source = module_source.clone();
         self.current_module_items = &module.items;
@@ -1091,7 +1091,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tir_module.wasm_module = module.wasm_module().map(String::from);
 
         self.assert_probes_complete();
-        self.logger.ok_or_bail(tir_module)
+        tir_module
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -1117,11 +1117,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: case.name.clone(),
                     index: i as u32,
                     span: case.span,
-                    wire_name_override: wire_name_override_of(&case.attrs),
+                    wire_name_override: wire_name_override(&case.attrs),
                 })
                 .collect(),
             span: enum_decl.span,
-            wire_name_policy: wire_name_policy_of(&enum_decl.attrs),
+            wire_name_policy: wire_name_policy(&enum_decl.attrs),
         }
     }
 
@@ -1147,7 +1147,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .collect(),
             span: flags_decl.span,
-            wire_name_policy: wire_name_policy_of(
+            wire_name_policy: wire_name_policy(
                 flags_decl.attributes.as_deref().unwrap_or_default(),
             ),
         })
@@ -1219,7 +1219,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(struct_decl.id)
             .expect("resolve_struct records the type params for every struct reify emits");
 
-        let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
+        let wire_name_policy = wire_name_policy(&struct_decl.attrs);
 
         TirStruct {
             def: StructDef::Decl(self.tysys.def_at(struct_decl.id)),
@@ -1301,7 +1301,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 monomorph_info: None,
                 fields,
                 span: struct_decl.span,
-                wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
+                wire_name_policy: wire_name_policy(&struct_decl.attrs),
             },
         );
     }
@@ -1343,7 +1343,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 index: index as u32,
                 payload: data.payload,
                 span: case.span,
-                wire_name_override: wire_name_override_of(&case.attrs),
+                wire_name_override: wire_name_override(&case.attrs),
             })
             .collect();
 
@@ -1361,11 +1361,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect(),
         );
 
-        let wire_tag = wire_value_of(&variant_decl.attrs, "tag");
-        if let Some(tag) = &wire_tag {
-            self.check_internal_tag(variant_decl, tag, &cases);
-        }
-
         TirVariantDecl {
             def,
             name: variant_decl.name.clone(),
@@ -1374,93 +1369,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_params,
             cases,
             span: variant_decl.span,
-            wire_name_policy: wire_name_policy_of(&variant_decl.attrs),
-            wire_tag,
+            wire_name_policy: wire_name_policy(&variant_decl.attrs),
+            wire_tag: wire_value(&variant_decl.attrs, "tag"),
         }
-    }
-
-    /// An internally tagged case is written as an object holding `tag` beside
-    /// its payload's fields, so the payload is a struct, or nothing, and writes
-    /// no field under `tag`.
-    fn check_internal_tag(
-        &self,
-        variant_decl: &ast::VariantDecl,
-        tag: &str,
-        cases: &[tir::TirVariantCase],
-    ) {
-        let unit = self.tysys.type_table.borrow().type_key(TypeTable::UNIT);
-        for (case, reified) in variant_decl.cases.iter().zip(cases) {
-            if self.tysys.type_table.borrow().type_key(reified.payload) == unit {
-                continue;
-            }
-            let case_path = format!("{}::{}", variant_decl.name, case.name);
-            let Some(payload) = self.derived_struct_decl_of(reified.payload) else {
-                let payload = self.tysys.type_table.borrow().type_name(reified.payload);
-                self.error_at(
-                    Code::AttrMisuse,
-                    case.span,
-                    format!(
-                        "`{case_path}` carries `{payload}`, but a case of a variant with \
-                         `#[wire(tag)]` carries nothing or a struct its derivation writes"
-                    ),
-                );
-                continue;
-            };
-            let policy = wire_name_policy_of(&payload.attrs);
-            for field in &payload.fields {
-                let wire_name = NamePolicy::wire_name(
-                    wire_name_override_of(&field.attrs).as_deref(),
-                    policy,
-                    &field.name,
-                );
-                if wire_name == tag {
-                    self.error_at(
-                        Code::AttrMisuse,
-                        case.span,
-                        format!(
-                            "`{case_path}` writes its payload's field `{}` as `{tag}`, \
-                             the key its tag is written under",
-                            field.name
-                        ),
-                    );
-                }
-            }
-        }
-    }
-
-    /// The struct declaration `ty` instantiates, through any newtype over it,
-    /// where the derivation reads and writes it as a struct: no link of `ty`
-    /// has a hand-written `Serialize` or `Deserialize`, whose shape nothing
-    /// here can see. `String` and `List` are declared as structs and are such.
-    fn derived_struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
-        let written = [CompilerItem::Serialize, CompilerItem::Deserialize]
-            .into_iter()
-            .filter_map(|item| self.tysys.compiler_trait_def(item))
-            .any(|trait_| self.tysys.impl_link(ty, trait_).is_some());
-        if written {
-            return None;
-        }
-        self.struct_decl_of(ty)
-    }
-
-    /// The struct declaration `ty` instantiates, through any newtype over it,
-    /// or `None` where `ty` is not a declared struct.
-    fn struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
-        let def = {
-            let type_table = self.tysys.type_table.borrow();
-            let head = type_table.newtype_representation(ty).unwrap_or(ty);
-            type_table.nominal_def(head)?
-        };
-        let defs = self.tysys.resolutions.defs();
-        let target = defs.ast_id(def);
-        self.loaded_modules
-            .get(defs.module(def))?
-            .items
-            .iter()
-            .find_map(|item| match item {
-                ast::Item::Struct(decl) if decl.id == target => Some(decl),
-                _ => None,
-            })
     }
 
     /// Reify an `interface E { … }` declaration. Effects have no
@@ -1576,11 +1487,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("the declaring walk records the type params for every function reify emits");
-        let declared = self.reify_declared_facts(func, &params, return_type);
-        let immediates = self.reify_immediate_attrs(func, &params);
-        if body.is_some() {
-            self.reject_bodyless_attrs_on_body(&func.attrs);
-        }
+        let DeclaredAttrs {
+            facts: declared,
+            immediates,
+        } = self
+            .ann_fn_declared_attrs(func.id)
+            .expect("the declaring walk records the declared attributes of every function");
 
         TirFunction {
             module_source: ModuleSource::default(),
@@ -1612,12 +1524,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
-            compiler_item: extract_compiler_item(
-                &func.attrs,
-                func.span,
-                &self.current_module_source,
-                self.logger,
-            ),
+            // The declaring walk registered it, and reported an unknown one.
+            compiler_item: parse_compiler_item_attrs(&func.attrs).0.into_iter().next(),
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
             kind: tir::FunctionKind::Regular,
@@ -1963,7 +1871,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let initializer = self.with_expr_ownership(&global_decl.initializer, |this| {
             this.reify_expr(&global_decl.initializer, &mut ctx, Some(ty))
         });
-        let param = self.reify_param_attr(global_decl);
+        let param = self.types.global_params.get(&global_decl.id).cloned();
         let span = global_decl.span;
 
         let frame = LocalFrame {
@@ -2059,40 +1967,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         .trait_decl(def)
     }
 
-    /// Report an error at `span` in the module reify stands in.
-    fn error_at(&self, code: Code, span: Span, message: String) {
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code,
-                message,
-                span: Some(DiagnosticSpan::from_span(&span, None)),
-            },
-        );
-    }
-
-    /// Report a malformed attribute at the attribute's own span.
-    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
-        self.error_at(code, attr.span, message);
-    }
-
-    /// Report each attribute that describes a declaration with no body, written
-    /// on a function that has one. Its arguments were read already, so a
-    /// malformed one reports that too.
-    fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
-        for (attr, name, bodyless) in attribute::bodyless(attrs) {
-            self.attr_error(
-                Code::AttrMisuse,
-                attr,
-                format!(
-                    "#[{name}] belongs to a declaration with no body: {}",
-                    bodyless.on_body
-                ),
-            );
-        }
-    }
-
     /// A declared struct field as TIR: its attributes read, its default reified.
     fn reify_struct_field(
         &mut self,
@@ -2112,7 +1986,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             index: index as u32,
             span: field.span,
             is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-            wire_name_override: wire_name_override_of(&field.attrs),
+            wire_name_override: wire_name_override(&field.attrs),
             serde_default: field.default.is_some(),
             serde_positional: field
                 .attrs
@@ -2120,175 +1994,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
             default_expr,
         }
-    }
-
-    /// Extract and structurally validate a `#[param]` attribute on a global.
-    ///
-    /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
-    /// global has no `#[param]` or the attribute is malformed (in which case a
-    /// structural error is emitted; compilation bails at `ok_or_bail`). The
-    /// resolution itself (overrides, env, conversion) happens later in the
-    /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
-    fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        let attr = global_decl.attributes.iter().find(|a| a.name == PARAM)?;
-        let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
-
-        let mut ok = true;
-        if global_decl.mutable {
-            emit("#[param] cannot be applied to a mutable global".to_string());
-            ok = false;
-        }
-
-        for arg in &attr.args {
-            match arg {
-                ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
-                ast::AttrArg::KeyValue(k, _)
-                | ast::AttrArg::KeyArray(k, _)
-                | ast::AttrArg::KeyIdentArray(k, _)
-                | ast::AttrArg::KeyIdent(k, _)
-                | ast::AttrArg::KeyNumber(k, _) => {
-                    emit(format!("unknown #[param] argument: {k}"));
-                    ok = false;
-                }
-                bare
-                @ (ast::AttrArg::Str(_) | ast::AttrArg::Ident(_) | ast::AttrArg::Number(_)) => {
-                    emit(format!("unknown #[param] argument: {}", bare.name()));
-                    ok = false;
-                }
-            }
-        }
-
-        let name = match attr.kv_value("name") {
-            Some("") => {
-                emit("#[param] name must not be empty".to_string());
-                ok = false;
-                global_decl.name.clone()
-            }
-            Some(n) => n.to_string(),
-            None => global_decl.name.clone(),
-        };
-        let from_env = match attr.kv_value("from_env") {
-            Some("") => {
-                emit("#[param] from_env must not be empty".to_string());
-                ok = false;
-                None
-            }
-            Some(env) => Some(env.to_string()),
-            None => None,
-        };
-
-        if ok {
-            Some(tir::ParamSpec { name, from_env })
-        } else {
-            None
-        }
-    }
-
-    /// What a body-less declaration states with `#[storage]` and
-    /// `#[side_effect]`. It owes both, unless it only reserves a name. A
-    /// Component Model import states neither: the raw call
-    /// its adapter makes carries the facts, the same for every import.
-    fn reify_declared_facts(
-        &self,
-        func: &ast::Function,
-        params: &[tir::TirParam],
-        return_type: tir::TypeId,
-    ) -> Option<BuiltinFacts<String>> {
-        if func.body.is_some() || reserves_a_name_only(func) {
-            return None;
-        }
-        let written = func
-            .attrs
-            .iter()
-            .filter(|attr| attr.name == STORAGE || attr.name == SIDE_EFFECT);
-        if carries_cm(func) {
-            for attr in written {
-                self.attr_error(
-                    code_of(&attr.name),
-                    attr,
-                    format!(
-                        "#[{}] does not belong on a Component Model import: the raw call \
-                         its adapter makes carries the facts, the same for every import",
-                        attr.name
-                    ),
-                );
-            }
-            return None;
-        }
-        let type_table = self.tysys.type_table.borrow();
-        let shapes: Vec<ParamShape<'_>> = params
-            .iter()
-            .map(|p| ParamShape::of(&p.name, p.type_id, &type_table))
-            .collect();
-        let ret = ReturnShape::of(return_type, &type_table);
-        match builtin_facts::read(&func.attrs, &shapes, ret) {
-            Ok(Some(facts)) => Some(facts),
-            Ok(None) => {
-                self.error_at(
-                    Code::StorageAttr,
-                    func.name_span,
-                    format!(
-                        "`{}` has no body, so it states what a call does: \
-                         declare #[storage(...)] and #[side_effect(...)]",
-                        func.name
-                    ),
-                );
-                None
-            }
-            Err(faults) => {
-                for fault in faults {
-                    let attr = func
-                        .attrs
-                        .iter()
-                        .filter(|attr| attr.name == fault.attr)
-                        .nth(fault.occurrence)
-                        .expect("a fault points at an attribute the declaration carries");
-                    self.attr_error(code_of(fault.attr), attr, fault.message);
-                }
-                None
-            }
-        }
-    }
-
-    /// The parameters named by `#[immediate(p)]`, each lowered to a Wasm
-    /// immediate and so required to still be a literal when codegen reads it.
-    fn reify_immediate_attrs(&self, func: &ast::Function, params: &[tir::TirParam]) -> Vec<String> {
-        func.attrs
-            .iter()
-            .filter(|a| a.name == IMMEDIATE)
-            .filter_map(|attr| self.reify_immediate_attr(attr, params, carries_cm(func)))
-            .collect()
-    }
-
-    fn reify_immediate_attr(
-        &self,
-        attr: &ast::Attribute,
-        params: &[tir::TirParam],
-        is_cm_import: bool,
-    ) -> Option<String> {
-        let emit = |message: String| {
-            self.attr_error(Code::ImmediateAttr, attr, message);
-            None
-        };
-        if is_cm_import {
-            return emit(
-                "#[immediate] does not belong on a Component Model import: its adapter \
-                 calls it rather than encoding it as one instruction"
-                    .to_string(),
-            );
-        }
-        let Some(ast::AttrArg::Ident(name)) = attr.args.first() else {
-            return emit("#[immediate] names one parameter, unquoted".to_string());
-        };
-        if !params.iter().any(|p| &p.name == name) {
-            return emit(format!("#[immediate] names no parameter: {name}"));
-        }
-        if attr.args.len() > 1 {
-            return emit(
-                "#[immediate] names one parameter; repeat the attribute for another".to_string(),
-            );
-        }
-        Some(name.clone())
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -10983,57 +10688,6 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
         ast::BinaryOp::BitXor => TirBinaryOp::BitXor,
         ast::BinaryOp::Shl => TirBinaryOp::Shl,
         ast::BinaryOp::Shr => TirBinaryOp::Shr,
-    }
-}
-
-/// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
-fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
-    wire_value_of(attrs, "name")
-}
-
-/// The string a `#[wire(key = "...")]` on the declaration writes.
-fn wire_value_of(attrs: &[ast::Attribute], key: &str) -> Option<String> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_value(key).map(str::to_string)
-        } else {
-            None
-        }
-    })
-}
-/// `#[wire(name_policy = "...")]` on a declaration. The attribute check refuses
-/// a policy `NamePolicy` does not name.
-fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_value("name_policy").and_then(NamePolicy::parse)
-        } else {
-            None
-        }
-    })
-}
-
-/// Whether the declaration reserves a name rather than a signature. Nothing
-/// ever calls a `#[unavailable]` one, so it states nothing about a call and is
-/// owed nothing about one either.
-fn reserves_a_name_only(func: &ast::Function) -> bool {
-    func.unavailable_attr().is_some()
-}
-
-/// Whether the declaration carries `#[cm(...)]`, which makes it a Component
-/// Model import called through an adapter. Not `Function::is_cm_import`, which
-/// a `#[canonical(...)]` builtin answers too.
-fn carries_cm(func: &ast::Function) -> bool {
-    func.attrs.iter().any(|attr| attr.name == CM)
-}
-
-/// The code a fault in the attribute named `name` is reported under.
-fn code_of(name: &str) -> Code {
-    if name == STORAGE {
-        Code::StorageAttr
-    } else {
-        assert_eq!(name, SIDE_EFFECT, "a fact attribute is one of the two");
-        Code::SideEffectAttr
     }
 }
 
