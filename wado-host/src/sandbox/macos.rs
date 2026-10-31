@@ -56,6 +56,10 @@ const PROFILE_BASE: &str = r#"(version 1)
 ; itself can be read.
 (allow file-read-data (literal "/"))
 (allow file-read-metadata (literal "/etc") (literal "/tmp") (literal "/var"))
+; A descriptor the child already holds, opened again by its number: no access
+; it lacks.
+(allow file-read* file-write* (subpath "/dev/fd"))
+(allow file-read-metadata (literal "/dev/stdin") (literal "/dev/stdout") (literal "/dev/stderr"))
 (allow mach-lookup
     (global-name "com.apple.system.opendirectoryd.libinfo")
     (global-name "com.apple.system.notification_center")
@@ -63,13 +67,17 @@ const PROFILE_BASE: &str = r#"(version 1)
     (global-name "com.apple.logd"))
 "#;
 
-/// The rules for a network grant: IP sockets, and the one UNIX socket by path
-/// name resolution goes through.
+/// The rules for a network grant: IP sockets, the one UNIX socket by path name
+/// resolution goes through, and the services that decide whether to trust a
+/// TLS certificate, which may fetch over the network for the child.
 const PROFILE_NETWORK: &str = r#"(allow system-socket)
 (allow network-outbound (remote ip))
 (allow network-inbound (local ip))
 (allow network-bind (local ip))
 (allow network-outbound (literal "/private/var/run/mDNSResponder"))
+(allow mach-lookup
+    (global-name "com.apple.trustd.agent")
+    (global-name "com.apple.TrustEvaluationAgent"))
 "#;
 
 /// The profile for `policy`, and the parameters it reads. Seatbelt matches the
@@ -78,9 +86,10 @@ const PROFILE_NETWORK: &str = r#"(allow system-socket)
 fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     let mut text = PROFILE_BASE.to_owned();
     let mut params = Vec::new();
-    // Resolving a path stats each directory above it, so a grant's ancestors
-    // show their metadata and nothing else.
-    let mut ancestors = BTreeSet::new();
+    // Resolving a path stats each directory above it and reads each link on
+    // it, so a grant's ancestors and the links its path names show their
+    // metadata and nothing else.
+    let mut traversed = BTreeSet::new();
     for rule in policy.rules() {
         let real = match rule.real_path() {
             Ok(real) => real,
@@ -97,21 +106,36 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
             Access::ReadWrite => "file-read* file-write* process-exec",
         };
         allow(&mut text, &mut params, operations, "subpath", &real);
-        ancestors.extend(real.ancestors().skip(1).map(Path::to_path_buf));
+        traversed.extend(real.ancestors().skip(1).map(Path::to_path_buf));
+        traversed.extend(links_on(&rule.path));
     }
-    for ancestor in &ancestors {
+    for path in &traversed {
         allow(
             &mut text,
             &mut params,
             "file-read-metadata",
             "literal",
-            ancestor,
+            path,
         );
     }
     if policy.network() == Network::Granted {
         text.push_str(PROFILE_NETWORK);
     }
     Ok((text, params))
+}
+
+/// The symbolic links `path` passes through, itself included, each at the real
+/// path Seatbelt matches it by.
+fn links_on(path: &Path) -> impl Iterator<Item = PathBuf> + '_ {
+    path.ancestors()
+        .filter(|step| std::fs::symlink_metadata(step).is_ok_and(|meta| meta.is_symlink()))
+        .filter_map(|link| {
+            Some(
+                std::fs::canonicalize(link.parent()?)
+                    .ok()?
+                    .join(link.file_name()?),
+            )
+        })
 }
 
 /// Appends a rule allowing `operations` on `path`, which reaches the profile as

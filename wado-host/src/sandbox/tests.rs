@@ -524,6 +524,121 @@ fn reads_the_system_configuration() {
 }
 
 #[test]
+fn a_shell_starts_without_complaint() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    let dir = File::open(tree.granted()).unwrap();
+    let args: Vec<OsString> = ["-c", "true"].iter().map(OsString::from).collect();
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[],
+        cwd: Some(&dir),
+        stdin: Stdio::Null,
+        stdout: Stdio::Null,
+        stderr: Stdio::Piped,
+        policy: &policy,
+        trace: Trace::Off,
+    })
+    .unwrap();
+    let mut err = String::new();
+    File::from(spawned.stderr.unwrap())
+        .read_to_string(&mut err)
+        .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
+    assert_eq!(err, "");
+}
+
+#[test]
+fn reaches_its_own_streams_through_their_device_paths() {
+    assert_available();
+    let tree = Tree::new();
+    let policy = tree.policy(Network::Denied);
+    assert_eq!(
+        sh(
+            &policy,
+            "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && ls /dev/fd/ > /dev/null"
+        ),
+        OK
+    );
+}
+
+#[test]
+fn reads_a_grant_through_the_link_that_names_it() {
+    assert_available();
+    let tree = Tree::new();
+    fs::write(tree.outside().join("f.txt"), "f").unwrap();
+    let link = tree.root.path().join("link");
+    symlink(tree.outside(), &link).unwrap();
+    let mut policy = Policy::new(Network::Denied);
+    policy.grant_path(&link, Access::ReadExecute);
+    assert_eq!(
+        sh(&policy, &format!("cat '{}'", link.join("f.txt").display())),
+        OK
+    );
+}
+
+/// The `/usr/bin` stubs that run the selected developer tools, wherever these
+/// run unconfined.
+#[cfg(target_os = "macos")]
+#[test]
+fn runs_the_developer_tools_through_their_stubs() {
+    assert_available();
+    let unconfined = std::process::Command::new("/usr/bin/git")
+        .arg("--version")
+        .env_clear()
+        .output()
+        .unwrap();
+    if !unconfined.status.success() {
+        return;
+    }
+    let tree = Tree::new();
+    let scratch = tree.granted().display().to_string();
+    let env = [("TMPDIR", scratch.as_str()), ("HOME", scratch.as_str())];
+    let policy = tree.policy(Network::Denied);
+    assert_eq!(
+        run(&policy, Path::new("/usr/bin/git"), &["--version"], &env),
+        OK
+    );
+}
+
+/// A TLS client asks a system service whether to trust a certificate, and that
+/// service may fetch over the network for it.
+#[cfg(target_os = "macos")]
+#[test]
+fn evaluates_certificate_trust_only_with_the_network() {
+    assert_available();
+    let tree = Tree::new();
+    let pem = std::process::Command::new("/usr/bin/security")
+        .args([
+            "find-certificate",
+            "-p",
+            "-c",
+            "ISRG Root X1",
+            "/System/Library/Keychains/SystemRootCertificates.keychain",
+        ])
+        .output()
+        .unwrap();
+    assert!(pem.status.success());
+    let root = tree.granted().join("root.pem");
+    fs::write(&root, pem.stdout).unwrap();
+    let root = root.display().to_string();
+    let scratch = tree.granted().display().to_string();
+    let env = [("TMPDIR", scratch.as_str()), ("HOME", scratch.as_str())];
+    let verify = |network| {
+        run(
+            &tree.policy(network),
+            Path::new("/usr/bin/security"),
+            &["verify-cert", "-c", &root, "-L", "-q"],
+            &env,
+        )
+    };
+    assert_eq!(verify(Network::Granted), OK);
+    assert_ne!(verify(Network::Denied), OK);
+}
+
+#[test]
 fn writes_nothing_under_a_read_only_subtree() {
     assert_available();
     let tree = Tree::new();

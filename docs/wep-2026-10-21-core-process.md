@@ -134,7 +134,10 @@ followed by one rule per grant, `(subpath (param "P0"))`, and each path reaches
 it as a parameter, `-D P0=/path`. No path is spliced into SBPL, so no escaping
 can rewrite the policy. Seatbelt matches the real path, so each parameter is
 one: the path a grant's descriptor names (`F_GETPATH`), or the baseline path
-canonicalized. The profile allows no `file-ioctl`, so no input reaches a
+canonicalized. A path is resolved through a link only where the link itself can
+be read, so each link a grant's path names on its way, such as
+`/Applications/Xcode.app` on a machine with several Xcodes, shows its metadata
+and nothing else. The profile allows no `file-ioctl`, so no input reaches a
 terminal.
 
 `sandbox-exec` reports a program it cannot start only on its own stderr, so
@@ -214,19 +217,27 @@ A native program reads paths a Wasm guest never needs: its loader, its shared
 libraries, its locale data. The baseline is that set, and it is the one way a
 child may read more than the guest. It is defined, not open-ended:
 
-| Purpose                        | Linux                                                                                         | macOS                                   |
-| ------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------- |
-| Loader and shared libraries    | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache   |
-| Installed programs             | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`   |
-| System configuration           | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the keychain            |
-| Name resolution (network only) | nothing beyond `/etc`                                                                         | mDNSResponder                           |
-| Locale and time zones          | `/usr/share/zoneinfo`, locale data                                                            | the same                                |
-| Devices                        | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same                                |
-| System and own process state   | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl` |
-| Scratch                        | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                |
+| Purpose                                              | Linux                                                                                         | macOS                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Loader and shared libraries                          | `/lib*`                                                                                       | `/usr/lib`, `/System`, the dyld cache                                      |
+| Installed programs                                   | `/usr`, `/bin`, `/sbin`, `/nix/store`                                                         | `/usr`, `/opt/homebrew`, `/opt/local`, the developer tools                 |
+| System configuration                                 | `/etc`, name resolution and TLS certificates among it                                         | `/private/etc`, the shell `/bin/sh` runs                                   |
+| Name resolution and certificate trust (network only) | nothing beyond `/etc`                                                                         | mDNSResponder, `trustd`                                                    |
+| Locale and time zones                                | `/usr/share/zoneinfo`, locale data                                                            | the same                                                                   |
+| Devices                                              | `/dev/null`, `/dev/urandom`, `/dev/tty` when inheriting                                       | the same, and `/dev/fd` with `/dev/stdin`, `/dev/stdout` and `/dev/stderr` |
+| System and own process state                         | `/proc/cpuinfo` and the other system-wide entries, `/proc/sys`, the child's own `/proc/<pid>` | nothing: macOS answers through `sysctl`                                    |
+| Scratch                                              | a private `HOME` and `TMPDIR` per spawn, removed at exit                                      | the same                                                                   |
 
 - The baseline is read and execute only. The writable entries are the private
-  `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited.
+  `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited. On
+  macOS `/dev/fd` is writable too: opening `/dev/fd/N` copies descriptor `N`,
+  which the child already holds, with no access it lacks.
+- On macOS the developer tools are what the `/usr/bin` stubs (`git`, `cc`,
+  `python3`) run: the directory `xcode-select` chose, else
+  `/Applications/Xcode.app` and the Command Line Tools, and the plist that
+  records the Xcode license was accepted. `xcode-select`'s choice is the
+  system's, set by root, not the guest's. An Xcode elsewhere runs only through
+  that choice or `--process-read`.
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
@@ -259,7 +270,13 @@ child may read more than the guest. It is defined, not open-ended:
   `java.security` lives in `/etc/java-*`), and what it holds is the system's,
   readable by every user. A secret under it, such as `/etc/shadow` or an SSH
   host key, is readable by root alone, which the guest's user is not.
-- With the network not granted, mDNSResponder's socket drops out.
+- On macOS a TLS client asks `trustd` whether to trust a certificate, through
+  `com.apple.trustd.agent` (Security.framework, Go) or
+  `com.apple.TrustEvaluationAgent` (the system `curl`). `trustd` may fetch what
+  the certificate names, such as an intermediate or a revocation list, over the
+  network on the child's behalf.
+- With the network not granted, mDNSResponder's socket and the trust services
+  drop out.
 
 ### Grants
 
@@ -506,9 +523,23 @@ the program accepts it.
 
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
-- On macOS, whether a child can change the mode of an inherited terminal is
-  untested. The profile allows no `file-ioctl`, and `tcsetattr` is an `ioctl`,
-  so a full-screen editor under `inherit_stdio` may fail there.
+- A child cannot read an inherited terminal. It runs in a process group of its
+  own, which is never the terminal's foreground group, so a read raises
+  `SIGTTIN`. On macOS the guest then sees the child end by `SIGKILL`. A prompt,
+  `git commit` opening an editor, or a pager under `inherit_stdio` fails this
+  way. Input from a pipe or a file is unaffected.
+- On macOS a child cannot change the mode of an inherited terminal. The profile
+  allows no `file-ioctl`, so `tcsetattr` and `tcgetpgrp` fail with `EPERM`
+  (`stty -echo`, a password prompt, a full-screen editor). `tcgetattr` and
+  `TIOCGWINSZ` succeed, and `TIOCSTI` stays refused.
+- On macOS a child reads the arguments of every process its user runs, through
+  `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
+  reads the whole environment too, `wado`'s own among them, so a token in the
+  environment that started `wado` reaches every child. Seatbelt mediates
+  neither this call nor `proc_pidinfo` under `(deny default)`, and an explicit
+  `deny` of `sysctl-read` or `process-info*` still lets `KERN_PROCARGS2`
+  through. On Linux, Landlock keeps a child out of every other process's
+  `/proc` entry.
 
 - WSL2 is untested: GitHub's hosted Windows runners cannot run it, so the escape
   tests have never run there. A WSL2 kernel without Landlock ABI 6 fails safe:

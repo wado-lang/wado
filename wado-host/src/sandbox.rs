@@ -222,7 +222,16 @@ const BASELINE_READ: &[&str] = &[
     "/System",
     "/opt/homebrew",
     "/opt/local",
+    // The developer tools the `/usr/bin` stubs (`git`, `cc`, `python3`) run:
+    // the directory `xcode-select` chose, else the defaults it looks in, and
+    // the license acceptance it checks first.
+    "/private/var/db/xcode_select_link",
+    "/Applications/Xcode.app",
+    "/Library/Developer/CommandLineTools",
+    "/Library/Preferences/com.apple.dt.Xcode.plist",
     "/private/etc",
+    // Which shell `/bin/sh` runs.
+    "/private/var/select",
     "/private/var/db/timezone",
     "/dev/urandom",
     "/dev/random",
@@ -477,11 +486,8 @@ impl Child {
             // The leader exited and every member is gone; nothing to signal.
             // Darwin answers EPERM instead when the group holds only zombies,
             // as it does while `wait` keeps the leader unreaped.
-            let nothing_to_signal = match err.raw_os_error() {
-                Some(libc::ESRCH) => true,
-                Some(libc::EPERM) => cfg!(target_os = "macos"),
-                _ => false,
-            };
+            let nothing_to_signal = err.raw_os_error() == Some(libc::ESRCH)
+                || (cfg!(target_os = "macos") && err.raw_os_error() == Some(libc::EPERM));
             if nothing_to_signal {
                 return Ok(());
             }
