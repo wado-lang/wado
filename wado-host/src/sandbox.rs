@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io;
-use std::os::fd::OwnedFd;
+use std::os::fd::{OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,9 @@ use crate::sync::lock;
 
 #[cfg(unix)]
 mod exec;
+mod terminal;
+
+use terminal::{Reservation, Terminal};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -222,7 +225,15 @@ const BASELINE_READ: &[&str] = &[
     "/System",
     "/opt/homebrew",
     "/opt/local",
+    // The Command Line Tools the `/usr/bin` stubs (`git`, `cc`, `python3`)
+    // run, and the Xcode license acceptance they check first. Not
+    // `/Applications/Xcode.app`: an admin user, who need not be root, can
+    // replace it with a link to anywhere.
+    "/Library/Developer/CommandLineTools",
+    "/Library/Preferences/com.apple.dt.Xcode.plist",
     "/private/etc",
+    // Which shell `/bin/sh` runs.
+    "/private/var/select",
     "/private/var/db/timezone",
     "/dev/urandom",
     "/dev/random",
@@ -409,7 +420,16 @@ pub fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         command.program.is_absolute(),
         "the program must be resolved to an absolute path"
     );
-    backend::spawn(command)
+    let terminal = Terminal::of(command);
+    let reservation = terminal::reserve(terminal);
+    // The backend makes the child's group the foreground group before its
+    // program starts, so the program's first use finds it there.
+    let mut spawned = backend::spawn(command, reservation.as_ref().map(Reservation::fd))?;
+    spawned.child.terminal = terminal;
+    if let Some(reservation) = reservation {
+        reservation.held_by(spawned.child.pid);
+    }
+    Ok(spawned)
 }
 
 /// The path the OS holds for an open directory, where a relative program path
@@ -444,6 +464,7 @@ pub enum ExitStatus {
 /// leader holds its pid, so the group's id cannot pass to an unrelated process.
 pub struct Child {
     pid: libc::pid_t,
+    terminal: Terminal,
     reaped: Mutex<bool>,
 }
 
@@ -451,6 +472,7 @@ impl Child {
     fn new(pid: libc::pid_t) -> Self {
         Self {
             pid,
+            terminal: Terminal::Elsewhere,
             reaped: Mutex::new(false),
         }
     }
@@ -477,11 +499,8 @@ impl Child {
             // The leader exited and every member is gone; nothing to signal.
             // Darwin answers EPERM instead when the group holds only zombies,
             // as it does while `wait` keeps the leader unreaped.
-            let nothing_to_signal = match err.raw_os_error() {
-                Some(libc::ESRCH) => true,
-                Some(libc::EPERM) => cfg!(target_os = "macos"),
-                _ => false,
-            };
+            let nothing_to_signal = err.raw_os_error() == Some(libc::ESRCH)
+                || (cfg!(target_os = "macos") && err.raw_os_error() == Some(libc::EPERM));
             if nothing_to_signal {
                 return Ok(());
             }
@@ -504,24 +523,19 @@ impl Child {
     pub fn wait(&self) -> io::Result<ExitStatus> {
         // Wait without reaping, so a `signal_group` racing the exit still finds
         // the leader holding the group id.
-        loop {
-            // SAFETY: `info` is plain data the kernel fills.
-            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
-            // SAFETY: plain system call on our own child.
-            let ret = unsafe {
-                libc::waitid(
-                    libc::P_PID,
-                    self.pid as libc::id_t,
-                    &raw mut info,
-                    libc::WEXITED | libc::WNOWAIT,
-                )
-            };
-            if ret == 0 {
-                break;
+        match self.terminal {
+            Terminal::Elsewhere => {
+                self.wait_id(libc::WEXITED | libc::WNOWAIT)?;
             }
-            let err = io::Error::last_os_error();
-            if err.raw_os_error() != Some(libc::EINTR) {
-                return Err(err);
+            Terminal::Inherited(fd) => {
+                let ended = self.follow_stops(fd);
+                // A wait that failed knows nothing of how the child left the
+                // terminal, and frees it all the same, lest no child get it.
+                terminal::release(
+                    self.pid,
+                    *ended.as_ref().unwrap_or(&terminal::End::Signaled),
+                );
+                ended?;
             }
         }
         self.signal_group(libc::SIGKILL)?;
@@ -537,6 +551,45 @@ impl Child {
             Ok(ExitStatus::Exited(libc::WEXITSTATUS(status) as u8))
         } else {
             Ok(ExitStatus::Signaled(libc::WTERMSIG(status) as u8))
+        }
+    }
+
+    /// Wait for the child to exit, following each stop on the way as a shell
+    /// follows its job's.
+    fn follow_stops(&self, fd: RawFd) -> io::Result<terminal::End> {
+        let events = libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT;
+        loop {
+            match self.wait_id(events)? {
+                libc::CLD_STOPPED => {}
+                libc::CLD_EXITED => return Ok(terminal::End::Exited),
+                _ => return Ok(terminal::End::Signaled),
+            }
+            // Taken, unless the child moved on since: waiting for that stop
+            // alone would then wait forever.
+            self.wait_id(libc::WSTOPPED | libc::WNOHANG)?;
+            match terminal::follow_stop(fd, self.pid) {
+                terminal::Resume::Continue => self.signal_group(libc::SIGCONT)?,
+                terminal::Resume::Stay => {}
+            }
+        }
+    }
+
+    /// The `si_code` of the child's next event among `options`.
+    fn wait_id(&self, options: libc::c_int) -> io::Result<libc::c_int> {
+        loop {
+            // SAFETY: `info` is plain data the kernel fills.
+            let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+            // SAFETY: plain system call on our own child.
+            let ret = unsafe {
+                libc::waitid(libc::P_PID, self.pid as libc::id_t, &raw mut info, options)
+            };
+            if ret == 0 {
+                return Ok(info.si_code);
+            }
+            let err = io::Error::last_os_error();
+            if err.raw_os_error() != Some(libc::EINTR) {
+                return Err(err);
+            }
         }
     }
 }
