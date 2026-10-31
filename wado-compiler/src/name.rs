@@ -2845,7 +2845,15 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
 ///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("$effect_dispatch__{label}__{op_name}")
+    format!("{DISPATCH_WRAPPER_PREFIX}{label}__{op_name}")
+}
+
+const DISPATCH_WRAPPER_PREFIX: &str = "$effect_dispatch__";
+
+/// Whether `name` is a [`dispatch_wrapper_name`].
+#[must_use]
+pub fn is_dispatch_wrapper(name: &str) -> bool {
+    name.starts_with(DISPATCH_WRAPPER_PREFIX)
 }
 
 /// Build the dispatch struct's per-operation field name.
