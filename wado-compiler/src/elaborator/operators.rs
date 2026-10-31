@@ -229,8 +229,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let left = self.resolve_expr(left_ast, ctx, Some(right));
             (left, right)
         } else {
-            let left_lit = op.is_comparison() && Self::takes_shape_from_expected_type(left_ast);
-            let right_lit = op.is_comparison() && Self::takes_shape_from_expected_type(right_ast);
+            let left_lit = op.is_comparison() && takes_shape_from_expected_type(left_ast);
+            let right_lit = op.is_comparison() && takes_shape_from_expected_type(right_ast);
             if left_lit && !right_lit {
                 let right = self.resolve_expr(right_ast, ctx, expected_type);
                 let left_expected = if right == TypeTable::ERROR {
@@ -260,22 +260,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         is_primitive_literal_target(&self.tysys.type_table.borrow(), operand)
             || self.is_open_pending_var(operand)
     }
+}
 
-    /// Whether an operand's own elaboration would consult the expected type, so a
-    /// comparison resolves the *other* side first and hands this one its type.
-    /// Syntactic on purpose: reify decides the same order with no synthesis to
-    /// ask, and a type-dependent order would desync the two walks inside a tuple
-    /// `for-of`. A form left out just resolves on its own, so a subset is safe.
-    pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
-        match expr {
-            ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
-            // A namespaced call (`Color::from_str(s)`) reads as a static path
-            // too; a plain call's return type is its own.
-            ast::Expr::Call(call) => {
-                matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
-            }
-            _ => false,
+/// Whether an operand's own elaboration would consult the expected type, so a
+/// comparison resolves the *other* side first and hands this one its type.
+/// Syntactic on purpose: reify decides the same order with no synthesis to
+/// ask, and a type-dependent order would desync the two walks inside a tuple
+/// `for-of`. A form left out just resolves on its own, so a subset is safe.
+pub(super) fn takes_shape_from_expected_type(expr: &ast::Expr) -> bool {
+    match expr {
+        ast::Expr::TupleLiteral(_) | ast::Expr::StaticMethodCall(_) => true,
+        // A namespaced call (`Color::from_str(s)`) reads as a static path
+        // too; a plain call's return type is its own.
+        ast::Expr::Call(call) => {
+            matches!(&call.callee, ast::Expr::Ident(id) if id.segments.len() >= 2)
         }
+        _ => false,
     }
 }
 
