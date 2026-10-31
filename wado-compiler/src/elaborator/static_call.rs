@@ -509,7 +509,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut table = self.tysys.type_table.borrow_mut();
         let ty = match lookup.declared_type_param_ids(def) {
             Some(params) => table.make_generic_instance(def, params.to_vec()),
-            None => Self::nominal_type_of(def, &mut table, &lookup),
+            None => lookup.nominal_type_of(def, &mut table),
         };
         (ty != TypeTable::UNKNOWN).then_some(ty)
     }
