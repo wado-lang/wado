@@ -745,6 +745,72 @@ fn reaches_its_own_streams_through_their_device_paths() {
     );
 }
 
+/// Set in a re-execution whose standard streams are files no grant covers.
+const STREAM_FILES_VAR: &str = "WADO_SANDBOX_STREAM_FILES";
+
+/// A stream the child inherits may be a file outside every grant, as when the
+/// host's output is redirected to one. Its device paths reach it still.
+#[test]
+fn reaches_inherited_files_through_their_device_paths() {
+    assert_available();
+    let tree = Tree::new();
+    let paths = ["stdin", "stdout", "stderr"].map(|name| {
+        let path = tree.outside().join(name);
+        fs::write(&path, "in").unwrap();
+        std::ffi::CString::new(path.into_os_string().into_encoded_bytes()).unwrap()
+    });
+    // SAFETY: the closure makes only system calls, on paths built before the
+    // fork.
+    let passed = unsafe {
+        reexecute("sandbox::tests::stream_files", STREAM_FILES_VAR, move || {
+            for (fd, path) in paths.iter().enumerate() {
+                let file = libc::open(path.as_ptr(), libc::O_RDWR);
+                if file < 0 || libc::dup2(file, fd as libc::c_int) < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+            Ok(())
+        })
+    };
+    assert!(passed);
+}
+
+/// Not a test of its own: the half of the test above whose streams are files.
+#[test]
+fn stream_files() {
+    if std::env::var_os(STREAM_FILES_VAR).is_none() {
+        return;
+    }
+    let tree = Tree::new();
+    let args: Vec<OsString> = [
+        "-c",
+        "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd: None,
+        stdin: Stdio::Inherit,
+        stdout: Stdio::Inherit,
+        stderr: Stdio::Inherit,
+        policy: &tree.policy(Network::Denied),
+        trace: Trace::Files,
+    })
+    .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
+    let refused: BTreeSet<Refusal> = spawned
+        .refusals
+        .collect()
+        .into_iter()
+        .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
+        .collect();
+    assert_eq!(refused, BTreeSet::new());
+}
+
 #[test]
 fn reads_a_grant_through_the_link_that_names_it() {
     assert_available();
