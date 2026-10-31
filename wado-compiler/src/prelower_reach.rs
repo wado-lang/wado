@@ -13,11 +13,14 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, global_init_target, is_dispatch_wrapper, is_type_bridge,
+    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_target, is_dispatch_wrapper,
+    is_effect_default, is_type_bridge,
 };
 use crate::nir_package::NirPackage;
 use crate::reflect_marker::{bridge_callee, is_marker_bridge};
-use crate::tir::{TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction};
+use crate::tir::{
+    ResolvedType, StructDef, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TypeId,
+};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
 use crate::type_table::TypeTable;
@@ -67,15 +70,18 @@ impl<'a> Roots<'a> {
         }
     }
 
-    /// Whether the program reaches `func` without any TIR body naming it: an
-    /// export, a [`CompilerItem::minted_after_tir`] item, a type bridge no
-    /// reflection marker calls, a global initializer, a [`MINTABLE`] impl.
-    fn contains(&self, func: &TirFunction) -> bool {
+    /// How the program reaches `func` when no TIR body names it.
+    fn entry(&self, func: &TirFunction, type_table: &TypeTable) -> Entry {
         let impl_trait = func
             .method_info
             .as_ref()
             .and_then(LocalMethodName::trait_decl);
-        func.is_cm_export
+        if self.stage == Stage::BeforeMonomorphize {
+            if let Some(entry) = self.minted_by_instances(func, impl_trait, type_table) {
+                return entry;
+            }
+        }
+        let root = func.is_cm_export
             || (func.is_export
                 && self
                     .flat
@@ -84,21 +90,180 @@ impl<'a> Roots<'a> {
             || func.compiler_item.is_some_and(CompilerItem::minted_after_tir)
             || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
             || global_init_target(&func.name).is_some()
-            || impl_trait.is_some_and(|def| self.mintable.contains(&def))
-            || (self.stage == Stage::BeforeMonomorphize
-                && self.minted_by_instances(func, impl_trait))
+            || impl_trait.is_some_and(|def| self.mintable.contains(&def));
+        if root { Entry::Root } else { Entry::Called }
     }
 
-    /// Whether the phases between monomorphization and `lower` may call
-    /// `func` with no TIR body naming it: an instance's elaboration spells drop
-    /// glue, reflection bridges, effect dispatch wrappers, `core:builtin`
-    /// accessors and compiler items by the type arguments it settles.
-    fn minted_by_instances(&self, func: &TirFunction, impl_trait: Option<DefId>) -> bool {
-        func.compiler_item.is_some()
-            || is_type_bridge(&func.name)
-            || is_dispatch_wrapper(&func.name)
-            || func.module_source.is_core_builtin()
+    /// How the phases between monomorphization and `lower` may call `func`
+    /// with no TIR body naming it: an instance's elaboration spells drop glue,
+    /// type bridges, effect dispatch wrappers, `core:builtin` accessors,
+    /// compiler items and [`MINTABLE`] impls by the type arguments it settles.
+    /// A method and a type bridge belong to one type, so they wait for it.
+    fn minted_by_instances(
+        &self,
+        func: &TirFunction,
+        impl_trait: Option<DefId>,
+        type_table: &TypeTable,
+    ) -> Option<Entry> {
+        let minted_method = func.compiler_item.is_some()
             || (impl_trait.is_some() && impl_trait == self.drop_trait)
+            || impl_trait.is_some_and(|def| self.mintable.contains(&def));
+        if minted_method && func.method_info.is_some() {
+            return Some(Entry::on_type(receiver_head(func)));
+        }
+        if is_type_bridge(&func.name) && !is_effect_default(&func.name) {
+            let head = func
+                .params
+                .first()
+                .and_then(|param| type_head(type_table, param.type_id));
+            return Some(Entry::on_type(head));
+        }
+        (func.compiler_item.is_some()
+            || is_effect_default(&func.name)
+            || is_dispatch_wrapper(&func.name)
+            || func.module_source.is_core_builtin())
+        .then_some(Entry::Root)
+    }
+}
+
+/// How a walk reaches a function.
+enum Entry {
+    /// From the start.
+    Root,
+    /// Once a reached body names a value of the type it belongs to.
+    OnType(Head),
+    /// Only through a body naming it.
+    Called,
+}
+
+impl Entry {
+    /// [`Self::OnType`] the head, or [`Self::Root`] where no head says which
+    /// type it waits on.
+    fn on_type(head: Option<Head>) -> Self {
+        head.map_or(Self::Root, Self::OnType)
+    }
+}
+
+/// What identifies a type to [`TypeReach`]: the head an `impl` header writes,
+/// which a receiver and a value's type share.
+type Head = TypeHead;
+
+/// The head of a value's type, through references. `None` for a type a caller
+/// has yet to settle.
+fn type_head(type_table: &TypeTable, id: TypeId) -> Option<Head> {
+    let id = type_table.peel_refs(id);
+    match type_table.get(id) {
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericResource { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Function { .. } => {
+            settled(type_table.fq_base_type_name(id).head().clone())
+        }
+        _ => None,
+    }
+}
+
+/// The head an impl method's receiver writes. `None` for a blanket impl's,
+/// which any type may take.
+fn receiver_head(func: &TirFunction) -> Option<Head> {
+    match &func.method_info.as_ref()?.receiver {
+        Receiver::Type(fq) | Receiver::RefTo(_, fq) => settled(fq.head().clone()),
+        Receiver::Ref(_) => None,
+    }
+}
+
+fn settled(head: Head) -> Option<Head> {
+    match head {
+        TypeHead::Binder { .. }
+        | TypeHead::ParamBucket { .. }
+        | TypeHead::Projection(_)
+        | TypeHead::Unresolved(_) => None,
+        TypeHead::Declared(_)
+        | TypeHead::Shape { .. }
+        | TypeHead::Builtin(_)
+        | TypeHead::Tuple
+        | TypeHead::Function { .. } => Some(head),
+    }
+}
+
+/// The types the reached bodies hold values of, closed over their fields and
+/// payloads, and the functions waiting on one.
+struct TypeReach<'t> {
+    type_table: &'t TypeTable,
+    /// A declaration's field and payload types; an anonymous shape's are its
+    /// constituents.
+    members: IndexMap<DefId, Vec<TypeId>>,
+    seen: IndexSet<TypeId>,
+    reached: IndexSet<Head>,
+    waiting: IndexMap<Head, Vec<FunctionId>>,
+}
+
+impl<'t> TypeReach<'t> {
+    fn new(flat: &FlatPackage, type_table: &'t TypeTable) -> Self {
+        let mut members: IndexMap<DefId, Vec<TypeId>> = IndexMap::default();
+        for decl in &flat.structs {
+            if let StructDef::Decl(def) = decl.def {
+                members
+                    .entry(def)
+                    .or_default()
+                    .extend(decl.fields.iter().map(|field| field.type_id));
+            }
+        }
+        for decl in &flat.variants {
+            members
+                .entry(decl.def)
+                .or_default()
+                .extend(decl.cases.iter().map(|case| case.payload));
+        }
+        Self {
+            type_table,
+            members,
+            seen: IndexSet::default(),
+            reached: IndexSet::default(),
+            waiting: IndexMap::default(),
+        }
+    }
+
+    /// Queue `key` once `head` is reached.
+    fn wait(&mut self, head: Head, key: FunctionId, work: &mut Vec<FunctionId>) {
+        if self.reached.contains(&head) {
+            work.push(key);
+        } else {
+            self.waiting.entry(head).or_default().push(key);
+        }
+    }
+
+    /// Reach `id` and every type it is built over, releasing what waited on one.
+    fn add(&mut self, id: TypeId, work: &mut Vec<FunctionId>) {
+        let tt = self.type_table;
+        let mut stack = vec![id];
+        while let Some(id) = stack.pop() {
+            if !self.seen.insert(id) {
+                continue;
+            }
+            stack.extend(tt.get_newtype_base(id));
+            tt.any_constituent(id, &mut |part| {
+                stack.push(part);
+                false
+            });
+            if let Some(head) = type_head(tt, id)
+                && !self.reached.contains(&head)
+            {
+                if let TypeHead::Declared(decl) = &head {
+                    stack.extend(self.members.get(&decl.def()).into_iter().flatten().copied());
+                }
+                work.extend(self.waiting.swap_remove(&head).into_iter().flatten());
+                self.reached.insert(head);
+            }
+        }
     }
 }
 
@@ -136,20 +301,40 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
     let type_table = flat.type_table.borrow();
     let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut templates: IndexMap<TemplateId, FunctionId> = IndexMap::default();
-    let mut impls: IndexMap<DispatchGroup, Vec<FunctionId>> = IndexMap::default();
+    let mut impls: IndexMap<DispatchGroup, Vec<(FunctionId, Option<Head>)>> =
+        IndexMap::default();
     let mut work: Vec<FunctionId> = Vec::new();
+    let mut types = TypeReach::new(flat, &type_table);
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         let key = function_key(&func);
-        if roots.contains(&func) {
-            work.push(key.clone());
+        match roots.entry(&func, &type_table) {
+            Entry::Root if std::env::var("TMP_X").is_ok_and(|x| {
+                (x.contains("items") && func.compiler_item.is_some())
+                    || (x.contains("builtin") && func.module_source.is_core_builtin())
+                    || (x.contains("wrap") && is_dispatch_wrapper(&func.name))
+                    || (x.contains("eff") && is_effect_default(&func.name))
+                    || (x.contains("bridge") && is_type_bridge(&func.name))
+                    || (x.contains("mint") && func.method_info.as_ref().and_then(LocalMethodName::trait_decl).is_some_and(|d| roots.mintable.contains(&d)))
+            }) => {}
+            Entry::Root => {
+                if stage == Stage::BeforeMonomorphize {
+                    compiler_trace!(TRACE_TARGET, "  ROOT {key} item={:?}", func.compiler_item);
+                }
+                work.push(key.clone())
+            }
+            Entry::OnType(def) => types.wait(def, key.clone(), &mut work),
+            Entry::Called => {}
         }
         if stage == Stage::BeforeMonomorphize {
             if let Some(template) = func.template_id() {
                 templates.insert(template, key.clone());
             }
             if let Some(group) = dispatch_group(func.method_info.as_ref()) {
-                impls.entry(group).or_default().push(key.clone());
+                impls
+                    .entry(group)
+                    .or_default()
+                    .push((key.clone(), receiver_head(&func)));
             }
         }
         bodies.insert(key, func_rc);
@@ -163,10 +348,18 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
         let Some(func_rc) = bodies.get(&key) else {
             continue;
         };
-        let Some(body) = &func_rc.borrow().body else {
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else {
             continue;
         };
-        for callee in Callees::of_body(body, &type_table, stage) {
+        let refs = BodyRefs::of(body, &type_table, stage);
+        if stage == Stage::BeforeMonomorphize {
+            let signature = func.params.iter().map(|param| param.type_id);
+            for id in signature.chain([func.return_type]).chain(refs.types) {
+                types.add(id, &mut work);
+            }
+        }
+        for callee in refs.callees {
             // A template calls another by a spelling no function carries
             // (`EnumCase<E>::holds`); its declaration names the function.
             if let Some(template) = &callee.template
@@ -183,11 +376,18 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
                 && let Some(group) = callee.dispatch
                 && dispatched.insert(group.clone())
             {
-                work.extend(impls.get(&group).into_iter().flatten().cloned());
+                for (impl_key, receiver) in impls.get(&group).into_iter().flatten() {
+                    match receiver {
+                        Some(head) => types.wait(head.clone(), impl_key.clone(), &mut work),
+                        None => work.push(impl_key.clone()),
+                    }
+                }
             }
             work.push(callee.key);
         }
     }
+    if stage == Stage::BeforeMonomorphize { for k in &reached { compiler_trace!(TRACE_TARGET, "  R {k}"); } for (_, ks) in &types.waiting { for k in ks { compiler_trace!(TRACE_TARGET, "  W {k}"); } } }
+    compiler_trace!(TRACE_TARGET, "types: {} heads reached ({} anon), {} waiting heads, {} waiting fns", types.reached.len(), types.reached.iter().filter(|h| matches!(h, TypeHead::Shape{..})).count(), types.waiting.len(), types.waiting.values().map(Vec::len).sum::<usize>());
     reached
 }
 
@@ -203,7 +403,10 @@ fn reachable(flat: &FlatPackage) -> Reached {
         if let Some(body) = &func.body {
             bodied += 1;
             named.extend(
-                Callees::of_body(body, &type_table, Stage::BeforeLower).map(|callee| callee.key),
+                BodyRefs::of(body, &type_table, Stage::BeforeLower)
+                    .callees
+                    .into_iter()
+                    .map(|callee| callee.key),
             );
         }
     }
@@ -327,25 +530,25 @@ struct Callee {
     dispatch: Option<DispatchGroup>,
 }
 
-struct Callees<'a> {
+/// What a body names: its callees and, before monomorphization, the types of
+/// the values it holds.
+struct BodyRefs<'a> {
     type_table: &'a TypeTable,
     stage: Stage,
     callees: Vec<Callee>,
+    types: Vec<TypeId>,
 }
 
-impl<'a> Callees<'a> {
-    fn of_body(
-        body: &TirBlock,
-        type_table: &'a TypeTable,
-        stage: Stage,
-    ) -> impl Iterator<Item = Callee> {
-        let mut collector = Self {
+impl<'a> BodyRefs<'a> {
+    fn of(body: &TirBlock, type_table: &'a TypeTable, stage: Stage) -> Self {
+        let mut refs = Self {
             type_table,
             stage,
             callees: Vec::new(),
+            types: Vec::new(),
         };
-        collector.walk_block(body);
-        collector.callees.into_iter()
+        refs.walk_block(body);
+        refs
     }
 
     fn push(&mut self, module_source: &ModuleSource, name: &str) {
@@ -357,17 +560,23 @@ impl<'a> Callees<'a> {
     }
 }
 
-impl TirRefVisitor for Callees<'_> {
+impl TirRefVisitor for BodyRefs<'_> {
     fn visit_expr(&mut self, expr: &TirExpr) {
+        if self.stage == Stage::BeforeMonomorphize {
+            self.types.push(expr.type_id);
+        }
         match &expr.kind {
             TirExprKind::Call {
                 func, type_args, ..
             } => match self.stage {
-                Stage::BeforeMonomorphize => self.callees.push(Callee {
-                    key: FunctionId::free(&func.module_source, &func.name),
-                    template: func.template.clone(),
-                    dispatch: dispatch_group(func.method_info.as_ref()),
-                }),
+                Stage::BeforeMonomorphize => {
+                    self.types.extend(type_args);
+                    self.callees.push(Callee {
+                        key: FunctionId::free(&func.module_source, &func.name),
+                        template: func.template.clone(),
+                        dispatch: dispatch_group(func.method_info.as_ref()),
+                    });
+                }
                 Stage::BeforeLower => {
                     self.push(&func.module_source, &func.name);
                     // `lower` rewrites the marker into a call of its bridge.

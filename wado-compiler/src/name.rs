@@ -198,6 +198,12 @@ pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
 /// Prefix of [`effect_default_impl_name`].
 const EFFECT_DEFAULT_PREFIX: &str = "$effect_default$";
 
+/// Whether `name` is an [`effect_default_impl_name`].
+#[must_use]
+pub fn is_effect_default(name: &str) -> bool {
+    name.starts_with(EFFECT_DEFAULT_PREFIX)
+}
+
 /// How a function name reads where a user sees it — `#function`, and the
 /// call-site name a defaulted argument captures. A default implementation's
 /// storage name is an internal detail, so it renders as the operation it
@@ -230,7 +236,7 @@ pub fn diagnostic_function_name(
     module: &ModuleSource,
     method: Option<&LocalMethodName>,
 ) -> String {
-    if name.starts_with(EFFECT_DEFAULT_PREFIX) {
+    if is_effect_default(name) {
         return name.to_string();
     }
     if let Some(method) = method {
