@@ -1168,7 +1168,7 @@ pub fn elementwise_extents(operands: List<List<i32>>) -> List<i32> {
 pub fn broadcast_in_dim_extents(own: &List<i32>, extents: List<i32>, dims: &List<i32>) -> List<i32> {
     assert dims.len() == own.len(), "broadcast_in_dim maps every operand axis";
     for let [i, d] of dims.into_iter().enumerate() {
-        assert own[i] == 1 || own[i] == extents[d], "an operand axis is 1 or the result's";
+        assert own[i] == 1 || own[i] == extents[*d], "an operand axis is 1 or the result's";
     }
     return extents;
 }
