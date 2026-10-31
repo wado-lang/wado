@@ -11,6 +11,7 @@ use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::module_source::ModuleSource;
 use crate::name::{FunctionId, LocalMethodName, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
 use crate::reflect_marker::{bridge_callee, is_marker_bridge};
@@ -82,14 +83,22 @@ const MINTED_AFTER_TIR: &[CompilerItem] = &[
 
 /// Whether the program reaches `func` without any TIR body naming it: an
 /// export, a [`MINTED_AFTER_TIR`] item, a type bridge no reflection marker
-/// calls, a global initializer, a [`MINTABLE`] impl.
-fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
+/// calls, a global initializer, a [`MINTABLE`] impl. Before monomorphization a
+/// marker's type arguments may still be a template's parameters, naming no
+/// bridge, so every bridge is a root there.
+fn is_root(
+    func: &TirFunction,
+    flat: &FlatPackage,
+    mintable: &IndexSet<DefId>,
+    stage: Stage,
+) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
         || func
             .compiler_item
             .is_some_and(|item| MINTED_AFTER_TIR.contains(&item))
-        || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
+        || (is_type_bridge(&func.name)
+            && (stage == Stage::BeforeMonomorphize || !is_marker_bridge(&func.name)))
         || global_init_target(&func.name).is_some()
         || func
             .method_info
@@ -108,22 +117,50 @@ pub(crate) struct Reached {
     named: IndexSet<FunctionId>,
 }
 
+/// Where in the pipeline a walk runs, which decides what it must root.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Stage {
+    /// Over templates and the code calling them: a call through a type
+    /// parameter names no function yet, and the drop glue an instance's
+    /// elaboration adds names none.
+    BeforeMonomorphize,
+    BeforeLower,
+}
+
+/// A trait method by its declaration and name: what a call through a type
+/// parameter dispatches to before monomorphization picks the impl.
+type DispatchGroup = (DefId, String);
+
 /// Every function the program reaches from its roots. Walks only the bodies it
 /// reaches, which is the work [`prune`] saves.
-fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
+fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
     let mintable = mintable_traits(flat);
     let type_table = flat.type_table.borrow();
+    let drop_trait = type_table.compiler_items().trait_def(CompilerItem::Drop);
     let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
+    let mut impls: IndexMap<DispatchGroup, Vec<FunctionId>> = IndexMap::default();
     let mut work: Vec<FunctionId> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         let key = function_key(&func);
-        if is_root(&func, flat, &mintable) {
+        let group = dispatch_group(func.method_info.as_ref());
+        // Before monomorphization a template calls another by a spelling
+        // (`EnumCase<E>::holds`) no function carries, so each is a root.
+        let unsettled = stage == Stage::BeforeMonomorphize
+            && (func.is_template()
+                || group
+                    .as_ref()
+                    .is_some_and(|(def, _)| Some(*def) == drop_trait));
+        if unsettled || is_root(&func, flat, &mintable, stage) {
             work.push(key.clone());
+        }
+        if let Some(group) = group {
+            impls.entry(group).or_default().push(key.clone());
         }
         bodies.insert(key, func_rc);
     }
     let mut reached: IndexSet<FunctionId> = IndexSet::default();
+    let mut dispatched: IndexSet<DispatchGroup> = IndexSet::default();
     while let Some(key) = work.pop() {
         if !reached.insert(key.clone()) {
             continue;
@@ -131,11 +168,30 @@ fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
         let Some(func_rc) = bodies.get(&key) else {
             continue;
         };
-        if let Some(body) = &func_rc.borrow().body {
-            work.extend(Callees::of_body(body, &type_table));
+        let Some(body) = &func_rc.borrow().body else {
+            continue;
+        };
+        for callee in Callees::of_body(body, &type_table, stage) {
+            // A callee no function is named is a call through a type
+            // parameter, which may reach any impl of the method.
+            if !bodies.contains_key(&callee.key)
+                && let Some(group) = callee.dispatch
+                && dispatched.insert(group.clone())
+            {
+                work.extend(impls.get(&group).into_iter().flatten().cloned());
+            }
+            work.push(callee.key);
         }
     }
     reached
+}
+
+fn dispatch_group(method: Option<&LocalMethodName>) -> Option<DispatchGroup> {
+    let method = method?;
+    Some((
+        method.trait_decl()?,
+        method.declared_method_name().to_string(),
+    ))
 }
 
 /// [`reach`], against the population it walked, for [`audit`] to report.
@@ -149,11 +205,13 @@ fn reachable(flat: &FlatPackage) -> Reached {
         present.insert(function_key(&func));
         if let Some(body) = &func.body {
             bodied += 1;
-            named.extend(Callees::of_body(body, &type_table));
+            named.extend(
+                Callees::of_body(body, &type_table, Stage::BeforeLower).map(|callee| callee.key),
+            );
         }
     }
     Reached {
-        reached: reach(flat),
+        reached: reach(flat, Stage::BeforeLower),
         present,
         named,
         bodied,
@@ -210,21 +268,36 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
 /// to flip rather than a compiler to rebuild.
 pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
     let found = enabled().then(|| reachable(flat));
-    if std::env::var_os("WADO_NO_PRELOWER_PRUNE").is_none() {
-        prune(flat);
+    if prunes() {
+        prune(flat, Stage::BeforeLower);
     }
     found
 }
 
-/// Drop what no root reaches, so `lower` never translates it, and record the
-/// drop for the assert in `lower`'s `Interner::resolve`.
-fn prune(flat: &mut FlatPackage) {
-    let reached = reach(flat);
+/// What every pipeline does with `flat` on its way into `monomorphize`, so
+/// no instance is made for a caller nothing reaches. A template stays: what
+/// it reaches is known only once an instance substitutes it.
+pub(crate) fn before_monomorphize(flat: &mut FlatPackage) {
+    if prunes() {
+        prune(flat, Stage::BeforeMonomorphize);
+    }
+}
+
+fn prunes() -> bool {
+    std::env::var_os("WADO_NO_PRELOWER_PRUNE").is_none()
+}
+
+/// Drop what no root reaches, and record the drop for the assert in `lower`'s
+/// `Interner::resolve`.
+fn prune(flat: &mut FlatPackage, stage: Stage) {
+    let reached = reach(flat, stage);
     let before = flat.functions.len();
     let pruned = &mut flat.pruned;
     flat.functions.retain(|func_rc| {
-        let key = function_key(&func_rc.borrow());
-        let keep = reached.contains(&key);
+        let func = func_rc.borrow();
+        let key = function_key(&func);
+        let keep =
+            reached.contains(&key) || (stage == Stage::BeforeMonomorphize && func.is_template());
         if !keep {
             pruned.insert(key);
         }
@@ -237,19 +310,39 @@ fn prune(flat: &mut FlatPackage) {
     );
 }
 
+/// A function a body names, and the trait method a call through a type
+/// parameter dispatches to.
+struct Callee {
+    key: FunctionId,
+    dispatch: Option<DispatchGroup>,
+}
+
 struct Callees<'a> {
     type_table: &'a TypeTable,
-    keys: Vec<FunctionId>,
+    stage: Stage,
+    callees: Vec<Callee>,
 }
 
 impl<'a> Callees<'a> {
-    fn of_body(body: &TirBlock, type_table: &'a TypeTable) -> Vec<FunctionId> {
+    fn of_body(
+        body: &TirBlock,
+        type_table: &'a TypeTable,
+        stage: Stage,
+    ) -> impl Iterator<Item = Callee> {
         let mut collector = Self {
             type_table,
-            keys: Vec::new(),
+            stage,
+            callees: Vec::new(),
         };
         collector.walk_block(body);
-        collector.keys
+        collector.callees.into_iter()
+    }
+
+    fn push(&mut self, module_source: &ModuleSource, name: &str) {
+        self.callees.push(Callee {
+            key: FunctionId::free(module_source, name),
+            dispatch: None,
+        });
     }
 }
 
@@ -259,12 +352,16 @@ impl TirRefVisitor for Callees<'_> {
             TirExprKind::Call {
                 func, type_args, ..
             } => {
-                self.keys
-                    .push(FunctionId::free(&func.module_source, &func.name));
-                // `lower` rewrites the marker into a call of its bridge.
-                if let Some(bridge) = bridge_callee(self.type_table, func, type_args) {
-                    self.keys
-                        .push(FunctionId::free(&bridge.module_source, &bridge.name));
+                self.callees.push(Callee {
+                    key: FunctionId::free(&func.module_source, &func.name),
+                    dispatch: dispatch_group(func.method_info.as_ref()),
+                });
+                // `lower` rewrites the marker into a call of its bridge. Before
+                // monomorphization every bridge is a root instead.
+                if self.stage == Stage::BeforeLower
+                    && let Some(bridge) = bridge_callee(self.type_table, func, type_args)
+                {
+                    self.push(&bridge.module_source, &bridge.name);
                 }
             }
             // A function used as a value: `IndirectCall` names the value, never
@@ -273,7 +370,7 @@ impl TirRefVisitor for Callees<'_> {
                 module_source,
                 name,
                 ..
-            } => self.keys.push(FunctionId::free(module_source, name)),
+            } => self.push(module_source, name),
             _ => {}
         }
         self.walk_expr(expr);
