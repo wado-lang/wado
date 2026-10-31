@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Run a workspace binary (`wado`, `wado-dev-tools`) from the dev build, building
-# it first. It runs in the caller's directory, as under `cargo run`.
+# it first. It runs in the caller's directory, as under `cargo run`; the build
+# runs at the root, since cargo reads `.cargo/config.toml` from the directory it
+# runs in, and `wado-bundled-icu/`'s targets wasm32.
 #
 #   scripts/dev-bin.sh wado test -O2 package-gale
 #   WADO=$(scripts/dev-bin.sh --path wado)    # build once, then run "$WADO" in a loop
@@ -20,12 +22,17 @@ bin=$1
 shift
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-# A relative CARGO_TARGET_DIR is relative to the directory cargo runs in, which
-# is the caller's here too.
-exe="${CARGO_TARGET_DIR:-${root}/target}/debug/${bin}"
+# A relative CARGO_TARGET_DIR names a directory under the caller's, so it is
+# made absolute before cargo runs at the root.
+target_dir="${CARGO_TARGET_DIR:-${root}/target}"
+case "${target_dir}" in
+    /*) ;;
+    *) target_dir="${PWD}/${target_dir}" ;;
+esac
+exe="${target_dir}/debug/${bin}"
 
 if [ -z "${WADO_PREBUILT:-}" ]; then
-    cargo build --manifest-path "${root}/Cargo.toml" --bin "${bin}" >&2
+    (cd "${root}" && CARGO_TARGET_DIR="${target_dir}" cargo build --bin "${bin}") >&2
 elif [ ! -x "${exe}" ]; then
     echo "error: WADO_PREBUILT is set, but ${exe} was not built" >&2
     exit 1

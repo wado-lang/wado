@@ -144,7 +144,7 @@ pub fn objdump(mut parser: lexopt::Parser) {
             range.start,
             range.end,
             range.end - range.start,
-            width = 32 - indent,
+            width = 32usize.saturating_sub(indent),
         );
         if matches!(
             payload,
