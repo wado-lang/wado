@@ -1,0 +1,16 @@
+// A reference to an `Option<!>` is no reference to an `Option<T>`: widening
+// builds a new value, and a reference names the one it points to.
+
+struct T { n: i32 }
+
+fn read(o: &Option<T>) -> bool {
+    return o matches { None };
+}
+
+export fn run() {
+    let t = null;
+    let _ = read(&t);
+}
+
+__DATA__
+{"compile_error": "12:18"}

@@ -2180,6 +2180,7 @@ fn compile_after_load<H: CompilerHost>(
     // bridges are keyed by its concrete member types. It must follow erasure
     // too, since lowering names the call from the erased mangle.
     synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+    synthesis::widen::expand_widenings(&mut flat);
     #[cfg(debug_assertions)]
     link::assert_no_stub_shadowing(&flat.functions, "reflect bridges");
 
@@ -2643,6 +2644,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Reflect bridges (after erasure — lowering names the call from the
             // erased mangle)
             synthesis::reflect_bridge::synthesize_monomorphized_reflect_bridges(&mut flat);
+            synthesis::widen::expand_widenings(&mut flat);
 
             // Snapshot monomorphized state (only unparse; Debug format is deferred)
             let mono_text = Some(unparse::unparse_flat_package(&flat));

@@ -46,7 +46,7 @@ use super::coercion::{
 use super::expr::UnionSource;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
-use super::typecheck::admits_condition;
+use super::typecheck::{admits_condition, widens};
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util;
@@ -2822,17 +2822,28 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let view = self.ann_list_view_conversions(expr.id());
         let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
         let tir = if self.moves(expr) { tir.moved() } else { tir };
-        match view {
-            Some(view) => {
-                let span = tir.span;
-                TirExpr::new(
-                    TirExprKind::ListViewOf {
-                        value: Box::new(tir),
-                    },
-                    view,
-                    span,
-                )
-            }
+        let span = tir.span;
+        if let Some(view) = view {
+            return TirExpr::new(
+                TirExprKind::ListViewOf {
+                    value: Box::new(tir),
+                },
+                view,
+                span,
+            );
+        }
+        let widened = self
+            .ann_widenings(expr.id())
+            .or(expected_type)
+            .filter(|&slot| widens(tir.type_id, slot, &self.tysys.type_table.borrow()));
+        match widened {
+            Some(widened) => TirExpr::new(
+                TirExprKind::Widen {
+                    value: Box::new(tir),
+                },
+                widened,
+                span,
+            ),
             None => tir,
         }
     }
@@ -2847,15 +2858,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `TirExpr::type_id`. Falls back to `expected_type` (or
         // `UNKNOWN` when neither is available) for AST shapes that
         // evaporated during annotate (e.g. a stmt-position match
-        // whose recorder fires only at the stmt level). An indefinite one
-        // (a bare `null`'s `Option<!>`) holds only where nothing else decides.
+        // whose recorder fires only at the stmt level). A `null` is built at
+        // the type expected of it; any other value holding an `Option<!>` is
+        // built at its own and widened where it goes (`reify_expr`).
+        let is_null = matches!(expr, ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null));
         let recorded_type = self
             .ann_expression_types(expr.id())
-            .or(expected_type)
+            .or(expected_type.filter(|_| is_null))
             .or_else(|| {
                 self.ann_recorded_expression_type(expr.id())
                     .filter(|&t| self.tysys.type_table.borrow().contains_never_arg(t))
             })
+            .or(expected_type)
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
 
@@ -3035,9 +3049,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => {
-                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::Match(match_expr) => self.reify_match_expr(
+                match_expr,
+                ctx,
+                branch_expectation(expected_type, recorded_type),
+                recorded_type,
+            ),
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
@@ -3056,6 +3073,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_static_method_call(static_call, ctx, recorded_type)
             }
             ast::Expr::LabeledBlock(lb) => {
+                let expected_type = branch_expectation(expected_type, recorded_type);
                 let tir_block = self.reify_block(
                     &lb.block,
                     &mut ctx.enter_labeled_block(lb.label.clone(), expected_type),
@@ -3078,9 +3096,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => {
-                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::If(if_expr) => self.reify_if_expr(
+                if_expr,
+                ctx,
+                branch_expectation(expected_type, recorded_type),
+                recorded_type,
+            ),
             ast::Expr::Assign(assign) => match &assign.target {
                 ast::AssignTarget::Place(target) => {
                     self.reify_write(target, &assign.value, span, ctx)
@@ -10426,6 +10447,13 @@ fn adjust_receiver_for_self_kind(
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)
+}
+
+/// What a branch of a construct yielding `recorded` is reified against: the
+/// construct's own expectation, else the type its branches settled on, which a
+/// branch typed by an `Option<!>` widens to.
+fn branch_expectation(expected: Option<TypeId>, recorded: TypeId) -> Option<TypeId> {
+    expected.or(Some(recorded))
 }
 
 /// The TIR read of a resolved binding: a local, a by-value capture, or a

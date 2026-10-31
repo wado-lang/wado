@@ -4830,7 +4830,9 @@ impl<'a> TirUnparser<'a> {
             // A move is how the source reads the place, so it has no spelling.
             TirExprKind::Move { expr: inner } => self.unparse_expr(inner),
             // The conversion is implicit, so the source spells only the value.
-            TirExprKind::ListViewOf { value } => self.unparse_expr(value),
+            TirExprKind::ListViewOf { value } | TirExprKind::Widen { value } => {
+                self.unparse_expr(value);
+            }
             TirExprKind::Call {
                 func,
                 type_args,

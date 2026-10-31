@@ -18,11 +18,11 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::FunctionId;
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
-    BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
-    TirVariantDecl,
+    BuiltinDeclarations, StructDef, TirEnum, TirFlags, TirFunction, TirGlobal, TirStruct, TirTest,
+    TirVariantDecl, TypeId,
 };
 use crate::tir_visitor::TirMutVisitor;
-use crate::type_table::TypeTable;
+use crate::type_table::{InstanceKey, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, WorldRegistry};
 
@@ -120,6 +120,23 @@ impl FlatPackage {
     /// Check if the project targets the synthetic test world.
     pub fn is_test_world(&self) -> bool {
         self.target_world == world_registry::TEST_WORLD
+    }
+
+    /// The listed struct `def` instantiated with `type_args`, each argument
+    /// compared by [`InstanceKey`] so an instance matches the struct it became.
+    pub fn listed_struct(
+        &self,
+        type_table: &TypeTable,
+        def: StructDef,
+        type_args: &[TypeId],
+    ) -> Option<&TirStruct> {
+        let keys = |args: &[TypeId]| -> Vec<InstanceKey> {
+            args.iter().map(|&a| type_table.instance_key(a)).collect()
+        };
+        let wanted = keys(type_args);
+        self.structs
+            .iter()
+            .find(|s| s.def == def && keys(&s.type_args) == wanted)
     }
 
     /// Walk every function body with `visitor`, which may rewrite it in place.

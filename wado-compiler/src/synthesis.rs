@@ -13,6 +13,7 @@ pub mod reflect_bridge;
 pub mod serde_synth;
 pub mod template;
 pub mod traits;
+pub mod widen;
 
 use crate::compiler_host::Code;
 use crate::defs::DefId;

@@ -2649,17 +2649,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Reports a `CannotInferType` error when every branch of a construct
-    /// produced an indefinite type, leaving the result one too. Returns `true`
-    /// when an error was reported, so the caller can skip the `null`-patching
-    /// pass (which requires a resolved target type).
+    /// Reports a `CannotInferType` error when the branches of a construct left
+    /// its result holding `unknown`. Branches agreeing only on an `Option<!>`
+    /// (each a `null`) settle on it, as a `let` bound to `null` does. Returns
+    /// `true` when an error was reported, so the caller can skip the
+    /// `null`-patching pass (which requires a resolved target type).
     fn report_uninferable_result(
         &mut self,
         result_type: TypeId,
         span: Span,
         construct: &str,
     ) -> bool {
-        if !self.tysys.type_table.borrow().is_indefinite(result_type) {
+        if !self.tysys.type_table.borrow().contains_unknown(result_type) {
             return false;
         }
         let _ = self.emit(TypeError::CannotInferType {
@@ -3805,7 +3806,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             for (elem, expected) in tuple_lit.elements.iter().zip(expected_elems) {
                 let resolved = self.resolve_expr(elem, ctx, Some(expected));
-                self.typecheck(resolved, expected, elem.span());
+                self.typecheck_value(elem, resolved, expected);
             }
             self.sem
                 .types
@@ -3820,7 +3821,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && expected_elems.is_some()
         {
             let resolved = self.resolve_expr(&cast.expr, ctx, Some(target_type));
-            self.typecheck(resolved, target_type, cast.expr.span());
+            self.typecheck_value(&cast.expr, resolved, target_type);
             return target_type;
         }
 
@@ -4219,7 +4220,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // here would compare `[…]` against the sequence it is about to
                 // become. The second pass checks it once coerced.
                 if !check_deferred && let Some(expected_type_id) = expected_field_type {
-                    self.typecheck(type_id, expected_type_id, field.value.span());
+                    self.typecheck_value(&field.value, type_id, expected_type_id);
                 }
 
                 let decl_idx = struct_field_types
@@ -4418,7 +4419,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         && !table.contains_fillable_slot(value_type)
                 };
                 if settled {
-                    self.typecheck(value_type, concrete_type, ast_field.value.span());
+                    self.typecheck_value(&ast_field.value, value_type, concrete_type);
                 }
             }
 
@@ -4482,6 +4483,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let (Some(base_ty), Some(spread)) = (spread_base_type, named_spread) {
             self.typecheck(base_ty, struct_type, spread.span);
+            self.record_widening(spread.expr.id(), base_ty, struct_type);
         }
 
         // Reify rebuilds the `StructLiteral` (`reify_struct_literal`)

@@ -1455,6 +1455,14 @@ pub enum TirExprKind {
         value: Box<TirExpr>,
     },
 
+    /// A value whose type holds an `Option<!>` where the node's type holds an
+    /// `Option<T>`, `Option<!>` being a value of every `Option<T>`. Once
+    /// monomorphization makes both concrete, `synthesis::widen` rebuilds it
+    /// as the node's type.
+    Widen {
+        value: Box<TirExpr>,
+    },
+
     /// Effect handler installation: `with E1 => h1, ... do { body }`.
     /// See `docs/wep-2026-04-11-effect-handler.md`.
     ///

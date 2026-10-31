@@ -4,6 +4,7 @@
 //! [`TypeMismatchPayload`], then [`Elaborator::typecheck`] emitting the
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
+use crate::ast::{AstId, Expr};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
 use crate::tir::{EffectRef, ResolvedType, RowFlow, TupleSlot, TypeId};
@@ -27,14 +28,6 @@ pub(super) enum TypeCheckResult {
     Incompatible,
 }
 
-/// Pure type compatibility check, emitting no errors. Rules apply in order:
-/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; a pack-arity
-/// conflict incompatible; anything else genuinely undecided deferred; reference
-/// variance (`&mut T` → `&T` only); newtypes and flags distinct from their base
-/// and from each other, but for two instances of one newtype; `Option`;
-/// structural comparison for function types, and argument by argument for two
-/// instances of one generic struct, resource or newtype; anything else
-/// incompatible.
 /// Whether a value of `type_id` may stand where a condition is read: a `bool`,
 /// a `!` that never yields one, or a type already diagnosed or yet unknown.
 pub(super) fn admits_condition(type_table: &TypeTable, type_id: TypeId) -> bool {
@@ -44,12 +37,29 @@ pub(super) fn admits_condition(type_table: &TypeTable, type_id: TypeId) -> bool 
     ) || type_table.type_key(type_id) == type_table.type_key(TypeTable::BOOL)
 }
 
+/// Pure type compatibility check, emitting no errors. Rules apply in order:
+/// identity; `NEVER` compatible but as a type argument behind a reference or in
+/// a function type, and `UNKNOWN` / `ERROR` deferred; a pack-arity conflict incompatible; anything else genuinely
+/// undecided deferred; reference variance (`&mut T` → `&T` only); newtypes and
+/// flags distinct from their base and from each other, but for two instances of
+/// one newtype; `Option`; structural comparison for function types, and
+/// argument by argument for two instances of one generic struct, resource or
+/// newtype; anything else incompatible.
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
     type_table: &TypeTable,
 ) -> TypeCheckResult {
-    check_at(actual, expected, type_table, Position::Covariant)
+    check_at(actual, expected, type_table, Position::Covariant, false)
+}
+
+/// Whether a value of `actual` holds an `Option<!>` where `expected` holds the
+/// `Option<T>` it goes to, so it must be rebuilt as one (`synthesis::widen`).
+pub(super) fn widens(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    type_table.holds_never_arg_by_value(actual)
+        && !type_table.is_indefinite(expected)
+        && type_table.type_key(actual) != type_table.type_key(expected)
+        && check_assignable(actual, expected, type_table) == TypeCheckResult::Compatible
 }
 
 /// Whether the position admits a subtype: a value, a `return` and a `&T`
@@ -61,11 +71,15 @@ enum Position {
     Invariant,
 }
 
+/// `fixed`: a reference names the value or a function computes it, so no
+/// conversion can rebuild it. A value whose type argument is `!` is one of the
+/// expected type only once rebuilt (`synthesis::widen`).
 fn check_at(
     actual: TypeId,
     expected: TypeId,
     type_table: &TypeTable,
     position: Position,
+    fixed: bool,
 ) -> TypeCheckResult {
     // Rule 1: Identity
     if actual == expected {
@@ -134,7 +148,7 @@ fn check_at(
             } else {
                 position
             };
-            return check_at(actual_inner, expected_inner, type_table, inner_position);
+            return check_at(actual_inner, expected_inner, type_table, inner_position, true);
         }
         return TypeCheckResult::Compatible;
     }
@@ -185,7 +199,16 @@ fn check_at(
             if actual_t == TypeTable::UNKNOWN || expected_t == TypeTable::UNKNOWN {
                 return TypeCheckResult::Compatible;
             }
-            return check_at(actual_t, expected_t, type_table, Position::Invariant);
+            if needs_rebuild(actual_t, expected_t, fixed) {
+                return TypeCheckResult::Incompatible;
+            }
+            return check_at(
+                actual_t,
+                expected_t,
+                type_table,
+                Position::Invariant,
+                fixed,
+            );
         }
         (Some(_), None) | (None, Some(_)) => {
             return TypeCheckResult::Incompatible;
@@ -237,13 +260,19 @@ fn check_at(
             return TypeCheckResult::Incompatible;
         }
         for (a, e) in actual_params.iter().zip(expected_params.iter()) {
-            match check_at(*a, *e, type_table, Position::Invariant) {
+            match check_at(*a, *e, type_table, Position::Invariant, true) {
                 TypeCheckResult::Incompatible => return TypeCheckResult::Incompatible,
                 TypeCheckResult::Deferred => return TypeCheckResult::Deferred,
                 TypeCheckResult::Compatible => {}
             }
         }
-        return check_at(*actual_ret, *expected_ret, type_table, Position::Invariant);
+        return check_at(
+            *actual_ret,
+            *expected_ret,
+            type_table,
+            Position::Invariant,
+            true,
+        );
     }
     // One is function, the other isn't -> incompatible
     if matches!(type_table.get(actual_inner), ResolvedType::Function { .. })
@@ -259,7 +288,7 @@ fn check_at(
     // their type args, so an argument's effect row is the effect check's to
     // resolve.
     if let Some((actual_args, expected_args)) = same_declaration {
-        return check_type_args(actual_args, expected_args, type_table);
+        return check_type_args(actual_args, expected_args, type_table, fixed);
     }
 
     // Rule 9: `resource Child extends Parent`, where the position admits it.
@@ -315,6 +344,12 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
     }
 }
 
+/// Whether a type argument `actual` of `!` meets an `expected` other than `!`
+/// where the value cannot be rebuilt.
+fn needs_rebuild(actual: TypeId, expected: TypeId, fixed: bool) -> bool {
+    fixed && actual == TypeTable::NEVER && expected != TypeTable::NEVER
+}
+
 /// The declaration `id` instantiates and its type arguments, where it is a
 /// generic struct, a generic resource or a newtype; a non-generic newtype has
 /// none.
@@ -333,12 +368,16 @@ fn check_type_args(
     actual: &[TypeId],
     expected: &[TypeId],
     type_table: &TypeTable,
+    fixed: bool,
 ) -> TypeCheckResult {
     if actual.len() != expected.len() {
         return TypeCheckResult::Incompatible;
     }
     for (a, e) in actual.iter().zip(expected) {
-        match check_at(*a, *e, type_table, Position::Invariant) {
+        if needs_rebuild(*a, *e, fixed) {
+            return TypeCheckResult::Incompatible;
+        }
+        match check_at(*a, *e, type_table, Position::Invariant, fixed) {
             TypeCheckResult::Compatible => {}
             verdict => return verdict,
         }
@@ -394,6 +433,7 @@ fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable)
                 expected_elems[i],
                 type_table,
                 Position::Invariant,
+                false,
             ) == TypeCheckResult::Incompatible
         })
 }
@@ -472,6 +512,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.typecheck_in(actual, expected, span, SlotFrame::Own);
     }
 
+    /// [`Self::typecheck`] on `value` meeting its slot, recording the rebuild
+    /// an `Option<!>` it holds needs there.
+    pub(super) fn typecheck_value(&mut self, value: &Expr, actual: TypeId, expected: TypeId) {
+        self.typecheck(actual, expected, value.span());
+        self.record_widening(value.id(), actual, expected);
+    }
+
+    /// Record that the value `value` meets a slot of `expected`, where its type
+    /// holds or may yet hold an `Option<!>`. Reify rebuilds it as `expected`
+    /// where the settled types say so ([`widens`]).
+    pub(super) fn record_widening(&mut self, value: AstId, actual: TypeId, expected: TypeId) {
+        let unsettled = {
+            let table = self.tysys.type_table.borrow();
+            table.contains_never_arg(actual) || table.contains_undecided(actual)
+        };
+        if unsettled {
+            self.sem.types.widenings.insert(value, expected);
+        }
+    }
+
     /// [`Self::typecheck`] on a value bound to a callee's parameter, whose type
     /// is written in the callee's frame.
     pub(super) fn typecheck_into_callee(&self, actual: TypeId, expected: TypeId, span: Span) {
@@ -488,8 +548,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// [`Self::typecheck`] on a call argument, worded by [`ArgSite::mismatch`].
-    pub(super) fn typecheck_arg(&self, actual: TypeId, expected: TypeId, site: ArgSite) {
+    /// [`Self::typecheck_value`] on a call argument, worded by
+    /// [`ArgSite::mismatch`].
+    pub(super) fn typecheck_arg(&mut self, actual: TypeId, expected: TypeId, site: ArgSite) {
         self.typecheck_worded(
             actual,
             expected,
@@ -497,6 +558,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             SlotFrame::Callee,
             |payload| site.mismatch(payload.expected, payload.found),
         );
+        if let ArgSite::Written { value, .. } = site {
+            self.record_widening(value, actual, expected);
+        }
     }
 
     fn typecheck_worded(

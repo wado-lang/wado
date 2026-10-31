@@ -1,0 +1,173 @@
+// An `Option<!>` is a value of every `Option<T>`, so a value whose type holds
+// one goes wherever the same type with an `Option<T>` there is expected: bound
+// by a `let`, returned, passed, assigned, destructured, stored in a field,
+// compared, and inside a tuple, a generic struct, a payload, a list or a
+// branch. It was carried over unconverted, and the module failed Wasm
+// validation.
+
+struct T { n: i32 }
+struct Box<A> { a: A }
+struct Holder { o: Option<T> }
+
+impl Holder {
+    fn put(&mut self, o: Option<T>) {
+        self.o = o;
+    }
+}
+
+fn count(o: &Option<T>) -> i32 {
+    return if let Some(t) = o { t.n } else { -1 };
+}
+
+fn generic<X>(x: Option<X>) -> Option<X> {
+    return x;
+}
+
+fn annotated() -> i32 {
+    let t = null;
+    let u: Option<T> = t;
+    return count(&u);
+}
+
+fn returned() -> Option<T> {
+    let t = null;
+    return t;
+}
+
+fn take(o: Option<T>) -> i32 {
+    return count(&o);
+}
+
+fn passed() -> i32 {
+    let t = null;
+    return take(t);
+}
+
+fn assigned() -> i32 {
+    let t = null;
+    let mut u = Option::Some(T { n: 1 });
+    u = t;
+    return count(&u);
+}
+
+fn destructured() -> i32 {
+    let t = null;
+    let mut a = Option::Some(T { n: 1 });
+    let mut b = 0;
+    [a, b] = [t, 2];
+    return count(&a) + b;
+}
+
+fn method_arg() -> i32 {
+    let t = null;
+    let mut h = Holder { o: Option::Some(T { n: 1 }) };
+    h.put(t);
+    return count(&h.o);
+}
+
+fn closure_return() -> i32 {
+    let f: fn() -> Option<T> = || {
+        let t = null;
+        return t;
+    };
+    return count(&f());
+}
+
+fn generic_return() -> i32 {
+    let t = null;
+    let u: Option<T> = generic(t);
+    return count(&u);
+}
+
+fn compared() -> bool {
+    let t = null;
+    let u: Option<i32> = Option::Some(1);
+    return u == t;
+}
+
+fn list_element() -> i32 {
+    let t = null;
+    let l: List<Option<T>> = [t, Option::Some(T { n: 3 })];
+    return count(&l[0]) + count(&l[1]);
+}
+
+fn field() -> i32 {
+    let t = null;
+    let h = Holder { o: t };
+    return count(&h.o);
+}
+
+fn tuple() -> [Option<T>, i32] {
+    let t = [null, 4];
+    return t;
+}
+
+fn boxed() -> i32 {
+    let t = Box { a: null };
+    let u: Box<Option<T>> = t;
+    return count(&u.a);
+}
+
+fn payload() -> i32 {
+    let t = Option::Some(null);
+    let u: Option<Option<T>> = t;
+    let Some(inner) = u else {
+        return 9;
+    };
+    return count(&inner);
+}
+
+fn list() -> i32 {
+    let t: List<Option<!>> = [null, null];
+    let mut u: List<Option<T>> = t;
+    u.push(Option::Some(T { n: 5 }));
+    return count(&u[0]) + count(&u[2]) + u.len();
+}
+
+fn bound_in_branch(c: bool) -> i32 {
+    let p = if c {
+        let t = [null, 0];
+        t
+    } else {
+        [Option::Some(T { n: 1 }), 1]
+    };
+    return count(&p.0) + p.1;
+}
+
+fn all_null_branches(c: bool, k: i32) -> i32 {
+    let p = if c {
+        [Option::Some(T { n: 1 }), 1]
+    } else {
+        match k {
+            0 => [null, 0],
+            _ => [null, 3],
+        }
+    };
+    return count(&p.0) + p.1;
+}
+
+test "an Option<!> value widens to the Option<T> it goes to" {
+    assert annotated() == -1;
+    assert count(&returned()) == -1;
+    assert passed() == -1;
+    assert assigned() == -1;
+    assert destructured() == 1;
+    assert method_arg() == -1;
+    assert closure_return() == -1;
+    assert generic_return() == -1;
+    assert !compared();
+    assert list_element() == 2;
+    assert field() == -1;
+    assert count(&tuple().0) == -1 && tuple().1 == 4;
+    assert boxed() == -1;
+    assert payload() == -1;
+    assert list() == 7;
+    assert bound_in_branch(builtin::black_box(true)) == -1;
+    assert bound_in_branch(builtin::black_box(false)) == 2;
+    assert all_null_branches(builtin::black_box(true), 0) == 2;
+    assert all_null_branches(builtin::black_box(false), builtin::black_box(0)) == -1;
+    assert all_null_branches(builtin::black_box(false), builtin::black_box(1)) == 2;
+}
+
+__DATA__
+{"test": {}}

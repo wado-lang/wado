@@ -558,7 +558,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let expected = expected_elem_types.get(i).copied();
                             let resolved = self.resolve_expr(elem, ctx, expected);
                             if let Some(expected_type) = expected {
-                                self.typecheck(resolved, expected_type, elem.span());
+                                self.typecheck_value(elem, resolved, expected_type);
                             }
                         }
 
@@ -640,7 +640,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BindingSite::Let,
                 );
             } else {
-                self.typecheck(value_type, type_id, ast_value.span());
+                self.typecheck_value(ast_value, value_type, type_id);
             }
         }
 
@@ -1329,18 +1329,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // The return type is the expected type, so a literal coerces to it.
         let value_type = self.resolve_expr(expr, ctx, Some(return_type));
-        self.typecheck_returned(value_type, return_type, ret_stmt.span);
+        self.typecheck_returned(expr, value_type, return_type, ret_stmt.span);
     }
 
     /// Check a returned value against the type it must have, first pinning a
     /// deferred hole that rode a prior binding into it
     /// (`let v = gen()?; return Ok(v)`).
-    fn typecheck_returned(&mut self, mut value_type: TypeId, expected: TypeId, span: Span) {
+    fn typecheck_returned(
+        &mut self,
+        value: &Expr,
+        mut value_type: TypeId,
+        expected: TypeId,
+        span: Span,
+    ) {
         if self.type_has_infer_hole(value_type) {
             self.solve_infer_holes_against(value_type, expected);
             value_type = self.apply_infer_holes(value_type);
         }
         self.typecheck(value_type, expected, span);
+        self.record_widening(value.id(), value_type, expected);
     }
 
     pub(super) fn resolve_task_return(
@@ -1358,7 +1365,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(expected) = expected else {
             return;
         };
-        self.typecheck_returned(value_type, expected, tr_stmt.span);
+        self.typecheck_returned(&tr_stmt.value, value_type, expected, tr_stmt.span);
     }
 
     /// Reify rebuilds the `If` / if-let-chain TIR from the AST + the

@@ -967,6 +967,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected,
                     args_ast.get(i).map_or(span, Expr::span),
                 );
+                if let Some(value) = args_ast.get(i) {
+                    self.record_widening(value.id(), *arg, expected);
+                }
             }
         }
 
@@ -2028,7 +2031,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_sites: Vec<ArgSite> = static_call
             .args
             .iter()
-            .map(|arg| ArgSite::Written(arg.span()))
+            .map(ArgSite::written)
             .collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
@@ -2168,7 +2171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_type_bindings,
             Some(static_call.id),
             ctx,
-            |_, _, default_expr, _| arg_sites.push(ArgSite::Written(default_expr.span())),
+            |_, _, default_expr, _| arg_sites.push(ArgSite::written(default_expr)),
         );
 
         // A declared static is checked against its signature here, where the

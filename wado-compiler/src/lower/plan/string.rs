@@ -263,6 +263,7 @@ impl StringCollector {
             TirExprKind::ListViewOf { .. } => {
                 unreachable!("synthesis::list_view expands every conversion")
             }
+            TirExprKind::Widen { .. } => unreachable!("synthesis::widen expands every widening"),
             TirExprKind::WithHandler { .. } => {
                 unreachable!(
                     "WithHandler should be desugared by effect-dispatch synthesis before this phase"

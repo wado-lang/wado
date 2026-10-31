@@ -1316,6 +1316,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
             unreachable!("synthesis::list_view expands every conversion before dispatch")
         }
         TirExprKind::Unary { expr, .. }
+        | TirExprKind::Widen { value: expr }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
@@ -2069,6 +2070,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 unreachable!("synthesis::list_view expands every conversion before dispatch")
             }
             TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Widen { value: inner }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
@@ -2896,6 +2898,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             unreachable!("synthesis::list_view expands every conversion before dispatch")
         }
         TirExprKind::Unary { expr, .. }
+        | TirExprKind::Widen { value: expr }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }

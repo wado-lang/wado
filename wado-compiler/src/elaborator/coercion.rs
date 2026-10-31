@@ -1546,6 +1546,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // The values are what decide an open value type.
                         self.solve_infer_holes_against(value_type, value);
                         value_type = self.apply_infer_holes(value_type);
+                        self.record_widening(field.value.id(), value, value_type);
                     }
                 }
             }
@@ -1863,6 +1864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // this sequence holds.
                 self.solve_infer_holes_against(element_type, elem_expr);
                 element_type = self.apply_infer_holes(element_type);
+                self.record_widening(element.id(), elem_expr, element_type);
             }
         }
 

@@ -24,6 +24,7 @@ use super::method_lookup::replace_on_assign_place;
 use super::scope::ScopedBound;
 use super::trait_query::primitive_has_operator;
 use super::transposition::{Clean, Path, Reading, Step, Transposition, field_path, target_reads};
+use super::typecheck::widens;
 use super::types::{
     FunctionContext, MethodInfo, OperatorImpl, ResolvedTraitMethod, TypeError, append_reason_chain,
 };
@@ -140,6 +141,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             left = self.apply_infer_holes(left);
             right = self.apply_infer_holes(right);
+        }
+        // An operand holding an `Option<!>` is one of its sibling's type.
+        let widens_to = |from: TypeId, to: TypeId| widens(from, to, &self.tysys.type_table.borrow());
+        if widens_to(right, left) {
+            self.record_widening(binary.right.id(), right, left);
+            right = left;
+        } else if widens_to(left, right) {
+            self.record_widening(binary.left.id(), left, right);
+            left = right;
         }
         // Pass the binary's source AstId so the operator-trait
         // dispatch path can record the decision under it.
@@ -1155,6 +1165,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if value_type == TypeTable::ERROR {
             return TypeTable::ERROR;
         }
+        self.record_widening(assign.value.id(), value_type, expected);
         let element_types = self
             .tysys
             .type_table
@@ -1500,15 +1511,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> TypeId {
         let place = self.resolve_write_place(target_ast, ctx);
         let value_span = value.span();
-        let value_type = match value {
-            AssignValue::Ast(expr) => {
-                self.resolve_expr(expr, ctx, Some(write_place_value_type(&place)))
-            }
-            AssignValue::Resolved { type_id, .. } => type_id,
+        let (value_type, value_id) = match value {
+            AssignValue::Ast(expr) => (
+                self.resolve_expr(expr, ctx, Some(write_place_value_type(&place))),
+                Some(expr.id()),
+            ),
+            AssignValue::Resolved { type_id, .. } => (type_id, None),
         };
         let Ok(place) = place else {
             return TypeTable::ERROR;
         };
+        if let Some(value_id) = value_id {
+            self.record_widening(value_id, value_type, place.value_type());
+        }
         self.check_write(target_ast, &place, value_type, value_span, ctx)
     }
 

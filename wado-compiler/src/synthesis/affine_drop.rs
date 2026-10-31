@@ -1607,6 +1607,8 @@ fn elab_expr(expr: &mut TirExpr, consuming: bool, cx: &mut Cx) {
         TirExprKind::ListViewOf { .. } => {
             unreachable!("synthesis::list_view expands every conversion before drops")
         }
+        // The widened value is rebuilt from the one it consumes.
+        TirExprKind::Widen { value } => elab_expr(value, true, cx),
 
         TirExprKind::Unary {
             op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
