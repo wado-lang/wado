@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793462788826,
+  "lastUpdate": 1793482192653,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72701,6 +72701,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/743b229dd4e7b726dc6450d7b0b451b08585a463"
         },
         "date": 1793462787874,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8c927c4f2e2f9b6fadbe40e99fb4cede649cdf62",
+          "message": "Merge pull request #2505 from wado-lang/ccr-597afb92-alcbrd\n\nrefactor(elaborate): reify no longer depends on the compiler host",
+          "timestamp": "2026-11-01T06:14:47+09:00",
+          "tree_id": "a2e883c7b6a12d74b1d2b2cca6cd3bfaadb4c0a3",
+          "url": "https://github.com/wado-lang/wado/commit/8c927c4f2e2f9b6fadbe40e99fb4cede649cdf62"
+        },
+        "date": 1793482192187,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
