@@ -2427,12 +2427,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Reject the body-less declaration attributes on a method requirement, in
     /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
-    /// and that impl is what answers each of them.
+    /// and that impl is what answers each of them. A method with a default body
+    /// is reported as any function with a body is: here, because a default no
+    /// impl takes is walked nowhere else.
     pub(super) fn reject_declaration_attrs_on_requirement(
         &mut self,
         owner: &str,
         method: &ast::Function,
     ) {
+        if method.body.is_some() {
+            self.reject_bodyless_attrs_on_body(&method.attrs);
+            return;
+        }
         for (attr, name, bodyless) in attribute::bodyless(&method.attrs) {
             let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),

@@ -89,7 +89,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Report each attribute that describes a declaration with no body, written
     /// on a function that has one.
-    fn reject_bodyless_attrs_on_body(&self, attrs: &[Attribute]) {
+    pub(super) fn reject_bodyless_attrs_on_body(&self, attrs: &[Attribute]) {
         for (attr, name, bodyless) in attribute::bodyless(attrs) {
             let _ = self.emit(TypeError::AttributeOnBody {
                 attribute: name,

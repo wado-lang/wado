@@ -1,0 +1,33 @@
+// A trait method with a default body has a body of its own, so a body-less
+// attribute on it is reported once, as on any function with a body, and not
+// a second time as on a requirement: whether an impl takes the default
+// (`Taken`) or none does (`Untaken`).
+#![stdlib("core:simd")]
+
+trait Taken with () {
+    #[storage(fresh)]
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct Source {}
+
+impl Taken for Source {}
+
+trait Untaken with () {
+    #[storage(fresh)]
+    fn get(&self) -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "#[storage] belongs to a declaration with no body",
+  "compile_error_count": 2,
+  "compile_errors_not_contains": ["cannot declare `#[storage]`"],
+  "compile_error_codes": ["ATTR_MISUSE"]
+}
