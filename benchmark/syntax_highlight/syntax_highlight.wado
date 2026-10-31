@@ -26,6 +26,7 @@ test "smoke" {
     assert sqlite::highlight("SELECT 1;").len() > 0;
 }
 
+#[workload]
 test "fuel" {
     let sql = #include_str("../sqlite_parse/queries.sql");
     assert measure("highlight", || sqlite::highlight(&sql).len()) > 0;
