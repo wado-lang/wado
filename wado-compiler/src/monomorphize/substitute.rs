@@ -137,7 +137,16 @@ impl Monomorphizer {
         type_table: &TypeTable,
         generic_structs: &IndexMap<DefId, TirStruct>,
     ) {
-        for id in type_table.iter_type_ids() {
+        let tested = &mut self.structs.sites_tested;
+        let untested = generic_structs.keys().filter(|def| tested.insert(**def)).count();
+        let from = if untested == 0 {
+            self.structs.sites_scanned
+        } else {
+            TypeId(0)
+        };
+        let (ids, end) = type_table.type_ids_since(from);
+        self.structs.sites_scanned = end;
+        for id in ids {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
                 if type_args.is_empty()
                     || type_table.is_list(id)

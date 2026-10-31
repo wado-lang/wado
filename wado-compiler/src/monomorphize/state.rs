@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
@@ -30,6 +31,12 @@ pub(super) struct StructInstState {
     /// How long the type table's shape substitution log was when the last
     /// batch was read from it.
     pub anon_scanned: usize,
+    /// Where the last scan for instantiation sites stopped in the type table.
+    /// A type is immutable once interned, so only a generic struct missing
+    /// from [`Self::sites_tested`] can turn one it skipped into a site.
+    pub sites_scanned: TypeId,
+    /// Every generic struct a scan has tested the types against.
+    pub sites_tested: IndexSet<DefId>,
     /// Substitutions into closed shapes, as the shape and the substitution's
     /// index, whose origin's methods are yet to be instantiated.
     pub pending_shapes: Vec<(AnonStructId, usize)>,
@@ -165,6 +172,8 @@ impl Monomorphizer {
                 type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
                 anon_scanned: 0,
+                sites_scanned: TypeId(0),
+                sites_tested: IndexSet::default(),
                 pending_shapes: Vec::new(),
                 open_shape_heads: IndexMap::default(),
                 shape_methods: IndexMap::default(),
