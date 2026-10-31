@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 
-use lexopt::Arg::Value;
+use lexopt::Arg::{Long, Value};
 use wado_wasm_embed::dataref::{self, DataRefs};
 
 /// Custom sections the asset has no use for: the relocations are spent once the
@@ -14,34 +14,60 @@ fn is_spent(name: &str) -> bool {
 
 pub fn run(mut parser: lexopt::Parser) {
     let mut input: Option<String> = None;
+    let mut component = false;
     while let Some(arg) = parser.next().expect("failed to parse args") {
         match arg {
+            Long("component") => component = true,
             Value(v) if input.is_none() => input = Some(v.to_string_lossy().into_owned()),
             _ => panic!("unexpected argument: {arg:?}"),
         }
     }
-    let input = input.expect("usage: wado-dev-tools bundled-asset <file.wasm>");
+    let input = input.expect("usage: wado-dev-tools bundled-asset [--component] <file.wasm>");
     let wasm = std::fs::read(&input).expect("failed to read input file");
 
-    let refs = dataref::resolve(&wasm).expect("failed to resolve the data-reference map");
-    let stripped = strip(&wasm);
+    let core = core_wat(&wasm);
+    if component {
+        print!("{}", component_wat(&core));
+    } else {
+        print!("{core}");
+    }
+}
 
+fn core_wat(wasm: &[u8]) -> String {
+    let refs = dataref::resolve(wasm).expect("failed to resolve the data-reference map");
+    let mut wat = print(&strip(wasm));
+    // `DataRefs::parse` refuses a map naming no function, so an asset with
+    // nothing to say carries no section at all.
+    if !refs.is_empty() {
+        let close = wat.rfind(')').expect("printed wat must close its module");
+        wat.insert_str(close, &block(&refs, data_bytes(wasm)));
+    }
+    wat
+}
+
+/// Wrap the module into a component, as `wasm-tools component new` does: its
+/// `component-type` section says what the component exports. The text is
+/// parsed rather than the stripped binary, since the `wado.dataref` section
+/// exists only in the text.
+fn component_wat(core_wat: &str) -> String {
+    let core = wat::parse_str(core_wat).expect("the printed core module must parse");
+    let component = wit_component::ComponentEncoder::default()
+        .validate(true)
+        .module(&core)
+        .expect("the core module must carry its `component-type` section")
+        .encode()
+        .expect("failed to encode the component");
+    print(&component)
+}
+
+fn print(wasm: &[u8]) -> String {
     let mut wat = String::new();
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);
     config
-        .print(&stripped, &mut wasmprinter::PrintFmtWrite(&mut wat))
+        .print(wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
         .expect("failed to print wasm");
-
-    // `DataRefs::parse` refuses a map naming no function, so an asset with
-    // nothing to say carries no section at all.
-    let block = if refs.is_empty() {
-        String::new()
-    } else {
-        block(&refs, data_bytes(&wasm))
-    };
-    let close = wat.rfind(')').expect("printed wat must close its module");
-    print!("{}{}{}", &wat[..close], block, &wat[close..]);
+    wat
 }
 
 /// Re-emit `wasm` without the sections [`is_spent`] names. Every other section

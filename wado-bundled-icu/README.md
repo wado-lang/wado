@@ -148,20 +148,19 @@ maps `panic` straight to a Wasm trap (Wado has no exceptions). It builds for
 ```sh
 # 1. Compile the no_std core module (target set in .cargo/config.toml).
 #    Add `--features spike` for the wider surface the sections above measure.
-cargo build --release
+#    The relocations are what the data-reference map is resolved from.
+RUSTFLAGS="-C link-arg=--emit-relocs" CARGO_PROFILE_RELEASE_STRIP=none cargo build --release
 
-# 2. Wrap it into a component using the component-type section wit-bindgen
-#    embedded. No WASI adapter is needed because there are no imports.
-wasm-tools component new \
+# 2. Wrap it into a validated component using the component-type section
+#    wit-bindgen embedded, printed as WAT. No WASI adapter is needed because
+#    there are no imports.
+../scripts/dev-bin.sh wado-dev-tools bundled-asset --component \
   target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm \
-  -o target/wado_bundled_icu.component.wasm
-
-# 3. Confirm it is a valid, import-free component
-wasm-tools validate target/wado_bundled_icu.component.wasm
-wasm-tools component wit target/wado_bundled_icu.component.wasm
+  > target/wado_bundled_icu.component.wat
 ```
 
 Result: a component whose `world` has only exports, no imports.
+`mise run update-bundled-icu` runs both steps into `wado-compiler/lib/core/icu.wat`.
 
 ### Alternative: wasm32-wasip2
 
