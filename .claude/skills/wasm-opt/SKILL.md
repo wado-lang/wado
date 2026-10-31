@@ -49,8 +49,7 @@ $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 
 ## Reading the difference
 
-`wado-dev-tools` stands in for the wasm-tools CLI (`scripts/dev-bin.sh
-wado-dev-tools <command> <file.wasm>`).
+`wado-dev-tools` stands in for the wasm-tools CLI (`scripts/dev-bin.sh wado-dev-tools <command> <file.wasm>`).
 
 - `objdump` gives the size and count of each section.
 - `print --offsets` puts each instruction's byte offset beside it. Use it for
