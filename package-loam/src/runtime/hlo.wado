@@ -1161,7 +1161,7 @@ fn laid_out<Axes>(x: &Tensor<f32, Axes>, order: &List<i32>) -> Laid {
 }
 
 /// The extents of the axes `axes`, in that order.
-fn picked(extents: &List<i32>, axes: &List<i32>) -> List<i32> {
+internal fn picked(extents: &List<i32>, axes: &List<i32>) -> List<i32> {
     let mut out: List<i32> = [];
     for let a of *axes {
         out.push(extents[a]);
@@ -1170,7 +1170,7 @@ fn picked(extents: &List<i32>, axes: &List<i32>) -> List<i32> {
 }
 
 /// The axes of a `rank` operand of `dot_general` neither batch nor contracting.
-fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32> {
+internal fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32> {
     let mut free: List<i32> = [];
     for let a of 0..<rank {
         if !batch.contains(&a) && !contracting.contains(&a) {
@@ -1181,7 +1181,7 @@ fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32>
 }
 
 /// The axes of a rank `rank` operand that a reduction over `dims` keeps.
-fn kept_axes(rank: i32, dims: &List<i32>) -> List<i32> {
+internal fn kept_axes(rank: i32, dims: &List<i32>) -> List<i32> {
     return (0..<rank).filter(|i| !dims.contains(&i)).collect();
 }
 

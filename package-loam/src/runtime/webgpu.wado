@@ -744,7 +744,7 @@ impl WebGpuBackend {
 
     /// `t` with its f32 elements in row-major order from its offset: `t`
     /// itself, or a copy.
-    internal fn materialized(
+    fn materialized(
         &mut self,
         t: &DeviceTensor,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -754,6 +754,21 @@ impl WebGpuBackend {
         let out = contiguous(self.allocated(element_count(&t.extents), false), 0, t.extents);
         self.copy(t, &out);
         return out;
+    }
+
+    /// `t` under `extents`: a view where its strides allow one, a copy
+    /// otherwise.
+    internal fn reshaped(
+        &mut self,
+        t: &DeviceTensor,
+        extents: &List<i32>,
+    ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        assert element_count(extents) == element_count(&t.extents), "a reshape keeps every element";
+        if let Some(view) = regrouped(t, extents) {
+            return view;
+        }
+        let whole = self.materialized(t);
+        return contiguous(whole.slot, whole.offset, *extents);
     }
 
     /// The shader `key` makes compiled, at the place in `pipelines` it is kept.
@@ -2082,12 +2097,7 @@ impl Backend for WebGpuBackend {
         let Device(d) = t else {
             return Placed::Host(self.cpu.reshape::<E, In, Out>(&self.host_only(t), extents));
         };
-        assert element_count(&extents) == element_count(&d.extents);
-        if let Some(view) = regrouped(d, &extents) {
-            return Placed::Device(view);
-        }
-        let whole = self.materialized(d);
-        return Placed::Device(contiguous(whole.slot, whole.offset, extents));
+        return Placed::Device(self.reshaped(d, &extents));
     }
 
     fn transpose2<E: Element, A, B>(&mut self, t: &Placed<E, [A, B]>) -> Placed<E, [B, A]> {
@@ -2550,7 +2560,7 @@ internal fn permuted(t: &DeviceTensor, perm: &List<i32>) -> DeviceTensor {
 /// buffer, or `None` where its strides cannot say it so a copy must. Each run
 /// of `t`'s axes that `extents` regroups must step through memory as one axis
 /// would, as numpy's reshape asks before it copies.
-internal fn regrouped(t: &DeviceTensor, extents: &List<i32>) -> Option<DeviceTensor> {
+fn regrouped(t: &DeviceTensor, extents: &List<i32>) -> Option<DeviceTensor> {
     if element_count(extents) == 0 {
         return null;
     }

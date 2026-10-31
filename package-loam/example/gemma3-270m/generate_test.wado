@@ -29,7 +29,7 @@ test "each prompt continues with the tokens onnxruntime picks greedily" {
 #[timeout_ms(1800000)]
 test "so does the graph build adds to" {
     let checkpoint = fs::read_linear("gemma3-270m/build/model.onnx_data").unwrap();
-    let mut model = Built::load(&checkpoint).unwrap();
+    let mut model = Built::load(Cpu {}, &checkpoint).unwrap();
     continues_each(|ids| model.next_token(ids));
 }
 

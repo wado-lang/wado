@@ -126,9 +126,13 @@ graph being built.
   body as the devices and stays the reference they are held to. `run` executes
   a recorded graph on `Cpu` node by node, so a compiled program has something
   to agree with.
+- Until its compiler lands, `WebGpuBackend`'s `Graph` computes each node as it
+  is added, as `Cpu`'s does, through the kernels `forward` dispatches.
+  `conformance/webgpu_graph.wado` holds it to `Cpu` on the graphs in
+  `src/runtime/graph_cases.wado`.
 
-`Holds` is what a backend and a graph share: a tensor type, `upload` and
-`extents_of`. `Backend` and `Graph` both extend it, so `Cache<H>` and
+`Holds` is what a backend and a graph share: a tensor type, `upload`,
+`extents_of`, and the pass `begin` starts and `retain` keeps a tensor through. `Backend` and `Graph` both extend it, so `Cache<H>` and
 `Passed<H>` serve the kernels' `pass` and the graph's `build` alike until the
 WebGPU compiler replaces `pass`. The weights a graph reads are `Params<G>`, each
 a tensor of the graph in the element type it computes in.
@@ -439,16 +443,16 @@ and a program for each shape class it has met. The caller owns it, and
 
 ### What this changes
 
-| WEP section                                 | Change                                                                                                     |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                             |
-| A Decoder's Cache Is One Value              | A field the past's length gives holds a capacity of positions and a valid length, and is written in place. |
-| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.             |
-| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.           |
-| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                    |
+| WEP section                                 | Change                                                                                                       |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Context                                     | Serving many requests on a TPU joins inference on the user's device as a goal.                               |
+| A Decoder's Cache Is One Value              | A field the past's length gives holds a capacity of positions and a valid length, and is written in place.   |
+| The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.               |
+| Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.             |
+| The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                      |
 | Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Model` holds the weights beside the programs that bind them. |
-| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.          |
-| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.    |
+| A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.            |
+| The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.      |
 
 ## Plan
 

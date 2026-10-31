@@ -26,7 +26,10 @@ use {
     WindowReduce,
     broadcast_in_dim_extents,
     decomposed_attention,
+    free_axes,
     joined_extents,
+    kept_axes,
+    picked,
     reduced_extents,
     sliced_extents,
 } from "./hlo.wado";
@@ -43,7 +46,7 @@ use {
     element_count,
     operand,
 } from "./tensor.wado";
-use { DeviceTensor, Placed, WebGpuBackend, contiguous, permuted, regrouped } from "./webgpu.wado";
+use { DeviceTensor, Placed, WebGpuBackend, contiguous, permuted } from "./webgpu.wado";
 
 impl Graph for WebGpuBackend {
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
@@ -152,7 +155,7 @@ impl Graph for WebGpuBackend {
         let Device(d) = x else {
             return Placed::Host(self.cpu.reshape(&self.host_only(x), extents));
         };
-        return Placed::Device(regrouped_on(self, d, &extents));
+        return Placed::Device(self.reshaped(d, &extents));
     }
 
     fn transpose<E: Element, In, Out>(&mut self, x: &Placed<E, In>, perm: List<i32>) -> Placed<E, Out> {
@@ -218,7 +221,7 @@ impl Graph for WebGpuBackend {
         };
         let view = self.device_view(x);
         if let Some(e) = fold && let Some(kept) = self.reduced(&view, &dims, &e) {
-            return Placed::Device(regrouped_on(self, &kept, &reduced_extents(&view.extents, &dims)));
+            return Placed::Device(self.reshaped(&kept, &reduced_extents(&view.extents, &dims)));
         }
         return Placed::Host(self.cpu.reduce(&self.host(x), op, init, dims));
     }
@@ -252,7 +255,7 @@ impl Graph for WebGpuBackend {
             let mut extents = batch;
             extents.push(tail.0);
             extents.push(tail.1);
-            return regrouped_on(self, &permuted(view, &perm), &extents);
+            return self.reshaped(&permuted(view, &perm), &extents);
         };
         let left = merged(&l, [dims.lhs_batch, l_free, dims.lhs_contracting], [rows, inner]);
         let right = merged(&r, [dims.rhs_batch, dims.rhs_contracting, r_free], [inner, columns]);
@@ -265,7 +268,7 @@ impl Graph for WebGpuBackend {
         extents.extend(&picked(&l.extents, &l_free));
         extents.extend(&picked(&r.extents, &r_free));
         return match product {
-            Device(d) => Placed::Device(regrouped_on(self, &d, &extents)),
+            Device(d) => Placed::Device(self.reshaped(&d, &extents)),
             Host(h) => Placed::Host(self.cpu.reshape(&h, extents)),
         };
     }
@@ -430,19 +433,6 @@ fn as_element<E: Element, Axes>(g: &mut WebGpuBackend, t: Placed<f32, Axes>) -> 
     };
 }
 
-/// `t` under `extents`: a view where its strides allow one, a copy otherwise.
-fn regrouped_on(
-    g: &mut WebGpuBackend,
-    t: &DeviceTensor,
-    extents: &List<i32>,
-) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    assert element_count(extents) == element_count(&t.extents), "a reshape keeps every element";
-    if let Some(view) = regrouped(t, extents) {
-        return view;
-    }
-    let whole = g.materialized(t);
-    return contiguous(whole.slot, whole.offset, *extents);
-}
 
 fn unary_expr(op: Unary) -> Expr {
     let x = operand(0);
@@ -482,16 +472,6 @@ fn compared_op(direction: Comparison) -> BinaryOp {
     };
 }
 
-/// The axes of a rank `rank` operand that are neither batch nor contracting,
-/// in order: a `dot_general`'s free axes.
-fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32> {
-    return (0..<rank).filter(|a| !batch.contains(&a) && !contracting.contains(&a)).collect();
-}
-
-fn picked(extents: &List<i32>, axes: &List<i32>) -> List<i32> {
-    return axes.into_iter().map(|a| extents[*a]).collect();
-}
-
 fn product_of(extents: &List<i32>, axes: &List<i32>) -> i32 {
     return element_count(&picked(extents, axes));
 }
@@ -521,7 +501,7 @@ fn scatter_windows<I>(
 ) -> List<[DeviceTensor, DeviceTensor]> {
     let rank = out.extents.len();
     let window_axes: List<i32> = (0..<rank).filter(|a| !dims.inserted_window_dims.contains(&a)).collect();
-    let scatter_axes = free_axes(update.extents.len(), &([] as List<i32>), &dims.update_window_dims);
+    let scatter_axes = kept_axes(update.extents.len(), &dims.update_window_dims);
     let vector = dims.index_vector_dim;
     let implicit = vector == index.extents.len();
     let count = if implicit { 1 } else { index.extents[vector] };

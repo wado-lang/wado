@@ -2816,7 +2816,6 @@ impl<'a> Unparser<'a> {
         }
     }
 
-
     /// Emit `kw` if `cond` is true. Used for modifiers like `pub `, `mut `, `async `.
     fn emit_kw_if(&mut self, cond: bool, kw: &str) {
         if cond {
