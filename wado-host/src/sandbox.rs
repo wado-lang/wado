@@ -561,24 +561,24 @@ impl Child {
     ///
     /// Panics when called a second time: a child is reaped once.
     pub fn wait(&self) -> io::Result<ExitStatus> {
-        // A child holding the terminal stops on its own, at Ctrl-Z, and the
-        // host follows it.
-        let stops = match self.terminal {
-            Terminal::Kept => 0,
-            Terminal::HandedOver(_) => libc::WSTOPPED,
-        };
         // Wait without reaping, so a `signal_group` racing the exit still finds
         // the leader holding the group id.
-        while self.wait_id(libc::WEXITED | stops | libc::WNOWAIT)? == libc::CLD_STOPPED {
-            self.wait_id(libc::WSTOPPED)?;
-            if let Terminal::HandedOver(fd) = self.terminal {
-                self.follow_stop(fd)?;
+        match self.terminal {
+            Terminal::Kept => {
+                self.wait_id(libc::WEXITED | libc::WNOWAIT)?;
             }
-        }
-        if let Terminal::HandedOver(fd) = self.terminal
-            && terminal_group(fd) == self.pid
-        {
-            give_terminal(fd, own_group())?;
+            // A child holding the terminal stops on its own, at Ctrl-Z, and
+            // the host follows it.
+            Terminal::HandedOver(fd) => {
+                let events = libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT;
+                while self.wait_id(events)? == libc::CLD_STOPPED {
+                    self.wait_id(libc::WSTOPPED)?;
+                    self.follow_stop(fd)?;
+                }
+                if terminal_group(fd) == self.pid {
+                    give_terminal(fd, own_group())?;
+                }
+            }
         }
         self.signal_group(libc::SIGKILL)?;
         let mut reaped = lock(&self.reaped);
