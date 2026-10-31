@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793393064842,
+  "lastUpdate": 1793414647162,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72481,6 +72481,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/45f3599f200dc79dd6ef8df6fab32e823e3582ab"
         },
         "date": 1793393063675,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "48e07ca610db4defbecb56e20b15173f0ee840ae",
+          "message": "Merge pull request #2499 from wado-lang/gfx/upgrade-deps-oct-2026\n\nchore: upgrade deps 🎃",
+          "timestamp": "2026-10-31T11:24:31+09:00",
+          "tree_id": "5a56823b8e52b17bced6eac96dc2a37f76fa4ab8",
+          "url": "https://github.com/wado-lang/wado/commit/48e07ca610db4defbecb56e20b15173f0ee840ae"
+        },
+        "date": 1793414645902,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
