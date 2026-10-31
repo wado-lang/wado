@@ -1,0 +1,35 @@
+// A component exporting a resource is imported as an affine resource: its
+// constructor, static functions and methods are the resource's, and a handle
+// the program owns runs the component's destructor where its scope ends.
+use { Counters } from "./sub/wasm_import_cm_resource.wat" with { type: "wat" };
+
+fn read(c: &Counters::Counter) -> u32 {
+    return c.get();
+}
+
+test "a constructed handle is dropped where its scope ends" {
+    let before = Counters::drops();
+    scope: {
+        let c = Counters::Counter::new(5);
+        assert c.get() == 5;
+        let d = Counters::Counter::from(7);
+        assert read(&d) == 7;
+    }
+    assert Counters::drops() == before + 2;
+}
+
+test "a handle passed by `own` moves into the component" {
+    let before = Counters::drops();
+    let c = Counters::Counter::new(9);
+    assert Counters::take(c) == 9;
+    assert Counters::drops() == before;
+}
+
+test "a moved handle is dropped once" {
+    let before = Counters::drops();
+    let c = Counters::Counter::new(3);
+    let moved = c;
+    assert moved.get() == 3;
+    builtin::drop(moved);
+    assert Counters::drops() == before + 1;
+}

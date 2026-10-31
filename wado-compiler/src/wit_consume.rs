@@ -11,8 +11,9 @@
 use crate::ast::{
     AstId, AstIdSpace, AttrArg, Attribute, CmBoundary, CmImport, EffectsSource, EnumCase, EnumDecl,
     FlagsDecl, FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module,
-    NamedType, Newtype, Param, SelfKind, StrLit, StructDecl, StructField, Type, UseDecl, UseItem,
-    UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path, cm_import_of,
+    NamedType, Newtype, Param, ResourceDecl, SelfKind, StrLit, StructDecl, StructField, Type,
+    UseDecl, UseItem, UseNameSpelling, VariantCase, VariantDecl, Visibility, cm_function_path,
+    cm_import_of,
 };
 use crate::attribute::{CM, CM_EXPORT, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
@@ -462,32 +463,12 @@ impl Builder {
 
         let iface_name = self.names.interfaces[fq].clone();
 
-        let mut methods = Vec::new();
-        for (fname, func) in &iface.functions {
-            let signature = self.signature(resolve, func, fq);
-            let is_async = is_async_func(func);
-            let return_type = self.func_return_type(resolve, func, fq);
-            let attrs = vec![self.cm_import_attr(fq, Some(fname)), signature.cm_params];
-            methods.push(Function {
-                id: self.id(),
-                name: wado_identifier(fname),
-                name_span: syn(),
-                visibility: Visibility::Private,
-                is_export: false,
-                export_targets: Vec::new(),
-                is_async,
-                type_params: Vec::new(),
-                attrs,
-                params: signature.params,
-                params_span: syn(),
-                return_type,
-                effects: Vec::new(),
-                effects_source: EffectsSource::Written,
-                holds_contracts_of: None,
-                body: None,
-                span: syn(),
-            });
-        }
+        let methods = iface
+            .functions
+            .values()
+            .filter(|func| resource_of(func).is_none())
+            .map(|func| self.function(resolve, func, fq))
+            .collect();
 
         let mut attrs = vec![self.cm_import_attr(fq, None)];
         if self.exports.contains_key(fq) {
@@ -510,7 +491,44 @@ impl Builder {
         }));
     }
 
-    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT.
+    /// The bodyless declaration of the interface `fq`'s function `func`: an
+    /// operation of the interface, or a constructor, method or static function
+    /// of the resource it belongs to. A constructor is `new`, the name Wado
+    /// calls one by.
+    fn function(&mut self, resolve: &Resolve, func: &wit_parser::Function, fq: &str) -> Function {
+        let signature = self.signature(resolve, func, fq);
+        let return_type = self.func_return_type(resolve, func, fq);
+        let name = if matches!(func.kind, wit_parser::FunctionKind::Constructor(_)) {
+            "new".to_string()
+        } else {
+            wado_identifier(func.item_name())
+        };
+        Function {
+            id: self.id(),
+            name,
+            name_span: syn(),
+            visibility: Visibility::Private,
+            is_export: false,
+            export_targets: Vec::new(),
+            is_async: is_async_func(func),
+            type_params: Vec::new(),
+            attrs: vec![
+                self.cm_import_attr(fq, Some(&func.name)),
+                signature.cm_params,
+            ],
+            params: signature.params,
+            params_span: syn(),
+            return_type,
+            effects: Vec::new(),
+            effects_source: EffectsSource::Written,
+            holds_contracts_of: None,
+            body: None,
+            span: syn(),
+        }
+    }
+
+    /// `func`'s parameters, with the `#[cm_params]` naming them in WIT. A
+    /// method's `self`, a `borrow` of its resource, is the `&self` receiver.
     fn signature(&mut self, resolve: &Resolve, func: &wit_parser::Function, fq: &str) -> Signature {
         let cm_params = Attribute {
             name: CM_PARAMS.to_string(),
@@ -523,7 +541,22 @@ impl Builder {
             span: syn(),
         };
         let mut params = Vec::with_capacity(func.params.len());
-        for p in &func.params {
+        for (i, p) in func.params.iter().enumerate() {
+            if i == 0 && is_method(func) {
+                let self_type = self.named("Self", None);
+                params.push(Param {
+                    id: self.id(),
+                    attrs: Vec::new(),
+                    name: "self".to_string(),
+                    name_span: syn(),
+                    ty: Type::Reference(Box::new(self_type)),
+                    self_kind: SelfKind::Ref,
+                    is_mut: false,
+                    default: None,
+                    span: syn(),
+                });
+                continue;
+            }
             let ty = match lent_list_elem(resolve, func, p.ty) {
                 Some(elem) => {
                     let elem = self.map_leaf(resolve, elem, fq);
@@ -725,6 +758,28 @@ impl Builder {
                     span: syn(),
                 }));
             }
+            TypeDefKind::Resource => {
+                let TypeOwner::Interface(owner) = td.owner else {
+                    unreachable!("a world-level type is rejected before its interface is emitted")
+                };
+                let methods = resolve.interfaces[owner]
+                    .functions
+                    .values()
+                    .filter(|func| resource_of(func) == Some(type_id))
+                    .map(|func| self.function(resolve, func, fq))
+                    .collect();
+                let id = self.id();
+                self.items.push(Item::Resource(ResourceDecl {
+                    id,
+                    name: wado_name,
+                    visibility: Visibility::Public,
+                    type_params: Vec::new(),
+                    parent: None,
+                    attrs: vec![cm],
+                    methods,
+                    span: syn(),
+                }));
+            }
             other => {
                 self.errors.push(format!(
                     "importing a component that exports the WIT type `{wit_name}` ({other:?}) is not \
@@ -822,6 +877,16 @@ impl Builder {
         };
         let id = used_origin(resolve, id);
         let td = &resolve.types[id];
+        // A handle is anonymous: it names the resource it owns or lends.
+        if let TypeDefKind::Handle(handle) = td.kind {
+            return match handle {
+                Handle::Own(resource) => self.map_leaf(resolve, WitType::Id(resource), current_fq),
+                Handle::Borrow(resource) => {
+                    let resource = self.map_leaf(resolve, WitType::Id(resource), current_fq);
+                    Type::Reference(Box::new(resource))
+                }
+            };
+        }
         if let Some(name) = td.name.as_deref() {
             let owner = type_source_fq(resolve, id, current_fq);
             let declared = self.type_name(&owner, name);
@@ -981,6 +1046,39 @@ fn is_async_func(func: &wit_parser::Function) -> bool {
         | FunctionKind::StaticSetter(_)
         | FunctionKind::Constructor(_) => false,
     }
+}
+
+/// The resource a constructor, method or static function belongs to, or `None`
+/// for an operation of the interface itself.
+fn resource_of(func: &wit_parser::Function) -> Option<TypeId> {
+    use wit_parser::FunctionKind;
+    match func.kind {
+        FunctionKind::Constructor(r)
+        | FunctionKind::Method(r)
+        | FunctionKind::AsyncMethod(r)
+        | FunctionKind::MethodGetter(r)
+        | FunctionKind::MethodSetter(r)
+        | FunctionKind::Static(r)
+        | FunctionKind::AsyncStatic(r)
+        | FunctionKind::StaticGetter(r)
+        | FunctionKind::StaticSetter(r) => Some(r),
+        FunctionKind::Freestanding
+        | FunctionKind::AsyncFreestanding
+        | FunctionKind::Getter
+        | FunctionKind::Setter => None,
+    }
+}
+
+/// Whether `func` takes its resource as a `self` receiver.
+fn is_method(func: &wit_parser::Function) -> bool {
+    use wit_parser::FunctionKind;
+    matches!(
+        func.kind,
+        FunctionKind::Method(_)
+            | FunctionKind::AsyncMethod(_)
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+    )
 }
 
 /// The FQ of the interface that owns `type_id`, falling back to `current_fq`
