@@ -126,8 +126,9 @@ impl Widener<'_> {
             let from_ref = self.tt.borrow_mut().make_ref(from);
             let slots = || ref_expr(v(), from_ref, synth_span());
             let len = builtin_call("array_len", vec![slots()], TypeTable::I32);
-            let mut stmts = self.rebuild_slots(slots, len, to, from_elem, to_elem, &mut locals);
-            stmts.push(return_stmt(Some(local_ref(2, "out", to))));
+            let (mut stmts, out) =
+                self.rebuild_slots(slots, len, to, from_elem, to_elem, &mut locals);
+            stmts.push(return_stmt(Some(out)));
             stmts
         } else if let Some((from_elem, to_elem)) = lists {
             // Only the first `used` slots hold elements; the spare capacity
@@ -154,13 +155,13 @@ impl Widener<'_> {
                 )
             };
             let used = || seq_field(SeqField::Len, TypeTable::I32);
-            let mut stmts =
+            let (mut stmts, out) =
                 self.rebuild_slots(slots, used(), to_array, from_elem, to_elem, &mut locals);
             stmts.push(return_stmt(Some(struct_literal(
                 to,
                 to_name,
                 [
-                    (SeqField::Backing.field_name(), local_ref(2, "out", to_array)),
+                    (SeqField::Backing.field_name(), out),
                     (SeqField::Len.field_name(), used()),
                 ],
             ))));
@@ -229,23 +230,22 @@ impl Widener<'_> {
         )
     }
 
-    /// Statements leaving in the local `out` a fresh `to` array holding the
-    /// first `len` of `slots` (a `&Array` of `from_elem`), each rebuilt.
+    /// Statements building a fresh `to` array of the first `count` of `slots`
+    /// (a `&Array` of `from_elem`), each rebuilt, and the local holding it.
     fn rebuild_slots(
         &mut self,
         slots: impl Fn() -> TirExpr,
-        len: TirExpr,
+        count: TirExpr,
         to: TypeId,
         from_elem: TypeId,
         to_elem: TypeId,
         locals: &mut Vec<TirLocal>,
-    ) -> Vec<TirStmt> {
+    ) -> (Vec<TirStmt>, TirExpr) {
         let span = synth_span();
         let to_mut_ref = self.tt.borrow_mut().make_mut_ref(to);
         locals.push(param_local("len", TypeTable::I32, false));
         locals.push(param_local("out", to, true));
         locals.push(param_local("index", TypeTable::I32, true));
-        let len_value = len;
         let len = || local_ref(1, "len", TypeTable::I32);
         let out = || local_ref(2, "out", to);
         let index = || local_ref(3, "index", TypeTable::I32);
@@ -271,12 +271,13 @@ impl Widener<'_> {
             ],
             span,
         );
-        vec![
-            let_stmt("len", 1, TypeTable::I32, len_value),
+        let stmts = vec![
+            let_stmt("len", 1, TypeTable::I32, count),
             let_mut_stmt("out", 2, to, builtin_call("array_new", vec![len()], to)),
             let_mut_stmt("index", 3, TypeTable::I32, i32_const(0)),
             loop_stmt(body),
-        ]
+        ];
+        (stmts, out())
     }
 
     /// The cases of two instances of one variant: name, index, and the payload

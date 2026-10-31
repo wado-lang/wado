@@ -558,6 +558,8 @@ struct ReifyFacts<'r, 'a> {
     affine_params: &'r [tir::TypeId],
 }
 
+// Ownership reads the recorded type itself: a value holding an `Option<!>`
+// moves as the type it widens to does.
 impl ownership::BodyFacts for ReifyFacts<'_, '_> {
     fn consumes_receiver(&self, call: AstId) -> bool {
         self.reify
@@ -565,8 +567,6 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
             .is_some_and(|dispatch| dispatch.consumes_self)
     }
 
-    // Ownership reads the recorded type itself: a value holding an `Option<!>`
-    // moves as the type it widens to does.
     fn indexes_tuple(&self, base: &ast::Expr) -> bool {
         self.reify
             .ann_recorded_expression_type(base.id())
