@@ -1,5 +1,5 @@
 use icu from "core:icu";
-use { Properties } from "core:icu";
+use { Locale, Properties } from "core:icu";
 
 test "a property named in the source needs no name lookup" {
     assert icu::has(Properties::BinaryProperty::Uppercase, 'À');
@@ -46,9 +46,98 @@ test "a name this build does not answer is null, not an empty set" {
     assert icu::contains("Other_Math", 'x') matches { None };
 }
 
+test "a locale keeps the language, script and region, in canonical case" {
+    assert `${Locale::from("sR-latn-rs")}` == "sr-Latn-RS";
+    assert `${Locale::from("zh-Hant")}` == "zh-Hant";
+    assert `${Locale::from("es-419")}` == "es-419";
+    assert `${Locale::from("und")}` == "und";
+    assert Locale::from("EN-us") == Locale::from("en-US");
+}
+
+test "a locale drops variants and extensions" {
+    assert `${Locale::from("de-DE-1996-u-co-phonebk-x-private")}` == "de-DE";
+    assert `${Locale::from("sl-rozaj-biske")}` == "sl";
+    assert `${Locale::from("ca-ES-valencia")}` == "ca-ES";
+    assert `${Locale::from("ja-t-it-m0-xxx")}` == "ja";
+}
+
+test "a well-formed tag is accepted" {
+    for let tag of [
+        "en", "haw-US", "en-1994", "en-u-ca-gregory-nu-latn", "en-u-attr-ca-gregory", "und-t-en-h0-hybrid",
+        "en-t-k0-qwerty", "en-a-bbb-x-a-b", "en-x-1",
+    ] {
+        assert Locale::is_well_formed(tag), tag;
+    }
+}
+
+test "a tag that is not well-formed is refused" {
+    for let tag of [
+        "", "e", "en-", "-en", "en--US", "en_US", "root", "x-private", "1en", "en-USA", "en-u", "en-u-a1", "en-t",
+        "en-t-k0", "en-a", "en-a-b", "en-x", "en-x-toolongsub", "en-ü",
+    ] {
+        assert !Locale::is_well_formed(tag), tag;
+        assert Locale::try_from(tag) matches { Err(_) }, tag;
+    }
+    let Err(e) = Locale::try_from("en_US") else {
+        panic("an ill-formed tag must be refused");
+    };
+    assert `${e}` == "\"en_US\" is not a well-formed BCP 47 language tag";
+}
+
+// No language has a subtag of 5 to 8 letters: BCP 47 reserves the length for
+// registration, and ICU4X stores a language in 3 bytes.
+test "a reserved language length is refused" {
+    assert !Locale::is_well_formed("abcde");
+}
+
+#[expect_trap]
+test "from traps on a tag that is not well-formed" {
+    let _ = Locale::from("not a tag!");
+}
+
+test "case mapping follows the language" {
+    let en = Locale::from("en");
+    let tr = Locale::from("tr-TR");
+    assert en.uppercase(&"istanbul") == "ISTANBUL";
+    assert tr.uppercase(&"istanbul") == "İSTANBUL";
+    assert en.lowercase(&"DIYARBAKIR") == "diyarbakir";
+    assert tr.lowercase(&"DIYARBAKIR") == "dıyarbakır";
+    // Greek drops the accent that the root mapping keeps.
+    assert Locale::from("und").uppercase(&"άδεια") == "ΆΔΕΙΑ";
+    assert Locale::from("el").uppercase(&"άδεια") == "ΑΔΕΙΑ";
+}
+
+test "folding is full, and Turkic in tr and az" {
+    let en = Locale::from("en");
+    assert en.fold(&"Straße") == "strasse";
+    assert en.fold(&"I") == "i";
+    assert Locale::from("tr").fold(&"I") == "ı";
+    assert Locale::from("az").fold(&"İ") == "i";
+    assert en.eq_ignore_case(&"STRASSE", &"straße");
+    assert en.eq_ignore_case(&"I", &"i");
+    assert !Locale::from("tr").eq_ignore_case(&"I", &"i");
+    assert !en.eq_ignore_case(&"a", &"b");
+}
+
+test "graphemes are what a reader counts as characters" {
+    let text = "e\u{301}👨‍👩‍👧🇯🇵!";
+    let mut clusters: List<String> = [];
+    for let g of icu::graphemes(&text) {
+        clusters.push(g.to_string());
+    }
+    assert clusters == ["e\u{301}", "👨‍👩‍👧", "🇯🇵", "!"];
+    assert icu::grapheme_count(&text) == 4;
+}
+
+test "an empty string has no graphemes" {
+    let mut none = icu::graphemes(&"");
+    assert none.next() matches { None };
+    assert icu::grapheme_count(&"") == 0;
+}
+
 test "a collator sorts as its locale does" {
-    let german = icu::Collator::new("de").unwrap();
-    let swedish = icu::Collator::new("sv").unwrap();
+    let german = icu::Collator::new(&Locale::from("de"));
+    let swedish = icu::Collator::new(&Locale::from("sv"));
     // German sorts `ä` with `a`; Swedish sorts it after `z`.
     assert german.compare(&"ä", &"z") matches { Less };
     assert swedish.compare(&"ä", &"z") matches { Greater };
@@ -57,15 +146,14 @@ test "a collator sorts as its locale does" {
 
 test "a locale CLDR tailors nothing for sorts as its fallback does" {
     // Root sorts `ä` with `a`, Swedish after `z`: each tag below lands on one.
-    assert icu::Collator::new("und").unwrap().compare(&"ä", &"z") matches { Less };
-    assert icu::Collator::new("sv-FI").unwrap().compare(&"ä", &"z") matches { Greater };
-    assert icu::Collator::new("sv-u-co-xyz").unwrap().compare(&"ä", &"z") matches { Greater };
-    assert icu::Collator::new("zz").unwrap().compare(&"ä", &"z") matches { Less };
-}
-
-test "a tag that does not parse is refused" {
-    let Err(e) = icu::Collator::new("not a tag!") else {
-        panic("an unparsable tag must be refused");
-    };
-    assert !`${e}`.is_empty();
+    let cases: List<[String, bool]> = [
+        ["und", false],
+        ["sv-FI", true],
+        ["sv-Latn", true],
+        ["zz", false],
+    ];
+    for let [tag, sorts_after_z] of cases {
+        let collator = icu::Collator::new(&Locale::from(tag));
+        assert collator.compare(&"ä", &"z") matches { Greater } == sorts_after_z, tag;
+    }
 }

@@ -61,8 +61,10 @@ identifiers.
 | Free function                       | pure in its arguments, no construction worth keeping |
 | Constructed handle, affine resource | construction worth hoisting, or stateful             |
 
-A free function covers normalization, case folding, `is_nfc`, character
-properties, and one-shot locale-sensitive casing.
+A free function covers normalization, `is_nfc`, character properties, and
+grapheme segmentation, which no locale tailors. A locale-sensitive operation
+that keeps nothing between calls, such as case mapping, is a method of the
+`Locale` it reads.
 
 Every handle is an affine resource with a destructor on the ICU side: a
 collator, plural rules, a formatter, a segmenter, a lazy segmentation iterator.
@@ -77,6 +79,31 @@ Where a capability serves both a one-shot and a loop, the facade offers both: a
 convenience function that constructs and discards, and the handle for when the
 construction should be hoisted. The facade makes the cost visible where it is
 paid.
+
+### A locale is a value, and every locale-aware operation takes one
+
+No operation falls back to an implicit locale, root included. A program that
+uses ICU always has a locale in mind, and an implicit one hides which. Hanging
+the stateless operations off `Locale` puts that in the types:
+`tr.uppercase(&s)` cannot be written without naming a locale. The names follow
+ICU4X's (`uppercase`, `fold`) rather than Rust's `to_uppercase`, which takes no
+locale; a Rust reader would otherwise take one for the other.
+
+`Locale` holds what ICU4X's `LanguageIdentifier` holds, minus variants: the
+language, script and region subtags, each as its ASCII bytes in a `u32` in
+canonical case. So a locale crosses the boundary as three numbers, and ICU4X
+rebuilds its identifier with no parse. `core:icu` checks a tag once, in Wado,
+since well-formedness is syntax alone:
+
+- `Locale::try_from(tag)` answers for a tag read at run time.
+- `Locale::from(tag)` has the contract `Locale::is_well_formed(&tag)`, for a tag
+  written in the source.
+
+Variants and extensions are dropped. Few CLDR locales vary by variant, and an
+extension's keywords (`-u-co`, `-u-kn`) are options of the capability that
+reads them, so they belong to that capability's constructor rather than to the
+locale. A method takes `&Locale`: the struct is a value, but copying it is not
+free.
 
 ### One implementation asset, collected per program
 
@@ -282,6 +309,16 @@ per request from `Accept-Language` accumulates far-side with no eviction and no
 visibility, a leak rather than a cache — and it silently shares the state of
 every object that has some.
 
+### An ambient locale
+
+A global holding the locale, with `core:icu` adding locale-aware methods to
+`String` through a trait, would let a program write `s.to_uppercase()`.
+Rejected: it is an implicit locale again, only not root's. An immutable global
+cannot vary per request, so a server whose users speak different languages
+cannot use it, and a mutable one is state any code may change. The method would
+also look like Rust's `to_uppercase` while depending on a locale no call site
+shows.
+
 ### Three user-visible modules
 
 An earlier plan split the surface into `core:text`, `core:collation`, and
@@ -361,7 +398,15 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   function per unused lift — the data and code it reached are already gone, so
   the cost is bytes rather than kilobytes.
 
+- **A collator takes no options.** The keywords a `-u-` extension carries
+  (`co`, `kn`, …) are dropped with the extension, and `Collator::new` takes
+  nothing else, so a program cannot ask for phonebook order or numeric
+  collation.
+
 ## Open questions
+
+- [ ] Whether an ambient locale, supplied through an effect so that a signature
+  shows it, should layer over the explicit API.
 
 - [ ] A closure cannot own an affine value
   ([Affine Types](./wep-2026-10-17-affine-types.md#a-closure-cannot-own-an-affine-value)),
@@ -399,6 +444,12 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   asset's core module from 0.35 MB to 1.69 MB. A program that constructs a
   collator carries all of it; one that does not collects it away, and no
   compile measurably slows.
+- [x] `Locale`, case mapping and graphemes. `Locale` is parsed in Wado and
+  carries `uppercase`, `lowercase`, `fold` and `eq_ignore_case`;
+  `Collator::new` takes `&Locale`. `graphemes` iterates a string's clusters as
+  `StrSlice`s, and `grapheme_count` counts them without listing them. Against a
+  program printing one line, uppercasing one string adds 68 KB and counting its
+  graphemes 33 KB.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
   itself, reduced here to an archive lookup: `core:icu` runs no provider
   component and needs no compile-time execution.

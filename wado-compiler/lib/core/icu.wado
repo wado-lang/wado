@@ -1,24 +1,280 @@
 #![stdlib("core:icu")]
-//! Unicode character properties and locale-aware collation, from the ICU4X
-//! component bundled with the toolchain. A property name it does not answer is
-//! `null`, never an approximate set: `Block`, `Decomposition_Type` and the
-//! contributory `Other_*` are withheld.
+//! Unicode character properties, locale-aware collation and case mapping, and
+//! grapheme segmentation, from the ICU4X component bundled with the toolchain.
+//! A property name it does not answer is `null`, never an approximate set:
+//! `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+//!
+//! Every locale-aware operation takes its `Locale` explicitly; none falls back
+//! to an implicit one.
 
 pub use { Properties } from "./icu.wat" with { type: "wat" };
-use { Collation } from "./icu.wat" with { type: "wat" };
+use { Casemap, Collation, Segmenter } from "./icu.wat" with { type: "wat" };
 
 #[synopsis]
 test {
     assert has(Properties::BinaryProperty::Uppercase, 'À');
     assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 
-    let swedish = Collator::new("sv").unwrap();
+    let tr = Locale::from("tr");
+    assert tr.uppercase(&"istanbul") == "İSTANBUL";
+
+    let swedish = Collator::new(&Locale::from("sv"));
     let mut words: List<String> = ["ö", "z", "a"];
     words.sort_by(|a, b| swedish.compare(a, b));
     assert words == ["a", "z", "ö"];
+
+    assert grapheme_count(&"🇯🇵") == 1;
 }
 
-/// Why a locale was refused: the tag does not parse as BCP 47.
+/// A locale: the language, script and region subtags of a BCP 47 tag, which
+/// are what select ICU4X's locale data. Variants and extensions are dropped.
+/// Each subtag is held as its ASCII bytes in canonical case, so a locale is
+/// parsed once and crosses to ICU4X as three numbers.
+pub struct Locale {
+    language: u32,
+    script: u32,
+    region: u32,
+}
+
+impl Locale {
+    /// Whether `tag` is a well-formed Unicode BCP 47 locale identifier
+    /// (UTS #35), with `-` between subtags. A language subtag of 5 to 8
+    /// letters is refused: BCP 47 reserves the length, and no language has one.
+    pub fn is_well_formed<S: AsStrSlice>(tag: S) -> bool {
+        let mut s = Scanner::new(tag.as_str_slice());
+        if !s.take(is_language) {
+            return false;
+        }
+        s.language_rest();
+        while let Some(singleton) = s.current {
+            if !(singleton.len() == 1 && is_alnum(&singleton)) {
+                return false;
+            }
+            s.advance();
+            let complete = match (unchecked singleton.byte_at(0)).to_ascii_lowercase() {
+                b'x' => {
+                    return s.take_all(|p| is_alnum_of(p, 1, 8)) && s.current matches { None };
+                },
+                b'u' => s.take_all(|p| is_key(p) || is_alnum_of(p, 3, 8)),
+                b't' => s.transformed_extension(),
+                _ => s.take_all(|p| is_alnum_of(p, 2, 8)),
+            };
+            if !complete {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// Full uppercase mapping of `text`.
+    pub fn uppercase(&self, text: &String) -> String {
+        return Casemap::uppercase(*text, self.language);
+    }
+
+    /// Full lowercase mapping of `text`.
+    pub fn lowercase(&self, text: &String) -> String {
+        return Casemap::lowercase(*text, self.language);
+    }
+
+    /// Full case folding of `text`, for caseless matching. `tr` and `az` fold
+    /// `I` to dotless `ı` and `İ` to `i`, as Turkic does.
+    pub fn fold(&self, text: &String) -> String {
+        return Casemap::fold(*text, self.language);
+    }
+
+    /// Whether `left` and `right` fold to the same text.
+    pub fn eq_ignore_case(&self, left: &String, right: &String) -> bool {
+        return Casemap::eq_ignore_case(*left, *right, self.language);
+    }
+}
+
+impl TryFrom<String> for Locale {
+    type Err = LocaleError;
+
+    fn try_from(tag: String) -> Result<Locale, LocaleError> {
+        if !Locale::is_well_formed(&tag) {
+            return Err(LocaleError { message: `"${tag}" is not a well-formed BCP 47 language tag` });
+        }
+        return Ok(unchecked Locale::from(tag));
+    }
+}
+
+impl From<String> for Locale {
+    /// The locale of a tag known to be well-formed; `Locale::try_from` answers
+    /// for one that may not be.
+    fn from(tag: String) -> Locale
+        contract Locale::is_well_formed(&tag)
+    {
+        let mut s = Scanner::new(tag.as_str_slice());
+        let language = pack(&s.current.unwrap(), 0);
+        s.advance();
+        let mut script: u32 = 0;
+        if let Some(p) = s.current && is_script(&p) {
+            script = pack(&p, 1);
+            s.advance();
+        }
+        let mut region: u32 = 0;
+        if let Some(p) = s.current && is_region(&p) {
+            region = pack(&p, 3);
+        }
+        return Locale { language, script, region };
+    }
+}
+
+impl Display for Locale {
+    fn fmt(&self, f: &mut Formatter) {
+        let mut tag = String::with_capacity(11);
+        push_subtag(&mut tag, self.language);
+        for let raw of [self.script, self.region] {
+            if raw != 0 {
+                tag.push_ascii(b'-');
+                push_subtag(&mut tag, raw);
+            }
+        }
+        f.pad(&tag);
+    }
+}
+
+/// A subtag's bytes, first byte lowest, the first `upper_prefix` of them
+/// uppercased and the rest lowercased.
+fn pack(subtag: &StrSlice, upper_prefix: i32) -> u32 {
+    let mut raw: u32 = 0;
+    for let i of 0..<subtag.len() {
+        let b = unchecked subtag.byte_at(i);
+        let b = if i < upper_prefix { b.to_ascii_uppercase() } else { b.to_ascii_lowercase() };
+        raw = raw | b as u32 << (8 * i) as u32;
+    }
+    return raw;
+}
+
+fn push_subtag(tag: &mut String, raw: u32) {
+    let mut rest = raw;
+    while rest != 0 {
+        tag.push_ascii((rest & 0xFF) as u8);
+        rest = rest >> 8;
+    }
+}
+
+/// Reads a tag one `-`-separated subtag at a time.
+struct Scanner {
+    tag: StrSlice,
+    end: i32,
+    /// The subtag under the cursor, `null` past the last.
+    current: Option<StrSlice>,
+}
+
+impl Scanner {
+    fn new(tag: StrSlice) -> Scanner {
+        let mut s = Scanner { tag, end: -1, current: null };
+        s.advance();
+        return s;
+    }
+
+    fn advance(&mut self) {
+        let start = self.end + 1;
+        if start > self.tag.len() {
+            self.current = null;
+            return;
+        }
+        let mut end = start;
+        while end < self.tag.len() && unchecked self.tag.byte_at(end) != b'-' {
+            end += 1;
+        }
+        self.end = end;
+        self.current = Some(unchecked self.tag.slice(start, end));
+    }
+
+    /// Steps past the current subtag if `pred` holds for it.
+    fn take(&mut self, pred: fn(&StrSlice) -> bool) -> bool {
+        if let Some(p) = self.current && pred(&p) {
+            self.advance();
+            return true;
+        }
+        return false;
+    }
+
+    /// Steps past every subtag `pred` holds for, up to the next singleton;
+    /// whether there was at least one.
+    fn take_all(&mut self, pred: fn(&StrSlice) -> bool) -> bool {
+        let mut any = false;
+        while self.take(pred) {
+            any = true;
+        }
+        return any;
+    }
+
+    /// The optional script, region and variants after a language subtag.
+    fn language_rest(&mut self) {
+        self.take(is_script);
+        self.take(is_region);
+        self.take_all(is_variant);
+    }
+
+    /// The subtags of a `t` extension: a source language, fields, or both.
+    fn transformed_extension(&mut self) -> bool {
+        let mut any = false;
+        if self.take(|p| is_alpha_of(p, 2, 3) || is_alpha_of(p, 5, 8)) {
+            self.language_rest();
+            any = true;
+        }
+        while self.take(is_tkey) {
+            if !self.take_all(|p| is_alnum_of(p, 3, 8)) {
+                return false;
+            }
+            any = true;
+        }
+        return any;
+    }
+}
+
+fn is_language(p: &StrSlice) -> bool {
+    return is_alpha_of(p, 2, 3);
+}
+
+fn is_script(p: &StrSlice) -> bool {
+    return is_alpha_of(p, 4, 4);
+}
+
+fn is_region(p: &StrSlice) -> bool {
+    return is_alpha_of(p, 2, 2) || p.len() == 3 && all_bytes(p, |b| b.is_ascii_digit());
+}
+
+fn is_variant(p: &StrSlice) -> bool {
+    return is_alnum_of(p, 5, 8) || is_alnum_of(p, 4, 4) && (unchecked p.byte_at(0)).is_ascii_digit();
+}
+
+/// A `u` extension key: an alphanumeric, then a letter.
+fn is_key(p: &StrSlice) -> bool {
+    return is_alnum_of(p, 2, 2) && (unchecked p.byte_at(1)).is_ascii_alphabetic();
+}
+
+/// A `t` extension field key: a letter, then a digit.
+fn is_tkey(p: &StrSlice) -> bool {
+    return p.len() == 2 && (unchecked p.byte_at(0)).is_ascii_alphabetic() && (unchecked p.byte_at(1)).is_ascii_digit();
+}
+
+fn is_alpha_of(p: &StrSlice, min: i32, max: i32) -> bool {
+    return min <= p.len() <= max && all_bytes(p, |b| b.is_ascii_alphabetic());
+}
+
+fn is_alnum_of(p: &StrSlice, min: i32, max: i32) -> bool {
+    return min <= p.len() <= max && is_alnum(p);
+}
+
+fn is_alnum(p: &StrSlice) -> bool {
+    return all_bytes(p, |b| b.is_ascii_alphanumeric());
+}
+
+fn all_bytes(p: &StrSlice, pred: fn(u8) -> bool) -> bool {
+    for let b of p.bytes() {
+        if !pred(b) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// Why a locale was refused: the tag is not well-formed BCP 47.
 pub struct LocaleError {
     message: String,
 }
@@ -38,13 +294,10 @@ pub affine struct Collator {
 }
 
 impl Collator {
-    /// A collator for the BCP 47 tag `locale`. A locale CLDR tailors nothing for
-    /// sorts as its fallback does, ending at the root collation.
-    pub fn new(locale: String) -> Result<Collator, LocaleError> {
-        return match Collation::Collator::create(locale) {
-            Ok(inner) => Ok(Collator { inner }),
-            Err(message) => Err(LocaleError { message }),
-        };
+    /// A collator for `locale`. A locale CLDR tailors nothing for sorts as its
+    /// fallback does, ending at the root collation.
+    pub fn new(locale: &Locale) -> Collator {
+        return Collator { inner: Collation::Collator::create(locale.language, locale.script, locale.region) };
     }
 
     /// How `left` sorts against `right`.
@@ -90,4 +343,43 @@ pub fn contains(property: String, ch: char) -> Option<bool> {
 /// ranges.
 pub fn value_contains(property: String, value: String, ch: char) -> Option<bool> {
     return Properties::contains(property, Option::Some(value), ch);
+}
+
+/// The extended grapheme clusters of `text` (UAX #29), in order: what a reader
+/// counts as one character each.
+pub fn graphemes(text: &String) -> Graphemes {
+    return Graphemes {
+        text: text.as_str_slice(),
+        ends: Segmenter::grapheme_ends(*text),
+        index: 0,
+        start: 0,
+    };
+}
+
+/// How many extended grapheme clusters `text` holds.
+pub fn grapheme_count(text: &String) -> i32 {
+    return Segmenter::grapheme_count(*text) as i32;
+}
+
+/// The iterator [`graphemes`] returns.
+pub struct Graphemes {
+    text: StrSlice,
+    ends: List<u32>,
+    index: i32,
+    start: i32,
+}
+
+impl Iterator for Graphemes {
+    type Item = StrSlice;
+
+    fn next(&mut self) -> Option<StrSlice> {
+        if self.index == self.ends.len() {
+            return null;
+        }
+        let end = self.ends[self.index] as i32;
+        let cluster = unchecked self.text.slice(self.start, end);
+        self.index += 1;
+        self.start = end;
+        return Some(cluster);
+    }
 }

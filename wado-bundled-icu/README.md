@@ -16,7 +16,10 @@ The crate builds one of two worlds:
 
 ## The shippable surface
 
-It exports two interfaces: character properties, and collation.
+It exports four interfaces: character properties, collation, case mapping, and
+grapheme segmentation. A locale crosses as its language, script and region
+subtags, each packed into a `u32`, so nothing on this side parses a tag:
+`core:icu` checks it once, in Wado.
 
 ### Character properties
 
@@ -51,10 +54,17 @@ out by hand instead.
 
 ### Collation
 
-`collator` is a resource with a destructor: `create` parses a BCP 47 tag and
+`collator` is a resource with a destructor: `create` takes a locale and
 `compare` orders two strings the way that locale sorts them. Collation data is
 baked for every locale, which takes the core module from 0.35 MB to 1.69 MB. A
 program that never constructs a collator collects it away.
+
+### Case mapping and graphemes
+
+`casemap` maps and folds by the language subtag alone, the only one that selects
+a tailoring. `fold` picks ICU4X's Turkic folding for `tr` and `az`.
+`segmenter` returns where each grapheme cluster ends, or only how many there
+are. The core module holding all four interfaces is 1.68 MB.
 
 ## What the spike surface exposes
 

@@ -4,10 +4,13 @@
 
 # core:icu
 
-Unicode character properties and locale-aware collation, from the ICU4X
-component bundled with the toolchain. A property name it does not answer is
-`null`, never an approximate set: `Block`, `Decomposition_Type` and the
-contributory `Other_*` are withheld.
+Unicode character properties, locale-aware collation and case mapping, and
+grapheme segmentation, from the ICU4X component bundled with the toolchain.
+A property name it does not answer is `null`, never an approximate set:
+`Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+
+Every locale-aware operation takes its `Locale` explicitly; none falls back
+to an implicit one.
 
 ## Synopsis
 
@@ -15,10 +18,15 @@ contributory `Other_*` are withheld.
 assert has(Properties::BinaryProperty::Uppercase, 'À');
 assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 
-let swedish = Collator::new("sv").unwrap();
+let tr = Locale::from("tr");
+assert tr.uppercase(&"istanbul") == "İSTANBUL";
+
+let swedish = Collator::new(&Locale::from("sv"));
 let mut words: List<String> = ["ö", "z", "a"];
 words.sort_by(|a, b| swedish.compare(a, b));
 assert words == ["a", "z", "ö"];
+
+assert grapheme_count(&"🇯🇵") == 1;
 ```
 
 ## Functions
@@ -52,6 +60,15 @@ name written into the source.
 Whether `ch` has that enumerated property value, without building the
 ranges.
 
+### `pub fn graphemes(text: &String) -> Graphemes`
+
+The extended grapheme clusters of `text` (UAX #29), in order: what a reader
+counts as one character each.
+
+### `pub fn grapheme_count(text: &String) -> i32`
+
+How many extended grapheme clusters `text` holds.
+
 ## Effects
 
 ### `pub interface Properties`
@@ -74,9 +91,56 @@ ranges.
 
 ## Structs
 
+### `pub struct Locale`
+
+A locale: the language, script and region subtags of a BCP 47 tag, which
+are what select ICU4X's locale data. Variants and extensions are dropped.
+Each subtag is held as its ASCII bytes in canonical case, so a locale is
+parsed once and crosses to ICU4X as three numbers.
+
+_Fields are private._
+
+#### `pub fn is_well_formed<S: AsStrSlice>(tag: S) -> bool`
+
+Whether `tag` is a well-formed Unicode BCP 47 locale identifier
+(UTS #35), with `-` between subtags. A language subtag of 5 to 8
+letters is refused: BCP 47 reserves the length, and no language has one.
+
+#### `pub fn uppercase(&self, text: &String) -> String`
+
+Full uppercase mapping of `text`.
+
+#### `pub fn lowercase(&self, text: &String) -> String`
+
+Full lowercase mapping of `text`.
+
+#### `pub fn fold(&self, text: &String) -> String`
+
+Full case folding of `text`, for caseless matching. `tr` and `az` fold
+`I` to dotless `ı` and `İ` to `i`, as Turkic does.
+
+#### `pub fn eq_ignore_case(&self, left: &String, right: &String) -> bool`
+
+Whether `left` and `right` fold to the same text.
+
+#### `impl TryFrom<String> for Locale`
+
+##### `fn try_from(tag: String) -> Result<Locale, LocaleError>`
+
+#### `impl From<String> for Locale`
+
+##### `fn from(tag: String) -> Locale`
+
+The locale of a tag known to be well-formed; `Locale::try_from` answers
+for one that may not be.
+
+#### `impl Display for Locale`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct LocaleError`
 
-Why a locale was refused: the tag does not parse as BCP 47.
+Why a locale was refused: the tag is not well-formed BCP 47.
 
 _Fields are private._
 
@@ -90,14 +154,24 @@ Compares strings the way a locale sorts them.
 
 _Fields are private._
 
-#### `pub fn new(locale: String) -> Result<Collator, LocaleError>`
+#### `pub fn new(locale: &Locale) -> Collator`
 
-A collator for the BCP 47 tag `locale`. A locale CLDR tailors nothing for
-sorts as its fallback does, ending at the root collation.
+A collator for `locale`. A locale CLDR tailors nothing for sorts as its
+fallback does, ending at the root collation.
 
 #### `pub fn compare(&self, left: &String, right: &String) -> Ordering`
 
 How `left` sorts against `right`.
+
+### `pub struct Graphemes`
+
+The iterator [`graphemes`] returns.
+
+_Fields are private._
+
+#### `impl Iterator for Graphemes`
+
+##### `fn next(&mut self) -> Option<StrSlice>`
 
 ## Enums
 
