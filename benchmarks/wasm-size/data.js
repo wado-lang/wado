@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793414647162,
+  "lastUpdate": 1793454441629,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72525,6 +72525,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/48e07ca610db4defbecb56e20b15173f0ee840ae"
         },
         "date": 1793414645902,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "de7961604416fd2501dd60c5945bb6bf1e67c617",
+          "message": "Merge pull request #2501 from wado-lang/ccr-597afb92-alcbrd\n\nrefactor(elaborate): reify only copies recorded facts and cannot fail",
+          "timestamp": "2026-10-31T22:32:30+09:00",
+          "tree_id": "6bed91ba61510156fa38afd106a6ef534f9cb70c",
+          "url": "https://github.com/wado-lang/wado/commit/de7961604416fd2501dd60c5945bb6bf1e67c617"
+        },
+        "date": 1793454441173,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
