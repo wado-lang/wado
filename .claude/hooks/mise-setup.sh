@@ -84,7 +84,7 @@ install_mise() {
     # Fetched first: `curl | sh` reports success when curl fails, since `sh`
     # runs the empty script.
     local installer
-    if ! { installer=$(curl -fsSL https://mise.run) && printf '%s\n' "$installer" | sh; }; then
+    if ! { installer=$(curl -fsSL https://mise.run) && printf '%s\n' "$installer" | MISE_INSTALL_PATH="$LOCAL_BIN/mise" sh; }; then
         log "mise.run installer failed; falling back to GitHub Releases"
         if ! install_mise_from_github; then
             log "Failed to install mise (both mise.run and GitHub fallback)"
