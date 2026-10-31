@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793454441629,
+  "lastUpdate": 1793457762877,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72569,6 +72569,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/de7961604416fd2501dd60c5945bb6bf1e67c617"
         },
         "date": 1793454441173,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4909e0f4951dd3244e2da0b5a313a2a3537d316f",
+          "message": "Merge pull request #2500 from wado-lang/process/macos-sandbox-audit\n\nfix(sandbox): a confined child runs the system shell, developer tools, TLS and the terminal",
+          "timestamp": "2026-10-31T23:27:53+09:00",
+          "tree_id": "c3ae6cf6e9649048df8c8fadd043b2d38c77f2ea",
+          "url": "https://github.com/wado-lang/wado/commit/4909e0f4951dd3244e2da0b5a313a2a3537d316f"
+        },
+        "date": 1793457761752,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
