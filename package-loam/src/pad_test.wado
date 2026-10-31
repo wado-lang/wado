@@ -82,6 +82,31 @@ test "an extent that falls as a length rises refuses it" {
     assert judged(source) == ["N: refused at P = Range: an extent may fall as it rises"] as List<String>;
 }
 
+/// A GroupQueryAttention over a past of `P` positions and `S` new ones, the
+/// total `T` the mask's, causal or not.
+fn attention(causal: i32) -> String {
+    return `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] PK, float[1, 1, P, 8] PV, int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] PY, float[1, 1, T, 8] VY) {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1, causal = ${causal}>(Q, K, V, PK, PV, L, T32)
+    }`;
+}
+
+test "a causal attention keeps its lengths padded, and one that is not refuses them" {
+    assert judged(attention(1)) == ["S: padded", "P: padded", "T: padded"] as List<String>;
+    let refused = judged(attention(0));
+    assert refused.len() == 3;
+    for let j of refused {
+        assert j.ends_with("= com.microsoft.GroupQueryAttention: a non-causal attention reads every key"), j;
+    }
+}
+
 test "a branch's nodes are judged as the graph's are" {
     let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Shape = {-1, 4}> {
         Y = If <then_branch = merged () => (float[?, 4] T) {

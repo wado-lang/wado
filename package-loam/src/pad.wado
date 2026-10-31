@@ -4,8 +4,8 @@
 //! devices.md § "An extent that varies is a capacity".
 
 use { HashMap } from "core:collections";
-use { Graph, Node } from "./graph.wado";
-use { Checked, split_axis } from "./infer.wado";
+use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
+use { Checked, attention_options, split_axis } from "./infer.wado";
 use { branches } from "./plan.wado";
 use { Poly } from "./poly.wado";
 use { Shape, short_of } from "./shape.wado";
@@ -25,6 +25,8 @@ pub enum Why {
     /// An extent may fall as the length rises, so a capacity past the length
     /// may hold fewer elements than the length's own extent.
     Shrinks,
+    /// An attention that is not causal reads the padded keys, past and new.
+    Acausal,
 }
 
 impl Display for Why {
@@ -35,6 +37,7 @@ impl Display for Why {
             SplitAlong => "it splits along it",
             Window => "a window reads across it",
             Shrinks => "an extent may fall as it rises",
+            Acausal => "a non-causal attention reads every key",
         });
     }
 }
@@ -126,6 +129,26 @@ fn shrinking(node: &Node, checked: &Checked) -> List<String> {
 fn refused_by(node: &Node, checked: &Checked) -> Option<[List<String>, Why]> {
     let shapes = &checked.shapes;
     let op = node.op;
+    // Stage 0 read the options already.
+    if op == GROUP_QUERY_ATTENTION && !attention_options(node).unwrap().causal {
+        let mut read: List<String> = [];
+        for let tensor of node.inputs.into_iter().chain(node.outputs.into_iter()) {
+            // The lengths it is given, the mask's total among them, are values.
+            if let Some(known) = checked.known.get(tensor) && let Symbolic(values) = known.elements {
+                for let v of values {
+                    read.extend(&v.symbols());
+                }
+            }
+            let Some(shape) = shapes.get(tensor) else {
+                continue;
+            };
+            // Each row of the batch attends on its own.
+            for let axis of shape.axes.into_iter().skip(1) {
+                read.extend(&axis.extent.poly().symbols());
+            }
+        }
+        return refusing(read, Why::Acausal);
+    }
     let regroups = op == "Reshape" || op == "Flatten" || op == "Squeeze" || op == "Unsqueeze";
     let windowed = op == "Conv" || op == "MaxPool";
     // A folded operand stage 0 gives no axes holds no padding.

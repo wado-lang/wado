@@ -552,6 +552,7 @@ test "the attention composite decomposes to what the kernel computes" {
             &v,
             &past_k,
             &past_v,
+            null,
             Option::Some(&cos),
             Option::Some(&sin),
             null,
@@ -562,4 +563,83 @@ test "the attention composite decomposes to what the kernel computes" {
         assert got.1.data == want.1.data;
         assert got.2.data == want.2.data;
     }
+}
+
+/// A past of fixed capacity holding its valid positions first, the new
+/// positions padded past their valid length, against the same attention over
+/// the valid positions alone. The padding holds noise, so a read of it shows.
+test "a past of fixed capacity takes the new positions at its valid length, and its padding changes nothing valid" {
+    let [batch, s, padded, heads, kv, past, capacity, d, positions] = [2, 3, 4, 4, 2, 2, 8, 4, 8];
+    let g = &mut Cpu {};
+    let q = Tensor::<f32, [Bt, St, Qt]> {
+        data: noise(batch * padded * heads * d, 1),
+        extents: [batch, padded, heads * d],
+    };
+    let k = Tensor::<f32, [Bt, St, Kt]> {
+        data: noise(batch * padded * kv * d, 2),
+        extents: [batch, padded, kv * d],
+    };
+    let v = Tensor::<f32, [Bt, St, Kt]> {
+        data: noise(batch * padded * kv * d, 3),
+        extents: [batch, padded, kv * d],
+    };
+    let past_k = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
+        data: noise(batch * kv * capacity * d, 4),
+        extents: [batch, kv, capacity, d],
+    };
+    let past_v = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
+        data: noise(batch * kv * capacity * d, 5),
+        extents: [batch, kv, capacity, d],
+    };
+    let cos = Tensor::<f32, [Pos, Half]> {
+        data: noise(positions * d / 2, 6),
+        extents: [positions, d / 2],
+    };
+    let sin = Tensor::<f32, [Pos, Half]> {
+        data: noise(positions * d / 2, 7),
+        extents: [positions, d / 2],
+    };
+    for let options of [
+        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
+        Attention { heads, kv_heads: kv, scale: 0.5, softcap: 2.0, window: 2, causal: true },
+    ] as List<Attention> {
+        let want = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+            g,
+            &prefix(g, &q, 1, s),
+            &prefix(g, &k, 1, s),
+            &prefix(g, &v, 1, s),
+            &prefix(g, &past_k, 2, past),
+            &prefix(g, &past_v, 2, past),
+            null,
+            Option::Some(&cos),
+            Option::Some(&sin),
+            null,
+            &options,
+        );
+        let got = Graph::group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+            g,
+            &q,
+            &k,
+            &v,
+            &past_k,
+            &past_v,
+            Option::Some(&value(past as i64)),
+            Option::Some(&cos),
+            Option::Some(&sin),
+            null,
+            &options,
+        );
+        assert got.1.extents == [batch, kv, capacity, d] as List<i32>;
+        assert_near(&prefix(g, &got.0, 1, s).data, &want.0.data);
+        assert prefix(g, &got.1, 2, past + s).data == want.1.data;
+        assert prefix(g, &got.2, 2, past + s).data == want.2.data;
+    }
+}
+
+/// `x`'s first `n` positions along `axis`.
+fn prefix<Axes>(g: &mut Cpu, x: &Tensor<f32, Axes>, axis: i32, n: i32) -> Tensor<f32, Axes> {
+    let mut limits = x.extents;
+    limits[axis] = n;
+    let rank = limits.len();
+    return g.slice(x, List::<i32>::filled(rank, 0), limits, List::<i32>::filled(rank, 1));
 }

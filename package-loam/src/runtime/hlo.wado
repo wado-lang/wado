@@ -213,7 +213,12 @@ pub affine trait Graph: Holds with _ {
     /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
     /// as `group_query_attention` in the kernels computes it, decomposed into
     /// the operations above. Returns the attended queries, then the past key
-    /// and value with the new (turned) positions after them.
+    /// and value with the new (turned) positions after them. Where
+    /// `past_length` is given, the past is a buffer of fixed capacity holding
+    /// that many positions, and the present is the same buffer, the new
+    /// positions written from there: onnxruntime's shared buffer. A new
+    /// position may then be padding, which a causal mask keeps every valid
+    /// query from reading.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
         &mut self,
         q: &Self::Tensor<f32, [B, S, Q]>,
@@ -221,11 +226,14 @@ pub affine trait Graph: Holds with _ {
         v: &Self::Tensor<f32, [B, S, K]>,
         past_k: &Self::Tensor<f32, [B, H, P, D]>,
         past_v: &Self::Tensor<f32, [B, H, P, D]>,
+        past_length: Option<&Self::Tensor<i64, []>>,
         cos: Option<&Self::Tensor<f32, [Pos, Half]>>,
         sin: Option<&Self::Tensor<f32, [Pos, Half]>>,
         bias: Option<&Self::Tensor<f32, [BB, BH, S, T]>>,
         options: &Attention,
-    ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>] {
+    ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>]
+        contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
+    {
         let [batch, s, past, d] = [
             self.extents_of(q)[0],
             self.extents_of(q)[1],
@@ -233,19 +241,29 @@ pub affine trait Graph: Holds with _ {
             self.extents_of(past_k)[3],
         ];
         let [heads, kv] = [options.heads, options.kv_heads];
-        let total = past + s;
+        let [first, total] = match past_length {
+            Some(l) => [*l, past],
+            None => [full::<Self, i64, []>(self, past as i64, []), past + s],
+        };
         let mut query = heads_first::<Self, B, S, Q, Heads, D>(self, q, heads, d);
         let mut key = heads_first::<Self, B, S, K, H, D>(self, k, kv, d);
         let value = heads_first::<Self, B, S, K, H, D>(self, v, kv, d);
         if let Some(c) = cos && let Some(n) = sin {
-            let half = self.extents_of(c)[1];
-            let cos_rows: Self::Tensor<f32, [S, Half]> = self.slice(c, [past, 0], [past + s, half], [1, 1]);
-            let sin_rows: Self::Tensor<f32, [S, Half]> = self.slice(n, [past, 0], [past + s, half], [1, 1]);
+            let cos_rows = strided_gather::<Self, f32, [Pos, Half], [S, Half]>(self, c, 0, &first, s, 1);
+            let sin_rows = strided_gather::<Self, f32, [Pos, Half], [S, Half]>(self, n, 0, &first, s, 1);
             query = turned::<Self, B, Heads, S, D, Half>(self, &query, &cos_rows, &sin_rows);
             key = turned::<Self, B, H, S, D, Half>(self, &key, &cos_rows, &sin_rows);
         }
-        let present_k: Self::Tensor<f32, [B, H, T, D]> = self.concatenate(past_k, &key, 2);
-        let present_v: Self::Tensor<f32, [B, H, T, D]> = self.concatenate(past_v, &value, 2);
+        let mut present = |past: &Self::Tensor<f32, [B, H, P, D]>, new: &Self::Tensor<f32, [B, H, S, D]>| -> Self::Tensor<f32, [B, H, T, D]> {
+            if past_length matches { None } {
+                return self.concatenate(past, new, 2);
+            }
+            return self.reshape(&written_at::<Self, f32, [B, H, P, D], [B, H, S, D]>(self, past, new, 2, &first), [
+                batch, kv, total, d,
+            ]);
+        };
+        let present_k = present(past_k, &key);
+        let present_v = present(past_v, &value);
         let keys = grouped::<Self, B, H, T, D, Heads>(self, &present_k, heads);
         let values = grouped::<Self, B, H, T, D, Heads>(self, &present_v, heads);
         let product = DotDims {
@@ -271,7 +289,7 @@ pub affine trait Graph: Holds with _ {
             scores = self.binary(Binary::Add, &scores, &stretched);
         }
         if options.causal || options.window > 0 {
-            let masked = attention_mask::<Self, B, Heads, S, T>(self, past, options, &score_extents);
+            let masked = attention_mask::<Self, B, Heads, S, T>(self, &first, options, &score_extents);
             let lowest = full::<Self, f32, [B, Heads, S, T]>(self, f32::NEG_INFINITY, score_extents);
             scores = self.select(&masked, &lowest, &scores);
         }
@@ -422,14 +440,26 @@ pub fn joined_at<affine G: Graph, E: Element, A, B, Out>(
     length: &G::Tensor<i64, []>,
 ) -> G::Tensor<E, Out> with _ {
     let joined: G::Tensor<E, Out> = g.concatenate(a, b, axis);
-    let at: G::Tensor<i64, [Row]> = g.broadcast_in_dim(length, [1], []);
+    return written_at::<G, E, Out, B>(g, &joined, b, axis, length);
+}
+
+/// `a` with `b` written over it along `axis` from `at` on, any part of `b`
+/// past `a`'s end dropped.
+pub fn written_at<affine G: Graph, E: Element, A, B>(
+    g: &mut G,
+    a: &G::Tensor<E, A>,
+    b: &G::Tensor<E, B>,
+    axis: i32,
+    at: &G::Tensor<i64, []>,
+) -> G::Tensor<E, A> with _ {
+    let start: G::Tensor<i64, [Row]> = g.broadcast_in_dim(at, [1], []);
     let dims = ScatterDims {
         update_window_dims: (0..<g.extents_of(b).len()).collect(),
         inserted_window_dims: [],
         scatter_dims_to_operand_dims: [axis],
         index_vector_dim: 0,
     };
-    return g.scatter(&joined, &at, b, &dims);
+    return g.scatter(a, &start, b, &dims);
 }
 
 /// ONNX's `Range` of `count` elements: `start`, then `delta` apart, each a
@@ -604,17 +634,17 @@ fn turned<affine G: Graph, B, N, S, D, Half>(
     return g.concatenate(&rotated, &rest, 3);
 }
 
-/// Where a query at row `i` after `past` positions may not read key `j`: past
+/// Where a query at row `i` after `first` positions may not read key `j`: past
 /// it where `causal`, and `window` or more before it where there is a window.
 fn attention_mask<affine G: Graph, B, N, S, T>(
     g: &mut G,
-    past: i32,
+    first: &G::Tensor<i64, []>,
     options: &Attention,
     extents: &List<i32>,
 ) -> G::Tensor<bool, [B, N, S, T]> with _ {
     let plane: List<i32> = [extents[2], extents[3]];
     let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
-    let position = g.binary(Binary::Add, &row, &full::<G, i64, [S, T]>(g, past as i64, plane));
+    let position = g.binary(Binary::Add, &row, &g.broadcast_in_dim(first, plane, []));
     let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
     let mut masked: G::Tensor<bool, [S, T]> = if options.causal {
         g.compare(Comparison::Gt, &key, &position);

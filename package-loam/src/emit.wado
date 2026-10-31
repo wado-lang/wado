@@ -1894,7 +1894,7 @@ fn node_calls(
         while bound.len() < 3 {
             bound.push("_");
         }
-        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`]);
+        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs, symbols, holder)?};`]);
     }
     let calls = match [holder, node.op == "Split"] {
         [Kernels, true] => split_calls(node, checked, exprs, symbols)?,
@@ -1909,9 +1909,17 @@ fn node_calls(
     return Result::Ok(lines);
 }
 
-/// A `GroupQueryAttention` as its kernel's call. An optional operand absent
-/// still needs its axes named, so the turbofish spells the query's for it.
-fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+/// A `GroupQueryAttention` as its kernel's call, or its composite's. An
+/// optional operand absent still needs its axes named, so the turbofish spells
+/// the query's for it. The composite takes a padded past as a buffer of fixed
+/// capacity, with its valid length.
+fn attention_call(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    holder: Holder,
+) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let options = settled(attention_options(node));
     let q = shapes[node.inputs[0]];
@@ -1948,13 +1956,17 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     for let i of 0..<5 {
         operands.push(exprs.reference(&node.inputs[i]));
     }
+    if holder matches { Built } {
+        let length = past.axes[2].extent.poly();
+        operands.push(if symbols.reads_lengths(&length) { `Option::Some(&${symbols.value(&length)?})` } else { "null" });
+    }
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
         operands.push(if options.rotary { optional(index) } else { "null" });
     }
     operands.push(optional(ATTENTION_BIAS));
     operands.push(attention);
-    return `backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`;
+    return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
 }
 
 /// The statement binding `call` to `output`'s name, which later reads of

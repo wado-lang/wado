@@ -1320,6 +1320,24 @@ test "a build reads the valid length where it sums, normalizes, contracts or joi
     assert built.contains("pub fn compute<");
 }
 
+test "a build takes a padded past to its attention as a buffer of fixed capacity, with its valid length" {
+    let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] PK, float[1, 1, P, 8] PV, int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] PY, float[1, 1, T, 8] VY) {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
+    }`;
+    let out = generate(source).unwrap();
+    let built = out.substr_bytes(out.find("pub fn build").unwrap(), out.len());
+    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, &Attention {");
+    assert !kernel_entries(&out).contains("lengths");
+}
+
 test "a build whose lengths enter no value takes none" {
     let out = generate(mlp("float")).unwrap();
     assert !out.contains("Lengths");
