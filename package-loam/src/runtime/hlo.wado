@@ -239,76 +239,106 @@ pub affine trait Graph: Holds with _ {
     ) -> [Self::Tensor<f32, [B, S, Q]>, Self::Tensor<f32, [B, H, T, D]>, Self::Tensor<f32, [B, H, T, D]>]
         contract past_length matches { None } || options.causal, "a shared buffer's padding is masked causally"
     {
-        let [batch, s, past, d] = [
-            self.extents_of(q)[0],
-            self.extents_of(q)[1],
-            self.extents_of(past_k)[2],
-            self.extents_of(past_k)[3],
-        ];
-        let [heads, kv] = [options.heads, options.kv_heads];
-        let [first, total] = match past_length {
-            Some(l) => [*l, past],
-            None => [full::<Self, i64, []>(self, past as i64, []), past + s],
-        };
-        let mut query = heads_first::<Self, B, S, Q, Heads, D>(self, q, heads, d);
-        let mut key = heads_first::<Self, B, S, K, H, D>(self, k, kv, d);
-        let value = heads_first::<Self, B, S, K, H, D>(self, v, kv, d);
-        if let Some(c) = cos && let Some(n) = sin {
-            let cos_rows = strided_gather::<Self, f32, [Pos, Half], [S, Half]>(self, c, 0, &first, s, 1);
-            let sin_rows = strided_gather::<Self, f32, [Pos, Half], [S, Half]>(self, n, 0, &first, s, 1);
-            query = turned::<Self, B, Heads, S, D, Half>(self, &query, &cos_rows, &sin_rows);
-            key = turned::<Self, B, H, S, D, Half>(self, &key, &cos_rows, &sin_rows);
-        }
-        let mut present = |past: &Self::Tensor<f32, [B, H, P, D]>, new: &Self::Tensor<f32, [B, H, S, D]>| -> Self::Tensor<f32, [B, H, T, D]> {
-            if past_length matches { None } {
-                return self.concatenate(past, new, 2);
-            }
-            return self.reshape(&written_at::<Self, f32, [B, H, P, D], [B, H, S, D]>(self, past, new, 2, &first), [
-                batch, kv, total, d,
-            ]);
-        };
-        let present_k = present(past_k, &key);
-        let present_v = present(past_v, &value);
-        let keys = grouped::<Self, B, H, T, D, Heads>(self, &present_k, heads);
-        let values = grouped::<Self, B, H, T, D, Heads>(self, &present_v, heads);
-        let product = DotDims {
-            lhs_batch: [0, 1],
-            rhs_batch: [0, 1],
-            lhs_contracting: [3],
-            rhs_contracting: [3],
-        };
-        let raw: Self::Tensor<f32, [B, Heads, S, T]> = self.dot_general(&query, &keys, &product);
-        let score_extents: List<i32> = [batch, heads, s, total];
-        let mut scores = self.binary(
-            Binary::Multiply,
-            &raw,
-            &full::<Self, f32, [B, Heads, S, T]>(self, options.scale, score_extents),
+        return decomposed_attention::<Self, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+            self,
+            q,
+            k,
+            v,
+            past_k,
+            past_v,
+            past_length,
+            cos,
+            sin,
+            bias,
+            options,
         );
-        if options.softcap > 0.0 {
-            let cap = full::<Self, f32, [B, Heads, S, T]>(self, options.softcap, score_extents);
-            let tanh = self.unary(Unary::Tanh, &self.binary(Binary::Divide, &scores, &cap));
-            scores = self.binary(Binary::Multiply, &cap, &tanh);
-        }
-        if let Some(b) = bias {
-            let stretched: Self::Tensor<f32, [B, Heads, S, T]> = self.broadcast_in_dim(b, score_extents, [0, 1, 2, 3]);
-            scores = self.binary(Binary::Add, &scores, &stretched);
-        }
-        if options.causal || options.window > 0 {
-            let masked = attention_mask::<Self, B, Heads, S, T>(self, &first, options, &score_extents);
-            let lowest = full::<Self, f32, [B, Heads, S, T]>(self, f32::NEG_INFINITY, score_extents);
-            scores = self.select(&masked, &lowest, &scores);
-        }
-        let weights = softmax::<Self, [B, Heads, S, T]>(self, &scores, 3);
-        let attend = DotDims {
-            lhs_batch: [0, 1],
-            rhs_batch: [0, 1],
-            lhs_contracting: [3],
-            rhs_contracting: [2],
-        };
-        let attended: Self::Tensor<f32, [B, Heads, S, D]> = self.dot_general(&weights, &values, &attend);
-        let back: Self::Tensor<f32, [B, S, Heads, D]> = self.transpose(&attended, [0, 2, 1, 3]);
-        return [self.reshape(&back, [batch, s, heads * d]), present_k, present_v];
     }
+}
+
+/// `Graph::group_query_attention`'s decomposition, which a graph that runs
+/// some cases as a kernel of its own runs for the rest.
+pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
+    g: &mut G,
+    q: &G::Tensor<f32, [B, S, Q]>,
+    k: &G::Tensor<f32, [B, S, K]>,
+    v: &G::Tensor<f32, [B, S, K]>,
+    past_k: &G::Tensor<f32, [B, H, P, D]>,
+    past_v: &G::Tensor<f32, [B, H, P, D]>,
+    past_length: Option<&G::Tensor<i64, []>>,
+    cos: Option<&G::Tensor<f32, [Pos, Half]>>,
+    sin: Option<&G::Tensor<f32, [Pos, Half]>>,
+    bias: Option<&G::Tensor<f32, [BB, BH, S, T]>>,
+    options: &Attention,
+) -> [G::Tensor<f32, [B, S, Q]>, G::Tensor<f32, [B, H, T, D]>, G::Tensor<f32, [B, H, T, D]>] with _ {
+    let [batch, s, past, d] = [
+        g.extents_of(q)[0],
+        g.extents_of(q)[1],
+        g.extents_of(past_k)[2],
+        g.extents_of(past_k)[3],
+    ];
+    let [heads, kv] = [options.heads, options.kv_heads];
+    let [first, total] = match past_length {
+        Some(l) => [*l, past],
+        None => [full::<G, i64, []>(g, past as i64, []), past + s],
+    };
+    let mut query = heads_first::<G, B, S, Q, Heads, D>(g, q, heads, d);
+    let mut key = heads_first::<G, B, S, K, H, D>(g, k, kv, d);
+    let value = heads_first::<G, B, S, K, H, D>(g, v, kv, d);
+    if let Some(c) = cos && let Some(n) = sin {
+        let cos_rows = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, c, 0, &first, s, 1);
+        let sin_rows = strided_gather::<G, f32, [Pos, Half], [S, Half]>(g, n, 0, &first, s, 1);
+        query = turned::<G, B, Heads, S, D, Half>(g, &query, &cos_rows, &sin_rows);
+        key = turned::<G, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
+    }
+    let mut present = |past: &G::Tensor<f32, [B, H, P, D]>, new: &G::Tensor<f32, [B, H, S, D]>| -> G::Tensor<f32, [B, H, T, D]> {
+        if past_length matches { None } {
+            return g.concatenate(past, new, 2);
+        }
+        return g.reshape(&written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, past, new, 2, &first), [
+            batch, kv, total, d,
+        ]);
+    };
+    let present_k = present(past_k, &key);
+    let present_v = present(past_v, &value);
+    let keys = grouped::<G, B, H, T, D, Heads>(g, &present_k, heads);
+    let values = grouped::<G, B, H, T, D, Heads>(g, &present_v, heads);
+    let product = DotDims {
+        lhs_batch: [0, 1],
+        rhs_batch: [0, 1],
+        lhs_contracting: [3],
+        rhs_contracting: [3],
+    };
+    let raw: G::Tensor<f32, [B, Heads, S, T]> = g.dot_general(&query, &keys, &product);
+    let score_extents: List<i32> = [batch, heads, s, total];
+    let mut scores = g.binary(
+        Binary::Multiply,
+        &raw,
+        &full::<G, f32, [B, Heads, S, T]>(g, options.scale, score_extents),
+    );
+    if options.softcap > 0.0 {
+        let cap = full::<G, f32, [B, Heads, S, T]>(g, options.softcap, score_extents);
+        let tanh = g.unary(Unary::Tanh, &g.binary(Binary::Divide, &scores, &cap));
+        scores = g.binary(Binary::Multiply, &cap, &tanh);
+    }
+    if let Some(b) = bias {
+        let stretched: G::Tensor<f32, [B, Heads, S, T]> = g.broadcast_in_dim(b, score_extents, [0, 1, 2, 3]);
+        scores = g.binary(Binary::Add, &scores, &stretched);
+    }
+    if options.causal || options.window > 0 {
+        let masked = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
+        let lowest = full::<G, f32, [B, Heads, S, T]>(g, f32::NEG_INFINITY, score_extents);
+        scores = g.select(&masked, &lowest, &scores);
+    }
+    let weights = softmax::<G, [B, Heads, S, T]>(g, &scores, 3);
+    let attend = DotDims {
+        lhs_batch: [0, 1],
+        rhs_batch: [0, 1],
+        lhs_contracting: [3],
+        rhs_contracting: [2],
+    };
+    let attended: G::Tensor<f32, [B, Heads, S, D]> = g.dot_general(&weights, &values, &attend);
+    let back: G::Tensor<f32, [B, S, Heads, D]> = g.transpose(&attended, [0, 2, 1, 3]);
+    return [g.reshape(&back, [batch, s, heads * d]), present_k, present_v];
 }
 
 /// The query heads, the key heads' groups, and the head width, inside the
