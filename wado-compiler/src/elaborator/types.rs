@@ -397,6 +397,9 @@ pub(crate) struct ResourceInfo {
     pub(super) name: String,
     /// `AstId` of the `resource` declaration (`ResourceDecl::id`).
     pub(super) defined_at: AstId,
+    /// The declaration's real type parameters, like
+    /// [`StructFieldInfo::type_params`].
+    pub(super) type_params: RealTypeParams,
 }
 
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
@@ -4594,6 +4597,11 @@ impl<'a> TypeLookup<'a> {
             return Some(&info.type_params);
         }
         if let Some(info) = self.variant_cases_of(def)
+            && !info.type_params.is_empty()
+        {
+            return Some(&info.type_params);
+        }
+        if let Some(info) = self.resource_type_of(def)
             && !info.type_params.is_empty()
         {
             return Some(&info.type_params);

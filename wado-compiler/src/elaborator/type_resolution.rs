@@ -1004,6 +1004,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| {
                 self.lookup_generic_newtype_of_decl(def)
                     .map(|info| info.type_params.clone())
+            })
+            .or_else(|| {
+                self.lookup_resource_type_of_decl(def)
+                    .map(|info| info.type_params.clone())
             });
         if let Some(params) = declared
             && self.reject_surplus_type_args(name, &params, args, span)
@@ -1033,6 +1037,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_args = self.type_args_of_application(def, args);
             self.check_type_decl_arg_bounds(def, &type_args, span);
             self.generic_newtype_instance(def, type_args)
+        } else if self
+            .lookup_resource_type_of_decl(def)
+            .is_some_and(|info| !info.type_params.is_empty())
+        {
+            let type_args = self.type_args_of_application(def, args);
+            self.check_type_decl_arg_bounds(def, &type_args, span);
+            self.tysys
+                .type_table
+                .borrow_mut()
+                .intern(ResolvedType::GenericResource { def, type_args })
         } else {
             self.resolve_generic_type_out_of_scope(site, name, args, span)
         }

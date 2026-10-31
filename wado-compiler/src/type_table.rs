@@ -1552,6 +1552,20 @@ impl TypeTable {
         self.compiler_item_def(item) == Some(def)
     }
 
+    /// Whether `def` declares one end of a stream or a future, which the
+    /// Canonical ABI releases by its own drop rather than a resource's.
+    #[must_use]
+    pub fn is_stream_or_future_end(&self, def: DefId) -> bool {
+        [
+            CompilerItem::Stream,
+            CompilerItem::StreamWritable,
+            CompilerItem::Future,
+            CompilerItem::FutureWritable,
+        ]
+        .into_iter()
+        .any(|item| self.is_compiler_item(def, item))
+    }
+
     /// Whether `head` is the struct `item` names.
     #[must_use]
     pub fn is_compiler_struct(&self, head: StructDef, item: CompilerItem) -> bool {

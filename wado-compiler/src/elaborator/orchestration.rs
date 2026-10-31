@@ -35,7 +35,7 @@ use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::type_resolution::slot_type_ids;
 use super::types::{
-    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
@@ -131,7 +131,6 @@ impl AstVisitor<'_> for BoundBindingsChecked<'_> {
 struct PendingExtends {
     child: DefId,
     child_name: String,
-    child_is_generic: bool,
     parent: Type,
     module: ModuleSource,
     span: Span,
@@ -145,7 +144,7 @@ type ResourceMethodNames = IndexMap<DefId, Vec<(String, Span)>>;
 fn resolve_resource_extends<H: CompilerHost>(
     pending: &[PendingExtends],
     method_names: &ResourceMethodNames,
-    generic_resources: &IndexSet<DefId>,
+    resource_types: &IndexMap<DefId, ResourceInfo>,
     resolutions: &Resolutions,
     type_table: &RefCell<TypeTable>,
     logger: &Logger<'_, H>,
@@ -160,6 +159,11 @@ fn resolve_resource_extends<H: CompilerHost>(
         );
     };
 
+    let is_generic = |def: DefId| {
+        resource_types
+            .get(&def)
+            .is_some_and(|info| !info.type_params.is_empty())
+    };
     let mut links: IndexMap<DefId, DefId> = IndexMap::default();
     for clause in pending {
         let Some(site) = head_site(&clause.parent) else {
@@ -200,8 +204,9 @@ fn resolve_resource_extends<H: CompilerHost>(
         let defs = resolutions.defs();
         // Keyed on the declaration, not the written shape: `Base` and
         // `Base<i32>` name one resource, and only it knows its arity.
-        if clause.child_is_generic || generic_resources.contains(&parent) {
-            let generic = if clause.child_is_generic {
+        let child_is_generic = is_generic(clause.child);
+        if child_is_generic || is_generic(parent) {
+            let generic = if child_is_generic {
                 clause.child_name.clone()
             } else {
                 defs.name(parent).to_string()
@@ -556,7 +561,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut pending_extends: Vec<PendingExtends> = Vec::new();
         let mut resource_method_names: ResourceMethodNames = IndexMap::default();
-        let mut generic_resources: IndexSet<DefId> = IndexSet::default();
 
         // First pass: collect struct, variant, enum, and resource names from all modules (for forward references)
         for (module_source, module) in modules {
@@ -630,6 +634,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             ResourceInfo {
                                 name: resource_decl.name.clone(),
                                 defined_at: resource_decl.id,
+                                type_params: RealTypeParams::of(&resource_decl.type_params),
                             },
                         );
                         if declares_unrestricted(&resource_decl.attrs) {
@@ -637,10 +642,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 def,
                                 declared_handle_classes(&resource_decl.attrs),
                             );
-                        }
-                        let is_generic = resource_decl.type_params.iter().any(|p| !p.is_effect);
-                        if is_generic {
-                            generic_resources.insert(def);
                         }
                         // A static is not inherited, so it shadows nothing.
                         resource_method_names.insert(
@@ -658,7 +659,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             pending_extends.push(PendingExtends {
                                 child: def,
                                 child_name: resource_decl.name.clone(),
-                                child_is_generic: is_generic,
                                 parent: parent.clone(),
                                 module: module_source.clone(),
                                 span: resource_decl.span,
@@ -1152,7 +1152,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         resolve_resource_extends(
             &pending_extends,
             &resource_method_names,
-            &generic_resources,
+            &data.resource_types,
             &resolutions,
             &type_table,
             logger,
