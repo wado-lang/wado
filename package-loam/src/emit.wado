@@ -2785,6 +2785,8 @@ fn built_call(
             Mul => "Multiply",
             Div => "Divide",
             Pow => "Power",
+            // No ONNX operator is named as these are.
+            Maximum | Minimum | Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
         };
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
     }

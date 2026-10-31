@@ -1656,13 +1656,24 @@ pub enum UnaryOp {
     Abs,
 }
 
-/// A two-operand operator of an [`Expr`].
+/// A two-operand operator of an [`Expr`]. The cases past `Pow` are
+/// StableHLO's, named apart from any ONNX operator, which the generator reads
+/// a case by: `maximum` and `minimum` are NaN where either operand is, and a
+/// comparison is IEEE's, a NaN equal to nothing, and 1.0 where it holds.
 pub enum BinaryOp {
     Add,
     Sub,
     Mul,
     Div,
     Pow,
+    Maximum,
+    Minimum,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
 /// A fold of a step along a row of a row kernel.
@@ -2004,7 +2015,20 @@ fn binary_over(op: BinaryOp, a: &Slice<f32>, b: &Slice<f32>) -> List<f32> {
         Mul => pairwise(a, b, |x, y| x * y),
         Div => pairwise(a, b, |x, y| x / y),
         Pow => pairwise(a, b, |x, y| f32::pow(x, y)),
+        Maximum => pairwise(a, b, |x, y| f32::ieee754_max(x, y)),
+        Minimum => pairwise(a, b, |x, y| f32::ieee754_min(x, y)),
+        Eq => pairwise(a, b, |x, y| holds(x.ieee754_eq(y))),
+        Ne => pairwise(a, b, |x, y| holds(!x.ieee754_eq(y))),
+        Lt => pairwise(a, b, |x, y| holds(x.ieee754_lt(y))),
+        Le => pairwise(a, b, |x, y| holds(x.ieee754_le(y))),
+        Gt => pairwise(a, b, |x, y| holds(x.ieee754_gt(y))),
+        Ge => pairwise(a, b, |x, y| holds(x.ieee754_ge(y))),
     };
+}
+
+/// A condition as the f32 an `Expr` holds it in.
+fn holds(condition: bool) -> f32 {
+    return if condition { 1.0 } else { 0.0 };
 }
 
 fn each(v: &Slice<f32>, f: fn(f32) -> f32) -> List<f32> {

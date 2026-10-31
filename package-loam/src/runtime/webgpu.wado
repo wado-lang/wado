@@ -3826,6 +3826,14 @@ fn binary_wgsl(op: BinaryOp, a: String, b: String) -> String {
         Mul => `(${a} * ${b})`,
         Div => `(${a} / ${b})`,
         Pow => `pow_(${a}, ${b})`,
+        Maximum => `maximum_(${a}, ${b})`,
+        Minimum => `minimum_(${a}, ${b})`,
+        Eq => `holds_(ordered_(${a}, ${b}) && ${a} == ${b})`,
+        Ne => `holds_(!ordered_(${a}, ${b}) || ${a} != ${b})`,
+        Lt => `holds_(ordered_(${a}, ${b}) && ${a} < ${b})`,
+        Le => `holds_(ordered_(${a}, ${b}) && ${a} <= ${b})`,
+        Gt => `holds_(ordered_(${a}, ${b}) && ${a} > ${b})`,
+        Ge => `holds_(ordered_(${a}, ${b}) && ${a} >= ${b})`,
     };
 }
 
@@ -3868,5 +3876,32 @@ fn pow_(x: f32, y: f32) -> f32 {
         return magnitude;
     }
     return -magnitude;
+}
+
+// WGSL lets an implementation assume no NaN, so one is told by its bits.
+fn nan_(x: f32) -> bool {
+    return (bitcast<u32>(x) & 0x7fffffffu) > 0x7f800000u;
+}
+
+fn ordered_(a: f32, b: f32) -> bool {
+    return !nan_(a) && !nan_(b);
+}
+
+fn holds_(condition: bool) -> f32 {
+    return select(0.0, 1.0, condition);
+}
+
+fn maximum_(a: f32, b: f32) -> f32 {
+    if !ordered_(a, b) {
+        return a + b;
+    }
+    return max(a, b);
+}
+
+fn minimum_(a: f32, b: f32) -> f32 {
+    if !ordered_(a, b) {
+        return a + b;
+    }
+    return min(a, b);
 }
 ";
