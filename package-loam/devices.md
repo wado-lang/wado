@@ -479,7 +479,9 @@ and a program for each shape class it has met. The caller owns it, and
    on `WebGpuBackend` is at most today's, with the host's time per token
    recorded beside the device's, the conformance cases with an `If` pass with
    no read back but the outputs, and the generator's plan and the fused trait
-   methods are deleted.
+   methods are deleted. The merged tiny GPT-2 pads its lengths and gets a
+   `compute` there, though a `Slice` starts at its past's length and the graph
+   owes the total equal to the past and the sequence only inside a branch.
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
@@ -521,10 +523,6 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller.
-- The merged tiny GPT-2 pads nothing: a `Slice` refuses its past's length,
-  and its other lengths are owed equal to sums with it. It gets no `compute`
-  either, as it owes the total equal to the past and the sequence only inside
-  a branch.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`
   returns a new tensor. Writing in place waits for the device compiler,
   which plans the memory.
