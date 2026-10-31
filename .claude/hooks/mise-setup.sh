@@ -91,7 +91,6 @@ install_mise() {
     fi
 }
 
-# Trust the mise configuration and install project tools.
 install_tools() {
     mise trust --all 2>/dev/null || true
     log "Installing project tools..."
@@ -107,16 +106,14 @@ fi
 
 # A mise older than mise.toml's `min_version` fails every command, so a failed
 # install is retried once on the latest mise.
-if install_tools; then
-    log "Project tools installed successfully"
-else
+if install_tools || {
     log "mise install failed; retrying on the latest mise"
     install_mise
-    if install_tools; then
-        log "Project tools installed successfully"
-    else
-        log "Warning: Some tools may have failed to install"
-    fi
+    install_tools
+}; then
+    log "Project tools installed successfully"
+else
+    log "Warning: Some tools may have failed to install"
 fi
 
 # Persist PATH and mise settings to CLAUDE_ENV_FILE
