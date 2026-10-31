@@ -45,3 +45,24 @@ test "a name this build does not answer is null, not an empty set" {
     assert icu::value_ranges("dt", "Font") matches { None };
     assert icu::contains("Other_Math", 'x') matches { None };
 }
+
+test "a collator sorts as its locale does" {
+    let german = icu::Collator::new("de").unwrap();
+    let swedish = icu::Collator::new("sv").unwrap();
+    // German sorts `ä` with `a`; Swedish sorts it after `z`.
+    assert german.compare(&"ä", &"z") matches { Less };
+    assert swedish.compare(&"ä", &"z") matches { Greater };
+    assert german.compare(&"a", &"a") matches { Equal };
+}
+
+test "a locale CLDR tailors nothing for falls back to the root collation" {
+    let root = icu::Collator::new("und").unwrap();
+    let english = icu::Collator::new("en").unwrap();
+    assert root.compare(&"e", &"é") matches { Less };
+    assert english.compare(&"e", &"é") matches { Less };
+}
+
+test "a tag that does not parse is refused" {
+    let refused = icu::Collator::new("not a tag!");
+    assert refused matches { Err(_) };
+}

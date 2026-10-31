@@ -33,7 +33,7 @@ use icu::properties::{
     props::{BinaryProperty, EnumeratedProperty},
 };
 
-struct Component;
+pub struct Component;
 
 /// UAX #44 loose matching: case, `_`, `-` and spaces are not significant.
 fn fold(name: &str) -> String {
