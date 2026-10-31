@@ -393,7 +393,7 @@ impl Drop for FileActions {
 
 /// A process group of its own, default signal handling, an empty mask, and
 /// every descriptor past the file actions closed. A child that takes the
-/// terminal starts suspended, until its group holds it: a read before then
+/// terminal starts suspended, until its group holds it: a use before then
 /// would find it in the background.
 struct SpawnAttr(libc::posix_spawnattr_t);
 
