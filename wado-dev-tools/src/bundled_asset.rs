@@ -1,5 +1,6 @@
 //! Turn a relocatable core wasm module into the `.wat` asset the compiler
-//! bundles, resolving its relocations into a `wado.dataref` map on the way.
+//! bundles, a core module or (`--component`) a component, resolving its
+//! relocations into a `wado.dataref` map on the way.
 
 use std::fmt::Write as _;
 
@@ -35,7 +36,7 @@ pub fn run(mut parser: lexopt::Parser) {
 
 fn core_wat(wasm: &[u8]) -> String {
     let refs = dataref::resolve(wasm).expect("failed to resolve the data-reference map");
-    let mut wat = print(&strip(wasm));
+    let mut wat = to_wat(&strip(wasm));
     // `DataRefs::parse` refuses a map naming no function, so an asset with
     // nothing to say carries no section at all.
     if !refs.is_empty() {
@@ -57,10 +58,10 @@ fn component_wat(core_wat: &str) -> String {
         .expect("the core module must carry its `component-type` section")
         .encode()
         .expect("failed to encode the component");
-    print(&component)
+    to_wat(&component)
 }
 
-fn print(wasm: &[u8]) -> String {
+fn to_wat(wasm: &[u8]) -> String {
     let mut wat = String::new();
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);

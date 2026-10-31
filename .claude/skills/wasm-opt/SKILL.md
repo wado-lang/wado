@@ -18,8 +18,8 @@ from the GitHub API in a cloud session. Download the release tarball instead:
 curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C scratchpad
 ```
 
-wasm-tools comes from mise. Where its shim reports no version set, call the
-binary under `~/.local/share/mise/installs/wasm-tools/latest/` directly.
+wasm-tools is not a project tool. Run it through mise without installing it
+for the project: `mise x wasm-tools@latest -- wasm-tools objdump <file>`.
 
 ## Pipeline
 
