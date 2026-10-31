@@ -710,8 +710,7 @@ impl Lowering {
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Flags { def } => instance(*def, &[]),
-            ResolvedType::GenericResource { def, type_args }
-            | ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
@@ -2281,7 +2280,6 @@ impl SolverBridge {
                 type_args,
             }
             | ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }
             | ResolvedType::Newtype { type_args, .. } => each(type_args),
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)

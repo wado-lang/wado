@@ -2759,7 +2759,6 @@ impl Monomorphizer {
             matches!(
                 type_table.get(effective),
                 ResolvedType::GenericInstance { .. }
-                    | ResolvedType::GenericResource { .. }
                     | ResolvedType::BuiltinArray(_)
                     | ResolvedType::Struct { .. }
             )
@@ -2982,8 +2981,9 @@ impl Monomorphizer {
             matches!(
                 type_table.get(resolved),
                 ResolvedType::GenericInstance {
-                    type_args: args, ..
-                } if !args.is_empty()
+                    def,
+                    type_args: args,
+                } if !args.is_empty() && !type_table.is_resource_def(*def)
             ) || matches!(type_table.get(resolved), ResolvedType::BuiltinArray(_))
         };
         // A generic-instance receiver normally reaches a generic impl on its

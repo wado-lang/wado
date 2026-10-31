@@ -4908,8 +4908,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
+        | ResolvedType::GenericInstance { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
         ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
@@ -4931,8 +4930,8 @@ fn resolve_impl_module_via_env(
 fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericResource { def, type_args }
-                if type_args.iter().all(|t| tt.is_concrete(*t)) =>
+            ResolvedType::GenericInstance { def, type_args }
+                if tt.is_resource_def(*def) && type_args.iter().all(|t| tt.is_concrete(*t)) =>
             {
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, *def, args))

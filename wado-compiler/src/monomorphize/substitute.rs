@@ -337,7 +337,7 @@ impl Monomorphizer {
 
                 type_table.make_generic_instance(def, new_args)
             }
-            // Delegate leaf cases (TypeParam, TypePack, GenericResource,
+            // Delegate leaf cases (TypeParam, TypePack,
             // AssocTypeProjection, and other non-composite types) to the
             // shared implementation.
             _ => type_table.substitute_type_params(type_id, substitution),

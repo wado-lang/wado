@@ -542,6 +542,7 @@ fn aggregate_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option
     // head, so no arm of its own.
     let is_aggregate = |id| {
         !tt.is_wide_int(id)
+            && !tt.is_resource_type(tt.representation_head(id))
             && matches!(
                 tt.get(tt.representation_head(id)),
                 ResolvedType::Struct { .. }
@@ -2020,7 +2021,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Variant { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::BuiltinArray(_) => {}
         }
         let type_name = self.tysys.type_table.borrow().type_name(struct_type);

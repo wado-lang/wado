@@ -1079,6 +1079,9 @@ impl RefCarrying<'_> {
                     None => (true, false),
                 }
             }
+            ResolvedType::GenericInstance { def, .. } if self.type_table.is_resource_def(*def) => {
+                (false, false)
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 let (def, type_args) = (*def, type_args.clone());
                 // A payload that is one of the template's parameters is the
@@ -1125,8 +1128,7 @@ impl RefCarrying<'_> {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. } => (false, false),
+            | ResolvedType::Resource { .. } => (false, false),
         }
     }
 }

@@ -276,8 +276,8 @@ impl<'a> AffineTypes<'a> {
             let base = tt.representation_head(type_id);
             (base, tt.get(base).clone())
         };
-        if let ResolvedType::Resource { def } | ResolvedType::GenericResource { def, .. } = resolved
-        {
+        let resource = self.tt.borrow().resource_def_of(base);
+        if let Some(def) = resource {
             let tt = self.tt.borrow();
             if tt.is_stream_or_future_end(def) {
                 return Layout::End;

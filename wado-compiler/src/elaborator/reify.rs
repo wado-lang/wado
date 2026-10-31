@@ -1364,7 +1364,7 @@ impl<'a> Reify<'a> {
 
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
-    /// 0; for generic resources `Self = GenericResource<…>` with the
+    /// 0; for generic resources `Self` is a `GenericInstance` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
     /// from the facts the body walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {

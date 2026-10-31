@@ -309,17 +309,12 @@ impl ResourceScan<'_> {
         if !visited.insert(type_id) {
             return;
         }
-        let ty = self.tt.get(type_id);
-        if let Some((def, type_args)) = resource_handle(ty) {
+        if let Some(def) = self.tt.resource_def_of(type_id) {
             // A `resource Child extends Parent` value is usable wherever the
             // parent is, so holding it holds every ancestor too.
             out.extend(resource_chain_effects(self.tt, self.resolutions, def));
-            for ta in type_args {
-                self.collect(*ta, out, visited);
-            }
-            return;
         }
-        match ty {
+        match self.tt.get(type_id) {
             ResolvedType::GenericInstance { type_args, .. } => {
                 for ta in type_args {
                     self.collect(*ta, out, visited);
@@ -353,15 +348,6 @@ impl ResourceScan<'_> {
             // AssocTypeProjection, Unknown, Error — no resource refs.
             _ => {}
         }
-    }
-}
-
-/// The resource a value of `ty` is a handle to, with its type arguments.
-fn resource_handle(ty: &ResolvedType) -> Option<(DefId, &[TypeId])> {
-    match ty {
-        ResolvedType::Resource { def } => Some((*def, &[])),
-        ResolvedType::GenericResource { def, type_args } => Some((*def, type_args)),
-        _ => None,
     }
 }
 
@@ -1584,7 +1570,7 @@ fn add_narrowed_resources(
         .0
         .into_iter()
         .flat_map(|id| annotations.all(|facts| &facts.pattern_ascriptions, id))
-        .filter_map(|&target| resource_handle(scan.tt.get(target)).map(|(def, _)| def))
+        .filter_map(|&target| scan.tt.resource_def_of(target))
         .collect();
     let chain = |target| resource_chain_effects(scan.tt, scan.resolutions, target);
     // A grant expands through the closure, which may hold another target's ancestor.

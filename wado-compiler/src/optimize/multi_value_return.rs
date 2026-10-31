@@ -280,7 +280,6 @@ pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) ->
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }
-        | ResolvedType::GenericResource { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_) => true,
         // A newtype erases to its base, and a reference is its referent's

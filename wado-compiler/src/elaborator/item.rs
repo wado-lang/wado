@@ -1584,10 +1584,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     fn is_storage_reference(&self, type_id: TypeId) -> bool {
         let tt = self.tysys.type_table.borrow();
         match tt.get(tt.representation_head(type_id)) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => !matches!(
-                tt.get(tt.representation_head(*inner)),
-                ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. }
-            ),
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
+                !tt.is_resource_type(tt.representation_head(*inner))
+            }
             _ => false,
         }
     }
@@ -1654,8 +1653,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             {
                 fields.into_iter().map(|(_, t)| t).collect()
             }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => type_args,
+            ResolvedType::GenericInstance { type_args, .. } => type_args,
             _ => Vec::new(),
         };
         within
@@ -2133,7 +2131,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// resource. That `Self` type comes back too, because it is the receiver's.
     ///
     /// It is constructed after the type params are in scope, so a generic
-    /// resource's `GenericResource` instance can reference its own `TypeParam`s
+    /// resource's `GenericInstance` can reference its own `TypeParam`s
     /// (which gap-2 substitution then specialises per impl-block instantiation).
     /// A non-generic resource is a plain `Resource { def }`.
     fn enter_operation_scope(
@@ -2161,10 +2159,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     .tysys
                     .type_table
                     .borrow_mut()
-                    .intern(ResolvedType::GenericResource {
-                        def,
-                        type_args: type_arg_ids,
-                    })
+                    .make_generic_instance(def, type_arg_ids)
             } else {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }

@@ -971,14 +971,8 @@ impl<'a> Emitter<'a> {
                         err: self.non_unit(*err),
                     },
                     (Some(CompilerItem::AsyncCall), [arg]) => self.classify_resolved(*arg),
-                    _ => CmShape::Leaf,
-                }
-            }
-            ResolvedType::GenericResource { def, type_args } => {
-                let elem = type_args.first().copied();
-                match self.types.compiler_type_item(*def) {
-                    Some(CompilerItem::Future) => CmShape::Future(elem),
-                    Some(CompilerItem::Stream) => CmShape::Stream(elem),
+                    (Some(CompilerItem::Future), args) => CmShape::Future(args.first().copied()),
+                    (Some(CompilerItem::Stream), args) => CmShape::Stream(args.first().copied()),
                     _ => CmShape::Leaf,
                 }
             }

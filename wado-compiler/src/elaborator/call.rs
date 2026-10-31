@@ -1266,10 +1266,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (kind, result) = {
             let tt = self.tysys.type_table.borrow();
             let bare_generic_of_arg = bare_generic
-                && matches!(
-                    tt.get(arg),
-                    ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. }
-                )
+                && matches!(tt.get(arg), ResolvedType::GenericInstance { .. })
                 && tt.nominal_def(arg).is_some()
                 && tt.nominal_def(arg) == tt.nominal_def(receiver)
                 && tt

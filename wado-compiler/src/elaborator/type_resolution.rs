@@ -1018,7 +1018,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(info) if !info.type_params.is_empty() => Some(info.type_params),
             _ => self
                 .lookup_variant_case_of_decl(def)
-                .map(|info| info.type_params.clone()),
+                .map(|info| info.type_params.clone())
+                .or_else(|| {
+                    self.lookup_resource_type_of_decl(def)
+                        .filter(|info| !info.type_params.is_empty())
+                        .map(|info| info.type_params.clone())
+                }),
         };
         if let Some(params) = instance_params {
             if params.is_empty() {
@@ -1037,16 +1042,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let type_args = self.type_args_of_application(def, args);
             self.check_type_decl_arg_bounds(def, &type_args, span);
             self.generic_newtype_instance(def, type_args)
-        } else if self
-            .lookup_resource_type_of_decl(def)
-            .is_some_and(|info| !info.type_params.is_empty())
-        {
-            let type_args = self.type_args_of_application(def, args);
-            self.check_type_decl_arg_bounds(def, &type_args, span);
-            self.tysys
-                .type_table
-                .borrow_mut()
-                .intern(ResolvedType::GenericResource { def, type_args })
         } else {
             self.resolve_generic_type_out_of_scope(site, name, args, span)
         }
@@ -1918,17 +1913,10 @@ impl TypeLookup<'_> {
                     let base_type_id = type_table.substitute_type_params(base, &substitution);
                     return type_table.make_newtype_instance(head, type_args, base_type_id);
                 }
-                // Not a `GenericInstance`: effect_check's `signature_resources` must see
-                // the resource a signature like `rx: Stream<u8>` implies.
-                if self.resource_type_of(head).is_some() {
-                    return type_table.intern(ResolvedType::GenericResource {
-                        def: head,
-                        type_args,
-                    });
-                }
                 if self.struct_fields_of(head).is_some()
                     || self.variant_cases_of(head).is_some()
                     || self.enum_cases_of(head).is_some()
+                    || self.resource_type_of(head).is_some()
                 {
                     type_table.make_generic_instance(head, type_args)
                 } else {

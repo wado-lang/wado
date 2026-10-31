@@ -1369,7 +1369,6 @@ impl TypeSystem {
             ResolvedType::Resource { def } => {
                 !self.type_table.borrow().is_unrestricted_resource(*def)
             }
-            ResolvedType::GenericResource { .. } => true,
             ResolvedType::Enum { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Unit

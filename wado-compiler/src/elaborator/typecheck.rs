@@ -321,7 +321,6 @@ fn heads_apart(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool
 fn declaration_instance(id: TypeId, type_table: &TypeTable) -> Option<(DefId, &[TypeId])> {
     match type_table.get(id) {
         ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::GenericResource { def, type_args }
         | ResolvedType::Newtype { def, type_args, .. } => Some((*def, type_args.as_slice())),
         _ => None,
     }
