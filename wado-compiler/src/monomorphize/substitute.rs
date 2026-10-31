@@ -138,7 +138,10 @@ impl Monomorphizer {
         generic_structs: &IndexMap<DefId, TirStruct>,
     ) {
         let tested = &mut self.structs.sites_tested;
-        let untested = generic_structs.keys().filter(|def| tested.insert(**def)).count();
+        let untested = generic_structs
+            .keys()
+            .filter(|def| tested.insert(**def))
+            .count();
         let from = if untested == 0 {
             self.structs.sites_scanned
         } else {
