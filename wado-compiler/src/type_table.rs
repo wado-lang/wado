@@ -40,6 +40,9 @@ pub struct TypeTable {
     /// essentially every type query, so it is a hash-free `Vec` index.
     types: TypeMap<ResolvedType>,
     intern_map: IndexMap<ResolvedType, TypeId>,
+    /// Every `GenericInstance` id by the declaration it instantiates, in
+    /// interning order. A slot `retain` empties stays listed.
+    generic_instances: IndexMap<DefId, Vec<TypeId>>,
     /// The slot each inference variable stands for, read only by diagnostics.
     /// Beside the variant, not inside it, so the interning key stays the id.
     infer_var_names: IndexMap<InferVarId, String>,
@@ -290,6 +293,7 @@ impl TypeTable {
         let mut table = Self {
             types: TypeMap::default(),
             intern_map: IndexMap::default(),
+            generic_instances: IndexMap::default(),
             infer_var_names: IndexMap::default(),
             next_effect_var: 0,
             effect_vars_solved: false,
@@ -349,12 +353,36 @@ impl TypeTable {
         }
         let id = self.types.next_id();
         self.index_type(id, &ty);
-        self.types.push(ty.clone());
+        self.push_type(ty.clone());
         self.intern_map.insert(ty, id);
         if self.instances_settled {
             self.settle_spelling(id);
         }
         id
+    }
+
+    /// Append `ty` at [`TypeMap::next_id`]: the only way a slot is filled.
+    fn push_type(&mut self, ty: ResolvedType) {
+        if let ResolvedType::GenericInstance { def, .. } = &ty {
+            self.generic_instances
+                .entry(*def)
+                .or_default()
+                .push(self.types.next_id());
+        }
+        self.types.push(ty);
+    }
+
+    /// The live `GenericInstance`s of `def` and their arguments, in interning
+    /// order.
+    pub fn generic_instances_of(&self, def: DefId) -> impl Iterator<Item = (TypeId, &[TypeId])> {
+        self.generic_instances
+            .get(&def)
+            .into_iter()
+            .flatten()
+            .filter_map(|&id| match self.types.get(id) {
+                Some(ResolvedType::GenericInstance { type_args, .. }) => Some((id, &type_args[..])),
+                _ => None,
+            })
     }
 
     fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
@@ -453,7 +481,7 @@ impl TypeTable {
             return id;
         }
         let id = self.types.next_id();
-        self.types.push(spelling.clone());
+        self.push_type(spelling.clone());
         self.intern_map.insert(spelling, id);
         self.unindexed.insert(id);
         self.settled_spellings.set_growing(id, id);
