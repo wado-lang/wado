@@ -405,14 +405,33 @@ How a weight is stored is the device compiler's choice, made per model and per
 device, not per shape class, since every shape class reads the same weights.
 On WebGPU that covers the layouts measured today, column by column, in pairs,
 concatenated, and in bf16 where nothing is lost. On a TPU it is bf16 where
-nothing is lost, and the graph's own type otherwise. `Prepared` holds the stored weights without spelling their
-layout, so a backend can change a layout without changing the generated module.
+nothing is lost, and the graph's own type otherwise. `Model` holds the stored
+weights without spelling their layout, so a backend can change a layout without
+changing the generated module.
+
+### A model holds its weights and its programs
+
+The generated module's `Model<Bk>` holds the weights as the device stores them
+and a program for each shape class it has met. The caller owns it, and
+`compute` takes it by `&mut`, since a call may compile a program into it.
+
+- A program binds the weights it reads, in the layouts the device compiler
+  chose for them. Held in one value, a program can only meet the weights it was
+  compiled against, and no run time check is needed for it.
+- Dropping the model frees the weights, the programs and their memory
+  together. A backend holds nothing past a call, so one backend serves any
+  number of models without a key to tell their programs apart.
+- `Model` is shared by every request; `Cache` is one request's. Slots (step 7)
+  and the weights an expert routing loads stay in the model.
+- On `Cpu` a program is empty, since `Cpu` computes `build` directly and stays
+  the reference.
 
 ### What a call does
 
 1. Check the inputs against the graph, as `forward` does now, and each valid
    length against its capacity.
-2. Find the shape class's program, building and compiling it on first use.
+2. Find the shape class's program in the model, building and compiling it on
+   first use.
 3. Write the inputs and the per-call values.
 4. Run the program.
 5. Read back what it returns: token ids from a decoding program, the outputs
@@ -427,7 +446,7 @@ layout, so a backend can change a layout without changing the generated module.
 | The Backend Is a Trait                      | The trait builds a graph of StableHLO's operations. A device compiles it once per shape class.             |
 | Fusion Is Decided by Operator Kind          | Fusion is the WebGPU compiler's, run over the graph at run time. The PJRT backend fuses nothing.           |
 | The MVP Is Tier 1 Only                      | Tier 2 is built: capacities, a valid length for each, and a cache of compiled programs.                    |
-| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Prepared` no longer spells it.                             |
+| Weights Are Prepared Once                   | The device compiler chooses a weight's layout. `Model` holds the weights beside the programs that bind them. |
 | A Branch Is a Block of `forward`            | A branch the shape class decides is chosen when the graph is built. Any other branch is a `case`.          |
 | The Generator Reports Every Fusion Decision | `loam dump` reports the build-time analyses. The device compiler's decisions are reported when it runs.    |
 
