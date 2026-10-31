@@ -84,6 +84,14 @@ pub fn checked_element_count(extents: &List<i32>) -> Option<i32> {
     return Option::Some(if empty { 0 } else { count });
 }
 
+/// A reference to what `t` holds, where it holds something.
+pub fn optional<T>(t: &Option<T>) -> Option<&T> {
+    return match t {
+        Some(held) => Option::Some(held),
+        None => null,
+    };
+}
+
 /// The elements a tensor of `extents` holds, which a list must be able to hold.
 pub fn element_count(extents: &List<i32>) -> i32 {
     let Some(count) = checked_element_count(extents) else {

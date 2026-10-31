@@ -28,6 +28,7 @@ use {
     element_count,
     group_query_attention,
     operand,
+    optional,
     paired_by_parts,
     prologue_tensor,
     reduced_count,
@@ -3794,14 +3795,6 @@ ${element(last, "            ")}            staged[e] = s${last};
         workgroupBarrier();
 `);
     return out;
-}
-
-/// A reference to the tensor `t` holds, where it holds one.
-fn optional<E, Axes>(t: &Option<Tensor<E, Axes>>) -> Option<&Tensor<E, Axes>> {
-    return match t {
-        Some(held) => Option::Some(held),
-        None => null,
-    };
 }
 
 fn max_of(values: &List<i32>) -> i32 {

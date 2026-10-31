@@ -114,13 +114,18 @@ rather than computing, it adds nodes to a graph. `build<G: Graph>` takes the
 inputs, the weights and the cache as nodes of `G`, and returns the outputs.
 
 `Graph` is a trait whose methods are the operations below, each typed by its
-axes as the kernels are today. A tensor is `G::Value<E, Axes>`, a node of the
+axes as the kernels are today. A tensor is `G::Tensor<E, Axes>`, a node of the
 graph being built.
 
 - A device backend's `Graph` records the nodes. The runtime runs `build` once
   per shape class and hands the recorded graph to the device's compiler.
+  `Recorder` in `src/runtime/recorded.wado` is that `Graph`. A branch passes
+  each result through `yielded`, which is how the recorder learns what the
+  branch returns.
 - `Cpu`'s `Graph` computes each node as it is added. So `Cpu` runs the same
-  body as the devices and stays the reference they are held to.
+  body as the devices and stays the reference they are held to. `run` executes
+  a recorded graph on `Cpu` node by node, so a compiled program has something
+  to agree with.
 
 `Holds` is what a backend and a graph share: a tensor type, `upload` and
 `extents_of`. `Backend` and `Graph` both extend it, so `Cache<H>` and

@@ -716,7 +716,7 @@ impl Graph for Cpu {
     }
 
     fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Tensor<E, Axes>, b: &Tensor<E, Axes>) -> Tensor<E, Axes> {
-        assert a.extents == b.extents, "the operands of an elementwise operation share their extents";
+        let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<E>::with_capacity(a.data.len());
         if E::is_f32() {
             for let i of 0..<a.data.len() {
@@ -727,7 +727,7 @@ impl Graph for Cpu {
                 data.push(E::from_i64(binary_i64(op, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>())));
             }
         }
-        return Tensor { data, extents: a.extents };
+        return Tensor { data, extents };
     }
 
     fn compare<E: Element, Axes>(
@@ -736,7 +736,7 @@ impl Graph for Cpu {
         a: &Tensor<E, Axes>,
         b: &Tensor<E, Axes>,
     ) -> Tensor<bool, Axes> {
-        assert a.extents == b.extents, "the operands of a comparison share their extents";
+        let extents = elementwise_extents([a.extents, b.extents]);
         let mut data = List::<bool>::with_capacity(a.data.len());
         for let i of 0..<a.data.len() {
             data.push(if E::is_f32() {
@@ -745,7 +745,7 @@ impl Graph for Cpu {
                 compared_i64(direction, a.data[i].cast_to::<i64>(), b.data[i].cast_to::<i64>());
             });
         }
-        return Tensor { data, extents: a.extents };
+        return Tensor { data, extents };
     }
 
     fn select<E: Element, Axes>(
@@ -754,12 +754,12 @@ impl Graph for Cpu {
         on_true: &Tensor<E, Axes>,
         on_false: &Tensor<E, Axes>,
     ) -> Tensor<E, Axes> {
-        assert pred.extents == on_true.extents && pred.extents == on_false.extents, "a select's operands share their extents";
+        let extents = elementwise_extents([pred.extents, on_true.extents, on_false.extents]);
         let mut data = List::<E>::with_capacity(pred.data.len());
         for let i of 0..<pred.data.len() {
             data.push(if pred.data[i] { on_true.data[i] } else { on_false.data[i] });
         }
-        return Tensor { data, extents: pred.extents };
+        return Tensor { data, extents };
     }
 
     fn broadcast_in_dim<E: Element, In, Out>(
@@ -768,11 +768,10 @@ impl Graph for Cpu {
         extents: List<i32>,
         dims: List<i32>,
     ) -> Tensor<E, Out> {
-        assert dims.len() == x.extents.len(), "broadcast_in_dim maps every operand axis";
+        let extents = broadcast_in_dim_extents(&x.extents, extents, &dims);
         let own = row_major_strides(&x.extents);
         let mut strides = List::<i32>::filled(extents.len(), 0);
         for let [i, d] of dims.into_iter().enumerate() {
-            assert x.extents[i] == 1 || x.extents[i] == extents[d], "an operand axis is 1 or the result's";
             if x.extents[i] != 1 {
                 strides[d] = own[i];
             }
@@ -1156,6 +1155,24 @@ fn kept_axes(rank: i32, dims: &List<i32>) -> List<i32> {
     return (0..<rank).filter(|i| !dims.contains(&i)).collect();
 }
 
+/// The extents of an elementwise operation over operands of `operands`.
+pub fn elementwise_extents(operands: List<List<i32>>) -> List<i32> {
+    for let o of operands {
+        assert o == operands[0], "the operands of an elementwise operation share their extents";
+    }
+    return operands[0];
+}
+
+/// `extents`, checked as the result a `broadcast_in_dim` of an operand of
+/// `own` along `dims` can have. ONNX's rule is `broadcast_extents`.
+pub fn broadcast_in_dim_extents(own: &List<i32>, extents: List<i32>, dims: &List<i32>) -> List<i32> {
+    assert dims.len() == own.len(), "broadcast_in_dim maps every operand axis";
+    for let [i, d] of dims.into_iter().enumerate() {
+        assert own[i] == 1 || own[i] == extents[d], "an operand axis is 1 or the result's";
+    }
+    return extents;
+}
+
 /// The extents a `reduce` over `dims` leaves of `extents`.
 pub fn reduced_extents(extents: &List<i32>, dims: &List<i32>) -> List<i32> {
     return picked(extents, &kept_axes(extents.len(), dims));
@@ -1219,7 +1236,13 @@ pub fn gathered_extents(indices: &List<i32>, dims: &GatherDims) -> List<i32> {
 
 /// The window a `convolution` of an input of `x` by a kernel of `kernel` slides.
 pub fn conv_window(x: &List<i32>, kernel: &List<i32>, conv: &Convolution) -> Window {
-    let mut window = Window { kernel: [], strides: conv.window_strides, dilations: conv.rhs_dilation, pads: [], output: [] };
+    let mut window = Window {
+        kernel: [],
+        strides: conv.window_strides,
+        dilations: conv.rhs_dilation,
+        pads: [],
+        output: [],
+    };
     let mut ends: List<i32> = [];
     for let i of 0..<x.len() - 2 {
         let k = kernel[2 + i];

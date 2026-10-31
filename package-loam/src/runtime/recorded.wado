@@ -13,15 +13,17 @@ use {
     ScatterDims,
     Unary,
     WindowReduce,
+    broadcast_in_dim_extents,
     conv_window,
     dot_extents,
+    elementwise_extents,
     gathered_extents,
     joined_extents,
     pooled_window,
     reduced_extents,
     sliced_extents,
 } from "./hlo.wado";
-use { Attention, Cpu, Element, ElementKind, Holds, Tensor, element_count } from "./tensor.wado";
+use { Attention, Cpu, Element, ElementKind, Holds, Tensor, element_count, optional } from "./tensor.wado";
 
 /// A tensor's elements, whichever element it holds.
 pub variant Data {
@@ -143,7 +145,13 @@ impl Recorder {
         return id;
     }
 
-    fn value<E, Axes>(&mut self, op: Operation, operands: List<i32>, kind: ElementKind, extents: List<i32>) -> Value<E, Axes> {
+    fn value<E, Axes>(
+        &mut self,
+        op: Operation,
+        operands: List<i32>,
+        kind: ElementKind,
+        extents: List<i32>,
+    ) -> Value<E, Axes> {
         return Value { id: self.added(op, operands, kind, extents) };
     }
 
@@ -153,7 +161,7 @@ impl Recorder {
 }
 
 /// `v`'s elements, as `Data` holds them.
-pub fn data_of<E: Element>(v: &List<E>) -> Data {
+fn data_of<E: Element>(v: &List<E>) -> Data {
     return match E::kind() {
         F32 => Data::F32(v.into_iter().map(|x| x.cast_to::<f32>()).collect()),
         I64 => Data::I64(v.into_iter().map(|x| x.cast_to::<i64>()).collect()),
@@ -192,8 +200,11 @@ impl Graph for Recorder {
     }
 
     fn binary<E: Element, Axes>(&mut self, op: Binary, a: &Value<E, Axes>, b: &Value<E, Axes>) -> Value<E, Axes> {
-        assert self.extents(a.id) == self.extents(b.id), "the operands of an elementwise operation share their extents";
-        return self.value(Operation::Binary(op), [a.id, b.id], E::kind(), self.extents(a.id));
+        let extents = elementwise_extents([
+            self.extents(a.id),
+            self.extents(b.id),
+        ]);
+        return self.value(Operation::Binary(op), [a.id, b.id], E::kind(), extents);
     }
 
     fn compare<E: Element, Axes>(
@@ -202,8 +213,11 @@ impl Graph for Recorder {
         a: &Value<E, Axes>,
         b: &Value<E, Axes>,
     ) -> Value<bool, Axes> {
-        assert self.extents(a.id) == self.extents(b.id), "the operands of a comparison share their extents";
-        return self.value(Operation::Compare(direction), [a.id, b.id], ElementKind::Bool, self.extents(a.id));
+        let extents = elementwise_extents([
+            self.extents(a.id),
+            self.extents(b.id),
+        ]);
+        return self.value(Operation::Compare(direction), [a.id, b.id], ElementKind::Bool, extents);
     }
 
     fn select<E: Element, Axes>(
@@ -212,8 +226,11 @@ impl Graph for Recorder {
         on_true: &Value<E, Axes>,
         on_false: &Value<E, Axes>,
     ) -> Value<E, Axes> {
-        let extents = self.extents(pred.id);
-        assert extents == self.extents(on_true.id) && extents == self.extents(on_false.id), "a select's operands share their extents";
+        let extents = elementwise_extents([
+            self.extents(pred.id),
+            self.extents(on_true.id),
+            self.extents(on_false.id),
+        ]);
         return self.value(Operation::Select, [pred.id, on_true.id, on_false.id], E::kind(), extents);
     }
 
@@ -223,11 +240,7 @@ impl Graph for Recorder {
         extents: List<i32>,
         dims: List<i32>,
     ) -> Value<E, Out> {
-        let own = self.extents(x.id);
-        assert dims.len() == own.len(), "broadcast_in_dim maps every operand axis";
-        for let [i, d] of dims.into_iter().enumerate() {
-            assert own[i] == 1 || own[i] == extents[d], "an operand axis is 1 or the result's";
-        }
+        let extents = broadcast_in_dim_extents(&self.extents(x.id), extents, &dims);
         return self.value(Operation::BroadcastInDim(dims), [x.id], E::kind(), extents);
     }
 
@@ -253,12 +266,7 @@ impl Graph for Recorder {
         return self.value(Operation::Slice([start, limit, strides]), [x.id], E::kind(), extents);
     }
 
-    fn concatenate<E: Element, A, B, Out>(
-        &mut self,
-        a: &Value<E, A>,
-        b: &Value<E, B>,
-        dimension: i32,
-    ) -> Value<E, Out> {
+    fn concatenate<E: Element, A, B, Out>(&mut self, a: &Value<E, A>, b: &Value<E, B>, dimension: i32) -> Value<E, Out> {
         let extents = joined_extents(&self.extents(a.id), &self.extents(b.id), dimension);
         return self.value(Operation::Concatenate(dimension), [a.id, b.id], E::kind(), extents);
     }
@@ -300,7 +308,10 @@ impl Graph for Recorder {
         kernel: &Value<f32, K>,
         conv: &Convolution,
     ) -> Value<f32, Out> {
-        let [input, weights] = [self.extents(x.id), self.extents(kernel.id)];
+        let [input, weights] = [
+            self.extents(x.id),
+            self.extents(kernel.id),
+        ];
         let mut extents: List<i32> = [input[0], weights[0]];
         extents.extend(&conv_window(&input, &weights, conv).output);
         return self.value(Operation::Convolution(*conv), [x.id, kernel.id], ElementKind::F32, extents);
@@ -418,7 +429,10 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Host {
 pub fn run(cpu: &mut Cpu, recorded: &Recorded, arguments: &List<Host>) -> List<Host>
     contract arguments.len() == recorded.parameters
 {
-    let mut run = Run { values: HashMap::new(), parts: HashMap::new() };
+    let mut run = Run {
+        values: HashMap::new(),
+        parts: HashMap::new(),
+    };
     run.region(cpu, recorded, &recorded.body, arguments);
     return recorded.body.results.into_iter().map(|r| run.values[r]).collect();
 }
@@ -455,6 +469,12 @@ impl Run {
         return self.values[node.operands[i]];
     }
 
+    /// The `i`th operand, an f32 tensor, under the axes the composite's
+    /// signature spells.
+    fn f32_at<Axes>(&self, node: &RecordedNode, i: i32) -> Tensor<f32, Axes> {
+        return retyped(&f32s(&self.operand(node, i)));
+    }
+
     fn computed(&mut self, cpu: &mut Cpu, id: i32, node: &RecordedNode, arguments: &List<Host>) -> Host {
         let extents = node.extents;
         return match node.op {
@@ -475,12 +495,18 @@ impl Run {
                 Bool(t) => converted(cpu, &t, node.kind),
             },
             Unary(op) => Host::F32(cpu.unary::<Untyped>(op, &f32s(&self.operand(node, 0)))),
-            Binary(op) => match [self.operand(node, 0), self.operand(node, 1)] {
+            Binary(op) => match [
+                self.operand(node, 0),
+                self.operand(node, 1),
+            ] {
                 [F32(a), F32(b)] => Host::F32(cpu.binary::<f32, Untyped>(op, &a, &b)),
                 [I64(a), I64(b)] => Host::I64(cpu.binary::<i64, Untyped>(op, &a, &b)),
                 _ => unreachable(),
             },
-            Compare(direction) => match [self.operand(node, 0), self.operand(node, 1)] {
+            Compare(direction) => match [
+                self.operand(node, 0),
+                self.operand(node, 1),
+            ] {
                 [F32(a), F32(b)] => Host::Bool(cpu.compare::<f32, Untyped>(direction, &a, &b)),
                 [I64(a), I64(b)] => Host::Bool(cpu.compare::<i64, Untyped>(direction, &a, &b)),
                 [Bool(a), Bool(b)] => Host::Bool(cpu.compare::<bool, Untyped>(direction, &a, &b)),
@@ -488,25 +514,36 @@ impl Run {
             },
             Select => {
                 let pred = bools(&self.operand(node, 0));
-                match [self.operand(node, 1), self.operand(node, 2)] {
+                match [
+                    self.operand(node, 1),
+                    self.operand(node, 2),
+                ] {
                     [F32(a), F32(b)] => Host::F32(cpu.select::<f32, Untyped>(&pred, &a, &b)),
                     [I64(a), I64(b)] => Host::I64(cpu.select::<i64, Untyped>(&pred, &a, &b)),
                     [Bool(a), Bool(b)] => Host::Bool(cpu.select::<bool, Untyped>(&pred, &a, &b)),
                     _ => unreachable(),
-                };
+                }
             },
             BroadcastInDim(_) | Reshape | Transpose(_) | Slice(_) | Reverse(_) | Yield => match self.operand(node, 0) {
                 F32(t) => Host::F32(regrouped(cpu, node, &t)),
                 I64(t) => Host::I64(regrouped(cpu, node, &t)),
                 Bool(t) => Host::Bool(regrouped(cpu, node, &t)),
             },
-            Concatenate(dimension) => match [self.operand(node, 0), self.operand(node, 1)] {
+            Concatenate(dimension) => match [
+                self.operand(node, 0),
+                self.operand(node, 1),
+            ] {
                 [F32(a), F32(b)] => Host::F32(cpu.concatenate::<f32, Untyped, Untyped, Untyped>(&a, &b, dimension)),
                 [I64(a), I64(b)] => Host::I64(cpu.concatenate::<i64, Untyped, Untyped, Untyped>(&a, &b, dimension)),
                 [Bool(a), Bool(b)] => Host::Bool(cpu.concatenate::<bool, Untyped, Untyped, Untyped>(&a, &b, dimension)),
                 _ => unreachable(),
             },
-            Reduce([op, init, dims]) => Host::F32(cpu.reduce::<Untyped, Untyped>(&f32s(&self.operand(node, 0)), op, init, dims)),
+            Reduce([op, init, dims]) => Host::F32(cpu.reduce::<Untyped, Untyped>(
+                &f32s(&self.operand(node, 0)),
+                op,
+                init,
+                dims,
+            )),
             DotGeneral(dims) => Host::F32(cpu.dot_general::<Untyped, Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
                 &f32s(&self.operand(node, 1)),
@@ -518,16 +555,28 @@ impl Run {
                     F32(t) => Host::F32(cpu.gather::<f32, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
                     I64(t) => Host::I64(cpu.gather::<i64, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
                     Bool(t) => Host::Bool(cpu.gather::<bool, Untyped, Untyped, Untyped>(&t, &indices, &dims)),
-                };
+                }
             },
             Scatter(dims) => {
                 let indices = i64s(&self.operand(node, 1));
-                match [self.operand(node, 0), self.operand(node, 2)] {
-                    [F32(a), F32(u)] => Host::F32(cpu.scatter::<f32, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
-                    [I64(a), I64(u)] => Host::I64(cpu.scatter::<i64, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
-                    [Bool(a), Bool(u)] => Host::Bool(cpu.scatter::<bool, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
+                match [
+                    self.operand(node, 0),
+                    self.operand(node, 2),
+                ] {
+                    [F32(a), F32(u)] => Host::F32(
+                        cpu.scatter::<f32, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims),
+                    ),
+                    [I64(a), I64(u)] => Host::I64(
+                        cpu.scatter::<i64, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims),
+                    ),
+                    [Bool(a), Bool(u)] => Host::Bool(cpu.scatter::<bool, Untyped, Untyped, Untyped>(
+                        &a,
+                        &indices,
+                        &u,
+                        &dims,
+                    )),
                     _ => unreachable(),
-                };
+                }
             },
             Convolution(conv) => Host::F32(cpu.convolution::<Untyped, Untyped, Untyped>(
                 &f32s(&self.operand(node, 0)),
@@ -553,7 +602,6 @@ impl Run {
     /// An attention node's attended queries and presents, by `Cpu`'s
     /// decomposition.
     fn attended(&self, cpu: &mut Cpu, node: &RecordedNode, attention: &AttentionNode) -> [Host, Host, Host] {
-        let at = |i: i32| -> Tensor<f32, [Untyped, Untyped]> { retyped(&f32s(&self.operand(node, i))) };
         let mut next = 5;
         let past_length: Option<Tensor<i64, []>> = if attention.shared {
             next += 1;
@@ -561,43 +609,42 @@ impl Run {
         } else {
             null;
         };
-        let [cos, sin] = if attention.rotary {
+        let [cos, sin]: [Option<Tensor<f32, [Untyped, Untyped]>>, Option<Tensor<f32, [Untyped, Untyped]>>] = if attention.rotary {
             next += 2;
-            [Option::Some(at(next - 2)), Option::Some(at(next - 1))];
+            [
+                Option::Some(self.f32_at(node, next - 2)),
+                Option::Some(self.f32_at(node, next - 1)),
+            ];
         } else {
             [null, null];
         };
         let bias: Option<Tensor<f32, [Untyped, Untyped, Untyped, Untyped]>> = if attention.biased {
-            Option::Some(retyped(&f32s(&self.operand(node, next))));
+            Option::Some(self.f32_at(node, next));
         } else {
             null;
         };
         let [a, k, v] = cpu.group_query_attention::<Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped, Untyped>(
-            &retyped(&f32s(&self.operand(node, 0))),
-            &retyped(&f32s(&self.operand(node, 1))),
-            &retyped(&f32s(&self.operand(node, 2))),
-            &retyped(&f32s(&self.operand(node, 3))),
-            &retyped(&f32s(&self.operand(node, 4))),
-            borrowed(&past_length),
-            borrowed(&cos),
-            borrowed(&sin),
-            borrowed(&bias),
+            &self.f32_at(node, 0),
+            &self.f32_at(node, 1),
+            &self.f32_at(node, 2),
+            &self.f32_at(node, 3),
+            &self.f32_at(node, 4),
+            optional(&past_length),
+            optional(&cos),
+            optional(&sin),
+            optional(&bias),
             &attention.options,
         );
-        return [Host::F32(retyped(&a)), Host::F32(retyped(&k)), Host::F32(retyped(&v))];
+        return [
+            Host::F32(retyped(&a)),
+            Host::F32(retyped(&k)),
+            Host::F32(retyped(&v)),
+        ];
     }
 }
 
-/// `t` under the axes `Out`, which the composite's signature spells.
 fn retyped<E, In, Out>(t: &Tensor<E, In>) -> Tensor<E, Out> {
     return Tensor { data: t.data, extents: t.extents };
-}
-
-fn borrowed<T>(t: &Option<T>) -> Option<&T> {
-    return match t {
-        Some(v) => Option::Some(v),
-        None => null,
-    };
 }
 
 fn f32s(h: &Host) -> Tensor<f32, Untyped> {
