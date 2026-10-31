@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793482192653,
+  "lastUpdate": 1793483398351,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72745,6 +72745,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8c927c4f2e2f9b6fadbe40e99fb4cede649cdf62"
         },
         "date": 1793482192187,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bee776d3196293227198b3ead47b176e9baa3e0f",
+          "message": "Merge pull request #2504 from wado-lang/ccr-9283f52f-j00xb6\n\nfeat(core:icu): locale-aware Collator, over affine resources imported from components",
+          "timestamp": "2026-11-01T06:15:22+09:00",
+          "tree_id": "1891fc16ee2e3c760b936791a3fa40726d789f4f",
+          "url": "https://github.com/wado-lang/wado/commit/bee776d3196293227198b3ead47b176e9baa3e0f"
+        },
+        "date": 1793483397477,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
