@@ -4510,6 +4510,7 @@ impl DataDecls {
 /// during resolution, the current module's own definitions, then its imports
 /// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
 /// All fields are borrowed, so a call site constructs one without allocating.
+/// The resolver for a written type over this view is in `type_resolution`.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     /// What every name in the program resolves to, answered once by the resolve

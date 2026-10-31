@@ -855,7 +855,8 @@ fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
 }
 
 /// The bundled ICU component: one core module inside a component whose lifts
-/// name its exports. A program importing only `has` traps the other three.
+/// name its exports. A program importing only `has` traps every other lift, as
+/// the compiler stubs every function a program leaves unused.
 #[test]
 fn a_component_asset_is_collected_through_its_core_module() {
     let wat = include_str!("../../wado-compiler/lib/core/icu.wat");
@@ -866,7 +867,10 @@ fn a_component_asset_is_collected_through_its_core_module() {
         &Embed {
             memory_import: None,
             keep_export: &|_| true,
-            stub_export: &|name| name.contains("properties@0.1.0#") && name != used,
+            stub_export: &|name| {
+                let lift = name.strip_prefix("cabi_post_").unwrap_or(name);
+                lift.starts_with("wado:icu/") && lift != used
+            },
             strip_custom_sections: true,
         },
     )

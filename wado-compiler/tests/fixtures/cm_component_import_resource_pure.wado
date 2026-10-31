@@ -1,0 +1,19 @@
+// A resource a composed component implements is no effect of its own: the
+// component imports nothing, so a function calling the resource's operations
+// declares no `with`.
+use { log_stdout } from "core:cli";
+use { Counters } from "./sub/wasm_import_cm_resource.wat" with { type: "wat" };
+
+fn sum(a: u32, b: u32) -> u32 {
+    let x = Counters::Counter::new(a);
+    let y = Counters::Counter::from(b);
+    return x.get() + y.get();
+}
+
+export fn run() {
+    let total = sum(2, 40);
+    log_stdout(`${total} drops=${Counters::drops()}`);
+}
+
+__DATA__
+{"stdout": "42 drops=2\n"}

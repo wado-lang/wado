@@ -1,0 +1,10 @@
+// A guest effect declaring a resource is refused: a handler answers the
+// effect's operations, and nothing in Wado provides a resource to it.
+use { Use } from "./sub/wasm_import_cm_guest_effect_resource.wat" with { type: "wat" };
+
+export fn run() {
+    Use::total();
+}
+
+__DATA__
+{"compile_error": "declares the resource `entry`"}

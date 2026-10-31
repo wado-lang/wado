@@ -518,6 +518,11 @@ or side-car `.wit` is involved.
   and a type alias a newtype. Each belongs to its interface, as a type an
   `interface` declares does ([Effect Definition](./spec-effects.md#effect-definition)),
   except the default interface's (below).
+- A resource becomes an affine Wado `resource` of its interface, so the
+  component's destructor runs where the program's handle drops
+  ([Affine Types](./spec-affine.md)). Its constructor is `new`, its static
+  functions are static methods, and a method takes `&self`. An `own<R>` is the
+  resource `R` itself, moved where it is passed, and a `borrow<R>` is a `&R`.
 - The module's names share one namespace, in three ranks: a plain-named
   export, then a function or type of the default interface (below), then an
   interface's basename. Where names of different ranks coincide, the higher
@@ -556,8 +561,9 @@ or side-car `.wit` is involved.
 The dependency is statically composed into the output, so the result is one
 self-contained component that runs standalone.
 
-An imported interface is not an effect by construction. Calling into a
-component requires the effects its own host imports map to
+An imported interface is not an effect by construction, and neither is a
+resource it declares. Calling into a component requires the effects its own
+host imports map to
 (`wasi:clocks/monotonic-clock` requires `MonotonicClock`), and a component that
 imports nothing from the host requires no effect. A component that imports an
 interface no host provides (a guest effect) makes that interface an effect its

@@ -1,0 +1,15 @@
+// A resource's operations require what its component's host imports map to,
+// as its interface's do: here the component reads `wasi:clocks`.
+use { Ticks } from "./sub/wasm_import_cm_resource_clock.wat" with { type: "wat" };
+
+fn read_one() -> u32 {
+    let t = Ticks::Ticker::new(1);
+    return t.read();
+}
+
+export fn run() {
+    read_one();
+}
+
+__DATA__
+{"compile_error": "missing effect 'MonotonicClock'"}

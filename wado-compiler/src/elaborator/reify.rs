@@ -4,7 +4,6 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
-use std::marker::PhantomData;
 use std::rc::Rc;
 
 use crate::ast::{
@@ -15,7 +14,6 @@ use crate::attribute::{
     wire_value,
 };
 use crate::call_args::CallArgs;
-use crate::compiler_host::CompilerHost;
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::cast::lower_cast;
@@ -43,18 +41,18 @@ use super::coercion::{
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
+use super::operators::takes_shape_from_expected_type;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
 use super::typecheck::admits_condition;
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
-use super::util;
+use super::util::{self, enumerate_index_local, split_enumerate};
 use crate::ast::RangeKind;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
-use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
@@ -451,8 +449,9 @@ pub(super) struct ReifyAssertCaptureContext {
 
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
 /// `ModuleSemantics` that `annotate` populated. One instance per module the
-/// batch driver emits TIR for; constructed via [`Reify::new`].
-pub(crate) struct Reify<'a, H: CompilerHost> {
+/// batch driver emits TIR for; constructed via [`Reify::new`]. It holds no
+/// logger: every diagnostic is annotate's, so reify cannot fail.
+pub(crate) struct Reify<'a> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
     /// treated as read-only per the WEP `Reify surface` contract.
@@ -473,9 +472,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
     pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// The host the `Elaborator` helpers reify shares are generic over. Reify
-    /// holds no logger: every diagnostic is annotate's, so it cannot fail.
-    host: PhantomData<fn() -> H>,
     /// Source module currently being reified.
     pub(crate) current_module_source: ModuleSource,
     /// The module whose TIR is being built, which `current_module_source`
@@ -557,12 +553,12 @@ pub(crate) struct BodyOwnership {
 /// [`ownership::BodyFacts`] as reify reads them, through the active tuple
 /// `for-of` overlays: an element's types decide whether a place in the body
 /// moves.
-struct ReifyFacts<'r, 'a, H: CompilerHost> {
-    reify: &'r Reify<'a, H>,
+struct ReifyFacts<'r, 'a> {
+    reify: &'r Reify<'a>,
     affine_params: &'r [tir::TypeId],
 }
 
-impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
+impl ownership::BodyFacts for ReifyFacts<'_, '_> {
     fn consumes_receiver(&self, call: AstId) -> bool {
         self.reify
             .ann_method_dispatch(call)
@@ -617,7 +613,7 @@ pub(crate) struct CallSiteLocation {
     pub(crate) function_name: String,
 }
 
-impl<'a, H: CompilerHost> Reify<'a, H> {
+impl<'a> Reify<'a> {
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -652,7 +648,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             all_module_semantics,
             symbols,
             loaded_modules,
-            host: PhantomData,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             emitted_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
@@ -705,7 +700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn with_ownership<R>(
         &mut self,
         affine_params: Vec<tir::TypeId>,
-        walk: impl FnOnce(&ReifyFacts<'_, 'a, H>) -> Modes,
+        walk: impl FnOnce(&ReifyFacts<'_, 'a>) -> Modes,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let modes = walk(&ReifyFacts {
@@ -720,7 +715,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Answer `ask` about the body being reified; outside one, nothing moves.
-    fn ask_ownership(&self, ask: impl FnOnce(&Modes, &ReifyFacts<'_, 'a, H>) -> bool) -> bool {
+    fn ask_ownership(&self, ask: impl FnOnce(&Modes, &ReifyFacts<'_, 'a>) -> bool) -> bool {
         self.body_ownership.as_ref().is_some_and(|body| {
             ask(
                 &body.modes,
@@ -851,16 +846,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // of whatever body referenced the global.
     fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        let resolved = Elaborator::<H>::resolve_type_static(
-            ty,
-            &mut self.tysys.type_table.borrow_mut(),
-            &lookup,
-        );
+        let resolved = lookup.resolve(ty, &mut self.tysys.type_table.borrow_mut());
         self.apply_function_type_effects(ty, resolved)
     }
 
     /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
-    /// shared static resolver has no effect-resolution context and leaves
+    /// `TypeLookup` resolver has no effect-resolution context and leaves
     /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
     /// the effect check then can't see that, e.g., `f: fn() with Stdout`
     /// requires `Stdout` at an indirect call site. Resolves effects through
@@ -3395,7 +3386,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
             Some(DesugarKind::ForOfNever) => {
-                let (iterable, _) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+                let (iterable, _) = split_enumerate(&for_of.iterable);
                 let iterable = self.reify_expr(iterable, ctx, None);
                 self.skip_for_of_body(for_of.id);
                 vec![TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)]
@@ -3571,7 +3562,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
-        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+        let (actual_iterable, is_enumerate) = split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let tuple_type_id = iterable.type_id;
         // Look through a `&`/`&mut` wrapper: `for v of &tuple` binds each
@@ -3762,7 +3753,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
-        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+        let (actual_iterable, is_enumerate) = split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -3796,8 +3787,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (binding_name, binding_local, mut destruct_stmts) =
             self.reify_pack_binding(&for_of.binding, binding_type, is_mut, unique_id, span, ctx);
 
-        let index_binding =
-            Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        let index_binding = enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let mut body = self.reify_block(
             &for_of.body,
             &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
@@ -3835,7 +3825,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         let span = comp.span;
-        let (source, is_enumerate) = Elaborator::<H>::split_enumerate(&comp.iterable);
+        let (source, is_enumerate) = split_enumerate(&comp.iterable);
         let iterable = self.reify_expr(source, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -3856,8 +3846,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (binding_name, binding_local, destructure) =
             self.reify_pack_binding(&comp.binding, binding_type, false, unique_id, span, ctx);
 
-        let index_binding =
-            Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        let index_binding = enumerate_index_local(is_enumerate, &comp.binding, ctx);
         let body = self.reify_expr(
             &comp.body,
             &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
@@ -4464,8 +4453,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |expr| expr.type_id,
             )
         } else if binary.op.is_comparison()
-            && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
-            && !Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
+            && takes_shape_from_expected_type(&binary.left)
+            && !takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
             let left = self.reify_expr(&binary.left, ctx, None);

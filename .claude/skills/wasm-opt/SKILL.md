@@ -18,9 +18,6 @@ from the GitHub API in a cloud session. Download the release tarball instead:
 curl -sSL https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz | tar xz -C scratchpad
 ```
 
-wasm-tools comes from mise. Where its shim reports no version set, call the
-binary under `~/.local/share/mise/installs/wasm-tools/latest/` directly.
-
 ## Pipeline
 
 ```sh
@@ -52,10 +49,12 @@ $B/wasm-opt "${FEATURES[@]}" -O3 $S/jco/prog.core.wasm -o $S/O3.wasm
 
 ## Reading the difference
 
-- `wasm-tools objdump` gives the size and count of each section.
-- `wasm-tools dump` annotates every byte. Use it for encoding questions, such
-  as how the local declarations are grouped.
-- `wasm-tools print` gives WAT to diff. A whole-module diff is too large to
+`wado-dev-tools` stands in for the wasm-tools CLI (`scripts/dev-bin.sh wado-dev-tools <command> <file.wasm>`).
+
+- `objdump` gives the size and count of each section.
+- `print --offsets` puts each instruction's byte offset beside it. Use it for
+  encoding questions: an instruction takes the bytes up to the next offset.
+- `print` gives WAT to diff. A whole-module diff is too large to
   read, so compare per-function instruction counts and opcode histograms with a
   small Node script instead.
 - `-O2 --skip-pass=NAME` measures what one pass is worth: the bytes `-O2` grows

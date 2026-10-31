@@ -1,11 +1,11 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{AstId, Literal, Pattern};
+use crate::ast::{AstId, Expr, Literal, Pattern};
 use crate::const_eval::format_float_repr;
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
 use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
-use crate::elaborator::types::TypeError;
+use crate::elaborator::types::{FunctionContext, TypeError};
 use crate::escape::{unescape_byte, unescape_char};
 use crate::lexer::defaults_to_float;
 use crate::lower::cast::widen_half;
@@ -1113,6 +1113,39 @@ pub(super) fn replaced<O, T, R>(
     let saved = guard.saved.take().expect("enclosing value present");
     let left = std::mem::replace(field(guard.owner), saved);
     (result, left)
+}
+
+/// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
+/// any other expression alone. The suffix stays in the AST so the formatter
+/// round-trips it, matching how the statement for-of reads it.
+pub(super) fn split_enumerate(iterable: &Expr) -> (&Expr, bool) {
+    match iterable {
+        Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+            (&mc.receiver, true)
+        }
+        other => (other, false),
+    }
+}
+
+/// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
+/// once the binding is in scope. `None` when the form is not an enumerate
+/// or the index position is a wildcard, and when the index is `mut`: a
+/// subscript must stay the element's own position.
+pub(super) fn enumerate_index_local(
+    is_enumerate: bool,
+    binding: &Pattern,
+    ctx: &FunctionContext,
+) -> Option<u32> {
+    if !is_enumerate {
+        return None;
+    }
+    let Pattern::Tuple(elems, _) = binding else {
+        return None;
+    };
+    let name = elems.first()?.as_name()?.name;
+    ctx.lookup(name)
+        .filter(|local| !local.is_mut)
+        .map(|local| local.index)
 }
 
 #[cfg(test)]
