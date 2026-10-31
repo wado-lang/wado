@@ -1301,11 +1301,7 @@ fn stream_files(command: &Command<'_>) -> io::Result<Vec<StreamFile>> {
         if stdio != Stdio::Inherit {
             continue;
         }
-        let file = match OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_PATH)
-            .open(format!("/proc/self/fd/{fd}"))
-        {
+        let file = match open_path(format!("/proc/self/fd/{fd}")) {
             Ok(file) => file,
             // A stream the host holds closed, or a host without `/proc`,
             // where no device path reaches the stream either.
@@ -1320,6 +1316,14 @@ fn stream_files(command: &Command<'_>) -> io::Result<Vec<StreamFile>> {
         }
     }
     Ok(files)
+}
+
+/// An `O_PATH` descriptor, which names a file without opening it for reading.
+fn open_path(path: impl AsRef<Path>) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH)
+        .open(path)
 }
 
 fn std_stdio(stdio: Stdio) -> StdStdio {
@@ -1434,11 +1438,7 @@ fn ruleset(policy: &Policy, stream_files: &[StreamFile]) -> io::Result<OwnedFd> 
         let opened: File;
         let file: &File = match &rule.dir {
             Some(dir) => dir,
-            None => match OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_PATH)
-                .open(&rule.path)
-            {
+            None => match open_path(&rule.path) {
                 Ok(file) => {
                     opened = file;
                     &opened

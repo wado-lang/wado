@@ -594,8 +594,11 @@ fn sh_traced(policy: &Policy, script: &str) -> (ExitStatus, BTreeSet<Refusal>) {
 /// GNU's does not), so that refusal is left out.
 #[cfg(target_os = "linux")]
 fn sh_traced_paths(policy: &Policy, script: &str) -> BTreeSet<Refusal> {
-    sh_traced(policy, script)
-        .1
+    without_process_entries(sh_traced(policy, script).1)
+}
+
+fn without_process_entries(refusals: BTreeSet<Refusal>) -> BTreeSet<Refusal> {
+    refusals
         .into_iter()
         .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
         .collect()
@@ -735,15 +738,11 @@ fn a_shell_starts_without_complaint() {
 fn reaches_its_own_streams_through_their_device_paths() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
-    assert_eq!(
-        sh(
-            &policy,
-            "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1"
-        ),
-        OK
-    );
+    assert_eq!(sh(&tree.policy(Network::Denied), REOPENS_STREAMS), OK);
 }
+
+const REOPENS_STREAMS: &str =
+    "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1";
 
 /// Set in a re-execution whose standard streams are files no grant covers.
 const STREAM_FILES_VAR: &str = "WADO_SANDBOX_STREAM_FILES";
@@ -762,15 +761,19 @@ fn reaches_inherited_files_through_their_device_paths() {
     // SAFETY: the closure makes only system calls, on paths built before the
     // fork.
     let passed = unsafe {
-        reexecute("sandbox::tests::stream_files", STREAM_FILES_VAR, move || {
-            for (fd, path) in paths.iter().enumerate() {
-                let file = libc::open(path.as_ptr(), libc::O_RDWR);
-                if file < 0 || libc::dup2(file, fd as libc::c_int) < 0 {
-                    return Err(std::io::Error::last_os_error());
+        reexecute(
+            "sandbox::tests::stream_files",
+            STREAM_FILES_VAR,
+            move || {
+                for (fd, path) in paths.iter().enumerate() {
+                    let file = libc::open(path.as_ptr(), libc::O_RDWR);
+                    if file < 0 || libc::dup2(file, fd as libc::c_int) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                 }
-            }
-            Ok(())
-        })
+                Ok(())
+            },
+        )
     };
     assert!(passed);
 }
@@ -782,13 +785,7 @@ fn stream_files() {
         return;
     }
     let tree = Tree::new();
-    let args: Vec<OsString> = [
-        "-c",
-        "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1",
-    ]
-    .iter()
-    .map(OsString::from)
-    .collect();
+    let args: Vec<OsString> = ["-c", REOPENS_STREAMS].iter().map(OsString::from).collect();
     let spawned = spawn(&Command {
         program: Path::new("/bin/sh"),
         args: &args,
@@ -802,13 +799,10 @@ fn stream_files() {
     })
     .unwrap();
     assert_eq!(spawned.child.wait().unwrap(), OK);
-    let refused: BTreeSet<Refusal> = spawned
-        .refusals
-        .collect()
-        .into_iter()
-        .filter(|refusal| !matches!(refusal, Refusal::ProcessEntry { .. }))
-        .collect();
-    assert_eq!(refused, BTreeSet::new());
+    assert_eq!(
+        without_process_entries(spawned.refusals.collect()),
+        BTreeSet::new()
+    );
 }
 
 #[test]
