@@ -13,7 +13,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_dispatch_wrapper,
+    FqTypeName, FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_dispatch_wrapper,
     is_effect_default, is_type_bridge,
 };
 use crate::nir_package::NirPackage;
@@ -52,7 +52,6 @@ struct Roots<'a> {
     stage: Stage,
     /// [`MINTABLE`] as the set an impl's trait is tested against.
     mintable: IndexSet<DefId>,
-    drop_trait: Option<DefId>,
 }
 
 impl<'a> Roots<'a> {
@@ -66,7 +65,6 @@ impl<'a> Roots<'a> {
                 .iter()
                 .filter_map(|item| items.trait_def(*item))
                 .collect(),
-            drop_trait: items.trait_def(CompilerItem::Drop),
         }
     }
 
@@ -76,10 +74,10 @@ impl<'a> Roots<'a> {
             .method_info
             .as_ref()
             .and_then(LocalMethodName::trait_decl);
-        if self.stage == Stage::BeforeMonomorphize {
-            if let Some(entry) = self.minted_by_instances(func, impl_trait, type_table) {
-                return entry;
-            }
+        if self.stage == Stage::BeforeMonomorphize
+            && let Some(entry) = self.minted_by_instances(func, impl_trait, type_table)
+        {
+            return entry;
         }
         let root = func.is_cm_export
             || (func.is_export
@@ -104,11 +102,12 @@ impl<'a> Roots<'a> {
         impl_trait: Option<DefId>,
         type_table: &TypeTable,
     ) -> Option<Entry> {
-        let minted_method = func.compiler_item.is_some()
-            || (impl_trait.is_some() && impl_trait == self.drop_trait)
-            || impl_trait.is_some_and(|def| self.mintable.contains(&def));
+        // An instance's elaboration calls a trait method of each type argument
+        // directly (a `$hole_fmt$` arm, a derived impl), with no call through a
+        // parameter for a dispatch group to follow.
+        let minted_method = func.compiler_item.is_some() || impl_trait.is_some();
         if minted_method && func.method_info.is_some() {
-            return Some(Entry::on_type(receiver_head(func)));
+            return Some(Entry::on_type(receiver_head(func.method_info.as_ref())));
         }
         if is_type_bridge(&func.name) && !is_effect_default(&func.name) {
             let head = func
@@ -172,11 +171,29 @@ fn type_head(type_table: &TypeTable, id: TypeId) -> Option<Head> {
 
 /// The head an impl method's receiver writes. `None` for a blanket impl's,
 /// which any type may take.
-fn receiver_head(func: &TirFunction) -> Option<Head> {
-    match &func.method_info.as_ref()?.receiver {
+fn receiver_head(method: Option<&LocalMethodName>) -> Option<Head> {
+    match &method?.receiver {
         Receiver::Type(fq) | Receiver::RefTo(_, fq) => settled(fq.head().clone()),
         Receiver::Ref(_) => None,
     }
+}
+
+/// Every settled head a call's receiver spells, its type arguments' included.
+fn receiver_heads(method: &LocalMethodName) -> Vec<Head> {
+    fn walk(name: &FqTypeName, heads: &mut Vec<Head>) {
+        heads.extend(settled(name.head().clone()));
+        for arg in name.args() {
+            walk(arg, heads);
+        }
+    }
+    let mut heads = Vec::new();
+    if let Receiver::Type(fq) | Receiver::RefTo(_, fq) = &method.receiver {
+        walk(fq, &mut heads);
+    }
+    for arg in &method.struct_type_args {
+        walk(arg, &mut heads);
+    }
+    heads
 }
 
 fn settled(head: Head) -> Option<Head> {
@@ -202,6 +219,10 @@ struct TypeReach<'t> {
     members: IndexMap<DefId, Vec<TypeId>>,
     seen: IndexSet<TypeId>,
     reached: IndexSet<Head>,
+    /// The modules a reached open shape is scoped by. Monomorphization
+    /// substitutes one into a closed shape of the same module, so every shape
+    /// of one counts as reached.
+    open_shape_modules: IndexSet<ModuleSource>,
     waiting: IndexMap<Head, Vec<FunctionId>>,
 }
 
@@ -227,13 +248,14 @@ impl<'t> TypeReach<'t> {
             members,
             seen: IndexSet::default(),
             reached: IndexSet::default(),
+            open_shape_modules: IndexSet::default(),
             waiting: IndexMap::default(),
         }
     }
 
     /// Queue `key` once `head` is reached.
     fn wait(&mut self, head: Head, key: FunctionId, work: &mut Vec<FunctionId>) {
-        if self.reached.contains(&head) {
+        if self.is_reached(&head) {
             work.push(key);
         } else {
             self.waiting.entry(head).or_default().push(key);
@@ -253,16 +275,63 @@ impl<'t> TypeReach<'t> {
                 stack.push(part);
                 false
             });
-            if let Some(head) = type_head(tt, id)
-                && !self.reached.contains(&head)
+            if let Some(head) = type_head(tt, id) {
+                self.reach_head(head, &mut stack, work);
+            }
+            if let ResolvedType::Struct {
+                def: StructDef::Anon(shape),
+                ..
+            } = tt.get(id)
+                && tt.anon_shape_is_open(*shape)
+                && self
+                    .open_shape_modules
+                    .insert(tt.anon_struct_module(*shape).clone())
             {
-                if let TypeHead::Declared(decl) = &head {
-                    stack.extend(self.members.get(&decl.def()).into_iter().flatten().copied());
-                }
-                work.extend(self.waiting.swap_remove(&head).into_iter().flatten());
-                self.reached.insert(head);
+                let module = tt.anon_struct_module(*shape);
+                self.waiting.retain(|head, keys| {
+                    let substituted = shape_module(head) == Some(module);
+                    if substituted {
+                        work.append(keys);
+                    }
+                    !substituted
+                });
             }
         }
+    }
+
+    /// Reach the type a call's receiver names: a static method holds no value
+    /// of it.
+    fn add_receiver(&mut self, head: Head, work: &mut Vec<FunctionId>) {
+        let mut stack = Vec::new();
+        self.reach_head(head, &mut stack, work);
+        for id in stack {
+            self.add(id, work);
+        }
+    }
+
+    /// Release what waited on `head`, and queue its members onto `stack`.
+    fn reach_head(&mut self, head: Head, stack: &mut Vec<TypeId>, work: &mut Vec<FunctionId>) {
+        if self.reached.contains(&head) {
+            return;
+        }
+        if let TypeHead::Declared(decl) = &head {
+            stack.extend(self.members.get(&decl.def()).into_iter().flatten().copied());
+        }
+        work.extend(self.waiting.swap_remove(&head).into_iter().flatten());
+        self.reached.insert(head);
+    }
+
+    fn is_reached(&self, head: &Head) -> bool {
+        self.reached.contains(head)
+            || shape_module(head).is_some_and(|module| self.open_shape_modules.contains(module))
+    }
+}
+
+/// The module an anonymous shape's head is scoped by.
+fn shape_module(head: &Head) -> Option<&ModuleSource> {
+    match head {
+        TypeHead::Shape { module, .. } => Some(module),
+        _ => None,
     }
 }
 
@@ -308,21 +377,8 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
         let func = func_rc.borrow();
         let key = function_key(&func);
         match roots.entry(&func, &type_table) {
-            Entry::Root if std::env::var("TMP_X").is_ok_and(|x| {
-                (x.contains("items") && func.compiler_item.is_some())
-                    || (x.contains("builtin") && func.module_source.is_core_builtin())
-                    || (x.contains("wrap") && is_dispatch_wrapper(&func.name))
-                    || (x.contains("eff") && is_effect_default(&func.name))
-                    || (x.contains("bridge") && is_type_bridge(&func.name))
-                    || (x.contains("mint") && func.method_info.as_ref().and_then(LocalMethodName::trait_decl).is_some_and(|d| roots.mintable.contains(&d)))
-            }) => {}
-            Entry::Root => {
-                if stage == Stage::BeforeMonomorphize {
-                    compiler_trace!(TRACE_TARGET, "  ROOT {key} item={:?}", func.compiler_item);
-                }
-                work.push(key.clone())
-            }
-            Entry::OnType(def) => types.wait(def, key.clone(), &mut work),
+            Entry::Root => work.push(key.clone()),
+            Entry::OnType(head) => types.wait(head, key.clone(), &mut work),
             Entry::Called => {}
         }
         if stage == Stage::BeforeMonomorphize {
@@ -333,7 +389,7 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
                 impls
                     .entry(group)
                     .or_default()
-                    .push((key.clone(), receiver_head(&func)));
+                    .push((key.clone(), receiver_head(func.method_info.as_ref())));
             }
         }
         bodies.insert(key, func_rc);
@@ -356,6 +412,9 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
             let signature = func.params.iter().map(|param| param.type_id);
             for id in signature.chain([func.return_type]).chain(refs.types) {
                 types.add(id, &mut work);
+            }
+            for head in refs.receivers {
+                types.add_receiver(head, &mut work);
             }
         }
         for callee in refs.callees {
@@ -385,8 +444,6 @@ fn reach(flat: &FlatPackage, stage: Stage) -> IndexSet<FunctionId> {
             work.push(callee.key);
         }
     }
-    if stage == Stage::BeforeMonomorphize { for k in &reached { compiler_trace!(TRACE_TARGET, "  R {k}"); } for (_, ks) in &types.waiting { for k in ks { compiler_trace!(TRACE_TARGET, "  W {k}"); } } }
-    compiler_trace!(TRACE_TARGET, "types: {} heads reached ({} anon), {} waiting heads, {} waiting fns", types.reached.len(), types.reached.iter().filter(|h| matches!(h, TypeHead::Shape{..})).count(), types.waiting.len(), types.waiting.values().map(Vec::len).sum::<usize>());
     reached
 }
 
@@ -510,13 +567,8 @@ fn prune(flat: &mut FlatPackage, stage: Stage) {
     drop(type_table);
     compiler_trace!(
         TRACE_TARGET,
-        "pruned {} of {before} functions; {} reached, {} templates kept",
-        before - flat.functions.len(),
-        reached.len(),
-        flat.functions
-            .iter()
-            .filter(|func| func.borrow().is_template() && !reached.contains(&function_key(&func.borrow())))
-            .count()
+        "pruned {} of {before} functions",
+        before - flat.functions.len()
     );
 }
 
@@ -536,6 +588,7 @@ struct BodyRefs<'a> {
     stage: Stage,
     callees: Vec<Callee>,
     types: Vec<TypeId>,
+    receivers: Vec<Head>,
 }
 
 impl<'a> BodyRefs<'a> {
@@ -545,6 +598,7 @@ impl<'a> BodyRefs<'a> {
             stage,
             callees: Vec::new(),
             types: Vec::new(),
+            receivers: Vec::new(),
         };
         refs.walk_block(body);
         refs
@@ -570,6 +624,9 @@ impl TirRefVisitor for BodyRefs<'_> {
             } => match self.stage {
                 Stage::BeforeMonomorphize => {
                     self.types.extend(type_args);
+                    if let Some(method) = &func.method_info {
+                        self.receivers.extend(receiver_heads(method));
+                    }
                     self.callees.push(Callee {
                         key: FunctionId::free(&func.module_source, &func.name),
                         template: func.template.clone(),
