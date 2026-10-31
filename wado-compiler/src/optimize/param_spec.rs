@@ -471,14 +471,19 @@ struct Signature {
     /// Whether each parameter's own slot may be replaced by a constant. A
     /// slot the body reassigns, references or aliases holds more than the argument.
     param_fixed: Vec<bool>,
-    /// Whether the function's scalar arguments may move into a clone. A callee
+    /// Whether a literal scalar argument may move into a clone. A callee
     /// writing through a reference is one a compile-time frame runs for those
     /// writes, and a constant it no longer receives is one that frame cannot
-    /// see — which costs a whole folded region to save a parameter. A callee on
-    /// a call cycle is one whose recursion the constant decides nothing about,
-    /// and cloning one member splits a cycle the return-ABI analysis reasons
-    /// about whole.
-    scalar_specializable: bool,
+    /// see — which costs a whole folded region to save a parameter. A constant
+    /// read from a field the caller holds constant is exempt, and only
+    /// `on_cycle` holds it back: a formatter passes its precision that way to
+    /// the routine writing through it, which folds on the precision only once
+    /// it is bound (`f64::fmt_fixed`).
+    literal_specializable: bool,
+    /// Whether the function is on a call cycle: one whose recursion a constant
+    /// decides nothing about, and cloning one member splits a cycle the
+    /// return-ABI analysis reasons about whole.
+    on_cycle: bool,
 }
 
 impl Signatures {
@@ -510,7 +515,8 @@ impl Signatures {
                     .collect(),
                 has_body: func.body.is_some() && !func.is_dead,
                 param_fixed: func.params.iter().map(is_param_fixed).collect(),
-                scalar_specializable: !recursive.contains(&FuncId::new(index)),
+                literal_specializable: !func.params.iter().any(|p| p.is_mut_ref),
+                on_cycle: recursive.contains(&FuncId::new(index)),
             }
         });
         Signatures {
@@ -1255,10 +1261,12 @@ fn select_sites(
                 // only a position they disagree on is worth a clone.
                 None => {
                     if !is_mut
-                        && signature.scalar_specializable
+                        && !signature.on_cycle
                         && signature.param_fixed[position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = scalar_argument_const(body, types, roots, arg)
+                        && let Some(value) = FieldConst::of_scalar(body, types, arg)
+                            .filter(|_| signature.literal_specializable)
+                            .or_else(|| constant_field_read(body, roots, arg))
                     {
                         bindings.push((param_local, Slot::Whole, value));
                     }
@@ -1308,42 +1316,35 @@ struct SelectField<'a> {
     roots: &'a IndexMap<u32, FieldConsts>,
 }
 
-/// Bind the constant fields of a struct the caller passes by reference, for
-/// each field the callee reads and never writes.
-/// The scalar constant an argument passes: a literal, or a read of a field
-/// `roots` holds constant for the whole caller. A formatter built in the caller
-/// passes its precision this way, a read the value graph sees as one only once
-/// the struct is split, which a `&mut` to it prevents.
-fn scalar_argument_const(
+/// The scalar an argument reads from a field `roots` holds constant for the
+/// whole caller. The value graph sees such a read as a constant only once the
+/// struct is split, which a `&mut` to it prevents.
+fn constant_field_read(
     body: &Body,
-    types: &TypeTable,
     roots: &IndexMap<u32, FieldConsts>,
     arg: Operand,
 ) -> Option<FieldConst> {
-    FieldConst::of_scalar(body, types, arg).or_else(|| {
-        let ExprKind::FieldAccess {
-            expr, field_index, ..
-        } = &body.exprs[arg.as_expr()?].kind
-        else {
-            return None;
-        };
-        let (local, _) = body.local_read(*expr)?;
-        roots
-            .get(&local)?
-            .get(field_index)
-            .filter(|value| {
-                matches!(
-                    value,
-                    FieldConst::Int(..)
-                        | FieldConst::Float(..)
-                        | FieldConst::Bool(_)
-                        | FieldConst::Char(_)
-                )
-            })
-            .cloned()
-    })
+    let ExprKind::FieldAccess {
+        expr, field_index, ..
+    } = &body.exprs[arg.as_expr()?].kind
+    else {
+        return None;
+    };
+    let (local, _) = body.local_read(*expr)?;
+    roots
+        .get(&local)?
+        .get(field_index)
+        .filter(|value| {
+            matches!(
+                value,
+                FieldConst::Int(..) | FieldConst::Float(..) | FieldConst::Bool(_) | FieldConst::Char(_)
+            )
+        })
+        .cloned()
 }
 
+/// Bind the constant fields of a struct the caller passes by reference, for
+/// each field the callee reads and never writes.
 fn select_field_bindings(
     caller: SelectField,
     (callee, param_local, pointee): (FuncId, u32, TypeKey),
