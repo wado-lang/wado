@@ -18,11 +18,6 @@ the guest ran, about one unit each. It does not depend on the host, so one run
 on any machine gives the figure that only a change to the program or to
 wasmtime moves.
 
-Fuel leaves out what the host does for the guest, GC included, by design: that
-work depends on the host, and counting it would give up the determinism. A
-change that allocates more costs no fuel for the allocation itself. The
-wall-clock benchmarks in `benchmark/` stay as they are and show that work.
-
 ### `core:fuel` measures a region of a test
 
 `measure(label, f)` runs `f` and reports the fuel it spent as region `label` of
@@ -88,6 +83,10 @@ The wall-clock series on gh-pages stops. Its history stays where it is.
 
 - Fuel prices every instruction alike, so a branch shape or a cache effect does
   not show.
+- Fuel misses most of what an allocation costs. `struct.new` and `array.new`
+  cost one unit like any instruction, while the collector's work for them runs
+  in the host. That work grows with the live set, which no per-instruction
+  price can see. The wall-clock benchmarks in `benchmark/` still show it.
 - No pull request is held to a wasm size. A growth shows only in the record on
   gh-pages, after the merge.
 - A region that reads `wasi:random/random`, a clock, or I/O can spend different
