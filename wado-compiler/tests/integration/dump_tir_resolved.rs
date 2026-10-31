@@ -42,6 +42,7 @@ fn resolved_modules_of(source: &str) -> Vec<String> {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,

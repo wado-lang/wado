@@ -525,8 +525,9 @@ pub struct CompilerOptions {
     /// When `Some`, instrument the modules this scope measures and carry
     /// their plan in the `org.wado-lang.coverage` section. Test world only.
     pub coverage: Option<coverage::CoverageScope>,
-    /// When `Some`, mark cold each region the profile recorded no run of. A
-    /// module is looked up under its name ([`coverage::ModulePlan::name`]).
+    /// The entry's profile. Where `-f pgo` is in force, mark cold each region
+    /// it recorded no run of. A module is looked up under its name
+    /// ([`coverage::ModulePlan::name`]).
     pub profile: Option<Arc<pgo::Profile>>,
     /// How many threads the optimizer visits functions on. The output does not
     /// depend on it. A host compiling several files at once passes 1.
@@ -1586,7 +1587,7 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         true,
         options.coverage,
-        options.profile.as_deref(),
+        options.profile.as_deref().filter(|_| codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
@@ -2416,6 +2417,7 @@ pub async fn dump_with_host<H: CompilerHost>(
         None,
         OptOverrides::default(),
         &[],
+        None,
         &param_resolution::ParamInputs::default(),
         kiln::InvocationIndex::default(),
         1,
@@ -2440,6 +2442,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     allocator: Option<&str>,
     opt: OptOverrides,
     codegen_flags: &[String],
+    profile: Option<&pgo::Profile>,
     params: &param_resolution::ParamInputs,
     invocations: kiln::InvocationIndex,
     parallelism: usize,
@@ -2519,12 +2522,18 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
+    let parsed_codegen_flags = parse_codegen_flags(
+        codegen_flags,
+        opt_level,
+        target_world == Some(TEST_WORLD),
+        &logger,
+    )?;
     let sem = semantics::semantics_with_logger(
         load_result,
         &logger,
         true,
         None,
-        None,
+        profile.filter(|_| parsed_codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
     let symbols = sem.symbols.clone();
@@ -2583,12 +2592,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 package.target_world = world.to_string();
             }
             package.wasm_assets.clone_from(&wasm_assets);
-            package.codegen_flags = parse_codegen_flags(
-                codegen_flags,
-                opt_level,
-                package.is_test_world(),
-                &logger,
-            )?;
+            package.codegen_flags = parsed_codegen_flags;
 
             // Validate target world (test world is synthetic, not in registry)
             if !package.is_test_world()

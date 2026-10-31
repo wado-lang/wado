@@ -5,7 +5,7 @@ use std::path::Path;
 use lexopt::Arg::Value;
 
 use crate::args::{self, CliExit};
-use crate::compile::{Settled, build_load, load_nearest_manifest};
+use crate::compile::{Settled, build_load, entry_profile, load_nearest_manifest};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 
@@ -355,6 +355,8 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     .await?;
 
     let knobs = &opts.knobs;
+    let profile = entry_profile(path, knobs, opts.target_world.as_deref(), &host)
+        .map_err(CliExit::error)?;
     // Diagnostics are already emitted by the host; signal silently on failure.
     let result = wado_compiler::dump_with_host_and_world(
         &source,
@@ -365,6 +367,7 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
         knobs.allocator.as_deref(),
         knobs.opt,
         &knobs.codegen_flags,
+        profile.as_deref(),
         &knobs.params,
         invocations,
         knobs.optimize_threads(),

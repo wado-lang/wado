@@ -393,7 +393,8 @@ pub async fn try_compile_with_run_cache(
         .map_err(|e| TryCompileError::reported(e.to_string()))?;
 
     let knobs = &flags.knobs;
-    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)?;
+    let profile = entry_profile(path, knobs, flags.target_world.as_deref(), &host)
+        .map_err(TryCompileError::reported)?;
     let options = wado_compiler::CompilerOptions {
         opt_level: knobs.opt_level.to_compiler(),
         skip_validation: knobs.skip_validation,
@@ -426,12 +427,12 @@ pub async fn try_compile_with_run_cache(
 /// The profile a compile of the entry `path` applies: the one `wado test --pgo`
 /// records its workloads into, where `-f pgo` is in force. The compile depends
 /// on that file, there or not, so a cached build follows it.
-fn entry_profile(
+pub(crate) fn entry_profile(
     path: &Path,
     knobs: &CompileKnobs,
     target_world: Option<&str>,
     host: &FilesystemCompilerHost,
-) -> Result<Option<Arc<Profile>>, TryCompileError> {
+) -> Result<Option<Arc<Profile>>, String> {
     let test_world = target_world == Some(TEST_WORLD);
     let parsed = CodegenFlags::parse(
         &knobs.codegen_flags,
@@ -460,16 +461,11 @@ fn entry_profile(
             }
             return Ok(None);
         }
-        Err(e) => {
-            return Err(TryCompileError::reported(format!(
-                "Error reading '{}': {e}",
-                file.display()
-            )));
-        }
+        Err(e) => return Err(format!("Error reading '{}': {e}", file.display())),
     };
     pgo::parse(&text)
         .map(|profile| Some(Arc::new(profile)))
-        .map_err(|e| TryCompileError::reported(format!("{}: {e}", file.display())))
+        .map_err(|e| format!("{}: {e}", file.display()))
 }
 
 /// The errors among `diagnostics`, one per line as `wado compile` prints them.
