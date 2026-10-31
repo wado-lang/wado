@@ -319,6 +319,12 @@ cannot use it, and a mutable one is state any code may change. The method would
 also look like Rust's `to_uppercase` while depending on a locale no call site
 shows.
 
+Supplying the locale through an effect fixes the first two, since a handler is
+installed per request and the signature shows `with CurrentLocale`. Rejected as
+well: the locale still reaches the operation unnamed at the call, and the
+explicit API already serves every case, so the layer would be a second way to
+say the same thing.
+
 ### Three user-visible modules
 
 An earlier plan split the surface into `core:text`, `core:collation`, and
@@ -404,9 +410,6 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   collation.
 
 ## Open questions
-
-- [ ] Whether an ambient locale, supplied through an effect so that a signature
-  shows it, should layer over the explicit API.
 
 - [ ] A closure cannot own an affine value
   ([Affine Types](./wep-2026-10-17-affine-types.md#a-closure-cannot-own-an-affine-value)),
