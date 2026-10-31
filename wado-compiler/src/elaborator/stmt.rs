@@ -27,12 +27,12 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::reify::reserve_float_pattern_locals;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
+use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias, range_local_name, repeat_pack_name,

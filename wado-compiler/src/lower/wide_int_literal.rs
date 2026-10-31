@@ -11,10 +11,9 @@ use std::rc::Rc;
 use crate::ast::BinaryOp;
 use crate::call_args::CallArgs;
 use crate::compiler_item::CompilerItem;
-use crate::elaborator::reify::ord_bool_from_cmp;
 use crate::elaborator::util::{parse_i128_literal, parse_u128_literal};
 use crate::name::LocalMethodName;
-use crate::synthesis::common::not_expr;
+use crate::synthesis::common::{not_expr, ord_bool_from_cmp};
 use crate::tir::{
     CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirUnaryOp, TypeId,
 };

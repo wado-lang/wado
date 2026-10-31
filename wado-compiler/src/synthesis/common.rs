@@ -11,7 +11,9 @@ use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::component_model::{CmFunctionInfo, peel_newtypes};
 use crate::hashmap::IndexSet;
 
-use crate::ast::Visibility;
+use std::cell::RefCell;
+
+use crate::ast::{BinaryOp, Visibility};
 use crate::module_source::ModuleSource;
 use crate::name::{COLD_PATH_INTRINSIC, FqTypeName, KNOWN_COLD_PATH_INTRINSIC, LocalMethodName};
 use crate::tir;
@@ -213,6 +215,114 @@ pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
         },
         target_type,
         synth_span(),
+    )
+}
+
+/// `expr as to` as codegen takes it, one instruction or none: `expr` itself
+/// where it already has the type.
+pub fn bare_cast(expr: TirExpr, to: TypeId, span: Span) -> TirExpr {
+    if expr.type_id == to {
+        return expr;
+    }
+    TirExpr::new(
+        TirExprKind::Cast {
+            expr: Box::new(expr),
+            target_type: to,
+        },
+        to,
+        span,
+    )
+}
+
+/// A call of `func` on the one argument `arg`.
+pub fn unary_call(func: FunctionRef, arg: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::Call {
+            func: Box::new(func),
+            type_args: vec![],
+            args: CallArgs::free(vec![CallArg::new(arg, false)]),
+        },
+        result_type,
+        span,
+    )
+}
+
+/// A call of the `core:rt` function `item` on `arg`.
+pub fn rt_call(
+    type_table: &TypeTable,
+    item: CompilerItem,
+    arg: TirExpr,
+    result_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let (module_source, name) = type_table.compiler_items().require_function(item);
+    let func = FunctionRef {
+        module_source: module_source.clone(),
+        name: name.to_string(),
+        template: None,
+        monomorph_info: None,
+        method_info: None,
+    };
+    unary_call(func, arg, result_type, span)
+}
+
+/// Wrap an `Ord::cmp` call into a `bool` by comparing the returned `Ordering`
+/// variant against the one that makes the operator true: `<` → `cmp == Less`,
+/// `>` → `cmp == Greater`, `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
+pub fn ord_bool_from_cmp(
+    cmp_call: TirExpr,
+    op: BinaryOp,
+    span: Span,
+    type_table: &RefCell<TypeTable>,
+) -> TirExpr {
+    let ordering_type_id = type_table
+        .borrow_mut()
+        .make_compiler_enum(CompilerItem::Ordering);
+    // Look up Ordering's `Less` / `Greater` cases through the `CompilerItem`
+    // registry so a stdlib rename of either case flows here without touching
+    // the operator-lowering path.
+    let (less_name, less_index, greater_name, greater_index) = {
+        let tt = type_table.borrow();
+        let items = tt.compiler_items();
+        let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
+        let (_, _, greater_name, greater_index) =
+            items.require_enum_case(CompilerItem::OrderingGreater);
+        (
+            less_name.to_string(),
+            less_index,
+            greater_name.to_string(),
+            greater_index,
+        )
+    };
+    let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
+        BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
+        BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
+        BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
+        BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
+        _ => unreachable!(),
+    };
+    let ordering_variant = TirExpr::new(
+        TirExprKind::EnumConstruct {
+            enum_type: ordering_type_id,
+            case_name,
+            case_index,
+        },
+        ordering_type_id,
+        span,
+    );
+    // The callee is `Ord::cmp` by construction, so it returns `Ordering`
+    // whatever the dispatch recorded — a trait-bounded receiver leaves that
+    // unresolved, and the comparison below would have no type to lower from.
+    let mut cmp_call = cmp_call;
+    cmp_call.type_id = ordering_type_id;
+    TirExpr::new(
+        TirExprKind::Binary {
+            op: compare_op,
+            left: Box::new(cmp_call),
+            right: Box::new(ordering_variant),
+        },
+        TypeTable::BOOL,
+        span,
     )
 }
 

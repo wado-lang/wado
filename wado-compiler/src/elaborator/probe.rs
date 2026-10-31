@@ -14,7 +14,9 @@ use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::reify::{Reify, rt_call};
+use crate::synthesis::common::rt_call;
+
+use super::reify::Reify;
 
 impl<H: CompilerHost> Reify<'_, H> {
     /// What reify puts at `site` on node `id`, in order: the cold marker the
