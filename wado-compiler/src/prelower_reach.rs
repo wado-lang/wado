@@ -50,13 +50,45 @@ fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
         .collect()
 }
 
+/// The compiler-item functions a phase from `lower` on calls with no TIR body
+/// naming them. Every other one is called only from code the elaborator or
+/// synthesis wrote, which the walk follows like any call.
+const MINTED_AFTER_TIR: &[CompilerItem] = &[
+    // `lower`
+    CompilerItem::AssertFailed,
+    CompilerItem::FormatterWriteLiteral,
+    CompilerItem::I128FromF64,
+    CompilerItem::I128FromI64,
+    CompilerItem::I128FromPair,
+    CompilerItem::I128FromU64,
+    CompilerItem::I64Add128Soft,
+    CompilerItem::I64MulWideSSoft,
+    CompilerItem::I64MulWideUSoft,
+    CompilerItem::I64Sub128Soft,
+    CompilerItem::ListIndexAssign,
+    CompilerItem::U128FromF64,
+    CompilerItem::U128FromI64,
+    CompilerItem::U128FromPair,
+    CompilerItem::U128FromU64,
+    // `optimize`
+    CompilerItem::StringLen,
+    CompilerItem::StringPushAscii,
+    CompilerItem::StringPushChar,
+    CompilerItem::StringPushStr,
+    CompilerItem::StringReserveUninit,
+    CompilerItem::StringSetByteUnchecked,
+    CompilerItem::StringWriteStrAt,
+];
+
 /// Whether the program reaches `func` without any TIR body naming it: an
-/// export, a compiler item, a type bridge no reflection marker calls, a global
-/// initializer, a [`MINTABLE`] impl.
+/// export, a [`MINTED_AFTER_TIR`] item, a type bridge no reflection marker
+/// calls, a global initializer, a [`MINTABLE`] impl.
 fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
-        || func.compiler_item.is_some()
+        || func
+            .compiler_item
+            .is_some_and(|item| MINTED_AFTER_TIR.contains(&item))
         || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
         || global_init_target(&func.name).is_some()
         || func

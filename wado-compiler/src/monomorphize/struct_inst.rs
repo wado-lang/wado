@@ -1,7 +1,7 @@
 //! Struct instantiation: creating concrete structs from generic definitions.
 
 use crate::hashmap::IndexMap;
-use crate::tir::{InstantiationKey, MonomorphInfo, ResolvedType, TirField, TirStruct, TypeId};
+use crate::tir::{InstantiationKey, MonomorphInfo, TirField, TirStruct, TypeId};
 use crate::type_table::TypeTable;
 
 use super::state::Monomorphizer;
@@ -41,13 +41,8 @@ impl Monomorphizer {
             .map(|&arg| type_table.without_rows(arg))
             .collect();
         let candidates: Vec<(TypeId, Vec<TypeId>)> = type_table
-            .iter_type_ids()
-            .filter_map(|id| match type_table.get(id) {
-                ResolvedType::GenericInstance { def, type_args } if *def == head_def => {
-                    Some((id, type_args.clone()))
-                }
-                _ => None,
-            })
+            .generic_instances_of(head_def)
+            .map(|(id, type_args)| (id, type_args.to_vec()))
             .collect();
         let mut instance_ids = Vec::new();
         for (id, type_args) in candidates {
