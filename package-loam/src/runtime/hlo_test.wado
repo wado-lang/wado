@@ -10,6 +10,7 @@ use {
     WindowReduce,
     assembled,
     capacity_of,
+    fitted,
     from_end_indices,
     joined_at,
     masked,
@@ -166,6 +167,17 @@ test "resizing pads each axis past its extent with zeros and cuts it short of it
     assert padded.data == [1, 2, 3, 0, 4, 5, 6, 0, 0, 0, 0, 0] as List<i64>;
     assert resized(&padded, [2, 3]).data == x.data;
     assert resized(&x, [1, 2]).data == [1, 2] as List<i64>;
+}
+
+test "fitting cuts an axis to an extent or pads it with zeros, on the graph" {
+    let g = &mut Cpu {};
+    let x = Tensor::<f32, [A, B]> {
+        data: [1.0, 2.0, 3.0, 4.0],
+        extents: [2, 2],
+    };
+    assert fitted::<Cpu, f32, [A, B]>(g, &x, 1, 3).data == [1.0, 2.0, 0.0, 3.0, 4.0, 0.0] as List<f32>;
+    assert fitted::<Cpu, f32, [A, B]>(g, &x, 0, 1).data == [1.0, 2.0] as List<f32>;
+    assert fitted::<Cpu, f32, [A, B]>(g, &x, 1, 2).data == x.data;
 }
 
 test "resizing takes an element only stored, as a half-precision input is" {

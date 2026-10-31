@@ -7,7 +7,7 @@ use { HashMap } from "core:collections";
 use { GROUP_QUERY_ATTENTION, Graph, Node } from "./graph.wado";
 use { Checked, attention_options, split_axis } from "./infer.wado";
 use { branches } from "./plan.wado";
-use { Poly } from "./poly.wado";
+use { Poly, equalities } from "./poly.wado";
 use { Shape, short_of } from "./shape.wado";
 
 /// Why an operator keeps a length from being padded.
@@ -27,6 +27,9 @@ pub enum Why {
     Shrinks,
     /// An attention that is not causal reads the padded keys, past and new.
     Acausal,
+    /// The graph owes the length equal to a sum of lengths, one of them
+    /// refused, whose exact extent a capacity would not match.
+    Tied,
 }
 
 impl Display for Why {
@@ -38,6 +41,7 @@ impl Display for Why {
             Window => "a window reads across it",
             Shrinks => "an extent may fall as it rises",
             Acausal => "a non-causal attention reads every key",
+            Tied => "it must equal a sum of lengths, one refused there",
         });
     }
 }
@@ -68,7 +72,27 @@ impl Display for Judged {
 /// Each symbol an input's axes read, in the order they first read it.
 pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     let mut refusals = HashMap::<String, PadRefusal>::new();
-    judge_scope(graph, checked, &mut refusals);
+    let mut ties: List<Poly> = [];
+    judge_scope(graph, checked, &mut refusals, &mut ties);
+    // A refusal spreads to every length it is owed equal to a sum with,
+    // through as many equalities as link them.
+    let mut spread = true;
+    while spread {
+        spread = false;
+        for let slack of &ties {
+            let read = slack.symbols();
+            let Some(first) = read.into_iter().find(|s| refusals.contains_key(s)) else {
+                continue;
+            };
+            let at = refusals[first];
+            for let symbol of read {
+                if !refusals.contains_key(symbol) {
+                    refusals[symbol] = PadRefusal { node: at.node, op: at.op, why: Why::Tied };
+                    spread = true;
+                }
+            }
+        }
+    }
     let mut symbols: List<Judged> = [];
     for let vi of &graph.inputs {
         for let axis of checked.shapes[vi.name].axes {
@@ -82,8 +106,15 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
     return symbols;
 }
 
-/// Each refusal the nodes of a scope make, the first one per symbol kept.
-fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, PadRefusal>) {
+/// Each refusal the nodes of a scope make, the first one per symbol kept, and
+/// each slack the scope owes to be 0.
+fn judge_scope(
+    graph: &Graph,
+    checked: &Checked,
+    refusals: &mut HashMap<String, PadRefusal>,
+    ties: &mut List<Poly>,
+) {
+    ties.extend(&equalities(&checked.owed));
     for let node of &graph.nodes {
         let mut refuse = |read: List<String>, why: Why| {
             for let symbol of read {
@@ -100,7 +131,7 @@ fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, 
         refuse(shrinking(node, checked), Why::Shrinks);
         if !folded && checked.branches.contains_key(node.outputs[0]) {
             for let b of branches(node, checked) {
-                judge_scope(&b.graph, &b.checked, refusals);
+                judge_scope(&b.graph, &b.checked, refusals, ties);
             }
         }
     }

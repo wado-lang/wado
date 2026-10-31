@@ -565,6 +565,27 @@ pub fn capacity_of(length: i32) -> i32
     return capacity;
 }
 
+/// `x` with `axis` cut to `extent` or padded past its own with zeros, where
+/// the graph holds it: a cache moved to the capacity a pass takes it at.
+pub fn fitted<affine G: Graph, E: Element, Axes>(
+    g: &mut G,
+    x: &G::Tensor<E, Axes>,
+    axis: i32,
+    extent: i32,
+) -> G::Tensor<E, Axes> with _ {
+    let mut extents = g.extents_of(x);
+    let own = extents[axis];
+    if extent <= own {
+        let mut limits = extents;
+        limits[axis] = extent;
+        let rank = extents.len();
+        return g.slice(x, List::<i32>::filled(rank, 0), limits, List::<i32>::filled(rank, 1));
+    }
+    extents[axis] = extent - own;
+    let zeros = full::<G, E, Axes>(g, E::from_i64(0), extents);
+    return g.concatenate(x, &zeros, axis);
+}
+
 /// `t` under `extents`, each axis cut to its extent or padded past it with
 /// zeros: an input padded to its capacities, or an output cut to its lengths.
 /// An element need only be stored, since an input held in half precision is.

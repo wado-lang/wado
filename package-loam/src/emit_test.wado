@@ -281,7 +281,7 @@ test "forward keeps the cache it is given through the pass it begins" {
 
     let forward = out.substr_bytes(out.find("pub fn forward").unwrap(), out.len());
     assert forward.contains("cache: &Cache<Bk>, weights: &Prepared<Bk>) -> Outputs<Bk> with _ {");
-    assert out.contains("pub struct Outputs<affine Bk: Backend> {");
+    assert out.contains("pub struct Outputs<affine Bk: Holds> {");
     assert forward.find("cache.retain(backend);").unwrap() < forward.find("backend.begin();").unwrap();
     assert !forward.contains("input_mismatch(past_key");
     assert forward.contains("let Passed { Y, cache } = pass(backend, &X, cache, weights);");
@@ -1336,6 +1336,26 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
     let built = out.substr_bytes(out.find("pub fn build").unwrap(), out.len());
     assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, &Attention {");
     assert !kernel_entries(&out).contains("lengths");
+}
+
+test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {
+    let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] "past_key_values.0.key", float[1, 1, P, 8] "past_key_values.0.value", int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] "present.0.key", float[1, 1, T, 8] "present.0.value") {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, "present.0.key", "present.0.value" = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, "past_key_values.0.key", "past_key_values.0.value", L, T32)
+    }`;
+    let out = generate(source).unwrap();
+    let computed = out.substr_bytes(out.find("pub fn compute").unwrap(), out.len());
+    assert computed.contains("cache: &Cache<Bk>, weights: &Params<Bk>) -> Outputs<Bk>");
+    assert computed.contains("let dim_P = -dim_S + dim_T;");
+    assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64;");
+    assert computed.contains("fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))");
 }
 
 test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {

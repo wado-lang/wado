@@ -166,6 +166,19 @@ pub fn owe_equal(
     return owe(conditions, site, &below, condition);
 }
 
+/// The slacks `conditions` owe to be 0, as `owe_equal` owes an equality: each
+/// owed beside its negation.
+pub fn equalities(conditions: &List<Condition>) -> List<Poly> {
+    let mut zero: List<Poly> = [];
+    for let c of conditions {
+        let negated = Poly::constant(0).try_sub(&c.slack);
+        if conditions.into_iter().any(|d| Option::Some(d.slack) == negated) {
+            zero.push(c.slack);
+        }
+    }
+    return zero;
+}
+
 /// `owe` for `Poly::presumed`: whether the reading holds, which it does not
 /// where no input meets it or no polynomial holds the slack.
 fn owes(conditions: &mut List<Condition>, origin: &String, slack: Option<Poly>, condition: String) -> bool {

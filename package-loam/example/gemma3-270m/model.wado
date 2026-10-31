@@ -100,7 +100,8 @@ impl<affine Bk: Backend> Model<Bk> {
     }
 }
 
-/// Gemma 3 as the graph `build` adds to, computed on the CPU as it is built.
+/// Gemma 3 as the graph `build` adds to, computed on the CPU as it is built,
+/// from inputs padded to capacities and a cache of fixed capacity.
 pub struct Built {
     cpu: Cpu,
     weights: gemma::Params<Cpu>,
@@ -134,7 +135,7 @@ impl Built {
             data: List::<i64>::filled(ids.len(), 1),
             extents: [gemma::BatchSize::EXTENT, ids.len()],
         };
-        let passed = gemma::build(&mut self.cpu, &input_ids, &mask, &self.cache, &self.weights);
+        let passed = gemma::compute(&mut self.cpu, &input_ids, &mask, &self.cache, &self.weights);
         // The graph's one position's logits, the first of the greatest.
         let mut best = 0;
         for let [i, v] of passed.logits.data.into_iter().enumerate() {

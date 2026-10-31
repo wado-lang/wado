@@ -20,7 +20,7 @@ use {
     module_idents,
 } from "./idents.wado";
 use { padding } from "./pad.wado";
-use { Lowers, Op, Poly } from "./poly.wado";
+use { Lowers, Op, Poly, equalities } from "./poly.wado";
 use { Axes, Axis, Shape } from "./shape.wado";
 use {
     Elements,
@@ -32,6 +32,7 @@ use {
     case_named,
     element_of,
     is_binary_elementwise,
+    ValueInfo,
     settled,
     trailing_axes,
 } from "./graph.wado";
@@ -252,10 +253,14 @@ pub fn emit(
         held_symbols.padded(&padded),
         &crossing,
     )?;
-    if !crossing.has_cache() {
-        let host_symbols = Symbols::of(&carriers, &names, |input, axis| `${*input}.extents[${axis}]`);
-        emit_compute(&mut w, graph, checked, &names, &held, &carriers, host_symbols, &padded, &read, &crossing)?;
-    }
+    // A past is held in the cache, at its capacity.
+    let cached: List<String> = crossing.cached.into_iter().map(|t| names.get(&t)).collect();
+    let host_symbols = Symbols::of(&carriers, &names, |input, axis| if cached.contains(input) {
+        `backend.extents_of(&cache.${*input})[${axis}]`;
+    } else {
+        `${*input}.extents[${axis}]`;
+    });
+    emit_compute(&mut w, graph, checked, &names, &held, &carriers, host_symbols, &padded, &read, &crossing)?;
     return Result::Ok(w.to_string());
 }
 
@@ -1027,6 +1032,15 @@ impl Symbols {
         return symbols;
     }
 
+    /// `symbol` bound to `value`, over the symbols the inputs carry, rather
+    /// than to its own extent.
+    fn derive(&mut self, symbol: &String, value: &Poly) {
+        self.sources[*symbol] = value.spelled(&self.idents);
+        self.requires[*symbol] = value.symbols();
+        self.order = self.order.into_iter().filter(|s| s != *symbol).collect();
+        self.order.push(*symbol);
+    }
+
     /// The symbols as `build` reads them where `padded` names a symbol: its
     /// extent the capacity, and its value `lengths`'s field of the symbol's name.
     fn padded(&self, padded: &List<String>) -> Symbols {
@@ -1395,12 +1409,23 @@ fn emit_compute(
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
     let returned = crossing.returned;
+    let has_cache = crossing.has_cache();
+    // The cache holds a past at a capacity, so its length is what the graph
+    // owes it to be, given the other inputs'.
+    let grown = grown_axes(checked, crossing);
+    for let g of &grown {
+        let Some(length) = owed_value(checked, &g.symbol, &grown) else {
+            return Result::Ok(());
+        };
+        symbols.derive(&g.symbol, &length);
+    }
     let mut compute = FnSpec::new("compute", Vis::Pub);
     compute.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
     let mut lines: List<String> = [];
+    let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
     // Every symbolic axis is its symbols' arithmetic over the lengths, but for
     // the axis a symbol is read from.
-    for let vi of &graph.inputs {
+    for let vi of &taken {
         let ident = names.get(&vi.name);
         compute.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
         for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
@@ -1417,21 +1442,35 @@ fn emit_compute(
             );
         }
     }
+    if has_cache {
+        compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+    }
     lines.extend(&owed_checks(checked, &mut symbols)?);
-    // Each padded length's capacity, which stands for it in every extent.
+    // Each padded length's capacity, which stands for it in every extent. A
+    // grown past's holds the present too, which the pass writes into it.
     let mut capacities = symbols;
     for let symbol of *padded {
-        let length = symbols.spell(&Poly::symbol(&symbol))?;
+        let reach = match grown.into_iter().find(|g| g.symbol == symbol) {
+            Some(g) => g.present,
+            None => Poly::symbol(&symbol),
+        };
+        let length = symbols.spell(&reach)?;
         let capacity = names.get(&capacity_key(&symbol));
         lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
         capacities.idents[symbol] = capacity;
     }
     let mut arguments: List<String> = ["backend"];
-    for let vi of &graph.inputs {
+    for let vi of &taken {
         let ident = names.get(&vi.name);
         let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
         lines.push(`let ${ident} = ${preparation(checked, held, &vi.name, padded_to, Holding::Pass)};`);
         arguments.push(`&${ident}`);
+    }
+    // The cache at the capacities, both as the pass takes it and as it returns it.
+    let fitted_cache = fitted_at_capacities(checked, names, crossing, &grown, padded, &mut capacities)?;
+    if has_cache {
+        lines.push(`let cache = ${fitted_cache};`);
+        arguments.push("&cache");
     }
     // A capacity reads its length, and an unpadded symbol is its own capacity.
     for let symbol of capacities.used {
@@ -1466,9 +1505,13 @@ fn emit_compute(
             idents.push(ident);
             fields.push(`${ident}: ${read_back(&output, ident)?}`);
         }
+        if has_cache {
+            idents.push("cache");
+            fields.push(`cache: ${fitted_cache}`);
+        }
         lines.push(`let ${PASSED} { ${idents.join(", ")} } = ${built};`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
-        OUTPUTS;
+        if has_cache { `${OUTPUTS}<${BACKEND_PARAM}>` } else { OUTPUTS };
     } else {
         lines.push(`return ${read_back(&returned[0], built)?};`);
         tensor_type(checked, held, &returned[0]);
@@ -1485,6 +1528,83 @@ fn emit_compute(
     }
     w.end();
     return Result::Ok(());
+}
+
+/// An axis of a past the present grows: the past's length on it, and the
+/// present's extent.
+struct Grown {
+    past: String,
+    axis: i32,
+    symbol: String,
+    present: Poly,
+}
+
+/// Each axis a pass grows, where the present's axis is not the past's.
+fn grown_axes(checked: &Checked, crossing: &Crossing) -> List<Grown> {
+    let mut grown: List<Grown> = [];
+    for let [past, present] of crossing.pairs {
+        let [from, to] = [checked.shapes[past], checked.shapes[present]];
+        for let [i, axis] of from.axes.into_iter().enumerate() {
+            let Symbolic(length) = axis.extent else {
+                continue;
+            };
+            if axis.name == to.axes[i].name {
+                continue;
+            }
+            let symbols = length.symbols();
+            assert symbols.len() == 1 && length == Poly::symbol(&symbols[0]);
+            grown.push(Grown { past, axis: i, symbol: symbols[0], present: to.axes[i].extent.poly() });
+        }
+    }
+    return grown;
+}
+
+/// The value the graph owes `symbol` to be, where it owes it to equal a sum
+/// of the other inputs' lengths: `symbol` once in a slack owed to be 0,
+/// beside no grown length.
+fn owed_value(checked: &Checked, symbol: &String, grown: &List<Grown>) -> Option<Poly> {
+    for let slack of equalities(&checked.owed) {
+        let Some([coefficient, rest]) = slack.linear_in(symbol) else {
+            continue;
+        };
+        if rest.symbols().into_iter().any(|s| grown.into_iter().any(|g| g.symbol == s)) {
+            continue;
+        }
+        if coefficient == -1 {
+            return Option::Some(rest);
+        }
+        if coefficient == 1 {
+            return Poly::constant(0).try_sub(&rest);
+        }
+    }
+    return null;
+}
+
+/// `Cache { .. }` of the fields of `cache`, each grown axis whose length is
+/// padded fitted to its capacity.
+fn fitted_at_capacities(
+    checked: &Checked,
+    names: &Names,
+    crossing: &Crossing,
+    grown: &List<Grown>,
+    padded: &List<String>,
+    capacities: &mut Symbols,
+) -> Result<String, EmitError> {
+    let mut fields: List<String> = [];
+    for let [past, _] of crossing.pairs {
+        let ident = names.get(&past);
+        let mut field = `cache.${ident}`;
+        let typed = `${checked.primitives[past]}, [${axis_list(&checked.shapes[past])}]`;
+        for let g of *grown {
+            if g.past != past || !padded.contains(&g.symbol) {
+                continue;
+            }
+            let capacity = capacities.spell_extent(&Poly::symbol(&g.symbol))?;
+            field = `fitted::<${BACKEND_PARAM}, ${typed}>(backend, &${field}, ${g.axis}, ${capacity})`;
+        }
+        fields.push(`${ident}: ${field}`);
+    }
+    return Result::Ok(`${CACHE} { ${fields.join(", ")} }`);
 }
 
 /// The key a padded symbol's capacity takes among the names `compute` binds.
@@ -2116,7 +2236,7 @@ fn emit_outputs(
 ) {
     let mut outputs = StructSpec::new(OUTPUTS, Vis::Pub);
     if has_cache {
-        outputs.add_generic(BACKEND_BOUND);
+        outputs.add_generic(HOLDS_BOUND);
     }
     for let output of *returned {
         outputs.add_pub_field(names.get(&output), tensor_type(checked, held, &output));

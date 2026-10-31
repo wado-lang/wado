@@ -82,6 +82,16 @@ test "an extent that falls as a length rises refuses it" {
     assert judged(source) == ["N: refused at P = Range: an extent may fall as it rises"] as List<String>;
 }
 
+test "a length owed equal to a sum with a refused one is refused with it" {
+    let source = `g (float[N, 2] X, float[M, 2] P, float[K, 2] Z) => (float[K, 2] Y, float[?, 2] H) {
+        J = Concat<axis = 0>(P, X)
+        Y = Add(J, Z)
+        H, R = Split<axis = 0, num_outputs = 2>(X)
+    }`;
+    let tied = "refused at H = Split: it must equal a sum of lengths, one refused there";
+    assert judged(source) == ["N: refused at H = Split: it splits along it", `M: ${tied}`, `K: ${tied}`] as List<String>;
+}
+
 /// A GroupQueryAttention over a past of `P` positions and `S` new ones, the
 /// total `T` the mask's, causal or not.
 fn attention(causal: i32) -> String {
