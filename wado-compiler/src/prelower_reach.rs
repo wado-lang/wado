@@ -13,7 +13,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_target, is_dispatch_wrapper,
+    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_dispatch_wrapper,
     is_effect_default, is_type_bridge,
 };
 use crate::nir_package::NirPackage;
@@ -89,7 +89,6 @@ impl<'a> Roots<'a> {
                     .contains_key(&func.module_source))
             || func.compiler_item.is_some_and(CompilerItem::minted_after_tir)
             || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
-            || global_init_target(&func.name).is_some()
             || impl_trait.is_some_and(|def| self.mintable.contains(&def));
         if root { Entry::Root } else { Entry::Called }
     }
@@ -594,6 +593,14 @@ impl TirRefVisitor for BodyRefs<'_> {
                 name,
                 ..
             } => self.push(module_source, name),
+            // `globals::extract` runs a global's initializer before its first
+            // use, so a use is the edge to it.
+            TirExprKind::GlobalVarGet { module_source, name }
+            | TirExprKind::GlobalVarSet {
+                module_source,
+                name,
+                ..
+            } => self.push(module_source, &global_init_function(name)),
             _ => {}
         }
         self.walk_expr(expr);

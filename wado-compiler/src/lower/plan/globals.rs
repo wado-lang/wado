@@ -11,7 +11,8 @@ use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_target,
+    FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_function,
+    global_init_target,
 };
 use crate::synthesis::common::known_cold_path_stmt;
 use crate::tir::{
@@ -87,13 +88,22 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
         });
         false
     });
+    let refs = global_refs_by_function(&flat.functions);
+    for (module_source, global) in refs.values().flatten() {
+        assert!(
+            !flat
+                .pruned
+                .contains(&FunctionId::free(module_source, &global_init_function(global))),
+            "`{global}` is used, but its initializer was pruned as unreached"
+        );
+    }
     if inits.is_empty() {
         return Ok(());
     }
 
     // One sort over every module, so a cycle through a module boundary is
     // found like any other.
-    let deps = init_dependencies(&inits, &global_refs_by_function(&flat.functions));
+    let deps = init_dependencies(&inits, &refs);
     let order = topological_order(&deps)
         .map_err(|in_degree| report_init_cycle(&inits, &deps, &in_degree, errors))?;
     let modules = module_order(&inits, &deps, errors)?;
