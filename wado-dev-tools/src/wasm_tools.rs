@@ -41,6 +41,10 @@ pub fn compose(mut parser: lexopt::Parser) {
     let composed = wasm_compose::composer::ComponentComposer::new(&input, &config)
         .compose()
         .unwrap_or_else(|e| panic!("failed to compose {}: {e:#}", input.display()));
+    // `ComponentComposer` encodes with `validate: false`.
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(&composed)
+        .unwrap_or_else(|e| panic!("the composed component is invalid: {e}"));
     write(&output.expect(usage), &composed);
 }
 

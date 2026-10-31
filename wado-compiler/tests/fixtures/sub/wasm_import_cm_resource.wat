@@ -1,6 +1,7 @@
 ;; A component whose interface `wado:test/counters` exports a resource with a
 ;; destructor, a constructor, a method taking the handle by borrow, and a static
-;; function, and `take`, which takes a handle by `own` and keeps its
+;; function; `peek`, which takes a handle by borrow outside a method; and
+;; `take`, which takes a handle by `own` and keeps its
 ;; representation without running the destructor. `drops` counts what the
 ;; destructor ran, so a consumer can observe that its handles were dropped.
 (component
@@ -24,6 +25,8 @@
     (canon lift (core func $new)))
   (func $get (param "self" (borrow $counter)) (result u32)
     (canon lift (core func $i "get")))
+  (func $peek (param "c" (borrow $counter)) (result u32)
+    (canon lift (core func $i "get")))
   ;; An `own` handle reaches its defining component as a handle into that
   ;; component's own table, so `take` reads the representation through it.
   (core func $rep (canon resource.rep $counter))
@@ -43,6 +46,7 @@
     (import "import-ctor" (func $ctor (param "start" u32) (result (own $imported))))
     (import "import-get" (func $get (param "self" (borrow $imported)) (result u32)))
     (import "import-from" (func $from (param "start" u32) (result (own $imported))))
+    (import "import-peek" (func $peek (param "c" (borrow $imported)) (result u32)))
     (import "import-take" (func $take (param "c" (own $imported)) (result u32)))
     (import "import-drops" (func $drops (result u32)))
     (export $exported "counter" (type $imported))
@@ -52,6 +56,7 @@
       (func (param "self" (borrow $exported)) (result u32)))
     (export "[static]counter.from" (func $from)
       (func (param "start" u32) (result (own $exported))))
+    (export "peek" (func $peek) (func (param "c" (borrow $exported)) (result u32)))
     (export "take" (func $take) (func (param "c" (own $exported)) (result u32)))
     (export "drops" (func $drops) (func (result u32)))
   )
@@ -60,6 +65,7 @@
     (with "import-ctor" (func $ctor))
     (with "import-get" (func $get))
     (with "import-from" (func $ctor))
+    (with "import-peek" (func $peek))
     (with "import-take" (func $take))
     (with "import-drops" (func $drops))
   ))

@@ -117,7 +117,7 @@ fn interfaces_on(module: &Module, side: Side) -> impl Iterator<Item = (&Interfac
 ///
 /// # Errors
 /// A message naming each shape the component exports that has no import
-/// mapping yet: a resource, a world-level type, or `error-context`.
+/// mapping yet: a world-level type, or `error-context`.
 pub fn build_bindings(
     resolve: &Resolve,
     world: WorldId,
@@ -760,7 +760,7 @@ impl Builder {
             }
             TypeDefKind::Resource => {
                 let TypeOwner::Interface(owner) = td.owner else {
-                    unreachable!("a world-level type is rejected before its interface is emitted")
+                    unreachable!("`emit_interface` passes only the types an interface owns")
                 };
                 let methods = resolve.interfaces[owner]
                     .functions

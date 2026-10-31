@@ -18,6 +18,14 @@ test "a constructed handle is dropped where its scope ends" {
     assert Counters::drops() == before + 2;
 }
 
+test "a handle passed by `borrow` stays the caller's" {
+    let before = Counters::drops();
+    let c = Counters::Counter::new(4);
+    assert Counters::peek(&c) == 4;
+    assert Counters::drops() == before;
+    assert c.get() == 4;
+}
+
 test "a handle passed by `own` moves into the component" {
     let before = Counters::drops();
     let c = Counters::Counter::new(9);
