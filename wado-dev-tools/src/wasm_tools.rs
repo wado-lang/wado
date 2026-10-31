@@ -1,6 +1,6 @@
 //! The `wasm-tools` subcommands the repository uses, so no task installs the
-//! `wasm-tools` CLI. Each takes the arguments its `wasm-tools` namesake does,
-//! and an output component is validated before it is written.
+//! `wasm-tools` CLI. Each takes a subset of its `wasm-tools` namesake's
+//! arguments, spelled the same, and validates a component before writing it.
 
 use std::path::PathBuf;
 

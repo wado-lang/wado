@@ -38,7 +38,7 @@ pub fn run(mut parser: lexopt::Parser) {
 
 fn core_wat(wasm: &[u8]) -> String {
     let refs = dataref::resolve(wasm).expect("failed to resolve the data-reference map");
-    let mut wat = to_wat(&strip(wasm));
+    let mut wat = folded_wat(&strip(wasm));
     // `DataRefs::parse` refuses a map naming no function, so an asset with
     // nothing to say carries no section at all.
     if !refs.is_empty() {
@@ -52,10 +52,10 @@ fn core_wat(wasm: &[u8]) -> String {
 /// `wado.dataref` section exists only in the text.
 fn component_wat(core_wat: &str) -> String {
     let core = wat::parse_str(core_wat).expect("the printed core module must parse");
-    to_wat(&wasm_tools::encode_component(&core))
+    folded_wat(&wasm_tools::encode_component(&core))
 }
 
-fn to_wat(wasm: &[u8]) -> String {
+fn folded_wat(wasm: &[u8]) -> String {
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);
     wasm_tools::to_wat(&config, wasm)
