@@ -558,11 +558,14 @@ pub const DROP_GLUE_PREFIX: &str = "$drop$";
 /// Every such helper spells the mangle of the type it belongs to after its
 /// kind, so a second [`INTERNAL_PREFIX`] is what tells one from the plainly
 /// synthesized functions that carry no type (`$initialize_module`, `$test_0`,
-/// `$cm_export__run`).
+/// `$cm_export__run`). A [`global_init_function`] spells a global there, not a
+/// type, and its global's uses reach it.
 #[must_use]
 pub fn is_type_bridge(name: &str) -> bool {
-    name.strip_prefix(INTERNAL_PREFIX)
-        .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
+    global_init_target(name).is_none()
+        && name
+            .strip_prefix(INTERNAL_PREFIX)
+            .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
 /// A minted name's digest part: the first 8 bytes of `digest`, in hex.

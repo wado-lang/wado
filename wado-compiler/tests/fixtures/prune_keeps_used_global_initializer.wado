@@ -1,0 +1,26 @@
+// `KEYWORD`'s initializer runs a call, so it is deferred to an `$init$`
+// function that no body calls. The constant pattern is the global's only use,
+// and that use must keep the initializer through the prune.
+use { println, Stdout } from "core:cli";
+
+fn make_keyword() -> String {
+    let mut s = "fn";
+    s.push_str("!");
+    return s;
+}
+
+global KEYWORD: String = make_keyword();
+
+fn classify(word: String) -> i32 {
+    return match word {
+        KEYWORD => 1,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${classify("fn!")} ${classify("let")}`);
+}
+
+__DATA__
+{"stdout": "1 0\n"}

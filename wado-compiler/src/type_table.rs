@@ -3778,6 +3778,13 @@ impl TypeTable {
             .insert(trait_ref.args, filled, resolved_id, None);
     }
 
+    /// Every associated type a concrete receiver answers, with that receiver.
+    pub fn assoc_type_answers(&self) -> impl Iterator<Item = (&InstanceKey, TypeId)> {
+        self.assoc_type_resolutions
+            .iter()
+            .flat_map(|(key, answers)| answers.0.iter().map(|answer| (&key.receiver, answer.answer)))
+    }
+
     /// Each associated type `receiver` answers: what synthesis registered for
     /// an open shape, for [`Self::instantiate_assoc_types`] to instantiate at
     /// every shape substituted from it.
