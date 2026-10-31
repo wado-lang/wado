@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793457762877,
+  "lastUpdate": 1793460071979,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72613,6 +72613,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4909e0f4951dd3244e2da0b5a313a2a3537d316f"
         },
         "date": 1793457761752,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c2f4f1d425a2d31bca4663fde64b0eeeb9407660",
+          "message": "Merge pull request #2502 from wado-lang/ccr-67696f54-x3aizq\n\nperf(compiler): cut the fixed cost of every compile by about 30%",
+          "timestamp": "2026-10-31T23:59:12+09:00",
+          "tree_id": "badf656cf5ed456de5bc1c6f31da0481a64fc5e7",
+          "url": "https://github.com/wado-lang/wado/commit/c2f4f1d425a2d31bca4663fde64b0eeeb9407660"
+        },
+        "date": 1793460070793,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
