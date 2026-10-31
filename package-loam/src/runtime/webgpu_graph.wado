@@ -26,7 +26,10 @@ use {
     WindowReduce,
     broadcast_in_dim_extents,
     decomposed_attention,
+    dot_extents,
+    elementwise_extents,
     free_axes,
+    gathered_extents,
     joined_extents,
     kept_axes,
     picked,
@@ -89,7 +92,7 @@ impl Graph for WebGpuBackend {
             self.device_view(a),
             self.device_view(b),
         ] as List<DeviceTensor>;
-        return as_element(self, self.fused_on::<Axes>(&operands, &operand(0).binary(binary_op(op), &operand(1))));
+        return as_element(self, elementwise_on::<Axes>(self, &operands, &operand(0).binary(binary_op(op), &operand(1))));
     }
 
     fn compare<E: Element, Axes>(
@@ -106,7 +109,7 @@ impl Graph for WebGpuBackend {
             self.device_view(b),
         ] as List<DeviceTensor>;
         let held = operand(0).binary(compared_op(direction), &operand(1));
-        return as_element(self, self.fused_on::<Axes>(&operands, &held));
+        return as_element(self, elementwise_on::<Axes>(self, &operands, &held));
     }
 
     fn select<E: Element, Axes>(
@@ -124,7 +127,7 @@ impl Graph for WebGpuBackend {
             self.device_view(on_false),
         ] as List<DeviceTensor>;
         let chosen = operand(0).select(&operand(1), &operand(2));
-        return as_element(self, self.fused_on::<Axes>(&operands, &chosen));
+        return as_element(self, elementwise_on::<Axes>(self, &operands, &chosen));
     }
 
     /// A view: each stretched axis reads its one element through a stride of 0.
@@ -239,6 +242,7 @@ impl Graph for WebGpuBackend {
             self.device_view(lhs),
             self.device_view(rhs),
         ];
+        let extents = dot_extents(&l.extents, &r.extents, dims);
         let l_free = free_axes(l.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
         let r_free = free_axes(r.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
         let batch = picked(&l.extents, &dims.lhs_batch);
@@ -264,9 +268,6 @@ impl Graph for WebGpuBackend {
             &Placed::<f32, B>::Device(right),
             &null,
         );
-        let mut extents = batch;
-        extents.extend(&picked(&l.extents, &l_free));
-        extents.extend(&picked(&r.extents, &r_free));
         return match product {
             Device(d) => Placed::Device(self.reshaped(&d, &extents)),
             Host(h) => Placed::Host(self.cpu.reshape(&h, extents)),
@@ -291,6 +292,7 @@ impl Graph for WebGpuBackend {
             }
             let clamped = Tensor::<i64, I> { data: starts, extents: index.extents };
             if let Some(out) = self.gathered(&self.device_view(data), &clamped, axis) {
+                assert out.extents == gathered_extents(&index.extents, dims);
                 return Placed::Device(out);
             }
         }
@@ -422,6 +424,17 @@ impl Graph for WebGpuBackend {
             options,
         );
     }
+}
+
+/// `op` over operands of one shape, as a StableHLO elementwise operation takes
+/// them; the kernel would broadcast any other.
+fn elementwise_on<Axes>(
+    g: &mut WebGpuBackend,
+    operands: &List<DeviceTensor>,
+    op: &Expr,
+) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let _ = elementwise_extents(operands.into_iter().map(|o| o.extents).collect());
+    return g.fused_on(operands, op);
 }
 
 /// An f32 result as the element `E` it computed, which the device holds as
