@@ -434,7 +434,7 @@ layout, so a backend can change a layout without changing the generated module.
    through it. Finished when every conformance case, the tiny GPT-2 and Gemma 3
    (270M) pass on `Cpu` through `build`, and the CPU time per token is recorded
    as a ratio to today's ([measured](#the-graph-on-the-cpu)).
-2. [ ] Capacities and valid lengths. The padding analysis, the masks it adds,
+2. [x] Capacities and valid lengths. The padding analysis, the masks it adds,
    and the cache of fixed capacity. Finished when Gemma 3 decodes on `Cpu`
    from padded inputs with onnxruntime's tokens, and `loam dump` reports each
    padded axis or the node that refused it.
@@ -473,10 +473,10 @@ layout, so a backend can change a layout without changing the generated module.
 Gemma 3 (270M) picking `generate.json`'s tokens greedily on `Cpu`, the test
 CPU time of each entry, the weights' loading included:
 
-| Entry                    | Ratio to `pass` |
-| ------------------------ | --------------- |
-| `pass`, the kernels      | 1               |
-| `build`, the graph's ops | 0.85            |
+| Entry                                        | Ratio to `pass` |
+| -------------------------------------------- | --------------- |
+| `pass`, the kernels                          | 1               |
+| `compute`, the graph's ops at the capacities | 0.89            |
 
 Each is one test of `example/gemma3-270m/generate_test.wado`, run alone:
 
