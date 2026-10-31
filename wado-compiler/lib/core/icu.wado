@@ -1,14 +1,60 @@
 #![stdlib("core:icu")]
-//! Unicode character properties, from the ICU4X component bundled with the
-//! toolchain. A name it does not answer is `null`, never an approximate set:
-//! `Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+//! Unicode character properties and locale-aware collation, from the ICU4X
+//! component bundled with the toolchain. A property name it does not answer is
+//! `null`, never an approximate set: `Block`, `Decomposition_Type` and the
+//! contributory `Other_*` are withheld.
 
 pub use { Properties } from "./icu.wat" with { type: "wat" };
+use { Collation } from "./icu.wat" with { type: "wat" };
 
 #[synopsis]
 test {
     assert has(Properties::BinaryProperty::Uppercase, 'À');
     assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+
+    let swedish = Collator::new("sv").unwrap();
+    let mut words: List<String> = ["ö", "z", "a"];
+    words.sort_by(|a, b| swedish.compare(a, b));
+    assert words == ["a", "z", "ö"];
+}
+
+/// Why a locale was refused: the tag does not parse as BCP 47.
+pub struct LocaleError {
+    message: String,
+}
+
+impl Display for LocaleError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for LocaleError {
+}
+
+/// Compares strings the way a locale sorts them.
+pub affine struct Collator {
+    inner: Collation::Collator,
+}
+
+impl Collator {
+    /// A collator for the BCP 47 tag `locale`. A locale CLDR tailors nothing for
+    /// sorts as its fallback does, ending at the root collation.
+    pub fn new(locale: String) -> Result<Collator, LocaleError> {
+        return match Collation::Collator::create(locale) {
+            Ok(inner) => Ok(Collator { inner }),
+            Err(message) => Err(LocaleError { message }),
+        };
+    }
+
+    /// How `left` sorts against `right`.
+    pub fn compare(&self, left: &String, right: &String) -> Ordering {
+        return match self.inner.compare(*left, *right) {
+            Less => Ordering::Less,
+            Equal => Ordering::Equal,
+            Greater => Ordering::Greater,
+        };
+    }
 }
 
 /// Whether `ch` has the property. Total, and the name costs nothing at run

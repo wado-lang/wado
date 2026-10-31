@@ -12,6 +12,7 @@ use std::rc::Rc;
 use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll, Waker};
 
+use crate::affine_move_check::check_affine_moves_semantic;
 use crate::analyze::Analyzer;
 use crate::ast;
 use crate::cm_type_decls::CmTypeDecls;
@@ -192,6 +193,12 @@ fn build_snapshot(coverage: Option<CoverageScope>, profile: Option<&Profile>) ->
     assert!(
         sem.is_complete(),
         "stdlib snapshot should compute semantics cleanly",
+    );
+    // Every compile it seeds skips its modules in this check.
+    let move_errors = check_affine_moves_semantic(&sem);
+    assert!(
+        move_errors.is_empty(),
+        "the stdlib moves no affine value twice: {move_errors:?}"
     );
     sem
 }

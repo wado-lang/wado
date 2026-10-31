@@ -1,20 +1,26 @@
 //! Utility functions for the elaborator phase.
 
-use crate::ast::{AstId, Literal, Pattern};
+use crate::ast::{AstId, Expr, Literal, Pattern};
+use crate::const_eval::format_float_repr;
 use crate::elaborator::float_literal::{FloatFormat, FloatLiteralError, float_literal_bits};
 use crate::elaborator::stmt::{primitive_float_limit_owner, primitive_int_limit};
 use crate::elaborator::trait_env::written_type_source;
-use crate::elaborator::types::TypeError;
+use crate::elaborator::types::{FunctionContext, TypeError};
 use crate::escape::{unescape_byte, unescape_char};
 use crate::lexer::defaults_to_float;
+use crate::lower::cast::widen_half;
+use crate::name::{range_local_name, widened_half_local_name};
 use crate::primitive::PrimitiveType;
 use crate::resolve::Resolutions;
+use crate::synthesis::common::{bare_cast, builtin_call};
 use crate::tir::{
-    FloatBound, FloatBoundKind, InstancePattern, PatternLiteral, RangeBound, ResolvedType,
-    TirLiteralPattern, TypeId,
+    FloatBound, FloatBoundKind, InstancePattern, LetStorage, PatternLiteral, RangeBound,
+    ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirLiteralPattern, TirPattern,
+    TirStmt, TirStmtKind, TypeId,
 };
 use crate::token::Span;
 use crate::type_table::TypeTable;
+use crate::unparse::unparse_instance_pattern;
 
 /// Why the integer literal `repr` of `magnitude`, negated where `negated`, is no
 /// value of `target_type`. Every base checks the numeric range, annotated or cast.
@@ -297,6 +303,182 @@ pub(super) fn settle_instance_pattern(
                 is_unsigned,
             })
         }
+    }
+}
+
+/// `pattern` on the settled `scrutinee`, or why it names no value of it.
+pub(crate) fn lower_instance_pattern(
+    pattern: &InstancePattern,
+    scrutinee: TypeId,
+    type_table: &mut TypeTable,
+    add_local: impl FnMut(String, TypeId) -> u32,
+    span: Span,
+) -> Result<TirPattern, Vec<PatternLiteralError>> {
+    Ok(
+        match settle_instance_pattern(pattern, scrutinee, type_table)? {
+            SettledPattern::Literal(value) => TirPattern::Literal(value),
+            SettledPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            } => TirPattern::Range {
+                start,
+                end,
+                inclusive,
+                is_unsigned,
+            },
+            SettledPattern::Float(range) => {
+                let locals = reserve_float_pattern_locals(scrutinee, type_table, add_local);
+                let shown = unparse_instance_pattern(pattern);
+                float_range_narrow(&range, &locals, shown, type_table, span)
+            }
+        },
+    )
+}
+
+/// The locals a float pattern compares its scrutinee through: the scrutinee,
+/// and for a half the `f32` it widens to, read by every comparison so the
+/// widening runs once.
+pub(super) struct FloatPatternLocals {
+    float_type: TypeId,
+    scrutinee: u32,
+    widened: Option<u32>,
+}
+
+/// Reserve the locals of a float pattern on `scrutinee`, in the order annotate
+/// and reify both take them.
+pub(super) fn reserve_float_pattern_locals(
+    scrutinee: TypeId,
+    type_table: &TypeTable,
+    mut add_local: impl FnMut(String, TypeId) -> u32,
+) -> FloatPatternLocals {
+    // Lowering peels a reference scrutinee, as match ergonomics reads it.
+    let float_type = type_table.peel_refs(scrutinee);
+    let scrutinee = add_local(range_local_name(), float_type);
+    let is_half = matches!(
+        type_table.primitive_head(float_type),
+        Some(PrimitiveType::F16 | PrimitiveType::Bf16)
+    );
+    let widened = is_half.then(|| add_local(widened_half_local_name(), TypeTable::F32));
+    FloatPatternLocals {
+        float_type,
+        scrutinee,
+        widened,
+    }
+}
+
+/// A float range holding its scrutinee in `locals`, matching where it lies
+/// between the bounds: a NaN where the range is the NaN, the value where it is
+/// one. No bound of a wider range is a NaN, so IEEE's comparisons answer as the
+/// float order does, one instruction each. A half compares as the `f32` it
+/// widens to exactly.
+fn float_range_narrow(
+    range: &FloatRange,
+    locals: &FloatPatternLocals,
+    shown: String,
+    type_table: &TypeTable,
+    span: Span,
+) -> TirPattern {
+    let float_type = locals.float_type;
+    let scrutinee = TirExpr::new(
+        TirExprKind::Local {
+            index: locals.scrutinee,
+            name: range_local_name(),
+        },
+        float_type,
+        span,
+    );
+    let (value, operand, width, widen) =
+        match (type_table.primitive_head(float_type), locals.widened) {
+            (Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)), Some(widened)) => {
+                let name = widened_half_local_name();
+                let widen = TirStmt::new(
+                    TirStmtKind::Let {
+                        name: name.clone(),
+                        local_index: widened,
+                        is_mut: false,
+                        type_id: TypeTable::F32,
+                        value: widen_half(type_table, scrutinee, half, span),
+                        storage: LetStorage::Planned,
+                    },
+                    span,
+                );
+                let value = TirExpr::new(
+                    TirExprKind::Local {
+                        index: widened,
+                        name,
+                    },
+                    TypeTable::F32,
+                    span,
+                );
+                (value, TypeTable::F32, "f32", Some(widen))
+            }
+            (Some(PrimitiveType::F32), None) => (
+                bare_cast(scrutinee, TypeTable::F32, span),
+                TypeTable::F32,
+                "f32",
+                None,
+            ),
+            (Some(PrimitiveType::F64), None) => (
+                bare_cast(scrutinee, TypeTable::F64, span),
+                TypeTable::F64,
+                "f64",
+                None,
+            ),
+            _ => unreachable!("a float pattern reads a float, and a half alone widens"),
+        };
+    let bound = |bits: u64| {
+        let value = range.format.value(bits);
+        TirExpr::new(
+            TirExprKind::FloatLiteral {
+                value,
+                repr: format_float_repr(value),
+            },
+            operand,
+            span,
+        )
+    };
+    let compare = |op: &str, left, right| {
+        builtin_call(
+            &format!("{width}_ieee754_{op}"),
+            vec![left, right],
+            TypeTable::BOOL,
+        )
+    };
+    let test = if range.is_nan() {
+        compare("ne", value.clone(), value)
+    } else if range.is_point() {
+        compare("eq", value, bound(range.start))
+    } else {
+        let below_end = if range.inclusive { "le" } else { "lt" };
+        TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(compare("ge", value.clone(), bound(range.start))),
+                right: Box::new(compare(below_end, value, bound(range.end))),
+            },
+            TypeTable::BOOL,
+            span,
+        )
+    };
+    let test = match widen {
+        Some(widen) => {
+            let stmts = vec![widen, TirStmt::new(TirStmtKind::Expr(test), span)];
+            TirExpr::new(
+                TirExprKind::Block(TirBlock::new(stmts, span)),
+                TypeTable::BOOL,
+                span,
+            )
+        }
+        None => test,
+    };
+    TirPattern::Narrow {
+        name: None,
+        local_index: locals.scrutinee,
+        type_id: float_type,
+        test: Box::new(test),
+        shown,
     }
 }
 
@@ -931,6 +1113,39 @@ pub(super) fn replaced<O, T, R>(
     let saved = guard.saved.take().expect("enclosing value present");
     let left = std::mem::replace(field(guard.owner), saved);
     (result, left)
+}
+
+/// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
+/// any other expression alone. The suffix stays in the AST so the formatter
+/// round-trips it, matching how the statement for-of reads it.
+pub(super) fn split_enumerate(iterable: &Expr) -> (&Expr, bool) {
+    match iterable {
+        Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
+            (&mc.receiver, true)
+        }
+        other => (other, false),
+    }
+}
+
+/// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
+/// once the binding is in scope. `None` when the form is not an enumerate
+/// or the index position is a wildcard, and when the index is `mut`: a
+/// subscript must stay the element's own position.
+pub(super) fn enumerate_index_local(
+    is_enumerate: bool,
+    binding: &Pattern,
+    ctx: &FunctionContext,
+) -> Option<u32> {
+    if !is_enumerate {
+        return None;
+    }
+    let Pattern::Tuple(elems, _) = binding else {
+        return None;
+    };
+    let name = elems.first()?.as_name()?.name;
+    ctx.lookup(name)
+        .filter(|local| !local.is_mut)
+        .map(|local| local.index)
 }
 
 #[cfg(test)]

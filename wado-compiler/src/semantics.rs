@@ -33,7 +33,7 @@ use crate::module_source::{ModuleSource, ModuleSourceInterner, ParseModules};
 use crate::name::resolve_import_with_entry;
 use crate::pgo::{ColdMap, Profile};
 use crate::resolve::Resolutions;
-use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module};
+use crate::stdlib_snapshot::{get_or_init_snapshot, reparsed_snapshot_module, stdlib_sources};
 use crate::symbol::{Symbol, SymbolTable};
 use crate::symbol_notation::SymbolNotation;
 use crate::tir::{EffectRows, ResolvedType, TemplateId, TirModule, TypeId};
@@ -116,6 +116,9 @@ pub struct Semantics {
     pub(crate) coverage: Option<CoverageMap>,
     /// Where the profile this compile applied marked code cold.
     pub(crate) cold: Option<ColdMap>,
+    /// The modules served from the stdlib snapshot, whose own build checked
+    /// them: a user's code cannot change what a check finds in one.
+    pub(crate) snapshot_modules: IndexSet<ModuleSource>,
 }
 
 /// A definition location, assembled from a symbol.
@@ -352,6 +355,7 @@ impl Semantics {
             published_names: IndexMap::default(),
             coverage: None,
             cold: None,
+            snapshot_modules: IndexSet::default(),
         }
     }
 
@@ -1694,6 +1698,12 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         .adopted_by(&load_result.entry_module_source)
         .map(|(def, name)| (def, name.to_string()))
         .collect();
+    let snapshot_modules = snapshot.as_deref().map_or_else(IndexSet::default, |snap| {
+        stdlib_sources(snap)
+            .into_iter()
+            .filter(|source| load_result.modules.contains_key(source))
+            .collect()
+    });
     Semantics {
         entry_module_source: load_result.entry_module_source,
         modules: load_result.modules,
@@ -1712,6 +1722,7 @@ pub(crate) fn semantics_with_logger<H: CompilerHost>(
         published_names,
         coverage,
         cold,
+        snapshot_modules,
     }
 }
 

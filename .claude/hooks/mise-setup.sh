@@ -78,22 +78,45 @@ install_mise_from_github() {
     return 0
 }
 
-# Check if mise is already available
-if command -v mise &>/dev/null; then
-    log "mise already available: $(mise --version)"
-else
+# Install the latest mise into $LOCAL_BIN, replacing any older one there.
+install_mise() {
     log "Installing mise to $LOCAL_BIN..."
-
-    if curl -fsSL https://mise.run | sh; then
-        log "mise installed via mise.run: $($LOCAL_BIN/mise --version)"
-    else
+    # Fetched first: `curl | sh` reports success when curl fails, since `sh`
+    # runs the empty script.
+    local installer
+    if ! { installer=$(curl -fsSL https://mise.run) && printf '%s\n' "$installer" | MISE_INSTALL_PATH="$LOCAL_BIN/mise" sh; }; then
         log "mise.run installer failed; falling back to GitHub Releases"
         if ! install_mise_from_github; then
             log "Failed to install mise (both mise.run and GitHub fallback)"
-            exit 1
+            return 1
         fi
-        log "mise installed from GitHub: $($LOCAL_BIN/mise --version)"
     fi
+    # Bash remembers where it last found `mise`, which may be the stale one.
+    hash -r
+}
+
+install_tools() {
+    mise trust --all 2>/dev/null || true
+    log "Installing project tools..."
+    mise install
+}
+
+# Ensure mise is in PATH for the rest of this script
+export PATH="$LOCAL_BIN:$PATH"
+
+if ! command -v mise &>/dev/null; then
+    install_mise || exit 1
+fi
+
+# A mise older than mise.toml's `min_version` fails every command, so a failed
+# install is retried once on the latest mise.
+if install_tools || {
+    log "mise install failed; retrying on the latest mise"
+    install_mise && install_tools
+}; then
+    log "Project tools installed successfully"
+else
+    log "Warning: Some tools may have failed to install"
 fi
 
 # Persist PATH and mise settings to CLAUDE_ENV_FILE
@@ -105,20 +128,6 @@ export MISE_TRUSTED_CONFIG_PATHS="$HOME:$PWD"
 eval "$(mise activate bash)"
 EOF
     log "Environment persisted to CLAUDE_ENV_FILE"
-fi
-
-# Ensure mise is in PATH for the rest of this script
-export PATH="$LOCAL_BIN:$PATH"
-
-# Trust the mise configuration and install project tools
-log "Trusting mise configuration..."
-mise trust --all 2>/dev/null || true
-
-log "Installing project tools..."
-if mise install; then
-    log "Project tools installed successfully"
-else
-    log "Warning: Some tools may have failed to install"
 fi
 
 if [ -f .gitmodules ]; then

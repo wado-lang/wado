@@ -37,7 +37,8 @@ The native host pieces that `wado-cli`, `wado-dev-tools`, and
   the process.
 - `sandbox.rs` — spawning a child confined to the guest's grants plus a fixed
   baseline, for `core:process`: Landlock and seccomp in `sandbox/linux.rs`,
-  `sandbox-exec` in `sandbox/macos.rs`. `wado-cli`'s `process_host` is its
+  `sandbox-exec` in `sandbox/macos.rs`, and the terminal a child holds as a
+  shell's job does in `sandbox/terminal.rs`. `wado-cli`'s `process_host` is its
   caller. See [WEP: `core:process`](../docs/wep-2026-10-21-core-process.md).
 - `engine.rs` — the Wasm features and GC defaults every wasmtime engine takes,
   so the e2e harness runs a program as `wado` does, and the fuel-metered engine

@@ -17,6 +17,7 @@ use crate::unparse::unparse_instance_pattern;
 
 use super::method_call::MethodCallInput;
 use super::method_lookup::REPLACE_ON_ASSIGN_TYPE;
+use super::type_resolution::slot_type_ids;
 use super::types::{BindingSite, FunctionContext, MustBind, TypeError};
 use super::tysys::TypeSystem;
 use super::util;
@@ -27,12 +28,12 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::float_literal::FloatFormat;
 use crate::elaborator::orchestration::first_infer_span;
-use crate::elaborator::reify::reserve_float_pattern_locals;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::trait_env::written_type_source;
 use crate::elaborator::trait_query::assoc_const_owner;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo};
+use crate::elaborator::util::reserve_float_pattern_locals;
 use crate::name::{
     constant_pattern_local_name, for_body_label, mangle_local_item_name, minted_name,
     namespace_member_alias, range_local_name, repeat_pack_name,
@@ -327,9 +328,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(struct_decl.name.clone(), def);
         // The type parameters are final already — read off the AST, not
         // resolved — so only the fields are left for `resolve_local_struct`.
-        let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+        let type_param_type_ids = slot_type_ids(
             &ParamSlot::list(&struct_decl.type_params),
-            &self.tysys.type_table,
+            &mut self.tysys.type_table.borrow_mut(),
         );
         self.sem.decls.local.struct_fields.insert(
             def,
@@ -2555,7 +2556,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // never resolves it as a method call, so `mc.id` carries no annotations
         // — intentional, like the `tuple.len()` short-circuits on
         // `MethodDispatch`. Reify re-detects the pattern from `for_of.iterable`.
-        let (actual_iterable, is_enumerate) = Self::split_enumerate(&for_of.iterable);
+        let (actual_iterable, is_enumerate) = util::split_enumerate(&for_of.iterable);
 
         // Resolve the iterable to determine its type
         let iterable_type_id = self.resolve_expr(actual_iterable, ctx, None);
@@ -2740,19 +2741,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.bind_pack_binding(&for_of.binding, binding_type, for_of.is_mut, ctx);
 
-        let index_binding = Self::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        let index_binding = util::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let ctx = &mut ctx.enter_enumerate_body(index_binding);
         let ctx = &mut ctx.enter_pack_walk();
         self.resolve_block(&for_of.body, ctx, None);
-    }
-
-    /// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
-    /// binding spells one.
-    pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<&str> {
-        let Pattern::Tuple(elems, _) = binding else {
-            return None;
-        };
-        elems.first()?.as_name().map(|n| n.name)
     }
 
     /// Expand `for let v of tuple { body }` by unrolling the body once per

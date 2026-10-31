@@ -1,6 +1,5 @@
-// The shippable `core:icu` stage-1 surface: Unicode character properties as
-// code point ranges, with no `resource` anywhere, so a Wado program can import
-// the component today. `wit/world.wit` keeps the full spike surface.
+// The shippable `core:icu` surface: Unicode character properties as code point
+// ranges, and collation. `wit/world.wit` keeps the full spike surface.
 package wado:icu@0.1.0;
 
 // Two paths to the same data. `has` and `set` name a binary property as an
@@ -96,6 +95,26 @@ interface properties {
   contains: func(property: string, value: option<string>, ch: char) -> option<bool>;
 }
 
+// Comparing strings the way a locale sorts them.
+interface collation {
+  enum ordering {
+    less,
+    equal,
+    greater,
+  }
+
+  resource collator {
+    /// A collator for the BCP 47 tag `locale`. A tag that does not parse is an
+    /// error; a locale CLDR tailors nothing for sorts as its fallback does,
+    /// ending at the root collation.
+    create: static func(locale: string) -> result<collator, string>;
+
+    /// How `left` sorts against `right`.
+    compare: func(left: string, right: string) -> ordering;
+  }
+}
+
 world icu-properties {
   export properties;
+  export collation;
 }

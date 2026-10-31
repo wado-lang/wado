@@ -675,6 +675,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An attribute describing a declaration with no body, written on a
+    /// function that has one; `reason` is its schema's `on_body`.
+    AttributeOnBody {
+        attribute: &'static str,
+        reason: &'static str,
+        span: Span,
+    },
+
     /// An attribute describing a declaration with no body, written on a trait
     /// or interface requirement; `reason` is its schema's `on_requirement`.
     AttributeOnRequirement {
@@ -1979,6 +1987,15 @@ impl TypeError {
             } => (
                 Code::InvalidSyntax,
                 format!("`{owner}::{operation}` {detail}"),
+                *span,
+            ),
+            TypeError::AttributeOnBody {
+                attribute,
+                reason,
+                span,
+            } => (
+                Code::AttrMisuse,
+                format!("#[{attribute}] belongs to a declaration with no body: {reason}"),
                 *span,
             ),
             TypeError::AttributeOnRequirement {
@@ -4493,6 +4510,7 @@ impl DataDecls {
 /// during resolution, the current module's own definitions, then its imports
 /// (with `use { Foo as Bar }` aliasing) — no global scan beyond that (#1416).
 /// All fields are borrowed, so a call site constructs one without allocating.
+/// The resolver for a written type over this view is in `type_resolution`.
 pub(crate) struct TypeLookup<'a> {
     pub(crate) current_module_source: &'a ModuleSource,
     /// What every name in the program resolves to, answered once by the resolve

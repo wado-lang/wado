@@ -1,5 +1,5 @@
-//! The shippable `core:icu` stage-1 surface: Unicode character properties.
-//! See `wit-properties/world.wit`.
+//! Unicode character properties, and the bindings of the shippable `core:icu`
+//! world (`wit-properties/world.wit`) that `collation` implements too.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -33,7 +33,7 @@ use icu::properties::{
     props::{BinaryProperty, EnumeratedProperty},
 };
 
-struct Component;
+pub struct Component;
 
 /// UAX #44 loose matching: case, `_`, `-` and spaces are not significant.
 fn fold(name: &str) -> String {

@@ -70,7 +70,7 @@ genuinely data-free and the blob can arrive either way:
 
 1. **feature + host-supplied data import** — host fulfils `get-casemap-blob`.
 2. **composed component, empty host linker** — `data` is satisfied internally by
-   the shared `data` component (`wasm-tools compose`); the composite imports
+   the shared `data` component (`wado-dev-tools compose`); the composite imports
    nothing.
 
 Both produce correct locale-aware Unicode (Turkish dotted-`İ`, Greek full

@@ -1,0 +1,12 @@
+// A component's resource is affine: a handle moved into the component by `own`
+// cannot be used again.
+use { Counters } from "./sub/wasm_import_cm_resource.wat" with { type: "wat" };
+
+export fn run() {
+    let c = Counters::Counter::new(1);
+    Counters::take(c);
+    c.get();
+}
+
+__DATA__
+{"compile_error": ":8:5: analysis error: affine value `c` used after it was moved (moved at 7:20)"}

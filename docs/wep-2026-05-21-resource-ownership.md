@@ -73,22 +73,18 @@ semantics from the absence of a `dtor` alone.
 ### Non-owning tokens
 
 A non-owning token names something whose lifetime another party already
-guarantees. Two backings qualify:
+guarantees: an affine resource owns the referent. `Waitable` is this:
+`Subtask::join` returns the subtask's own handle number as the identity to match
+a `WaitEvent` against, and the `Subtask` owns the drop.
 
-- **An affine resource owns the referent.** `Waitable` is this: `Subtask::join`
-  returns the subtask's own handle number as the identity to match a `WaitEvent`
-  against, and the `Subtask` owns the drop.
-- **An immortal table in a statically composed component.** `core:icu`'s
-  interned handles are this: the component interns each object whose
-  configuration the program bounds at compile time, so the table is finite by
-  construction and never freed.
-
-A CM `borrow<R>` cannot stand in for either: it must be dropped before the call
+A CM `borrow<R>` cannot stand in for it: it must be dropped before the call
 returns, where a token is compared long after, is copied across comparisons, and
 travels inside a struct by value (`WaitEvent.handle`).
 
-A referent with neither backing — allocated per call from unbounded runtime
-input — is affine instead: a copyable index would leak it.
+A referent without that backing is affine instead: a copyable index would leak
+it. That holds even for an object a component interns: each `own` handle it
+returns is a new entry in the caller's table, which only a drop frees, so
+`core:icu`'s handles are affine ([`core:icu`](./wep-2026-08-09-core-icu.md)).
 
 ### Unreclaimed handles
 
@@ -880,6 +876,6 @@ handle nothing minted, which the program then owns and drops.
 - [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
 - [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
-- [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second
-  backing.
+- [`core:icu`](./wep-2026-08-09-core-icu.md) — why a component's interned
+  handles are affine all the same.
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

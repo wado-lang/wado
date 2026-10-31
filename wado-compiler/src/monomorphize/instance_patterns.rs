@@ -4,8 +4,8 @@
 //! settled type is in the elaborator.
 
 use crate::compiler_host::CompilerHost;
-use crate::elaborator::reify::lower_instance_pattern;
 use crate::elaborator::types::TypeError;
+use crate::elaborator::util::lower_instance_pattern;
 use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, Logger};
 use crate::synthesis::common::alloc_named_local;
