@@ -28,8 +28,8 @@ use std::sync::OnceLock;
 
 use super::terminal::give_terminal;
 use super::{
-    Access, Availability, Child, Command, Foreground, Network, Policy, Refusal, Refusals,
-    ResolvedPolicy, Spawned, Stdio, Trace,
+    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
+    Spawned, Stdio, Trace,
 };
 use crate::sync::spawn_detached;
 
@@ -155,7 +155,7 @@ fn probe_listener() -> io::Result<bool> {
     Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
 }
 
-pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
     let ruleset = ruleset(command.policy)?;
     let listens = listens()?;
     let (refer, trace) = if listens {
@@ -191,7 +191,7 @@ pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result
                 &filter,
                 cwd.as_ref(),
                 listener_tx.as_ref().map(AsRawFd::as_raw_fd),
-                foreground,
+                terminal,
             )
         });
     }
@@ -1292,14 +1292,14 @@ fn confine_self(
     filter: &[libc::sock_filter],
     cwd: Option<&File>,
     listener_tx: Option<RawFd>,
-    foreground: Foreground,
+    terminal: Option<RawFd>,
 ) -> io::Result<()> {
     // A group of its own, so the host's kill reaches every descendant; the
     // filter below keeps them from leaving it.
     // SAFETY: each call below is a plain system call on memory the parent built.
     check(unsafe { libc::setpgid(0, 0) })?;
-    if foreground == Foreground::Child {
-        give_terminal(unsafe { libc::getpid() });
+    if let Some(terminal) = terminal {
+        give_terminal(terminal, unsafe { libc::getpid() });
     }
     if let Some(dir) = cwd {
         check(unsafe { libc::fchdir(dir.as_raw_fd()) })?;

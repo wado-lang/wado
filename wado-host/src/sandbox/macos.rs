@@ -19,9 +19,7 @@ use std::ptr;
 use std::sync::OnceLock;
 
 use super::terminal::give_terminal;
-use super::{
-    Access, Availability, Child, Command, Foreground, Network, Policy, Refusals, Spawned, Stdio,
-};
+use super::{Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
@@ -224,7 +222,7 @@ fn c_string(bytes: &OsStr) -> io::Result<CString> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "an argument holds a NUL byte"))
 }
 
-pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
     // `sandbox-exec` reports a missing program only on its own stderr, so the
     // host asks first.
     std::fs::metadata(command.program)?;
@@ -281,7 +279,7 @@ pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result
         actions.fchdir(dir.as_raw_fd())?;
     }
 
-    let attr = SpawnAttr::new(foreground)?;
+    let attr = SpawnAttr::new(terminal.is_some())?;
     let mut pid: libc::pid_t = 0;
     let program = c_string(OsStr::new(SANDBOX_EXEC))?;
     // SAFETY: every pointer is to memory alive for the call, the arrays
@@ -301,8 +299,8 @@ pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result
         return Err(io::Error::from_raw_os_error(ret));
     }
     let child = Child::new(pid);
-    if foreground == Foreground::Child {
-        give_terminal(pid);
+    if let Some(terminal) = terminal {
+        give_terminal(terminal, pid);
         child
             .signal_group(libc::SIGCONT)
             .expect("a child just spawned can be continued");
@@ -400,15 +398,16 @@ impl Drop for FileActions {
 struct SpawnAttr(libc::posix_spawnattr_t);
 
 impl SpawnAttr {
-    fn new(foreground: Foreground) -> io::Result<Self> {
+    fn new(takes_terminal: bool) -> io::Result<Self> {
         let mut attr = MaybeUninit::uninit();
         // SAFETY: init fills the value it is handed.
         check(unsafe { libc::posix_spawnattr_init(attr.as_mut_ptr()) })?;
         // SAFETY: initialized just above.
         let mut attr = Self(unsafe { attr.assume_init() });
-        let suspended = match foreground {
-            Foreground::Host => 0,
-            Foreground::Child => libc::POSIX_SPAWN_START_SUSPENDED,
+        let suspended = if takes_terminal {
+            libc::POSIX_SPAWN_START_SUSPENDED
+        } else {
+            0
         };
         let flags = libc::POSIX_SPAWN_CLOEXEC_DEFAULT
             | libc::POSIX_SPAWN_SETPGROUP

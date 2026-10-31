@@ -170,18 +170,13 @@ fn terminal() {
     policy.grant_terminal();
     let dir = File::open(tree.granted()).unwrap();
     let on_terminal = |program: &str, script: &str| {
-        let args = [OsString::from("-c"), OsString::from(script)];
-        spawn(&Command {
-            program: Path::new(program),
-            args: &args,
-            env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-            cwd: Some(&dir),
-            stdin: Stdio::Inherit,
-            stdout: Stdio::Piped,
-            stderr: Stdio::Inherit,
-            policy: &policy,
-            trace: Trace::Off,
-        })
+        spawn_with(
+            &policy,
+            Some(&dir),
+            Path::new(program),
+            script,
+            [Stdio::Inherit, Stdio::Piped, Stdio::Inherit],
+        )
     };
     // Read while waiting, as `wado` does: `wait` follows a child's stops, and
     // a stopped child closes no pipe.
@@ -221,6 +216,23 @@ fn terminal() {
     let killed = on_terminal("/bin/sh", "stty -echo && kill -9 $$").unwrap();
     assert_eq!(output(killed).0, ExitStatus::Signaled(libc::SIGKILL as u8));
     assert!(echoes());
+    assert!(holds_terminal());
+
+    // A child that only writes to the terminal holds it too.
+    let writer = spawn_with(
+        &policy,
+        Some(&dir),
+        Path::new("/bin/sh"),
+        "stty -echo <&1 && stty echo <&1",
+        [Stdio::Null, Stdio::Inherit, Stdio::Inherit],
+    );
+    assert_eq!(writer.unwrap().child.wait().unwrap(), OK);
+    assert!(holds_terminal());
+
+    // This host leads its session, so its group is orphaned: a stop would be
+    // discarded, and the child's Ctrl-Z does nothing, as it would sharing it.
+    let stopped = on_terminal("/bin/sh", "kill -TSTP $$ && printf continued").unwrap();
+    assert_eq!(output(stopped), (OK, "continued".to_owned()));
     assert!(holds_terminal());
 
     // A spawn that fails gives the terminal back, wherever it failed.
@@ -597,19 +609,37 @@ fn spawn_sh(
     stdout: Stdio,
     stderr: Stdio,
 ) -> Spawned {
+    spawn_with(
+        policy,
+        cwd,
+        Path::new("/bin/sh"),
+        script,
+        [Stdio::Null, stdout, stderr],
+    )
+    .unwrap()
+}
+
+/// `program -c script` started under `policy` in `cwd`, with `streams` as its
+/// stdin, stdout and stderr.
+fn spawn_with(
+    policy: &Policy,
+    cwd: Option<&File>,
+    program: &Path,
+    script: &str,
+    [stdin, stdout, stderr]: [Stdio; 3],
+) -> std::io::Result<Spawned> {
     let args: Vec<OsString> = ["-c", script].iter().map(OsString::from).collect();
     spawn(&Command {
-        program: Path::new("/bin/sh"),
+        program,
         args: &args,
         env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
         cwd,
-        stdin: Stdio::Null,
+        stdin,
         stdout,
         stderr,
         policy,
         trace: Trace::Off,
     })
-    .unwrap()
 }
 
 fn sh(policy: &Policy, script: &str) -> ExitStatus {

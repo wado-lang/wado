@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io;
-use std::os::fd::OwnedFd;
+use std::os::fd::{OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -20,7 +20,7 @@ use crate::sync::lock;
 mod exec;
 mod terminal;
 
-use terminal::Terminal;
+use terminal::{Reservation, Terminal};
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -420,27 +420,16 @@ pub fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         command.program.is_absolute(),
         "the program must be resolved to an absolute path"
     );
-    let terminal = Terminal::of(command.stdin);
+    let terminal = Terminal::of(command);
     let reservation = terminal::reserve(terminal);
-    let foreground = match reservation {
-        Some(_) => Foreground::Child,
-        None => Foreground::Host,
-    };
-    let mut spawned = backend::spawn(command, foreground)?;
+    // The backend makes the child's group the foreground group before its
+    // program starts, so the program's first use finds it there.
+    let mut spawned = backend::spawn(command, reservation.as_ref().map(Reservation::fd))?;
     spawned.child.terminal = terminal;
     if let Some(reservation) = reservation {
         reservation.held_by(spawned.child.pid);
     }
     Ok(spawned)
-}
-
-/// Whose group a backend makes the terminal's foreground group.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Foreground {
-    Host,
-    /// The child's, before its program starts, so the program's first read of
-    /// the terminal finds its group in the foreground.
-    Child,
 }
 
 /// The path the OS holds for an open directory, where a relative program path
@@ -538,21 +527,15 @@ impl Child {
             Terminal::Elsewhere => {
                 self.wait_id(libc::WEXITED | libc::WNOWAIT)?;
             }
-            Terminal::Inherited => {
-                let events = libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT;
-                let ended = loop {
-                    match self.wait_id(events)? {
-                        libc::CLD_STOPPED => {}
-                        libc::CLD_EXITED => break terminal::End::Exited,
-                        _ => break terminal::End::Signaled,
-                    }
-                    // Taken, unless the child moved on since: waiting for that
-                    // stop alone would then wait forever.
-                    self.wait_id(libc::WSTOPPED | libc::WNOHANG)?;
-                    terminal::follow_stop(self.pid);
-                    self.signal_group(libc::SIGCONT)?;
-                };
-                terminal::release(self.pid, ended);
+            Terminal::Inherited(fd) => {
+                let ended = self.follow_stops(fd);
+                // A wait that failed knows nothing of how the child left the
+                // terminal, and frees it all the same, lest no child get it.
+                terminal::release(
+                    self.pid,
+                    *ended.as_ref().unwrap_or(&terminal::End::Signaled),
+                );
+                ended?;
             }
         }
         self.signal_group(libc::SIGKILL)?;
@@ -568,6 +551,26 @@ impl Child {
             Ok(ExitStatus::Exited(libc::WEXITSTATUS(status) as u8))
         } else {
             Ok(ExitStatus::Signaled(libc::WTERMSIG(status) as u8))
+        }
+    }
+
+    /// Wait for the child to exit, following each stop on the way as a shell
+    /// follows its job's.
+    fn follow_stops(&self, fd: RawFd) -> io::Result<terminal::End> {
+        let events = libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT;
+        loop {
+            match self.wait_id(events)? {
+                libc::CLD_STOPPED => {}
+                libc::CLD_EXITED => return Ok(terminal::End::Exited),
+                _ => return Ok(terminal::End::Signaled),
+            }
+            // Taken, unless the child moved on since: waiting for that stop
+            // alone would then wait forever.
+            self.wait_id(libc::WSTOPPED | libc::WNOHANG)?;
+            match terminal::follow_stop(fd, self.pid) {
+                terminal::Resume::Continue => self.signal_group(libc::SIGCONT)?,
+                terminal::Resume::Stay => {}
+            }
         }
     }
 

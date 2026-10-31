@@ -2,9 +2,10 @@
 
 use std::fs::File;
 use std::io;
+use std::os::fd::RawFd;
 use std::path::PathBuf;
 
-use super::{Availability, Command, Foreground, Spawned};
+use super::{Availability, Command, Spawned};
 
 pub(super) fn availability() -> Availability {
     Availability::Unsupported(format!(
@@ -13,7 +14,7 @@ pub(super) fn availability() -> Availability {
     ))
 }
 
-pub(super) fn spawn(_command: &Command<'_>, _foreground: Foreground) -> io::Result<Spawned> {
+pub(super) fn spawn(_command: &Command<'_>, _terminal: Option<RawFd>) -> io::Result<Spawned> {
     unreachable!("`sandbox::spawn` asserts availability first")
 }
 

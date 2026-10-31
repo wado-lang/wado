@@ -418,24 +418,25 @@ comments for the interface. What follows is why it takes the shape it does.
 - A child of an unconfined spawn shares its parent's process group, and with it
   the parent's place on the terminal: it reads the terminal and sets its mode.
   A group of its own reads and sets the terminal only as its foreground group,
-  so the `wado` host treats a child whose stdin is its terminal as a shell
-  treats the job it runs:
+  so the `wado` host treats a child that inherits a stream from its terminal as
+  a shell treats the job it runs:
   - Holding the terminal, the host hands it to the child's group before the
     program starts, and takes it back once the child ends. Ctrl-C then reaches
     the child alone, where a shared group would end the host too: the guest
     sees the child end by `SIGINT` and carries on.
-  - One child holds the terminal at a time. Another that reads it waits until
-    the first is done, then gets it.
+  - One child holds the terminal at a time. Another starts in the background
+    and writes there freely. If it reads the terminal or sets its mode, it waits
+    until the first is done, then gets it.
   - The host stops where a shared group would stop: when Ctrl-Z stops the child
-    holding the terminal, and when a child reads the terminal while the host is
+    holding the terminal, and when a child uses the terminal while the host is
     in the background. Continued in the foreground, the host hands the terminal
-    over again.
+    over again. The kernel discards a stop sent to an orphaned group, so a host
+    whose group is orphaned does not stop: Ctrl-Z does nothing, as it would to
+    a shared group.
   - A child that stops, or that a signal ends, leaves the terminal in the
     host's mode, as a shell restores its own. A child that exits leaves the
-    mode it chose.
-  - A child that inherits only stdout or stderr from the terminal stays in the
-    background, so the host keeps its stdin and Ctrl-C. Such a child that sets
-    the terminal's mode stops, and the host with it.
+    mode it chose. A host that exits while a child holds the terminal takes it
+    back in its own mode first.
 
 ### The timeout is the guest's
 
@@ -555,6 +556,9 @@ the program accepts it.
 - A child waiting its turn for the terminal that the guest kills ends at once,
   but its exit reaches the guest only once the child holding the terminal is
   done: the host waits on the terminal for it then, not on the child.
+- A host whose group is orphaned in the background leaves a child that uses
+  the terminal stopped, and the guest's wait does not return until the guest
+  kills it. A child sharing the group would instead fail its read with `EIO`.
 - On macOS a child reads the arguments of every process its user runs, through
   `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
   reads the whole environment too, `wado`'s own among them, so a token in the
