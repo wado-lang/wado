@@ -124,15 +124,21 @@ impl NormalizerGuest for Component {
     }
 
     fn nfd(text: String) -> String {
-        DecomposingNormalizer::new_nfd().normalize(&text).into_owned()
+        DecomposingNormalizer::new_nfd()
+            .normalize(&text)
+            .into_owned()
     }
 
     fn nfkc(text: String) -> String {
-        ComposingNormalizer::new_nfkc().normalize(&text).into_owned()
+        ComposingNormalizer::new_nfkc()
+            .normalize(&text)
+            .into_owned()
     }
 
     fn nfkd(text: String) -> String {
-        DecomposingNormalizer::new_nfkd().normalize(&text).into_owned()
+        DecomposingNormalizer::new_nfkd()
+            .normalize(&text)
+            .into_owned()
     }
 
     fn is_nfc(text: String) -> bool {

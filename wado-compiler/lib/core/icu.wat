@@ -16533,9 +16533,7 @@
             (i32.const 32))))
       (i32.store16 offset=12
         (local.get 4)
-        (local.tee 3
-          (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
-            (local.get 3))))
+        (local.get 3))
       (i32.store8 offset=14
         (local.get 4)
         (i32.shr_u
@@ -19773,7 +19771,9 @@
           (i32.const 8))
         (local.get 0)
         (local.get 1)
-        (local.get 4))
+        (local.tee 4
+          (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
+            (local.get 4))))
       (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu7casemap4fold
         (i32.add
           (local.get 5)
@@ -19860,7 +19860,8 @@
           (i32.const 20))
         (local.get 0)
         (local.get 1)
-        (local.get 2))
+        (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
+          (local.get 2)))
       (call $_RNvMs1_NtCs5JHfeWeQK0x_5alloc6borrowINtB5_3CoweE10into_ownedCs2z8luribqXT_15icu_locale_core
         (i32.add
           (local.get 3)
@@ -20014,7 +20015,7 @@
         (local.tee 3
           (i32.sub
             (global.get $__stack_pointer)
-            (i32.const 80))))
+            (i32.const 64))))
       (block ;; label = @1
         (br_if 0 (;@1;)
           (i32.load8_u offset=2416362
@@ -20023,48 +20024,54 @@
         (i32.store8 offset=2416362
           (i32.const 0)
           (i32.const 1)))
+      (local.set 2
+        (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
+          (local.get 2)))
       (i32.store8
         (i32.add
           (local.get 3)
-          (i32.const 58))
+          (i32.const 45))
+        (i32.const 0))
+      (i32.store8
+        (i32.add
+          (local.get 3)
+          (i32.const 42))
         (i32.shr_u
-          (local.tee 2
-            (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
-              (local.get 2)))
+          (local.get 2)
           (i32.const 16)))
-      (i32.store16 offset=56
+      (i32.store16 offset=43 align=1
+        (local.get 3)
+        (i32.const 255))
+      (i32.store16 offset=40
         (local.get 3)
         (local.get 2))
-      (i32.store8 offset=59
+      (i32.store offset=36
         (local.get 3)
         (i32.const 255))
-      (i32.store8 offset=52
-        (local.get 3)
-        (i32.const 255))
-      (i64.store offset=41 align=1
+      (i64.store offset=25 align=1
         (local.get 3)
         (i64.const 255))
-      (i32.store8 offset=40
+      (i32.store8 offset=24
         (local.get 3)
         (i32.const 0))
       (local.set 2
         (call $_RNvMs2_NtCsj8VDQDR3IhD_11icu_casemap9internalsNtB5_13CaseMapLocale11from_langid
           (i32.add
             (local.get 3)
-            (i32.const 40))))
-      (i32.store16 offset=77 align=1
+            (i32.const 24))))
+      (i32.store16 offset=61 align=1
         (local.get 3)
         (i32.const 256))
-      (i32.store offset=68
+      (i32.store offset=52
         (local.get 3)
         (local.get 1))
-      (i32.store offset=64
+      (i32.store offset=48
         (local.get 3)
         (local.get 0))
-      (i32.store offset=72
+      (i32.store offset=56
         (local.get 3)
         (i32.const 1247420))
-      (i32.store8 offset=76
+      (i32.store8 offset=60
         (local.get 3)
         (i32.and
           (local.get 2)
@@ -20072,39 +20079,37 @@
       (call $_RINvNtCshzRO0C1QMJB_9writeable19to_string_or_borrow19to_string_or_borrowINtNtCsj8VDQDR3IhD_11icu_casemap9internals17FullCaseWriteableKb0_EEB1d_
         (i32.add
           (local.get 3)
-          (i32.const 28))
+          (i32.const 12))
         (i32.add
           (local.get 3)
-          (i32.const 64))
+          (i32.const 48))
         (local.get 0)
         (local.get 1))
       (call $_RNvMs1_NtCs5JHfeWeQK0x_5alloc6borrowINtB5_3CoweE10into_ownedCs2z8luribqXT_15icu_locale_core
         (i32.add
           (local.get 3)
-          (i32.const 16))
+          (i32.const 48))
         (i32.add
           (local.get 3)
-          (i32.const 28)))
+          (i32.const 12)))
       (call $_RNvMs3_NtCs5JHfeWeQK0x_5alloc7raw_vecNtB5_11RawVecInner10deallocateCsH36t9ANJev_8zerotrie
         (local.get 1)
         (local.get 0)
         (i32.const 1)
         (i32.const 1))
       (call $_RNvMs_NtCs5JHfeWeQK0x_5alloc3vecINtB4_3VechE16into_boxed_sliceCsH36t9ANJev_8zerotrie
+        (local.get 3)
         (i32.add
           (local.get 3)
-          (i32.const 8))
-        (i32.add
-          (local.get 3)
-          (i32.const 16)))
+          (i32.const 48)))
       (i64.store offset=2416344 align=4
         (i32.const 0)
-        (i64.load offset=8
+        (i64.load
           (local.get 3)))
       (global.set $__stack_pointer
         (i32.add
           (local.get 3)
-          (i32.const 80)))
+          (i32.const 64)))
       (i32.const 2416344)
     )
     (func $_RNvMs2_NtCsj8VDQDR3IhD_11icu_casemap9internalsNtB5_13CaseMapLocale11from_langid (;105;) (type 1) (param i32) (result i32)
@@ -20213,7 +20218,7 @@
         (local.tee 3
           (i32.sub
             (global.get $__stack_pointer)
-            (i32.const 80))))
+            (i32.const 64))))
       (block ;; label = @1
         (br_if 0 (;@1;)
           (i32.load8_u offset=2416362
@@ -20222,48 +20227,54 @@
         (i32.store8 offset=2416362
           (i32.const 0)
           (i32.const 1)))
+      (local.set 2
+        (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
+          (local.get 2)))
       (i32.store8
         (i32.add
           (local.get 3)
-          (i32.const 58))
+          (i32.const 45))
+        (i32.const 0))
+      (i32.store8
+        (i32.add
+          (local.get 3)
+          (i32.const 42))
         (i32.shr_u
-          (local.tee 2
-            (call $_RNvNtCs4tIenilrHYQ_16wado_bundled_icu6locale8language
-              (local.get 2)))
+          (local.get 2)
           (i32.const 16)))
-      (i32.store16 offset=56
+      (i32.store16 offset=43 align=1
+        (local.get 3)
+        (i32.const 255))
+      (i32.store16 offset=40
         (local.get 3)
         (local.get 2))
-      (i32.store8 offset=59
+      (i32.store offset=36
         (local.get 3)
         (i32.const 255))
-      (i32.store8 offset=52
-        (local.get 3)
-        (i32.const 255))
-      (i64.store offset=41 align=1
+      (i64.store offset=25 align=1
         (local.get 3)
         (i64.const 255))
-      (i32.store8 offset=40
+      (i32.store8 offset=24
         (local.get 3)
         (i32.const 0))
       (local.set 2
         (call $_RNvMs2_NtCsj8VDQDR3IhD_11icu_casemap9internalsNtB5_13CaseMapLocale11from_langid
           (i32.add
             (local.get 3)
-            (i32.const 40))))
-      (i32.store16 offset=77 align=1
+            (i32.const 24))))
+      (i32.store16 offset=61 align=1
         (local.get 3)
         (i32.const 258))
-      (i32.store offset=68
+      (i32.store offset=52
         (local.get 3)
         (local.get 1))
-      (i32.store offset=64
+      (i32.store offset=48
         (local.get 3)
         (local.get 0))
-      (i32.store offset=72
+      (i32.store offset=56
         (local.get 3)
         (i32.const 1247420))
-      (i32.store8 offset=76
+      (i32.store8 offset=60
         (local.get 3)
         (i32.and
           (local.get 2)
@@ -20271,39 +20282,37 @@
       (call $_RINvNtCshzRO0C1QMJB_9writeable19to_string_or_borrow19to_string_or_borrowINtNtCsj8VDQDR3IhD_11icu_casemap9internals17FullCaseWriteableKb0_EEB1d_
         (i32.add
           (local.get 3)
-          (i32.const 28))
+          (i32.const 12))
         (i32.add
           (local.get 3)
-          (i32.const 64))
+          (i32.const 48))
         (local.get 0)
         (local.get 1))
       (call $_RNvMs1_NtCs5JHfeWeQK0x_5alloc6borrowINtB5_3CoweE10into_ownedCs2z8luribqXT_15icu_locale_core
         (i32.add
           (local.get 3)
-          (i32.const 16))
+          (i32.const 48))
         (i32.add
           (local.get 3)
-          (i32.const 28)))
+          (i32.const 12)))
       (call $_RNvMs3_NtCs5JHfeWeQK0x_5alloc7raw_vecNtB5_11RawVecInner10deallocateCsH36t9ANJev_8zerotrie
         (local.get 1)
         (local.get 0)
         (i32.const 1)
         (i32.const 1))
       (call $_RNvMs_NtCs5JHfeWeQK0x_5alloc3vecINtB4_3VechE16into_boxed_sliceCsH36t9ANJev_8zerotrie
+        (local.get 3)
         (i32.add
           (local.get 3)
-          (i32.const 8))
-        (i32.add
-          (local.get 3)
-          (i32.const 16)))
+          (i32.const 48)))
       (i64.store offset=2416344 align=4
         (i32.const 0)
-        (i64.load offset=8
+        (i64.load
           (local.get 3)))
       (global.set $__stack_pointer
         (i32.add
           (local.get 3)
-          (i32.const 80)))
+          (i32.const 64)))
       (i32.const 2416344)
     )
     (func $"wado:icu/collation@0.1.0#[dtor]collator" (;107;) (type 2) (param i32)
