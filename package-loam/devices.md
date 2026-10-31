@@ -493,8 +493,9 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller.
-- The merged tiny GPT-2 gets no `compute`: a `Slice` refuses its past's
-  length, and it owes the total equal to the past and the sequence only inside
+- The merged tiny GPT-2 pads nothing: a `Slice` refuses its past's length,
+  and its other lengths are owed equal to sums with it. It gets no `compute`
+  either, as it owes the total equal to the past and the sequence only inside
   a branch.
 - On `Cpu` a pass still copies the cache it writes into, since `scatter`
   returns a new tensor. Writing in place waits for the device compiler,
