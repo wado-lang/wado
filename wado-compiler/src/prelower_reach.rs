@@ -14,8 +14,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FqTypeName, FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_dispatch_wrapper,
-    is_effect_default, is_type_bridge,
+    FqTypeName, FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function,
+    is_dispatch_wrapper, is_effect_default, is_type_bridge,
 };
 use crate::nir_package::NirPackage;
 use crate::reflect_marker::{bridge_callee, is_marker_bridge};
@@ -81,7 +81,9 @@ impl<'a> Roots<'a> {
                     .flat
                     .wasm_module_sources
                     .contains_key(&func.module_source))
-            || func.compiler_item.is_some_and(CompilerItem::minted_after_tir);
+            || func
+                .compiler_item
+                .is_some_and(CompilerItem::minted_after_tir);
         if root {
             return Entry::Root;
         }
@@ -111,8 +113,7 @@ impl<'a> Roots<'a> {
         type_table: &TypeTable,
     ) -> Option<Entry> {
         // An instance's elaboration calls a trait method of each type argument
-        // directly (a `$hole_fmt$` arm, a derived impl), with no call through a
-        // parameter for a dispatch group to follow.
+        // directly: a `$hole_fmt$` arm, a derived impl.
         let minted_method = func.compiler_item.is_some() || impl_trait.is_some();
         if minted_method && func.method_info.is_some() {
             return Some(Entry::on_type(receiver_head(func.method_info.as_ref())));
@@ -170,9 +171,7 @@ fn type_head(type_table: &TypeTable, id: TypeId) -> Option<Head> {
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_)
-        | ResolvedType::Function { .. } => {
-            settled(type_table.fq_base_type_name(id).head().clone())
-        }
+        | ResolvedType::Function { .. } => settled(type_table.fq_base_type_name(id).head().clone()),
         _ => None,
     }
 }
@@ -299,11 +298,9 @@ impl<'t> TypeReach<'t> {
                 ..
             } = tt.get(id)
                 && tt.anon_shape_is_open(*shape)
-                && self
-                    .open_shape_modules
-                    .insert(tt.anon_struct_module(*shape).clone())
+                && let module = tt.anon_struct_module(*shape)
+                && self.open_shape_modules.insert(module.clone())
             {
-                let module = tt.anon_struct_module(*shape);
                 self.waiting.retain(|head, keys| {
                     let substituted = shape_module(head) == Some(module);
                     if substituted {
@@ -628,7 +625,10 @@ impl TirRefVisitor for BodyRefs<'_> {
             } => self.push(module_source, name, template.as_ref()),
             // `globals::extract` runs a global's initializer before its first
             // use, so a use is the edge to it.
-            TirExprKind::GlobalVarGet { module_source, name }
+            TirExprKind::GlobalVarGet {
+                module_source,
+                name,
+            }
             | TirExprKind::GlobalVarSet {
                 module_source,
                 name,

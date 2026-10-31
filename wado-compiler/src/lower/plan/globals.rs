@@ -11,8 +11,8 @@ use crate::flat_package::FlatPackage;
 use crate::logger::{Bail, ErrorSink};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION, global_init_function,
-    global_init_target,
+    FunctionId, MODULE_INIT_FUNCTION, MODULES_INIT_FLAG, MODULES_INIT_FUNCTION,
+    global_init_function, global_init_target,
 };
 use crate::synthesis::common::known_cold_path_stmt;
 use crate::tir::{
@@ -91,9 +91,10 @@ pub fn extract(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<(), Bai
     let refs = global_refs_by_function(&flat.functions);
     for (module_source, global) in refs.values().flatten() {
         assert!(
-            !flat
-                .pruned
-                .contains(&FunctionId::free(module_source, &global_init_function(global))),
+            !flat.pruned.contains(&FunctionId::free(
+                module_source,
+                &global_init_function(global)
+            )),
             "`{global}` is used, but its initializer was pruned as unreached"
         );
     }
