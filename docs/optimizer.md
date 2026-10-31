@@ -159,7 +159,9 @@ Scalars and dataflow:
 - `copy_prop` — propagate a trivial copy and drop the binding.
 - `param_spec` — specialize a callee on the constant arguments its callers
   pass, and on the constant fields of a struct they pass by reference, a
-  reference to a struct literal included.
+  reference to a struct literal included. A literal argument stays passed to a
+  callee taking a `&mut`, and a read of a field the caller holds constant
+  binds even there.
 - `dae` — drop a parameter the callee never reads.
 - `drve` — drop a return value every caller discards.
 - `store_load_forward` — forward a stored value to a later load.

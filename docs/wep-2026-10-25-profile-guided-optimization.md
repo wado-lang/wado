@@ -318,11 +318,6 @@ level.
   of one it ran.
 - [ ] A workload that traps fails the recording, so a package cannot profile a
   path that ends in a trap.
-- [ ] An accurate marker can slow the path it leaves hot. In `benchmark/fts`,
-  the markers on `f64::fmt_into`'s unused shortest-form path cost about 15%:
-  `f64::fmt_fixed` is no longer spliced into each template hole that calls it,
-  so the hole's constant precision no longer reaches `fixed_width_for_prec`
-  and its specializations are lost.
 - [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
   a module is pending, so the workload fails the recording if it traps, and is
   reported as unexpectedly passing if it returns.
