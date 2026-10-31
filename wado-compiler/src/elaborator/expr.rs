@@ -2480,7 +2480,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_branching(expected_type, |this, expected| {
             let type_id = this.resolve_if_once(if_expr, ctx, expected);
             let mut branches = vec![this.ast_block_result_type(&if_expr.then_block)];
-            branches.extend(if_expr.else_block.as_ref().map(|b| this.ast_block_result_type(b)));
+            branches.extend(
+                if_expr
+                    .else_block
+                    .as_ref()
+                    .map(|b| this.ast_block_result_type(b)),
+            );
             (type_id, branches)
         })
     }

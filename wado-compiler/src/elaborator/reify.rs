@@ -3056,13 +3056,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 self.reify_static_method_call(static_call, ctx, recorded_type)
             }
             ast::Expr::LabeledBlock(lb) => {
-                // Annotate unified the breaks into the recorded type, so a `null` that only a
-                // sibling break types still coerces where the use site expects nothing.
-                let branch_expected = expected_type.or(Some(recorded_type));
                 let tir_block = self.reify_block(
                     &lb.block,
-                    &mut ctx.enter_labeled_block(lb.label.clone(), branch_expected),
-                    branch_expected,
+                    &mut ctx.enter_labeled_block(lb.label.clone(), expected_type),
+                    expected_type,
                 );
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
@@ -4612,12 +4609,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
-        // With no expected type from the use site (`let x = if c { Some(v) }
-        // else { null };`), fall back to the if-expression's own unified
-        // `recorded_type` so the bare `null` branch reifies as `Option<T>`
-        // rather than UNKNOWN — a branch type disagreeing with the `If` node's
-        // own produces invalid Wasm. Same fallback as `LabeledBlockTarget`.
-        let branch_expected = expected_type.or(Some(recorded_type));
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
@@ -4632,12 +4623,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     if_expr.else_block.as_ref(),
                     if_expr.id,
                     if_expr.span,
-                    |r, b| r.reify_block_value(b, ctx, branch_expected),
+                    |r, b| r.reify_block_value(b, ctx, expected_type),
                 );
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     |r, ctx| {
-                        r.reify_block_with_position(&if_expr.then_block, ctx, branch_expected, true)
+                        r.reify_block_with_position(&if_expr.then_block, ctx, expected_type, true)
                             .stmts
                     },
                     else_block.as_ref(),
@@ -4649,12 +4640,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             }
         };
         let condition = self.reify_condition_expr(cond_expr, ctx);
-        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
+        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, expected_type);
         let else_branch = self.else_branch(
             if_expr.else_block.as_ref(),
             if_expr.id,
             if_expr.span,
-            |r, b| r.reify_block_value(b, ctx, branch_expected),
+            |r, b| r.reify_block_value(b, ctx, expected_type),
         );
         TirExpr::new(
             TirExprKind::If {
@@ -7330,13 +7321,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        // Same fallback as `reify_if_expr` (this file, above): without a
-        // top-down expected type, an arm body that is a bare `null` reifies
-        // as `UNKNOWN` unless it falls back to the match's own already-unified
-        // `recorded_type`, producing the same invalid-Wasm shape for
-        // `let x = match v { A => Option::Some(1), B => null };`.
-        let branch_expected = expected_type.or(Some(recorded_type));
-
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
@@ -7347,7 +7331,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .guard
                     .as_ref()
                     .map(|g| self.reify_condition_expr(g, ctx));
-                let body = self.reify_expr(&arm.body, ctx, branch_expected);
+                let body = self.reify_expr(&arm.body, ctx, expected_type);
                 let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {
                     pattern,
