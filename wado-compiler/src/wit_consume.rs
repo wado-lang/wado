@@ -200,6 +200,17 @@ pub fn build_bindings(
     // satisfy it.
     for id in guest_imports {
         let fq = interface_fq(resolve, id);
+        let iface = &resolve.interfaces[id];
+        let resource = iface
+            .types
+            .iter()
+            .find(|(_, ty)| matches!(resolve.types[**ty].kind, TypeDefKind::Resource));
+        if let Some((name, _)) = resource {
+            return Err(format!(
+                "importing a component whose guest effect `{fq}` declares the resource `{name}` \
+                 is not supported: a handler answers operations, and cannot provide a resource"
+            ));
+        }
         b.emit_interface(resolve, id, &fq);
     }
 

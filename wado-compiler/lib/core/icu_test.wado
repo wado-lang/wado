@@ -55,11 +55,12 @@ test "a collator sorts as its locale does" {
     assert german.compare(&"a", &"a") matches { Equal };
 }
 
-test "a locale CLDR tailors nothing for falls back to the root collation" {
-    let root = icu::Collator::new("und").unwrap();
-    let english = icu::Collator::new("en").unwrap();
-    assert root.compare(&"e", &"é") matches { Less };
-    assert english.compare(&"e", &"é") matches { Less };
+test "a locale CLDR tailors nothing for sorts as its fallback does" {
+    // Root sorts `ä` with `a`, Swedish after `z`: each tag below lands on one.
+    assert icu::Collator::new("und").unwrap().compare(&"ä", &"z") matches { Less };
+    assert icu::Collator::new("sv-FI").unwrap().compare(&"ä", &"z") matches { Greater };
+    assert icu::Collator::new("sv-u-co-xyz").unwrap().compare(&"ä", &"z") matches { Greater };
+    assert icu::Collator::new("zz").unwrap().compare(&"ä", &"z") matches { Less };
 }
 
 test "a tag that does not parse is refused" {

@@ -1,0 +1,10 @@
+// A resource's constructor is `new`, so a static function of that name as well
+// would give one resource two methods of one name.
+use { Cells } from "./sub/wasm_import_cm_resource_new_clash.wat" with { type: "wat" };
+
+export fn run() {
+    let _c = Cells::Cell::new(1);
+}
+
+__DATA__
+{"compile_error": "duplicate definition 'Cells::Cell::new'"}

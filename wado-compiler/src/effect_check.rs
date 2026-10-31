@@ -981,9 +981,11 @@ impl OwnedEffectData {
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
         for module in sem.modules.values() {
             for item in &module.items {
-                let (id, attrs) = match item {
-                    Item::Interface(decl) => (decl.id, &decl.attrs),
-                    Item::Resource(decl) => (decl.id, &decl.attrs),
+                // A resource's `#[cm]` FQ names the interface declaring it, so
+                // only the interface's effect answers for that FQ.
+                let (id, attrs, answers_cm_fq) = match item {
+                    Item::Interface(decl) => (decl.id, &decl.attrs, true),
+                    Item::Resource(decl) => (decl.id, &decl.attrs, false),
                     _ => continue,
                 };
                 let def = defs.def_at(id);
@@ -991,9 +993,7 @@ impl OwnedEffectData {
                 let key = resolutions
                     .effect_decl(def)
                     .expect("an interface or resource is an effect");
-                // A resource's `#[cm]` FQ names the interface declaring it, so
-                // only the interface's effect answers for that FQ.
-                if matches!(item, Item::Interface(_))
+                if answers_cm_fq
                     && closure.contains_key(&key)
                     && let Some(fq) = &cm_fq
                 {

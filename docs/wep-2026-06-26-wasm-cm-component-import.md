@@ -122,6 +122,12 @@ None. Every open item is a known gap below.
 
 ## Known gaps
 
+### A guest effect declaring a resource is refused
+
+A dependency whose guest effect declares a resource is rejected when its type is
+decoded. A handler answers the effect's operations, and nothing in Wado provides
+a resource to the dependency.
+
 ### A resource handle in a stream or future payload is unexercised
 
 A `stream<own<R>>` or `future<own<R>>` of an imported component's resource

@@ -1,0 +1,13 @@
+// A caller holding what the component's host imports map to may call into its
+// resource.
+use { println, Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
+use { Ticks } from "./sub/wasm_import_cm_resource_clock.wat" with { type: "wat" };
+
+export fn run() with (Stdout, MonotonicClock) {
+    let t = Ticks::Ticker::new(7);
+    println(`${t.read()}`);
+}
+
+__DATA__
+{"stdout": "7\n"}
