@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793483398351,
+  "lastUpdate": 1793490326823,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72789,6 +72789,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/bee776d3196293227198b3ead47b176e9baa3e0f"
         },
         "date": 1793483397477,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "09e48612ed933428cb95d68540b4ab695e4a24d9",
+          "message": "Merge pull request #2506 from wado-lang/ccr-75cb3b93-l4d51s\n\nfix(ci): keep the release PR's Cargo.lock in step with main",
+          "timestamp": "2026-11-01T08:30:11+09:00",
+          "tree_id": "81a1b94c42902218742ea588ca5dfa1d1a0a9480",
+          "url": "https://github.com/wado-lang/wado/commit/09e48612ed933428cb95d68540b4ab695e4a24d9"
+        },
+        "date": 1793490325695,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
