@@ -182,7 +182,7 @@ for silence.
 
 ## Structs
 
-### `pub struct NoFields`
+### `pub struct NoFields {}`
 
 Serializes to `{}`; the default field payload, so `info(msg)` needs no
 second argument and the default type parameter supplies its type.
@@ -248,7 +248,7 @@ Record a non-parent causal link: this span follows from `cause`.
 Close a span entered by hand. [`in_span`] closes on every exit path, so
 this is only for a span the caller opened without it.
 
-### `pub struct NoClock`
+### `pub struct NoClock {}`
 
 No timestamp, and no `wasi:clocks` import. The default sink's clock, so a
 program that installs nothing logs in any world, `core:kiln/generator`
@@ -262,7 +262,7 @@ change, and may replace this once a mechanism keeps the guarantee.
 
 ##### `fn now() -> Option<String>`
 
-### `pub struct WallClock`
+### `pub struct WallClock {}`
 
 Wall-clock stamps with millisecond precision. Installing a sink over this
 adds a `wasi:clocks` import, so it belongs only in a world that has one.

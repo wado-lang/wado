@@ -528,7 +528,7 @@ quoted, so it reads apart from a number.
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
-### `pub struct IgnoredAny`
+### `pub struct IgnoredAny {}`
 
 A value of any shape, read and thrown away.
 
