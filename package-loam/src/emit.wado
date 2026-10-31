@@ -29,10 +29,10 @@ use {
     InPlace,
     KERNEL_ELEMENT,
     Node,
+    ValueInfo,
     case_named,
     element_of,
     is_binary_elementwise,
-    ValueInfo,
     settled,
     trailing_axes,
 } from "./graph.wado";
@@ -1511,7 +1511,11 @@ fn emit_compute(
         }
         lines.push(`let ${PASSED} { ${idents.join(", ")} } = ${built};`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
-        if has_cache { `${OUTPUTS}<${BACKEND_PARAM}>` } else { OUTPUTS };
+        if has_cache {
+            `${OUTPUTS}<${BACKEND_PARAM}>`;
+        } else {
+            OUTPUTS;
+        }
     } else {
         lines.push(`return ${read_back(&returned[0], built)?};`);
         tensor_type(checked, held, &returned[0]);

@@ -1355,7 +1355,9 @@ test "compute holds a cache at the capacity of the total, its past's length what
     assert computed.contains("cache: &Cache<Bk>, weights: &Params<Bk>) -> Outputs<Bk>");
     assert computed.contains("let dim_P = -dim_S + dim_T;");
     assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64;");
-    assert computed.contains("fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))");
+    assert computed.contains(
+        "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))",
+    );
 }
 
 test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {
@@ -1367,7 +1369,10 @@ test "what a padded length owes is checked at the length, by compute, and not at
         Y = Add(X, Part)
     }`;
     let out = generate(source).unwrap();
-    let [build_at, compute_at] = [out.find("pub fn build").unwrap(), out.find("pub fn compute").unwrap()];
+    let [build_at, compute_at] = [
+        out.find("pub fn build").unwrap(),
+        out.find("pub fn compute").unwrap(),
+    ];
     assert out.substr_bytes(compute_at, out.len()).contains("refuse(unmet(");
     assert !out.substr_bytes(build_at, compute_at).contains("refuse(unmet(");
 }

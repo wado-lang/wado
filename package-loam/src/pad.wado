@@ -108,12 +108,7 @@ pub fn padding(graph: &Graph, checked: &Checked) -> List<Judged> {
 
 /// Each refusal the nodes of a scope make, the first one per symbol kept, and
 /// each slack the scope owes to be 0.
-fn judge_scope(
-    graph: &Graph,
-    checked: &Checked,
-    refusals: &mut HashMap<String, PadRefusal>,
-    ties: &mut List<Poly>,
-) {
+fn judge_scope(graph: &Graph, checked: &Checked, refusals: &mut HashMap<String, PadRefusal>, ties: &mut List<Poly>) {
     ties.extend(&equalities(&checked.owed));
     for let node of &graph.nodes {
         let mut refuse = |read: List<String>, why: Why| {
