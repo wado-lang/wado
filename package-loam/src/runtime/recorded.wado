@@ -429,12 +429,12 @@ pub fn host_of<E: Element, Axes>(t: &Tensor<E, Axes>) -> Host {
 pub fn run(cpu: &mut Cpu, recorded: &Recorded, arguments: &List<Host>) -> List<Host>
     contract arguments.len() == recorded.parameters
 {
-    let mut run = Run {
+    let mut state = Run {
         values: HashMap::new(),
         parts: HashMap::new(),
     };
-    run.region(cpu, recorded, &recorded.body, arguments);
-    return recorded.body.results.into_iter().map(|r| run.values[r]).collect();
+    state.region(cpu, recorded, &recorded.body, arguments);
+    return recorded.body.results.into_iter().map(|r| state.values[r]).collect();
 }
 
 /// The values a run has computed, each by its node's id.

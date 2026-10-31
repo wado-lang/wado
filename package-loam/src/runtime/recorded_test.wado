@@ -1,80 +1,30 @@
-use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use {
+    A,
+    B,
+    Bt,
+    C,
+    Dt,
+    Half,
+    Ht,
+    Kt,
+    Pos,
+    Pt,
+    Qt,
+    St,
+    attending,
+    attention_case,
+    branching,
+    branching_inputs,
+    mixed,
+    mixed_inputs,
+    windowed,
+    windowed_input,
+} from "./graph_cases.wado";
 use { Host, Recorder, host_of, run } from "./recorded.wado";
-use { Attention, Cpu, Holds, Tensor } from "./tensor.wado";
-
-struct A {
-}
-struct B {
-}
-struct C {
-}
-
-/// Every operation but the windowed ones and the composite, over `x` of
-/// extents [2, 3] and `ids` of extents [2].
-fn mixed<affine G: Graph>(
-    g: &mut G,
-    x: &G::Tensor<f32, [A, B]>,
-    ids: &G::Tensor<i64, [C]>,
-) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>] with _ {
-    let turned = g.unary(Unary::Tanh, x);
-    let scaled = g.binary(Binary::Multiply, x, &turned);
-    let counted = g.iota::<f32, [A, B]>([2, 3], 1);
-    let above = g.compare(Comparison::Gt, &scaled, &counted);
-    let picked = g.select(&above, &scaled, &counted);
-    let swapped: G::Tensor<f32, [B, A]> = g.transpose(&picked, [1, 0]);
-    let back: G::Tensor<f32, [A, B]> = g.reshape(&swapped, [2, 3]);
-    let cut: G::Tensor<f32, [A, B]> = g.slice(&back, [0, 1], [2, 3], [1, 1]);
-    let joined: G::Tensor<f32, [A, B]> = g.concatenate(&cut, x, 1);
-    let summed: G::Tensor<f32, [B]> = g.reduce(&joined, Binary::Add, 0.0, [0]);
-    let wide: G::Tensor<f32, [A, B]> = g.broadcast_in_dim(&summed, [2, 5], [1]);
-    let flipped = g.reverse(&wide, [1]);
-    let product: G::Tensor<f32, [A, A]> = g.dot_general(
-        &joined,
-        &flipped,
-        &DotDims {
-            lhs_batch: [],
-            rhs_batch: [],
-            lhs_contracting: [1],
-            rhs_contracting: [1],
-        },
-    );
-    let rows: G::Tensor<f32, [C, B]> = g.gather(
-        x,
-        ids,
-        &GatherDims {
-            offset_dims: [1],
-            collapsed_slice_dims: [0],
-            start_index_map: [0],
-            index_vector_dim: 1,
-            slice_sizes: [1, 3],
-        },
-    );
-    let at: G::Tensor<i64, [C, A]> = g.reshape(ids, [2, 1]);
-    let placed = g.scatter(
-        x,
-        &at,
-        &rows,
-        &ScatterDims {
-            update_window_dims: [1],
-            inserted_window_dims: [0],
-            scatter_dims_to_operand_dims: [0],
-            index_vector_dim: 1,
-        },
-    );
-    let widened: G::Tensor<f32, [C]> = g.convert(ids);
-    let twice = g.binary(Binary::Add, ids, ids);
-    return [product, placed, widened, above, twice];
-}
+use { Cpu, Holds } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
-    let x = Tensor::<f32, [A, B]> {
-        data: [0.5, -1.0, 2.0, 3.0, -0.25, 1.5],
-        extents: [2, 3],
-    };
-    let ids = Tensor::<i64, [C]> {
-        data: [1, 5],
-        extents: [2],
-    };
+    let [x, ids] = mixed_inputs();
     let cpu = &mut Cpu {};
     let want = mixed(cpu, &x, &ids);
     let mut r = Recorder::new();
@@ -95,40 +45,8 @@ test "a recorded graph run on the CPU computes what the CPU computes as each ope
     ] as List<Host>;
 }
 
-/// A convolution then a pooling over `x` of extents [1, 1, 4].
-fn windowed<affine G: Graph>(g: &mut G, x: &G::Tensor<f32, [A, B, C]>) -> G::Tensor<f32, [A, B, C]> with _ {
-    let kernel = g.upload(&Tensor::<f32, [A, B, C]> {
-        data: [1.0, -2.0],
-        extents: [1, 1, 2],
-    });
-    let slid: G::Tensor<f32, [A, B, C]> = g.convolution(
-        x,
-        &kernel,
-        &Convolution {
-            window_strides: [1],
-            padding: [1, 0],
-            rhs_dilation: [1],
-            feature_group_count: 1,
-        },
-    );
-    return g.reduce_window(
-        &slid,
-        Binary::Maximum,
-        f32::NEG_INFINITY,
-        &WindowReduce {
-            window_dimensions: [1, 1, 2],
-            window_strides: [1, 1, 2],
-            window_dilations: [1, 1, 1],
-            padding: [0, 0, 0, 0, 0, 1],
-        },
-    );
-}
-
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {
-    let x = Tensor::<f32, [A, B, C]> {
-        data: [1.0, 4.0, -2.0, 3.0],
-        extents: [1, 1, 4],
-    };
+    let x = windowed_input();
     let cpu = &mut Cpu {};
     let want = windowed(cpu, &x);
     let mut r = Recorder::new();
@@ -139,40 +57,9 @@ test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a
     assert run(cpu, &recorded, &[host_of(&x)]) == [host_of(&want)] as List<Host>;
 }
 
-/// Two results of a branch on `pred`, each reading what was computed before it,
-/// and one computed after it from both.
-fn branching<affine G: Graph>(
-    g: &mut G,
-    pred: &G::Tensor<bool, [C]>,
-    x: &G::Tensor<f32, [A]>,
-) -> G::Tensor<f32, [A]> with _ {
-    let doubled = g.binary(Binary::Add, x, x);
-    let [first, second] = g.conditional(pred, || {
-        let negated = g.unary(Unary::Negate, &doubled);
-        return [
-            g.yielded(&negated),
-            g.yielded(x),
-        ];
-    }, || {
-        let squared = g.binary(Binary::Multiply, &doubled, x);
-        return [
-            g.yielded(x),
-            g.yielded(&squared),
-        ];
-    });
-    return g.binary(Binary::Subtract, &first, &second);
-}
-
 test "a recorded conditional runs the branch its predicate picks, the first branch's results naming those of either" {
-    let x = Tensor::<f32, [A]> {
-        data: [1.0, -3.0],
-        extents: [2],
-    };
     for let p of [true, false] as List<bool> {
-        let pred = Tensor::<bool, [C]> {
-            data: [p],
-            extents: [1],
-        };
+        let [pred, x] = branching_inputs(p);
         let cpu = &mut Cpu {};
         let want = branching(cpu, &pred, &x);
         let mut r = Recorder::new();
@@ -194,96 +81,13 @@ test "a recorded graph holds no element to download" {
     r.download(&x);
 }
 
-struct Bt {
-}
-struct St {
-}
-struct Qt {
-}
-struct Kt {
-}
-struct Ht {
-}
-struct Pt {
-}
-struct Tt {
-}
-struct Dt {
-}
-struct Pos {
-}
-struct Half {
-}
-
-fn attending<affine G: Graph>(
-    g: &mut G,
-    inputs: &[G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, St, Kt]>, G::Tensor<f32, [Bt, St, Kt]>],
-    past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, []>],
-    rotation: &[G::Tensor<f32, [Pos, Half]>, G::Tensor<f32, [Pos, Half]>],
-    options: &Attention,
-) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
-    return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
-        &inputs.0,
-        &inputs.1,
-        &inputs.2,
-        &past.0,
-        &past.1,
-        Option::Some(&past.2),
-        Option::Some(&rotation.0),
-        Option::Some(&rotation.1),
-        null,
-        options,
-    );
-}
-
-/// Deterministic values in [-1, 1).
-fn noise(n: i32, seed: i32) -> List<f32> {
-    let mut out: List<f32> = [];
-    let mut s = seed as u32 * 2654435761 + 1;
-    for let _ of 0..<n {
-        s = s * 1664525 + 1013904223;
-        out.push((s >> 8) as f32 / 8388608.0 - 1.0);
-    }
-    return out;
-}
-
 test "a recorded attention composite computes the CPU's, its presents the buffer it shares" {
-    let [batch, s, heads, kv, capacity, d, positions] = [1, 2, 4, 2, 4, 4, 8];
-    let q = Tensor::<f32, [Bt, St, Qt]> {
-        data: noise(batch * s * heads * d, 1),
-        extents: [batch, s, heads * d],
-    };
-    let k = Tensor::<f32, [Bt, St, Kt]> {
-        data: noise(batch * s * kv * d, 2),
-        extents: [batch, s, kv * d],
-    };
-    let v = Tensor::<f32, [Bt, St, Kt]> {
-        data: noise(batch * s * kv * d, 3),
-        extents: [batch, s, kv * d],
-    };
-    let past_k = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
-        data: noise(batch * kv * capacity * d, 4),
-        extents: [batch, kv, capacity, d],
-    };
-    let past_v = Tensor::<f32, [Bt, Ht, Pt, Dt]> {
-        data: noise(batch * kv * capacity * d, 5),
-        extents: [batch, kv, capacity, d],
-    };
-    let length = Tensor::<i64, []> {
-        data: [1],
-        extents: [],
-    };
-    let cos = Tensor::<f32, [Pos, Half]> {
-        data: noise(positions * d / 2, 6),
-        extents: [positions, d / 2],
-    };
-    let sin = Tensor::<f32, [Pos, Half]> {
-        data: noise(positions * d / 2, 7),
-        extents: [positions, d / 2],
-    };
-    let options = Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true };
+    let case = attention_case();
+    let [q, k, v] = case.inputs;
+    let [past_k, past_v, length] = case.past;
+    let [cos, sin] = case.rotation;
     let cpu = &mut Cpu {};
-    let want = attending(cpu, &[q, k, v], &[past_k, past_v, length], &[cos, sin], &options);
+    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.options);
     let mut r = Recorder::new();
     let inputs = [
         r.parameter::<f32, [Bt, St, Qt]>(q.extents),
@@ -299,7 +103,7 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         r.parameter::<f32, [Pos, Half]>(cos.extents),
         r.parameter::<f32, [Pos, Half]>(sin.extents),
     ];
-    let got = attending(&mut r, &inputs, &past, &rotation, &options);
+    let got = attending(&mut r, &inputs, &past, &rotation, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
     assert recorded.nodes[got.1.id].extents == want.1.extents;
     let arguments: List<Host> = [

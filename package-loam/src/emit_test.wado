@@ -1358,6 +1358,11 @@ test "compute holds a cache at the capacity of the total, its past's length what
     assert computed.contains(
         "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))",
     );
+    // A device releases the pass before at `begin`, but for the cache it retains.
+    let begun = computed.find("backend.begin();").unwrap();
+    assert computed.find("cache.retain(backend);").unwrap() < begun;
+    assert begun < computed.find("let Q = ").unwrap();
+    assert begun < computed.find("fitted::<Bk").unwrap();
 }
 
 test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {

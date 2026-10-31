@@ -79,15 +79,15 @@ use {
 /// the same buffer.
 pub struct DeviceTensor {
     /// The buffer's place in the backend: see `WebGpuBackend::buffer`.
-    slot: i32,
-    offset: i32,
-    extents: List<i32>,
-    strides: List<i32>,
+    internal slot: i32,
+    internal offset: i32,
+    internal extents: List<i32>,
+    internal strides: List<i32>,
     /// Whether the buffer holds bf16 elements, two to a word, the even one in
     /// the low half. Only a product's right operand, a gather's data and a
     /// copy's source read one so; every other kernel takes f32, which
     /// `materialized` widens it to.
-    half: bool,
+    internal half: bool,
 }
 
 /// A tensor where the WebGPU backend holds it.
@@ -263,7 +263,7 @@ pub affine struct WebGpuBackend {
     read_backs: i32,
     dispatches: i32,
     bind_groups: i32,
-    cpu: Cpu,
+    internal cpu: Cpu,
 }
 
 /// Invocations per workgroup of every shader but the product's: a power of
@@ -471,7 +471,7 @@ impl WebGpuBackend {
 
     /// A buffer of `count` 32-bit words, and its slot: a spare of that size,
     /// or a new one. A spare's words are what its last pass left.
-    fn allocated(&mut self, count: i32, kept: bool) -> i32 with (GpuDevice, GpuBuffer) {
+    internal fn allocated(&mut self, count: i32, kept: bool) -> i32 with (GpuDevice, GpuBuffer) {
         if kept {
             self.kept.push(self.created(count));
             return -self.kept.len();
@@ -638,7 +638,7 @@ impl WebGpuBackend {
     }
 
     /// `t`, which a caller found on the host.
-    fn host_only<E, Axes>(&self, t: &Placed<E, Axes>) -> Tensor<E, Axes> {
+    internal fn host_only<E, Axes>(&self, t: &Placed<E, Axes>) -> Tensor<E, Axes> {
         let Host(h) = t else {
             unreachable();
         };
@@ -647,7 +647,7 @@ impl WebGpuBackend {
 
     /// `t` on the device: its view, or the host tensor written there for this
     /// pass.
-    fn device_view<E: Element, Axes>(
+    internal fn device_view<E: Element, Axes>(
         &mut self,
         t: &Placed<E, Axes>,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuBuffer) {
@@ -668,7 +668,7 @@ impl WebGpuBackend {
         return Option::Some(self.host(placed));
     }
 
-    fn host<E: Element, Axes>(
+    internal fn host<E: Element, Axes>(
         &mut self,
         t: &Placed<E, Axes>,
     ) -> Tensor<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -744,7 +744,7 @@ impl WebGpuBackend {
 
     /// `t` with its f32 elements in row-major order from its offset: `t`
     /// itself, or a copy.
-    fn materialized(
+    internal fn materialized(
         &mut self,
         t: &DeviceTensor,
     ) -> DeviceTensor with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
@@ -1035,7 +1035,7 @@ impl WebGpuBackend {
     /// Copies `from`'s elements to `to`'s place, the two of one extents, a
     /// half `from` widened: in one dispatch, or in halves along an axis where
     /// one outgrows a binding.
-    fn copy(
+    internal fn copy(
         &mut self,
         from: &DeviceTensor,
         to: &DeviceTensor,
@@ -1064,7 +1064,7 @@ impl WebGpuBackend {
 
     /// `op` over `operands`, on the device where they fit a dispatch and on
     /// the CPU otherwise.
-    fn fused_on<Axes>(
+    internal fn fused_on<Axes>(
         &mut self,
         operands: &List<DeviceTensor>,
         op: &Expr,
@@ -1117,7 +1117,7 @@ impl WebGpuBackend {
     /// rank-1 operand is a row on the left or a column on the right, whose axis
     /// the result drops, and the batch axes broadcast. `then` runs in the same
     /// dispatch where its operands fit beside the two matrices.
-    fn product<A, B, Out>(
+    internal fn product<A, B, Out>(
         &mut self,
         a: &Placed<f32, A>,
         b: &Placed<f32, B>,
@@ -1398,7 +1398,7 @@ impl WebGpuBackend {
     /// A gather of `data` along `axis` by `indices`, a negative one counting
     /// from the end: the result's axes are `data`'s before `axis`, the
     /// indices', then `data`'s after `axis`.
-    fn gathered<Ix>(
+    internal fn gathered<Ix>(
         &mut self,
         data: &DeviceTensor,
         indices: &Tensor<i64, Ix>,
@@ -1481,7 +1481,7 @@ impl WebGpuBackend {
     }
 
     /// `t` folded along `axes` by the row kernel, those axes kept at extent 1.
-    fn reduced(
+    internal fn reduced(
         &mut self,
         t: &DeviceTensor,
         axes: &List<i32>,
@@ -1498,7 +1498,7 @@ impl WebGpuBackend {
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
     /// tables. `None` where the operands outgrow what a dispatch binds.
-    fn attended(
+    internal fn attended(
         &mut self,
         q: &DeviceTensor,
         k: &DeviceTensor,
@@ -1702,28 +1702,6 @@ impl Holds for WebGpuBackend {
     ) -> Tensor<E, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         return self.host(t);
     }
-}
-
-impl Backend for WebGpuBackend {
-    type Operand<Axes> = PlacedRead<Axes>;
-    /// A matrix kept column by column where one binding holds it, of bf16
-    /// elements where those hold every value: see `kept_matrix`.
-    type Rhs<K, N> = Placed<f32, [K, N]>;
-
-    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        let [k, n] = [t.extents[0], t.extents[1]];
-        let data = &t.data;
-        return self.kept_matrix(k, n, data, |r, c| data[r * n + c]);
-    }
-
-    fn keep_rhs_transposed<K, N>(
-        &mut self,
-        t: &Tensor<f32, [N, K]>,
-    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
-        let k = t.extents[1];
-        let data = &t.data;
-        return self.kept_matrix(k, t.extents[0], data, |r, c| data[c * k + r]);
-    }
 
     /// Submits what the pass before recorded and releases its buffers, so a
     /// tensor of that pass is no longer one to read, but for those it
@@ -1775,6 +1753,28 @@ impl Backend for WebGpuBackend {
         if let Device(d) = t && d.slot >= 0 {
             self.retaining.insert(d.slot);
         }
+    }
+}
+
+impl Backend for WebGpuBackend {
+    type Operand<Axes> = PlacedRead<Axes>;
+    /// A matrix kept column by column where one binding holds it, of bf16
+    /// elements where those hold every value: see `kept_matrix`.
+    type Rhs<K, N> = Placed<f32, [K, N]>;
+
+    fn keep_rhs<K, N>(&mut self, t: &Tensor<f32, [K, N]>) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let [k, n] = [t.extents[0], t.extents[1]];
+        let data = &t.data;
+        return self.kept_matrix(k, n, data, |r, c| data[r * n + c]);
+    }
+
+    fn keep_rhs_transposed<K, N>(
+        &mut self,
+        t: &Tensor<f32, [N, K]>,
+    ) -> Placed<f32, [K, N]> with (GpuDevice, GpuQueue, GpuBuffer) {
+        let k = t.extents[1];
+        let data = &t.data;
+        return self.kept_matrix(k, t.extents[0], data, |r, c| data[c * k + r]);
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Placed<E, Axes> {
@@ -2481,7 +2481,7 @@ fn split_axis(extents: &List<i32>) -> i32 {
 }
 
 /// A view of `extents` laid out row-major from `offset`.
-fn contiguous(slot: i32, offset: i32, extents: List<i32>) -> DeviceTensor {
+internal fn contiguous(slot: i32, offset: i32, extents: List<i32>) -> DeviceTensor {
     return DeviceTensor { slot, offset, strides: row_major(&extents), extents, half: false };
 }
 
@@ -2536,7 +2536,7 @@ fn broadcast_all(operands: &List<DeviceTensor>) -> List<i32> {
 }
 
 /// `t`'s axes in the order `perm` lists them.
-fn permuted(t: &DeviceTensor, perm: &List<i32>) -> DeviceTensor {
+internal fn permuted(t: &DeviceTensor, perm: &List<i32>) -> DeviceTensor {
     let mut extents: List<i32> = [];
     let mut strides: List<i32> = [];
     for let p of *perm {
@@ -2550,7 +2550,7 @@ fn permuted(t: &DeviceTensor, perm: &List<i32>) -> DeviceTensor {
 /// buffer, or `None` where its strides cannot say it so a copy must. Each run
 /// of `t`'s axes that `extents` regroups must step through memory as one axis
 /// would, as numpy's reshape asks before it copies.
-fn regrouped(t: &DeviceTensor, extents: &List<i32>) -> Option<DeviceTensor> {
+internal fn regrouped(t: &DeviceTensor, extents: &List<i32>) -> Option<DeviceTensor> {
     if element_count(extents) == 0 {
         return null;
     }

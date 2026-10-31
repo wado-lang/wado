@@ -2251,6 +2251,18 @@ pub affine trait Holds with _ {
     fn extents_of<E: Element, Axes>(&self, t: &Self::Tensor<E, Axes>) -> List<i32>;
     /// `t` back on the host.
     fn download<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) -> Tensor<E, Axes>;
+    /// The start of a pass. What the pass before computed is dead, but for
+    /// what it retained: a caller of `pass` reads its outputs before the next
+    /// pass, and `forward` and `compute` have downloaded them, so a backend
+    /// may release it.
+    fn begin(&mut self) {
+    }
+    /// Keeps `t` alive through the next [`Self::begin`], for the pass after
+    /// it to read, as a model retains the attention cache it still holds just
+    /// before it begins. The begin after that releases it, unless `t` is
+    /// retained again.
+    fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
+    }
 }
 
 /// Where the kernels run. `forward` is instantiated at each backend, and the
@@ -2281,19 +2293,6 @@ pub affine trait Backend: Holds with _ {
     fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Self::Rhs<K, N> {
         return self.keep_rhs_transposed(&widen(t));
     }
-    /// The start of a forward pass. What the pass before computed is dead,
-    /// but for what it retained: a caller of `pass` reads its outputs before
-    /// the next pass, and `forward` has downloaded them, so a backend may
-    /// release it.
-    fn begin(&mut self) {
-    }
-    /// Keeps `t` alive through the next [`Self::begin`], for the pass after
-    /// it to read, as a model retains the attention cache it still holds just
-    /// before it begins. The begin after that releases it, unless `t` is
-    /// retained again.
-    fn retain<E: Element, Axes>(&mut self, t: &Self::Tensor<E, Axes>) {
-    }
-
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Self::Tensor<E, Axes>;
     fn range_i64<A>(&mut self, start: i64, count: i32, delta: i64) -> Self::Tensor<i64, [A]>;
 

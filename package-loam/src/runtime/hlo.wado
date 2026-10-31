@@ -290,11 +290,11 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         query = turned::<G, B, Heads, S, D, Half>(g, &query, &cos_rows, &sin_rows);
         key = turned::<G, B, H, S, D, Half>(g, &key, &cos_rows, &sin_rows);
     }
-    let mut present = |past: &G::Tensor<f32, [B, H, P, D]>, new: &G::Tensor<f32, [B, H, S, D]>| -> G::Tensor<f32, [B, H, T, D]> {
+    let mut present = |held: &G::Tensor<f32, [B, H, P, D]>, new: &G::Tensor<f32, [B, H, S, D]>| -> G::Tensor<f32, [B, H, T, D]> {
         if past_length matches { None } {
-            return g.concatenate(past, new, 2);
+            return g.concatenate(held, new, 2);
         }
-        return g.reshape(&written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, past, new, 2, &first), [
+        return g.reshape(&written_at::<G, f32, [B, H, P, D], [B, H, S, D]>(g, held, new, 2, &first), [
             batch, kv, total, d,
         ]);
     };
@@ -325,9 +325,9 @@ pub fn decomposed_attention<affine G: Graph, B, S, Q, K, H, P, T, D, Pos, Half, 
         scores = g.binary(Binary::Add, &scores, &stretched);
     }
     if options.causal || options.window > 0 {
-        let masked = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
+        let hidden = attention_mask::<G, B, Heads, S, T>(g, &first, options, &score_extents);
         let lowest = full::<G, f32, [B, Heads, S, T]>(g, f32::NEG_INFINITY, score_extents);
-        scores = g.select(&masked, &lowest, &scores);
+        scores = g.select(&hidden, &lowest, &scores);
     }
     let weights = softmax::<G, [B, Heads, S, T]>(g, &scores, 3);
     let attend = DotDims {
@@ -705,7 +705,7 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     let row: G::Tensor<i64, [S, T]> = g.iota(plane, 0);
     let position = g.binary(Binary::Add, &row, &g.broadcast_in_dim(first, plane, []));
     let key: G::Tensor<i64, [S, T]> = g.iota(plane, 1);
-    let mut masked: G::Tensor<bool, [S, T]> = if options.causal {
+    let mut hidden: G::Tensor<bool, [S, T]> = if options.causal {
         g.compare(Comparison::Gt, &key, &position);
     } else {
         full::<G, bool, [S, T]>(g, false, plane);
@@ -713,9 +713,9 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     if options.window > 0 {
         let behind = g.binary(Binary::Subtract, &position, &key);
         let far = g.compare(Comparison::Ge, &behind, &full::<G, i64, [S, T]>(g, options.window as i64, plane));
-        masked = g.select(&far, &far, &masked);
+        hidden = g.select(&far, &far, &hidden);
     }
-    return g.broadcast_in_dim(&masked, *extents, [2, 3]);
+    return g.broadcast_in_dim(&hidden, *extents, [2, 3]);
 }
 
 impl Graph for Cpu {

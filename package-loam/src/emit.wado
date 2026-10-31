@@ -1459,6 +1459,11 @@ fn emit_compute(
         lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
         capacities.idents[symbol] = capacity;
     }
+    // The cache was computed before the pass this call begins.
+    if has_cache {
+        lines.push("cache.retain(backend);");
+    }
+    lines.push("backend.begin();");
     let mut arguments: List<String> = ["backend"];
     for let vi of &taken {
         let ident = names.get(&vi.name);
@@ -1817,11 +1822,7 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     }
     w.line("    };");
     w.line("}");
-    w.end();
     w.blank();
-    let mut block = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
-    block.add_generic(BACKEND_BOUND);
-    block.emit_begin(w);
     w.line("/// Keeps the cache through the next `backend.begin()`.");
     w.line(`pub fn retain(&self, backend: &mut ${BACKEND_PARAM}) with _ {`);
     for let line of retains {

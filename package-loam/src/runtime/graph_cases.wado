@@ -1,0 +1,236 @@
+//! Graphs built through any `Graph`, which the recorder's tests and the WebGPU
+//! conformance program both compute on `Cpu` to compare against.
+
+use { Binary, Comparison, Convolution, DotDims, GatherDims, Graph, ScatterDims, Unary, WindowReduce } from "./hlo.wado";
+use { Attention, Tensor, element_count } from "./tensor.wado";
+use { noise } from "../../example/webgpu/compare.wado";
+
+pub struct A {
+}
+pub struct B {
+}
+pub struct C {
+}
+
+/// Every operation but the windowed ones and the composite, over `x` of
+/// extents [2, 3] and `ids` of extents [2].
+pub fn mixed<affine G: Graph>(
+    g: &mut G,
+    x: &G::Tensor<f32, [A, B]>,
+    ids: &G::Tensor<i64, [C]>,
+) -> [G::Tensor<f32, [A, A]>, G::Tensor<f32, [A, B]>, G::Tensor<f32, [C]>, G::Tensor<bool, [A, B]>, G::Tensor<i64, [C]>] with _ {
+    let turned = g.unary(Unary::Tanh, x);
+    let scaled = g.binary(Binary::Multiply, x, &turned);
+    let counted = g.iota::<f32, [A, B]>([2, 3], 1);
+    let above = g.compare(Comparison::Gt, &scaled, &counted);
+    let picked = g.select(&above, &scaled, &counted);
+    let swapped: G::Tensor<f32, [B, A]> = g.transpose(&picked, [1, 0]);
+    let back: G::Tensor<f32, [A, B]> = g.reshape(&swapped, [2, 3]);
+    let cut: G::Tensor<f32, [A, B]> = g.slice(&back, [0, 1], [2, 3], [1, 1]);
+    let joined: G::Tensor<f32, [A, B]> = g.concatenate(&cut, x, 1);
+    let summed: G::Tensor<f32, [B]> = g.reduce(&joined, Binary::Add, 0.0, [0]);
+    let wide: G::Tensor<f32, [A, B]> = g.broadcast_in_dim(&summed, [2, 5], [1]);
+    let flipped = g.reverse(&wide, [1]);
+    let product: G::Tensor<f32, [A, A]> = g.dot_general(
+        &joined,
+        &flipped,
+        &DotDims {
+            lhs_batch: [],
+            rhs_batch: [],
+            lhs_contracting: [1],
+            rhs_contracting: [1],
+        },
+    );
+    let rows: G::Tensor<f32, [C, B]> = g.gather(
+        x,
+        ids,
+        &GatherDims {
+            offset_dims: [1],
+            collapsed_slice_dims: [0],
+            start_index_map: [0],
+            index_vector_dim: 1,
+            slice_sizes: [1, 3],
+        },
+    );
+    let at: G::Tensor<i64, [C, A]> = g.reshape(ids, [2, 1]);
+    let placed = g.scatter(
+        x,
+        &at,
+        &rows,
+        &ScatterDims {
+            update_window_dims: [1],
+            inserted_window_dims: [0],
+            scatter_dims_to_operand_dims: [0],
+            index_vector_dim: 1,
+        },
+    );
+    let widened: G::Tensor<f32, [C]> = g.convert(ids);
+    let twice = g.binary(Binary::Add, ids, ids);
+    return [product, placed, widened, above, twice];
+}
+
+/// A convolution then a pooling over `x` of extents [1, 1, 4].
+pub fn windowed<affine G: Graph>(g: &mut G, x: &G::Tensor<f32, [A, B, C]>) -> G::Tensor<f32, [A, B, C]> with _ {
+    let kernel = g.upload(&Tensor::<f32, [A, B, C]> {
+        data: [1.0, -2.0],
+        extents: [1, 1, 2],
+    });
+    let slid: G::Tensor<f32, [A, B, C]> = g.convolution(
+        x,
+        &kernel,
+        &Convolution {
+            window_strides: [1],
+            padding: [1, 0],
+            rhs_dilation: [1],
+            feature_group_count: 1,
+        },
+    );
+    return g.reduce_window(
+        &slid,
+        Binary::Maximum,
+        f32::NEG_INFINITY,
+        &WindowReduce {
+            window_dimensions: [1, 1, 2],
+            window_strides: [1, 1, 2],
+            window_dilations: [1, 1, 1],
+            padding: [0, 0, 0, 0, 0, 1],
+        },
+    );
+}
+
+/// Two results of a branch on `pred`, each reading what was computed before it,
+/// and one computed after it from both.
+pub fn branching<affine G: Graph>(
+    g: &mut G,
+    pred: &G::Tensor<bool, [C]>,
+    x: &G::Tensor<f32, [A]>,
+) -> G::Tensor<f32, [A]> with _ {
+    let doubled = g.binary(Binary::Add, x, x);
+    let [first, second] = g.conditional(pred, || {
+        let negated = g.unary(Unary::Negate, &doubled);
+        return [
+            g.yielded(&negated),
+            g.yielded(x),
+        ];
+    }, || {
+        let squared = g.binary(Binary::Multiply, &doubled, x);
+        return [
+            g.yielded(x),
+            g.yielded(&squared),
+        ];
+    });
+    return g.binary(Binary::Subtract, &first, &second);
+}
+
+pub struct Bt {
+}
+pub struct St {
+}
+pub struct Qt {
+}
+pub struct Kt {
+}
+pub struct Ht {
+}
+pub struct Pt {
+}
+pub struct Tt {
+}
+pub struct Dt {
+}
+pub struct Pos {
+}
+pub struct Half {
+}
+
+/// Attention over a past of `past.2` positions in a shared buffer, turned by
+/// `rotation`.
+pub fn attending<affine G: Graph>(
+    g: &mut G,
+    inputs: &[G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, St, Kt]>, G::Tensor<f32, [Bt, St, Kt]>],
+    past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, []>],
+    rotation: &[G::Tensor<f32, [Pos, Half]>, G::Tensor<f32, [Pos, Half]>],
+    options: &Attention,
+) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
+    return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
+        &inputs.0,
+        &inputs.1,
+        &inputs.2,
+        &past.0,
+        &past.1,
+        Option::Some(&past.2),
+        Option::Some(&rotation.0),
+        Option::Some(&rotation.1),
+        null,
+        options,
+    );
+}
+
+pub fn mixed_inputs() -> [Tensor<f32, [A, B]>, Tensor<i64, [C]>] {
+    return [
+        Tensor {
+            data: [0.5, -1.0, 2.0, 3.0, -0.25, 1.5],
+            extents: [2, 3],
+        },
+        Tensor {
+            data: [1, 5],
+            extents: [2],
+        },
+    ];
+}
+
+pub fn windowed_input() -> Tensor<f32, [A, B, C]> {
+    return Tensor {
+        data: [1.0, 4.0, -2.0, 3.0],
+        extents: [1, 1, 4],
+    };
+}
+
+pub fn branching_inputs(p: bool) -> [Tensor<bool, [C]>, Tensor<f32, [A]>] {
+    return [
+        Tensor {
+            data: [p],
+            extents: [1],
+        },
+        Tensor {
+            data: [1.0, -3.0],
+            extents: [2],
+        },
+    ];
+}
+
+/// `attending`'s arguments: a past of one position in a buffer of four.
+pub struct AttentionCase {
+    pub inputs: [Tensor<f32, [Bt, St, Qt]>, Tensor<f32, [Bt, St, Kt]>, Tensor<f32, [Bt, St, Kt]>],
+    pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, []>],
+    pub rotation: [Tensor<f32, [Pos, Half]>, Tensor<f32, [Pos, Half]>],
+    pub options: Attention,
+}
+
+pub fn attention_case() -> AttentionCase {
+    let [batch, s, heads, kv, capacity, d, positions] = [1, 2, 4, 2, 4, 4, 8];
+    return AttentionCase {
+        inputs: [
+            noisy([batch, s, heads * d], 1),
+            noisy([batch, s, kv * d], 2),
+            noisy([batch, s, kv * d], 3),
+        ],
+        past: [
+            noisy([batch, kv, capacity, d], 4),
+            noisy([batch, kv, capacity, d], 5),
+            Tensor {
+                data: [1],
+                extents: [],
+            },
+        ],
+        rotation: [
+            noisy([positions, d / 2], 6),
+            noisy([positions, d / 2], 7),
+        ],
+        options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
+    };
+}
+
+fn noisy<Axes>(extents: List<i32>, seed: u32) -> Tensor<f32, Axes> {
+    return Tensor { data: noise(element_count(&extents), seed, 1.0), extents };
+}
