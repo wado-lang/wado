@@ -795,14 +795,12 @@ impl Graph for Cpu {
     ) -> Tensor<E, Out> {
         let own = row_major_strides(&x.extents);
         let mut base = 0;
-        let mut extents: List<i32> = [];
         let mut steps: List<i32> = [];
         for let i of 0..<x.extents.len() {
-            assert 0 <= start[i] <= limit[i] <= x.extents[i] && strides[i] > 0, "a slice lies within its operand";
             base += start[i] * own[i];
-            extents.push((limit[i] - start[i]).div_ceil(strides[i]));
             steps.push(own[i] * strides[i]);
         }
+        let extents = sliced_extents(&x.extents, &start, &limit, &strides);
         return Tensor { data: walked(&x.data, base, &steps, &extents), extents };
     }
 
@@ -812,11 +810,7 @@ impl Graph for Cpu {
         b: &Tensor<E, B>,
         dimension: i32,
     ) -> Tensor<E, Out> {
-        let mut extents = a.extents;
-        extents[dimension] = a.extents[dimension] + b.extents[dimension];
-        for let i of 0..<extents.len() {
-            assert i == dimension || a.extents[i] == b.extents[i], "concatenated operands agree off the joined axis";
-        }
+        let extents = joined_extents(&a.extents, &b.extents, dimension);
         let outer = element_count(&a.extents[0..<dimension].to_list());
         let [a_run, b_run] = [
             element_count(&a.extents[dimension..<a.extents.len()].to_list()),
@@ -831,17 +825,9 @@ impl Graph for Cpu {
     }
 
     fn reduce<In, Out>(&mut self, x: &Tensor<f32, In>, op: Binary, init: f32, dims: List<i32>) -> Tensor<f32, Out> {
-        let mut kept: List<i32> = [];
-        let mut reduced: List<i32> = [];
-        for let i of 0..<x.extents.len() {
-            if dims.contains(&i) {
-                reduced.push(i);
-            } else {
-                kept.push(i);
-            }
-        }
+        let kept = kept_axes(x.extents.len(), &dims);
         let mut perm = kept;
-        perm.extend(&reduced);
+        perm.extend(&(0..<x.extents.len()).filter(|i| dims.contains(&i)).collect());
         let laid: Tensor<f32, In> = self.transpose(x, perm);
         let extents = picked(&x.extents, &kept);
         let rows = element_count(&extents);
@@ -858,6 +844,7 @@ impl Graph for Cpu {
     }
 
     fn dot_general<A, B, Out>(&mut self, lhs: &Tensor<f32, A>, rhs: &Tensor<f32, B>, dims: &DotDims) -> Tensor<f32, Out> {
+        let extents = dot_extents(&lhs.extents, &rhs.extents, dims);
         let lhs_free = free_axes(lhs.extents.len(), &dims.lhs_batch, &dims.lhs_contracting);
         let rhs_free = free_axes(rhs.extents.len(), &dims.rhs_batch, &dims.rhs_contracting);
         let batch = element_count(&picked(&lhs.extents, &dims.lhs_batch));
@@ -866,19 +853,10 @@ impl Graph for Cpu {
             element_count(&picked(&lhs.extents, &dims.lhs_contracting)),
             element_count(&picked(&rhs.extents, &rhs_free)),
         ];
-        for let [i, a] of dims.lhs_batch.into_iter().enumerate() {
-            assert lhs.extents[a] == rhs.extents[dims.rhs_batch[i]], "the batch axes agree";
-        }
-        for let [i, a] of dims.lhs_contracting.into_iter().enumerate() {
-            assert lhs.extents[a] == rhs.extents[dims.rhs_contracting[i]], "the contracting axes agree";
-        }
         let mut lhs_order = dims.lhs_batch;
         lhs_order.extend(&lhs_free);
         lhs_order.extend(&dims.lhs_contracting);
         let a = laid_out(lhs, &lhs_order);
-        let mut extents = picked(&lhs.extents, &dims.lhs_batch);
-        extents.extend(&picked(&lhs.extents, &lhs_free));
-        extents.extend(&picked(&rhs.extents, &rhs_free));
         // A weight is read in place in either order it is stored in, rather
         // than copied on every call: by rows where its contracting axes are
         // last, as a tied embedding's are, and by columns where they lead.
@@ -903,34 +881,10 @@ impl Graph for Cpu {
     ) -> Tensor<E, Out> {
         let rank = operand.extents.len();
         let implicit = dims.index_vector_dim == indices.extents.len();
-        let mut batch_extents: List<i32> = [];
-        for let i of 0..<indices.extents.len() {
-            if i != dims.index_vector_dim {
-                batch_extents.push(indices.extents[i]);
-            }
-        }
-        let mut offset_extents: List<i32> = [];
-        let mut offset_axes: List<i32> = [];
-        for let a of 0..<rank {
-            if !dims.collapsed_slice_dims.contains(&a) {
-                offset_extents.push(dims.slice_sizes[a]);
-                offset_axes.push(a);
-            }
-        }
-        let out_rank = batch_extents.len() + offset_extents.len();
-        let mut extents = List::<i32>::filled(out_rank, 0);
-        let mut batch_at: List<i32> = [];
-        let [mut b, mut o] = [0, 0];
-        for let d of 0..<out_rank {
-            if dims.offset_dims.contains(&d) {
-                extents[d] = offset_extents[o];
-                o += 1;
-            } else {
-                extents[d] = batch_extents[b];
-                batch_at.push(d);
-                b += 1;
-            }
-        }
+        let offset_axes: List<i32> = (0..<rank).filter(|a| !dims.collapsed_slice_dims.contains(&a)).collect();
+        let extents = gathered_extents(&indices.extents, dims);
+        let out_rank = extents.len();
+        let batch_at: List<i32> = (0..<out_rank).filter(|d| !dims.offset_dims.contains(&d)).collect();
         let own = row_major_strides(&operand.extents);
         let index_strides = row_major_strides(&indices.extents);
         let vector_stride = if implicit { 0 } else { index_strides[dims.index_vector_dim] };
@@ -1013,25 +967,7 @@ impl Graph for Cpu {
         kernel: &Tensor<f32, K>,
         conv: &Convolution,
     ) -> Tensor<f32, Out> {
-        let spatial = x.extents.len() - 2;
-        let mut window = Window {
-            kernel: [],
-            strides: conv.window_strides,
-            dilations: conv.rhs_dilation,
-            pads: [],
-            output: [],
-        };
-        let mut ends: List<i32> = [];
-        for let i of 0..<spatial {
-            let k = kernel.extents[2 + i];
-            let [lo, hi] = [conv.padding[2 * i], conv.padding[2 * i + 1]];
-            window.kernel.push(k);
-            window.pads.push(lo);
-            ends.push(hi);
-            let span = (k - 1) * conv.rhs_dilation[i] + 1;
-            window.output.push((x.extents[2 + i] + lo + hi - span) / conv.window_strides[i] + 1);
-        }
-        window.pads.extend(&ends);
+        let window = conv_window(&x.extents, &kernel.extents, conv);
         let t = conv_grouped::<Batch, Feature, Feature, Feature, [Spatial], [Spatial], [Spatial]>(
             &Tensor { data: x.data, extents: x.extents },
             &Tensor { data: kernel.data, extents: kernel.extents },
@@ -1051,24 +987,7 @@ impl Graph for Cpu {
     ) -> Tensor<f32, Out>
         contract op matches { Maximum } && init == f32::NEG_INFINITY, "the CPU reduces windows by their greatest alone"
     {
-        let spatial = x.extents.len() - 2;
-        let mut pooled = Window { kernel: [], strides: [], dilations: [], pads: [], output: [] };
-        let mut ends: List<i32> = [];
-        for let a of 0..<2 {
-            assert window.window_dimensions[a] == 1 && window.window_strides[a] == 1, "the batch and feature axes are windows of one";
-        }
-        for let i of 2..<spatial + 2 {
-            let k = window.window_dimensions[i];
-            let [lo, hi] = [window.padding[2 * i], window.padding[2 * i + 1]];
-            pooled.kernel.push(k);
-            pooled.strides.push(window.window_strides[i]);
-            pooled.dilations.push(window.window_dilations[i]);
-            pooled.pads.push(lo);
-            ends.push(hi);
-            let span = (k - 1) * window.window_dilations[i] + 1;
-            pooled.output.push((x.extents[i] + lo + hi - span) / window.window_strides[i] + 1);
-        }
-        pooled.pads.extend(&ends);
+        let pooled = pooled_window(&x.extents, window);
         let t = max_pool::<Batch, Feature, [Spatial], [Spatial]>(&Tensor { data: x.data, extents: x.extents }, &pooled);
         return Tensor { data: t.data, extents: t.extents };
     }
@@ -1225,6 +1144,112 @@ fn free_axes(rank: i32, batch: &List<i32>, contracting: &List<i32>) -> List<i32>
         }
     }
     return free;
+}
+
+/// The axes of a rank `rank` operand that a reduction over `dims` keeps.
+fn kept_axes(rank: i32, dims: &List<i32>) -> List<i32> {
+    return (0..<rank).filter(|i| !dims.contains(&i)).collect();
+}
+
+/// The extents a `reduce` over `dims` leaves of `extents`.
+pub fn reduced_extents(extents: &List<i32>, dims: &List<i32>) -> List<i32> {
+    return picked(extents, &kept_axes(extents.len(), dims));
+}
+
+/// The extents of a `slice` of an operand of `extents`.
+pub fn sliced_extents(extents: &List<i32>, start: &List<i32>, limit: &List<i32>, strides: &List<i32>) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let i of 0..<extents.len() {
+        assert 0 <= start[i] <= limit[i] <= extents[i] && strides[i] > 0, "a slice lies within its operand";
+        out.push((limit[i] - start[i]).div_ceil(strides[i]));
+    }
+    return out;
+}
+
+/// The extents of `a` and `b` joined along `dimension`.
+pub fn joined_extents(a: &List<i32>, b: &List<i32>, dimension: i32) -> List<i32> {
+    let mut extents = *a;
+    extents[dimension] = a[dimension] + b[dimension];
+    for let i of 0..<extents.len() {
+        assert i == dimension || a[i] == b[i], "concatenated operands agree off the joined axis";
+    }
+    return extents;
+}
+
+/// The extents of a `dot_general`: the batch axes, then the left operand's free
+/// axes, then the right's.
+pub fn dot_extents(lhs: &List<i32>, rhs: &List<i32>, dims: &DotDims) -> List<i32> {
+    for let [i, a] of dims.lhs_batch.into_iter().enumerate() {
+        assert lhs[a] == rhs[dims.rhs_batch[i]], "the batch axes agree";
+    }
+    for let [i, a] of dims.lhs_contracting.into_iter().enumerate() {
+        assert lhs[a] == rhs[dims.rhs_contracting[i]], "the contracting axes agree";
+    }
+    let mut extents = picked(lhs, &dims.lhs_batch);
+    extents.extend(&picked(lhs, &free_axes(lhs.len(), &dims.lhs_batch, &dims.lhs_contracting)));
+    extents.extend(&picked(rhs, &free_axes(rhs.len(), &dims.rhs_batch, &dims.rhs_contracting)));
+    return extents;
+}
+
+/// The extents of a `gather` by indices of `indices`: each offset axis a
+/// slice size where `offset_dims` places it, the indices' batch axes between.
+pub fn gathered_extents(indices: &List<i32>, dims: &GatherDims) -> List<i32> {
+    let batch: List<i32> = (0..<indices.len()).filter(|i| i != dims.index_vector_dim).map(|i| indices[i]).collect();
+    let offsets: List<i32> = (0..<dims.slice_sizes.len()).filter(|a| !dims.collapsed_slice_dims.contains(&a)).map(
+        |a| dims.slice_sizes[a],
+    ).collect();
+    let mut extents: List<i32> = [];
+    let [mut b, mut o] = [0, 0];
+    for let d of 0..<batch.len() + offsets.len() {
+        if dims.offset_dims.contains(&d) {
+            extents.push(offsets[o]);
+            o += 1;
+        } else {
+            extents.push(batch[b]);
+            b += 1;
+        }
+    }
+    return extents;
+}
+
+/// The window a `convolution` of an input of `x` by a kernel of `kernel` slides.
+pub fn conv_window(x: &List<i32>, kernel: &List<i32>, conv: &Convolution) -> Window {
+    let mut window = Window { kernel: [], strides: conv.window_strides, dilations: conv.rhs_dilation, pads: [], output: [] };
+    let mut ends: List<i32> = [];
+    for let i of 0..<x.len() - 2 {
+        let k = kernel[2 + i];
+        let [lo, hi] = [conv.padding[2 * i], conv.padding[2 * i + 1]];
+        window.kernel.push(k);
+        window.pads.push(lo);
+        ends.push(hi);
+        let span = (k - 1) * conv.rhs_dilation[i] + 1;
+        window.output.push((x[2 + i] + lo + hi - span) / conv.window_strides[i] + 1);
+    }
+    window.pads.extend(&ends);
+    return window;
+}
+
+/// The window a `reduce_window` over an input of `x` slides, its batch and
+/// feature axes windows of one.
+pub fn pooled_window(x: &List<i32>, window: &WindowReduce) -> Window {
+    let mut pooled = Window { kernel: [], strides: [], dilations: [], pads: [], output: [] };
+    let mut ends: List<i32> = [];
+    for let a of 0..<2 {
+        assert window.window_dimensions[a] == 1 && window.window_strides[a] == 1, "the batch and feature axes are windows of one";
+    }
+    for let i of 2..<x.len() {
+        let k = window.window_dimensions[i];
+        let [lo, hi] = [window.padding[2 * i], window.padding[2 * i + 1]];
+        pooled.kernel.push(k);
+        pooled.strides.push(window.window_strides[i]);
+        pooled.dilations.push(window.window_dilations[i]);
+        pooled.pads.push(lo);
+        ends.push(hi);
+        let span = (k - 1) * window.window_dilations[i] + 1;
+        pooled.output.push((x[i] + lo + hi - span) / window.window_strides[i] + 1);
+    }
+    pooled.pads.extend(&ends);
+    return pooled;
 }
 
 /// `batch` products of an `[m, k]` matrix by a `[k, n]` one, each output row
