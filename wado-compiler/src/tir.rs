@@ -2383,7 +2383,7 @@ pub fn receiver_value(receiver: &TirExpr) -> &TirExpr {
 
 /// A `#[param]` compile-time parameter declared on a `global`.
 ///
-/// Carried from reify (which validates the attribute shape) to the
+/// Carried from the body walk (which validates the attribute shape) to the
 /// param-resolution pass (which resolves an override and rewrites the
 /// initializer). See `wep-2026-04-26-compile-time-params.md`.
 #[derive(Debug, Clone)]
@@ -3220,9 +3220,9 @@ impl LocalFrame {
 }
 
 impl TirFunction {
-    /// Where an attribute's named parameter sits. Reify drops a clause naming
-    /// no parameter, so one reaching here names a parameter of this very
-    /// declaration.
+    /// Where an attribute's named parameter sits. The body walk drops a clause
+    /// naming no parameter, so one reaching here names a parameter of this
+    /// very declaration.
     fn param_position(&self, name: &str) -> usize {
         self.params
             .iter()

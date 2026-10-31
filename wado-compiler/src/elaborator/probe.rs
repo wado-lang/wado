@@ -5,18 +5,17 @@
 //! [WEP: Profile-Guided Optimization](../../../docs/wep-2026-10-25-profile-guided-optimization.md).
 
 use crate::ast::{AstId, Block};
-use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::coverage::ProbeSite;
 use crate::hashmap::IndexSet;
-use crate::synthesis::common::known_cold_path_stmt;
+use crate::synthesis::common::{known_cold_path_stmt, rt_call};
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
-use super::reify::{Reify, rt_call};
+use super::reify::Reify;
 
-impl<H: CompilerHost> Reify<'_, H> {
+impl Reify<'_> {
     /// What reify puts at `site` on node `id`, in order: the cold marker the
     /// profile asks for there, then the coverage probe.
     pub(super) fn site_stmts(&mut self, site: ProbeSite, id: AstId, span: Span) -> Vec<TirStmt> {

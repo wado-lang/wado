@@ -218,6 +218,9 @@ pub fn check_affine_moves_semantic(sem: &Semantics) -> Vec<AffineMoveError> {
     let fallbacks = sem.destructuring_fallbacks();
     let mut out = Vec::new();
     for (src, module) in &sem.modules {
+        if sem.snapshot_modules.contains(src) {
+            continue;
+        }
         let mut checker = Checker {
             sem,
             module: src,

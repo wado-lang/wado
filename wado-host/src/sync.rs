@@ -2,7 +2,7 @@
 
 use std::io;
 use std::panic::resume_unwind;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use tokio::task::{JoinError, JoinSet};
@@ -13,6 +13,18 @@ use tokio::task::{JoinError, JoinSet};
 /// enforcement.
 pub fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Wait on `condvar` while `condition` holds, recovering the guard as [`lock`]
+/// does.
+pub fn wait_while<'a, T>(
+    condvar: &Condvar,
+    guard: MutexGuard<'a, T>,
+    condition: impl FnMut(&mut T) -> bool,
+) -> MutexGuard<'a, T> {
+    condvar
+        .wait_while(guard, condition)
+        .unwrap_or_else(PoisonError::into_inner)
 }
 
 /// What a task returned. A panic in it continues in the caller, so it ends

@@ -4,25 +4,22 @@
 //! only reads them — never re-running inference, resolution, or dispatch.
 
 use super::sig::AssocConstSig;
-use std::ops::ControlFlow;
 use std::rc::Rc;
 
 use crate::ast::{
     self, AstId, AstVisitor, CompoundAssignOp, Expr, Item, Module, UnaryOp, walk_expr,
 };
 use crate::attribute::{
-    self, ALLOC, AMBIENT, CM, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, SECRET, SIDE_EFFECT, STORAGE,
-    WIRE,
+    ALLOC, AMBIENT, EXPORT_NAME, INLINE, SECRET, WIRE, wire_name_override, wire_name_policy,
+    wire_value,
 };
-use crate::builtin_facts::{self, BuiltinFacts, ParamShape, ReturnShape};
 use crate::call_args::CallArgs;
-use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::logger::{Bail, Logger};
+use crate::lower::cast::lower_cast;
 use crate::lower::contract_checks::is_contract_clause;
 use crate::lower::plan::value_copy::place::{is_source_place, source_place_subscripts_mut};
-use crate::lower::wide_int_literal::{create_conversion, create_literal, method_ref};
+use crate::lower::wide_int_literal::{create_literal, method_ref};
 use crate::module_source::ModuleSource;
 use crate::name::{
     CONTRACT_CLAUSE_INTRINSIC, CONTRACT_SITE_INTRINSIC, FqTypeName, Receiver, contract_owner_name,
@@ -44,31 +41,30 @@ use super::coercion::{
     unary_passes_expected_type,
 };
 use super::expr::UnionSource;
+use super::operators::takes_shape_from_expected_type;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
 use super::typecheck::{admits_condition, widens};
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
-use super::util;
+use super::util::{self, enumerate_index_local, split_enumerate};
 use crate::ast::RangeKind;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, NamePolicy, Visibility};
+use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
 use crate::compiler_item::{CompilerItem, Resolved};
 use crate::coverage::{CoverageMap, ProbeSite};
 use crate::defs::DefId;
-use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{MOVED, NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::{ARRAY_NEW_DATA, RECEIVER, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{compose_union_plan, peel_to_struct};
 use crate::elaborator::float_literal::{FloatFormat, float_literal_bits};
-use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, FromCallFacts, ImplFacts,
-    IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodDispatch,
-    MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch, impl_self_layers,
-    with_body_facts,
+    BodyFacts, CoercionKind, DeclaredAttrs, DesugarKind, ForOfIteratorInfo, FromCallFacts,
+    ImplFacts, IndirectCallee, KeyValueCoercionFacts, LiteralCallee, LiteralFromCall,
+    MethodDispatch, MethodNames, OperatorDispatch, SequenceCoercionFacts, StaticMethodDispatch,
+    impl_self_layers, with_body_facts,
 };
 use crate::elaborator::stmt::{
     RefBinding, collect_pattern_bindings_with_index, remap_pattern_local,
@@ -77,9 +73,8 @@ use crate::elaborator::trait_query::trait_sig_of_with;
 use crate::elaborator::types::{VarRef, newtype_member_owner};
 use crate::elaborator::unchecked::Contracts;
 use crate::elaborator::util::{
-    BoundValue, FloatRange, PatternLiteralError, SettledPattern, bound_value,
-    constant_pattern_site, float_limit_pattern, literal_pattern, parse_i128_literal,
-    parse_u128_literal, range_bound, range_pattern, settle_instance_pattern,
+    BoundValue, bound_value, constant_pattern_site, float_limit_pattern, literal_pattern,
+    lower_instance_pattern, parse_i128_literal, parse_u128_literal, range_bound, range_pattern,
     settles_literal_patterns,
 };
 use crate::escape::{
@@ -92,14 +87,12 @@ use crate::name::{
     DeclaredHead, LocalMethodName, MethodName, constant_pattern_local_name, deref_capture_name,
     display_function_name, effect_default_impl_name, for_body_label, mangle_local_item_name,
     minted_name, range_local_name, template_block_label, template_hole_local, test_function_name,
-    widened_half_local_name,
 };
 use crate::pgo::ColdMap;
-use crate::primitive::PrimitiveType;
 use crate::symbol::{Symbol, SymbolKind};
-use crate::synthesis::common::{bool_lit, handle_bits, handle_from_f64, handle_to_f64, not_expr};
 use crate::synthesis::common::{
-    builtin_call, cold_path_stmt, is_cold_marker_stmt, known_cold_path_stmt,
+    bare_cast, bool_lit, builtin_call, cold_path_stmt, handle_bits, is_cold_marker_stmt,
+    known_cold_path_stmt, not_expr, ord_bool_from_cmp, rt_call,
 };
 use crate::tir::{
     EffectRef, StructDef, TemplateId, TirEffectOp, TirField, TirImpl, TirParam, TirTypeParam,
@@ -112,7 +105,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirMutVisitor;
 use crate::token::Span;
-use crate::unparse::{unparse_expr_source, unparse_instance_pattern, unparse_pattern_source};
+use crate::unparse::{unparse_expr_source, unparse_pattern_source};
 
 /// A template's text and holes as reify assembles it: one segment more than
 /// holes, each segment cooked and raw, and each hole with its specifier as
@@ -373,23 +366,6 @@ fn build_literal_from_call(array: TirExpr, call: &LiteralFromCall, span: Span) -
     )
 }
 
-/// `operand` dereferenced through what a cast to `target` reads through.
-fn read_through_for_cast(tt: &TypeTable, operand: TirExpr, target: tir::TypeId) -> TirExpr {
-    tt.cast_read_through(operand.type_id, target)
-        .into_iter()
-        .fold(operand, |operand, referent| {
-            let span = operand.span;
-            TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(operand),
-                },
-                referent,
-                span,
-            )
-        })
-}
-
 /// Cast a `from` result to the newtype the literal targeted, where it targeted
 /// one.
 fn cast_to_newtype(built: TirExpr, newtype_cast_to: Option<tir::TypeId>, span: Span) -> TirExpr {
@@ -473,8 +449,9 @@ pub(super) struct ReifyAssertCaptureContext {
 
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
 /// `ModuleSemantics` that `annotate` populated. One instance per module the
-/// batch driver emits TIR for; constructed via [`Reify::new`].
-pub(crate) struct Reify<'a, H: CompilerHost> {
+/// batch driver emits TIR for; constructed via [`Reify::new`]. It holds no
+/// logger: every diagnostic is annotate's, so reify cannot fail.
+pub(crate) struct Reify<'a> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
     /// treated as read-only per the WEP `Reify surface` contract.
@@ -495,8 +472,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// All loaded modules. Used by cross-module lookups (e.g. resolving
     /// the AST of a function referenced by a `FunctionRef`).
     pub(crate) loaded_modules: &'a IndexMap<ModuleSource, Module>,
-    /// Diagnostics logger.
-    pub(crate) logger: &'a Logger<'a, H>,
     /// Source module currently being reified.
     pub(crate) current_module_source: ModuleSource,
     /// The module whose TIR is being built, which `current_module_source`
@@ -578,12 +553,12 @@ pub(crate) struct BodyOwnership {
 /// [`ownership::BodyFacts`] as reify reads them, through the active tuple
 /// `for-of` overlays: an element's types decide whether a place in the body
 /// moves.
-struct ReifyFacts<'r, 'a, H: CompilerHost> {
-    reify: &'r Reify<'a, H>,
+struct ReifyFacts<'r, 'a> {
+    reify: &'r Reify<'a>,
     affine_params: &'r [tir::TypeId],
 }
 
-impl<H: CompilerHost> ownership::BodyFacts for ReifyFacts<'_, '_, H> {
+impl ownership::BodyFacts for ReifyFacts<'_, '_> {
     fn consumes_receiver(&self, call: AstId) -> bool {
         self.reify
             .ann_method_dispatch(call)
@@ -638,7 +613,7 @@ pub(crate) struct CallSiteLocation {
     pub(crate) function_name: String,
 }
 
-impl<'a, H: CompilerHost> Reify<'a, H> {
+impl<'a> Reify<'a> {
     /// The symbol row behind a reference site — see
     /// `Elaborator::symbol_at`, which answers the same way from the same
     /// table, so annotate and reify cannot disagree.
@@ -664,7 +639,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         all_module_semantics: &'a IndexMap<ModuleSource, Rc<ModuleSemantics>>,
         symbols: &'a SymbolTable,
         loaded_modules: &'a IndexMap<ModuleSource, Module>,
-        logger: &'a Logger<'a, H>,
         emit_live: Option<&'a IndexSet<AstId>>,
     ) -> Self {
         Self {
@@ -674,7 +648,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             all_module_semantics,
             symbols,
             loaded_modules,
-            logger,
             current_module_source: ModuleSource::entry_point_uninitialized(),
             emitted_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
@@ -727,7 +700,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn with_ownership<R>(
         &mut self,
         affine_params: Vec<tir::TypeId>,
-        walk: impl FnOnce(&ReifyFacts<'_, 'a, H>) -> Modes,
+        walk: impl FnOnce(&ReifyFacts<'_, 'a>) -> Modes,
         reify: impl FnOnce(&mut Self) -> R,
     ) -> R {
         let modes = walk(&ReifyFacts {
@@ -742,7 +715,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     }
 
     /// Answer `ask` about the body being reified; outside one, nothing moves.
-    fn ask_ownership(&self, ask: impl FnOnce(&Modes, &ReifyFacts<'_, 'a, H>) -> bool) -> bool {
+    fn ask_ownership(&self, ask: impl FnOnce(&Modes, &ReifyFacts<'_, 'a>) -> bool) -> bool {
         self.body_ownership.as_ref().is_some_and(|body| {
             ask(
                 &body.modes,
@@ -835,6 +808,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ann_fn_param_types => fn_param_types: Vec<tir::TypeId>,
             ann_fn_affine_params => fn_affine_params: Vec<tir::TypeId>,
             ann_fn_return_type => fn_return_types: tir::TypeId,
+            ann_fn_declared_attrs => fn_declared_attrs: DeclaredAttrs,
             ann_effect_ops => effect_ops: Vec<TirEffectOp>,
             ann_decl_type_params => decl_type_params: Vec<TirTypeParam>,
             ann_struct_field_types => struct_field_types: Vec<tir::TypeId>,
@@ -872,16 +846,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     // of whatever body referenced the global.
     fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        let resolved = Elaborator::<H>::resolve_type_static(
-            ty,
-            &mut self.tysys.type_table.borrow_mut(),
-            &lookup,
-        );
+        let resolved = lookup.resolve(ty, &mut self.tysys.type_table.borrow_mut());
         self.apply_function_type_effects(ty, resolved)
     }
 
     /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
-    /// shared static resolver has no effect-resolution context and leaves
+    /// `TypeLookup` resolver has no effect-resolution context and leaves
     /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
     /// the effect check then can't see that, e.g., `f: fn() with Stdout`
     /// requires `Stdout` at an indirect call site. Resolves effects through
@@ -946,7 +916,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &mut self,
         module: &'a Module,
         module_source: ModuleSource,
-    ) -> Result<TirModule, Bail> {
+    ) -> TirModule {
         self.current_module_source = module_source.clone();
         self.emitted_module_source = module_source.clone();
         self.current_module_items = &module.items;
@@ -1091,7 +1061,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         tir_module.wasm_module = module.wasm_module().map(String::from);
 
         self.assert_probes_complete();
-        self.logger.ok_or_bail(tir_module)
+        tir_module
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -1117,11 +1087,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     name: case.name.clone(),
                     index: i as u32,
                     span: case.span,
-                    wire_name_override: wire_name_override_of(&case.attrs),
+                    wire_name_override: wire_name_override(&case.attrs),
                 })
                 .collect(),
             span: enum_decl.span,
-            wire_name_policy: wire_name_policy_of(&enum_decl.attrs),
+            wire_name_policy: wire_name_policy(&enum_decl.attrs),
         }
     }
 
@@ -1147,7 +1117,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 })
                 .collect(),
             span: flags_decl.span,
-            wire_name_policy: wire_name_policy_of(
+            wire_name_policy: wire_name_policy(
                 flags_decl.attributes.as_deref().unwrap_or_default(),
             ),
         })
@@ -1219,7 +1189,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .ann_decl_type_params(struct_decl.id)
             .expect("resolve_struct records the type params for every struct reify emits");
 
-        let wire_name_policy = wire_name_policy_of(&struct_decl.attrs);
+        let wire_name_policy = wire_name_policy(&struct_decl.attrs);
 
         TirStruct {
             def: StructDef::Decl(self.tysys.def_at(struct_decl.id)),
@@ -1301,7 +1271,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 monomorph_info: None,
                 fields,
                 span: struct_decl.span,
-                wire_name_policy: wire_name_policy_of(&struct_decl.attrs),
+                wire_name_policy: wire_name_policy(&struct_decl.attrs),
             },
         );
     }
@@ -1343,7 +1313,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 index: index as u32,
                 payload: data.payload,
                 span: case.span,
-                wire_name_override: wire_name_override_of(&case.attrs),
+                wire_name_override: wire_name_override(&case.attrs),
             })
             .collect();
 
@@ -1361,11 +1331,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .collect(),
         );
 
-        let wire_tag = wire_value_of(&variant_decl.attrs, "tag");
-        if let Some(tag) = &wire_tag {
-            self.check_internal_tag(variant_decl, tag, &cases);
-        }
-
         TirVariantDecl {
             def,
             name: variant_decl.name.clone(),
@@ -1374,93 +1339,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             type_params,
             cases,
             span: variant_decl.span,
-            wire_name_policy: wire_name_policy_of(&variant_decl.attrs),
-            wire_tag,
+            wire_name_policy: wire_name_policy(&variant_decl.attrs),
+            wire_tag: wire_value(&variant_decl.attrs, "tag"),
         }
-    }
-
-    /// An internally tagged case is written as an object holding `tag` beside
-    /// its payload's fields, so the payload is a struct, or nothing, and writes
-    /// no field under `tag`.
-    fn check_internal_tag(
-        &self,
-        variant_decl: &ast::VariantDecl,
-        tag: &str,
-        cases: &[tir::TirVariantCase],
-    ) {
-        let unit = self.tysys.type_table.borrow().type_key(TypeTable::UNIT);
-        for (case, reified) in variant_decl.cases.iter().zip(cases) {
-            if self.tysys.type_table.borrow().type_key(reified.payload) == unit {
-                continue;
-            }
-            let case_path = format!("{}::{}", variant_decl.name, case.name);
-            let Some(payload) = self.derived_struct_decl_of(reified.payload) else {
-                let payload = self.tysys.type_table.borrow().type_name(reified.payload);
-                self.error_at(
-                    Code::AttrMisuse,
-                    case.span,
-                    format!(
-                        "`{case_path}` carries `{payload}`, but a case of a variant with \
-                         `#[wire(tag)]` carries nothing or a struct its derivation writes"
-                    ),
-                );
-                continue;
-            };
-            let policy = wire_name_policy_of(&payload.attrs);
-            for field in &payload.fields {
-                let wire_name = NamePolicy::wire_name(
-                    wire_name_override_of(&field.attrs).as_deref(),
-                    policy,
-                    &field.name,
-                );
-                if wire_name == tag {
-                    self.error_at(
-                        Code::AttrMisuse,
-                        case.span,
-                        format!(
-                            "`{case_path}` writes its payload's field `{}` as `{tag}`, \
-                             the key its tag is written under",
-                            field.name
-                        ),
-                    );
-                }
-            }
-        }
-    }
-
-    /// The struct declaration `ty` instantiates, through any newtype over it,
-    /// where the derivation reads and writes it as a struct: no link of `ty`
-    /// has a hand-written `Serialize` or `Deserialize`, whose shape nothing
-    /// here can see. `String` and `List` are declared as structs and are such.
-    fn derived_struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
-        let written = [CompilerItem::Serialize, CompilerItem::Deserialize]
-            .into_iter()
-            .filter_map(|item| self.tysys.compiler_trait_def(item))
-            .any(|trait_| self.tysys.impl_link(ty, trait_).is_some());
-        if written {
-            return None;
-        }
-        self.struct_decl_of(ty)
-    }
-
-    /// The struct declaration `ty` instantiates, through any newtype over it,
-    /// or `None` where `ty` is not a declared struct.
-    fn struct_decl_of(&self, ty: TypeId) -> Option<&'a ast::StructDecl> {
-        let def = {
-            let type_table = self.tysys.type_table.borrow();
-            let head = type_table.newtype_representation(ty).unwrap_or(ty);
-            type_table.nominal_def(head)?
-        };
-        let defs = self.tysys.resolutions.defs();
-        let target = defs.ast_id(def);
-        self.loaded_modules
-            .get(defs.module(def))?
-            .items
-            .iter()
-            .find_map(|item| match item {
-                ast::Item::Struct(decl) if decl.id == target => Some(decl),
-                _ => None,
-            })
     }
 
     /// Reify an `interface E { … }` declaration. Effects have no
@@ -1576,11 +1457,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("the declaring walk records the type params for every function reify emits");
-        let declared = self.reify_declared_facts(func, &params, return_type);
-        let immediates = self.reify_immediate_attrs(func, &params);
-        if body.is_some() {
-            self.reject_bodyless_attrs_on_body(&func.attrs);
-        }
+        let DeclaredAttrs {
+            facts: declared,
+            immediates,
+            compiler_item,
+        } = self
+            .ann_fn_declared_attrs(func.id)
+            .expect("the declaring walk records the declared attributes of every function");
 
         TirFunction {
             module_source: ModuleSource::default(),
@@ -1612,12 +1495,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
-            compiler_item: extract_compiler_item(
-                &func.attrs,
-                func.span,
-                &self.current_module_source,
-                self.logger,
-            ),
+            compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
             kind: tir::FunctionKind::Regular,
@@ -1963,7 +1841,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let initializer = self.with_expr_ownership(&global_decl.initializer, |this| {
             this.reify_expr(&global_decl.initializer, &mut ctx, Some(ty))
         });
-        let param = self.reify_param_attr(global_decl);
+        let param = self.types.global_params.get(&global_decl.id).cloned();
         let span = global_decl.span;
 
         let frame = LocalFrame {
@@ -2059,40 +1937,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         .trait_decl(def)
     }
 
-    /// Report an error at `span` in the module reify stands in.
-    fn error_at(&self, code: Code, span: Span, message: String) {
-        let _ = self.logger.error_in(
-            &self.current_module_source,
-            Diagnostic {
-                severity: Severity::Error,
-                code,
-                message,
-                span: Some(DiagnosticSpan::from_span(&span, None)),
-            },
-        );
-    }
-
-    /// Report a malformed attribute at the attribute's own span.
-    fn attr_error(&self, code: Code, attr: &ast::Attribute, message: String) {
-        self.error_at(code, attr.span, message);
-    }
-
-    /// Report each attribute that describes a declaration with no body, written
-    /// on a function that has one. Its arguments were read already, so a
-    /// malformed one reports that too.
-    fn reject_bodyless_attrs_on_body(&self, attrs: &[ast::Attribute]) {
-        for (attr, name, bodyless) in attribute::bodyless(attrs) {
-            self.attr_error(
-                Code::AttrMisuse,
-                attr,
-                format!(
-                    "#[{name}] belongs to a declaration with no body: {}",
-                    bodyless.on_body
-                ),
-            );
-        }
-    }
-
     /// A declared struct field as TIR: its attributes read, its default reified.
     fn reify_struct_field(
         &mut self,
@@ -2112,7 +1956,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             index: index as u32,
             span: field.span,
             is_secret: field.attrs.iter().any(|a| a.name == SECRET),
-            wire_name_override: wire_name_override_of(&field.attrs),
+            wire_name_override: wire_name_override(&field.attrs),
             serde_default: field.default.is_some(),
             serde_positional: field
                 .attrs
@@ -2120,175 +1964,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .any(|a| a.name == WIRE && a.has_arg("positional")),
             default_expr,
         }
-    }
-
-    /// Extract and structurally validate a `#[param]` attribute on a global.
-    ///
-    /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
-    /// global has no `#[param]` or the attribute is malformed (in which case a
-    /// structural error is emitted; compilation bails at `ok_or_bail`). The
-    /// resolution itself (overrides, env, conversion) happens later in the
-    /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
-    fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        let attr = global_decl.attributes.iter().find(|a| a.name == PARAM)?;
-        let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
-
-        let mut ok = true;
-        if global_decl.mutable {
-            emit("#[param] cannot be applied to a mutable global".to_string());
-            ok = false;
-        }
-
-        for arg in &attr.args {
-            match arg {
-                ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
-                ast::AttrArg::KeyValue(k, _)
-                | ast::AttrArg::KeyArray(k, _)
-                | ast::AttrArg::KeyIdentArray(k, _)
-                | ast::AttrArg::KeyIdent(k, _)
-                | ast::AttrArg::KeyNumber(k, _) => {
-                    emit(format!("unknown #[param] argument: {k}"));
-                    ok = false;
-                }
-                bare
-                @ (ast::AttrArg::Str(_) | ast::AttrArg::Ident(_) | ast::AttrArg::Number(_)) => {
-                    emit(format!("unknown #[param] argument: {}", bare.name()));
-                    ok = false;
-                }
-            }
-        }
-
-        let name = match attr.kv_value("name") {
-            Some("") => {
-                emit("#[param] name must not be empty".to_string());
-                ok = false;
-                global_decl.name.clone()
-            }
-            Some(n) => n.to_string(),
-            None => global_decl.name.clone(),
-        };
-        let from_env = match attr.kv_value("from_env") {
-            Some("") => {
-                emit("#[param] from_env must not be empty".to_string());
-                ok = false;
-                None
-            }
-            Some(env) => Some(env.to_string()),
-            None => None,
-        };
-
-        if ok {
-            Some(tir::ParamSpec { name, from_env })
-        } else {
-            None
-        }
-    }
-
-    /// What a body-less declaration states with `#[storage]` and
-    /// `#[side_effect]`. It owes both, unless it only reserves a name. A
-    /// Component Model import states neither: the raw call
-    /// its adapter makes carries the facts, the same for every import.
-    fn reify_declared_facts(
-        &self,
-        func: &ast::Function,
-        params: &[tir::TirParam],
-        return_type: tir::TypeId,
-    ) -> Option<BuiltinFacts<String>> {
-        if func.body.is_some() || reserves_a_name_only(func) {
-            return None;
-        }
-        let written = func
-            .attrs
-            .iter()
-            .filter(|attr| attr.name == STORAGE || attr.name == SIDE_EFFECT);
-        if carries_cm(func) {
-            for attr in written {
-                self.attr_error(
-                    code_of(&attr.name),
-                    attr,
-                    format!(
-                        "#[{}] does not belong on a Component Model import: the raw call \
-                         its adapter makes carries the facts, the same for every import",
-                        attr.name
-                    ),
-                );
-            }
-            return None;
-        }
-        let type_table = self.tysys.type_table.borrow();
-        let shapes: Vec<ParamShape<'_>> = params
-            .iter()
-            .map(|p| ParamShape::of(&p.name, p.type_id, &type_table))
-            .collect();
-        let ret = ReturnShape::of(return_type, &type_table);
-        match builtin_facts::read(&func.attrs, &shapes, ret) {
-            Ok(Some(facts)) => Some(facts),
-            Ok(None) => {
-                self.error_at(
-                    Code::StorageAttr,
-                    func.name_span,
-                    format!(
-                        "`{}` has no body, so it states what a call does: \
-                         declare #[storage(...)] and #[side_effect(...)]",
-                        func.name
-                    ),
-                );
-                None
-            }
-            Err(faults) => {
-                for fault in faults {
-                    let attr = func
-                        .attrs
-                        .iter()
-                        .filter(|attr| attr.name == fault.attr)
-                        .nth(fault.occurrence)
-                        .expect("a fault points at an attribute the declaration carries");
-                    self.attr_error(code_of(fault.attr), attr, fault.message);
-                }
-                None
-            }
-        }
-    }
-
-    /// The parameters named by `#[immediate(p)]`, each lowered to a Wasm
-    /// immediate and so required to still be a literal when codegen reads it.
-    fn reify_immediate_attrs(&self, func: &ast::Function, params: &[tir::TirParam]) -> Vec<String> {
-        func.attrs
-            .iter()
-            .filter(|a| a.name == IMMEDIATE)
-            .filter_map(|attr| self.reify_immediate_attr(attr, params, carries_cm(func)))
-            .collect()
-    }
-
-    fn reify_immediate_attr(
-        &self,
-        attr: &ast::Attribute,
-        params: &[tir::TirParam],
-        is_cm_import: bool,
-    ) -> Option<String> {
-        let emit = |message: String| {
-            self.attr_error(Code::ImmediateAttr, attr, message);
-            None
-        };
-        if is_cm_import {
-            return emit(
-                "#[immediate] does not belong on a Component Model import: its adapter \
-                 calls it rather than encoding it as one instruction"
-                    .to_string(),
-            );
-        }
-        let Some(ast::AttrArg::Ident(name)) = attr.args.first() else {
-            return emit("#[immediate] names one parameter, unquoted".to_string());
-        };
-        if !params.iter().any(|p| &p.name == name) {
-            return emit(format!("#[immediate] names no parameter: {name}"));
-        }
-        if attr.args.len() > 1 {
-            return emit(
-                "#[immediate] names one parameter; repeat the attribute for another".to_string(),
-            );
-        }
-        Some(name.clone())
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -2913,9 +2588,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     .ann_expression_types(cast.id)
                     .unwrap_or(TypeTable::ERROR);
                 let inner = self.reify_expr(&cast.expr, ctx, None);
-                let inner =
-                    read_through_for_cast(&self.tysys.type_table.borrow(), inner, target_type);
-                self.lower_cast(inner, target_type, span)
+                lower_cast(&self.tysys.type_table, inner, target_type, span)
             }
             ast::Expr::Unary(unary) if unary.op == ast::UnaryOp::Unchecked => {
                 let mut call = self.reify_expr(&unary.expr, ctx, expected_type);
@@ -3732,7 +3405,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             Some(DesugarKind::ForOfTuple) => self.reify_tuple_for_of(for_of, ctx),
             Some(DesugarKind::ForOfVariadic) => self.reify_variadic_for_of(for_of, ctx),
             Some(DesugarKind::ForOfNever) => {
-                let (iterable, _) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+                let (iterable, _) = split_enumerate(&for_of.iterable);
                 let iterable = self.reify_expr(iterable, ctx, None);
                 self.skip_for_of_body(for_of.id);
                 vec![TirStmt::new(TirStmtKind::Expr(iterable), for_of.span)]
@@ -3908,7 +3581,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let span = for_of.span;
         let unique_id = ctx.fresh_serial();
 
-        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+        let (actual_iterable, is_enumerate) = split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let tuple_type_id = iterable.type_id;
         // Look through a `&`/`&mut` wrapper: `for v of &tuple` binds each
@@ -4099,7 +3772,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Vec<TirStmt> {
         let span = for_of.span;
-        let (actual_iterable, is_enumerate) = Elaborator::<H>::split_enumerate(&for_of.iterable);
+        let (actual_iterable, is_enumerate) = split_enumerate(&for_of.iterable);
         let iterable = self.reify_expr(actual_iterable, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -4133,8 +3806,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (binding_name, binding_local, mut destruct_stmts) =
             self.reify_pack_binding(&for_of.binding, binding_type, is_mut, unique_id, span, ctx);
 
-        let index_binding =
-            Elaborator::<H>::enumerate_index_local(is_enumerate, &for_of.binding, ctx);
+        let index_binding = enumerate_index_local(is_enumerate, &for_of.binding, ctx);
         let mut body = self.reify_block(
             &for_of.body,
             &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
@@ -4172,7 +3844,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         let span = comp.span;
-        let (source, is_enumerate) = Elaborator::<H>::split_enumerate(&comp.iterable);
+        let (source, is_enumerate) = split_enumerate(&comp.iterable);
         let iterable = self.reify_expr(source, ctx, None);
         let unique_id = ctx.fresh_serial();
 
@@ -4193,8 +3865,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let (binding_name, binding_local, destructure) =
             self.reify_pack_binding(&comp.binding, binding_type, false, unique_id, span, ctx);
 
-        let index_binding =
-            Elaborator::<H>::enumerate_index_local(is_enumerate, &comp.binding, ctx);
+        let index_binding = enumerate_index_local(is_enumerate, &comp.binding, ctx);
         let body = self.reify_expr(
             &comp.body,
             &mut ctx.enter_enumerate_body(index_binding).enter_pack_walk(),
@@ -4795,8 +4466,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 |expr| expr.type_id,
             )
         } else if binary.op.is_comparison()
-            && Elaborator::<H>::takes_shape_from_expected_type(&binary.left)
-            && !Elaborator::<H>::takes_shape_from_expected_type(&binary.right)
+            && takes_shape_from_expected_type(&binary.left)
+            && !takes_shape_from_expected_type(&binary.right)
         {
             let right = self.reify_expr(&binary.right, ctx, None);
             let left = self.reify_expr(&binary.left, ctx, None);
@@ -8851,239 +8522,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ))
     }
 
-    /// `inner as target_type`, `inner` already read through its references:
-    /// the prelude calls a half or a wide integer needs, then the bare `Cast`.
-    fn lower_cast(&self, inner: TirExpr, target_type: TypeId, span: Span) -> TirExpr {
-        if self.is_newtype_step(inner.type_id, target_type) {
-            return bare_cast(inner, target_type, span);
-        }
-        let inner = match self.lower_half_cast(inner, target_type, span) {
-            ControlFlow::Break(lowered) => return lowered,
-            ControlFlow::Continue(inner) => inner,
-        };
-        let inner = match self.lower_int128_cast(inner, target_type, span) {
-            ControlFlow::Break(lowered) => return lowered,
-            ControlFlow::Continue(inner) => inner,
-        };
-        let (from_handle, to_handle) = {
-            let tt = self.tysys.type_table.borrow();
-            (
-                tt.is_unrestricted_handle(inner.type_id),
-                tt.is_unrestricted_handle(target_type),
-            )
-        };
-        let inner = match (from_handle, to_handle) {
-            (true, false) => handle_to_f64(inner),
-            (false, true) => return handle_from_f64(inner, target_type),
-            _ => inner,
-        };
-        bare_cast(inner, target_type, span)
-    }
-
-    /// Whether `source as target` changes no representation: both share one,
-    /// or either is still generic, where the checker admits only a newtype
-    /// step (`cast_needs_no_judgment`).
-    fn is_newtype_step(&self, source: TypeId, target: TypeId) -> bool {
-        let tt = self.tysys.type_table.borrow();
-        tt.share_common_base(source, target)
-            || tt.representation_awaits_substitution(source)
-            || tt.representation_awaits_substitution(target)
-    }
-
-    /// A cast with `f16` or `bf16` on either side. No instruction converts
-    /// either, so a half widens to its exact `f32` and casts on from there,
-    /// and a number reaches a half through the prelude conversion that rounds
-    /// it once. `Continue` hands `inner` on where neither side is a half.
-    fn lower_half_cast(
-        &self,
-        inner: TirExpr,
-        target_type: TypeId,
-        span: Span,
-    ) -> ControlFlow<TirExpr, TirExpr> {
-        let (source_half, target_half) = {
-            let tt = self.tysys.type_table.borrow();
-            let half = |id| tt.primitive_head(id).filter(|p| p.is_half());
-            (half(inner.type_id), half(target_type))
-        };
-        if source_half.is_none() && target_half.is_none() {
-            return ControlFlow::Continue(inner);
-        }
-        let source = match source_half {
-            Some(half) => widen_half(&self.tysys.type_table.borrow(), inner, half, span),
-            None => inner,
-        };
-        let Some(half) = target_half else {
-            return ControlFlow::Break(self.lower_cast(source, target_type, span));
-        };
-        let (base, item, via) = {
-            let tt = self.tysys.type_table.borrow();
-            let source_base = tt.representation_head(source.type_id);
-            match (
-                half,
-                tt.primitive_head(source_base),
-                tt.wide_int_item(source_base),
-            ) {
-                (PrimitiveType::F16, _, _) => {
-                    (TypeTable::F16, CompilerItem::F16FromF64, TypeTable::F64)
-                }
-                (_, _, Some(CompilerItem::I128)) => {
-                    (TypeTable::BF16, CompilerItem::Bf16FromI128, source_base)
-                }
-                (_, _, Some(_)) => (TypeTable::BF16, CompilerItem::Bf16FromU128, source_base),
-                (_, Some(PrimitiveType::I64), _) => {
-                    (TypeTable::BF16, CompilerItem::Bf16FromI64, TypeTable::I64)
-                }
-                (_, Some(PrimitiveType::U64), _) => {
-                    (TypeTable::BF16, CompilerItem::Bf16FromU64, TypeTable::U64)
-                }
-                _ => (TypeTable::BF16, CompilerItem::Bf16FromF64, TypeTable::F64),
-            }
-        };
-        let arg = self.lower_cast(source, via, span);
-        let converted = rt_call(&self.tysys.type_table.borrow(), item, arg, base, span);
-        ControlFlow::Break(bare_cast(converted, target_type, span))
-    }
-
-    /// A cast with a wide integer on either side, `inner` already read through
-    /// its references. The 128-bit types are prelude structs, so a bare `Cast`
-    /// would leak the boxed struct ref into a slot expecting a Wasm scalar
-    /// (issue #1328), or a scalar into one expecting the struct. `Continue` hands
-    /// `inner` on to the bare cast where neither side needs a lowering.
-    fn lower_int128_cast(
-        &self,
-        inner: TirExpr,
-        target_type: TypeId,
-        span: Span,
-    ) -> ControlFlow<TirExpr, TirExpr> {
-        let tt = self.tysys.type_table.borrow();
-        if tt.is_wide_int(inner.type_id) {
-            drop(tt);
-            return self.lower_int128_source_cast(inner, target_type, span);
-        }
-        let Some(item) = tt.wide_int_item(target_type) else {
-            return ControlFlow::Continue(inner);
-        };
-        ControlFlow::Break(create_conversion(item, inner, target_type, &tt, span))
-    }
-
-    /// `i128/u128 as T`: `f64`/`f32` through the correctly rounded
-    /// `as_f64`/`as_f32`, integer targets through `low()` plus a primitive
-    /// cast (truncation), and `i128 ↔ u128` through the bit-reinterpreting
-    /// `from_u128`/`from_i128` constructors. Any other target hands `inner`
-    /// on; `resolve_cast` has already reported it if it is invalid.
-    fn lower_int128_source_cast(
-        &self,
-        inner: TirExpr,
-        target_type: TypeId,
-        span: Span,
-    ) -> ControlFlow<TirExpr, TirExpr> {
-        let source_type = inner.type_id;
-        // Newtypes share their base's representation, so dispatch on the
-        // ultimate base of both sides; explicit repr-compatible `Cast`
-        // nodes bridge the newtype boundaries below.
-        let (source_base, target_base) = {
-            let tt = self.tysys.type_table.borrow();
-            (
-                tt.representation_head(source_type),
-                tt.representation_head(target_type),
-            )
-        };
-        let (source_item, target_item) = {
-            let tt = self.tysys.type_table.borrow();
-            (
-                tt.wide_int_item(source_base)
-                    .expect("the caller checked the source is a wide integer"),
-                tt.wide_int_item(target_base),
-            )
-        };
-        let signed_source = source_item == CompilerItem::I128;
-
-        enum Lowering {
-            /// `&self` accessor returning the target primitive directly.
-            Method(CompilerItem),
-            /// `low()` then a primitive cast down to the target width.
-            LowThenCast,
-            /// Static bit-reinterpreting constructor of the other wide type.
-            Reinterpret(CompilerItem),
-        }
-        let lowering = match self.tysys.type_table.borrow().get(target_base).clone() {
-            ResolvedType::Primitive(PrimitiveType::F64) => Lowering::Method(if signed_source {
-                CompilerItem::I128AsF64
-            } else {
-                CompilerItem::U128AsF64
-            }),
-            ResolvedType::Primitive(PrimitiveType::F32) => Lowering::Method(if signed_source {
-                CompilerItem::I128AsF32
-            } else {
-                CompilerItem::U128AsF32
-            }),
-            ResolvedType::Primitive(
-                PrimitiveType::I64
-                | PrimitiveType::U64
-                | PrimitiveType::I32
-                | PrimitiveType::U32
-                | PrimitiveType::I16
-                | PrimitiveType::U16
-                | PrimitiveType::I8
-                | PrimitiveType::U8,
-            ) => Lowering::LowThenCast,
-            _ => match target_item {
-                Some(item) => {
-                    assert_ne!(
-                        item, source_item,
-                        "`lower_cast` takes a cast within one base as a newtype step"
-                    );
-                    Lowering::Reinterpret(if signed_source {
-                        CompilerItem::U128FromI128
-                    } else {
-                        CompilerItem::I128FromU128
-                    })
-                }
-                None => return ControlFlow::Continue(inner),
-            },
-        };
-
-        // A newtype source first steps to its wide base so the prelude calls
-        // below see their declared receiver/argument type.
-        let inner = bare_cast(inner, source_base, span);
-        match lowering {
-            Lowering::Method(item) => {
-                let func = method_ref(&self.tysys.type_table.borrow(), item);
-                let receiver = adjust_receiver_for_self_kind(
-                    inner,
-                    ast::SelfKind::Ref,
-                    /* self_layers */ 0,
-                    &self.tysys.type_table,
-                );
-                let call = build_tir_method_call(receiver, func, vec![], vec![], target_base, span);
-                ControlFlow::Break(bare_cast(call, target_type, span))
-            }
-            Lowering::LowThenCast => {
-                let item = if signed_source {
-                    CompilerItem::I128Low
-                } else {
-                    CompilerItem::U128Low
-                };
-                let func = method_ref(&self.tysys.type_table.borrow(), item);
-                let receiver = adjust_receiver_for_self_kind(
-                    inner,
-                    ast::SelfKind::Ref,
-                    /* self_layers */ 0,
-                    &self.tysys.type_table,
-                );
-                let low_call =
-                    build_tir_method_call(receiver, func, vec![], vec![], TypeTable::U64, span);
-                let converted = bare_cast(low_call, target_base, span);
-                ControlFlow::Break(bare_cast(converted, target_type, span))
-            }
-            Lowering::Reinterpret(item) => {
-                let func = method_ref(&self.tysys.type_table.borrow(), item);
-                let call = unary_call(func, inner, target_base, span);
-                ControlFlow::Break(bare_cast(call, target_type, span))
-            }
-        }
-    }
-
     fn reify_literal(
         &mut self,
         lit: &ast::LiteralExpr,
@@ -10522,67 +9960,6 @@ fn handle_comparison(op: ast::BinaryOp, left: TirExpr, right: TirExpr, span: Spa
     )
 }
 
-/// Wrap an `Ord::cmp` call into a `bool` by comparing the returned
-/// `Ordering` variant against the one that makes the operator true:
-/// `<` → `cmp == Less`, `>` → `cmp == Greater`,
-/// `<=` → `cmp != Greater`, `>=` → `cmp != Less`.
-pub(crate) fn ord_bool_from_cmp(
-    cmp_call: TirExpr,
-    op: ast::BinaryOp,
-    span: Span,
-    type_table: &std::cell::RefCell<TypeTable>,
-) -> TirExpr {
-    let ordering_type_id = type_table
-        .borrow_mut()
-        .make_compiler_enum(CompilerItem::Ordering);
-    // Look up Ordering's `Less` / `Greater` cases through the
-    // `CompilerItem` registry so a stdlib rename of either case
-    // flows here without touching the operator-lowering path.
-    let (less_name, less_index, greater_name, greater_index) = {
-        let tt = type_table.borrow();
-        let items = tt.compiler_items();
-        let (_, _, less_name, less_index) = items.require_enum_case(CompilerItem::OrderingLess);
-        let (_, _, greater_name, greater_index) =
-            items.require_enum_case(CompilerItem::OrderingGreater);
-        (
-            less_name.to_string(),
-            less_index,
-            greater_name.to_string(),
-            greater_index,
-        )
-    };
-    let (compare_op, case_name, case_index): (TirBinaryOp, String, u32) = match op {
-        ast::BinaryOp::Lt => (TirBinaryOp::Eq, less_name, less_index),
-        ast::BinaryOp::Gt => (TirBinaryOp::Eq, greater_name, greater_index),
-        ast::BinaryOp::LtEq => (TirBinaryOp::NotEq, greater_name, greater_index),
-        ast::BinaryOp::GtEq => (TirBinaryOp::NotEq, less_name, less_index),
-        _ => unreachable!(),
-    };
-    let ordering_variant = TirExpr::new(
-        TirExprKind::EnumConstruct {
-            enum_type: ordering_type_id,
-            case_name,
-            case_index,
-        },
-        ordering_type_id,
-        span,
-    );
-    // The callee is `Ord::cmp` by construction, so it returns `Ordering`
-    // whatever the dispatch recorded — a trait-bounded receiver leaves that
-    // unresolved, and the comparison below would have no type to lower from.
-    let mut cmp_call = cmp_call;
-    cmp_call.type_id = ordering_type_id;
-    TirExpr::new(
-        TirExprKind::Binary {
-            op: compare_op,
-            left: Box::new(cmp_call),
-            right: Box::new(ordering_variant),
-        },
-        TypeTable::BOOL,
-        span,
-    )
-}
-
 /// The sole constructor of a method call — a [`crate::tir::TirExprKind::Call`]
 /// whose receiver heads its `args`. Centralising it gives one audit point for
 /// "every emitted method call was typechecked against the callee's declared
@@ -10999,57 +10376,6 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
     }
 }
 
-/// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
-fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
-    wire_value_of(attrs, "name")
-}
-
-/// The string a `#[wire(key = "...")]` on the declaration writes.
-fn wire_value_of(attrs: &[ast::Attribute], key: &str) -> Option<String> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_value(key).map(str::to_string)
-        } else {
-            None
-        }
-    })
-}
-/// `#[wire(name_policy = "...")]` on a declaration. The attribute check refuses
-/// a policy `NamePolicy` does not name.
-fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<NamePolicy> {
-    attrs.iter().find_map(|a| {
-        if a.name == WIRE {
-            a.kv_value("name_policy").and_then(NamePolicy::parse)
-        } else {
-            None
-        }
-    })
-}
-
-/// Whether the declaration reserves a name rather than a signature. Nothing
-/// ever calls a `#[unavailable]` one, so it states nothing about a call and is
-/// owed nothing about one either.
-fn reserves_a_name_only(func: &ast::Function) -> bool {
-    func.unavailable_attr().is_some()
-}
-
-/// Whether the declaration carries `#[cm(...)]`, which makes it a Component
-/// Model import called through an adapter. Not `Function::is_cm_import`, which
-/// a `#[canonical(...)]` builtin answers too.
-fn carries_cm(func: &ast::Function) -> bool {
-    func.attrs.iter().any(|attr| attr.name == CM)
-}
-
-/// The code a fault in the attribute named `name` is reported under.
-fn code_of(name: &str) -> Code {
-    if name == STORAGE {
-        Code::StorageAttr
-    } else {
-        assert_eq!(name, SIDE_EFFECT, "a fact attribute is one of the two");
-        Code::SideEffectAttr
-    }
-}
-
 /// The discriminant of a case the walk resolved. The walk rejects a case the
 /// variant does not declare, so reify only ever sees one it resolved.
 fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
@@ -11116,217 +10442,6 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
         .collect()
 }
 
-/// A call of the `core:rt` function `item` on `arg`.
-pub(super) fn rt_call(
-    type_table: &TypeTable,
-    item: CompilerItem,
-    arg: TirExpr,
-    result_type: TypeId,
-    span: Span,
-) -> TirExpr {
-    let (module_source, name) = type_table.compiler_items().require_function(item);
-    let func = FunctionRef {
-        module_source: module_source.clone(),
-        name: name.to_string(),
-        template: None,
-        monomorph_info: None,
-        method_info: None,
-    };
-    unary_call(func, arg, result_type, span)
-}
-
-/// The exact `f32` that `value`, of the half type `half`, holds.
-fn widen_half(type_table: &TypeTable, value: TirExpr, half: PrimitiveType, span: Span) -> TirExpr {
-    let (base, widen) = match half {
-        PrimitiveType::F16 => (TypeTable::F16, CompilerItem::F16Widen),
-        PrimitiveType::Bf16 => (TypeTable::BF16, CompilerItem::Bf16Widen),
-        _ => unreachable!("`{}` is no half", half.as_str()),
-    };
-    rt_call(
-        type_table,
-        widen,
-        bare_cast(value, base, span),
-        TypeTable::F32,
-        span,
-    )
-}
-
-/// `pattern` on the settled `scrutinee`, or why it names no value of it.
-pub(crate) fn lower_instance_pattern(
-    pattern: &InstancePattern,
-    scrutinee: TypeId,
-    type_table: &mut TypeTable,
-    add_local: impl FnMut(String, TypeId) -> u32,
-    span: Span,
-) -> Result<TirPattern, Vec<PatternLiteralError>> {
-    Ok(
-        match settle_instance_pattern(pattern, scrutinee, type_table)? {
-            SettledPattern::Literal(value) => TirPattern::Literal(value),
-            SettledPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            } => TirPattern::Range {
-                start,
-                end,
-                inclusive,
-                is_unsigned,
-            },
-            SettledPattern::Float(range) => {
-                let locals = reserve_float_pattern_locals(scrutinee, type_table, add_local);
-                let shown = unparse_instance_pattern(pattern);
-                float_range_narrow(&range, &locals, shown, type_table, span)
-            }
-        },
-    )
-}
-
-/// The locals a float pattern compares its scrutinee through: the scrutinee,
-/// and for a half the `f32` it widens to, read by every comparison so the
-/// widening runs once.
-pub(super) struct FloatPatternLocals {
-    float_type: TypeId,
-    scrutinee: u32,
-    widened: Option<u32>,
-}
-
-/// Reserve the locals of a float pattern on `scrutinee`, in the order annotate
-/// and reify both take them.
-pub(super) fn reserve_float_pattern_locals(
-    scrutinee: TypeId,
-    type_table: &TypeTable,
-    mut add_local: impl FnMut(String, TypeId) -> u32,
-) -> FloatPatternLocals {
-    // Lowering peels a reference scrutinee, as match ergonomics reads it.
-    let float_type = type_table.peel_refs(scrutinee);
-    let scrutinee = add_local(range_local_name(), float_type);
-    let is_half = matches!(
-        type_table.primitive_head(float_type),
-        Some(PrimitiveType::F16 | PrimitiveType::Bf16)
-    );
-    let widened = is_half.then(|| add_local(widened_half_local_name(), TypeTable::F32));
-    FloatPatternLocals {
-        float_type,
-        scrutinee,
-        widened,
-    }
-}
-
-/// A float range holding its scrutinee in `locals`, matching where it lies
-/// between the bounds: a NaN where the range is the NaN, the value where it is
-/// one. No bound of a wider range is a NaN, so IEEE's comparisons answer as the
-/// float order does, one instruction each. A half compares as the `f32` it
-/// widens to exactly.
-fn float_range_narrow(
-    range: &FloatRange,
-    locals: &FloatPatternLocals,
-    shown: String,
-    type_table: &TypeTable,
-    span: Span,
-) -> TirPattern {
-    let float_type = locals.float_type;
-    let scrutinee = TirExpr::new(
-        TirExprKind::Local {
-            index: locals.scrutinee,
-            name: range_local_name(),
-        },
-        float_type,
-        span,
-    );
-    let (value, operand, width, widen) =
-        match (type_table.primitive_head(float_type), locals.widened) {
-            (Some(half @ (PrimitiveType::F16 | PrimitiveType::Bf16)), Some(widened)) => {
-                let name = widened_half_local_name();
-                let widen = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name.clone(),
-                        local_index: widened,
-                        is_mut: false,
-                        type_id: TypeTable::F32,
-                        value: widen_half(type_table, scrutinee, half, span),
-                        storage: LetStorage::Planned,
-                    },
-                    span,
-                );
-                let value = TirExpr::new(
-                    TirExprKind::Local {
-                        index: widened,
-                        name,
-                    },
-                    TypeTable::F32,
-                    span,
-                );
-                (value, TypeTable::F32, "f32", Some(widen))
-            }
-            (Some(PrimitiveType::F32), None) => (
-                bare_cast(scrutinee, TypeTable::F32, span),
-                TypeTable::F32,
-                "f32",
-                None,
-            ),
-            (Some(PrimitiveType::F64), None) => (
-                bare_cast(scrutinee, TypeTable::F64, span),
-                TypeTable::F64,
-                "f64",
-                None,
-            ),
-            _ => unreachable!("a float pattern reads a float, and a half alone widens"),
-        };
-    let bound = |bits: u64| {
-        let value = range.format.value(bits);
-        TirExpr::new(
-            TirExprKind::FloatLiteral {
-                value,
-                repr: format_float_repr(value),
-            },
-            operand,
-            span,
-        )
-    };
-    let compare = |op: &str, left, right| {
-        builtin_call(
-            &format!("{width}_ieee754_{op}"),
-            vec![left, right],
-            TypeTable::BOOL,
-        )
-    };
-    let test = if range.is_nan() {
-        compare("ne", value.clone(), value)
-    } else if range.is_point() {
-        compare("eq", value, bound(range.start))
-    } else {
-        let below_end = if range.inclusive { "le" } else { "lt" };
-        TirExpr::new(
-            TirExprKind::Binary {
-                op: TirBinaryOp::And,
-                left: Box::new(compare("ge", value.clone(), bound(range.start))),
-                right: Box::new(compare(below_end, value, bound(range.end))),
-            },
-            TypeTable::BOOL,
-            span,
-        )
-    };
-    let test = match widen {
-        Some(widen) => {
-            let stmts = vec![widen, TirStmt::new(TirStmtKind::Expr(test), span)];
-            TirExpr::new(
-                TirExprKind::Block(TirBlock::new(stmts, span)),
-                TypeTable::BOOL,
-                span,
-            )
-        }
-        None => test,
-    };
-    TirPattern::Narrow {
-        name: None,
-        local_index: locals.scrutinee,
-        type_id: float_type,
-        test: Box::new(test),
-        shown,
-    }
-}
-
 /// The literal of type `ty` holding a range bound's `value`.
 fn bound_literal(value: BoundValue, ty: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
     let kind = match value {
@@ -11351,35 +10466,6 @@ fn bound_literal(value: BoundValue, ty: TypeId, type_table: &TypeTable, span: Sp
         }
     };
     TirExpr::new(kind, ty, span)
-}
-
-/// A call of `func` on the one argument `arg`.
-fn unary_call(func: FunctionRef, arg: TirExpr, result_type: TypeId, span: Span) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::Call {
-            func: Box::new(func),
-            type_args: vec![],
-            args: CallArgs::free(vec![CallArg::new(arg, false)]),
-        },
-        result_type,
-        span,
-    )
-}
-
-/// `expr as to` as codegen takes it, one instruction or none: `expr` itself
-/// where it already has the type.
-fn bare_cast(expr: TirExpr, to: TypeId, span: Span) -> TirExpr {
-    if expr.type_id == to {
-        return expr;
-    }
-    TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(expr),
-            target_type: to,
-        },
-        to,
-        span,
-    )
 }
 
 /// A half precision literal, given as its bits.

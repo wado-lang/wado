@@ -738,6 +738,28 @@ pub fn coverage_off(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|attr| attr.name == COVERAGE)
 }
 
+/// The string a `#[wire(key = "...")]` on the declaration writes.
+#[must_use]
+pub fn wire_value(attrs: &[Attribute], key: &str) -> Option<String> {
+    attrs
+        .iter()
+        .filter(|attr| attr.name == WIRE)
+        .find_map(|attr| attr.kv_value(key).map(str::to_string))
+}
+
+/// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
+#[must_use]
+pub fn wire_name_override(attrs: &[Attribute]) -> Option<String> {
+    wire_value(attrs, "name")
+}
+
+/// `#[wire(name_policy = "...")]` on a declaration. [`check`] refuses a policy
+/// `NamePolicy` does not name.
+#[must_use]
+pub fn wire_name_policy(attrs: &[Attribute]) -> Option<NamePolicy> {
+    NamePolicy::parse(&wire_value(attrs, "name_policy")?)
+}
+
 fn wire_fault(
     written: &WrittenAttribute<'_>,
     schema: &'static AttributeSchema,

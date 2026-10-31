@@ -6,12 +6,13 @@ mod highlight_corpus;
 mod highlight_vocab;
 mod pipeline;
 mod template;
+mod wasm_tools;
 
 use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
 const COMMANDS: &str = "golden-dump, bundled-asset, const-regions, grammar-corpus, \
-     highlight-corpus, highlight-vocab";
+     highlight-corpus, highlight-vocab, component-new, compose, print, objdump";
 
 fn main() {
     let mut parser = lexopt::Parser::from_env();
@@ -29,6 +30,10 @@ fn main() {
         "grammar-corpus" => grammar_corpus::run(parser),
         "highlight-corpus" => highlight_corpus::run(parser),
         "highlight-vocab" => highlight_vocab::run(parser),
+        "component-new" => wasm_tools::component_new(parser),
+        "compose" => wasm_tools::compose(parser),
+        "print" => wasm_tools::print(parser),
+        "objdump" => wasm_tools::objdump(parser),
         other => panic!("unknown command: {other}"),
     }
 }

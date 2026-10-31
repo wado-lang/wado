@@ -5016,36 +5016,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ));
     }
 
-    /// The local slot bound to the index of `for let [i, v] of t.enumerate()`,
-    /// once the binding is in scope. `None` when the form is not an enumerate
-    /// or the index position is a wildcard, and when the index is `mut`: a
-    /// subscript must stay the element's own position.
-    pub(super) fn enumerate_index_local(
-        is_enumerate: bool,
-        binding: &ast::Pattern,
-        ctx: &FunctionContext,
-    ) -> Option<u32> {
-        if !is_enumerate {
-            return None;
-        }
-        let name = Self::enumerate_index_binding_name(binding)?;
-        ctx.lookup(name)
-            .filter(|local| !local.is_mut)
-            .map(|local| local.index)
-    }
-
-    /// Split a `t.enumerate()` iterable into its receiver and the flag, leaving
-    /// any other expression alone. The suffix stays in the AST so the formatter
-    /// round-trips it, matching how the statement for-of reads it.
-    pub(super) fn split_enumerate(iterable: &Expr) -> (&Expr, bool) {
-        match iterable {
-            Expr::MethodCall(mc) if mc.method == "enumerate" && mc.args.is_empty() => {
-                (&mc.receiver, true)
-            }
-            other => (other, false),
-        }
-    }
-
     /// Resolve `[for let v of tuple { expr }]`.
     ///
     /// Only a pack-typed tuple is walkable: a concrete tuple's elements have
@@ -5057,7 +5027,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         comp: &ast::TupleComprehensionExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let (source, is_enumerate) = Self::split_enumerate(&comp.iterable);
+        let (source, is_enumerate) = util::split_enumerate(&comp.iterable);
         let iterable_type = self.resolve_expr(source, ctx, None);
         let Some((pack_name, pack_index, elem_type)) =
             self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
@@ -5084,7 +5054,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut scope = ctx.enter_scope();
         self.check_pack_binding(&comp.binding, binding_type, comp.span);
         self.bind_pack_binding(&comp.binding, binding_type, false, &mut scope);
-        let index_binding = Self::enumerate_index_local(is_enumerate, &comp.binding, &scope);
+        let index_binding = util::enumerate_index_local(is_enumerate, &comp.binding, &scope);
         let body_type = self.resolve_expr(
             &comp.body,
             &mut scope.enter_enumerate_body(index_binding).enter_pack_walk(),

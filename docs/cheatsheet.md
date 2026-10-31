@@ -2047,7 +2047,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:log`](./stdlib-core-log.md) — structured logging and tracing (levels, fields, spans, sinks)
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
 - [`core:icu`](./stdlib-core-icu.md) — Unicode character properties, as code
-  point ranges or per character
+  point ranges or per character, and `Collator`, which compares strings the
+  way a locale sorts them
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities
 - [`core:fuel`](./stdlib-core-fuel.md) — `measure`, the fuel (Wasm instructions)

@@ -10,28 +10,27 @@
 # from GitHub). See README.md "Generating the blob".
 set -euo pipefail
 cd "$(dirname "$0")"
+# component-new and compose validate what they write.
+DEV_TOOLS=$(../../scripts/dev-bin.sh --path wado-dev-tools)
 
 echo "== [1/5] datagen: slice casemap markers into a postcard blob =="
 ( cd datagen && cargo run --release -- casemap ../casemap.blob )
 
 echo "== [2/5] build data-free casemap feature component =="
 ( cd casemap && cargo build --release )
-wasm-tools component new \
+"$DEV_TOOLS" component-new \
   casemap/target/wasm32-unknown-unknown/release/bdp_casemap.wasm \
   -o casemap-feature.wasm
-wasm-tools validate casemap-feature.wasm
 
 echo "== [3/5] build shared data component (bakes the blob) =="
 cp casemap.blob data/casemap.blob
 ( cd data && cargo build --release )
-wasm-tools component new \
+"$DEV_TOOLS" component-new \
   data/target/wasm32-unknown-unknown/release/bdp_data.wasm \
   -o data-provider.wasm
-wasm-tools validate data-provider.wasm
 
 echo "== [4/5] compose feature + shared data into one import-free component =="
-wasm-tools compose casemap-feature.wasm -d data-provider.wasm -o composed.wasm
-wasm-tools validate composed.wasm
+"$DEV_TOOLS" compose casemap-feature.wasm -d data-provider.wasm -o composed.wasm
 
 echo "== sizes =="
 ls -l casemap.blob casemap-feature.wasm data-provider.wasm composed.wasm
@@ -56,14 +55,13 @@ echo "== build data-free collator & normalizer feature components + shared data 
 ( cd normalizer && cargo build --release )
 cp shared.blob data-cn/shared.blob
 ( cd data-cn && cargo build --release )
-wasm-tools component new collator/target/wasm32-unknown-unknown/release/cn_collator.wasm -o collator-feature.wasm
-wasm-tools component new normalizer/target/wasm32-unknown-unknown/release/cn_normalizer.wasm -o normalizer-feature.wasm
-wasm-tools component new data-cn/target/wasm32-unknown-unknown/release/cn_data.wasm -o cn-data.wasm
+"$DEV_TOOLS" component-new collator/target/wasm32-unknown-unknown/release/cn_collator.wasm -o collator-feature.wasm
+"$DEV_TOOLS" component-new normalizer/target/wasm32-unknown-unknown/release/cn_normalizer.wasm -o normalizer-feature.wasm
+"$DEV_TOOLS" component-new data-cn/target/wasm32-unknown-unknown/release/cn_data.wasm -o cn-data.wasm
 
 echo "== compose each feature with the ONE shared data component =="
-wasm-tools compose collator-feature.wasm -d cn-data.wasm -o collator-composed.wasm
-wasm-tools compose normalizer-feature.wasm -d cn-data.wasm -o normalizer-composed.wasm
-wasm-tools validate collator-composed.wasm && wasm-tools validate normalizer-composed.wasm
+"$DEV_TOOLS" compose collator-feature.wasm -d cn-data.wasm -o collator-composed.wasm
+"$DEV_TOOLS" compose normalizer-feature.wasm -d cn-data.wasm -o normalizer-composed.wasm
 
 echo "== sizes =="
 ls -l collator-feature.wasm normalizer-feature.wasm cn-data.wasm collator-composed.wasm normalizer-composed.wasm

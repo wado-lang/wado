@@ -2,15 +2,13 @@
 # https://mise.jdx.dev/
 # Schema: https://mise.jdx.dev/schema/mise.json
 
+min_version = "2026.10.24"
+
 [tools]
 # Rust is absent because mise reads rust-toolchain.toml.
 #
-# Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
-# `--experimental-wasm-jspi`, which Node 26 no longer accepts.
+# Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works.
 node = "26"
-# `wasm-tools component new` wraps the bundled ICU core module into a component.
-# Only rebuilding that asset needs it.
-wasm-tools = "latest"
 
 [settings]
 auto_install = true
@@ -378,27 +376,27 @@ run = "node --test .claude/hooks/*.test.mts"
 # ~/.config/wado/config.toml names mise's installs (~/.local/share/mise/installs).
 [tasks.oracle-gale]
 description = "Run the ANTLR4 jar on a grammar and the input on stdin (package-gale/scripts/antlr4_oracle.wado)"
-tools = { java = "temurin-21" }
+tools = { java = "lts" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle.wado"
 
 [tasks.oracle-gale-selftest]
 description = "Check the ANTLR4 oracle's answers and refusals against the corpus grammars"
-tools = { java = "temurin-21" }
+tools = { java = "lts" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/antlr4_oracle_selftest.wado"
 
 [tasks.oracle-gale-regen]
 description = "Regenerate Gale's oracle-pinned driver tests (sqlite, json, or all)"
-tools = { java = "temurin-21" }
+tools = { java = "lts" }
 run = 'WADO="$(scripts/dev-bin.sh --path wado)" scripts/dev-bin.sh wado run package-gale/scripts/regen_oracle.wado'
 
 [tasks.oracle-gale-typescript]
 description = "List where Gale's TypeScript parse tree for a file differs from the ANTLR4 jar's"
-tools = { java = "temurin-21" }
+tools = { java = "lts" }
 run = "scripts/dev-bin.sh wado run package-gale/tools/oracle_typescript.wado"
 
 [tasks.extract-gale-descriptors]
 description = "Regenerate Gale's ANTLR4 descriptor corpus (all categories, or those named)"
-tools = { java = "temurin-21" }
+tools = { java = "lts" }
 run = "scripts/dev-bin.sh wado run package-gale/scripts/extract_antlr4_descriptors.wado"
 
 [tasks.test-gale-o2]
@@ -739,7 +737,10 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # STRIP=none keeps the name section, which the `wado.dataref` map is keyed by.
-cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_STRIP=none cargo build --release && cd ..
+# A subshell, so `set -e` stops the task when the build fails. The crate's
+# `.cargo/config.toml` picks the target, and cargo reads it from the directory
+# it runs in.
+(cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_STRIP=none cargo build --release)
 WAT_FILE="wado-compiler/lib/core/libm.wat"
 WAT_TMP="${WAT_FILE}.tmp"
 cargo run --bin wado-dev-tools -- bundled-asset target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
@@ -747,26 +748,22 @@ scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled libm WAT"
 """
 
 [tasks.update-bundled-icu]
-description = "Rebuild the bundled ICU character-property component"
+description = "Rebuild the bundled ICU component"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 # --emit-relocs keeps the `linking` and `reloc.*` sections the data-reference
 # map is resolved from; STRIP=none keeps the `name` section it is keyed by.
-cd wado-bundled-icu && RUSTFLAGS="-C link-arg=--emit-relocs" CARGO_PROFILE_RELEASE_STRIP=none cargo build --release && cd ..
+# A subshell, as in `update-bundled`.
+(cd wado-bundled-icu && RUSTFLAGS="-C link-arg=--emit-relocs" CARGO_PROFILE_RELEASE_STRIP=none cargo build --release)
 CORE="wado-bundled-icu/target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm"
-CORE_WAT="wado-bundled-icu/target/icu.core.wat"
-COMPONENT="wado-bundled-icu/target/icu.component.wasm"
-# Resolve the relocations into `wado.dataref` and spend them, as libm does. The
-# map's offsets are segment-relative, so they survive the print/reparse that a
-# `reloc` entry's offset into the encoded code section would not.
-scripts/dev-bin.sh wado-dev-tools bundled-asset "$CORE" > "$CORE_WAT"
-# The crate imports nothing, so the wrap needs no WASI adapter.
-wasm-tools component new "$CORE_WAT" -o "$COMPONENT"
-wasm-tools validate "$COMPONENT"
 WAT_FILE="wado-compiler/lib/core/icu.wat"
 WAT_TMP="${WAT_FILE}.tmp"
-wasm-tools print -f "$COMPONENT" -o "$WAT_TMP"
+# Resolve the relocations into `wado.dataref` and spend them, as libm does. The
+# map's offsets are segment-relative, so they survive the print/reparse that a
+# `reloc` entry's offset into the encoded code section would not. The crate
+# imports nothing, so the wrap into a component needs no WASI adapter.
+scripts/dev-bin.sh wado-dev-tools bundled-asset --component "$CORE" > "$WAT_TMP"
 scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled ICU WAT"
 """
 

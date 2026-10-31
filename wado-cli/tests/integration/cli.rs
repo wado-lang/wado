@@ -1553,8 +1553,9 @@ fn test_run_reuses_its_component_until_something_it_read_changes() {
 }
 
 /// A cache entry names every file the compile read, and a path that is not
-/// UTF-8 cannot be written into one: the run goes ahead uncached.
-#[cfg(unix)]
+/// UTF-8 cannot be written into one: the run goes ahead uncached. APFS refuses
+/// such a name (`EILSEQ`), so on macOS the case never arises.
+#[cfg(all(unix, not(target_os = "macos")))]
 #[test]
 fn test_run_compiles_a_file_under_a_directory_whose_name_is_not_utf8() {
     use std::os::unix::ffi::OsStrExt;

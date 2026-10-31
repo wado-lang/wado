@@ -8,6 +8,7 @@ use crate::type_table::TypeTable;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
 use super::trait_env;
+use super::type_resolution::slot_type_ids;
 use super::types::{
     EnumInfo, GenericNewtypeInfo, ParamSlot, StructFieldInfo, VariantCaseData, VariantInfo,
 };
@@ -33,9 +34,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         scope.reject_written_annotation(&field.ty);
                         fields.push((field.name.clone(), type_id, field.visibility));
                     }
-                    let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+                    let type_param_type_ids = slot_type_ids(
                         &ParamSlot::list(&struct_decl.type_params),
-                        &scope.tysys.type_table,
+                        &mut scope.tysys.type_table.borrow_mut(),
                     );
 
                     let info = StructFieldInfo::of_decl(
@@ -73,9 +74,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 Item::Variant(variant_decl) => {
                     let mut scope = self.enter_decl_params_scope(&variant_decl.type_params);
-                    let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+                    let type_param_type_ids = slot_type_ids(
                         &ParamSlot::list(&variant_decl.type_params),
-                        &scope.tysys.type_table,
+                        &mut scope.tysys.type_table.borrow_mut(),
                     );
 
                     let cases = VariantCaseData::collect(variant_decl, |payload_ty| {

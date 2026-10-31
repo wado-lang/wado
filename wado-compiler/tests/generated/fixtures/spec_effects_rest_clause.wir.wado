@@ -824,9 +824,9 @@ type "functype//spec_effects_rest_clause.wado/$cm_export__$test_trap_1____trap__
 
 type "functype//spec_effects_rest_clause.wado/$value_copy$wasi:sockets/types.wado/ErrorCode" = fn(ref "wasi:sockets/types.wado//ErrorCode") -> ref "wasi:sockets/types.wado//ErrorCode";  // TypeId(193)
 
-type "functype//spec_effects_rest_clause.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(194)
+type "functype//spec_effects_rest_clause.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>" = fn(ref null "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(194)
 
-type "functype//spec_effects_rest_clause.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>" = fn(ref null "core:prelude/string.wado//String") -> ref null "core:prelude/string.wado//String";  // TypeId(195)
+type "functype//spec_effects_rest_clause.wado/$value_copy$core:prelude/string.wado/String" = fn(ref "core:prelude/string.wado//String") -> ref "core:prelude/string.wado//String";  // TypeId(195)
 
 type "functype//spec_effects_rest_clause.wado/$test_0$cold0" = fn();  // TypeId(196)
 
@@ -1767,18 +1767,18 @@ fn "spec_effects_rest_clause.wado/$value_copy$wasi:sockets/types.wado/ErrorCode"
     });
 }
 
-fn "spec_effects_rest_clause.wado/$value_copy$core:prelude/string.wado/String"(v) {
-    let $av_1: i32;
-    $av_1 = v.used;
-    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
-}
-
 fn "spec_effects_rest_clause.wado/$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v) {
     return (if ref.is_null(v) -> ref null "core:prelude/string.wado//String" {
         v;
     } else {
         "spec_effects_rest_clause.wado/$value_copy$core:prelude/string.wado/String"(ref.as_non_null(v));
     });
+}
+
+fn "spec_effects_rest_clause.wado/$value_copy$core:prelude/string.wado/String"(v) {
+    let $av_1: i32;
+    $av_1 = v.used;
+    return struct.new "core:prelude/string.wado//String" { repr: let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v.repr; let $array_clone_dst_2: ref Array<u8>; builtin::array_copy<u8>(local.tee $array_clone_dst_2(builtin::array_new<u8>($av_1)), 0, $array_clone_src_1, 0, $av_1); $array_clone_dst_2, used: $av_1 };
 }
 
 fn "spec_effects_rest_clause.wado/$test_0$cold0"() {

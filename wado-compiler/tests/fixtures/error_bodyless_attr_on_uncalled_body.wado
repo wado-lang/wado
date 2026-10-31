@@ -1,0 +1,17 @@
+// An attribute that describes a declaration with no body is an error on a
+// function that has one, whether or not anything calls it. The attributes are
+// the standard library's, so this file is one of its modules.
+#![stdlib("core:simd")]
+
+#[storage(fresh)]
+fn never_called() -> i32 {
+    return 1;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "core:simd:6:1: analysis error: #[storage] belongs to a declaration with no body",
+  "compile_error_codes": ["ATTR_MISUSE"]
+}

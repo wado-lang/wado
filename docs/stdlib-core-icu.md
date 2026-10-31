@@ -4,15 +4,21 @@
 
 # core:icu
 
-Unicode character properties, from the ICU4X component bundled with the
-toolchain. A name it does not answer is `null`, never an approximate set:
-`Block`, `Decomposition_Type` and the contributory `Other_*` are withheld.
+Unicode character properties and locale-aware collation, from the ICU4X
+component bundled with the toolchain. A property name it does not answer is
+`null`, never an approximate set: `Block`, `Decomposition_Type` and the
+contributory `Other_*` are withheld.
 
 ## Synopsis
 
 ```wado
 assert has(Properties::BinaryProperty::Uppercase, 'À');
 assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
+
+let swedish = Collator::new("sv").unwrap();
+let mut words: List<String> = ["ö", "z", "a"];
+words.sort_by(|a, b| swedish.compare(a, b));
+assert words == ["a", "z", "ö"];
 ```
 
 ## Functions
@@ -65,6 +71,33 @@ ranges.
 #### `fn contains(property: String, value: Option<String>, ch: char) -> Option<bool>`
 
 `#[cm]` `#[cm_params("property", "value", "ch")]`
+
+## Structs
+
+### `pub struct LocaleError`
+
+Why a locale was refused: the tag does not parse as BCP 47.
+
+_Fields are private._
+
+#### `impl Display for LocaleError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub affine struct Collator`
+
+Compares strings the way a locale sorts them.
+
+_Fields are private._
+
+#### `pub fn new(locale: String) -> Result<Collator, LocaleError>`
+
+A collator for the BCP 47 tag `locale`. A locale CLDR tailors nothing for
+sorts as its fallback does, ending at the root collation.
+
+#### `pub fn compare(&self, left: &String, right: &String) -> Ordering`
+
+How `left` sorts against `right`.
 
 ## Enums
 

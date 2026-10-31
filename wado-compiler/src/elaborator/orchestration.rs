@@ -18,7 +18,7 @@ use crate::ast::{
 };
 use crate::bail_with;
 use crate::builtin_registry::BuiltinRegistry;
-use crate::compiler_host::{Code, CompilerHost, DiagnosticSpan};
+use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::coverage::{CoverageMap, CoverageScope};
@@ -26,19 +26,21 @@ use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::pgo::{ColdMap, Profile};
 use crate::symbol::SymbolTable;
-use crate::tir::{ResolvedType, TirModule, TypeId, positional_substitution};
+use crate::tir::{TirModule, TypeId};
 use crate::type_table::TypeTable;
 use crate::world_registry::WorldRegistry;
 
+use super::declaration_attrs::internal_tag_faults;
 use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
+use super::type_resolution::slot_type_ids;
 use super::types::{
     DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, ResourceInfo,
     StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use super::{AbstractSelectionCache, Elaborator};
-use crate::ast::{GenericType, NamedType, UseItem};
+use crate::ast::UseItem;
 use crate::compiler_item::{CompilerItemKind, Resolved};
 use crate::component_model::SourceInterfaceBatch;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -767,11 +769,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             walk: &no_walk,
                             decls: &trait_env,
                         };
-                        let base_type_id = Self::resolve_type_static(
-                            &newtype_decl.ty,
-                            &mut type_table.borrow_mut(),
-                            &lookup,
-                        );
+                        let base_type_id =
+                            lookup.resolve(&newtype_decl.ty, &mut type_table.borrow_mut());
                         data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                         newly_resolved = true;
                     } else if !data.generic_newtypes.contains_key(&def) {
@@ -819,10 +818,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .fields
                             .iter()
                             .map(|field| {
-                                let type_id = Self::resolve_type_static_with_params(
+                                let type_id = lookup.resolve_in(
                                     &field.ty,
                                     &mut type_table.borrow_mut(),
-                                    &lookup,
                                     &struct_slots,
                                 );
                                 (field.name.clone(), type_id, field.visibility)
@@ -830,7 +828,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .collect();
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
-                        let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
+                        let type_param_type_ids =
+                            slot_type_ids(&struct_slots, &mut type_table.borrow_mut());
                         let info = data
                             .struct_fields
                             .get_mut(&resolutions.defs().def_at(struct_decl.id))
@@ -840,25 +839,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                     // The pre-pass already recorded every generic newtype whole.
                     Item::Newtype(newtype_decl) if newtype_decl.type_params.is_empty() => {
-                        let base_type_id = Self::resolve_type_static(
-                            &newtype_decl.ty,
-                            &mut type_table.borrow_mut(),
-                            &lookup,
-                        );
+                        let base_type_id =
+                            lookup.resolve(&newtype_decl.ty, &mut type_table.borrow_mut());
                         let def = resolutions.defs().def_at(newtype_decl.id);
                         data.declare_newtype(&type_table, def, newtype_decl.id, base_type_id);
                     }
                     Item::Variant(variant_decl) => {
                         let variant_slots = ParamSlot::list(&variant_decl.type_params);
                         let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
-                            Self::resolve_type_static_with_params(
+                            lookup.resolve_in(
                                 payload_ty,
                                 &mut type_table.borrow_mut(),
-                                &lookup,
                                 &variant_slots,
                             )
                         });
-                        let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
+                        let type_param_type_ids =
+                            slot_type_ids(&variant_slots, &mut type_table.borrow_mut());
                         data.variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
                             VariantInfo::of_decl(
@@ -1294,7 +1290,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Replace the program's statically resolved fields and cases with what
     /// each declaring module's decl pass resolved in the declaration's frame,
-    /// so every module reads one type for one field. The static resolver builds
+    /// so every module reads one type for one field. `TypeLookup::resolve_in` builds
     /// a projection without the trait arguments and bindings the frame reads,
     /// and a projection interns by them: `Q::T` read from another module's
     /// `Passed<Q>` would otherwise never be the `B::T` a signature names.
@@ -1496,7 +1492,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     elaborator.annotate_module_decls(module, module_source.clone());
                     // What each trait declares of its associated types. The
                     // elaborator builds one on asking, but a projection the
-                    // static resolver builds is read by the trait solver,
+                    // `TypeLookup` builds is read by the trait solver,
                     // which cannot. Built once the module's declarations, and
                     // so its namespace members, resolve.
                     elaborator.register_assoc_type_sigs(module);
@@ -1697,17 +1693,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         // `unchecked` reads the callees the body walks settled, so it waits
         // for every module's walk. Only a clean walk settled them all.
+        // `#[wire(tag)]` reads its cases' payloads and their `Serialize` impls,
+        // so it waits for the same.
         reify_eligible.retain(|module_source| {
-            let misplaced = misplaced_unchecked(
-                &modules[module_source],
+            let module = &modules[module_source];
+            let faults: Vec<Diagnostic> = misplaced_unchecked(
+                module,
                 &state.module_semantics[module_source],
                 &state.tysys.resolutions,
                 modules,
-            );
-            for diagnostic in &misplaced {
+            )
+            .into_iter()
+            .chain(internal_tag_faults(module, &state.tysys, modules))
+            .collect();
+            for diagnostic in &faults {
                 let _ = logger.error_in(module_source, diagnostic.clone());
             }
-            misplaced.is_empty()
+            faults.is_empty()
         });
 
         // Liveness — source-level reachability over every module's recorded
@@ -1807,7 +1809,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         &state.module_semantics,
                         symbols,
                         modules,
-                        logger,
                         // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
                         // `reify_module`). The semantic diagnostics (effect
@@ -1821,9 +1822,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                     reify.coverage = state.coverage.as_ref();
                     reify.cold = state.cold.as_ref();
-                    if let Ok(reified) = reify.reify_module(module, module_source.clone()) {
-                        result.insert(module_source.clone(), reified);
-                    }
+                    let reified = reify.reify_module(module, module_source.clone());
+                    result.insert(module_source.clone(), reified);
                 }
             }
         }
@@ -2119,317 +2119,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         Ok(())
-    }
-
-    /// Static version of `resolve_type` for use before the elaborator is fully
-    /// constructed. Reads type info via [`TypeLookup`] — the same path the
-    /// fully-constructed elaborator uses, so name resolution stays in one place.
-    pub(super) fn resolve_type_static(
-        ty: &Type,
-        type_table: &mut TypeTable,
-        lookup: &TypeLookup<'_>,
-    ) -> TypeId {
-        // Delegate to the type-param-aware resolver with an empty scope.
-        // Keeping a single implementation avoids the two arms drifting:
-        // `resolve_type_static` previously lacked the generic
-        // resource / variant / enum handling, so a struct field typed
-        // `Stream<u8>` / `Result<T, E>` resolved to `UNKNOWN`.
-        Self::resolve_type_static_with_params(ty, type_table, lookup, &[])
-    }
-
-    /// A `TypeId` per slot, in declaration order, so a slot's position is the
-    /// index [`Self::resolve_type_static_with_params`] gave it.
-    pub(super) fn slot_type_ids(
-        slots: &[ParamSlot],
-        type_table: &RefCell<TypeTable>,
-    ) -> Vec<TypeId> {
-        slots
-            .iter()
-            .enumerate()
-            .map(|(i, slot)| {
-                type_table.borrow_mut().make_declared_param(
-                    slot.name.clone(),
-                    i as u32,
-                    slot.is_pack,
-                )
-            })
-            .collect()
-    }
-
-    /// Append each declared default to `settled`, resolved against the
-    /// declaring parameters and then substituted with the arguments settled
-    /// before it: `Both<A, B = A>` binds `B` to `A`'s argument, not to whatever
-    /// the use site calls `A`.
-    fn fill_declared_defaults(
-        settled: &mut Vec<TypeId>,
-        slots: &[ParamSlot],
-        defaults: &[Type],
-        type_table: &mut TypeTable,
-        lookup: &TypeLookup<'_>,
-    ) {
-        let mut substitution = positional_substitution(settled);
-        for default in defaults {
-            let resolved =
-                Self::resolve_type_static_with_params(default, type_table, lookup, slots);
-            let filled = type_table.substitute_type_params(resolved, &substitution);
-            substitution.insert(settled.len() as u32, filled);
-            settled.push(filled);
-        }
-    }
-
-    /// The type a struct, resource, variant, enum or flags declaration `def` declares,
-    /// read from the registry entry that holds it; `UNKNOWN` for any other.
-    pub(super) fn nominal_type_of(
-        def: DefId,
-        type_table: &mut TypeTable,
-        lookup: &TypeLookup<'_>,
-    ) -> TypeId {
-        if lookup.struct_fields_of(def).is_some() {
-            type_table.make_struct(StructDef::Decl(def))
-        } else if lookup.resource_type_of(def).is_some() {
-            type_table.make_resource(def)
-        } else if lookup.variant_cases_of(def).is_some() {
-            type_table.make_variant(def)
-        } else if lookup.enum_cases_of(def).is_some() {
-            type_table.make_enum(def)
-        } else if let Some(flags) = lookup.flags_members_of(def) {
-            flags.type_id
-        } else {
-            TypeTable::UNKNOWN
-        }
-    }
-
-    /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
-    /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
-    pub(super) fn resolve_type_static_with_params(
-        ty: &Type,
-        type_table: &mut TypeTable,
-        lookup: &TypeLookup<'_>,
-        type_params: &[ParamSlot],
-    ) -> TypeId {
-        match ty {
-            Type::Named(named) => {
-                // Which declaration the name means is the site's answer, taken
-                // once here and asked of every registry below.
-                let def = lookup.declaration_at(Some(named.id), &named.name);
-                // Check newtypes first
-                if let Some(alias_type_id) = def.and_then(|def| lookup.newtype_of(def)) {
-                    return alias_type_id;
-                }
-
-                if let Some(index) = type_params.iter().position(|p| p.name == named.name) {
-                    return type_table.make_type_param(named.name.clone(), index as u32);
-                }
-
-                if let Some(primitive) =
-                    def.and_then(|def| TypeTable::primitive_of_decl(lookup.resolutions.defs(), def))
-                {
-                    return primitive;
-                }
-
-                // `resolve_type_static[_with_params]` runs before the
-                // elaborator instance exists — including the newtype
-                // pre-pass (`annotate_modules`), which resolves newtype
-                // base types *before* `intern_all_decl_types` mints and
-                // registers struct/variant/enum/resource `TypeId`s. So
-                // this one cannot reach an identity through a type that
-                // may not be interned yet: it reads the declaring node
-                // each registry entry already carries, which is the same
-                // answer at every point in the bootstrap.
-                let Some(def) = def else {
-                    return TypeTable::UNKNOWN;
-                };
-                Self::nominal_type_of(def, type_table, lookup)
-            }
-            Type::Generic(generic) => {
-                let head = lookup.declaration_at(Some(generic.id), &generic.name);
-                // Arity is the elaborator's to report, where the same head
-                // resolves again with a span to report it at.
-                if let Some(make) = head.and_then(|def| type_table.compiler_generic_builder(def))
-                    && let [arg] = generic.args.as_slice()
-                {
-                    let elem =
-                        Self::resolve_type_static_with_params(arg, type_table, lookup, type_params);
-                    return make(type_table, elem);
-                }
-                let mut type_args: Vec<TypeId> = generic
-                    .args
-                    .iter()
-                    .map(|arg| {
-                        Self::resolve_type_static_with_params(arg, type_table, lookup, type_params)
-                    })
-                    .collect();
-                // As in `type_resolution`, or a field type carries a
-                // half-applied instantiation.
-                if let Some((slots, defaults)) =
-                    head.and_then(|def| lookup.type_args_with_defaults(def, generic.args.len()))
-                {
-                    Self::fill_declared_defaults(
-                        &mut type_args,
-                        &slots,
-                        &defaults,
-                        type_table,
-                        lookup,
-                    );
-                }
-                let Some(head) = head else {
-                    return TypeTable::UNKNOWN;
-                };
-                // A `Newtype` over the instantiated base, as in `type_resolution`: `UNKNOWN`
-                // here would hide the inherited base methods from monomorphization.
-                if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                    // Substituted after resolving: a base spelling `T::Assoc`
-                    // names no type until `T` is one.
-                    let slots: Vec<ParamSlot> =
-                        gn_info.type_params.iter().map(ParamSlot::from).collect();
-                    let base = Self::resolve_type_static_with_params(
-                        &gn_info.base_type_ast,
-                        type_table,
-                        lookup,
-                        &slots,
-                    );
-                    let substitution = positional_substitution(&type_args);
-                    let base_type_id = type_table.substitute_type_params(base, &substitution);
-                    return type_table.make_newtype_instance(head, type_args, base_type_id);
-                }
-                // Not a `GenericInstance`: effect_check's `signature_resources` must see
-                // the resource a signature like `rx: Stream<u8>` implies.
-                if lookup.resource_type_of(head).is_some() {
-                    return type_table.intern(ResolvedType::GenericResource {
-                        def: head,
-                        type_args,
-                    });
-                }
-                if lookup.struct_fields_of(head).is_some()
-                    || lookup.variant_cases_of(head).is_some()
-                    || lookup.enum_cases_of(head).is_some()
-                {
-                    type_table.make_generic_instance(head, type_args)
-                } else {
-                    TypeTable::UNKNOWN
-                }
-            }
-            Type::Reference(inner) => {
-                let inner_type =
-                    Self::resolve_type_static_with_params(inner, type_table, lookup, type_params);
-                type_table.make_ref(inner_type)
-            }
-            Type::MutReference(inner) => {
-                let inner_type =
-                    Self::resolve_type_static_with_params(inner, type_table, lookup, type_params);
-                type_table.make_mut_ref(inner_type)
-            }
-            Type::NamespacedGeneric(namespaced) => {
-                if let Some(index) = type_params
-                    .iter()
-                    .position(|p| p.name == namespaced.namespace)
-                {
-                    // The declaring trait is part of the projection's identity,
-                    // so a name no bound declares resolves to nothing here and
-                    // the frame resolver reports it against the written span.
-                    let Some(owning_trait) = lookup
-                        .bound_declaring_assoc_type(&type_params[index].bounds, &namespaced.name)
-                    else {
-                        return TypeTable::UNKNOWN;
-                    };
-                    let param_id =
-                        type_table.make_type_param(namespaced.namespace.clone(), index as u32);
-                    let args = namespaced
-                        .args
-                        .iter()
-                        .map(|arg| {
-                            Self::resolve_type_static_with_params(
-                                arg,
-                                type_table,
-                                lookup,
-                                type_params,
-                            )
-                        })
-                        .collect();
-                    return type_table.make_assoc_type_projection(
-                        param_id,
-                        owning_trait,
-                        None,
-                        namespaced.name.clone(),
-                        args,
-                        vec![],
-                    );
-                }
-                // `ns::Type` namespace-import alias in type position: resolve
-                // the `ns$Type` alias via the `Named` / `Generic` arms, which
-                // route through the import tier to the namespace's own module.
-                // Mirrors the dynamic resolver's namespace-alias branch.
-                if lookup.namespace_imports.contains_key(&namespaced.namespace) {
-                    let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
-                    let aliased = if namespaced.args.is_empty() {
-                        Type::Named(NamedType::new(namespaced.id, alias, namespaced.span))
-                    } else {
-                        Type::Generic(GenericType {
-                            id: namespaced.id,
-                            name: alias,
-                            args: namespaced.args.clone(),
-                            span: namespaced.span,
-                        })
-                    };
-                    return Self::resolve_type_static_with_params(
-                        &aliased,
-                        type_table,
-                        lookup,
-                        type_params,
-                    );
-                }
-                TypeTable::UNKNOWN
-            }
-            Type::Tuple(elements) => {
-                let elem_types: Vec<TypeId> = elements
-                    .iter()
-                    .map(|e| {
-                        Self::resolve_type_static_with_params(e, type_table, lookup, type_params)
-                    })
-                    .collect();
-                type_table.make_tuple(elem_types)
-            }
-            Type::Function(func_type) => {
-                let params: Vec<TypeId> = func_type
-                    .params
-                    .iter()
-                    .map(|p| {
-                        Self::resolve_type_static_with_params(p, type_table, lookup, type_params)
-                    })
-                    .collect();
-                let return_type = Self::resolve_type_static_with_params(
-                    &func_type.return_type,
-                    type_table,
-                    lookup,
-                    type_params,
-                );
-                type_table.intern(ResolvedType::Function {
-                    is_mut: func_type.is_mut,
-                    params,
-                    return_type,
-                    effects: vec![],
-                })
-            }
-            // A variadic type-pack spread `..T` resolves to a `TypePack`
-            // keyed by the param's positional index, mirroring the instance
-            // resolver's `trait_ctx.type_params` lookup.
-            // Without this arm a `[..T]` parameter resolves its element to
-            // `UNKNOWN`, so a generic tuple method (`Tuple<..T>^Eq::eq`)
-            // monomorphizes against `Tuple<unknown>` and never registers at
-            // WIR build.
-            Type::TypePackSpread(name, _span) => {
-                if let Some(index) = type_params.iter().position(|p| &p.name == name) {
-                    type_table.make_type_pack(name.clone(), index as u32)
-                } else {
-                    TypeTable::UNKNOWN
-                }
-            }
-            // Inference placeholder `_` resolves to the unknown type, matching
-            // an omitted turbofish slot.
-            Type::Infer(_) => TypeTable::UNKNOWN,
-            // Parser error-recovery placeholder: resolve to the error type.
-            Type::Error(_) => TypeTable::ERROR,
-        }
     }
 
     /// Pre-pass: scan all modules and register `generic_assoc_type_defs` for every

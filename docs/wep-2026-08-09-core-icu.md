@@ -54,49 +54,29 @@ capabilities acquire Wado shapes: a collator that satisfies `Ord`, segmentation
 exposed through the iterator traits, `Display` and `Inspect` on locale
 identifiers.
 
-### Three API shapes, chosen by what the thing is
+### Two API shapes, chosen by what the thing is
 
-| Shape                                | When                                                               |
-| ------------------------------------ | ------------------------------------------------------------------ |
-| Free function                        | pure in its arguments, no construction worth keeping               |
-| Constructed handle, non-owning token | construction worth hoisting, configuration bounded at compile time |
-| Constructed handle, affine resource  | built from unbounded runtime input, or stateful                    |
+| Shape                               | When                                                 |
+| ----------------------------------- | ---------------------------------------------------- |
+| Free function                       | pure in its arguments, no construction worth keeping |
+| Constructed handle, affine resource | construction worth hoisting, or stateful             |
 
 A free function covers normalization, case folding, `is_nfc`, character
 properties, and one-shot locale-sensitive casing.
 
-What separates the two handle shapes is who ends the object's life. It is not
-the line the data slicing draws — that one is capability and locale, and it runs
-across both shapes.
-
-Statefulness forces the affine shape for a second, independent reason: copying a
-token aliases its referent, which two copies of a lazy iterator would show by
-advancing each other. So the segmenter is a token and the iteration is not — a
-full pass returns a `List<u32>` of boundaries, while lazy iteration is affine, an
-eager list being pathological when the caller wants the first few.
+Every handle is an affine resource with a destructor on the ICU side: a
+collator, plural rules, a formatter, a segmenter, a lazy segmentation iterator.
+The `own` handle the component returns is a new entry in the program's handle
+table each time, so only a drop frees it, whatever the component shares behind
+it. An interned handle with value semantics would leak one entry per
+construction. Affine costs little where the handle is used: a closure sees what
+it captures by reference, so `list.sort_by(|a, b| c.compare(a, b))` is written
+the obvious way, and a function takes `&Collator`.
 
 Where a capability serves both a one-shot and a loop, the facade offers both: a
 convenience function that constructs and discards, and the handle for when the
 construction should be hoisted. The facade makes the cost visible where it is
 paid.
-
-#### Non-owning token
-
-A collator over a declared locale, plural rules, a formatter over a fixed
-skeleton, a segmenter: immutable, and configured only from what
-`with { locales: [...] }` and the program's types already bound. The
-implementation asset interns these, so the set is finite by construction and
-never needs freeing, and the handle keeps the value semantics the rest of
-`core:*` has — it sits in a global, and a closure captures it by copy, so
-`list.sort_by(|a, b| c.compare(a, b))` is written the obvious way.
-
-#### Affine resource
-
-A collator tailored from user-supplied rules, a formatter compiled from a runtime
-skeleton or message pattern, anything keyed by an `Accept-Language` string, a
-lazy segmentation iterator. The far side allocates these per call from input the
-program does not bound, so the object has an end and something must reach it: the
-handle carries a `dtor` and is move-only.
 
 ### One implementation asset, collected per program
 
@@ -282,24 +262,25 @@ compile-time-bounded key. A design that holds for case mapping and breaks at dat
 formatting is not a design for `core:icu`.
 
 The counterargument — that move-only resources clash with Wado's value semantics
-— is real, and the three-shape split above is the answer to it rather than a
-concession: the objects that want to be copyable values are copyable values.
-What stays move-only is what genuinely has an end.
+— is weaker than it looks: what a hot path does with a handle is borrow it, and
+a closure and a `&` parameter both borrow.
 
-### One handle shape for everything
+### A copyable token for what the program bounds
 
-Making every handle affine adds no kind, but move-only on an immutable interned
-object is a discipline with no safety payoff — nothing can be double-freed
-because nothing is freed — and it costs what the hot paths need: a collator in a
-global, and a collator captured by a comparison closure. It would also put the
-entire surface behind CM resource import rather than the part owning a `dtor`.
+An immutable object whose configuration the program bounds at compile time — a
+collator over a declared locale — could be an interned, `dtor`-less token with
+value semantics. Rejected: as a CM resource, each `own` handle the asset returns
+is a new entry in the program's handle table, and a token nothing drops leaks
+one per construction, so a one-shot helper called in a loop grows the table
+without bound. The asset's interning bounds its own table, not the program's. It
+would also need a second handle kind, and a way to tell it apart that the
+component's type does not carry.
 
-Making every handle a bare index is the mirror error. It reintroduces what sank
-the memoizing surface above — an object built per request from `Accept-Language`
-accumulates far-side with no eviction and no visibility, a leak rather than a
-cache — and it silently shares the state of every object that has some.
-Representation was never the question: a CM handle is already an index into a
-per-instance table.
+Making every handle a bare index is the variant of it that leaks nothing in the
+table. It reintroduces what sank the memoizing surface above — an object built
+per request from `Accept-Language` accumulates far-side with no eviction and no
+visibility, a leak rather than a cache — and it silently shares the state of
+every object that has some.
 
 ### Three user-visible modules
 
@@ -382,17 +363,13 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Open questions
 
-- [ ] What bounds a token's interned set. Tokens forbid eviction — an entry
-  freed under a live token dangles — so the set is a permanent high-water
-  mark and must be small, not merely finite. The bound wanted is on the key
-  type's cardinality, which is a facade-authoring decision rather than
-  anything the compiler checks; whether it should instead be a distinct type
-  per bounded configuration is undecided. Unrelated to data slicing.
-- [ ] Holding an affine handle in a global, and capturing one in a closure
-  ([resource ownership](./wep-2026-05-21-resource-ownership.md)). The token
-  form needs neither, so this bounds only the tailored, runtime-configured,
-  and stateful surface — where a service caching a collator per
-  `Accept-Language` lives.
+- [ ] A closure cannot own an affine value
+  ([Affine Types](./wep-2026-10-17-affine-types.md#a-closure-cannot-own-an-affine-value)),
+  so no function returns a comparator that carries its collator, and a map
+  keyed by `Accept-Language` cannot hold collators either
+  ([maps and sets of affine values](./wep-2026-10-17-affine-types.md#maps-and-sets-of-affine-values)).
+  Nor can a global hold one ([Affine Types](./spec-affine.md)), so a collator
+  built once per program is passed down by `&`.
 - [ ] Does ICU4X expose collation sort keys? A bulk key-extraction call would let
   a sort cross the boundary once instead of per comparison, which dominates
   any handle-versus-lookup difference.
@@ -411,15 +388,17 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Implementation
 
-- [ ] Non-owning token support in CM component import
+- [x] Affine resource support in CM component import
   ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
-  a `dtor`-less imported handle decoded as a copyable newtype. It is what
-  normalization, case mapping, collation over the declared locales, and
-  grapheme boundaries by eager pass need beyond what character properties
-  already use.
-- [ ] Affine resource support in the same path — methods, static constructors,
-  `borrow<T>` parameters, `resource.drop` — gating the tailored,
-  runtime-configured, and stateful surface, not the package.
+  methods, static constructors, `borrow<T>` parameters and `resource.drop`. A
+  resource the component implements demands no effect of its own, as its
+  interface does not.
+- [x] `Collator`: the asset exports a `collator` resource, and the facade wraps it
+  in an affine `Collator` whose `compare` answers an `Ordering`. Collation is
+  baked for every locale until the data image below lands, which takes the
+  asset's core module from 0.35 MB to 1.69 MB. A program that constructs a
+  collator carries all of it; one that does not collects it away, and no
+  compile measurably slows.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
   itself, reduced here to an archive lookup: `core:icu` runs no provider
   component and needs no compile-time execution.
@@ -459,5 +438,5 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   the implementation asset is consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API
   need no longer be CM-representable.
-- [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — the token and
-  affine handle kinds the facade draws on.
+- [Affine Types](./wep-2026-10-17-affine-types.md) — the handle kind the facade
+  draws on.

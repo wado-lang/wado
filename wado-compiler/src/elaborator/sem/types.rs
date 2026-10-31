@@ -5,6 +5,8 @@
 //! [`crate::ast_index::AstIndex`], decl-level ones on [`super::decls::ModuleDecls`].
 
 use crate::ast::{self, AstId, Expr};
+use crate::builtin_facts::BuiltinFacts;
+use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -388,6 +390,11 @@ pub(crate) struct TypeAnnotations {
     /// Resolved return type per function/method `AstId`.
     /// Reify reads it instead of re-resolving the return annotation.
     pub(crate) fn_return_types: IndexMap<AstId, tir::TypeId>,
+    /// What each function's / method's declaration attributes state, per its
+    /// `AstId`, checked against the signature they name.
+    pub(crate) fn_declared_attrs: IndexMap<AstId, DeclaredAttrs>,
+    /// Each `#[param]` global's build input, per the global's `AstId`.
+    pub(crate) global_params: IndexMap<AstId, tir::ParamSpec>,
     /// Resolved operation signatures per effect / resource decl `AstId`
     /// (params, return type, `cm` name), as the body walk resolved them
     /// with the decl's type-param / `Self` scope in place. Reify reads these
@@ -431,6 +438,16 @@ pub(crate) struct TypeAnnotations {
     /// Each destructuring assignment that keeps its desugaring, keyed by its
     /// span. One that is absent from every walk is an `index_swap`.
     pub(crate) destructuring_fallbacks: IndexMap<Span, FallbackSite>,
+}
+
+/// What a function's declaration attributes state: the facts a body-less one
+/// declares with `#[storage]` and `#[side_effect]`, the parameters
+/// `#[immediate]` names, and the item `#[compiler_item]` names.
+#[derive(Clone)]
+pub(crate) struct DeclaredAttrs {
+    pub(crate) facts: Option<BuiltinFacts<String>>,
+    pub(crate) immediates: Vec<String>,
+    pub(crate) compiler_item: Option<CompilerItem>,
 }
 
 /// A destructuring assignment that keeps its desugaring, which copies each
@@ -661,6 +678,8 @@ impl TypeAnnotations {
             + self.fn_param_types.len()
             + self.fn_affine_params.len()
             + self.fn_return_types.len()
+            + self.fn_declared_attrs.len()
+            + self.global_params.len()
             + self.effect_ops.len()
             + self.decl_type_params.len()
             + self.pack_spread_subjects.len()
