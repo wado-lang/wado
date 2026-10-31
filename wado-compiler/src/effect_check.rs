@@ -750,7 +750,7 @@ struct OwnedEffectData {
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
     waiting: IndexSet<EffectRef>,
-    /// Each interface declaration's effect and `#[cm]` FQ.
+    /// Each interface and resource declaration's effect and `#[cm]` FQ.
     interfaces: IndexMap<DefId, (EffectRef, Option<String>)>,
     effect_by_cm_fq: IndexMap<String, EffectRef>,
     /// CM interface FQs the consumer satisfies with a provider component, which
@@ -981,15 +981,20 @@ impl OwnedEffectData {
         let mut effect_by_cm_fq: IndexMap<String, EffectRef> = IndexMap::default();
         for module in sem.modules.values() {
             for item in &module.items {
-                let Item::Interface(decl) = item else {
-                    continue;
+                // A resource's `#[cm]` FQ names the interface declaring it, so
+                // only the interface's effect answers for that FQ.
+                let (id, attrs, answers_cm_fq) = match item {
+                    Item::Interface(decl) => (decl.id, &decl.attrs, true),
+                    Item::Resource(decl) => (decl.id, &decl.attrs, false),
+                    _ => continue,
                 };
-                let def = defs.def_at(decl.id);
-                let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
+                let def = defs.def_at(id);
+                let cm_fq = cm_import_of(attrs).map(CmImport::interface_path);
                 let key = resolutions
                     .effect_decl(def)
-                    .expect("an interface is an effect");
-                if closure.contains_key(&key)
+                    .expect("an interface or resource is an effect");
+                if answers_cm_fq
+                    && closure.contains_key(&key)
                     && let Some(fq) = &cm_fq
                 {
                     effect_by_cm_fq.entry(fq.clone()).or_insert(key.clone());
@@ -1112,7 +1117,7 @@ struct EffectIndex<'a> {
     closure: &'a IndexMap<EffectRef, IndexSet<EffectRef>>,
     /// What waiting on an `AsyncCall` demands, held where the call starts.
     waiting: &'a IndexSet<EffectRef>,
-    /// Interface declaration → its effect and `#[cm]` FQ.
+    /// Interface or resource declaration → its effect and `#[cm]` FQ.
     interfaces: &'a IndexMap<DefId, (EffectRef, Option<String>)>,
     /// CM interface FQ → the effect it declares, for reconstructing a
     /// component's host-leaf imports into effects.
@@ -1194,8 +1199,9 @@ fn binding_granted_effects(
         .collect()
 }
 
-/// What a direct call of an operation `owner` declares demands of its caller:
-/// the interface itself, whether a handler or the host answers it.
+/// What a direct call of an operation of the interface or resource `owner`
+/// demands of its caller: the owner itself, whether a handler or the host
+/// answers it, unless a composed component implements it.
 fn operation_requirements(
     sem: &Semantics,
     index: &EffectIndex,
@@ -1902,7 +1908,7 @@ fn dispatch_effects(
             .contains(&index.resolutions.defs().ast_id(def)),
         None => func_ref.method_info.is_some(),
     };
-    let effects = index.method_effects(func_ref);
+    let effects = index.method_effects(sem, func_ref);
     let brought = if effects.iter().any(EffectRef::is_param) {
         index.brought_by_dispatch(func_ref, rows)
     } else {
@@ -1977,8 +1983,9 @@ impl EffectIndex<'_> {
     }
 
     /// Effects a method dispatch requires: the callee's declared effects plus,
-    /// for a direct (non-trait) method on a `resource`, the resource effect.
-    fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
+    /// for a direct (non-trait) method on a `resource`, what an operation of the
+    /// resource demands ([`operation_requirements`]).
+    fn method_effects(&self, sem: &Semantics, func_ref: &FunctionRef) -> Vec<EffectRef> {
         // A trait method's `with` clause bounds every impl, and a bound
         // dispatch has no impl to read: the declaration is what a call requires.
         let mut effects = match self.declared_by_trait(func_ref) {
@@ -1990,12 +1997,14 @@ impl EffectIndex<'_> {
             && let Some(def) = method_info.receiver().def()
             && self.resolutions.defs().kind(def) == DefKind::Resource
         {
-            let resource_effect = self
-                .resolutions
-                .effect_decl(def)
-                .expect("a resource is an effect");
-            if !effects.contains(&resource_effect) {
-                effects.push(resource_effect);
+            assert!(
+                self.interfaces.contains_key(&def),
+                "a resource is an operation owner"
+            );
+            for demanded in operation_requirements(sem, self, Some(def)) {
+                if !effects.contains(&demanded) {
+                    effects.push(demanded);
+                }
             }
         }
         effects

@@ -36,6 +36,12 @@ the type it embedded about itself.
   `Catalog::id_u32(x)` after `use { Catalog }`. Its named types become Wado
   items of the corresponding shape: a WIT record becomes a struct, a variant a
   variant, an enum an enum, flags a flags, and a type alias a newtype.
+- An exported resource becomes an affine Wado `resource` of its interface. Its
+  constructor is `new`, a method takes `&self`, an `own<R>` is `R` and a
+  `borrow<R>` is `&R`. Affine is the only reading the type admits: it cannot
+  tell an interned referent from one minted per call, and every `own` handle
+  the component returns is a new entry in the caller's table, which only a drop
+  frees. A copyable handle would leak one entry per construction.
 - A function the world exports directly, outside any interface, becomes a free
   function imported by bare name.
 - The default interface, named after its own package, also offers each of its
@@ -116,19 +122,16 @@ None. Every open item is a known gap below.
 
 ## Known gaps
 
-### A component exporting a resource is rejected
+### A guest effect declaring a resource is refused
 
-A component exporting a `resource`, with its methods, static constructors and
-`borrow<T>` parameters, is rejected when its type is decoded. So is a resource
-handle inside a `stream` or `future` payload. Wado has resources; what is
-missing is the consuming direction of the mapping.
+A dependency whose guest effect declares a resource is rejected when its type is
+decoded. A handler answers the effect's operations, and nothing in Wado provides
+a resource to the dependency.
 
-What it admits is a whole class of components Wado cannot use: any dependency
-built around resources. Nothing in a component's type tells an interned referent
-from one minted per call, and a `dtor`-less exported handle would be a copyable
-[token](./wep-2026-05-21-resource-ownership.md). The compile-time-bounded half
-of a bundled ICU surface ([`core:icu`](./wep-2026-08-09-core-icu.md)) needs that
-token.
+### A resource handle in a stream or future payload is unexercised
+
+A `stream<own<R>>` or `future<own<R>>` of an imported component's resource
+decodes, but no fixture carries one across the boundary.
 
 ### `error-context` is rejected
 

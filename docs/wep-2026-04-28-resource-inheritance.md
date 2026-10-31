@@ -81,8 +81,8 @@ Concretely:
   ```
 - A resource without `#[cm(...)]` is affine and **cannot use `extends`** in v1. Hierarchies require explicit CM identity.
 - `resource X extends Y { ... }` is a compile error unless **both** `X` and `Y` declare `linearity = "unrestricted"`. A mismatch inside an `extends` family is a hard error, not a warning.
-- A resource declared `"unrestricted"` without any `extends` relationship is allowed (an opt-in to value semantics on its own). This is the spelling the non-owning tokens of
-  [Resource Ownership](./wep-2026-05-21-resource-ownership.md) — `Waitable`, `core:icu`'s interned handles — have never had: their value semantics is inferred today from the absence of a `dtor`, and nothing in the declaration says so.
+- A resource declared `"unrestricted"` without any `extends` relationship is allowed (an opt-in to value semantics on its own). This is the spelling the non-owning token of
+  [Resource Ownership](./wep-2026-05-21-resource-ownership.md), `Waitable`, has never had: its value semantics is inferred today from the absence of a `dtor`, and nothing in the declaration says so.
 
 ### Why the field names linearity, not representation
 
@@ -93,9 +93,9 @@ the move check, the cleanup pass, and whether `extends` is possible at all.
 axes orthogonal.
 
 Naming the enforced axis also covers more ground. A representation can only be
-stated for a resource that has one to name, but `Waitable` and `core:icu`'s
-interned handles are copyable for the same reason the web bindings' handles
-are, with a different backing. One field says so for all three.
+stated for a resource that has one to name, but `Waitable` is copyable for the
+same reason the web bindings' handles are, with a different backing. One field
+says so for both.
 
 ### Why mandatory + structural over namespace inference
 
@@ -763,7 +763,7 @@ Not built:
 
 - The `Display` host import.
 - Rule (5), visibility judged at the declaring module, and the unenforced parent-visibility bullet above. Both need per-method visibility on resources, which nothing asks for yet.
-- Declaring `linearity = "unrestricted"` on the non-owning tokens (`Waitable`, `core:icu`'s interned handles), which still take their value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
+- Declaring `linearity = "unrestricted"` on the non-owning token `Waitable`, which still takes its value semantics from the absence of a `dtor`; and generic resources on either side of `extends`.
 - A parent declared by a prebuilt module. The collect pass skips what the stdlib snapshot covers, so a snapshot parent reaches validation without its method names or its arity; rather than accept what it cannot check, the compiler rejects the clause. `wado-lang:web` is a package, never snapshotted, so nothing reaches it yet.
 
 ### Known gap: the handle is an index, not a reference
