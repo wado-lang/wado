@@ -2520,14 +2520,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let initializer_type = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
-<<<<<<< HEAD
         self.typecheck_value(&global_decl.initializer, initializer_type, ty);
-||||||| 45f3599f200
-        self.typecheck(initializer_type, ty, global_decl.initializer.span());
-=======
-        self.typecheck(initializer_type, ty, global_decl.initializer.span());
         self.record_param_attr(global_decl);
->>>>>>> origin/main
     }
 
     /// Resolve a variant declaration
