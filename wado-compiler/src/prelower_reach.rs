@@ -50,45 +50,13 @@ fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
         .collect()
 }
 
-/// The compiler-item functions a phase from `lower` on calls with no TIR body
-/// naming them. Every other one is called only from code the elaborator or
-/// synthesis wrote, which the walk follows like any call.
-const MINTED_AFTER_TIR: &[CompilerItem] = &[
-    // `lower`
-    CompilerItem::AssertFailed,
-    CompilerItem::FormatterWriteLiteral,
-    CompilerItem::I128FromF64,
-    CompilerItem::I128FromI64,
-    CompilerItem::I128FromPair,
-    CompilerItem::I128FromU64,
-    CompilerItem::I64Add128Soft,
-    CompilerItem::I64MulWideSSoft,
-    CompilerItem::I64MulWideUSoft,
-    CompilerItem::I64Sub128Soft,
-    CompilerItem::ListIndexAssign,
-    CompilerItem::U128FromF64,
-    CompilerItem::U128FromI64,
-    CompilerItem::U128FromPair,
-    CompilerItem::U128FromU64,
-    // `optimize`
-    CompilerItem::StringLen,
-    CompilerItem::StringPushAscii,
-    CompilerItem::StringPushChar,
-    CompilerItem::StringPushStr,
-    CompilerItem::StringReserveUninit,
-    CompilerItem::StringSetByteUnchecked,
-    CompilerItem::StringWriteStrAt,
-];
-
 /// Whether the program reaches `func` without any TIR body naming it: an
-/// export, a [`MINTED_AFTER_TIR`] item, a type bridge no reflection marker
-/// calls, a global initializer, a [`MINTABLE`] impl.
+/// export, a [`CompilerItem::minted_after_tir`] item, a type bridge no
+/// reflection marker calls, a global initializer, a [`MINTABLE`] impl.
 fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
-        || func
-            .compiler_item
-            .is_some_and(|item| MINTED_AFTER_TIR.contains(&item))
+        || func.compiler_item.is_some_and(CompilerItem::minted_after_tir)
         || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
         || global_init_target(&func.name).is_some()
         || func
@@ -217,19 +185,27 @@ pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
 }
 
 /// Drop what no root reaches, so `lower` never translates it, and record the
-/// drop for the assert in `lower`'s `Interner::resolve`.
+/// drop for the asserts in `lower`'s `Interner::resolve` and
+/// `CompilerItems::require_function`.
 fn prune(flat: &mut FlatPackage) {
     let reached = reach(flat);
     let before = flat.functions.len();
     let pruned = &mut flat.pruned;
+    let mut type_table = flat.type_table.borrow_mut();
+    let items = type_table.compiler_items_mut();
     flat.functions.retain(|func_rc| {
-        let key = function_key(&func_rc.borrow());
+        let func = func_rc.borrow();
+        let key = function_key(&func);
         let keep = reached.contains(&key);
         if !keep {
+            if let Some(item) = func.compiler_item {
+                items.mark_pruned(item);
+            }
             pruned.insert(key);
         }
         keep
     });
+    drop(type_table);
     compiler_trace!(
         TRACE_TARGET,
         "pruned {} of {before} functions",

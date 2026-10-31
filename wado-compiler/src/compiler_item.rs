@@ -1656,6 +1656,40 @@ impl CompilerItem {
         )
     }
 
+    /// Whether a phase from `lower` on calls this item's function with no TIR
+    /// body naming it, so `prelower_reach` must keep the function. Every other
+    /// one is called from code the elaborator or synthesis wrote, which its walk
+    /// follows. [`CompilerItems::require_function`] catches an omission.
+    pub fn minted_after_tir(self) -> bool {
+        matches!(
+            self,
+            // `lower`
+            Self::AssertFailed
+                | Self::FormatterWriteLiteral
+                | Self::I128FromF64
+                | Self::I128FromI64
+                | Self::I128FromPair
+                | Self::I128FromU64
+                | Self::I64Add128Soft
+                | Self::I64MulWideSSoft
+                | Self::I64MulWideUSoft
+                | Self::I64Sub128Soft
+                | Self::ListIndexAssign
+                | Self::U128FromF64
+                | Self::U128FromI64
+                | Self::U128FromPair
+                | Self::U128FromU64
+                // `optimize`
+                | Self::StringLen
+                | Self::StringPushAscii
+                | Self::StringPushChar
+                | Self::StringPushStr
+                | Self::StringReserveUninit
+                | Self::StringSetByteUnchecked
+                | Self::StringWriteStrAt
+        )
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the elaborator to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
@@ -2196,6 +2230,8 @@ pub struct CompilerItems {
     trait_by_decl: hashmap::IndexMap<AstId, CompilerItem>,
     /// The inverse of [`CompilerItems::decl`] for every other kind.
     type_by_decl: hashmap::IndexMap<AstId, CompilerItem>,
+    /// The function items `prelower_reach` dropped as unreached.
+    pruned: hashmap::IndexSet<CompilerItem>,
 }
 
 impl Default for CompilerItems {
@@ -2232,7 +2268,13 @@ impl CompilerItems {
             items: vec![None; CompilerItem::COUNT],
             trait_by_decl: hashmap::IndexMap::default(),
             type_by_decl: hashmap::IndexMap::default(),
+            pruned: hashmap::IndexSet::default(),
         }
+    }
+
+    /// Record that `item`'s function was dropped as unreached.
+    pub fn mark_pruned(&mut self, item: CompilerItem) {
+        self.pruned.insert(item);
     }
 
     /// Internal: convert a [`CompilerItem`] to its dense index.
@@ -2623,6 +2665,11 @@ impl CompilerItems {
 
     /// Module + name of a [`CompilerItemKind::Function`] item.
     pub fn require_function(&self, item: CompilerItem) -> (&ModuleSource, &str) {
+        assert!(
+            !self.pruned.contains(&item),
+            "`{item}` was pruned as unreached and then minted: \
+             `CompilerItem::minted_after_tir` must list it"
+        );
         match self.require(item) {
             Resolved::Function {
                 module_source,
