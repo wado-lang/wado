@@ -1140,19 +1140,13 @@ pub(super) fn enumerate_index_local(
     if !is_enumerate {
         return None;
     }
-    let name = enumerate_index_binding_name(binding)?;
-    ctx.lookup(name)
-        .filter(|local| !local.is_mut)
-        .map(|local| local.index)
-}
-
-/// The name bound to the index of `for let [i, v] of t.enumerate()`, if the
-/// binding spells one.
-pub(super) fn enumerate_index_binding_name(binding: &Pattern) -> Option<&str> {
     let Pattern::Tuple(elems, _) = binding else {
         return None;
     };
-    elems.first()?.as_name().map(|n| n.name)
+    let name = elems.first()?.as_name()?.name;
+    ctx.lookup(name)
+        .filter(|local| !local.is_mut)
+        .map(|local| local.index)
 }
 
 #[cfg(test)]
