@@ -828,7 +828,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .collect();
                         // In declaration order, so `infer_struct_type_args` can fill a
                         // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
-                        let type_param_type_ids = slot_type_ids(&struct_slots, &type_table);
+                        let type_param_type_ids =
+                            slot_type_ids(&struct_slots, &mut type_table.borrow_mut());
                         let info = data
                             .struct_fields
                             .get_mut(&resolutions.defs().def_at(struct_decl.id))
@@ -852,7 +853,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 &variant_slots,
                             )
                         });
-                        let type_param_type_ids = slot_type_ids(&variant_slots, &type_table);
+                        let type_param_type_ids =
+                            slot_type_ids(&variant_slots, &mut type_table.borrow_mut());
                         data.variant_cases.insert(
                             resolutions.defs().def_at(variant_decl.id),
                             VariantInfo::of_decl(
@@ -1288,7 +1290,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Replace the program's statically resolved fields and cases with what
     /// each declaring module's decl pass resolved in the declaration's frame,
-    /// so every module reads one type for one field. The static resolver builds
+    /// so every module reads one type for one field. `TypeLookup::resolve_in` builds
     /// a projection without the trait arguments and bindings the frame reads,
     /// and a projection interns by them: `Q::T` read from another module's
     /// `Passed<Q>` would otherwise never be the `B::T` a signature names.
@@ -1490,7 +1492,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     elaborator.annotate_module_decls(module, module_source.clone());
                     // What each trait declares of its associated types. The
                     // elaborator builds one on asking, but a projection the
-                    // static resolver builds is read by the trait solver,
+                    // `TypeLookup` builds is read by the trait solver,
                     // which cannot. Built once the module's declarations, and
                     // so its namespace members, resolve.
                     elaborator.register_assoc_type_sigs(module);

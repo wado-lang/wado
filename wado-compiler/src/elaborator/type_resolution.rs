@@ -1,6 +1,5 @@
 //! AST Type to `TypeId` resolution.
 
-use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::ast::{AstId, Type};
@@ -1771,15 +1770,11 @@ impl DeclaringSpace {
 
 /// A `TypeId` per slot, in declaration order, so a slot's position is the
 /// index [`TypeLookup::resolve_in`] gave it.
-pub(super) fn slot_type_ids(slots: &[ParamSlot], type_table: &RefCell<TypeTable>) -> Vec<TypeId> {
+pub(super) fn slot_type_ids(slots: &[ParamSlot], type_table: &mut TypeTable) -> Vec<TypeId> {
     slots
         .iter()
         .enumerate()
-        .map(|(i, slot)| {
-            type_table
-                .borrow_mut()
-                .make_declared_param(slot.name.clone(), i as u32, slot.is_pack)
-        })
+        .map(|(i, slot)| type_table.make_declared_param(slot.name.clone(), i as u32, slot.is_pack))
         .collect()
 }
 
@@ -1859,14 +1854,13 @@ impl TypeLookup<'_> {
                     return primitive;
                 }
 
-                // This runs before the elaborator instance exists — including
-                // the newtype pre-pass (`annotate_modules`), which resolves
-                // newtype base types *before* `intern_all_decl_types` mints and
-                // registers struct/variant/enum/resource `TypeId`s. So this one
-                // cannot reach an identity through a type that may not be
-                // interned yet: it reads the declaring node each registry entry
-                // already carries, which is the same answer at every point in
-                // the bootstrap.
+                // The newtype pre-pass (`annotate_modules`) calls this before
+                // `intern_all_decl_types` mints and registers
+                // struct/variant/enum/resource `TypeId`s. So this cannot reach
+                // an identity through a type that may not be interned yet: it
+                // reads the declaring node each registry entry already
+                // carries, which is the same answer at every point in the
+                // bootstrap and after it.
                 let Some(def) = def else {
                     return TypeTable::UNKNOWN;
                 };

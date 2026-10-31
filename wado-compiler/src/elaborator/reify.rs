@@ -449,7 +449,8 @@ pub(super) struct ReifyAssertCaptureContext {
 
 /// Per-module reify pass: emits a [`TirModule`] from the AST plus the
 /// `ModuleSemantics` that `annotate` populated. One instance per module the
-/// batch driver emits TIR for; constructed via [`Reify::new`].
+/// batch driver emits TIR for; constructed via [`Reify::new`]. It holds no
+/// logger: every diagnostic is annotate's, so reify cannot fail.
 pub(crate) struct Reify<'a> {
     /// Pipeline-wide type knowledge. `&mut` only because reify may
     /// intern new monomorphic instances; the trait/impl tables are
@@ -850,7 +851,7 @@ impl<'a> Reify<'a> {
     }
 
     /// Re-intern a resolved `fn(...) with E` type carrying its effects: the
-    /// shared static resolver has no effect-resolution context and leaves
+    /// `TypeLookup` resolver has no effect-resolution context and leaves
     /// `effects` empty, so a `fn`-typed parameter loses its `with` clause.
     /// the effect check then can't see that, e.g., `f: fn() with Stdout`
     /// requires `Stdout` at an indirect call site. Resolves effects through

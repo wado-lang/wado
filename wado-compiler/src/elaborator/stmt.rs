@@ -330,7 +330,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolved — so only the fields are left for `resolve_local_struct`.
         let type_param_type_ids = slot_type_ids(
             &ParamSlot::list(&struct_decl.type_params),
-            &self.tysys.type_table,
+            &mut self.tysys.type_table.borrow_mut(),
         );
         self.sem.decls.local.struct_fields.insert(
             def,

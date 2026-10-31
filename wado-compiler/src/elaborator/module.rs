@@ -36,7 +36,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     let type_param_type_ids = slot_type_ids(
                         &ParamSlot::list(&struct_decl.type_params),
-                        &scope.tysys.type_table,
+                        &mut scope.tysys.type_table.borrow_mut(),
                     );
 
                     let info = StructFieldInfo::of_decl(
@@ -76,7 +76,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut scope = self.enter_decl_params_scope(&variant_decl.type_params);
                     let type_param_type_ids = slot_type_ids(
                         &ParamSlot::list(&variant_decl.type_params),
-                        &scope.tysys.type_table,
+                        &mut scope.tysys.type_table.borrow_mut(),
                     );
 
                     let cases = VariantCaseData::collect(variant_decl, |payload_ty| {
