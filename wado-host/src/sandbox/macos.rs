@@ -91,8 +91,8 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     let mut text = PROFILE_BASE.to_owned();
     let mut params = Vec::new();
     // Resolving a path stats each directory above it and reads each link on
-    // it, so a grant's ancestors and the links its path names show their
-    // metadata and nothing else.
+    // the way, so a grant's ancestors and those links show their metadata and
+    // nothing else.
     let mut traversed = BTreeSet::new();
     for rule in policy.rules() {
         let real = match rule.real_path() {
@@ -136,20 +136,8 @@ const SYMLINKS_MAX: usize = 32;
 fn links_on(path: &Path) -> Vec<PathBuf> {
     let mut links = Vec::new();
     let mut resolved = PathBuf::from("/");
-    // The components still to resolve, the next one last.
-    let mut pending: Vec<OsString> = Vec::new();
-    let push = |pending: &mut Vec<OsString>, path: &Path| {
-        pending.extend(
-            path.components()
-                .rev()
-                .filter_map(|component| match component {
-                    Component::Normal(name) => Some(name.to_owned()),
-                    Component::ParentDir => Some(OsString::from("..")),
-                    Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
-                }),
-        );
-    };
-    push(&mut pending, path);
+    // The names still to resolve, the next one last.
+    let mut pending: Vec<OsString> = names_reversed(path).collect();
     while let Some(name) = pending.pop() {
         if name == ".." {
             resolved.pop();
@@ -167,9 +155,20 @@ fn links_on(path: &Path) -> Vec<PathBuf> {
         if target.is_absolute() {
             resolved = PathBuf::from("/");
         }
-        push(&mut pending, &target);
+        pending.extend(names_reversed(&target));
     }
     links
+}
+
+/// The names `path` steps through, `..` among them, from the last.
+fn names_reversed(path: &Path) -> impl Iterator<Item = OsString> + '_ {
+    path.components()
+        .rev()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name.to_owned()),
+            Component::ParentDir => Some(OsString::from("..")),
+            Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
+        })
 }
 
 /// Appends a rule allowing `operations` on `path`, which reaches the profile as
