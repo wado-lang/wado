@@ -301,6 +301,10 @@ each symbolic axis whether it can promise that, at build time:
 - An extent that may fall as a length rises, such as a `Range` by the length,
   would hold fewer elements at the capacity than at the length, so the
   generator refuses to pad that length.
+- An attention that is not causal reads every key, the padded ones too, so
+  the generator refuses the lengths it reads.
+- A length the graph owes equal to a sum with a refused length is refused
+  too, since its capacity would not match the refused length's exact extent.
 - Any other operation that reads across a padded axis, such as a merge with an
   axis before it, which would interleave the padding, makes the generator
   refuse to pad that axis. It then compiles one program per length of that
@@ -321,7 +325,8 @@ The generated module takes them so:
 - `compute` takes the inputs on the host. It checks them, and what the graph
   owes, against their own lengths. It pads each padded length to its
   capacity, the next power of two, builds, and cuts the outputs back to their
-  lengths.
+  lengths. A graph with a cache passes it to `compute` too, as the next
+  section says.
 
 An `If` whose condition the shape class decides is chosen when the graph is
 built. One whose condition depends on a value is a `case` with both branches.
@@ -341,6 +346,17 @@ class, copied once.
 
 This builds on [the decoder's cache](./design.md#the-decoders-cache), which is
 one value already.
+
+`compute` holds the cache so. The past's length is what the graph owes it to
+be given the other inputs' lengths: Gemma's attention owes the total to be the
+past and the sequence, so the past is the mask's length less the ids'. The
+past takes the capacity of the present, `capacity_of(past + sequence)`, which
+the mask's total takes too. `compute` fits each field of the cache to it,
+padding with zeros or cutting, before the pass and after it. A
+`GroupQueryAttention` given the past's valid length reads its past as
+onnxruntime's shared buffer: the present is the past's buffer, the new
+positions written from the valid length on. A graph that owes its past's
+length no such equality gets no `compute`.
 
 ### Requests share a pass through slots
 
@@ -476,8 +492,13 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
   slots (step 7) give each row its own.
 - `build` cannot check what the graph owes over a padded length, which only
   `compute` knows on the host. A caller of `build` vouches for it.
-- `compute` takes no capacities from the caller, and a graph with a cache has
-  no `compute` until the cache is one of fixed capacity.
+- `compute` takes no capacities from the caller.
+- The merged tiny GPT-2 gets no `compute`: a `Slice` refuses its past's
+  length, and it owes the total equal to the past and the sequence only inside
+  a branch.
+- On `Cpu` a pass still copies the cache it writes into, since `scatter`
+  returns a new tensor. Writing in place waits for the device compiler,
+  which plans the memory.
 - The first call of a shape class waits for its program to compile. At build
   time no user waits on the generator, and at first use one does. The cache on
   disk spares a second process on PJRT, and nothing spares a first call on

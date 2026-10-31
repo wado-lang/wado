@@ -575,7 +575,10 @@ pub fn fitted<affine G: Graph, E: Element, Axes>(
 ) -> G::Tensor<E, Axes> with _ {
     let mut extents = g.extents_of(x);
     let own = extents[axis];
-    if extent <= own {
+    if extent == own {
+        return *x;
+    }
+    if extent < own {
         let mut limits = extents;
         limits[axis] = extent;
         let rank = extents.len();
