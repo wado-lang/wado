@@ -289,7 +289,7 @@ level.
    whose hash differs is skipped, and the conflict remark is emitted. An e2e
    fixture can name a profile in its `__DATA__`, so a fixture states which
    regions end up cold.
-5. [ ] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
+5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
 6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
    marker, with the remark. An e2e fixture states both sides of the threshold.
