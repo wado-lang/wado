@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793460071979,
+  "lastUpdate": 1793462788826,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72657,6 +72657,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c2f4f1d425a2d31bca4663fde64b0eeeb9407660"
         },
         "date": 1793460070793,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "743b229dd4e7b726dc6450d7b0b451b08585a463",
+          "message": "Merge pull request #2503 from wado-lang/ccr-67696f54-mise-setup\n\nfix(hooks): bring a stale mise up to mise.toml's min_version at session start",
+          "timestamp": "2026-11-01T00:51:29+09:00",
+          "tree_id": "40b6e6d8e03684874fc4ba81461aa1e03b289e2c",
+          "url": "https://github.com/wado-lang/wado/commit/743b229dd4e7b726dc6450d7b0b451b08585a463"
+        },
+        "date": 1793462787874,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
