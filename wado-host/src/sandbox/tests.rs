@@ -134,7 +134,7 @@ fn a_child_holds_the_terminal_it_inherits() {
         .unwrap();
     // Typed before the child reads it: the terminal holds the line.
     File::from(master.try_clone().unwrap())
-        .write_all(b"typed\n")
+        .write_all(b"typed\nfirst\nsecond\n")
         .unwrap();
     // The terminal echoes, and closing the slave waits until its output is
     // read.
@@ -169,52 +169,63 @@ fn terminal() {
     let mut policy = tree.policy(Network::Denied);
     policy.grant_terminal();
     let dir = File::open(tree.granted()).unwrap();
-    let args: Vec<OsString> = [
-        "-c",
-        "stty -echo && stty echo && read line && printf %s \"$line\"",
-    ]
-    .iter()
-    .map(OsString::from)
-    .collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: Some(&dir),
-        stdin: Stdio::Inherit,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
-    let mut out = String::new();
-    File::from(spawned.stdout.unwrap())
-        .read_to_string(&mut out)
-        .unwrap();
-    assert_eq!(spawned.child.wait().unwrap(), OK);
-    assert_eq!(out, "typed");
+    let on_terminal = |program: &str, script: &str| {
+        let args = [OsString::from("-c"), OsString::from(script)];
+        spawn(&Command {
+            program: Path::new(program),
+            args: &args,
+            env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+            cwd: Some(&dir),
+            stdin: Stdio::Inherit,
+            stdout: Stdio::Piped,
+            stderr: Stdio::Inherit,
+            policy: &policy,
+            trace: Trace::Off,
+        })
+    };
+    // Read while waiting, as `wado` does: `wait` follows a child's stops, and
+    // a stopped child closes no pipe.
+    let output = |spawned: Spawned| {
+        let mut stdout = File::from(spawned.stdout.unwrap());
+        let reader = std::thread::spawn(move || {
+            let mut out = String::new();
+            stdout.read_to_string(&mut out).unwrap();
+            out
+        });
+        (spawned.child.wait().unwrap(), reader.join().unwrap())
+    };
     // SAFETY: plain system calls.
-    assert_eq!(unsafe { libc::tcgetpgrp(0) }, unsafe { libc::getpgrp() });
-    // A child that inherits only stdout from the terminal holds it too: set
-    // from the background, the mode would stop it with `SIGTTOU`.
-    let args: Vec<OsString> = ["-c", "stty -echo <&1 && stty echo <&1"]
-        .iter()
-        .map(OsString::from)
-        .collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: Some(&dir),
-        stdin: Stdio::Null,
-        stdout: Stdio::Inherit,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
-    assert_eq!(spawned.child.wait().unwrap(), OK);
+    let holds_terminal = || unsafe { libc::tcgetpgrp(0) == libc::getpgrp() };
+    let echoes = || {
+        // SAFETY: `mode` is plain data the call fills.
+        let mut mode: libc::termios = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::tcgetattr(0, &raw mut mode) }, 0);
+        mode.c_lflag & libc::ECHO != 0
+    };
+
+    let child = on_terminal(
+        "/bin/sh",
+        "stty -echo && stty echo && stty size > /dev/null && read line && printf %s \"$line\"",
+    );
+    assert_eq!(output(child.unwrap()), (OK, "typed".to_owned()));
+    assert!(holds_terminal());
+
+    // One child holds the terminal at a time; the next reads it in its turn.
+    let first = on_terminal("/bin/sh", "read line && printf %s \"$line\"").unwrap();
+    let second = on_terminal("/bin/sh", "read line && printf %s \"$line\"").unwrap();
+    assert_eq!(output(first), (OK, "first".to_owned()));
+    assert_eq!(output(second), (OK, "second".to_owned()));
+    assert!(holds_terminal());
+
+    // A child killed with the terminal in its own mode leaves the host's.
+    let killed = on_terminal("/bin/sh", "stty -echo && kill -9 $$").unwrap();
+    assert_eq!(output(killed).0, ExitStatus::Signaled(libc::SIGKILL as u8));
+    assert!(echoes());
+    assert!(holds_terminal());
+
+    // A spawn that fails gives the terminal back, wherever it failed.
+    assert!(on_terminal("/nonexistent/program", "").is_err());
+    assert!(holds_terminal());
 }
 
 /// Set in a re-execution that may not read a non-dumpable child's memory.

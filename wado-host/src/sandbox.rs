@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::fmt;
 use std::fs::File;
 use std::io;
-use std::os::fd::{OwnedFd, RawFd};
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -18,6 +18,9 @@ use crate::sync::lock;
 
 #[cfg(unix)]
 mod exec;
+mod terminal;
+
+use terminal::Terminal;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
@@ -417,59 +420,27 @@ pub fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         command.program.is_absolute(),
         "the program must be resolved to an absolute path"
     );
-    backend::spawn(command, terminal_for(command))
-}
-
-/// Whether a child takes the host's terminal for as long as it runs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Terminal {
-    /// The child inherits no stream from a terminal the host holds.
-    Kept,
-    /// The child's group is the foreground group of the terminal on `fd`, as
-    /// a shell makes the job it runs.
-    HandedOver(RawFd),
-}
-
-/// A child of an unconfined spawn shares its parent's group, and with it the
-/// parent's place on the terminal. A child in a group of its own reads and
-/// sets the terminal only as the foreground group, so the host hands over the
-/// terminal it holds where the child inherits a stream from it.
-fn terminal_for(command: &Command<'_>) -> Terminal {
-    [(0, command.stdin), (1, command.stdout), (2, command.stderr)]
-        .into_iter()
-        .filter(|&(_, stdio)| stdio == Stdio::Inherit)
-        // SAFETY: plain system calls.
-        .find(|&(fd, _)| unsafe { libc::isatty(fd) == 1 } && terminal_group(fd) == own_group())
-        .map_or(Terminal::Kept, |(fd, _)| Terminal::HandedOver(fd))
-}
-
-/// Make `group` the foreground group of the terminal on `fd`. A group in the
-/// background may do so only with `SIGTTOU` blocked, as a shell does.
-/// Async-signal-safe, so a child may call it between `fork` and `exec`.
-fn give_terminal(fd: RawFd, group: libc::pid_t) -> io::Result<()> {
-    // SAFETY: plain calls on signal sets that live on this stack.
-    unsafe {
-        let mut ttou: libc::sigset_t = std::mem::zeroed();
-        let mut old: libc::sigset_t = std::mem::zeroed();
-        libc::sigemptyset(&raw mut ttou);
-        libc::sigaddset(&raw mut ttou, libc::SIGTTOU);
-        libc::pthread_sigmask(libc::SIG_BLOCK, &raw const ttou, &raw mut old);
-        let ret = libc::tcsetpgrp(fd, group);
-        let err = io::Error::last_os_error();
-        libc::pthread_sigmask(libc::SIG_SETMASK, &raw const old, std::ptr::null_mut());
-        if ret == -1 { Err(err) } else { Ok(()) }
+    let terminal = Terminal::of(command.stdin);
+    let reservation = terminal::reserve(terminal);
+    let foreground = match reservation {
+        Some(_) => Foreground::Child,
+        None => Foreground::Host,
+    };
+    let mut spawned = backend::spawn(command, foreground)?;
+    spawned.child.terminal = terminal;
+    if let Some(reservation) = reservation {
+        reservation.held_by(spawned.child.pid);
     }
+    Ok(spawned)
 }
 
-/// The foreground group of the terminal on `fd`.
-fn terminal_group(fd: RawFd) -> libc::pid_t {
-    // SAFETY: plain system call.
-    unsafe { libc::tcgetpgrp(fd) }
-}
-
-fn own_group() -> libc::pid_t {
-    // SAFETY: plain system call.
-    unsafe { libc::getpgrp() }
+/// Whose group a backend makes the terminal's foreground group.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Foreground {
+    Host,
+    /// The child's, before its program starts, so the program's first read of
+    /// the terminal finds its group in the foreground.
+    Child,
 }
 
 /// The path the OS holds for an open directory, where a relative program path
@@ -509,10 +480,10 @@ pub struct Child {
 }
 
 impl Child {
-    fn new(pid: libc::pid_t, terminal: Terminal) -> Self {
+    fn new(pid: libc::pid_t) -> Self {
         Self {
             pid,
-            terminal,
+            terminal: Terminal::Elsewhere,
             reaped: Mutex::new(false),
         }
     }
@@ -564,20 +535,24 @@ impl Child {
         // Wait without reaping, so a `signal_group` racing the exit still finds
         // the leader holding the group id.
         match self.terminal {
-            Terminal::Kept => {
+            Terminal::Elsewhere => {
                 self.wait_id(libc::WEXITED | libc::WNOWAIT)?;
             }
-            // A child holding the terminal stops on its own, at Ctrl-Z, and
-            // the host follows it.
-            Terminal::HandedOver(fd) => {
+            Terminal::Inherited => {
                 let events = libc::WEXITED | libc::WSTOPPED | libc::WNOWAIT;
-                while self.wait_id(events)? == libc::CLD_STOPPED {
-                    self.wait_id(libc::WSTOPPED)?;
-                    self.follow_stop(fd)?;
-                }
-                if terminal_group(fd) == self.pid {
-                    give_terminal(fd, own_group())?;
-                }
+                let ended = loop {
+                    match self.wait_id(events)? {
+                        libc::CLD_STOPPED => {}
+                        libc::CLD_EXITED => break terminal::End::Exited,
+                        _ => break terminal::End::Signaled,
+                    }
+                    // Taken, unless the child moved on since: waiting for that
+                    // stop alone would then wait forever.
+                    self.wait_id(libc::WSTOPPED | libc::WNOHANG)?;
+                    terminal::follow_stop(self.pid);
+                    self.signal_group(libc::SIGCONT)?;
+                };
+                terminal::release(self.pid, ended);
             }
         }
         self.signal_group(libc::SIGKILL)?;
@@ -613,24 +588,6 @@ impl Child {
                 return Err(err);
             }
         }
-    }
-
-    /// The child holding the terminal stopped, as a job does at Ctrl-Z. Sharing
-    /// its group, the host would stop with it, so it does: the terminal goes
-    /// back to the host's group, which stops. Continued in the foreground, the
-    /// host hands the terminal over again, and the child continues.
-    fn follow_stop(&self, fd: RawFd) -> io::Result<()> {
-        if terminal_group(fd) == self.pid {
-            give_terminal(fd, own_group())?;
-        }
-        // SAFETY: plain system call; it returns once the group is continued.
-        if unsafe { libc::killpg(own_group(), libc::SIGTSTP) } == -1 {
-            return Err(io::Error::last_os_error());
-        }
-        if terminal_group(fd) == own_group() {
-            give_terminal(fd, self.pid)?;
-        }
-        self.signal_group(libc::SIGCONT)
     }
 }
 

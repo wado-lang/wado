@@ -18,9 +18,9 @@ use std::path::{Component, Path, PathBuf};
 use std::ptr;
 use std::sync::OnceLock;
 
+use super::terminal::give_terminal;
 use super::{
-    Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio, Terminal,
-    give_terminal,
+    Access, Availability, Child, Command, Foreground, Network, Policy, Refusals, Spawned, Stdio,
 };
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
@@ -224,7 +224,7 @@ fn c_string(bytes: &OsStr) -> io::Result<CString> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "an argument holds a NUL byte"))
 }
 
-pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result<Spawned> {
     // `sandbox-exec` reports a missing program only on its own stderr, so the
     // host asks first.
     std::fs::metadata(command.program)?;
@@ -281,7 +281,7 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spa
         actions.fchdir(dir.as_raw_fd())?;
     }
 
-    let attr = SpawnAttr::new(terminal)?;
+    let attr = SpawnAttr::new(foreground)?;
     let mut pid: libc::pid_t = 0;
     let program = c_string(OsStr::new(SANDBOX_EXEC))?;
     // SAFETY: every pointer is to memory alive for the call, the arrays
@@ -300,12 +300,12 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spa
     if ret != 0 {
         return Err(io::Error::from_raw_os_error(ret));
     }
-    let child = Child::new(pid, terminal);
-    if let Terminal::HandedOver(fd) = terminal {
-        // Where the terminal refuses, the child runs in the background, as
-        // under a host that does not hold it.
-        let _ = give_terminal(fd, pid);
-        child.signal_group(libc::SIGCONT)?;
+    let child = Child::new(pid);
+    if foreground == Foreground::Child {
+        give_terminal(pid);
+        child
+            .signal_group(libc::SIGCONT)
+            .expect("a child just spawned can be continued");
     }
     let [stdin, stdout, stderr] = parent_ends;
     Ok(Spawned {
@@ -400,15 +400,15 @@ impl Drop for FileActions {
 struct SpawnAttr(libc::posix_spawnattr_t);
 
 impl SpawnAttr {
-    fn new(terminal: Terminal) -> io::Result<Self> {
+    fn new(foreground: Foreground) -> io::Result<Self> {
         let mut attr = MaybeUninit::uninit();
         // SAFETY: init fills the value it is handed.
         check(unsafe { libc::posix_spawnattr_init(attr.as_mut_ptr()) })?;
         // SAFETY: initialized just above.
         let mut attr = Self(unsafe { attr.assume_init() });
-        let suspended = match terminal {
-            Terminal::Kept => 0,
-            Terminal::HandedOver(_) => libc::POSIX_SPAWN_START_SUSPENDED,
+        let suspended = match foreground {
+            Foreground::Host => 0,
+            Foreground::Child => libc::POSIX_SPAWN_START_SUSPENDED,
         };
         let flags = libc::POSIX_SPAWN_CLOEXEC_DEFAULT
             | libc::POSIX_SPAWN_SETPGROUP

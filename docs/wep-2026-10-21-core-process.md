@@ -242,7 +242,10 @@ child may read more than the guest. It is defined, not open-ended:
   a link to anywhere. A stub that finds no Xcode falls back to the Command Line
   Tools, and a user who wants Xcode grants its bundle, such as
   `--process-read /Applications/Xcode.app`.
-- Each entry in the list is a path only root can replace.
+- Each entry sits in a directory only root can write, so no other user can
+  swap the entry for a link. What lies inside may be the user's, as under
+  `/opt/homebrew`. A link there leads only to its real path, which the sandbox
+  judges on its own.
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
@@ -414,15 +417,25 @@ comments for the interface. What follows is why it takes the shape it does.
   and none holds a pipe the guest is reading open.
 - A child of an unconfined spawn shares its parent's process group, and with it
   the parent's place on the terminal: it reads the terminal and sets its mode.
-  A group of its own is the terminal's foreground group only where the host
-  makes it one, as a shell makes the job it runs. So where a child inherits a
-  stream from a terminal the `wado` host holds, the host hands the terminal to
-  the child's group before the program starts, and takes it back once the
-  child exits. The cost is Ctrl-C: it reaches the child alone, where a shared
-  group would end the host too, so the guest sees the child end by `SIGINT`
-  and carries on. A shell treats the job it runs the same way. Ctrl-Z stops the
-  child, and the host stops with it as a shared group would. Continued in the
-  foreground, the host hands the terminal over again.
+  A group of its own reads and sets the terminal only as its foreground group,
+  so the `wado` host treats a child whose stdin is its terminal as a shell
+  treats the job it runs:
+  - Holding the terminal, the host hands it to the child's group before the
+    program starts, and takes it back once the child ends. Ctrl-C then reaches
+    the child alone, where a shared group would end the host too: the guest
+    sees the child end by `SIGINT` and carries on.
+  - One child holds the terminal at a time. Another that reads it waits until
+    the first is done, then gets it.
+  - The host stops where a shared group would stop: when Ctrl-Z stops the child
+    holding the terminal, and when a child reads the terminal while the host is
+    in the background. Continued in the foreground, the host hands the terminal
+    over again.
+  - A child that stops, or that a signal ends, leaves the terminal in the
+    host's mode, as a shell restores its own. A child that exits leaves the
+    mode it chose.
+  - A child that inherits only stdout or stderr from the terminal stays in the
+    background, so the host keeps its stdin and Ctrl-C. Such a child that sets
+    the terminal's mode stops, and the host with it.
 
 ### The timeout is the guest's
 
@@ -539,9 +552,9 @@ the program accepts it.
 
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
-- Of children running at once, only the first to inherit a stream from the
-  terminal holds it. Another starts while the host no longer holds the
-  terminal, so it runs in the background and stops at its first read of it.
+- A child waiting its turn for the terminal that the guest kills ends at once,
+  but its exit reaches the guest only once the child holding the terminal is
+  done: the host waits on the terminal for it then, not on the child.
 - On macOS a child reads the arguments of every process its user runs, through
   `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
   reads the whole environment too, `wado`'s own among them, so a token in the

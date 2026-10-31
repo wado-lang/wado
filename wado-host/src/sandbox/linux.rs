@@ -26,9 +26,10 @@ use std::process::{Command as StdCommand, Stdio as StdStdio};
 use std::ptr;
 use std::sync::OnceLock;
 
+use super::terminal::give_terminal;
 use super::{
-    Access, Availability, Child, Command, Network, Policy, Refusal, Refusals, ResolvedPolicy,
-    Spawned, Stdio, Terminal, Trace, give_terminal,
+    Access, Availability, Child, Command, Foreground, Network, Policy, Refusal, Refusals,
+    ResolvedPolicy, Spawned, Stdio, Trace,
 };
 use crate::sync::spawn_detached;
 
@@ -154,7 +155,7 @@ fn probe_listener() -> io::Result<bool> {
     Ok(libc::WIFEXITED(status) && libc::WEXITSTATUS(status) == 0)
 }
 
-pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, foreground: Foreground) -> io::Result<Spawned> {
     let ruleset = ruleset(command.policy)?;
     let listens = listens()?;
     let (refer, trace) = if listens {
@@ -190,7 +191,7 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spa
                 &filter,
                 cwd.as_ref(),
                 listener_tx.as_ref().map(AsRawFd::as_raw_fd),
-                terminal,
+                foreground,
             )
         });
     }
@@ -220,7 +221,7 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spa
     drop(std_command);
     let mut child = spawned?;
     Ok(Spawned {
-        child: Child::new(child.id() as libc::pid_t, terminal),
+        child: Child::new(child.id() as libc::pid_t),
         stdin: child.stdin.take().map(OwnedFd::from),
         stdout: child.stdout.take().map(OwnedFd::from),
         stderr: child.stderr.take().map(OwnedFd::from),
@@ -1291,17 +1292,14 @@ fn confine_self(
     filter: &[libc::sock_filter],
     cwd: Option<&File>,
     listener_tx: Option<RawFd>,
-    terminal: Terminal,
+    foreground: Foreground,
 ) -> io::Result<()> {
     // A group of its own, so the host's kill reaches every descendant; the
     // filter below keeps them from leaving it.
     // SAFETY: each call below is a plain system call on memory the parent built.
     check(unsafe { libc::setpgid(0, 0) })?;
-    if let Terminal::HandedOver(fd) = terminal {
-        // Taken before `exec`, so the program's first read finds its group in
-        // the foreground. Where the terminal refuses, the child runs in the
-        // background, as under a host that does not hold it.
-        let _ = give_terminal(fd, unsafe { libc::getpid() });
+    if foreground == Foreground::Child {
+        give_terminal(unsafe { libc::getpid() });
     }
     if let Some(dir) = cwd {
         check(unsafe { libc::fchdir(dir.as_raw_fd()) })?;
