@@ -35,8 +35,8 @@ use super::method_lookup::ImplParamSlots;
 use super::sem::decls::ModuleDecls;
 use super::type_resolution::slot_type_ids;
 use super::types::{
-    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams, ResourceInfo,
-    StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    DataDecls, EnumInfo, FlagsInfo, GenericNewtypeInfo, ParamList, ParamSlot, RealTypeParams,
+    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
 use super::{AbstractSelectionCache, Elaborator};
