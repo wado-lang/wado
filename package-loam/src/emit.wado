@@ -1749,6 +1749,11 @@ fn emit_passed(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, che
 fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>, EmitError> {
     let mut lines: List<String> = [];
     for let c of &checked.owed {
+        // Its extents are capacities, which need not meet what the lengths
+        // meet: whoever pads the inputs checks it at the lengths.
+        if symbols.reads_lengths(&c.slack) {
+            continue;
+        }
         lines.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
     }
     return Result::Ok(lines);

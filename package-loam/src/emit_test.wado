@@ -1338,6 +1338,20 @@ test "a build takes a padded past to its attention as a buffer of fixed capacity
     assert !kernel_entries(&out).contains("lengths");
 }
 
+test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {
+    // The slice of `W` matches `X` only where N is at most 8.
+    let source = `g (float[N] X) => (float[N] Y) <float[8] W> {
+        S = Shape(X)
+        Zero = Constant<value_ints = [0]>()
+        Part = Slice(W, Zero, S)
+        Y = Add(X, Part)
+    }`;
+    let out = generate(source).unwrap();
+    let [build_at, compute_at] = [out.find("pub fn build").unwrap(), out.find("pub fn compute").unwrap()];
+    assert out.substr_bytes(compute_at, out.len()).contains("refuse(unmet(");
+    assert !out.substr_bytes(build_at, compute_at).contains("refuse(unmet(");
+}
+
 test "a build whose lengths enter no value takes none" {
     let out = generate(mlp("float")).unwrap();
     assert !out.contains("Lengths");

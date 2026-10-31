@@ -315,7 +315,9 @@ The generated module takes them so:
 
 - `build` takes `lengths: &Lengths<G>`, a value of `[]` for each padded length
   it reads as a value. A build that reads none takes no `lengths`. Every
-  extent the inputs give is a capacity.
+  extent the inputs give is a capacity. A condition the graph owes over a
+  padded length is not checked there, since a capacity need not meet what its
+  length meets.
 - `compute` takes the inputs on the host. It checks them, and what the graph
   owes, against their own lengths. It pads each padded length to its
   capacity, the next power of two, builds, and cuts the outputs back to their
@@ -472,8 +474,8 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 
 - A valid length is one value for every row, which is a batch of one, until
   slots (step 7) give each row its own.
-- `build` checks what the graph owes against the capacities, not the lengths,
-  so a condition a length meets and its capacity misses refuses the call.
+- `build` cannot check what the graph owes over a padded length, which only
+  `compute` knows on the host. A caller of `build` vouches for it.
 - `compute` takes no capacities from the caller, and a graph with a cache has
   no `compute` until the cache is one of fixed capacity.
 - The first call of a shape class waits for its program to compile. At build
