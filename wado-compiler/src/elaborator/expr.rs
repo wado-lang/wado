@@ -764,20 +764,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Expr::TupleLiteral(tuple_lit) => {
                 self.resolve_tuple_literal(tuple_lit, ctx, expected_type)
             }
-            Expr::LabeledBlock(lb) => {
-                let overlays_before = self.tuple_overlay_counts();
-                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected_type);
+            Expr::LabeledBlock(lb) => self.resolve_branching(expected_type, |this, expected| {
+                let overlays_before = this.tuple_overlay_counts();
+                let mut frame = ctx.enter_labeled_block(lb.label.clone(), expected);
                 // A labeled block yields via `break label: value`, not a tail
                 // expression, so its trailing statement stays in statement
                 // position (a discarded tail `match` may have arms of
                 // differing types).
-                self.resolve_block(&lb.block, &mut frame, expected_type);
+                this.resolve_block(&lb.block, &mut frame, expected);
                 let target = frame.finish();
 
                 // Reify rebuilds the `LabeledBlock` from the AST, re-running
                 // the same unification; project only the result type.
-                self.unify_labeled_block(lb, &target.break_types, expected_type, &overlays_before)
-            }
+                let type_id =
+                    this.unify_labeled_block(lb, &target.break_types, expected, &overlays_before);
+                let mut branches: Vec<TypeId> =
+                    target.break_types.iter().map(|&(_, t)| t).collect();
+                branches.push(this.labeled_block_tail_type(lb));
+                (type_id, branches)
+            }),
             Expr::Matches(m) => self.desugar_matches_expr(m, ctx, expected_type),
             Expr::Spread(..) => {
                 panic!("Spread expression should only appear inside TupleLiteral handling")
@@ -2472,6 +2477,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         ctx: &mut FunctionContext,
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        self.resolve_branching(expected_type, |this, expected| {
+            let type_id = this.resolve_if_once(if_expr, ctx, expected);
+            let mut branches = vec![this.ast_block_result_type(&if_expr.then_block)];
+            branches.extend(if_expr.else_block.as_ref().map(|b| this.ast_block_result_type(b)));
+            (type_id, branches)
+        })
+    }
+
+    /// A branching expression's type by `resolve`, which answers it beside
+    /// each branch's, resolved again under that type where a branch is still
+    /// indefinite. Such a branch was resolved before a sibling settled the
+    /// type, so it typed its parts by an unresolved `null`'s `Option<!>`: a
+    /// tuple, a generic struct or a payload holding a `null`. Only the
+    /// expectation reaches those parts, as an annotation does.
+    fn resolve_branching(
+        &mut self,
+        expected_type: Option<TypeId>,
+        mut resolve: impl FnMut(&mut Self, Option<TypeId>) -> (TypeId, Vec<TypeId>),
+    ) -> TypeId {
+        let (agreed, branches) = resolve(self, expected_type);
+        let retyped = self.settled_result_expectation(expected_type).is_none() && {
+            let table = self.tysys.type_table.borrow();
+            !table.is_indefinite(agreed) && branches.iter().any(|&b| table.is_indefinite(b))
+        };
+        if retyped {
+            return resolve(self, Some(agreed)).0;
+        }
+        agreed
+    }
+
+    fn resolve_if_once(
+        &mut self,
+        if_expr: &IfExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
         match &if_expr.condition {
             Condition::LetChain { elements, .. } => {
                 self.record_desugar(if_expr.id, DesugarKind::IfLetChain);
@@ -2951,6 +2992,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     pub(super) fn resolve_match_expr(
+        &mut self,
+        match_expr: &ast::MatchExpr,
+        ctx: &mut FunctionContext,
+        expected_type: Option<TypeId>,
+    ) -> TypeId {
+        self.resolve_branching(expected_type, |this, expected| {
+            let type_id = this.resolve_match_once(match_expr, ctx, expected);
+            let arms = match_expr
+                .arms
+                .iter()
+                .filter_map(|arm| this.ast_expr_type(&arm.body))
+                .collect();
+            (type_id, arms)
+        })
+    }
+
+    fn resolve_match_once(
         &mut self,
         match_expr: &ast::MatchExpr,
         ctx: &mut FunctionContext,
