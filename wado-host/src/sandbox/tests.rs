@@ -454,6 +454,29 @@ fn sh_traced_paths(policy: &Policy, script: &str) -> BTreeSet<Refusal> {
         .collect()
 }
 
+/// `sh -c script` started under `policy` in `cwd`, its output where asked.
+fn spawn_sh(
+    policy: &Policy,
+    cwd: Option<&File>,
+    script: &str,
+    stdout: Stdio,
+    stderr: Stdio,
+) -> Spawned {
+    let args: Vec<OsString> = ["-c", script].iter().map(OsString::from).collect();
+    spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd,
+        stdin: Stdio::Null,
+        stdout,
+        stderr,
+        policy,
+        trace: Trace::Off,
+    })
+    .unwrap()
+}
+
 fn sh(policy: &Policy, script: &str) -> ExitStatus {
     run(
         policy,
@@ -527,21 +550,14 @@ fn reads_the_system_configuration() {
 fn a_shell_starts_without_complaint() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
     let dir = File::open(tree.granted()).unwrap();
-    let args: Vec<OsString> = ["-c", "true"].iter().map(OsString::from).collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[],
-        cwd: Some(&dir),
-        stdin: Stdio::Null,
-        stdout: Stdio::Null,
-        stderr: Stdio::Piped,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        Some(&dir),
+        "true",
+        Stdio::Null,
+        Stdio::Piped,
+    );
     let mut err = String::new();
     File::from(spawned.stderr.unwrap())
         .read_to_string(&mut err)
@@ -558,7 +574,7 @@ fn reaches_its_own_streams_through_their_device_paths() {
     assert_eq!(
         sh(
             &policy,
-            "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && ls /dev/fd/ > /dev/null"
+            "cat /dev/stdin && printf '' > /dev/stdout && printf '' > /dev/stderr && printf '' > /dev/fd/1"
         ),
         OK
     );
@@ -569,8 +585,12 @@ fn reads_a_grant_through_the_link_that_names_it() {
     assert_available();
     let tree = Tree::new();
     fs::write(tree.outside().join("f.txt"), "f").unwrap();
+    // A link to a relative one, so resolving reads a link the grant's path
+    // never names.
+    let hop = tree.granted().join("hop");
+    symlink("../outside", &hop).unwrap();
     let link = tree.root.path().join("link");
-    symlink(tree.outside(), &link).unwrap();
+    symlink(&hop, &link).unwrap();
     let mut policy = Policy::new(Network::Denied);
     policy.grant_path(&link, Access::ReadExecute);
     assert_eq!(
@@ -579,24 +599,31 @@ fn reads_a_grant_through_the_link_that_names_it() {
     );
 }
 
-/// The `/usr/bin` stubs that run the selected developer tools, wherever these
-/// run unconfined.
+/// The `/usr/bin` stubs run the developer tools `xcode-select` names: the
+/// Command Line Tools from the baseline, or an Xcode the user grants.
 #[cfg(target_os = "macos")]
 #[test]
 fn runs_the_developer_tools_through_their_stubs() {
     assert_available();
-    let unconfined = std::process::Command::new("/usr/bin/git")
-        .arg("--version")
-        .env_clear()
+    // Unlike a stub, `xcode-select` offers no installer where nothing is
+    // installed.
+    let selected = std::process::Command::new("/usr/bin/xcode-select")
+        .arg("-p")
         .output()
         .unwrap();
-    if !unconfined.status.success() {
+    if !selected.status.success() {
         return;
     }
+    let developer = PathBuf::from(String::from_utf8(selected.stdout).unwrap().trim_end());
     let tree = Tree::new();
     let scratch = tree.granted().display().to_string();
     let env = [("TMPDIR", scratch.as_str()), ("HOME", scratch.as_str())];
-    let policy = tree.policy(Network::Denied);
+    let mut policy = tree.policy(Network::Denied);
+    if !developer.starts_with("/Library/Developer/CommandLineTools") {
+        // `Xcode.app/Contents/Developer`: the stubs read the whole bundle.
+        let bundle = developer.ancestors().nth(2).unwrap();
+        policy.grant_path(bundle, Access::ReadExecute);
+    }
     assert_eq!(
         run(&policy, Path::new("/usr/bin/git"), &["--version"], &env),
         OK
@@ -1133,21 +1160,14 @@ fn starts_in_the_directory_it_is_given() {
     assert_available();
     let tree = Tree::new();
     fs::write(tree.granted().join("here.txt"), "here").unwrap();
-    let policy = tree.policy(Network::Denied);
     let dir = File::open(tree.granted()).unwrap();
-    let args: Vec<OsString> = ["-c", "cat here.txt"].iter().map(OsString::from).collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[],
-        cwd: Some(&dir),
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        Some(&dir),
+        "cat here.txt",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     let mut out = String::new();
     File::from(spawned.stdout.unwrap())
         .read_to_string(&mut out)
@@ -1160,23 +1180,13 @@ fn starts_in_the_directory_it_is_given() {
 fn a_group_kill_ends_every_descendant() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
-    let args: Vec<OsString> = ["-c", "sleep 60 & sleep 60; wait"]
-        .iter()
-        .map(OsString::from)
-        .collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: None,
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        None,
+        "sleep 60 & sleep 60; wait",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     spawned.child.signal_group(libc::SIGKILL).unwrap();
     assert_eq!(
         spawned.child.wait().unwrap(),
@@ -1195,20 +1205,13 @@ fn a_group_kill_ends_every_descendant() {
 fn no_descendant_outlives_the_child() {
     assert_available();
     let tree = Tree::new();
-    let policy = tree.policy(Network::Denied);
-    let args: Vec<OsString> = ["-c", "sleep 60 &"].iter().map(OsString::from).collect();
-    let spawned = spawn(&Command {
-        program: Path::new("/bin/sh"),
-        args: &args,
-        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
-        cwd: None,
-        stdin: Stdio::Null,
-        stdout: Stdio::Piped,
-        stderr: Stdio::Inherit,
-        policy: &policy,
-        trace: Trace::Off,
-    })
-    .unwrap();
+    let spawned = spawn_sh(
+        &tree.policy(Network::Denied),
+        None,
+        "sleep 60 &",
+        Stdio::Piped,
+        Stdio::Inherit,
+    );
     assert_eq!(spawned.child.wait().unwrap(), OK);
     // The background `sleep` held the pipe's write end; EOF means it is gone.
     let mut rest = Vec::new();

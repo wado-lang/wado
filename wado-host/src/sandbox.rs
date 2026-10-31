@@ -222,11 +222,10 @@ const BASELINE_READ: &[&str] = &[
     "/System",
     "/opt/homebrew",
     "/opt/local",
-    // The developer tools the `/usr/bin` stubs (`git`, `cc`, `python3`) run:
-    // the directory `xcode-select` chose, else the defaults it looks in, and
-    // the license acceptance it checks first.
-    "/private/var/db/xcode_select_link",
-    "/Applications/Xcode.app",
+    // The Command Line Tools the `/usr/bin` stubs (`git`, `cc`, `python3`)
+    // run, and the Xcode license acceptance they check first. Not
+    // `/Applications/Xcode.app`: an admin user, who need not be root, can
+    // replace it with a link to anywhere.
     "/Library/Developer/CommandLineTools",
     "/Library/Preferences/com.apple.dt.Xcode.plist",
     "/private/etc",

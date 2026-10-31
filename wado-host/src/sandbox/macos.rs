@@ -14,7 +14,7 @@ use std::io;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::ptr;
 use std::sync::OnceLock;
 
@@ -58,8 +58,12 @@ const PROFILE_BASE: &str = r#"(version 1)
 (allow file-read-metadata (literal "/etc") (literal "/tmp") (literal "/var"))
 ; A descriptor the child already holds, opened again by its number: no access
 ; it lacks.
-(allow file-read* file-write* (subpath "/dev/fd"))
+(allow file-read* file-write-data (subpath "/dev/fd"))
 (allow file-read-metadata (literal "/dev/stdin") (literal "/dev/stdout") (literal "/dev/stderr"))
+; Where the `/usr/bin` developer tool stubs find the developer directory
+; `xcode-select` chose. Root sets the link; the directory it names is a grant
+; of its own.
+(allow file-read-metadata (literal "/private/var/db/xcode_select_link"))
 (allow mach-lookup
     (global-name "com.apple.system.opendirectoryd.libinfo")
     (global-name "com.apple.system.notification_center")
@@ -124,18 +128,48 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
     Ok((text, params))
 }
 
-/// The symbolic links `path` passes through, itself included, each at the real
-/// path Seatbelt matches it by.
-fn links_on(path: &Path) -> impl Iterator<Item = PathBuf> + '_ {
-    path.ancestors()
-        .filter(|step| std::fs::symlink_metadata(step).is_ok_and(|meta| meta.is_symlink()))
-        .filter_map(|link| {
-            Some(
-                std::fs::canonicalize(link.parent()?)
-                    .ok()?
-                    .join(link.file_name()?),
-            )
-        })
+/// Darwin's `MAXSYMLINKS`: how many links one lookup follows before `ELOOP`.
+const SYMLINKS_MAX: usize = 32;
+
+/// Each symbolic link that resolving `path` reads, at the real path Seatbelt
+/// matches it by: those `path` names, and those its links lead through.
+fn links_on(path: &Path) -> Vec<PathBuf> {
+    let mut links = Vec::new();
+    let mut resolved = PathBuf::from("/");
+    // The components still to resolve, the next one last.
+    let mut pending: Vec<OsString> = Vec::new();
+    let push = |pending: &mut Vec<OsString>, path: &Path| {
+        pending.extend(
+            path.components()
+                .rev()
+                .filter_map(|component| match component {
+                    Component::Normal(name) => Some(name.to_owned()),
+                    Component::ParentDir => Some(OsString::from("..")),
+                    Component::RootDir | Component::CurDir | Component::Prefix(_) => None,
+                }),
+        );
+    };
+    push(&mut pending, path);
+    while let Some(name) = pending.pop() {
+        if name == ".." {
+            resolved.pop();
+            continue;
+        }
+        let next = resolved.join(&name);
+        let Ok(target) = std::fs::read_link(&next) else {
+            resolved = next;
+            continue;
+        };
+        if links.len() == SYMLINKS_MAX {
+            break;
+        }
+        links.push(next);
+        if target.is_absolute() {
+            resolved = PathBuf::from("/");
+        }
+        push(&mut pending, &target);
+    }
+    links
 }
 
 /// Appends a rule allowing `operations` on `path`, which reaches the profile as

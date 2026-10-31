@@ -135,10 +135,10 @@ it as a parameter, `-D P0=/path`. No path is spliced into SBPL, so no escaping
 can rewrite the policy. Seatbelt matches the real path, so each parameter is
 one: the path a grant's descriptor names (`F_GETPATH`), or the baseline path
 canonicalized. A path is resolved through a link only where the link itself can
-be read, so each link a grant's path names on its way, such as
-`/Applications/Xcode.app` on a machine with several Xcodes, shows its metadata
-and nothing else. The profile allows no `file-ioctl`, so no input reaches a
-terminal.
+be read. So each link that resolving a grant's path reads shows its metadata and
+nothing else: the links the path names, and the links those lead through. An
+example is `/Applications/Xcode.app` on a machine with several Xcodes. The
+profile allows no `file-ioctl`, so no input reaches a terminal.
 
 `sandbox-exec` reports a program it cannot start only on its own stderr, so
 the host checks that the program exists before spawning it.
@@ -232,12 +232,15 @@ child may read more than the guest. It is defined, not open-ended:
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited. On
   macOS `/dev/fd` is writable too: opening `/dev/fd/N` copies descriptor `N`,
   which the child already holds, with no access it lacks.
-- On macOS the developer tools are what the `/usr/bin` stubs (`git`, `cc`,
-  `python3`) run: the directory `xcode-select` chose, else
-  `/Applications/Xcode.app` and the Command Line Tools, and the plist that
-  records the Xcode license was accepted. `xcode-select`'s choice is the
-  system's, set by root, not the guest's. An Xcode elsewhere runs only through
-  that choice or `--process-read`.
+- On macOS the developer tools are the Command Line Tools, which the `/usr/bin`
+  stubs (`git`, `cc`, `python3`) run, and the plist that records that the Xcode
+  license was accepted. A stub reads the link `xcode-select` keeps, but not the
+  directory it names. Xcode itself is not in the baseline: `/Applications` is
+  writable by every admin user, root or not, so the entry could be swapped for
+  a link to anywhere. A stub that finds no Xcode falls back to the Command Line
+  Tools, and a user who wants Xcode grants its bundle, such as
+  `--process-read /Applications/Xcode.app`.
+- Each entry in the list is a path only root can replace.
 - The list is fixed per OS in the host's source. Nothing in it is derived from
   the program's path, which the guest chooses: deriving a prefix from
   `/home/u/bin/x` would open `/home/u`. A program outside these prefixes and
