@@ -3,7 +3,8 @@
 // by a `let`, returned, passed, assigned, destructured, stored in a field,
 // compared, and inside a tuple, a generic struct, a payload, a list or a
 // branch. It was carried over unconverted, and the module failed Wasm
-// validation.
+// validation. A list rebuilds only the elements it holds: the spare capacity
+// past them holds no value, and rebuilding one trapped on a null reference.
 
 struct T { n: i32 }
 struct Box<A> { a: A }
@@ -124,6 +125,13 @@ fn list() -> i32 {
     return count(&u[0]) + count(&u[2]) + u.len();
 }
 
+fn list_with_spare_capacity() -> i32 {
+    let mut t: List<[Option<!>, i32]> = [];
+    t.push([null, 6]);
+    let u: List<[Option<T>, i32]> = t;
+    return count(&u[0].0) + u[0].1 + u.len();
+}
+
 fn bound_in_branch(c: bool) -> i32 {
     let p = if c {
         let t = [null, 0];
@@ -162,6 +170,7 @@ test "an Option<!> value widens to the Option<T> it goes to" {
     assert boxed() == -1;
     assert payload() == -1;
     assert list() == 7;
+    assert list_with_spare_capacity() == 6;
     assert bound_in_branch(builtin::black_box(true)) == -1;
     assert bound_in_branch(builtin::black_box(false)) == 2;
     assert all_null_branches(builtin::black_box(true), 0) == 2;

@@ -565,9 +565,11 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
             .is_some_and(|dispatch| dispatch.consumes_self)
     }
 
+    // Ownership reads the recorded type itself: a value holding an `Option<!>`
+    // moves as the type it widens to does.
     fn indexes_tuple(&self, base: &ast::Expr) -> bool {
         self.reify
-            .ann_expression_types(base.id())
+            .ann_recorded_expression_type(base.id())
             .is_some_and(|ty| {
                 let tt = self.reify.tysys.type_table.borrow();
                 matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
@@ -577,7 +579,7 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
 
     fn is_affine(&self, expr: AstId) -> bool {
         self.reify
-            .ann_expression_types(expr)
+            .ann_recorded_expression_type(expr)
             .is_some_and(|ty| self.reify.tysys.is_affine(ty, self.affine_params))
     }
 
@@ -9529,14 +9531,21 @@ impl<'a> Reify<'a> {
                 })
                 .unwrap_or_default()
         };
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(peeled_scrutinee)
+            .unwrap_or_default();
 
         let tir_fields: Vec<TirStructPatternField> = fields
             .iter()
             .map(|f| {
-                let (field_index, field_ty) = field_info
+                let (field_index, declared) = field_info
                     .get(&f.field_name)
                     .copied()
                     .unwrap_or((0, TypeTable::UNKNOWN));
+                let field_ty = self.tysys.substitute_type_params(declared, &type_args);
                 // Match ergonomics: a field bound through a `&Point` /
                 // `&mut Point` scrutinee is `&field` / `&mut field`.
                 let binding_ty = self

@@ -1,0 +1,25 @@
+// Destructuring an instance of a generic affine struct binds each field at
+// the instance's type. The pattern took the declared field type, so `v` kept
+// the parameter `T` and reached codegen unsubstituted.
+
+use { Stdout } from "core:cli";
+
+affine struct Holder<T> {
+    fut: Future<i32>,
+    v: T,
+}
+
+fn take(h: Holder<i32>) -> i32 {
+    let Holder { fut, v } = h;
+    builtin::drop(fut);
+    return v;
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<i32>::new();
+    assert take(Holder { fut: rx, v: 7 }) == 7;
+    tx.write(1);
+}
+
+__DATA__
+{}

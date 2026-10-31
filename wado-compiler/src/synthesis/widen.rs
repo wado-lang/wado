@@ -92,13 +92,14 @@ impl Widener<'_> {
     fn helper(&mut self, name: String, from: TypeId, to: TypeId) -> TirFunction {
         let v = || local_ref(0, "v", from);
         let mut locals = vec![param_local("v", from, false)];
-        let (from_head, to_head, tuples, resolved) = {
+        let (from_head, to_head, tuples, lists, resolved) = {
             let tt = self.tt.borrow();
             let (from_head, to_head) = (tt.representation_head(from), tt.representation_head(to));
             (
                 from_head,
                 to_head,
                 tt.as_tuple(from_head).zip(tt.as_tuple(to_head)),
+                tt.list_element(from_head).zip(tt.list_element(to_head)),
                 (tt.get(from_head).clone(), tt.get(to_head).clone()),
             )
         };
@@ -122,7 +123,48 @@ impl Widener<'_> {
         } else if let (ResolvedType::BuiltinArray(from_elem), ResolvedType::BuiltinArray(to_elem)) =
             resolved
         {
-            self.array_stmts(from, to, from_elem, to_elem, &mut locals)
+            let from_ref = self.tt.borrow_mut().make_ref(from);
+            let slots = || ref_expr(v(), from_ref, synth_span());
+            let len = builtin_call("array_len", vec![slots()], TypeTable::I32);
+            let mut stmts = self.rebuild_slots(slots, len, to, from_elem, to_elem, &mut locals);
+            stmts.push(return_stmt(Some(local_ref(2, "out", to))));
+            stmts
+        } else if let Some((from_elem, to_elem)) = lists {
+            // Only the first `used` slots hold elements; the spare capacity
+            // past them holds no value to rebuild.
+            let (from_array, from_array_ref, to_array, to_name) = {
+                let mut tt = self.tt.borrow_mut();
+                let from_array = tt.make_builtin_array(from_elem);
+                (
+                    from_array,
+                    tt.make_ref(from_array),
+                    tt.make_builtin_array(to_elem),
+                    tt.struct_list_name(to)
+                        .expect("a list instance is listed as a struct"),
+                )
+            };
+            let seq_field = |field: SeqField, ty| {
+                field_access(v(), field.index(), field.field_name(), ty, synth_span())
+            };
+            let slots = || {
+                ref_expr(
+                    seq_field(SeqField::Backing, from_array),
+                    from_array_ref,
+                    synth_span(),
+                )
+            };
+            let used = || seq_field(SeqField::Len, TypeTable::I32);
+            let mut stmts =
+                self.rebuild_slots(slots, used(), to_array, from_elem, to_elem, &mut locals);
+            stmts.push(return_stmt(Some(struct_literal(
+                to,
+                to_name,
+                [
+                    (SeqField::Backing.field_name(), local_ref(2, "out", to_array)),
+                    (SeqField::Len.field_name(), used()),
+                ],
+            ))));
+            stmts
         } else if let Some(cases) = self.variant_cases(from_head, to_head) {
             let span = synth_span();
             let arms = cases
@@ -187,28 +229,27 @@ impl Widener<'_> {
         )
     }
 
-    /// A fresh `Array` of `to_elem` with each slot of `v` rebuilt into it.
-    fn array_stmts(
+    /// Statements leaving in the local `out` a fresh `to` array holding the
+    /// first `len` of `slots` (a `&Array` of `from_elem`), each rebuilt.
+    fn rebuild_slots(
         &mut self,
-        from: TypeId,
+        slots: impl Fn() -> TirExpr,
+        len: TirExpr,
         to: TypeId,
         from_elem: TypeId,
         to_elem: TypeId,
         locals: &mut Vec<TirLocal>,
     ) -> Vec<TirStmt> {
         let span = synth_span();
-        let (from_ref, to_mut_ref) = {
-            let mut tt = self.tt.borrow_mut();
-            (tt.make_ref(from), tt.make_mut_ref(to))
-        };
+        let to_mut_ref = self.tt.borrow_mut().make_mut_ref(to);
         locals.push(param_local("len", TypeTable::I32, false));
         locals.push(param_local("out", to, true));
         locals.push(param_local("index", TypeTable::I32, true));
-        let v = || ref_expr(local_ref(0, "v", from), from_ref, span);
+        let len_value = len;
         let len = || local_ref(1, "len", TypeTable::I32);
         let out = || local_ref(2, "out", to);
         let index = || local_ref(3, "index", TypeTable::I32);
-        let slot = builtin_call("array_get_value", vec![v(), index()], from_elem);
+        let slot = builtin_call("array_get_value", vec![slots(), index()], from_elem);
         let set = builtin_call(
             "array_set",
             vec![
@@ -231,16 +272,10 @@ impl Widener<'_> {
             span,
         );
         vec![
-            let_stmt(
-                "len",
-                1,
-                TypeTable::I32,
-                builtin_call("array_len", vec![v()], TypeTable::I32),
-            ),
+            let_stmt("len", 1, TypeTable::I32, len_value),
             let_mut_stmt("out", 2, to, builtin_call("array_new", vec![len()], to)),
             let_mut_stmt("index", 3, TypeTable::I32, i32_const(0)),
             loop_stmt(body),
-            return_stmt(Some(out())),
         ]
     }
 
@@ -292,20 +327,8 @@ impl Widener<'_> {
         (to_name, fields)
     }
 
-    /// A struct's fields as lowering writes them: a `List`'s `{repr, used}`,
-    /// or the listed instance's own.
+    /// The listed struct instance's fields.
     fn fields_of(&self, id: TypeId) -> Vec<(u32, String, TypeId)> {
-        let list_element = self.tt.borrow().list_element(id);
-        if let Some(elem) = list_element {
-            let backing = self.tt.borrow_mut().make_builtin_array(elem);
-            return [
-                (SeqField::Backing, backing),
-                (SeqField::Len, TypeTable::I32),
-            ]
-            .into_iter()
-            .map(|(field, ty)| (field.index(), field.field_name().to_string(), ty))
-            .collect();
-        }
         let tt = self.tt.borrow();
         let (def, type_args) = match tt.get(id) {
             ResolvedType::Struct { def, type_args } => (*def, type_args.as_slice()),

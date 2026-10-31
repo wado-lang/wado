@@ -2496,12 +2496,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         expected_type: Option<TypeId>,
         mut resolve: impl FnMut(&mut Self, Option<TypeId>) -> (TypeId, Vec<TypeId>),
     ) -> TypeId {
+        let overlays_before = self.tuple_overlay_counts();
         let (agreed, branches) = resolve(self, expected_type);
         let retyped = self.settled_result_expectation(expected_type).is_none() && {
             let table = self.tysys.type_table.borrow();
             !table.is_indefinite(agreed) && branches.iter().any(|&b| table.is_indefinite(b))
         };
         if retyped {
+            // The retry records each tuple for-of inside again; reify pairs an
+            // instantiation with each walk it makes, so the first pass's go.
+            for (key, instantiations) in &mut self.sem.types.tuple_overlays {
+                instantiations.truncate(overlays_before.get(key).copied().unwrap_or(0));
+            }
             return resolve(self, Some(agreed)).0;
         }
         agreed
