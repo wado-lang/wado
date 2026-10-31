@@ -355,8 +355,8 @@ async fn run_single(opts: &DumpOptions, input: &str) -> Result<(), CliExit> {
     .await?;
 
     let knobs = &opts.knobs;
-    let profile = entry_profile(path, knobs, opts.target_world.as_deref(), &host)
-        .map_err(CliExit::error)?;
+    let profile =
+        entry_profile(path, knobs, opts.target_world.as_deref(), &host).map_err(CliExit::error)?;
     // Diagnostics are already emitted by the host; signal silently on failure.
     let result = wado_compiler::dump_with_host_and_world(
         &source,

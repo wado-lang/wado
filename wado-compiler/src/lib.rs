@@ -1587,7 +1587,10 @@ fn compile_after_load<H: CompilerHost>(
         logger,
         true,
         options.coverage,
-        options.profile.as_deref().filter(|_| codegen_flags.pgo.applies()),
+        options
+            .profile
+            .as_deref()
+            .filter(|_| codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
     if !sem.is_complete() {
@@ -2513,6 +2516,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     let wasm_assets = load_result.wasm_assets.clone();
     let implicit_modules = load_result.implicit_modules.clone();
     let loaded_module_sources: Vec<ModuleSource> = load_result.modules.keys().cloned().collect();
+    let parsed_codegen_flags = parse_codegen_flags(
+        codegen_flags,
+        opt_level,
+        target_world == Some(TEST_WORLD),
+        &logger,
+    )?;
 
     // === Phases 5-7: ast index, analyze, elaborate ===
     //
@@ -2522,12 +2531,6 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let parsed_codegen_flags = parse_codegen_flags(
-        codegen_flags,
-        opt_level,
-        target_world == Some(TEST_WORLD),
-        &logger,
-    )?;
     let sem = semantics::semantics_with_logger(
         load_result,
         &logger,
