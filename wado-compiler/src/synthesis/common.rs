@@ -206,16 +206,9 @@ pub fn binary(op: TirBinaryOp, left: TirExpr, right: TirExpr, ty: TypeId) -> Tir
     )
 }
 
-/// Create a cast expression.
+/// [`bare_cast`] at the synthetic span.
 pub fn cast(expr: TirExpr, target_type: TypeId) -> TirExpr {
-    TirExpr::new(
-        TirExprKind::Cast {
-            expr: Box::new(expr),
-            target_type,
-        },
-        target_type,
-        synth_span(),
-    )
+    bare_cast(expr, target_type, synth_span())
 }
 
 /// `expr as to` as codegen takes it, one instruction or none: `expr` itself

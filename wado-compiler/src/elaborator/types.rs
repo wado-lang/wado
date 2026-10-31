@@ -675,6 +675,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An attribute describing a declaration with no body, written on a
+    /// function that has one; `reason` is its schema's `on_body`.
+    AttributeOnBody {
+        attribute: &'static str,
+        reason: &'static str,
+        span: Span,
+    },
+
     /// An attribute describing a declaration with no body, written on a trait
     /// or interface requirement; `reason` is its schema's `on_requirement`.
     AttributeOnRequirement {
@@ -1979,6 +1987,15 @@ impl TypeError {
             } => (
                 Code::InvalidSyntax,
                 format!("`{owner}::{operation}` {detail}"),
+                *span,
+            ),
+            TypeError::AttributeOnBody {
+                attribute,
+                reason,
+                span,
+            } => (
+                Code::AttrMisuse,
+                format!("#[{attribute}] belongs to a declaration with no body: {reason}"),
                 *span,
             ),
             TypeError::AttributeOnRequirement {

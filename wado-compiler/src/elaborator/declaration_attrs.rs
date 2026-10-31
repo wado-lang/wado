@@ -20,7 +20,9 @@ use crate::token::Span;
 use crate::type_table::TypeTable;
 
 use super::Elaborator;
+use super::item::extract_compiler_item;
 use super::sem::types::DeclaredAttrs;
+use super::types::TypeError;
 use super::tysys::TypeSystem;
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -51,10 +53,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if func.body.is_some() {
             self.reject_bodyless_attrs_on_body(&func.attrs);
         }
-        self.sem
-            .types
-            .fn_declared_attrs
-            .insert(func.id, DeclaredAttrs { facts, immediates });
+        // An operation's default body is registered under no owner, so this is
+        // the only report for one.
+        let compiler_item = extract_compiler_item(
+            &func.attrs,
+            func.span,
+            &self.current_module_source,
+            self.logger,
+        );
+        self.sem.types.fn_declared_attrs.insert(
+            func.id,
+            DeclaredAttrs {
+                facts,
+                immediates,
+                compiler_item,
+            },
+        );
     }
 
     /// Check `global`'s `#[param]`, and record the build input it names.
@@ -77,20 +91,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// on a function that has one.
     fn reject_bodyless_attrs_on_body(&self, attrs: &[Attribute]) {
         for (attr, name, bodyless) in attribute::bodyless(attrs) {
-            self.error_at(
-                Code::AttrMisuse,
-                attr.span,
-                format!(
-                    "#[{name}] belongs to a declaration with no body: {}",
-                    bodyless.on_body
-                ),
-            );
+            let _ = self.emit(TypeError::AttributeOnBody {
+                attribute: name,
+                reason: bodyless.on_body,
+                span: attr.span,
+            });
         }
     }
 
     /// The build input a global's `#[param]` names, or `None` where it carries
-    /// none or a malformed one. The value itself is resolved later, in the
-    /// param-resolution pass.
+    /// none or a malformed one. The resolution itself (overrides, env,
+    /// conversion) happens later in the param-resolution pass — see
+    /// `wep-2026-04-26-compile-time-params.md`.
     fn param_attr(&self, global: &GlobalDecl) -> Option<ParamSpec> {
         let attr = global.attributes.iter().find(|a| a.name == PARAM)?;
         let emit = |message: String| self.error_at(Code::ParamAttr, attr.span, message);

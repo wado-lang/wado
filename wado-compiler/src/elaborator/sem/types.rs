@@ -6,6 +6,7 @@
 
 use crate::ast::{self, AstId, Expr};
 use crate::builtin_facts::BuiltinFacts;
+use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -436,12 +437,13 @@ pub(crate) struct TypeAnnotations {
 }
 
 /// What a function's declaration attributes state: the facts a body-less one
-/// declares with `#[storage]` and `#[side_effect]`, and the parameters
-/// `#[immediate]` names.
+/// declares with `#[storage]` and `#[side_effect]`, the parameters
+/// `#[immediate]` names, and the item `#[compiler_item]` names.
 #[derive(Clone)]
 pub(crate) struct DeclaredAttrs {
     pub(crate) facts: Option<BuiltinFacts<String>>,
     pub(crate) immediates: Vec<String>,
+    pub(crate) compiler_item: Option<CompilerItem>,
 }
 
 /// A destructuring assignment that keeps its desugaring, which copies each

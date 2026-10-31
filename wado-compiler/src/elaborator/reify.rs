@@ -16,7 +16,6 @@ use crate::attribute::{
 };
 use crate::call_args::CallArgs;
 use crate::compiler_host::CompilerHost;
-use crate::compiler_item::parse_compiler_item_attrs;
 use crate::const_eval::{format_float_repr, truncate_int};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::cast::lower_cast;
@@ -1470,6 +1469,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let DeclaredAttrs {
             facts: declared,
             immediates,
+            compiler_item,
         } = self
             .ann_fn_declared_attrs(func.id)
             .expect("the declaring walk records the declared attributes of every function");
@@ -1504,8 +1504,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             is_cm_export: false,
             is_ambient: extract_is_ambient_attr(&func.attrs),
             inline_hint: extract_inline_hint_attr(&func.attrs),
-            // The declaring walk registered it, and reported an unknown one.
-            compiler_item: parse_compiler_item_attrs(&func.attrs).0.into_iter().next(),
+            compiler_item,
             export_name: extract_export_name_attr(&func.attrs),
             allocator_tag: extract_allocator_tag_attr(&func.attrs),
             kind: tir::FunctionKind::Regular,

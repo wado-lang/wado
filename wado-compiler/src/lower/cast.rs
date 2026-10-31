@@ -12,7 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::lower::wide_int_literal::{create_conversion, method_ref};
 use crate::primitive::PrimitiveType;
 use crate::synthesis::common::{bare_cast, handle_from_f64, handle_to_f64, rt_call, unary_call};
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirUnaryOp, TypeId, to_layers_of};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 
@@ -262,19 +262,12 @@ fn wide_int_source_cast(
     // A newtype source first steps to its wide base so the prelude calls below
     // see their declared receiver/argument type.
     let inner = bare_cast(inner, source_base, span);
-    let accessor = |item, result_type| {
+    let accessor = |item, inner, result_type| {
         let func = method_ref(&type_table.borrow(), item);
         let ref_type = type_table
             .borrow_mut()
             .intern(ResolvedType::Ref(source_base));
-        let receiver = TirExpr::new(
-            TirExprKind::Unary {
-                op: TirUnaryOp::Ref,
-                expr: Box::new(inner.clone()),
-            },
-            ref_type,
-            inner.span,
-        );
+        let receiver = to_layers_of(inner, ref_type, &type_table.borrow());
         TirExpr::new(
             TirExprKind::method_call(Box::new(receiver), func, vec![], vec![]),
             result_type,
@@ -282,14 +275,14 @@ fn wide_int_source_cast(
         )
     };
     let converted = match lowering {
-        Lowering::Method(item) => accessor(item, target_base),
+        Lowering::Method(item) => accessor(item, inner, target_base),
         Lowering::LowThenCast => {
             let item = if signed_source {
                 CompilerItem::I128Low
             } else {
                 CompilerItem::U128Low
             };
-            bare_cast(accessor(item, TypeTable::U64), target_base, span)
+            bare_cast(accessor(item, inner, TypeTable::U64), target_base, span)
         }
         Lowering::Reinterpret(item) => {
             let func = method_ref(&type_table.borrow(), item);

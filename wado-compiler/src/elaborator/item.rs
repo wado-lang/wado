@@ -47,7 +47,7 @@ use crate::tir::{ResolvedType, TirTypeParam};
 /// each unrecognised name. Returns the first matched [`CompilerItem`]
 /// (in attribute order); subsequent matches are silently dropped — a
 /// declaration may carry at most one marker per the design contract.
-fn extract_compiler_item<H: CompilerHost>(
+pub(super) fn extract_compiler_item<H: CompilerHost>(
     attrs: &[Attribute],
     decl_span: Span,
     module_source: &ModuleSource,
