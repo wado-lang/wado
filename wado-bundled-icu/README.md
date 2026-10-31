@@ -11,12 +11,14 @@ The crate builds one of two worlds:
 
 | build                        | world            | WIT               | what it is                                   |
 | ---------------------------- | ---------------- | ----------------- | -------------------------------------------- |
-| `cargo build --release`      | `icu-properties` | `wit-properties/` | the shippable `core:icu` stage-1 surface     |
+| `cargo build --release`      | `icu-properties` | `wit-properties/` | the shippable `core:icu` surface             |
 | `--release --features spike` | `icu`            | `wit/`            | the wider technical-validation surface below |
 
-## The shippable surface: character properties
+## The shippable surface
 
-Resource-free, so the Wado import path consumes it today.
+It exports two interfaces: character properties, and collation.
+
+### Character properties
 
 `has` and `set` name a binary property as an enum case: the call site resolves
 it, so there is no string to copy and no name to search, and the operation is
@@ -24,7 +26,7 @@ total. `contains` and `ranges` take the name as a string instead, for a name a
 program reads at run time rather than writes. Both take a value as well, for an
 enumerated property, and match names as UAX #44 matches them, loosely.
 
-**326 KB** import-free component, covering 63 binary properties, 15 enumerated
+Built without collation, it is a **326 KB** import-free component, covering 63 binary properties, 15 enumerated
 ones, and General_Category groups (`L` as well as `Lu`). 35 KB of that is the
 `wado.dataref` map and the `name` section it is keyed by, which is what lets a
 program carry a slice of the rest rather than all of it.
@@ -46,6 +48,13 @@ None of the three occurs in a live rule anywhere in
 `Block` and `Decomposition_Type` never appear at all. Every `Other_*`
 occurrence sits in a comment: Python's and Rust's lexers spell the code points
 out by hand instead.
+
+### Collation
+
+`collator` is a resource with a destructor: `create` parses a BCP 47 tag and
+`compare` orders two strings the way that locale sorts them. Collation data is
+baked for every locale, which takes the core module from 0.35 MB to 1.69 MB. A
+program that never constructs a collator collects it away.
 
 ## What the spike surface exposes
 

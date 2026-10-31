@@ -1,5 +1,5 @@
-//! The shippable `core:icu` stage-1 surface: Unicode character properties.
-//! See `wit-properties/world.wit`.
+//! Unicode character properties, and the bindings of the shippable `core:icu`
+//! world (`wit-properties/world.wit`) that `collation` implements too.
 
 use alloc::string::String;
 use alloc::vec::Vec;
