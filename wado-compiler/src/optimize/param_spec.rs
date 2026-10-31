@@ -510,8 +510,7 @@ impl Signatures {
                     .collect(),
                 has_body: func.body.is_some() && !func.is_dead,
                 param_fixed: func.params.iter().map(is_param_fixed).collect(),
-                scalar_specializable: !func.params.iter().any(|p| p.is_mut_ref)
-                    && !recursive.contains(&FuncId::new(index)),
+                scalar_specializable: !recursive.contains(&FuncId::new(index)),
             }
         });
         Signatures {
@@ -1259,7 +1258,7 @@ fn select_sites(
                         && signature.scalar_specializable
                         && signature.param_fixed[position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
-                        && let Some(value) = FieldConst::of_scalar(body, types, arg)
+                        && let Some(value) = scalar_argument_const(body, types, roots, arg)
                     {
                         bindings.push((param_local, Slot::Whole, value));
                     }
@@ -1311,6 +1310,40 @@ struct SelectField<'a> {
 
 /// Bind the constant fields of a struct the caller passes by reference, for
 /// each field the callee reads and never writes.
+/// The scalar constant an argument passes: a literal, or a read of a field
+/// `roots` holds constant for the whole caller. A formatter built in the caller
+/// passes its precision this way, a read the value graph sees as one only once
+/// the struct is split, which a `&mut` to it prevents.
+fn scalar_argument_const(
+    body: &Body,
+    types: &TypeTable,
+    roots: &IndexMap<u32, FieldConsts>,
+    arg: Operand,
+) -> Option<FieldConst> {
+    FieldConst::of_scalar(body, types, arg).or_else(|| {
+        let ExprKind::FieldAccess {
+            expr, field_index, ..
+        } = &body.exprs[arg.as_expr()?].kind
+        else {
+            return None;
+        };
+        let (local, _) = body.local_read(*expr)?;
+        roots
+            .get(&local)?
+            .get(field_index)
+            .filter(|value| {
+                matches!(
+                    value,
+                    FieldConst::Int(..)
+                        | FieldConst::Float(..)
+                        | FieldConst::Bool(_)
+                        | FieldConst::Char(_)
+                )
+            })
+            .cloned()
+    })
+}
+
 fn select_field_bindings(
     caller: SelectField,
     (callee, param_local, pointee): (FuncId, u32, TypeKey),
