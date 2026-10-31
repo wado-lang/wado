@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io;
 use std::path::PathBuf;
 
-use super::{Availability, Command, Spawned};
+use super::{Availability, Command, Spawned, Terminal};
 
 pub(super) fn availability() -> Availability {
     Availability::Unsupported(format!(
@@ -13,7 +13,7 @@ pub(super) fn availability() -> Availability {
     ))
 }
 
-pub(super) fn spawn(_command: &Command<'_>) -> io::Result<Spawned> {
+pub(super) fn spawn(_command: &Command<'_>, _terminal: Terminal) -> io::Result<Spawned> {
     unreachable!("`sandbox::spawn` asserts availability first")
 }
 

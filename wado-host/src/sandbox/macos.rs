@@ -18,7 +18,10 @@ use std::path::{Component, Path, PathBuf};
 use std::ptr;
 use std::sync::OnceLock;
 
-use super::{Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio};
+use super::{
+    Access, Availability, Child, Command, Network, Policy, Refusals, Spawned, Stdio, Terminal,
+    give_terminal,
+};
 
 const SANDBOX_EXEC: &str = "/usr/bin/sandbox-exec";
 
@@ -122,6 +125,19 @@ fn profile(policy: &Policy) -> io::Result<(String, Vec<OsString>)> {
             path,
         );
     }
+    // What a program that inherits a terminal does with it, as a child of an
+    // unconfined spawn can: set its mode, and ask its line discipline and
+    // foreground group. `TIOCSTI` stays refused.
+    writeln!(
+        text,
+        "(allow file-ioctl (ioctl-command #x{:x} #x{:x} #x{:x} #x{:x} #x{:x}))",
+        libc::TIOCSETA,
+        libc::TIOCSETAW,
+        libc::TIOCSETAF,
+        libc::TIOCGETD,
+        libc::TIOCGPGRP,
+    )
+    .expect("writing to a String cannot fail");
     if policy.network() == Network::Granted {
         text.push_str(PROFILE_NETWORK);
     }
@@ -208,7 +224,7 @@ fn c_string(bytes: &OsStr) -> io::Result<CString> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "an argument holds a NUL byte"))
 }
 
-pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
+pub(super) fn spawn(command: &Command<'_>, terminal: Terminal) -> io::Result<Spawned> {
     // `sandbox-exec` reports a missing program only on its own stderr, so the
     // host asks first.
     std::fs::metadata(command.program)?;
@@ -265,7 +281,7 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
         actions.fchdir(dir.as_raw_fd())?;
     }
 
-    let attr = SpawnAttr::new()?;
+    let attr = SpawnAttr::new(terminal)?;
     let mut pid: libc::pid_t = 0;
     let program = c_string(OsStr::new(SANDBOX_EXEC))?;
     // SAFETY: every pointer is to memory alive for the call, the arrays
@@ -284,9 +300,16 @@ pub(super) fn spawn(command: &Command<'_>) -> io::Result<Spawned> {
     if ret != 0 {
         return Err(io::Error::from_raw_os_error(ret));
     }
+    let child = Child::new(pid, terminal);
+    if let Terminal::HandedOver(fd) = terminal {
+        // Where the terminal refuses, the child runs in the background, as
+        // under a host that does not hold it.
+        let _ = give_terminal(fd, pid);
+        child.signal_group(libc::SIGCONT)?;
+    }
     let [stdin, stdout, stderr] = parent_ends;
     Ok(Spawned {
-        child: Child::new(pid),
+        child,
         stdin,
         stdout,
         stderr,
@@ -371,20 +394,27 @@ impl Drop for FileActions {
 }
 
 /// A process group of its own, default signal handling, an empty mask, and
-/// every descriptor past the file actions closed.
+/// every descriptor past the file actions closed. A child that takes the
+/// terminal starts suspended, until its group holds it: a read before then
+/// would find it in the background.
 struct SpawnAttr(libc::posix_spawnattr_t);
 
 impl SpawnAttr {
-    fn new() -> io::Result<Self> {
+    fn new(terminal: Terminal) -> io::Result<Self> {
         let mut attr = MaybeUninit::uninit();
         // SAFETY: init fills the value it is handed.
         check(unsafe { libc::posix_spawnattr_init(attr.as_mut_ptr()) })?;
         // SAFETY: initialized just above.
         let mut attr = Self(unsafe { attr.assume_init() });
+        let suspended = match terminal {
+            Terminal::Kept => 0,
+            Terminal::HandedOver(_) => libc::POSIX_SPAWN_START_SUSPENDED,
+        };
         let flags = libc::POSIX_SPAWN_CLOEXEC_DEFAULT
             | libc::POSIX_SPAWN_SETPGROUP
             | libc::POSIX_SPAWN_SETSIGDEF
-            | libc::POSIX_SPAWN_SETSIGMASK;
+            | libc::POSIX_SPAWN_SETSIGMASK
+            | suspended;
         // SAFETY: each call below sets one field of the initialized attributes.
         check(unsafe { libc::posix_spawnattr_setflags(&raw mut attr.0, flags as libc::c_short) })?;
         check(unsafe { libc::posix_spawnattr_setpgroup(&raw mut attr.0, 0) })?;

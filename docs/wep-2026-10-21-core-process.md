@@ -138,7 +138,9 @@ canonicalized. A path is resolved through a link only where the link itself can
 be read. So each link that resolving a grant's path reads shows its metadata and
 nothing else: the links the path names, and the links those lead through. An
 example is `/Applications/Xcode.app` on a machine with several Xcodes. The
-profile allows no `file-ioctl`, so no input reaches a terminal.
+profile allows `file-ioctl` only for what a program does with a terminal it
+inherits: setting its mode and asking its line discipline and foreground group.
+`TIOCSTI` stays refused, so no input reaches a terminal.
 
 `sandbox-exec` reports a program it cannot start only on its own stderr, so
 the host checks that the program exists before spawning it.
@@ -410,6 +412,17 @@ comments for the interface. What follows is why it takes the shape it does.
   process. Once the child exits, the host kills what is left of its group before
   reaping it, so no descendant keeps the child's grants with nobody watching,
   and none holds a pipe the guest is reading open.
+- A child of an unconfined spawn shares its parent's process group, and with it
+  the parent's place on the terminal: it reads the terminal and sets its mode.
+  A group of its own is the terminal's foreground group only where the host
+  makes it one, as a shell makes the job it runs. So where a child inherits a
+  stream from a terminal the `wado` host holds, the host hands the terminal to
+  the child's group before the program starts, and takes it back once the
+  child exits. The cost is Ctrl-C: it reaches the child alone, where a shared
+  group would end the host too, so the guest sees the child end by `SIGINT`
+  and carries on. A shell treats the job it runs the same way. Ctrl-Z stops the
+  child, and the host stops with it as a shared group would. Continued in the
+  foreground, the host hands the terminal over again.
 
 ### The timeout is the guest's
 
@@ -526,15 +539,9 @@ the program accepts it.
 
 - No pseudo-terminal: a child that needs one (a full-screen editor) gets the
   inherited terminal or none.
-- A child cannot read an inherited terminal. It runs in a process group of its
-  own, which is never the terminal's foreground group, so a read raises
-  `SIGTTIN`. On macOS the guest then sees the child end by `SIGKILL`. A prompt,
-  `git commit` opening an editor, or a pager under `inherit_stdio` fails this
-  way. Input from a pipe or a file is unaffected.
-- On macOS a child cannot change the mode of an inherited terminal. The profile
-  allows no `file-ioctl`, so `tcsetattr` and `tcgetpgrp` fail with `EPERM`
-  (`stty -echo`, a password prompt, a full-screen editor). `tcgetattr` and
-  `TIOCGWINSZ` succeed, and `TIOCSTI` stays refused.
+- Of children running at once, only the first to inherit a stream from the
+  terminal holds it. Another starts while the host no longer holds the
+  terminal, so it runs in the background and stops at its first read of it.
 - On macOS a child reads the arguments of every process its user runs, through
   `sysctl(KERN_PROCARGS2)`. Of each process not built as a platform binary it
   reads the whole environment too, `wado`'s own among them, so a token in the

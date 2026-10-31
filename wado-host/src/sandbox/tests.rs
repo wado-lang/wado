@@ -8,9 +8,9 @@
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::Read;
+use std::io::{Read, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::os::unix::fs::{PermissionsExt, symlink};
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt, symlink};
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -70,13 +70,13 @@ fn under_an_enclosing_listener_a_child_runs_unobserved() {
 }
 
 /// Whether the test `test` passes in this binary re-executed with `var` set,
-/// after `setup` runs between `fork` and `exec`.
+/// after `setup` runs between `fork` and `exec`. A re-execution that runs past
+/// a deadline is killed and fails.
 ///
 /// # Safety
 ///
 /// `setup` must be safe in the child of a multithreaded process: system calls
 /// on memory built before the fork alone.
-#[cfg(target_os = "linux")]
 unsafe fn reexecute(
     test: &str,
     var: &str,
@@ -84,13 +84,137 @@ unsafe fn reexecute(
 ) -> bool {
     use std::os::unix::process::CommandExt;
 
+    const DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
     let mut command = std::process::Command::new(std::env::current_exe().unwrap());
     command
         .args(["--exact", test, "--test-threads=1", "--quiet"])
         .env(var, "1");
     // SAFETY: as the caller vouches.
     unsafe { command.pre_exec(setup) };
-    command.status().unwrap().success()
+    let mut child = command.spawn().unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            return status.success();
+        }
+        if start.elapsed() > DEADLINE {
+            child.kill().unwrap();
+            child.wait().unwrap();
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+/// Set in a re-execution whose standard input is a terminal it controls.
+const TERMINAL_VAR: &str = "WADO_SANDBOX_TERMINAL";
+
+/// A child that inherits the host's terminal holds it while it runs, as the
+/// child of an unconfined spawn does: it reads the terminal and sets its mode.
+/// The host holds it again once the child exits.
+#[test]
+fn a_child_holds_the_terminal_it_inherits() {
+    assert_available();
+    // SAFETY: plain calls on the pseudo-terminal they open.
+    let (master, slave) = unsafe {
+        let master = libc::posix_openpt(libc::O_RDWR | libc::O_NOCTTY);
+        assert!(master >= 0);
+        assert_eq!(libc::grantpt(master), 0);
+        assert_eq!(libc::unlockpt(master), 0);
+        let name = libc::ptsname(master);
+        assert!(!name.is_null());
+        let slave = std::ffi::CStr::from_ptr(name).to_owned();
+        (OwnedFd::from_raw_fd(master), slave)
+    };
+    // Darwin blocks a write to the master until the slave is open.
+    let _open = File::options()
+        .read(true)
+        .custom_flags(libc::O_NOCTTY)
+        .open(slave.to_str().unwrap())
+        .unwrap();
+    // Typed before the child reads it: the terminal holds the line.
+    File::from(master.try_clone().unwrap())
+        .write_all(b"typed\n")
+        .unwrap();
+    // The terminal echoes, and closing the slave waits until its output is
+    // read.
+    let mut echo = File::from(master.try_clone().unwrap());
+    std::thread::spawn(move || std::io::copy(&mut echo, &mut std::io::sink()));
+    // SAFETY: the closure makes only system calls, on a path built before the
+    // fork.
+    let passed = unsafe {
+        reexecute("sandbox::tests::terminal", TERMINAL_VAR, move || {
+            if libc::setsid() < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            // A session leader with no terminal takes the first it opens.
+            let fd = libc::open(slave.as_ptr(), libc::O_RDWR);
+            if fd < 0 || libc::dup2(fd, 0) < 0 || libc::dup2(fd, 1) < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        })
+    };
+    drop(master);
+    assert!(passed);
+}
+
+/// Not a test of its own: the half of the test above that holds a terminal.
+#[test]
+fn terminal() {
+    if std::env::var_os(TERMINAL_VAR).is_none() {
+        return;
+    }
+    let tree = Tree::new();
+    let mut policy = tree.policy(Network::Denied);
+    policy.grant_terminal();
+    let dir = File::open(tree.granted()).unwrap();
+    let args: Vec<OsString> = [
+        "-c",
+        "stty -echo && stty echo && read line && printf %s \"$line\"",
+    ]
+    .iter()
+    .map(OsString::from)
+    .collect();
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd: Some(&dir),
+        stdin: Stdio::Inherit,
+        stdout: Stdio::Piped,
+        stderr: Stdio::Inherit,
+        policy: &policy,
+        trace: Trace::Off,
+    })
+    .unwrap();
+    let mut out = String::new();
+    File::from(spawned.stdout.unwrap())
+        .read_to_string(&mut out)
+        .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
+    assert_eq!(out, "typed");
+    // SAFETY: plain system calls.
+    assert_eq!(unsafe { libc::tcgetpgrp(0) }, unsafe { libc::getpgrp() });
+    // A child that inherits only stdout from the terminal holds it too: set
+    // from the background, the mode would stop it with `SIGTTOU`.
+    let args: Vec<OsString> = ["-c", "stty -echo <&1 && stty echo <&1"]
+        .iter()
+        .map(OsString::from)
+        .collect();
+    let spawned = spawn(&Command {
+        program: Path::new("/bin/sh"),
+        args: &args,
+        env: &[(OsString::from("PATH"), OsString::from("/usr/bin:/bin"))],
+        cwd: Some(&dir),
+        stdin: Stdio::Null,
+        stdout: Stdio::Inherit,
+        stderr: Stdio::Inherit,
+        policy: &policy,
+        trace: Trace::Off,
+    })
+    .unwrap();
+    assert_eq!(spawned.child.wait().unwrap(), OK);
 }
 
 /// Set in a re-execution that may not read a non-dumpable child's memory.
