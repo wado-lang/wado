@@ -1539,6 +1539,9 @@ pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
 /// to another as ONNX's `Cast` does: a bool is 1 or 0, and anything nonzero is
 /// true.
 pub trait Element with () {
+    /// Which element this is, for a graph that records its operations rather
+    /// than computing them.
+    fn kind() -> ElementKind;
     fn cast_to<T: Element>(&self) -> T;
     fn from_f32(v: f32) -> Self;
     fn from_i64(v: i64) -> Self;
@@ -1546,7 +1549,7 @@ pub trait Element with () {
     /// Whether this is `f32`, the one element a GPU computes in: WGSL has
     /// neither `i64` nor a stored `bool`.
     fn is_f32() -> bool {
-        return false;
+        return Self::kind() matches { F32 };
     }
     /// Whether an f32 holds every value of this exactly, so a GPU can store
     /// it as one: `f32` itself, and `bool` as 1.0 and 0.0.
@@ -1555,13 +1558,20 @@ pub trait Element with () {
     }
 }
 
+/// Each [`Element`].
+pub enum ElementKind {
+    F32,
+    I64,
+    Bool,
+}
+
 impl Element for f32 {
-    fn cast_to<T: Element>(&self) -> T {
-        return T::from_f32(*self);
+    fn kind() -> ElementKind {
+        return ElementKind::F32;
     }
 
-    fn is_f32() -> bool {
-        return true;
+    fn cast_to<T: Element>(&self) -> T {
+        return T::from_f32(*self);
     }
 
     fn from_f32(v: f32) -> f32 {
@@ -1578,6 +1588,10 @@ impl Element for f32 {
 }
 
 impl Element for i64 {
+    fn kind() -> ElementKind {
+        return ElementKind::I64;
+    }
+
     fn cast_to<T: Element>(&self) -> T {
         return T::from_i64(*self);
     }
@@ -1596,6 +1610,10 @@ impl Element for i64 {
 }
 
 impl Element for bool {
+    fn kind() -> ElementKind {
+        return ElementKind::Bool;
+    }
+
     fn cast_to<T: Element>(&self) -> T {
         return T::from_bool(*self);
     }

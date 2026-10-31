@@ -209,6 +209,11 @@ pub affine trait Graph: Holds with _ {
         then: fn() -> T with _,
         otherwise: fn() -> T with _,
     ) -> T with _;
+    /// `x` as a result of the branch being built, each in the order the
+    /// branch returns them.
+    fn yielded<E: Element, Axes>(&mut self, x: &Self::Tensor<E, Axes>) -> Self::Tensor<E, Axes> {
+        return *x;
+    }
 
     /// onnxruntime's `GroupQueryAttention` (its `docs/ContribOperators.md`),
     /// as `group_query_attention` in the kernels computes it, decomposed into

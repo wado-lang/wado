@@ -2204,11 +2204,18 @@ fn branch_lines(
     for let [i, vi] of graph.outputs.into_iter().enumerate() {
         let from = branch.shapes[vi.name];
         let to = around.shapes[node.outputs[i]];
-        if axis_list(&from) == axis_list(&to) {
-            yielded.push(inner.value(&vi.name));
-            continue;
-        }
-        yielded.push(relabeled(holder, &around.primitives[node.outputs[i]], &from, &to, &inner.reference(&vi.name)));
+        let element = &around.primitives[node.outputs[i]];
+        let result = if axis_list(&from) == axis_list(&to) {
+            inner.value(&vi.name);
+        } else {
+            relabeled(holder, element, &from, &to, &inner.reference(&vi.name));
+        };
+        // A recording graph learns from `yielded` which of its tensors a
+        // branch returns.
+        yielded.push(match holder {
+            Kernels => result,
+            Built => `backend.yielded::<${*element}, [${axis_list(&to)}]>(&${result})`,
+        });
     }
     let value = if yielded.len() == 1 { yielded[0] } else { `[${yielded.join(", ")}]` };
     // A conditional's branch is a closure, which returns its value.

@@ -1679,6 +1679,16 @@ test "a name only arithmetic spells is read back from its length, after the name
     assert n < m;
 }
 
+test "a built branch returns each result through yielded, kernels' as it is" {
+    let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
+        Y = If <then_branch = t () => (float[2] A) { A = Neg(X) }, else_branch = e () => (float[2] B) { B = Relu(X) }> (C)
+    }`;
+    let body = generate(source).unwrap();
+    assert body.contains("return backend.yielded::<f32, [X0]>(&A);");
+    assert body.contains("return backend.yielded::<f32, [X0]>(&B);");
+    assert body.split("yielded").count() == 3;
+}
+
 test "a constant one branch folds is spelled in that branch" {
     let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
         Y = If <then_branch = t () => (float[2] A) { K = Constant<value_floats = [1.0, 2.0]>() A = Add(X, K) }, else_branch = e () => (float[2] B) { B = Neg(X) }> (C)
