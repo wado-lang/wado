@@ -2,8 +2,8 @@
 //! calls a half precision float or a wide integer needs, then the bare `Cast`
 //! codegen takes as one instruction or none.
 //!
-//! A function of the type table alone, at the `lower::` top level for callers
-//! either side of the planner / translator boundary, as `wide_int_literal` is.
+//! A matter of representation rather than a recorded decision: a function of
+//! the type table alone, which reify calls for every cast.
 
 use std::cell::RefCell;
 use std::ops::ControlFlow;

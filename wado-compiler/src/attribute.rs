@@ -757,10 +757,7 @@ pub fn wire_name_override(attrs: &[Attribute]) -> Option<String> {
 /// `NamePolicy` does not name.
 #[must_use]
 pub fn wire_name_policy(attrs: &[Attribute]) -> Option<NamePolicy> {
-    attrs
-        .iter()
-        .filter(|attr| attr.name == WIRE)
-        .find_map(|attr| attr.kv_value("name_policy").and_then(NamePolicy::parse))
+    NamePolicy::parse(&wire_value(attrs, "name_policy")?)
 }
 
 fn wire_fault(
