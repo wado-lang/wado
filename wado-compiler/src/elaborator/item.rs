@@ -2427,12 +2427,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Reject the body-less declaration attributes on a method requirement, in
     /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
-    /// and that impl is what answers each of them.
+    /// and that impl is what answers each of them. A method with a default body
+    /// is reported as any function with a body is: here, because a default no
+    /// impl takes is walked nowhere else.
     pub(super) fn reject_declaration_attrs_on_requirement(
         &mut self,
         owner: &str,
         method: &ast::Function,
     ) {
+        if method.body.is_some() {
+            self.reject_bodyless_attrs_on_body(&method.attrs);
+            return;
+        }
         for (attr, name, bodyless) in attribute::bodyless(&method.attrs) {
             let _ = self.emit(TypeError::AttributeOnRequirement {
                 owner: owner.to_string(),
@@ -2515,6 +2521,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let initializer_type = self.resolve_expr(&global_decl.initializer, &mut ctx, Some(ty));
 
         self.typecheck(initializer_type, ty, global_decl.initializer.span());
+        self.record_param_attr(global_decl);
     }
 
     /// Resolve a variant declaration
@@ -2746,6 +2753,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         drop(scope);
 
+        self.record_declared_attrs(func, &param_types, return_type);
         self.sem.types.fn_param_types.insert(func.id, param_types);
         self.sem.types.fn_return_types.insert(func.id, return_type);
         self.sem.types.decl_type_params.insert(func.id, type_params);
@@ -2869,6 +2877,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         drop(scope);
 
         // In `func.params` order, receiver included.
+        self.record_declared_attrs(func, &param_types, return_type);
         self.sem.types.fn_param_types.insert(func.id, param_types);
         self.sem.types.fn_return_types.insert(func.id, return_type);
         self.sem.types.decl_type_params.insert(func.id, type_params);

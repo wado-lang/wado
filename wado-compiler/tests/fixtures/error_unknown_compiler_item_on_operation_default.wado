@@ -1,0 +1,18 @@
+// An operation's default body is a function of its own, so a
+// `#[compiler_item]` naming no item is an error there as on any function.
+// The attribute is the standard library's, so this file is one of its modules.
+#![stdlib("core:simd")]
+
+interface Probe {
+    #[compiler_item("no_such_item")]
+    fn ping() -> i32 {
+        return 1;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "unknown compiler item `no_such_item`"
+}

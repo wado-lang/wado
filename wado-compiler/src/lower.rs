@@ -5,6 +5,7 @@
 //! [`plan::LowerPlan`]. [`translate::translate`] is then a single fold.
 
 pub mod bare_asserts;
+pub(crate) mod cast;
 mod cold_paths;
 pub mod contract_checks;
 pub mod plan;
