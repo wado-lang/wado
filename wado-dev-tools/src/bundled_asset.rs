@@ -7,6 +7,8 @@ use std::fmt::Write as _;
 use lexopt::Arg::{Long, Value};
 use wado_wasm_embed::dataref::{self, DataRefs};
 
+use crate::wasm_tools;
+
 /// Custom sections the asset has no use for: the relocations are spent once the
 /// map is resolved, and nothing ever debugs the asset.
 fn is_spent(name: &str) -> bool {
@@ -46,29 +48,17 @@ fn core_wat(wasm: &[u8]) -> String {
     wat
 }
 
-/// Wrap the module into a component, as `wasm-tools component new` does: its
-/// `component-type` section says what the component exports. The text is
-/// parsed rather than the stripped binary, since the `wado.dataref` section
-/// exists only in the text.
+/// The text is parsed rather than the stripped binary, since the
+/// `wado.dataref` section exists only in the text.
 fn component_wat(core_wat: &str) -> String {
     let core = wat::parse_str(core_wat).expect("the printed core module must parse");
-    let component = wit_component::ComponentEncoder::default()
-        .validate(true)
-        .module(&core)
-        .expect("the core module must carry its `component-type` section")
-        .encode()
-        .expect("failed to encode the component");
-    to_wat(&component)
+    to_wat(&wasm_tools::encode_component(&core))
 }
 
 fn to_wat(wasm: &[u8]) -> String {
-    let mut wat = String::new();
     let mut config = wasmprinter::Config::new();
     config.fold_instructions(true);
-    config
-        .print(wasm, &mut wasmprinter::PrintFmtWrite(&mut wat))
-        .expect("failed to print wasm");
-    wat
+    wasm_tools::to_wat(&config, wasm)
 }
 
 /// Re-emit `wasm` without the sections [`is_spent`] names. Every other section
