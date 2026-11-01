@@ -397,9 +397,9 @@ impl Graph for WebGpuBackend {
 
     /// The backend's attention kernels, and the decomposition where they
     /// cannot run it. A shared past holds `past_length` valid positions, the
-    /// kernels attend over those and the new ones, and the present spans the
-    /// past's positions. Past the valid ones a causal attention reads none,
-    /// so the kernels compute what the decomposition does.
+    /// kernels attend over those and the new ones, as many columns of the bias,
+    /// and the present spans the past's positions. Past the valid ones a causal
+    /// attention reads none, so the kernels compute what the decomposition does.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,
@@ -414,17 +414,13 @@ impl Graph for WebGpuBackend {
         options: &Attention,
     ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let shared = past_length matches { Some(_) };
-        if !shared || options.causal && bias matches { None } {
+        if !shared || options.causal {
             let rotary = match [cos, sin] {
                 [Some(c), Some(s)] => Option::Some([
                     self.device_view(c),
                     self.device_view(s),
                 ]),
                 _ => null,
-            };
-            let biased = match bias {
-                Some(b) => Option::Some(self.device_view(b)),
-                None => null,
             };
             let [held_k, held_v] = [
                 self.device_view(past_k),
@@ -435,9 +431,14 @@ impl Graph for WebGpuBackend {
                 Some(l) => self.host(l).data[0] as i32,
                 None => positions,
             };
+            let query = self.device_view(q);
+            let biased = match bias {
+                Some(b) => Option::Some(sliced(&self.device_view(b), 3, 0, valid + query.extents[1])),
+                None => null,
+            };
             let spanned = if shared { positions } else { 0 };
             if let Some([out, present_k, present_v]) = self.attended(
-                &self.device_view(q),
+                &query,
                 &self.device_view(k),
                 &self.device_view(v),
                 &sliced(&held_k, 2, 0, valid),

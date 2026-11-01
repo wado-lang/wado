@@ -58,7 +58,7 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     }
 
     let case = cases::attention_case();
-    let expected = cases::attending(cpu, &case.inputs, &case.past, &case.rotation, &case.options);
+    let expected = cases::attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.options);
     let inputs = [
         gpu.upload(&case.inputs.0),
         gpu.upload(&case.inputs.1),
@@ -73,7 +73,12 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
         gpu.upload(&case.rotation.0),
         gpu.upload(&case.rotation.1),
     ];
-    let attended = cases::attending(&mut gpu, &inputs, &past, &rotation, &case.options);
+    let bias = gpu.upload(&case.bias);
+    let dispatched = gpu.dispatches();
+    let attended = cases::attending(&mut gpu, &inputs, &past, &rotation, &bias, &case.options);
+    // A past the backend did not fill is copied into a cache, then the kernels
+    // append, attend and join; the decomposition takes dozens.
+    assert gpu.dispatches() - dispatched == 5, "a causal attention over a shared cache runs in its kernels";
     println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
     // Past the valid positions and the new ones, a present holds padding.
     let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];

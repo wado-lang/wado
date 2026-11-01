@@ -11,6 +11,7 @@ use {
     Pt,
     Qt,
     St,
+    Tt,
     attending,
     attention_case,
     branching,
@@ -87,7 +88,7 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
     let [past_k, past_v, length] = case.past;
     let [cos, sin] = case.rotation;
     let cpu = &mut Cpu {};
-    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.options);
+    let want = attending(cpu, &case.inputs, &case.past, &case.rotation, &case.bias, &case.options);
     let mut r = Recorder::new();
     let inputs = [
         r.parameter::<f32, [Bt, St, Qt]>(q.extents),
@@ -103,7 +104,8 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         r.parameter::<f32, [Pos, Half]>(cos.extents),
         r.parameter::<f32, [Pos, Half]>(sin.extents),
     ];
-    let got = attending(&mut r, &inputs, &past, &rotation, &case.options);
+    let bias = r.parameter::<f32, [Bt, Ht, St, Tt]>(case.bias.extents);
+    let got = attending(&mut r, &inputs, &past, &rotation, &bias, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
     assert recorded.nodes[got.1.id].extents == want.1.extents;
     let arguments: List<Any<Cpu>> = [
@@ -115,6 +117,7 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         host_of(&length),
         host_of(&cos),
         host_of(&sin),
+        host_of(&case.bias),
     ];
     assert run(cpu, &recorded, &arguments) == [
         host_of(&want.0),
