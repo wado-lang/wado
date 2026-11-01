@@ -1,0 +1,34 @@
+// A closure in a generic function declares its locals in its own table, which
+// monomorphization substitutes like the rest of the body: a binding the closure
+// destructures is `&W<Pos>` there, as its pattern is, not `&W<T>`.
+
+struct W<T> {
+    v: T,
+}
+
+struct Pos {
+    p: i32,
+}
+
+fn both_present<T>(a: Option<&W<T>>, b: Option<&W<T>>) -> i32 {
+    let pick = |x: i32| {
+        let [Some(c), Some(n)] = [a, b] else {
+            return 0;
+        };
+        builtin::black_box(c);
+        builtin::black_box(n);
+        return x + 1;
+    };
+    return pick(1);
+}
+
+export fn run() {
+    let w = W { v: Pos { p: 1 } };
+    assert both_present(Some(&w), Some(&w)) == 2;
+    assert both_present(Some(&w), null) == 0;
+}
+
+__DATA__
+{
+    "stdout": ""
+}
