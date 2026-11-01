@@ -35,12 +35,30 @@ fn two_hops(r: &Holder, q: &mut Point) -> i32 {
     return read_x(*r.p, set(q));
 }
 
+struct Rows {
+    items: List<i32>,
+}
+
+// The box holds the caller's reference: the parameter binding being immutable
+// says nothing of the storage behind it, so `kept` stays a copy.
+#[inline("never")]
+fn len_across_push(rows: &mut Rows) -> i32 {
+    let rr = &rows;
+    builtin::black_box(rr);
+    let kept = rows.items;
+    rows.items.push(9);
+    return kept.len();
+}
+
 export fn run() {
     let mut u = Point { x: 1 };
     assert one_hop(&u, &mut u) == 101;
     let mut t = Point { x: 1 };
     let h = Holder { p: &t };
     assert two_hops(&h, &mut t) == 101;
+    let mut rows = Rows { items: [1, 2, 3] };
+    assert len_across_push(&mut rows) == 3;
+    assert rows.items.len() == 4;
 }
 
 __DATA__

@@ -121,8 +121,9 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
         remap_locals_in_block(body, &remap);
 
         // The shadow is declared as a boxed `let` local is: of the parameter's
-        // own type, which the lowering wraps in the box. A `let` of the box
-        // itself would hide from every analysis that the box holds what the
+        // own type, which the lowering wraps in the box, sharing the
+        // parameter's storage. A `let` of the box itself, or one that owns its
+        // value, would hide from every analysis that the box holds what the
         // parameter does, the caller's storage included.
         let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
         for (param_idx, shadow_idx, original_type_id, name) in &shadowed_params {
@@ -142,7 +143,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
                     is_mut: false,
                     type_id: *original_type_id,
                     value: param_read,
-                    storage: LetStorage::Taken,
+                    storage: LetStorage::Aliased,
                 },
                 span,
             ));
