@@ -40,8 +40,8 @@ impl Entry {
         let weights = Prepared::embedded(&mut opaque);
         let got = forward(&mut opaque, ${*args}&weights);`,
             Compute => `let mut cpu = Cpu {};
-        let params = Params::embedded(&mut cpu);
-        let got = compute(&mut cpu, ${*args}&params);`,
+        let mut model = Model::new(Params::embedded(&mut cpu));
+        let got = compute(&mut cpu, ${*args}&mut model);`,
         };
     }
 }

@@ -1,0 +1,33 @@
+// A variant instance built only inside a closure, one of whose cases holds a
+// struct instance nothing builds, still gets its WIR type.
+use { println, Stdout } from "core:cli";
+
+struct Box<E> {
+    data: List<E>,
+}
+
+variant Any<T> {
+    Float(Box<f32>),
+    Other(Box<T>),
+}
+
+fn executed<T>(arguments: &List<Any<T>>) -> List<Any<T>> {
+    unreachable();
+}
+
+fn run_on<T>(arguments: fn() -> List<Any<T>>) -> List<Any<T>> with Stdout {
+    let given = arguments();
+    println(`${given.len()}`);
+    return executed(&given);
+}
+
+export fn run() with Stdout {
+    let x = Box::<f32> { data: [1.0] };
+    run_on::<i64>(|| [Any::Float(x)]);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "trapped": true
+}

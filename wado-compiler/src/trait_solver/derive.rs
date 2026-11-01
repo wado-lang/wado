@@ -15,12 +15,12 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
     let has_impl = covered_heads(program, trait_);
     program.traits.entry(trait_).or_default().structural = true;
     let mut standing: Vec<(&Declaration, ImplId, Env)> = Vec::new();
+    program.declare(declarations);
     for decl in declarations {
-        program.declarations.insert(decl.id, decl.clone());
         if has_impl.contains(&decl.id) || !sourced(program, trait_, decl) {
             continue;
         }
-        let bounds = derived_bounds(trait_, decl, program.copyable == Some(trait_));
+        let bounds = derived_bounds(trait_, decl, program);
         let id = program.push_impl(ImplDef {
             trait_: Some(trait_),
             trait_args: Vec::new(),
@@ -46,7 +46,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
         standing.push((decl, id, env));
     }
     // Removing an impl only fails more, so the round order does not change the
-    // fixpoint.
+    // fixpoint. A projected member is asked at each instance instead.
     loop {
         let unsatisfied: IndexSet<ImplId> = standing
             .iter()
@@ -54,6 +54,7 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
                 !decl
                     .members
                     .iter()
+                    .filter(|member| !member.projects_param(&program.projecting))
                     .all(|member| holds(program, env, member, trait_).is_some())
             })
             .map(|(_, id, _)| *id)
@@ -87,19 +88,17 @@ pub fn derive_alongside(program: &mut Program, trait_: TraitDeclId, derived: Vec
 fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId> {
     program
         .impls_of(trait_)
-        .map(|(_, def)| def)
-        .filter(|def| at_defaults(program, def))
-        .filter_map(|def| match &def.target {
-            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
-            SolverType::Decl(..)
-            | SolverType::Param(_)
-            | SolverType::Pack(_)
-            | SolverType::Ref { .. }
-            | SolverType::Tuple(_)
-            | SolverType::Projection { .. }
-            | SolverType::AnyRow => None,
-        })
+        .filter_map(|(_, def)| covered_head(program, def))
         .collect()
+}
+
+/// The head `def` answers at every instance, at the trait's default
+/// arguments; `None` where it answers fewer.
+fn covered_head(program: &Program, def: &ImplDef) -> Option<TypeDeclId> {
+    let SolverType::Decl(head, _) = def.target else {
+        return None;
+    };
+    (covers_every_instance(def) && at_defaults(program, def)).then_some(head)
 }
 
 /// Whether a source of `trait_` holds of `decl` at its own parameters, which
@@ -125,6 +124,40 @@ fn decl_params(decl: &Declaration) -> Vec<SolverType> {
             }
         })
         .collect()
+}
+
+/// Each bound a written impl of `trait_` covering `head` ([`covered_head`])
+/// puts on one of `head`'s arguments, by the argument's position: an instance
+/// holds the trait only where its arguments meet them. A bound that writes the
+/// trait's arguments is left out. `None` where no such impl is written.
+#[must_use]
+pub fn written_over(
+    program: &Program,
+    trait_: TraitDeclId,
+    head: TypeDeclId,
+) -> Option<Vec<(usize, TraitDeclId)>> {
+    let def = program.impls_of(trait_).map(|(_, def)| def).find(|def| {
+        def.origin == ImplOrigin::Written && covered_head(program, def) == Some(head)
+    })?;
+    let SolverType::Decl(_, args) = &def.target else {
+        unreachable!("a covered head is a declaration's");
+    };
+    Some(
+        args.iter()
+            .enumerate()
+            .filter_map(|(position, arg)| match arg {
+                SolverType::Param(index) => Some((position, *index)),
+                _ => None,
+            })
+            .flat_map(|(position, index)| {
+                def.params[index as usize]
+                    .bounds
+                    .iter()
+                    .filter(|b| b.args.is_empty())
+                    .map(move |b| (position, b.trait_))
+            })
+            .collect(),
+    )
 }
 
 /// Whether `def` reaches every instance of its target's head: the target names
@@ -178,15 +211,21 @@ pub fn pair_comparisons(program: &mut Program, eq: TraitDeclId, ord: TraitDeclId
 
 /// The bound each parameter of the derived impl carries: `trait_` where a
 /// member mentions it, none otherwise. A reference copies whatever it points
-/// to, so for `Copyable` a mention behind one does not count.
+/// to, so for `Copyable` a mention behind one does not count. A projected
+/// member is asked at each instance, so its mentions bound nothing.
 fn derived_bounds(
     trait_: TraitDeclId,
     decl: &Declaration,
-    copyable: bool,
+    program: &Program,
 ) -> Vec<Vec<TraitDeclId>> {
+    let copyable = program.copyable == Some(trait_);
     (0..decl.params)
         .map(|index| {
-            let mentioned = decl.members.iter().any(|m| {
+            let mut unprojected = decl
+                .members
+                .iter()
+                .filter(|m| !m.projects_param(&program.projecting));
+            let mentioned = unprojected.any(|m| {
                 if copyable {
                     m.owns_param(index)
                 } else {
@@ -306,6 +345,43 @@ mod tests {
             ],
         );
         assert_eq!(targets(&d), vec![decl(POINT)]);
+    }
+
+    /// `variant Any<G: Holds> { F(G::T) }` derives with no bound on `G`, its
+    /// member asked at each instance: `Any<Dev>` is `Eq` where `Dev` binds `T`
+    /// to `List<i32>`, and `Any<Opaque>` is not where `Opaque` binds it to
+    /// itself. `struct Node<G> { any: Any<G> }` reaches the projection through
+    /// `Any`, so it is asked the same way.
+    #[test]
+    fn a_member_projected_off_a_parameter_is_asked_at_each_instance() {
+        const HOLDS: TraitDeclId = TraitDeclId(2);
+        const T: AssocId = AssocId(0);
+        const DEV: TypeDeclId = TypeDeclId(8);
+        let projected = SolverType::Projection {
+            base: Box::new(SolverType::Param(0)),
+            trait_: HOLDS,
+            assoc: T,
+            args: vec![],
+        };
+        let mut p = prelude();
+        let dev = p.push_impl(concrete(HOLDS, decl(DEV)));
+        let opaque = p.push_impl(concrete(HOLDS, decl(OPAQUE)));
+        p.assoc_bindings
+            .insert(dev, vec![(T, SolverType::Decl(LIST, vec![decl(I32)]))]);
+        p.assoc_bindings.insert(opaque, vec![(T, decl(OPAQUE))]);
+        let declarations = [
+            declaration(WRAPPER, 1, vec![projected]),
+            declaration(NODE, 1, vec![wrapper_of(SolverType::Param(0))]),
+        ];
+        let d = derived(p.clone(), &declarations);
+        assert!(d.iter().all(|def| def.params == vec![ParamDef::default()]));
+        derive(&mut p, EQ, &declarations);
+        let at = |head, arg| {
+            let ty = SolverType::Decl(head, vec![decl(arg)]);
+            holds(&p, &Env::default(), &ty, EQ).is_some()
+        };
+        assert!(at(WRAPPER, DEV) && at(NODE, DEV));
+        assert!(!at(WRAPPER, OPAQUE) && !at(NODE, OPAQUE));
     }
 
     /// A plain `enum` or `flags` has no members and derives unconditionally.

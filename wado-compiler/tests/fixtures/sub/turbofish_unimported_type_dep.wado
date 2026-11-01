@@ -1,0 +1,41 @@
+pub struct Shown {}
+
+pub struct Hidden {}
+
+pub struct Value<E, Axes> {
+    pub id: i32,
+}
+
+pub fn made<E, Axes>() -> Value<E, Axes> {
+    return Value { id: 1 };
+}
+
+impl<E, Axes> Value<E, Axes> {
+    pub fn fresh() -> Value<E, Axes> {
+        return Value { id: 1 };
+    }
+}
+
+pub trait Holds with () {
+    type Tensor<E, Axes>;
+    fn id_of<E, Axes>(&self, t: &Self::Tensor<E, Axes>) -> i32;
+}
+
+pub struct Recorder {}
+
+impl Recorder {
+    pub fn parameter<E, Axes>(&mut self, extents: List<i32>) -> Value<E, Axes> {
+        return Value { id: extents.len() };
+    }
+}
+
+impl Holds for Recorder {
+    type Tensor<E, Axes> = Value<E, Axes>;
+    fn id_of<E, Axes>(&self, t: &Value<E, Axes>) -> i32 {
+        return t.id;
+    }
+}
+
+pub fn taken<G: Holds>(g: &mut G, v: &G::Tensor<f32, [Shown, Hidden]>) -> i32 {
+    return g.id_of(v);
+}

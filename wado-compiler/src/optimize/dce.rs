@@ -1615,6 +1615,7 @@ fn populate_type_reachability(
     // the loop mutates. Recomputing it per round put a whole-program walk inside
     // the pass's hot spot. `remove_unreachable_types` hoists it the same way.
     let kept_past_use = variant_decls_kept_past_use(project, &project.type_table.borrow());
+    let instance_payloads = variant_instance_payloads(project);
 
     let mut changed = true;
     while changed {
@@ -1669,6 +1670,13 @@ fn populate_type_reachability(
                 }
             }
         }
+        for (instance, payloads) in &instance_payloads {
+            if analysis.types.contains(instance) {
+                for &payload in payloads {
+                    collect_type_transitive(payload, &type_table, &mut analysis.types);
+                }
+            }
+        }
 
         // Collect type dependencies (array elements, option inner, etc.)
         let current_types: Vec<TypeId> = analysis.types.iter().copied().collect();
@@ -1690,6 +1698,34 @@ fn populate_type_reachability(
         let type_table = project.type_table.borrow();
         analysis.refresh_indexes(&type_table);
     }
+}
+
+/// Each concrete instance of a generic variant, with its case payloads as WIR
+/// lowers the instance with them. A reachable instance keeps these, where the
+/// declaration's own payloads name only its type parameters.
+fn variant_instance_payloads(project: &NirPackage) -> Vec<(TypeId, Vec<TypeId>)> {
+    let instances: Vec<(TypeId, DefId, Vec<TypeId>)> = {
+        let type_table = project.type_table.borrow();
+        type_table
+            .iter_type_ids()
+            .filter_map(|id| {
+                let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                    return None;
+                };
+                let concrete = !type_args
+                    .iter()
+                    .any(|&arg| type_table.contains_type_param(arg));
+                concrete.then(|| (id, *def, type_args.clone()))
+            })
+            .collect()
+    };
+    instances
+        .into_iter()
+        .filter_map(|(id, def, type_args)| {
+            let cases = project.variant_cases(def, &type_args)?;
+            Some((id, cases.into_iter().map(|(_, payload)| payload).collect()))
+        })
+        .collect()
 }
 
 /// Add a type and its dependencies to the reachable set

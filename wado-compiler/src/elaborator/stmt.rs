@@ -424,17 +424,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report a written type position naming a type no declaration answers
-    /// here. Unlike a bound or a signature it names no type parameter it does
-    /// not already have in scope, so the site's answer is decisive.
-    pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
-        if self.logger.has_errors() {
-            return;
+    /// here, and say whether it did. Unlike a bound or a signature it names no
+    /// type parameter it does not already have in scope, so the site's answer
+    /// is decisive.
+    pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) -> bool {
+        !self.logger.has_errors() && self.reject_unresolved_heads(ty)
+    }
+
+    /// [`Self::reject_unresolved_annotation`] over each of a turbofish's
+    /// arguments, which name types as an annotation does. Each is reported
+    /// whatever was reported before, as the call's own resolution reaches it.
+    pub(super) fn reject_unresolved_args(&mut self, args: &[ast::Type]) {
+        for arg in args {
+            self.reject_unresolved_heads(arg);
         }
+    }
+
+    /// Report each head of `ty` naming no type here, and say whether one did.
+    fn reject_unresolved_heads(&mut self, ty: &ast::Type) -> bool {
+        let mut reported = false;
         self.walk_type_heads(ty, &mut |scope, id, name, span, has_args| {
             if name == "Self" || scope.annotate_ctx.trait_ctx.type_params.contains_key(name) {
                 return false;
             }
             if scope.reject_non_type_decl(id, name, span) {
+                reported = true;
                 return true;
             }
             if scope.decl_key_at(Some(id), name).is_some() {
@@ -449,8 +463,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: name.to_string(),
                 span,
             });
+            reported = true;
             true
         });
+        reported
     }
 
     /// Resolve a local newtype, reporting whether its base came out known.

@@ -144,12 +144,13 @@ pub struct Half {
 }
 
 /// Attention over a past of `past.2` positions in a shared buffer, turned by
-/// `rotation`.
+/// `rotation`, biased over the buffer's positions by `bias`.
 pub fn attending<affine G: Graph>(
     g: &mut G,
     inputs: &[G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, St, Kt]>, G::Tensor<f32, [Bt, St, Kt]>],
     past: &[G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<f32, [Bt, Ht, Pt, Dt]>, G::Tensor<i64, []>],
     rotation: &[G::Tensor<f32, [Pos, Half]>, G::Tensor<f32, [Pos, Half]>],
+    bias: &G::Tensor<f32, [Bt, Ht, St, Tt]>,
     options: &Attention,
 ) -> [G::Tensor<f32, [Bt, St, Qt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>, G::Tensor<f32, [Bt, Ht, Tt, Dt]>] with _ {
     return g.group_query_attention::<Bt, St, Qt, Kt, Ht, Pt, Tt, Dt, Pos, Half, Bt, Ht>(
@@ -161,7 +162,7 @@ pub fn attending<affine G: Graph>(
         Option::Some(&past.2),
         Option::Some(&rotation.0),
         Option::Some(&rotation.1),
-        null,
+        Option::Some(bias),
         options,
     );
 }
@@ -199,11 +200,13 @@ pub fn branching_inputs(p: bool) -> [Tensor<bool, [C]>, Tensor<f32, [A]>] {
     ];
 }
 
-/// `attending`'s arguments: a past of one position in a buffer of four.
+/// `attending`'s arguments: a past of one position in a buffer of four, and a
+/// bias shared by the heads, as a decoder makes one of its attention mask.
 pub struct AttentionCase {
     pub inputs: [Tensor<f32, [Bt, St, Qt]>, Tensor<f32, [Bt, St, Kt]>, Tensor<f32, [Bt, St, Kt]>],
     pub past: [Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<f32, [Bt, Ht, Pt, Dt]>, Tensor<i64, []>],
     pub rotation: [Tensor<f32, [Pos, Half]>, Tensor<f32, [Pos, Half]>],
+    pub bias: Tensor<f32, [Bt, Ht, St, Tt]>,
     pub options: Attention,
 }
 
@@ -227,6 +230,12 @@ pub fn attention_case() -> AttentionCase {
             noisy([positions, d / 2], 6),
             noisy([positions, d / 2], 7),
         ],
+        // The past position, the two new ones, then padding, which a causal
+        // attention never reads, so a large bias there shows a read of it.
+        bias: Tensor {
+            data: [0.25, -0.5, 0.0, 7.0, -0.75, 0.5, 0.3, 7.0],
+            extents: [batch, 1, s, capacity],
+        },
         options: Attention { heads, kv_heads: kv, scale: 0.5, softcap: 0.0, window: -1, causal: true },
     };
 }

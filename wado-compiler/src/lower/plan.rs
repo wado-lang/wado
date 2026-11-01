@@ -119,7 +119,6 @@ pub fn plan(
     let closure = in_span(profiler, "lower/closure", || closure::plan(flat));
     boxing::shadow_new_functions(flat, &box_plan, lifted_from);
     globals::build_initialize_modules(flat);
-    flat.rebuild_variant_indices();
     lift_mut::lift_mut_match_bindings(flat);
     let value_copy = value_copy::plan(
         flat,

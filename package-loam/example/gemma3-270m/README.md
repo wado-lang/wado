@@ -21,6 +21,20 @@ collector can use, so it runs under `--collector drc`.
 and the model as a library. The model keeps the attention cache between
 calls, so a call that extends the last one's ids runs only the new ones.
 
+## On a WebGPU device
+
+`webgpu.wado` and `webgpu_compute.wado` continue each prompt `generate.json`
+records on `WebGpuBackend`. They print what `gemma3.wado` prints with no prompt,
+and the dispatches and read backs a token takes. `webgpu.wado` runs a token as a
+`pass` through the kernels, and `webgpu_compute.wado` as a `compute` through
+the program the backend compiled for the shape class:
+
+    cd package-loam/example/gemma3-270m
+    wado run-webgpu webgpu.wado
+    wado run-webgpu webgpu_compute.wado
+
+`continued.wado` holds what the two share.
+
 ## What the build reads
 
 The model is

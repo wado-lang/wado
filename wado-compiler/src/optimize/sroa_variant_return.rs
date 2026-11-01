@@ -23,7 +23,6 @@ use super::arena_query;
 use super::gate::{FunctionGate, GatedPass};
 use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
-use crate::module_source::ModuleSource;
 use crate::nir_visitor::reachable_exprs;
 use crate::parallel::Executor;
 
@@ -868,35 +867,12 @@ fn tail_call_callees(body: &Body) -> Vec<FuncId> {
 /// The variant declaration behind a return type, with its case payloads
 /// substituted against the instance's type arguments.
 fn variant_cases(project: &NirPackage, type_id: TypeId) -> Option<(Vec<String>, Vec<TypeId>)> {
-    let (name, module_source, type_args) = {
-        let type_table = project.type_table.borrow();
-        match type_table.get(type_id) {
-            ResolvedType::Variant { .. } => {
-                let (n, m) = type_table.nominal_head(type_id)?;
-                (n, m, Vec::new())
-            }
-            ResolvedType::GenericInstance { type_args, .. } => {
-                let args = type_args.clone();
-                let (n, m) = type_table.nominal_head(type_id)?;
-                (n, m, args)
-            }
-            _ => return None,
-        }
+    let (def, type_args) = match project.type_table.borrow().get(type_id) {
+        ResolvedType::Variant { def } => (*def, Vec::new()),
+        ResolvedType::GenericInstance { def, type_args } => (*def, type_args.clone()),
+        _ => return None,
     };
-    let decl = project.find_variant(&module_source, &name)?;
-    let names: Vec<String> = decl.cases.iter().map(|c| c.name.clone()).collect();
-    let templates: Vec<TypeId> = decl.cases.iter().map(|c| c.payload).collect();
-    let substitution: IndexMap<u32, TypeId> = type_args
-        .iter()
-        .enumerate()
-        .map(|(i, arg)| (u32::try_from(i).expect("too many type params"), *arg))
-        .collect();
-    let mut type_table = project.type_table.borrow_mut();
-    let payloads = templates
-        .into_iter()
-        .map(|t| type_table.substitute_type_params(t, &substitution))
-        .collect();
-    Some((names, payloads))
+    Some(project.variant_cases(def, &type_args)?.into_iter().unzip())
 }
 
 /// How a payload type reaches its slot.
@@ -1036,7 +1012,12 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
                 // `wir_build` registers an `Option<T>` instance off the
                 // declaration; without it the minted slot type has no WIR
                 // registration and codegen panics.
-                project.find_variant(&option_module(project)?, "Option")?;
+                project.find_variant(
+                    project
+                        .type_table
+                        .borrow()
+                        .compiler_item_def(CompilerItem::Option)?,
+                )?;
                 let option_type = project.type_table.borrow_mut().make_option(*payload);
                 (option_type, Pad::NoneOf(option_type), true)
             }
@@ -1085,16 +1066,6 @@ fn compute_layout(project: &NirPackage, variant_type: TypeId) -> Option<Layout> 
         null_case,
         option,
     })
-}
-
-/// Where `Option` is declared, per `#[compiler_item("option")]`.
-fn option_module(project: &NirPackage) -> Option<ModuleSource> {
-    project
-        .type_table
-        .borrow()
-        .compiler_items()
-        .variant_module(CompilerItem::Option)
-        .cloned()
 }
 
 /// The `{Unit, Payload(GC ref)}` shape `wir_optimize::nullable_ref` erases.
@@ -2114,18 +2085,25 @@ fn rewrite_call_sites(
         // than left to it. An aliased temp is not a pure destructure target, and
         // retyping it would hand a tuple to a reference cell the rebox can no
         // longer repair. A temp that fails is dropped and reboxed instead.
-        bound.retain(|&local, &mut f| {
-            !func.address_taken_locals.contains(&local)
-                && temp_uses_rewritable(&body, local, &rebind, &candidates[&f].layout)
+        let layouts: IndexMap<u32, &Layout> = bound
+            .iter()
+            .map(|(&local, f)| (local, &candidates[f].layout))
+            .collect();
+        let unrewritable = unrewritable_temps(&body, &layouts, &rebind);
+        bound.retain(|local, _| {
+            !func.address_taken_locals.contains(local) && !unrewritable.contains(local)
         });
         if !bound.is_empty() {
-            for (&local, &f) in &bound {
-                let tuple_type = candidates[&f].layout.tuple_type;
+            let tuple_types: IndexMap<u32, TypeId> = bound
+                .iter()
+                .map(|(&local, f)| (local, candidates[f].layout.tuple_type))
+                .collect();
+            for (&local, &tuple_type) in &tuple_types {
                 let slot = &mut func.locals[local as usize].type_id;
                 changed |= *slot != tuple_type;
                 *slot = tuple_type;
-                changed |= retype_let(&mut body, local, tuple_type);
             }
+            changed |= retype_lets(&mut body, &tuple_types);
             let names: Vec<String> = func.locals.iter().map(|l| l.name.clone()).collect();
             let root = body.root();
             let bound: IndexMap<u32, Candidate> = bound
@@ -2682,90 +2660,65 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
     changed
 }
 
-/// Whether every mention of `local` is one the rewrite lowers: a destructure, or
-/// a bare read it rebuilds the variant for. A `Match` arm deeper than one level
-/// has no tag form, and leaves the site to the rebox.
-fn temp_uses_rewritable(body: &Body, local: u32, rebind: &Rebind, layout: &Layout) -> bool {
-    let mut ok = true;
-    check_temp_uses(
+/// The temps of `layouts` some mention of which the rewrite cannot lower. It
+/// lowers a destructure and a bare read, which it rebuilds the variant for,
+/// but a `Match` arm deeper than one level has no tag form, and leaves the
+/// site to the rebox. One walk answers for every temp.
+fn unrewritable_temps(
+    body: &Body,
+    layouts: &IndexMap<u32, &Layout>,
+    rebind: &Rebind,
+) -> IndexSet<u32> {
+    let mut refused = IndexSet::default();
+    let mut binding: Vec<u32> = Vec::new();
+    refuse_temp_uses(
         body,
         NodeRef::Block(body.root()),
-        local,
+        layouts,
         rebind,
-        layout,
-        &mut ok,
+        &mut binding,
+        &mut refused,
     );
-    ok
+    refused
 }
 
-fn check_temp_uses(
+/// Refuses each temp a `Match` under `node` cannot be lowered for. `binding`
+/// holds the temps whose own initializer `node` is in, which is the call and
+/// not a use.
+fn refuse_temp_uses(
     body: &Body,
     node: NodeRef,
-    local: u32,
+    layouts: &IndexMap<u32, &Layout>,
     rebind: &Rebind,
-    layout: &Layout,
-    ok: &mut bool,
+    binding: &mut Vec<u32>,
+    refused: &mut IndexSet<u32>,
 ) {
-    if !*ok {
-        return;
-    }
     if let NodeRef::Stmt(s) = node
         && let StmtKind::Let {
             local_index, value, ..
         } = &body.stmts[s].kind
-        && *local_index == local
+        && layouts.contains_key(local_index)
+        && let Some(e) = value.as_expr()
+        && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
     {
-        // The binding's own initializer is the call, not a use.
-        if let Some(e) = value.as_expr()
-            && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
-        {
-            return;
-        }
+        binding.push(*local_index);
+        body.for_each_child(node, |c| {
+            refuse_temp_uses(body, c, layouts, rebind, binding, refused);
+        });
+        binding.pop();
+        return;
     }
-    if let NodeRef::Expr(e) = node {
-        match &body.exprs[e].kind {
-            ExprKind::VariantTag { expr }
-            | ExprKind::VariantTest { expr, .. }
-            | ExprKind::VariantPayload { expr, .. } => {
-                if is_local(body, *expr, local) {
-                    return;
-                }
-            }
-            ExprKind::Match { expr: scrut, arms } => {
-                if is_local(body, *scrut, local) {
-                    if !arms_are_one_level(body, arms, rebind, layout) {
-                        *ok = false;
-                        return;
-                    }
-                    let arms = arms.clone();
-                    for a in &arms {
-                        if let Some(g) = a.guard
-                            && let Some(ge) = g.as_expr()
-                        {
-                            check_temp_uses(body, NodeRef::Expr(ge), local, rebind, layout, ok);
-                        }
-                        if let Some(be) = a.body.as_expr() {
-                            check_temp_uses(body, NodeRef::Expr(be), local, rebind, layout, ok);
-                        }
-                    }
-                    return;
-                }
-            }
-            ExprKind::Local { index, .. } if *index == local => {
-                return;
-            }
-            _ => {}
-        }
+    if let NodeRef::Expr(e) = node
+        && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
+        && let Some(local) = temp_local(body, *scrut, layouts)
+        && !binding.contains(&local)
+        && !arms_are_one_level(body, arms, rebind, layouts[&local])
+    {
+        refused.insert(local);
     }
     body.for_each_child(node, |c| {
-        check_temp_uses(body, c, local, rebind, layout, ok);
+        refuse_temp_uses(body, c, layouts, rebind, binding, refused);
     });
-}
-
-fn is_local(body: &Body, op: Operand, local: u32) -> bool {
-    op.as_expr().is_some_and(
-        |e| matches!(&body.exprs[e].kind, ExprKind::Local { index, .. } if *index == local),
-    )
 }
 
 fn temp_local<V>(body: &Body, op: Operand, bound: &IndexMap<u32, V>) -> Option<u32> {

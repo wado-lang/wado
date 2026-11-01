@@ -8,6 +8,7 @@ use {
     Expr,
     Holds,
     Merged,
+    Read,
     Tensor,
     UnaryOp,
     constant,
@@ -22,6 +23,7 @@ use {
     conv_grouped_bias,
     extent_mismatch,
     from_end,
+    fused_rows,
     gather,
     gather_rows,
     input_mismatch,
@@ -174,6 +176,19 @@ test "a row kernel over empty rows writes each row's fold of nothing" {
         true,
     );
     assert shifted.data == [1.0, 2.0, 3.0] as List<f32>;
+}
+
+test "a row kernel iterates its own extents, which its operands may each read per row" {
+    let per_row: List<f32> = [1.0, 2.0, 3.0];
+    let reads = [
+        Read::<[Row, Col]> {
+            data: &per_row,
+            extents: [3, 1],
+        },
+    ] as List<Read<[Row, Col]>>;
+    let summed = fused_rows::<[Row, Col], [Row, Col]>(&reads, &operand(0).row_sum(null), 1, true, [3, 4]);
+    assert summed.extents == [3, 1] as List<i32>;
+    assert summed.data == [4.0, 8.0, 12.0] as List<f32>;
 }
 
 test "the CPU backend reads a condition as 1.0 and 0.0" {
