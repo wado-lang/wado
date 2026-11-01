@@ -309,8 +309,10 @@ this way, since each component's export is its own declaration.
   reaches. `cm_component_import_same_type_two_interfaces.wado`,
   `cm_component_import_interface_type_kinds.wado` and
   `cm_component_import_interface_type_namespace.wado` pass.
-- [x] `core:icu` re-exports the interface `Properties` alone, and its callers
-  write `Properties::BinaryProperty`.
+- [x] `core:icu` re-exported the interface `Properties` alone, and its callers
+  wrote `Properties::BinaryProperty`. It re-exports no interface since its
+  property types became Wado enums
+  ([WEP: `core:icu`](./wep-2026-08-09-core-icu.md#character-properties-are-the-first-capability)).
 - [ ] A Wado `interface` declares the WIT type kinds, named bare inside it and
   only through it outside. A visibility modifier on one, and a field that is not
   `pub` in a `#[cm]` interface, are errors.

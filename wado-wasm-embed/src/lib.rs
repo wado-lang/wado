@@ -196,7 +196,11 @@ fn drop_section_length(out: &mut Vec<u8>, id: u8) {
     while out.last().is_some_and(|byte| byte & 0x80 != 0) {
         out.pop();
     }
-    assert_eq!(out.last(), Some(&id), "a section is its id byte and a length");
+    assert_eq!(
+        out.last(),
+        Some(&id),
+        "a section is its id byte and a length"
+    );
 }
 
 /// Everything the pass needs from the asset, in its original index space.
