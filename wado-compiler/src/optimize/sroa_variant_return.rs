@@ -2703,7 +2703,7 @@ fn refuse_temp_uses(
     {
         binding.push(*local_index);
         body.for_each_child(node, |c| {
-            refuse_temp_uses(body, c, layouts, rebind, binding, refused)
+            refuse_temp_uses(body, c, layouts, rebind, binding, refused);
         });
         binding.pop();
         return;
@@ -2717,7 +2717,7 @@ fn refuse_temp_uses(
         refused.insert(local);
     }
     body.for_each_child(node, |c| {
-        refuse_temp_uses(body, c, layouts, rebind, binding, refused)
+        refuse_temp_uses(body, c, layouts, rebind, binding, refused);
     });
 }
 
