@@ -64,7 +64,7 @@ spelling of it would be the parallel classification
 ```wado
 pub trait Reflect {
     fn type_info() -> TypeInfo;
-    fn type_name() -> String;
+    fn decl_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 
@@ -97,7 +97,7 @@ pub struct DeclInfo { … }
 
 impl DeclInfo {
     pub fn name(&self) -> String;              // "Pair<String, i32>"
-    pub fn base_name(&self) -> String;         // "Pair"
+    pub fn decl_name(&self) -> String;         // "Pair"
     pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
     pub fn type_args(&self) -> List<TypeInfo>; // [String, i32]
 }
@@ -133,11 +133,19 @@ function type, each holding several facts, take a sealed struct.
 
 `name()` spells the type as source writes it, with every type argument a
 default fills in spelled out, and each argument in the same surface spelling.
-`base_name()` is the declaration's name alone, which is what
-`Reflect::type_name()` already answers. The surface spelling names no module,
+`decl_name()` is the declaration's name alone, as `Reflect::decl_name()`
+answers it. The surface spelling names no module,
 so two declarations of one name in different modules spell alike. It serves a
 reader, `Inspect` among them; `canonical_name()` is the one that tells them
 apart.
+
+The three names are one vocabulary across reflection: `name()` with the
+arguments, `decl_name()` without them, `canonical_name()` with the module.
+`Reflect::type_name()` is renamed `Reflect::decl_name()` to join it, since it
+answers the declaration's name and `type_name` read as the other one. The
+declaration's name is not `base_name()`: a newtype's base is its underlying
+type (`ReflectNewtype::Base`), so `base_name()` on `Meters` would read as
+`f64`'s name. The compiler names these the same way.
 
 A function type is the whole signature or it is not the type: `fn mut(…)`
 differs from `fn(…)`, and `with (Stdout, Stderr)` is a row member of the type
@@ -295,11 +303,11 @@ fn describe<T: Reflect>(v: &T) -> String {
     match type T {
         struct(FieldTypes = [..F]) => return fields_of(v),
         variant(CasePayloads = [..P]) => return live_case_of(v),
-        enum | flags => return Reflect::<T>::type_name(),
+        enum | flags => return Reflect::<T>::decl_name(),
         newtype(Base = B) => return describe(&B::from(*v)),
-        template(Holes = [..V]) => return Reflect::<T>::type_name(),
+        template(Holes = [..V]) => return Reflect::<T>::decl_name(),
         resource | array | primitive | unit | never | tuple | reference
-            | function | opaque => return Reflect::<T>::type_name(),
+            | function | opaque => return Reflect::<T>::decl_name(),
     }
 }
 ```
@@ -426,9 +434,9 @@ written, so it takes no turbofish: `1.5 as Wrapper<f64>`. An affine resource
 reads `Stream<u8>#0x1f`. A type argument a default fills in is written too, so
 the output names the instance.
 
-The arguments come from `TypeInfo`: the base name from `base_name()` and each
-argument from `name()`. `type_name()` stays the bare declaration name, which
-serde's wire format reads.
+The arguments come from `TypeInfo`: the declaration from `decl_name()` and each
+argument from `name()`. `Reflect::decl_name()` stays the bare declaration name,
+which serde's wire format reads.
 
 The output grows: an `Option` inside a `List` writes its argument at every
 element. That is accepted. A debug form that drops the arguments cannot tell
@@ -476,7 +484,7 @@ nothing at a use site: it is a closed constant expression, so
 hoists it to a global and the call reads from there — the same treatment
 `members()` gets. Asking only for the case is therefore a load, not an
 allocation, which is what makes a separate scalar query unnecessary rather than
-merely redundant. `type_name()` stays beside it as the allocation-free
+merely redundant. `decl_name()` stays beside it as the allocation-free
 shorthand serde's `begin_struct` calls.
 
 The value plane stays out of reflection, as it was: a uniform walk over an
@@ -487,10 +495,16 @@ answers for the _type_.
 
 1. [ ] `TypeInfo`, `DeclInfo`, `ReflectResource`, and type arguments in
    `Inspect`. Done when `type_info()` answers every case above, `name()` and
-   `base_name()` spell each, an affine resource derives `Inspect` from a prelude
-   blanket over `ReflectResource`, and every generic type's `Inspect` writes its
+   `decl_name()` spell each, `Reflect::type_name()` is `Reflect::decl_name()`
+   at every caller, an affine resource derives `Inspect` from a prelude blanket
+   over `ReflectResource`, and every generic type's `Inspect` writes its
    arguments.
-2. [ ] `match type`. Done when `Inspect`'s per-kind blankets are arms of one body
+2. [ ] The compiler's names follow the same vocabulary. Done when one function
+   answers each of `name`, `decl_name` and `canonical_name` for a `TypeId`
+   (today `type_name`, a family of `*_name` helpers, and `type_name_qualified`),
+   and the disambiguated spelling a mangle embeds is named `mangled` rather than
+   `rendered` (`DeclaredHead::rendered`, `decl_render_name`).
+3. [ ] `match type`. Done when `Inspect`'s per-kind blankets are arms of one body
    and `mise run report-wasm-size` does not regress.
 
 ## Known gaps
