@@ -18,8 +18,14 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 }
 
 #[cfg(not(feature = "spike"))]
+mod casemap;
+#[cfg(not(feature = "spike"))]
 mod collation;
 #[cfg(not(feature = "spike"))]
+mod locale;
+#[cfg(not(feature = "spike"))]
 mod properties;
+#[cfg(not(feature = "spike"))]
+mod segmenter;
 #[cfg(feature = "spike")]
 mod spike;
