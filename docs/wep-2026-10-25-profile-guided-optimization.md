@@ -316,8 +316,6 @@ level.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] A workload that traps fails the recording, so a package cannot profile a
-  path that ends in a trap.
 - [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
   a module is pending, so the workload fails the recording if it traps, and is
   reported as unexpectedly passing if it returns.
