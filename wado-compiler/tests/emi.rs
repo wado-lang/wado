@@ -857,8 +857,9 @@ struct Payload {
 }
 
 /// Ordered by the analysis family each attacks: alias and mod/ref for the
-/// write, liveness and escape for the read.
-static PAYLOADS: [Payload; 2] = [
+/// write, liveness and escape for the read, the boxing rewrite and
+/// scalarization for the borrow.
+static PAYLOADS: [Payload; 3] = [
     Payload {
         name: "write",
         render: opaque_writes,
@@ -866,6 +867,10 @@ static PAYLOADS: [Payload; 2] = [
     Payload {
         name: "read",
         render: opaque_reads,
+    },
+    Payload {
+        name: "borrow",
+        render: opaque_borrows,
     },
 ];
 
@@ -884,6 +889,20 @@ fn opaque_writes(site: &Site) -> String {
 fn opaque_reads(site: &Site) -> String {
     render(&site.readables, |name| {
         format!("builtin::black_box({name});")
+    })
+}
+
+/// An opaque borrow of every binding the dead region can name, which makes each
+/// a referenced place. Unlike a read, a borrow moves nothing, so it reaches the
+/// resources the read payload is refused at.
+fn opaque_borrows(site: &Site) -> String {
+    render(&site.readables, |name| {
+        let borrow = if site.mutables.contains(name) {
+            "&mut "
+        } else {
+            "&"
+        };
+        format!("builtin::black_box({borrow}{name});")
     })
 }
 
@@ -2263,6 +2282,25 @@ fn a_site_sees_the_readable_bindings_in_scope() {
         (vec!["b".into()], vec!["n".into(), "a".into(), "b".into()]),
     ];
     assert_eq!(seen, expected);
+}
+
+/// The borrow payload makes every binding in scope a referenced place, and
+/// borrows an assignable one mutably, the stronger claim the passes must honour.
+#[test]
+fn the_borrow_payload_borrows_an_assignable_binding_mutably() {
+    let source = r#"fn f(n: i32) -> i32 {
+    let a = 1;
+    let mut b = 2;
+    return n + a + b;
+}
+"#;
+    let last = injection_sites(source)
+        .pop()
+        .expect("the return statement is a site");
+    assert_eq!(
+        opaque_borrows(&last),
+        "builtin::black_box(&n); builtin::black_box(&a); builtin::black_box(&mut b);"
+    );
 }
 
 /// A name reaches the binding that shadows it, so an outer `let mut` an inner
