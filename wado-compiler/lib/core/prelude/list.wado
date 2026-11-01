@@ -22,6 +22,7 @@ use {
     From,
     Display,
     Inspect,
+    AnyBits,
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
 use { String, AsStrSlice } from "core:prelude/string.wado";
@@ -364,6 +365,20 @@ impl<T: FromLeBytes> List<T> {
             out.push(T::from_le_at(view, i * width));
         }
         return out;
+    }
+}
+
+impl<T: AnyBits> List<T> {
+    /// The `len` `T`s lying from `ptr` on in linear memory, read at any
+    /// alignment.
+    #[compiler_item("list_loaded")]
+    internal fn internal_loaded(ptr: i32, len: i32) -> List<T> {
+        let width = builtin::size_of::<T>();
+        let mut repr: Array<T> = builtin::array_new(len);
+        for let i of 0..<len {
+            repr[i] = builtin::load::<T>(ptr + i * width);
+        }
+        return List { repr, used: len };
     }
 }
 

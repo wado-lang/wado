@@ -670,6 +670,10 @@ impl CmBuffer {
         }
     }
 
+    fn base_ref(&self) -> TirExpr {
+        local_ref(self.base, "$base", TypeTable::I32)
+    }
+
     fn count_ref(&self) -> TirExpr {
         local_ref(self.count, "$count", TypeTable::I32)
     }
@@ -702,7 +706,7 @@ impl CmBuffer {
             addr,
             TypeTable::I32,
             binary_add(
-                local_ref(self.base, "$base", TypeTable::I32),
+                self.base_ref(),
                 binary(
                     TirBinaryOp::Mul,
                     local_ref(i_local, "$i", TypeTable::I32),
@@ -732,7 +736,7 @@ impl CmBuffer {
                 TypeTable::BOOL,
             ),
             block(vec![linear_free(
-                local_ref(self.base, "$base", TypeTable::I32),
+                self.base_ref(),
                 binary(
                     TirBinaryOp::Mul,
                     self.count_ref(),
@@ -744,6 +748,21 @@ impl CmBuffer {
             None,
         ));
     }
+}
+
+/// The name of `ty` where it is a number, whose `list` lies in linear memory as
+/// a `List` of it holds it, so a copy lifts the list. `bool` and `char` are
+/// not: a `bool` is any nonzero byte.
+fn number_name(ty: &Type) -> Option<&str> {
+    let Type::Named(named) = ty else {
+        return None;
+    };
+    let name = named.name.as_str();
+    matches!(
+        name,
+        "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "i64" | "u64" | "f32" | "f64"
+    )
+    .then_some(name)
 }
 
 /// Lift a `list<T>` from linear memory at `addr`.
@@ -773,7 +792,7 @@ fn synthesize_lift_list(
     // a second `TypeId` for shared stdlib records, producing a mismatched
     // `List<T>`. Otherwise (nested lists) fall back to rebuilding from the
     // element type.
-    let (elem_type_id, array_type_id, list_head, with_capacity, push) = {
+    let (elem_type_id, array_type_id, list_head, with_capacity, push, loaded) = {
         let mut tt = ctx.type_table.borrow_mut();
         let (list_tid, elem_tid) = if let Some(pair) =
             override_list_ty.and_then(|lt| tt.as_list(lt).map(|elem| (lt, elem)))
@@ -792,12 +811,35 @@ fn synthesize_lift_list(
             list_head,
             items.require_template(CompilerItem::ListWithCapacity),
             items.require_template(CompilerItem::ListPush),
+            items.require_template(CompilerItem::ListLoaded),
         )
     };
 
     let buffer = CmBuffer::read(&addr, elem_size, elem_align, next_local, stmts, locals);
 
     let result_local = alloc_local(next_local, locals, array_type_id);
+    if let Some(number) = number_name(elem_ty) {
+        let copied = if number == "u8" {
+            internal_call(
+                CompilerItem::MemoryToByteList.attr_name(),
+                vec![buffer.base_ref(), buffer.count_ref()],
+                array_type_id,
+            )
+        } else {
+            generic_static_call(
+                &list_head,
+                "internal_loaded",
+                ModuleSource::list(),
+                loaded,
+                vec![elem_type_id],
+                vec![buffer.base_ref(), buffer.count_ref()],
+                array_type_id,
+            )
+        };
+        stmts.push(let_stmt("$result", result_local, array_type_id, copied));
+        buffer.free(stmts);
+        return local_ref(result_local, "$result", array_type_id);
+    }
     stmts.push(let_mut_stmt(
         "$result",
         result_local,

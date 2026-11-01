@@ -1,0 +1,18 @@
+// A list of numbers an import returns is copied out of linear memory by one
+// call, not walked element by element in the binding. A CM binding is glue,
+// which the inliner splices no loop callee into, so a program calling `push`
+// elsewhere kept a call per element there.
+
+use { Random } from "wasi:random";
+
+test "an imported list of bytes lifts in bulk" {
+    assert Random::get_random_bytes(37).len() == 37;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_not_expect:O2": [
+        "builtin::load_u8($base + $i)"
+    ]
+}

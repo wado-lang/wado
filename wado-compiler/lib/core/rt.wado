@@ -428,6 +428,12 @@ internal fn cm_stream_read_u8(handle: i32, max: i32, into: ReadInto) -> StartedR
 /// `ptr`.
 #[compiler_item("cm_stream_lift_u8")]
 internal fn cm_stream_lift_u8(handle: i32, ptr: i32, count: i32) -> List<u8> {
+    return memory_to_byte_list(ptr, count);
+}
+
+/// The `count` bytes at `ptr`, copied into a `List`: a lifted `list<u8>`.
+#[compiler_item("memory_to_byte_list")]
+internal fn memory_to_byte_list(ptr: i32, count: i32) -> List<u8> {
     return List::internal_from_raw(memory_to_gc_array(ptr, count), count);
 }
 
