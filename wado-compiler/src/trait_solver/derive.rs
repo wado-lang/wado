@@ -88,19 +88,25 @@ pub fn derive_alongside(program: &mut Program, trait_: TraitDeclId, derived: Vec
 fn covered_heads(program: &Program, trait_: TraitDeclId) -> IndexSet<TypeDeclId> {
     program
         .impls_of(trait_)
-        .map(|(_, def)| def)
-        .filter(|def| at_defaults(program, def))
-        .filter_map(|def| match &def.target {
-            SolverType::Decl(head, _) if covers_every_instance(def) => Some(*head),
-            SolverType::Decl(..)
-            | SolverType::Param(_)
-            | SolverType::Pack(_)
-            | SolverType::Ref { .. }
-            | SolverType::Tuple(_)
-            | SolverType::Projection { .. }
-            | SolverType::AnyRow => None,
-        })
+        .filter_map(|(_, def)| covered_head(program, def))
         .collect()
+}
+
+/// The head `def` answers at every instance, at the trait's default
+/// arguments; `None` where it answers fewer.
+fn covered_head(program: &Program, def: &ImplDef) -> Option<TypeDeclId> {
+    match &def.target {
+        SolverType::Decl(head, _) if covers_every_instance(def) && at_defaults(program, def) => {
+            Some(*head)
+        }
+        SolverType::Decl(..)
+        | SolverType::Param(_)
+        | SolverType::Pack(_)
+        | SolverType::Ref { .. }
+        | SolverType::Tuple(_)
+        | SolverType::Projection { .. }
+        | SolverType::AnyRow => None,
+    }
 }
 
 /// Whether a source of `trait_` holds of `decl` at its own parameters, which
@@ -128,9 +134,9 @@ fn decl_params(decl: &Declaration) -> Vec<SolverType> {
         .collect()
 }
 
-/// Each bound a written impl of `trait_` over every instance of `head` puts on
-/// one of `head`'s arguments, by the argument's position: an instance holds
-/// the trait only where its arguments meet them. A bound that writes the
+/// Each bound a written impl of `trait_` covering `head` ([`covered_head`])
+/// puts on one of `head`'s arguments, by the argument's position: an instance
+/// holds the trait only where its arguments meet them. A bound that writes the
 /// trait's arguments is left out. `None` where no such impl is written.
 #[must_use]
 pub fn written_over(
@@ -138,29 +144,28 @@ pub fn written_over(
     trait_: TraitDeclId,
     head: TypeDeclId,
 ) -> Option<Vec<(usize, TraitDeclId)>> {
-    program.impls_of(trait_).find_map(|(_, def)| {
-        let SolverType::Decl(target, args) = &def.target else {
-            return None;
-        };
-        (def.origin == ImplOrigin::Written && *target == head && covers_every_instance(def)).then(
-            || {
-                args.iter()
-                    .enumerate()
-                    .filter_map(|(position, arg)| match arg {
-                        SolverType::Param(index) => Some((position, *index)),
-                        _ => None,
-                    })
-                    .flat_map(|(position, index)| {
-                        def.params[index as usize]
-                            .bounds
-                            .iter()
-                            .filter(|b| b.args.is_empty())
-                            .map(move |b| (position, b.trait_))
-                    })
-                    .collect()
-            },
-        )
-    })
+    let def = program.impls_of(trait_).map(|(_, def)| def).find(|def| {
+        def.origin == ImplOrigin::Written && covered_head(program, def) == Some(head)
+    })?;
+    let SolverType::Decl(_, args) = &def.target else {
+        unreachable!("a covered head is a declaration's");
+    };
+    Some(
+        args.iter()
+            .enumerate()
+            .filter_map(|(position, arg)| match arg {
+                SolverType::Param(index) => Some((position, *index)),
+                _ => None,
+            })
+            .flat_map(|(position, index)| {
+                def.params[index as usize]
+                    .bounds
+                    .iter()
+                    .filter(|b| b.args.is_empty())
+                    .map(move |b| (position, b.trait_))
+            })
+            .collect(),
+    )
 }
 
 /// Whether `def` reaches every instance of its target's head: the target names

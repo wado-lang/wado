@@ -34,12 +34,29 @@ struct Paired {
     p: Pair<Untagged>,
 }
 
+// An impl at another argument of the trait says nothing of `Eq<Self>`.
+struct Weighed<T> {
+    v: T,
+}
+
+impl<T: Tag> Eq<i32> for Weighed<T> {
+    fn eq(&self, other: &i32) -> bool {
+        return self.v.tag() == *other;
+    }
+}
+
+struct Holder {
+    w: Weighed<Inner>,
+}
+
 export fn run() {
     let o = Outer { items: [] };
     assert o == o;
     let r = to_string(&o);
     let p = Paired { p: Pair { v: Untagged { n: 1 } } };
     assert p == p;
+    let h = Holder { w: Weighed { v: Inner { f: || {} } } };
+    assert h == h;
 }
 
 __DATA__
@@ -47,7 +64,8 @@ __DATA__
     "compile_error": "note: `Outer` does not implement `Eq` because field `items` of type `List<Inner>` does not implement `Eq`\n  note: `List<Inner>` implements `Eq` only where `Inner` does\n  note: `Inner` does not implement `Eq` because field `f` of type `fn() -> ()` does not implement `Eq`",
     "compile_errors_contains": [
         "note: `List<Inner>` implements `Serialize` only where `Inner` does\n  note: `Inner` does not implement `Serialize` because field `f`",
-        "note: `Paired` does not implement `Eq` because field `p` of type `Pair<Untagged>` does not implement `Eq`\n  note: `Pair<Untagged>` implements `Eq` only where `Untagged` implements `Tag`"
+        "note: `Paired` does not implement `Eq` because field `p` of type `Pair<Untagged>` does not implement `Eq`\n  note: `Pair<Untagged>` implements `Eq` only where `Untagged` implements `Tag`",
+        "note: `Weighed<Inner>` does not implement `Eq` because field `v` of type `Inner` does not implement `Eq`"
     ],
     "compile_errors_not_contains": ["repr"]
 }

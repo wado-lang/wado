@@ -5,7 +5,7 @@
 //! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::sync::RwLockReadGuard;
 
 use crate::call_args::CallArgs;
@@ -350,7 +350,7 @@ fn collect_candidates(
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
     let buried = buried_promoted_reads(body);
-    let aliases = Aliases::of(body, gate);
+    let aliases = Aliases::of(body);
     let leaked_ref_args = ref_args_that_escape(body, &aliases, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
@@ -1676,7 +1676,7 @@ impl Gate<'_> {
             return true;
         }
         f.body.as_ref().is_none_or(|body| {
-            !is_readonly_body(body, &Aliases::of(body, self), param.local_index, self)
+            !is_readonly_body(body, &Aliases::of(body), param.local_index, self)
         })
     }
 
@@ -1784,7 +1784,7 @@ impl Gate<'_> {
             return true;
         };
         f.body.as_ref().is_none_or(|body| {
-            param_storage_escapes(body, &Aliases::of(body, self), param.local_index, self)
+            param_storage_escapes(body, &Aliases::of(body), param.local_index, self)
         })
     }
 
@@ -1804,7 +1804,7 @@ impl Gate<'_> {
         let Some(body) = f.body.as_ref() else {
             return false;
         };
-        let aliases = Aliases::of(body, self);
+        let aliases = Aliases::of(body);
         is_readonly_body(body, &aliases, param.local_index, self)
             && !param_storage_escapes(body, &aliases, param.local_index, self)
     }
@@ -1839,7 +1839,7 @@ fn readonly_body_violation(
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
     let others: Vec<u32> = aliases
-        .projection_roots(idx)
+        .projection_roots(body, idx, gate)
         .into_iter()
         .filter(|&root| root != idx)
         .collect();
@@ -1883,7 +1883,7 @@ fn written_through(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// own copy is legitimate and even counts as owned, a premise hoisting
 /// invalidates. A reference or a scalar projection is not an escape.
 fn param_storage_escapes(body: &Body, aliases: &Aliases, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = aliases.projection_roots(idx);
+    let roots = aliases.projection_roots(body, idx, gate);
     storage_leaves_body(body, &roots, gate) || storage_passed_on(body, &roots, gate)
 }
 
@@ -1986,8 +1986,9 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 struct AliasSite {
     value: Operand,
     binds: Vec<u32>,
-    /// The locals whose storage evaluating `value` can produce.
-    yields: Vec<u32>,
+    /// The locals whose storage evaluating `value` can produce, found the
+    /// first time [`Aliases::projection_roots`] asks.
+    yields: OnceCell<Vec<u32>>,
 }
 
 /// A body's binding sites, gathered once: every local of a body asks which
@@ -1997,9 +1998,9 @@ struct Aliases {
 }
 
 impl Aliases {
-    fn of(body: &Body, gate: &Gate<'_>) -> Aliases {
+    fn of(body: &Body) -> Aliases {
         Aliases {
-            sites: alias_sites(body, gate),
+            sites: alias_sites(body),
         }
     }
 
@@ -2020,9 +2021,12 @@ impl Aliases {
     /// test because nothing says which part flows out: `let r = if c { s.a }
     /// else { s.b };` binds one of two, and `let r = f(s.a);` whatever `f`
     /// hands back.
-    fn projection_roots(&self, idx: u32) -> Vec<u32> {
+    fn projection_roots(&self, body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
         alias_closure(idx, &self.sites, |site, roots| {
-            site.yields.iter().any(|y| roots.contains(y))
+            site.yields
+                .get_or_init(|| yielded_roots(body, site.value, gate))
+                .iter()
+                .any(|y| roots.contains(y))
         })
     }
 
@@ -2040,15 +2044,14 @@ impl Aliases {
 /// Every place locals are bound or filled from a source: a `let`, a
 /// destructuring `let`, a `match` arm over its scrutinee, or an assignment to
 /// the whole local.
-fn alias_sites(body: &Body, gate: &Gate<'_>) -> Vec<AliasSite> {
+fn alias_sites(body: &Body) -> Vec<AliasSite> {
     let mut sites = Vec::new();
     let mut site = |value: Operand, binds: Vec<u32>| {
         if !binds.is_empty() {
-            let yields = yielded_roots(body, value, gate);
             sites.push(AliasSite {
                 value,
                 binds,
-                yields,
+                yields: OnceCell::new(),
             });
         }
     };
