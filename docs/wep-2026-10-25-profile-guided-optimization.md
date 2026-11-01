@@ -218,8 +218,9 @@ the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
 the cold line the same for `--optimize-profile-summary-cutoff-cold`. A count at
 or above the hot line is hot, and any other at or below the cold line is cold.
 A profile whose counts are nearly all one value puts both lines on it, and such
-a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in parts per million, with LLVM's defaults for its options of the
-same names: 990000 and 999999. A share of all runs stays put when a workload
+a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in
+parts per million, with LLVM's defaults for its options of the same names:
+990000 and 999999. A share of all runs stays put when a workload
 runs twice, so a workload need not be large, only like real use.
 
 The inliner prices a call site by what the summary says of the region holding
@@ -245,8 +246,8 @@ workload modelled on real use measures better than any guess. The guess is
 usually right: an HTTP service answers well under 1% of its requests with a 4xx
 or 5xx. So the marker stays while the summary calls the failure path's count
 cold. Otherwise the profile wins: the marker is dropped, and the same remark
-names the count. Comparing with zero would drop a right guess, since a
-rare path still runs now and then. LLVM settles the same question the same way,
+names the count. Comparing with zero would drop a right guess, since a rare
+path still runs now and then. LLVM settles the same question the same way,
 letting a measured count override a `__builtin_expect`.
 
 The other markers the compiler places sit ahead of a trap, or past a global's
