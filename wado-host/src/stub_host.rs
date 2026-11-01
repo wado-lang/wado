@@ -86,7 +86,7 @@ impl StubHost {
     /// generator: the caller chose this tree as a package.
     #[must_use]
     pub fn reading_manifests(base_path: PathBuf) -> Self {
-        let build_dependencies = manifest_generators(&base_path);
+        let build_dependencies = manifest_generators(&base_path, &base_path);
         Self {
             stubs: HostStubs {
                 build_dependencies,
@@ -109,6 +109,42 @@ impl StubHost {
     #[must_use]
     pub fn stubs(&self) -> &HostStubs {
         &self.stubs
+    }
+
+    /// Whether the `wado.toml` files on disk say which package a module is in.
+    #[must_use]
+    pub fn reads_manifests(&self) -> bool {
+        matches!(self.packages, Packages::Manifests)
+    }
+
+    /// The host the clauses of the generator in `generator_dir` run on, loading
+    /// sources relative to `base_path`. A stubbed host keeps its stubs; one
+    /// reading manifests resolves the clauses' nicknames through the
+    /// generator's own package, as `wado` does.
+    #[must_use]
+    pub fn for_generator_clauses(&self, base_path: PathBuf, generator_dir: &Path) -> Self {
+        match self.packages {
+            Packages::Stubbed => Self::new(base_path).with_stubs(self.stubs.clone()),
+            Packages::Manifests => Self {
+                stubs: HostStubs {
+                    build_dependencies: manifest_generators(generator_dir, &base_path),
+                    ..HostStubs::default()
+                },
+                packages: Packages::Manifests,
+                ..Self::new(base_path)
+            },
+        }
+    }
+
+    /// The host a generator at `base_path` compiles on. A fixture's stubs are
+    /// the fixture's, not the generator's, so a stubbed host passes none on; a
+    /// package's generator compiles in its own package.
+    #[must_use]
+    pub fn for_generator(&self, base_path: PathBuf) -> Self {
+        match self.packages {
+            Packages::Stubbed => Self::new(base_path),
+            Packages::Manifests => Self::reading_manifests(base_path),
+        }
     }
 
     /// The diagnostics emitted since this host was created.
@@ -262,10 +298,10 @@ fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
 }
 
 /// The generator each path `[build-dependencies]` entry of the manifest
-/// nearest `base` names, keyed by its nickname, as a path relative to `base`.
-/// No manifest above `base` names none.
-fn manifest_generators(base: &Path) -> IndexMap<String, String> {
-    let Some(dir) = nearest_manifest_dir(base) else {
+/// nearest `dir` names, keyed by its nickname, as a path relative to `base`.
+/// No manifest above `dir` names none.
+fn manifest_generators(dir: &Path, base: &Path) -> IndexMap<String, String> {
+    let Some(dir) = nearest_manifest_dir(dir) else {
         return IndexMap::new();
     };
     let manifest = read_manifest(&dir);
