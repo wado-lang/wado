@@ -1106,7 +1106,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .type_names_for_mismatch(answer, ty);
+                        .names_for_mismatch(answer, ty);
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected,
                         found,
@@ -1329,7 +1329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.is_key_value_literal_target(target_type) {
             return;
         }
-        let type_name = self.tysys.type_table.borrow().type_name(target_type);
+        let type_name = self.tysys.type_table.borrow().name(target_type);
         let _ = self.emit(TypeError::InvalidLiteral {
             message: format!(
                 "`{type_name}` implements no `From<Array<[K, V]>>`, so it cannot be built from an \
@@ -1380,7 +1380,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_names_for_mismatch(target_type, built);
+                .names_for_mismatch(target_type, built);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected,
                 found,
@@ -1460,7 +1460,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if key_incompatible {
             let (type_name, key_name) = {
                 let tt = self.tysys.type_table.borrow();
-                (tt.type_name(target_type), tt.type_name(key_type))
+                (tt.name(target_type), tt.name(key_type))
             };
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
@@ -1480,7 +1480,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             let found = self.literal_spread_call(output_type);
             if found.is_none() {
-                let type_name = self.tysys.type_table.borrow().type_name(target_type);
+                let type_name = self.tysys.type_table.borrow().name(target_type);
                 let _ = self.emit(TypeError::MissingTraitImpl {
                     type_name,
                     trait_name: "LiteralSpread".to_string(),
@@ -1612,7 +1612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match found {
             Ok(info) => Some((info, link, link != target_type)),
             Err(count) => {
-                let type_name = self.tysys.type_table.borrow().type_name(target_type);
+                let type_name = self.tysys.type_table.borrow().name(target_type);
                 let _ = self.emit(TypeError::AmbiguousLiteralConversion {
                     type_name,
                     count,
@@ -1635,7 +1635,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let (found, slot) = {
             let tt = self.tysys.type_table.borrow();
-            (tt.type_name(found_type), tt.type_name(slot_type))
+            (tt.name(found_type), tt.name(slot_type))
         };
         // `null`'s own type is what a target converts from to accept it, and
         // `Option<!>` reads badly in the message that says none was found.
@@ -1811,7 +1811,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .find(|element| matches!(element, Expr::Spread(..)))
         {
-            let type_name = self.tysys.type_table.borrow().type_name(target_type);
+            let type_name = self.tysys.type_table.borrow().name(target_type);
             let _ = self.emit(TypeError::InvalidLiteral {
                 message: format!(
                     "`..base` is a tuple spread; a sequence literal building `{type_name}` \

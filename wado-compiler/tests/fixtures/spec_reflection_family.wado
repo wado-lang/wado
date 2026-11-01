@@ -7,7 +7,7 @@ struct Point {
 
 // `T: ReflectStruct` alone reaches `Reflect`'s methods
 fn struct_name<T: ReflectStruct>() -> String {
-    return Reflect::<T>::type_name();
+    return Reflect::<T>::decl_name();
 }
 
 test "a kind bound reaches the root" {
@@ -19,14 +19,14 @@ struct Tagged {
 }
 
 impl Tagged {
-    fn type_name() -> String {    // the type's own function, not reflection's
+    fn decl_name() -> String {    // the type's own function, not reflection's
         return "tagged";
     }
 }
 
 test "reflection leaves the type's namespace alone" {
-    assert Tagged::type_name() == "tagged";
-    assert Reflect::<Tagged>::type_name() == "Tagged";
+    assert Tagged::decl_name() == "tagged";
+    assert Reflect::<Tagged>::decl_name() == "Tagged";
 }
 
 __DATA__

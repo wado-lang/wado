@@ -312,7 +312,7 @@ fn scalar_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<St
             tt.get(tt.representation_head(id)),
             ResolvedType::Enum { .. }
         )
-        .then(|| tt.type_name(id))
+        .then(|| tt.name(id))
     };
     if tt.representation_head(target) == TypeTable::BOOL {
         return Some("nothing casts to `bool`; compare instead, as `x != 0`".to_string());
@@ -525,8 +525,8 @@ fn representation_refusal(tt: &TypeTable, a: TypeId, b: TypeId) -> Option<String
         | (ResolvedType::MutRef(x), ResolvedType::MutRef(y)) => representation_refusal(tt, *x, *y),
         _ => Some(format!(
             "`{}` and `{}` {SHARE_NO_REPRESENTATION}",
-            tt.type_name(a),
-            tt.type_name(b)
+            tt.name(a),
+            tt.name(b)
         )),
     }
 }
@@ -666,7 +666,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .type_table
             .borrow()
-            .type_names_for_mismatch(TypeTable::BOOL, type_id);
+            .names_for_mismatch(TypeTable::BOOL, type_id);
         let _ = self.emit(TypeError::TypeMismatch {
             expected,
             found,
@@ -1571,7 +1571,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let expected = expected
             .filter(|&t| t != TypeTable::ERROR && t != TypeTable::UNKNOWN)
-            .map(|t| self.tysys.type_table.borrow().type_name(t));
+            .map(|t| self.tysys.type_table.borrow().name(t));
         let _ = self.emit(TypeError::BareCaseNeedsContext {
             case: ident.name.clone(),
             qualified,
@@ -1950,7 +1950,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 match hit {
                     Some(Some(found)) => return found,
                     Some(None) => {
-                        let name = self.tysys.type_table.borrow().type_name(struct_type);
+                        let name = self.tysys.type_table.borrow().name(struct_type);
                         return self.field_not_found(&name, field_name, span);
                     }
                     None => {}
@@ -2023,7 +2023,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource { .. }
             | ResolvedType::BuiltinArray(_) => {}
         }
-        let type_name = self.tysys.type_table.borrow().type_name(struct_type);
+        let type_name = self.tysys.type_table.borrow().name(struct_type);
         let _ = self.emit(TypeError::FieldOfFieldless {
             type_name,
             field_name: field_name.to_string(),
@@ -2422,7 +2422,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
-        let type_name = self.tysys.type_table.borrow().type_name(expr_type);
+        let type_name = self.tysys.type_table.borrow().name(expr_type);
         let _ = self.emit(TypeError::MissingTraitImpl {
             type_name,
             trait_name: "IndexValue or IndexRef".to_string(),
@@ -2572,7 +2572,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 (Some(agreed), _) => agreed,
                 (None, None) => {
                     if then_type != TypeTable::UNIT {
-                        let type_name = self.tysys.type_table.borrow().type_name(then_type);
+                        let type_name = self.tysys.type_table.borrow().name(then_type);
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: UNIT_TYPE_NAME.to_string(),
                             found: type_name,
@@ -2586,7 +2586,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .type_names_for_mismatch(then_type, else_type);
+                        .names_for_mismatch(then_type, else_type);
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: then_name,
                         found: else_name,
@@ -2637,7 +2637,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_names_for_mismatch(expected, actual);
+                .names_for_mismatch(expected, actual);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected: expected_name,
                 found: found_name,
@@ -2652,7 +2652,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// because `check_assignable` treats the still-`UNKNOWN` `null` leniently.
     fn report_unresolved_nulls(&mut self, unresolved: &[Span], result_type: TypeId) {
         for &span in unresolved {
-            let expected = self.tysys.type_table.borrow().type_name(result_type);
+            let expected = self.tysys.type_table.borrow().name(result_type);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected,
                 found: "null".to_string(),
@@ -3099,7 +3099,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .tysys
                         .type_table
                         .borrow()
-                        .type_names_for_mismatch(type_id, arm_type);
+                        .names_for_mismatch(type_id, arm_type);
                     let _ = self.emit(TypeError::TypeMismatch {
                         expected: expected_name,
                         found: found_name,
@@ -3401,8 +3401,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     Some(format!(
                         "unreachable arm: every `{}` is `{}`, which an earlier arm already takes",
-                        tt.type_name(*target),
-                        tt.type_name(*earlier)
+                        tt.name(*target),
+                        tt.name(*earlier)
                     ))
                 }
                 _ => None,
@@ -3763,7 +3763,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && let Some(expected_elems) = expected_elems
         {
             if tuple_lit.elements.len() != expected_elems.len() {
-                let from_name = self.tysys.type_table.borrow().type_name(target_type);
+                let from_name = self.tysys.type_table.borrow().name(target_type);
                 let _ = self.emit(TypeError::InvalidCast {
                     from: format!("a {}-element tuple", tuple_lit.elements.len()),
                     to: from_name,
@@ -3845,7 +3845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .or_else(|| wide_int_cast_hint(&tt, source_type, target_type))
                 .or_else(|| char_cast_hint(&tt, source_type, target_type))
                 .map(|hint| {
-                    let (from, to) = tt.type_names_for_mismatch(source_type, target_type);
+                    let (from, to) = tt.names_for_mismatch(source_type, target_type);
                     (from, to, hint)
                 })
         };
@@ -4912,8 +4912,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if disagrees {
                     let _ = self.emit(TypeError::TypeMismatch {
-                        expected: self.tysys.type_table.borrow().type_name(first),
-                        found: self.tysys.type_table.borrow().type_name(answer),
+                        expected: self.tysys.type_table.borrow().name(first),
+                        found: self.tysys.type_table.borrow().name(answer),
                         span: struct_field.span,
                     });
                 }
@@ -5038,7 +5038,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some((pack_name, pack_index, elem_type)) =
             self.tysys.comprehension_pack(iterable_type, ctx.pack_walks)
         else {
-            let type_name = self.tysys.type_table.borrow().type_name(iterable_type);
+            let type_name = self.tysys.type_table.borrow().name(iterable_type);
             let _ = self.emit(TypeError::InvalidPattern {
                 message: format!(
                     "a tuple comprehension walks a variadic tuple (`[..T]`); `{type_name}` is not one"
@@ -5298,7 +5298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             (Some(some), _) => (true, some),
             (None, Some((ok, _))) => (false, ok),
             (None, None) => {
-                let type_name = tt.type_name(inner_type);
+                let type_name = tt.name(inner_type);
                 drop(tt);
                 let _ = self.emit(TypeError::InvalidQuestionMark {
                     message: format!("cannot use ? on type {type_name}"),
@@ -5417,7 +5417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 let (outer, inner) = {
                     let tt = self.tysys.type_table.borrow();
-                    tt.type_names_for_mismatch(outer_err_type, inner_err_type)
+                    tt.names_for_mismatch(outer_err_type, inner_err_type)
                 };
                 let _ = self.emit(TypeError::InvalidQuestionMark {
                     message: format!(
@@ -5798,8 +5798,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if start != end && start != TypeTable::ERROR && end != TypeTable::ERROR {
             let type_table = self.tysys.type_table.borrow();
-            let start_name = type_table.type_name(start);
-            let end_name = type_table.type_name(end);
+            let start_name = type_table.name(start);
+            let end_name = type_table.name(end);
             if start_name != end_name {
                 let op_str = range.kind.operator();
                 let _ = self.emit(TypeError::TypeMismatch {

@@ -1223,7 +1223,7 @@ pub struct LocalMethodName {
     /// `head_key()` is the base identity string preserved across monomorphization.
     ///
     /// With [`Self::struct_type_args`] this is the whole of the receiver's
-    /// identity — the rendered `Point<i32>` spelling is [`Self::struct_name`],
+    /// identity — the mangled `Point<i32>` spelling is [`Self::struct_name`],
     /// derived rather than stored, so the two cannot disagree.
     pub receiver: Receiver,
     /// The trait / effect / resource this method implements, named by the
@@ -1245,7 +1245,7 @@ pub struct LocalMethodName {
     pub trait_type_args: Vec<tir::TypeId>,
     /// The receiver's type arguments, structured. Together with `receiver`
     /// they *are* `struct_name`: [`Self::fq_struct_name`] rebuilds the
-    /// instantiated receiver from them rather than reading the rendered
+    /// instantiated receiver from them rather than reading the mangled
     /// `struct_name` back apart.
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
@@ -3548,7 +3548,7 @@ impl TypeHead {
     }
 
     /// The head's own name, as its declaration writes it. Diagnostics; a mangle
-    /// takes [`Self::rendered`], which disambiguates a function-local
+    /// takes [`Self::mangled`], which disambiguates a function-local
     /// declaration.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -3569,9 +3569,9 @@ impl TypeHead {
     /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
     /// a projection's base.
     #[must_use]
-    pub fn rendered(&self) -> &str {
+    pub fn mangled(&self) -> &str {
         match self {
-            Self::Declared(head) => head.rendered(),
+            Self::Declared(head) => head.mangled(),
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
@@ -3956,7 +3956,7 @@ impl FqTypeName {
         }
         match &self.head {
             TypeHead::Declared(head) => {
-                out.push_str(&mangle_declared(head.module(), head.rendered()));
+                out.push_str(&mangle_declared(head.module(), head.mangled()));
             }
             TypeHead::Shape { module, name } => out.push_str(&mangle_declared(module, name)),
             // A bucket keys an index and heads no function name; spelled apart
@@ -3966,7 +3966,7 @@ impl FqTypeName {
             }
             TypeHead::Builtin(name) | TypeHead::Unresolved(name) => out.push_str(name),
             TypeHead::Binder { name, owner } => match owner {
-                Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
+                Some(owner) => out.push_str(&format!("{name}#{}", owner.mangled())),
                 None => out.push_str(name),
             },
             TypeHead::Projection(head) => {
@@ -3975,7 +3975,7 @@ impl FqTypeName {
                     head.base.to_mangled(),
                     head.assoc,
                     head.owning_trait.module(),
-                    head.owning_trait.rendered()
+                    head.owning_trait.mangled()
                 ));
                 if let Some(trait_args) = head.trait_args.as_ref().filter(|args| !args.is_empty()) {
                     let args: Vec<String> = trait_args.iter().map(FqTypeName::to_mangled).collect();
@@ -3997,7 +3997,7 @@ impl FqTypeName {
     /// the whole name when it *is* `old`, and otherwise each argument,
     /// recursively.
     ///
-    /// A substitution over the structure. Rewriting the rendered spelling
+    /// A substitution over the structure. Rewriting the mangled spelling
     /// instead means finding `old`'s mangling inside `self`'s and splicing,
     /// which cannot tell a type from a type whose name contains it and leaves
     /// the identity that produced the spelling unchanged.
@@ -4187,7 +4187,7 @@ pub struct BinderOwner {
     /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
     /// process-global counter and would make mangled names non-deterministic
     /// (see [`mangle_local_item_name`]).
-    rendered: String,
+    mangled: String,
 }
 
 impl PartialEq for BinderOwner {
@@ -4211,7 +4211,7 @@ impl BinderOwner {
         Self {
             id,
             assoc: None,
-            rendered: format!("{module}/{}", id.local()),
+            mangled: format!("{module}/{}", id.local()),
         }
     }
 
@@ -4226,13 +4226,13 @@ impl BinderOwner {
         Self {
             id,
             assoc: Some(assoc.to_string()),
-            rendered: format!("{module}/{}::{assoc}", id.local()),
+            mangled: format!("{module}/{}::{assoc}", id.local()),
         }
     }
 
     /// The spelling a mangle embeds.
-    fn rendered(&self) -> &str {
-        &self.rendered
+    fn mangled(&self) -> &str {
+        &self.mangled
     }
 }
 
@@ -4246,7 +4246,7 @@ pub struct DeclaredHead {
     name: String,
     /// What a mangle embeds: [`Self::name`] with a function-local
     /// declaration's disambiguator applied.
-    rendered: String,
+    mangled: String,
 }
 
 impl PartialEq for DeclaredHead {
@@ -4269,7 +4269,7 @@ impl DeclaredHead {
     #[must_use]
     pub fn new(defs: &DefTable, def: DefId) -> Self {
         let name = defs.name(def).to_string();
-        let rendered = if defs.is_function_local(def) {
+        let mangled = if defs.is_function_local(def) {
             mangle_local_item_name(&name, defs.ast_id(def))
         } else {
             name.clone()
@@ -4278,14 +4278,14 @@ impl DeclaredHead {
             def,
             module: defs.module(def).clone(),
             name,
-            rendered,
+            mangled,
         }
     }
 
     /// The spelling a mangle embeds.
     #[must_use]
-    pub fn rendered(&self) -> &str {
-        &self.rendered
+    pub fn mangled(&self) -> &str {
+        &self.mangled
     }
 
     #[must_use]
@@ -4442,7 +4442,7 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TraitHead::Declared(head) => mangle_declared(head.module(), head.rendered()),
+            TraitHead::Declared(head) => mangle_declared(head.module(), head.mangled()),
             TraitHead::Binder(name) => name.clone(),
         };
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();

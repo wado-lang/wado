@@ -365,7 +365,7 @@ fn synthesize_stream_writes(sites: &BindingSites<'_>) -> Vec<Rc<RefCell<TirFunct
 fn payload_ast_type(payload: TypeId, tt: &TypeTable, registry: &CmInterfaceRegistry) -> ast::Type {
     let id = peel_newtypes(tt, payload);
     if let ResolvedType::GenericInstance { def, type_args } = tt.get(id) {
-        let name = tt.def_name(*def).to_string();
+        let name = tt.decl_name(*def).to_string();
         let args: Vec<ast::Type> = type_args
             .iter()
             .map(|&a| payload_ast_type(a, tt, registry))
@@ -2025,12 +2025,7 @@ fn parameterize_stream_cm_name(
 fn stream_element_decl(tt: &TypeTable, elem: TypeId) -> CmDecl {
     let def = tt
         .nominal_def(tt.representation_head(elem))
-        .unwrap_or_else(|| {
-            panic!(
-                "`stream<{}>` element names no declaration",
-                tt.type_name(elem)
-            )
-        });
+        .unwrap_or_else(|| panic!("`stream<{}>` element names no declaration", tt.name(elem)));
     CmDecl::new(tt.defs(), def)
 }
 

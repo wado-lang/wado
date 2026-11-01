@@ -135,8 +135,8 @@ pub affine trait Drop with () {
 pub trait Reflect with () {
     /// Returns the declaration's name, or `""` for an anonymous struct, which
     /// names none.
-    #[compiler_item("reflect_type_name")]
-    fn type_name() -> String;
+    #[compiler_item("reflect_decl_name")]
+    fn decl_name() -> String;
 
     /// The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
     /// kind carries the attribute, and it says the same thing on each: the
@@ -995,7 +995,7 @@ fn inspect_struct_alternate<affine S: ReflectStruct<FieldTypes = [..F]>, affine 
 /// The name a struct's debug form opens with, and the space after it. An
 /// anonymous struct has none, so it reads as the literal that built it.
 fn write_struct_head<affine S: Reflect>(f: &mut Formatter) {
-    let name = Reflect::<S>::type_name();
+    let name = Reflect::<S>::decl_name();
     if !name.is_empty() {
         f.write_str(&name);
         f.write_str(" ");
@@ -1045,7 +1045,7 @@ impl<E: ReflectEnum<Members = [..M]>, ..M> Inspect for E {
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectEnum::<E>::members() {
             if case.holds(self) {
-                f.write_str(&Reflect::<E>::type_name());
+                f.write_str(&Reflect::<E>::decl_name());
                 f.write_str("::");
                 f.write_str(&case.name());
             }
@@ -1075,7 +1075,7 @@ impl<affine V: ReflectVariant<CasePayloads = [..P]>, affine ..P: Inspect> Inspec
     fn inspect(&self, f: &mut Formatter) {
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
-                f.write_str(&Reflect::<V>::type_name());
+                f.write_str(&Reflect::<V>::decl_name());
                 f.write_str("::");
                 f.write_str(&case.name());
                 if !case.is_unit() {
@@ -1096,14 +1096,14 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Inspect for L {
                 if wrote_bit {
                     f.write_str(" | ");
                 }
-                f.write_str(&Reflect::<L>::type_name());
+                f.write_str(&Reflect::<L>::decl_name());
                 f.write_str("::");
                 f.write_str(&bit.name());
                 wrote_bit = true;
             }
         }
         if !wrote_bit {
-            f.write_str(&Reflect::<L>::type_name());
+            f.write_str(&Reflect::<L>::decl_name());
             f.write_str("::none()");
         }
     }
@@ -1119,7 +1119,7 @@ impl<affine N: ReflectNewtype<Base = B>, affine B: Inspect> Inspect for N {
     fn inspect(&self, f: &mut Formatter) {
         (self as &B).inspect(f);
         f.write_str(" as ");
-        f.write_str(&Reflect::<N>::type_name());
+        f.write_str(&Reflect::<N>::decl_name());
     }
 }
 

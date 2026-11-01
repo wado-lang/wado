@@ -2864,7 +2864,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let (trait_name, trait_) = {
                 let table = self.tysys.type_table.borrow();
                 (
-                    table.def_name(trait_ref.decl).to_string(),
+                    table.decl_name(trait_ref.decl).to_string(),
                     table.trait_ref_name(trait_ref),
                 )
             };
@@ -3044,11 +3044,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 continue;
             }
-            let (type_name, expected_name, actual_name) = (
-                tt.type_name(type_arg),
-                tt.type_name(expected),
-                tt.type_name(actual),
-            );
+            let (type_name, expected_name, actual_name) =
+                (tt.name(type_arg), tt.name(expected), tt.name(actual));
             drop(tt);
             let _ = self.emit(TypeError::AssocTypeBoundNotSatisfied {
                 type_name,

@@ -424,7 +424,7 @@ fn check_cm_boundary_representable_inner(
         return Err(format!(
             "recursive type `{}` cannot cross the Component Model boundary \
              — WIT has no recursive types",
-            type_table.type_name(type_id)
+            type_table.name(type_id)
         ));
     }
     visited.push(type_id);
@@ -474,7 +474,7 @@ fn check_cm_boundary_representable_inner(
                 PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
             ) => Err(format!(
                 "`{}` has no Component Model value representation",
-                type_table.type_name(type_id)
+                type_table.name(type_id)
             )),
             ResolvedType::Unit if slot == Slot::Value => Err(
                 "`()` has no Component Model representation here — it stands only where a \
@@ -489,7 +489,7 @@ fn check_cm_boundary_representable_inner(
                 Err(format!(
                     "`{}` declares no case, and an empty enum, flags or variant has no \
                      Component Model representation — add at least one",
-                    type_table.type_name(type_id)
+                    type_table.name(type_id)
                 ))
             }
             // Scalars, plain discriminants, bitflags, and plain resource
@@ -529,7 +529,7 @@ fn check_cm_boundary_representable_inner(
                 if type_table.is_string(type_id) {
                     return Ok(());
                 }
-                let name = type_table.struct_head_name(*def);
+                let name = type_table.struct_head_mangled_name(*def);
                 match struct_decl_of(*def, type_args, tir_modules) {
                     Some(decl) if decl.fields.is_empty() => Err(format!(
                         "record `{name}` has no fields; an empty record has no \
@@ -583,7 +583,7 @@ fn check_cm_boundary_representable_inner(
                 } else {
                     Err(format!(
                         "generic type `{}` has no Component Model value representation",
-                        type_table.type_name(type_id)
+                        type_table.name(type_id)
                     ))
                 }
             }
@@ -601,7 +601,7 @@ fn check_cm_boundary_representable_inner(
                     Err(format!(
                         "a reference crosses a Component Model import only as a borrowed \
                          resource handle, and `{}` refers to no resource",
-                        type_table.type_name(type_id)
+                        type_table.name(type_id)
                     ))
                 }
             }
@@ -619,7 +619,7 @@ fn check_cm_boundary_representable_inner(
             | ResolvedType::Unknown
             | ResolvedType::Error => Err(format!(
                 "type `{}` has no Component Model value representation",
-                type_table.type_name(type_id)
+                type_table.name(type_id)
             )),
         }
     })(visited);
@@ -942,7 +942,7 @@ fn flat_types_from_type_id_inner(
                 // component (the memory lowerer panics on the same condition).
                 panic!(
                     "struct `{}` has no TIR declaration; cannot compute its flat CM types",
-                    type_table.struct_head_name(*def)
+                    type_table.struct_head_mangled_name(*def)
                 );
             }
         }

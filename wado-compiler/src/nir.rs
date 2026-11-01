@@ -1036,7 +1036,7 @@ pub fn aggregate_field_info(
         return None;
     };
     let module_source = type_table.struct_head_module(*def);
-    let name = type_table.struct_rendered_name(*def, type_args);
+    let name = type_table.struct_mangled_name(*def, type_args);
     let s = structs
         .iter()
         .find(|s| s.name == name && s.module_source == *module_source)?;

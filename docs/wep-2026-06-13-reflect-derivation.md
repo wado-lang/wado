@@ -65,7 +65,7 @@ it wrote.
 
 Identity and structure part ways at a newtype. It names _itself_ through the
 root, and inherits its base's structure like every other impl ([Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)).
-So `Reflect::<P>::type_name()` answers `"P"` while `ReflectStruct::<P>::members()`
+So `Reflect::<P>::decl_name()` answers `"P"` while `ReflectStruct::<P>::members()`
 on `type P = Point` walks Point's fields.
 
 The two bounds therefore hold at different depths: `ReflectNewtype` at the
@@ -77,7 +77,7 @@ per chain link, so `type A = i32; type B = A` renders `7 as A as B`.
 
 ```wado
 pub trait Reflect {                              // identity — every nameable type
-    fn type_name() -> String;                    // the declaration's name
+    fn decl_name() -> String;                    // the declaration's name
     fn type_info() -> TypeInfo;                  // + module + this instantiation's args
     fn wire_name_policy() -> CaseStyle;          // #[wire(name_policy)], casing not applied
 }
@@ -222,7 +222,7 @@ reports its type and nothing about the range.
 
 ## Type identity
 
-`type_name()` names the _declaration_, so every instantiation of a generic type
+`decl_name()` names the _declaration_, so every instantiation of a generic type
 answers alike (`"Pair"`, not `"Pair<String>"` — see [Generic types](#generic-types)). A consumer that keys per instantiation — a schema
 library's `$defs`, a registry, a cache — needs the instance instead, which is a
 distinct fact rather than a different spelling. `TypeInfo` carries it: the
@@ -241,7 +241,7 @@ have to widen its bound to a kind just to name its subject. A schema generator
 keying `$defs` by a `T: JsonSchema` cannot do that, since it does not know which
 kind `T` is.
 
-`type_name()` sits beside `type_info()` on the root: the allocation-free
+`decl_name()` sits beside `type_info()` on the root: the allocation-free
 shorthand serde's `begin_struct` calls, answering the declaration name
 `type_info()` carries.
 
@@ -375,7 +375,7 @@ alternative — synthesizing a concrete impl once `Pair<String>` exists — is
 circular: a derivation needs `Pair<String>: ReflectStruct` _while_
 monomorphizing, which is exactly when the instance appears.
 
-`type_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
+`decl_name()` is the declared name (`"Pair"`, not `"Pair<String>"`), matching
 the plain-struct case and Rust's `{:?}`. The instantiation shows in
 `Reflect::<T>::type_info()` instead: one declaration name and module for every
 `Pair<…>`, with `type_args()` substituted per instance, so a consumer keying
@@ -429,7 +429,7 @@ The reflection traits, the member handles, the wire-naming split, and the
 streaming struct build are implemented — `core:serde` derives every struct,
 variant, enum, and flags impl through them, and a newtype reaches those
 derivations through the base whose structure it inherits. So is the identity
-root: `Reflect` carries `type_name()` for every kind, a kind bound reaches it
+root: `Reflect` carries `decl_name()` for every kind, a kind bound reaches it
 through the supertrait, and `T: Reflect` is a bound of its own. No format trait
 is derived per declaration any more: `Inspect`'s `as Name` tag is a blanket over
 the newtype kind. What remains is what a schema library reads and
@@ -439,11 +439,11 @@ nothing else yet does.
   so `description` / `title` have no source. The fact is not lost: a doc comment
   lives in the `TriviaMap` that `wado doc` reads, and nothing carries it as far
   as a synthesized member.
-- `TypeInfo` is unimplemented: the root answers `type_name()` but not yet
+- `TypeInfo` is unimplemented: the root answers `decl_name()` but not yet
   `type_info()`, so an instantiation cannot be told from its declaration.
   Nothing in the tree needs a new mechanism — it is a sealed value minted like a
   member, and it rides the root's resolution path — but the body is
-  per-instantiation, so it follows `type_name()`'s synthesis, where the resolved
+  per-instantiation, so it follows `decl_name()`'s synthesis, where the resolved
   subject already carries the facts a declaration's case needs (its base name,
   module, and type arguments). Making the root total lands with it: today only
   a synthesized kind carries it. Both are

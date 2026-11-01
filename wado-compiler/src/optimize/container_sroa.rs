@@ -1347,7 +1347,7 @@ fn element_layout_of(
         && let module_source = &type_table.struct_head_module(*def).clone()
     {
         let key = (
-            type_table.struct_rendered_name(*def, type_args),
+            type_table.struct_mangled_name(*def, type_args),
             module_source.clone(),
         );
         let tir_struct = struct_index.get(&key)?;

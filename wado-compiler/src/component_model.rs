@@ -69,7 +69,7 @@ pub fn classify_future_payload(type_table: &TypeTable, type_arg: TypeId) -> CmFu
     try_classify_future_payload(type_table, type_arg).unwrap_or_else(|| {
         panic!(
             "`Future<{}>` has no Component Model payload type",
-            type_table.type_name(type_arg)
+            type_table.name(type_arg)
         )
     })
 }
@@ -80,7 +80,7 @@ pub fn future_payload_rejection(type_table: &TypeTable, payload: TypeId) -> Opti
         .then(|| {
             format!(
                 "`{}` has no Component Model representation as a `future` payload",
-                type_table.type_name(payload)
+                type_table.name(payload)
             )
         })
 }
@@ -113,7 +113,7 @@ pub fn stream_payload_rejection(type_table: &TypeTable, element: TypeId) -> Opti
         .then(|| {
             format!(
                 "`{}` has no Component Model representation as a `stream` element",
-                type_table.type_name(element)
+                type_table.name(element)
             )
         })
 }
@@ -169,7 +169,7 @@ pub fn map_key_rejection(type_table: &TypeTable, key: TypeId) -> Option<String> 
         format!(
             "`{}` is not a Component Model `map` key — a key is `bool`, \
              `char`, `String`, or an integer",
-            type_table.type_name(key)
+            type_table.name(key)
         )
     })
 }
@@ -246,7 +246,7 @@ pub fn classify_stream_payload(type_table: &TypeTable, element: TypeId) -> CmStr
         None => panic!(
             "`Stream<{}>` has no Component Model element type: a guest-created \
              stream of a WASI-owned type is not supported yet",
-            type_table.type_name(element)
+            type_table.name(element)
         ),
     }
 }

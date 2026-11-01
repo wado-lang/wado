@@ -349,7 +349,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 "argument synthesis under-approximated at {span:?}: argument {} elaborated to \
                  `{}`, which the synthesized class {class:?} excludes",
                 index + 1,
-                self.tysys.type_table.borrow().type_name(arg),
+                self.tysys.type_table.borrow().name(arg),
             );
         }
     }
@@ -1109,7 +1109,7 @@ impl TypeSystem {
     pub(super) fn describe_arg_class(&self, class: &ArgClass) -> String {
         let tt = self.type_table.borrow();
         match class {
-            ArgClass::Exact(t) => format!("has type `{}`", tt.type_name(*t)),
+            ArgClass::Exact(t) => format!("has type `{}`", tt.name(*t)),
             ArgClass::Head(head) => format!(
                 "is a `{}` whose type arguments are not pinned here",
                 head.to_display()

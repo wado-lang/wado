@@ -270,7 +270,7 @@ pub enum CompilerItem {
     /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
     FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
-    /// `type_name` for all of them (WEP 2026-06-13).
+    /// `decl_name` for all of them (WEP 2026-06-13).
     Reflect,
     /// `ReflectStruct` — compile-time struct-introspection anchor; the
     /// per-struct `impl ReflectStruct for S` synthesis points at it.
@@ -511,8 +511,8 @@ pub enum CompilerItem {
     ListIndexAssign,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
-    /// `Reflect::type_name` — the declaration's name, for every kind.
-    ReflectTypeName,
+    /// `Reflect::decl_name` — the declaration's name, for every kind.
+    ReflectDeclName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
     /// Every kind carries the attribute and it says the same thing on each, so
     /// the root states it once.
@@ -947,7 +947,7 @@ impl CompilerItem {
         Self::ListIndexValue,
         Self::ListIndexAssign,
         Self::ListFromLeBytes,
-        Self::ReflectTypeName,
+        Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
         Self::MapEntriesIterNext,
@@ -1224,7 +1224,7 @@ impl CompilerItem {
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
             Self::ListFromLeBytes => "list_from_le_bytes",
-            Self::ReflectTypeName => "reflect_type_name",
+            Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::MapEntriesIterNext => "map_entries_iter_next",
@@ -1480,7 +1480,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
-            | Self::ReflectTypeName
+            | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
@@ -1807,7 +1807,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
-            | Self::ReflectTypeName
+            | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
             | Self::MapEntriesIterNext

@@ -640,10 +640,10 @@ impl TypeSystem {
         loop {
             match self.type_table.borrow().get(current).clone() {
                 ResolvedType::Struct { def, .. } => {
-                    return self.type_table.borrow().struct_head_name(def);
+                    return self.type_table.borrow().struct_head_mangled_name(def);
                 }
                 ResolvedType::GenericInstance { def, .. } => {
-                    return self.type_table.borrow().def_name(def).to_string();
+                    return self.type_table.borrow().decl_name(def).to_string();
                 }
                 ResolvedType::Newtype { base_type, .. } => current = base_type,
                 ResolvedType::Flags { .. } => return TypeTable::FLAGS_BASE_NAME.to_string(),
@@ -651,7 +651,7 @@ impl TypeSystem {
                 // (its type args are carried separately), not the full
                 // `type_name` spelling `Array<T>`.
                 ResolvedType::BuiltinArray(_) => return ARRAY_TYPE_NAME.to_string(),
-                _ => return self.type_table.borrow().type_name(current),
+                _ => return self.type_table.borrow().name(current),
             }
         }
     }
@@ -771,9 +771,9 @@ impl TypeSystem {
         bound_param_name(&self.type_table.borrow(), type_id).cloned()
     }
 
-    /// [`TypeTable::type_name`], the one diagnostic spelling of a type.
+    /// [`TypeTable::name`], the one diagnostic spelling of a type.
     pub(crate) fn type_id_to_string(&self, type_id: TypeId) -> String {
-        self.type_table.borrow().type_name(type_id)
+        self.type_table.borrow().name(type_id)
     }
 
     /// Whether `==` / `!=` compares these operands as unrestricted resource

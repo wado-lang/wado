@@ -185,7 +185,7 @@ pub fn resolve_params<H: CompilerHost>(
 
         // v1 supports built-in scalar types only — regardless of any override.
         if !is_supported_type(global.ty, &builtins) {
-            let type_name = type_table.borrow().type_name(global.ty);
+            let type_name = type_table.borrow().name(global.ty);
             emit(
                 ParamPolicyLevel::Error,
                 Code::ParamAttr,
@@ -238,7 +238,7 @@ pub fn resolve_params<H: CompilerHost>(
                 }
             }
         } else if let Some(origin) = source.blamed_origin(&spec.name) {
-            let type_name = type_table.borrow().type_name(global.ty);
+            let type_name = type_table.borrow().name(global.ty);
             emit(
                 policy.invalid,
                 Code::ParamInvalid,

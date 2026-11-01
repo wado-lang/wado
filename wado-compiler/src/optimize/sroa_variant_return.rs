@@ -1746,7 +1746,7 @@ impl<'t> Rebind<'t> {
                         declared,
                         (
                             type_table.type_key(type_args[0]),
-                            type_table.struct_rendered_name(*def, type_args),
+                            type_table.struct_mangled_name(*def, type_args),
                         ),
                     ))
                 }

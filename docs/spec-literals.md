@@ -1085,7 +1085,7 @@ template's holes, each a type and a specifier, so `` tag`a=${a}` `` and
 `` tag`b: ${b}` `` are one type where `a` and `b` share one, and one
 instantiation of the tag. A value of it holds each hole and the literal text the
 site wrote. The type is unnameable and reached only through the bound; a
-diagnostic and `Reflect::type_name()` show it as its holes, each spelled by its
+diagnostic and `Reflect::decl_name()` show it as its holes, each spelled by its
 type and specifier, `` `${i32:04}` ``, cut at 50 characters with `...`.
 
 `ReflectTemplate` is

@@ -666,7 +666,7 @@ pub enum ResolvedType {
         def: StructDef,
         /// What this instantiation was made with; empty for a declaration
         /// written as such. The rendered spelling is derived from the two —
-        /// see [`TypeTable::struct_rendered_name`].
+        /// see [`TypeTable::struct_mangled_name`].
         type_args: Vec<TypeId>,
     },
     Enum {

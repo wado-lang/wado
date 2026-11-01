@@ -783,7 +783,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             scope.reject_provided_from(target, source, impl_block.span);
         }
         if scope.tysys.type_table.borrow().is_never(target) {
-            let type_name = scope.tysys.type_table.borrow().type_name(target);
+            let type_name = scope.tysys.type_table.borrow().name(target);
             let _ = scope.emit(TypeError::ImplForNever {
                 type_name,
                 span: impl_block.span,
@@ -836,8 +836,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             };
             let header = format!(
                 "{} for {}",
-                display_generic_name("From", &[tt.type_name(source)]),
-                tt.type_name(target)
+                display_generic_name("From", &[tt.name(source)]),
+                tt.name(target)
             );
             (provided, header)
         };
@@ -1378,7 +1378,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         | ResolvedType::Enum { .. }
                         | ResolvedType::Variant { .. }
                 ),
-                tt.type_name(self_ty),
+                tt.name(self_ty),
             )
         };
         if is_concrete_value && !self.tysys.carries_affine(self_ty) {
@@ -1553,7 +1553,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = self.emit(TypeError::UnpublishedAtCmBoundary {
                 function: function.name.clone(),
                 position: position.to_string(),
-                ty: self.tysys.type_table.borrow().type_name(ty),
+                ty: self.tysys.type_table.borrow().name(ty),
                 span,
             });
         }
@@ -2697,7 +2697,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let _ = scope.emit(TypeError::RefAtCmBoundary {
                     function: func.name.clone(),
                     position: format!("parameter '{}'", param.name),
-                    reference: scope.tysys.type_table.borrow().type_name(reference),
+                    reference: scope.tysys.type_table.borrow().name(reference),
                     span: param.span,
                 });
             }
@@ -2729,7 +2729,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = scope.emit(TypeError::RefAtCmBoundary {
                 function: func.name.clone(),
                 position: "return type".to_string(),
-                reference: scope.tysys.type_table.borrow().type_name(reference),
+                reference: scope.tysys.type_table.borrow().name(reference),
                 span: func.span,
             });
         }

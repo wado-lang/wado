@@ -2303,10 +2303,10 @@ impl Monomorphizer {
                 // Update struct_name to match the (possibly monomorphized) struct_type
                 match type_table.get(*struct_type) {
                     ResolvedType::Struct { def, type_args } => {
-                        *struct_name = type_table.struct_rendered_name(*def, type_args);
+                        *struct_name = type_table.struct_mangled_name(*def, type_args);
                     }
                     ResolvedType::GenericInstance { def, type_args } => {
-                        let name = &type_table.def_name(*def).to_string();
+                        let name = &type_table.decl_name(*def).to_string();
                         if type_args.is_empty() && !substitution.is_empty() {
                             // GenericInstance with empty type_args in a substitution context
                             // Build the name using the substitution map. Type

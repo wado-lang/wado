@@ -735,7 +735,7 @@ impl<'a> WirContext<'a> {
             type_table.is_stackless(type_id),
             "[WIR] {} disagrees with `is_stackless`: a type the signature lists and the body \
              drops (or the reverse) desyncs the two",
-            type_table.type_name(type_id),
+            type_table.name(type_id),
         );
         wir
     }
@@ -897,7 +897,7 @@ impl<'a> WirContext<'a> {
                 // instantiation is its own struct type.
                 let lookup_name = StructName::new(
                     lookup_module,
-                    type_table.struct_rendered_name(*def, type_args),
+                    type_table.struct_mangled_name(*def, type_args),
                 );
                 let Some(type_id) = self.struct_type_map.get(&lookup_name) else {
                     return Err(UnregisteredType::struct_ref(format!(
@@ -929,7 +929,7 @@ impl<'a> WirContext<'a> {
                 // function-local declaration's spelling carries its
                 // disambiguator, and two sibling functions' `struct Box<T>`
                 // are two registrations.
-                let name = &type_table.decl_render_name(*def);
+                let name = &type_table.decl_mangled_name(*def);
                 let module_source = &type_table.def_module(*def).clone();
                 // A generic instance is either a struct or a variant, and the
                 // two live in different maps. Registration aliases the
@@ -964,7 +964,8 @@ impl<'a> WirContext<'a> {
             }
             // Option<T> is handled as GenericInstance (variant).
             ResolvedType::Enum { def } => {
-                let key = wir_enum_type_key(type_table.def_module(*def), type_table.def_name(*def));
+                let key =
+                    wir_enum_type_key(type_table.def_module(*def), type_table.decl_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::enum_i32(format!("enum `{key}`")));
                 };
@@ -973,7 +974,7 @@ impl<'a> WirContext<'a> {
                 }
             }
             ResolvedType::Variant { def } => {
-                let key = wir_type_key(type_table.def_module(*def), type_table.def_name(*def));
+                let key = wir_type_key(type_table.def_module(*def), type_table.decl_name(*def));
                 let Some(type_id) = self.type_map.get(&key) else {
                     return Err(UnregisteredType::struct_ref(format!("variant `{key}`")));
                 };

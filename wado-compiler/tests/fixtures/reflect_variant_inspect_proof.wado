@@ -9,14 +9,14 @@ trait LibInspect with () {
 
 impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect> LibInspect for T {
     fn lib_inspect(&self) -> String {
-        let type_name = Reflect::<T>::type_name();
+        let decl_name = Reflect::<T>::decl_name();
         let mut out = "";
         for let c of ReflectVariant::<T>::members() {
             if c.holds(self) {
                 if c.is_unit() {
-                    out = `${type_name}::${c.name()}`;
+                    out = `${decl_name}::${c.name()}`;
                 } else {
-                    out = `${type_name}::${c.name()}(${c.extract(self):?})`;
+                    out = `${decl_name}::${c.name()}(${c.extract(self):?})`;
                 }
             }
         }

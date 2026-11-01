@@ -135,7 +135,7 @@ fn collect_variant_bridges(flat: &FlatPackage, generated: &mut Vec<Rc<RefCell<Ti
                     .then(|| {
                         (
                             id,
-                            tt.def_name(*def).to_string(),
+                            tt.decl_name(*def).to_string(),
                             tt.def_module(*def).clone(),
                             type_args.clone(),
                         )

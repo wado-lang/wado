@@ -917,7 +917,7 @@ impl PatternLiteralError {
         match self {
             PatternLiteralError::Mismatch(expected) => TypeError::PatternTypeMismatch {
                 expected,
-                found: type_table.type_name(type_table.peel_refs(scrutinee)),
+                found: type_table.name(type_table.peel_refs(scrutinee)),
                 span,
             },
             PatternLiteralError::Invalid(message) => TypeError::InvalidPattern { message, span },

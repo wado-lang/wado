@@ -8,7 +8,7 @@ author cannot name:
 
 | Plane     | Carried by                                  | An unknown `T`                     |
 | --------- | ------------------------------------------- | ---------------------------------- |
-| Identity  | `Reflect` — `type_name`, `wire_name_policy` | answers                            |
+| Identity  | `Reflect` — `decl_name`, `wire_name_policy` | answers                            |
 | Structure | the kind sub-traits (`ReflectStruct`, …)    | needs the kind named in the bound  |
 | Value     | the member bridges (`get` / `extract` / …)  | needs the payload types statically |
 
@@ -141,8 +141,8 @@ apart.
 
 The three names are one vocabulary across reflection: `name()` with the
 arguments, `decl_name()` without them, `canonical_name()` with the module.
-`Reflect::type_name()` is renamed `Reflect::decl_name()` to join it, since it
-answers the declaration's name and `type_name` read as the other one. The
+`Reflect::decl_name()` is named to join it: it answers the declaration's name,
+and `type_name` would read as the other one. The
 declaration's name is not `base_name()`: a newtype's base is its underlying
 type (`ReflectNewtype::Base`), so `base_name()` on `Meters` would read as
 `f64`'s name. The compiler names these the same way.
@@ -352,7 +352,7 @@ and a `match type` node is expanded the same way against the concrete subject.
 The call it leaves behind is a solved problem too: a `Reflect*` static call on a
 type parameter records a dispatch fact (`is_type_param_receiver`) that
 monomorphization redirects to the concrete type's synthesized impl. That is how
-`fn root_name_of<T: Reflect>()` works today (`reflect_root_type_name.wado`).
+`fn root_name_of<T: Reflect>()` works today (`reflect_root_decl_name.wado`).
 
 An arm binds what its kind's trait associates. The pack cannot be left to a
 helper function's header: a call site projects `[..F]` from the _concrete_
@@ -493,17 +493,16 @@ answers for the _type_.
 
 ## Roadmap
 
-1. [ ] `TypeInfo`, `DeclInfo`, `ReflectResource`, and type arguments in
+1. [x] The names follow the vocabulary. `Reflect::decl_name()` answers the
+   declaration's name. In the compiler, `TypeTable::name` and
+   `TypeTable::canonical_name` spell a `TypeId`, `TypeTable::decl_name` spells a
+   `DefId`, and the disambiguated spelling a mangle embeds is `mangled`
+   (`DeclaredHead::mangled`, `TypeTable::decl_mangled_name`).
+2. [ ] `TypeInfo`, `DeclInfo`, `ReflectResource`, and type arguments in
    `Inspect`. Done when `type_info()` answers every case above, `name()` and
-   `decl_name()` spell each, `Reflect::type_name()` is `Reflect::decl_name()`
-   at every caller, an affine resource derives `Inspect` from a prelude blanket
-   over `ReflectResource`, and every generic type's `Inspect` writes its
+   `decl_name()` spell each, an affine resource derives `Inspect` from a prelude
+   blanket over `ReflectResource`, and every generic type's `Inspect` writes its
    arguments.
-2. [ ] The compiler's names follow the same vocabulary. Done when one function
-   answers each of `name`, `decl_name` and `canonical_name` for a `TypeId`
-   (today `type_name`, a family of `*_name` helpers, and `type_name_qualified`),
-   and the disambiguated spelling a mangle embeds is named `mangled` rather than
-   `rendered` (`DeclaredHead::rendered`, `decl_render_name`).
 3. [ ] `match type`. Done when `Inspect`'s per-kind blankets are arms of one body
    and `mise run report-wasm-size` does not regress.
 

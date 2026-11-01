@@ -117,9 +117,9 @@ only an affine type implements it.
 A type's identity: the root every reflected kind sits under. Sealed and
 compiler-synthesized like the kinds. See WEP 2026-06-13.
 
-#### `fn type_name() -> String`
+#### `fn decl_name() -> String`
 
-`#[compiler_item("reflect_type_name")]`
+`#[compiler_item("reflect_decl_name")]`
 
 Returns the declaration's name, or `""` for an anonymous struct, which
 names none.
