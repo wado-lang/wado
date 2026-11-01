@@ -1826,6 +1826,9 @@ pub struct TirCapture {
     pub name: String,
     pub source: CaptureSource,
     pub type_id: TypeId,
+    /// Lowering made the slot hold a `&T` to the binding and wrapped each
+    /// read of it in a `Deref` the source never wrote.
+    pub through_ref: bool,
 }
 
 /// The constructing frame's locals `captures` reads, in order. A slot read off

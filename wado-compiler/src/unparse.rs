@@ -4189,6 +4189,9 @@ pub struct TirUnparser<'a> {
     /// Which locals of the function or closure body being printed are mutable,
     /// which a pattern binding states only through its local.
     mut_locals: Vec<bool>,
+    /// Which environment slots of the closure body being printed lowering
+    /// reads through a `Deref` of its own.
+    through_ref_slots: Vec<bool>,
 }
 
 impl ListWriter for TirUnparser<'_> {
@@ -4205,6 +4208,7 @@ impl<'a> TirUnparser<'a> {
             indent_level: 0,
             source_form: false,
             mut_locals: Vec::new(),
+            through_ref_slots: Vec::new(),
         }
     }
 
@@ -4811,7 +4815,13 @@ impl<'a> TirUnparser<'a> {
                 self.output.push(')');
             }
             TirExprKind::Unary { op, expr: inner } => {
-                self.output.push_str(tir_unary_op_str(*op));
+                let lowered_deref = self.source_form
+                    && *op == TirUnaryOp::Deref
+                    && matches!(inner.kind, TirExprKind::Capture { index, .. }
+                        if self.through_ref_slots[index as usize]);
+                if !lowered_deref {
+                    self.output.push_str(tir_unary_op_str(*op));
+                }
                 self.unparse_expr(inner);
             }
             TirExprKind::Assign { target, value } => {
@@ -5077,8 +5087,13 @@ impl<'a> TirUnparser<'a> {
             .chain(body_locals.iter().map(|l| l.is_mut))
             .collect();
         let enclosing = std::mem::replace(&mut self.mut_locals, closure_mut_locals);
+        let enclosing_slots = std::mem::replace(
+            &mut self.through_ref_slots,
+            captures.iter().map(|c| c.through_ref).collect(),
+        );
         self.unparse_expr(body);
         self.mut_locals = enclosing;
+        self.through_ref_slots = enclosing_slots;
     }
 }
 
