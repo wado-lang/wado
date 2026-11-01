@@ -226,6 +226,17 @@ of the region holding the `?`. At 1% or more the profile wins: the marker is
 dropped, and the same remark names the count and the share. Comparing with zero
 would drop a right guess, since a rare path still runs now and then.
 
+A share means little over a few runs: a workload is small, and one failure in
+20 runs is 5%. So the profile overrules the guess only where the region holding
+the `?` ran at least 100 times, and below that the marker stays.
+
+No share is the right one. GCC calls a branch predictable under 2% one way
+(`predictable-branch-outcome`), and LLVM weighs `__builtin_expect` at 2000 to 1.
+Both are tuning knobs rather than rules, and so are these two:
+`--optimize-pgo-yield-share` sets the share, in percent, and
+`--optimize-pgo-yield-min-runs` the runs, alongside the other `--optimize-*`
+options.
+
 The other markers the compiler places sit ahead of a trap, or past a global's
 once-guard. A workload that reaches a trap fails the recording, and a once-guard
 runs once by construction, so a profile has nothing to correct in them. The
@@ -301,8 +312,10 @@ level.
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
-   marker, with the remark. An e2e fixture states both sides of the threshold.
+6. [ ] A `?`'s failure path the profile ran 1% or more of the time, in a region
+   that ran at least 100 times, loses its marker, with the remark.
+   `--optimize-pgo-yield-share` and `--optimize-pgo-yield-min-runs` set the two
+   numbers. An e2e fixture states both sides of each.
 7. [ ] The random-profile differential test.
 8. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
@@ -323,6 +336,9 @@ level.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
+- [ ] Nothing reads how large a share of the whole run a region takes, so a call
+  site the workloads ran a million times is inlined at the price of one they ran
+  once.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
