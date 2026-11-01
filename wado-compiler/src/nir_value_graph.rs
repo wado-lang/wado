@@ -530,9 +530,9 @@ pub struct ValuePool {
     /// is the kind for `id`. CSE is pure hash-consing (no e-class merges), so a
     /// `ValueId` is stable once allocated and needs no representative lookup.
     values: Vec<ValueKind>,
-    /// Reverse index: kind → `ValueId`. The hash-cons memo.
-    /// Every kind but `Opaque`: an opaque is fresh by definition, so hashing
-    /// one shares nothing, and a builder mints one per local at every call.
+    /// Reverse index: kind → `ValueId`, the hash-cons memo. It holds every kind
+    /// but `Opaque`: an opaque is fresh by definition, so hashing one shares
+    /// nothing, and a builder mints one per escaped local at every call.
     interned: IndexMap<ValueKind, ValueId>,
     /// Per-`ValueId` source type, indexed by raw id. `ValueKind` is type-erased
     /// (an `Int(u64)` carries no width), so extraction — which materialises a
@@ -583,7 +583,6 @@ impl ValuePool {
         if let Some(&id) = self.interned.get(&kind) {
             return id;
         }
-        let id = ValueId(self.values.len() as u32);
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
         let carried_type = match &kind {
@@ -602,9 +601,16 @@ impl ValuePool {
             | ValueKind::LoopPhi { .. }
             | ValueKind::FieldAccess { .. } => None,
         };
-        self.values.push(kind.clone());
-        self.types.push(carried_type);
+        let id = self.alloc(kind.clone(), carried_type);
         self.interned.insert(kind, id);
+        id
+    }
+
+    /// A new `ValueId` for `kind`, shared with no other.
+    fn alloc(&mut self, kind: ValueKind, type_id: Option<TypeId>) -> ValueId {
+        let id = ValueId(self.values.len() as u32);
+        self.values.push(kind);
+        self.types.push(type_id);
         id
     }
 
@@ -639,10 +645,7 @@ impl ValuePool {
     /// constant's width: `ValueKind` is type-erased, so `7: i32` and `7: i64`
     /// would otherwise hash-cons to one id with one recorded type.
     pub fn alloc_unshared(&mut self, kind: ValueKind, type_id: TypeId) -> ValueId {
-        let id = ValueId(self.values.len() as u32);
-        self.values.push(kind);
-        self.types.push(Some(type_id));
-        id
+        self.alloc(kind, Some(type_id))
     }
 
     /// Name an evaluated constant, whatever its shape — the single place that
@@ -677,10 +680,7 @@ impl ValuePool {
     fn mint_opaque(&mut self, local: Option<u32>) -> ValueId {
         let opaque = OpaqueId(u32::try_from(self.opaque_locals.len()).expect("opaques fit u32"));
         self.opaque_locals.push(local);
-        let id = ValueId(self.values.len() as u32);
-        self.values.push(ValueKind::Opaque(opaque));
-        self.types.push(None);
-        id
+        self.alloc(ValueKind::Opaque(opaque), None)
     }
 
     /// The local an `Opaque` reads, if it reads one.

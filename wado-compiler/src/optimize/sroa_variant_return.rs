@@ -2693,10 +2693,21 @@ fn rewrite_temp_uses(body: &mut Body, node: NodeRef, cx: &mut SiteCx) -> bool {
 /// lowers a destructure and a bare read, which it rebuilds the variant for,
 /// but a `Match` arm deeper than one level has no tag form, and leaves the
 /// site to the rebox. One walk answers for every temp.
-fn unrewritable_temps(body: &Body, layouts: &IndexMap<u32, &Layout>, rebind: &Rebind) -> IndexSet<u32> {
+fn unrewritable_temps(
+    body: &Body,
+    layouts: &IndexMap<u32, &Layout>,
+    rebind: &Rebind,
+) -> IndexSet<u32> {
     let mut refused = IndexSet::default();
     let mut binding: Vec<u32> = Vec::new();
-    refuse_temp_uses(body, NodeRef::Block(body.root()), layouts, rebind, &mut binding, &mut refused);
+    refuse_temp_uses(
+        body,
+        NodeRef::Block(body.root()),
+        layouts,
+        rebind,
+        &mut binding,
+        &mut refused,
+    );
     refused
 }
 
@@ -2720,23 +2731,23 @@ fn refuse_temp_uses(
         && matches!(&body.exprs[e].kind, ExprKind::Call { .. })
     {
         binding.push(*local_index);
-        body.for_each_child(node, |c| refuse_temp_uses(body, c, layouts, rebind, binding, refused));
+        body.for_each_child(node, |c| {
+            refuse_temp_uses(body, c, layouts, rebind, binding, refused)
+        });
         binding.pop();
         return;
     }
     if let NodeRef::Expr(e) = node
         && let ExprKind::Match { expr: scrut, arms } = &body.exprs[e].kind
-        && let Some(local) = scrut.as_expr().and_then(|s| match &body.exprs[s].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
-        })
-        && let Some(layout) = layouts.get(&local)
+        && let Some(local) = temp_local(body, *scrut, layouts)
         && !binding.contains(&local)
-        && !arms_are_one_level(body, arms, rebind, layout)
+        && !arms_are_one_level(body, arms, rebind, layouts[&local])
     {
         refused.insert(local);
     }
-    body.for_each_child(node, |c| refuse_temp_uses(body, c, layouts, rebind, binding, refused));
+    body.for_each_child(node, |c| {
+        refuse_temp_uses(body, c, layouts, rebind, binding, refused)
+    });
 }
 
 fn temp_local<V>(body: &Body, op: Operand, bound: &IndexMap<u32, V>) -> Option<u32> {

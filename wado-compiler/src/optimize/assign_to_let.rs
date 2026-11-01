@@ -42,7 +42,9 @@ pub(super) fn promote_lone_assignments(
                 && path[enclosing.len()].0 == *block
                 && path[enclosing.len()].1 >= *index
         };
-        if !operand_read_locals(body, *value).contains(local) && census.mentions[local].iter().all(after) {
+        if !operand_read_locals(body, *value).contains(local)
+            && census.mentions[local].iter().all(after)
+        {
             promoted.push((*stmt, *local, *value));
         }
     }
@@ -78,7 +80,8 @@ impl Census<'_> {
                 if let Some((local, value)) = assignment_statement(body, stmt)
                     && self.lone.contains(&local)
                 {
-                    self.assignments.push((stmt, local, value, self.path.clone()));
+                    self.assignments
+                        .push((stmt, local, value, self.path.clone()));
                 }
                 self.walk(body, NodeRef::Stmt(stmt));
                 self.path.pop();
@@ -98,7 +101,10 @@ impl Census<'_> {
         });
         for local in read {
             if self.lone.contains(&local) {
-                self.mentions.entry(local).or_default().push(self.path.clone());
+                self.mentions
+                    .entry(local)
+                    .or_default()
+                    .push(self.path.clone());
             }
         }
         body.for_each_child(node, |c| self.walk(body, c));

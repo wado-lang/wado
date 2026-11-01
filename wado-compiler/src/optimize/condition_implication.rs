@@ -1391,31 +1391,17 @@ impl Summaries {
             roots: hashmap::IndexSet::default(),
             aliased: false,
             call: false,
-            jumps: false,
-            quiet: true,
+            jumps: matches!(node, NodeRef::Stmt(s) if body.stmts[s].kind.is_jump()),
+            quiet: node_quiet(body, node, |id| engine.is_quiet_callee(id)),
         };
-        match node {
-            NodeRef::Expr(e) => {
-                for_each_write(engine, e, &mut |w| match w {
-                    Write::Root(r) => {
-                        own.roots.insert(r);
-                    }
-                    Write::Aliased(_) => own.aliased = true,
-                    Write::Call => own.call = true,
-                });
-                own.quiet = match &body.exprs[e].kind {
-                    ExprKind::Call { func_id, .. } => engine.is_quiet_callee(*func_id),
-                    kind => !matches!(kind, ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }),
-                };
-            }
-            NodeRef::Stmt(s) => {
-                own.jumps = body.stmts[s].kind.is_jump();
-                own.quiet = !matches!(
-                    body.stmts[s].kind,
-                    StmtKind::Loop { .. } | StmtKind::Return { .. } | StmtKind::Break { .. } | StmtKind::Continue
-                );
-            }
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        if let NodeRef::Expr(e) = node {
+            for_each_write(engine, e, &mut |w| match w {
+                Write::Root(r) => {
+                    own.roots.insert(r);
+                }
+                Write::Aliased(_) => own.aliased = true,
+                Write::Call => own.call = true,
+            });
         }
         for child in &children {
             own.jumps |= child.jumps;
@@ -1471,7 +1457,6 @@ impl Summary {
             || (self.call && write_hits(engine, Write::Call, root))
     }
 }
-
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
 /// the side-table). Recognises the loop guard `if !(var < bound) { break }` at
@@ -2711,26 +2696,29 @@ fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
 /// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
 fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
-    body.for_each_node_under(node, |n| {
-        quiet &= match n {
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::Call { func_id, .. } => quiet_call(*func_id),
-                kind => !matches!(
-                    kind,
-                    ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
-                ),
-            },
-            NodeRef::Stmt(s) => !matches!(
-                body.stmts[s].kind,
-                StmtKind::Loop { .. }
-                    | StmtKind::Return { .. }
-                    | StmtKind::Break { .. }
-                    | StmtKind::Continue
-            ),
-            NodeRef::Block(_) | NodeRef::Pat(_) => true,
-        };
-    });
+    body.for_each_node_under(node, |n| quiet &= node_quiet(body, n, &quiet_call));
     quiet
+}
+
+/// [`subtree_quiet`] of `node` alone, its children aside.
+fn node_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
+    match node {
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => quiet_call(*func_id),
+            kind => !matches!(
+                kind,
+                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
+            ),
+        },
+        NodeRef::Stmt(s) => !matches!(
+            body.stmts[s].kind,
+            StmtKind::Loop { .. }
+                | StmtKind::Return { .. }
+                | StmtKind::Break { .. }
+                | StmtKind::Continue
+        ),
+        NodeRef::Block(_) | NodeRef::Pat(_) => true,
+    }
 }
 
 /// Whether `var + j` cannot wrap for any `var` in `span`.
@@ -3252,10 +3240,24 @@ fn rbce_walk(
         }
         let mut ft = branch_facts(facts);
         ft.extend(floors);
-        changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames, summaries);
+        changed |= rbce_walk(
+            engine,
+            NodeRef::Block(then_b),
+            &mut ft,
+            binds,
+            frames,
+            summaries,
+        );
         if let Some(eb) = else_b {
             let mut fe = branch_facts(facts);
-            changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds, frames, summaries);
+            changed |= rbce_walk(
+                engine,
+                NodeRef::Block(eb),
+                &mut fe,
+                binds,
+                frames,
+                summaries,
+            );
             invalidate(engine, NodeRef::Block(eb), facts, summaries);
         }
         invalidate(engine, NodeRef::Block(then_b), facts, summaries);

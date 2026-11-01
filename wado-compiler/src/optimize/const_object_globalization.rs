@@ -938,7 +938,11 @@ fn let_stmt_qualifies(
     {
         return decline("storage leaks through a call");
     }
-    if storage_leaves_body(body, &aliases.delivered_roots(body, local_index, gate), gate) {
+    if storage_leaves_body(
+        body,
+        &aliases.delivered_roots(body, local_index, gate),
+        gate,
+    ) {
         return decline("storage leaves the function");
     }
     // An unread binding is dead code on its way out, not a hoist target:
@@ -1671,11 +1675,9 @@ impl Gate<'_> {
         if self.param_refs_mutably(param) {
             return true;
         }
-        f.body
-            .as_ref()
-            .is_none_or(|body| {
-                !is_readonly_body(body, &Aliases::of(body, self), param.local_index, self)
-            })
+        f.body.as_ref().is_none_or(|body| {
+            !is_readonly_body(body, &Aliases::of(body, self), param.local_index, self)
+        })
     }
 
     /// Whether parameter `param_pos` is taken by value and never written or
@@ -1781,11 +1783,9 @@ impl Gate<'_> {
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
-        f.body
-            .as_ref()
-            .is_none_or(|body| {
-                param_storage_escapes(body, &Aliases::of(body, self), param.local_index, self)
-            })
+        f.body.as_ref().is_none_or(|body| {
+            param_storage_escapes(body, &Aliases::of(body, self), param.local_index, self)
+        })
     }
 
     fn compute_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
@@ -1838,12 +1838,12 @@ fn readonly_body_violation(
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    let aliases: Vec<u32> = aliases
+    let others: Vec<u32> = aliases
         .projection_roots(idx)
         .into_iter()
         .filter(|&root| root != idx)
         .collect();
-    written_through(body, &aliases, gate).then_some("an alias of the binding is written")
+    written_through(body, &others, gate).then_some("an alias of the binding is written")
 }
 
 /// Whether a write reaches the storage one of `roots` names: an assignment
