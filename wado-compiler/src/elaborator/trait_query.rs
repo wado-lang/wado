@@ -1177,7 +1177,12 @@ impl TypeSystem {
         let args = table
             .generic_type_args(table.representation_head(type_id))
             .expect("an argument the impl bounds is one the instance carries");
-        Some(positions.into_iter().map(|position| args[position]).collect())
+        Some(
+            positions
+                .into_iter()
+                .map(|position| args[position])
+                .collect(),
+        )
     }
 
     /// The declaration `type_id` represents, where no source of `trait_` holds
