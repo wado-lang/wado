@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793495686479,
+  "lastUpdate": 1793498139283,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72877,6 +72877,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/edbe8c1aafaf9be73f03fb2bf021ddc88bf46e59"
         },
         "date": 1793495685526,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7b2c972ca8fa63fbc1a93bcbd6f625584e8bb37",
+          "message": "Merge pull request #2508 from wado-lang/ccr-597afb92-alcbrd\n\nfix(elaborator): resolve written generic resource types",
+          "timestamp": "2026-11-01T10:30:06+09:00",
+          "tree_id": "9c4279d756d11f759a89a68a5022823b57ffe1c9",
+          "url": "https://github.com/wado-lang/wado/commit/e7b2c972ca8fa63fbc1a93bcbd6f625584e8bb37"
+        },
+        "date": 1793498138023,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
