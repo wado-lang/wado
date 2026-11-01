@@ -145,6 +145,7 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
     let mut out = Vec::new();
     let mut nesting = 0usize;
     let mut copied = 0usize;
+    let mut embedded_any = false;
     for payload in wasmparser::Parser::new(0).parse_all(component) {
         match payload? {
             Payload::ModuleSection {
@@ -162,6 +163,7 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
                     drop_section_length(&mut out, MODULE_SECTION_ID);
                     embed(&component[unchecked_range.clone()], opts)?.encode(&mut out);
                     copied = unchecked_range.end;
+                    embedded_any = true;
                 }
                 nesting += 1;
             }
@@ -178,7 +180,7 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
             _ => {}
         }
     }
-    if copied == 0 {
+    if !embedded_any {
         return Err(Error::Unsupported("a component with no core module"));
     }
     out.extend_from_slice(&component[copied..]);

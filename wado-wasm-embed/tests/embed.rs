@@ -408,6 +408,27 @@ fn stripping_a_component_drops_its_own_custom_sections_too() {
     assert!(kept.contains(&"component-name".to_string()), "{kept:?}");
 }
 
+/// Stripping a custom section consumes bytes, as embedding a module does, but
+/// leaves a component with nothing to collect.
+#[test]
+fn a_component_with_only_a_custom_section_has_no_core_module() {
+    let component =
+        wat::parse_str(r#"(component (@custom "producers" "\00"))"#).expect("fixture must parse");
+    let result = wado_wasm_embed::embed_component(
+        &component,
+        &Embed {
+            memory_import: None,
+            keep_export: &|_| true,
+            stub_export: &|_| false,
+            strip_custom_sections: true,
+        },
+    );
+    assert!(
+        matches!(result, Err(wado_wasm_embed::Error::Unsupported(_))),
+        "{result:?}"
+    );
+}
+
 /// `ref.func` needs its target declared, and an export is a declaration. When
 /// the prune drops that export the function is still live, so the declaration
 /// has to be put back or the module no longer validates.
