@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793498139283,
+  "lastUpdate": 1793498922931,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -72921,6 +72921,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e7b2c972ca8fa63fbc1a93bcbd6f625584e8bb37"
         },
         "date": 1793498138023,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "43b421e9ef4ce0bd5480e40b912038bce4d7eb98",
+          "message": "Merge pull request #2509 from wado-lang/pgo-flags\n\nfeat(pgo): builds apply the entry's profile, and -f pgo / -f no-pgo choose",
+          "timestamp": "2026-11-01T10:30:33+09:00",
+          "tree_id": "d7e4a1cc94c00cd59efb111ce991394dba00f29d",
+          "url": "https://github.com/wado-lang/wado/commit/43b421e9ef4ce0bd5480e40b912038bce4d7eb98"
+        },
+        "date": 1793498922327,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
