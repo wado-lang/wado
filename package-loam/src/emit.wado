@@ -63,6 +63,7 @@ use {
     Cut,
     ROTARY_COS,
     ROTARY_SIN,
+    arg_max_axis,
     attention_options,
     concat_axis,
     conv_group,
@@ -2863,6 +2864,10 @@ fn node_call(
     if is_reduction(&op) {
         return reduction_call(node, checked, exprs, symbols);
     }
+    if op == "ArgMax" {
+        let axis = settled(arg_max_axis(node, shapes[node.inputs[0]].rank()));
+        return ranked(node, checked, `backend.arg_max(${exprs.reference(&node.inputs[0])}, ${axis})`, symbols);
+    }
     if op == "Concat" {
         return Result::Ok(concat_call(node, checked, exprs));
     }
@@ -2958,6 +2963,12 @@ fn built_call(
     }
     if is_reduction(&op) {
         return built_reduction(node, checked, exprs, symbols);
+    }
+    if op == "ArgMax" {
+        let x = shapes[node.inputs[0]];
+        let axis = settled(arg_max_axis(node, x.rank()));
+        let a = masked_along(operand(0), &x, axis, float_literal(f32::NEG_INFINITY), symbols)?;
+        return ranked(node, checked, `arg_max::<${BACKEND_PARAM}, [${axis_list(&x)}]>(backend, ${a}, ${axis})`, symbols);
     }
     if op == "Concat" {
         return built_concat(node, checked, exprs, symbols);
@@ -3663,6 +3674,16 @@ fn reshaped(node: &Node, checked: &Checked, operand: &String, symbols: &mut Symb
     let extents = symbols.spell_shape(&to)?;
     return Result::Ok(
         `backend.reshape::<${element}, [${axis_list(&from)}], [${axis_list(&to)}]>(${operand}, ${extents})`,
+    );
+}
+
+/// `call`, an `ArgMax` keeping its axis at extent 1 under its operand's axes,
+/// reshaped to the node's.
+fn ranked(node: &Node, checked: &Checked, call: String, symbols: &mut Symbols) -> Result<String, EmitError> {
+    let from = checked.shapes[node.inputs[0]];
+    let to = checked.shapes[node.outputs[0]];
+    return Result::Ok(
+        `backend.reshape::<i64, [${axis_list(&from)}], [${axis_list(&to)}]>(&${call}, ${symbols.spell_shape(&to)?})`,
     );
 }
 

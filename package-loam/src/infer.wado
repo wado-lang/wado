@@ -780,6 +780,13 @@ fn produced_primitive(node: &Node, primitives: &HashMap<String, String>) -> Resu
         // A float range folds, so only an integer one reaches the run.
         return Result::Ok(Option::Some("i64"));
     }
+    if op == "ArgMax" {
+        let x = node.inputs[0];
+        if let Some(p) = primitives.get(x) && p != KERNEL_ELEMENT {
+            return Result::Err(refusal(node, `operand ${x} is ${p}, and ArgMax ranks ${KERNEL_ELEMENT}`));
+        }
+        return Result::Ok(Option::Some("i64"));
+    }
     if op == "ConstantOfShape" {
         return Result::Ok(Option::Some(known_primitive(&attr_read(node, fill_of(node))?)));
     }
@@ -1115,14 +1122,23 @@ fn infer_node(
     if op == "Expand" {
         return expanded(node, &operand_at(node, shapes, 0), known, owed, classes);
     }
-    if is_reduction(&op) {
+    if is_reduction(&op) || op == "ArgMax" {
         let x = operand_at(node, shapes, 0);
-        let reduced = reduced_axes(node, known, x.rank())?;
+        let reduced: List<i32> = if op == "ArgMax" {
+            [arg_max_axis(node, x.rank())?];
+        } else {
+            reduced_axes(node, known, x.rank())?;
+        };
         let keep = int_attr(node, "keepdims", 1)? != 0;
         let mut axes: List<Axis> = [];
         for let [i, axis] of x.axes.into_iter().enumerate() {
             if !reduced.contains(&i) {
                 axes.push(axis);
+            } else if keep && op == "ArgMax" {
+                // An index is no position along the axis it ranks, and an
+                // output sharing that axis's name would leave the name no
+                // single extent.
+                axes.push(new_axis(&node.outputs[0], i, Extent::Static(1), classes));
             } else if keep {
                 axes.push(Axis { ..axis, extent: Extent::Static(1) });
             }
@@ -1888,6 +1904,15 @@ pub fn reduced_axes(node: &Node, known: &HashMap<String, Known>, rank: i32) -> R
     return Result::Ok(axes);
 }
 
+/// The axis `ArgMax` ranks along. The kernels take the first of equal greatest
+/// elements, so `select_last_index` is refused.
+pub fn arg_max_axis(node: &Node, rank: i32) -> Result<i32, InferError> {
+    if int_attr(node, "select_last_index", 0)? != 0 {
+        return Result::Err(attribute_error(node, "select_last_index", "is set, and the kernels take the first index"));
+    }
+    return axis_attr(node, 0, rank, rank - 1);
+}
+
 /// The `axis` attribute, where a negative one counts from `rank` and the
 /// operator reads at most `last`.
 fn axis_attr(node: &Node, fallback: i64, rank: i32, last: i32) -> Result<i32, InferError> {
@@ -1989,7 +2014,7 @@ fn required_operands(op: &String) -> Option<i32> {
     }
     return match op.as_str_slice() {
         "Constant" => Option::Some(0),
-        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" => Option::Some(
+        "Shape" | "Reshape" | "Unsqueeze" | "Squeeze" | "Flatten" | "Concat" | "Slice" | "ConstantOfShape" | "Transpose" | "Softmax" | "Split" | "MaxPool" | "ArgMax" => Option::Some(
             1,
         ),
         "Gather" | "MatMul" | "Gemm" | "Conv" | "Expand" => Option::Some(2),

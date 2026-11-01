@@ -1,10 +1,10 @@
 //! What the invocation fixes before stage 0 reads a graph: extents for its
-//! symbolic dimensions, the outputs `forward` returns, and the outputs it
-//! returns the last position of.
+//! symbolic dimensions, the outputs `forward` returns, the outputs it returns
+//! the last position of, and those it returns the greatest element's index of.
 
 use { HashMap, HashSet, TreeMap } from "core:collections";
 use { Extent, spelled_poly } from "./extent.wado";
-use { Attr, Dim, Graph, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
+use { Attr, Dim, Graph, KERNEL_ELEMENT, Node, Rank, ValueInfo, is_binary_elementwise, read_at } from "./graph.wado";
 use { Checked, is_reduction, is_unary_elementwise } from "./infer.wado";
 use { Shape } from "./shape.wado";
 
@@ -168,6 +168,46 @@ pub fn keep_last(graph: &mut Graph, checked: &Checked, output: &String, axis: i3
         let mut declared = written;
         declared[axis] = Dim::Static(1);
         graph.outputs[at].rank = Rank::Dims(declared);
+    }
+    return Result::Ok(());
+}
+
+/// `output` replaced by the index of its greatest element along `axis`, the
+/// first of equal ones, the axis kept at extent 1: a language model's greedy
+/// pick, which then reads one index rather than the vocabulary's scores. The
+/// node computing it writes `<output>/scores`, which an `ArgMax` ranks.
+pub fn take_arg_max(graph: &mut Graph, checked: &Checked, output: &String, axis: i32) -> Result<(), OptionConflict> {
+    let Some(at) = graph.outputs.position(|vi| vi.name == *output) else {
+        return conflict("arg_max", `the graph declares no output ${*output}`);
+    };
+    let rank = checked.shapes.get(*output).unwrap().rank();
+    if axis < 0 || axis >= rank {
+        return conflict("arg_max", `${*output} has ${rank} axes, and no axis ${axis}`);
+    }
+    let element = checked.primitives[*output];
+    if element != KERNEL_ELEMENT {
+        return conflict("arg_max", `${*output} is ${element}, and ArgMax ranks ${KERNEL_ELEMENT}`);
+    }
+    if graph.nodes.into_iter().any(|n| n.reads().contains_str(output)) {
+        return conflict("arg_max", `${*output} is read inside the graph, which needs its elements`);
+    }
+    let Some(producer) = graph.nodes.position(|n| n.outputs.contains_str(output)) else {
+        return conflict("arg_max", `no node computes ${*output}, which the graph is given`);
+    };
+    let scores = `${*output}/scores`;
+    let written = &mut graph.nodes[producer].outputs;
+    written[written.position(|o| o == *output).unwrap()] = scores;
+    graph.nodes.push(Node {
+        op: "ArgMax",
+        outputs: [*output],
+        inputs: [scores],
+        attrs: [Attr { name: "axis", values: [`${axis}`], is_list: false }],
+    });
+    graph.outputs[at].dtype = "int64";
+    if let Dims(declared) = graph.outputs[at].rank {
+        let mut kept = declared;
+        kept[axis] = Dim::Static(1);
+        graph.outputs[at].rank = Rank::Dims(kept);
     }
     return Result::Ok(());
 }

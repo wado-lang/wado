@@ -637,6 +637,20 @@ test "a reduction axis outside the operand stops the build" {
     assert y_axes(source).unwrap_err() == "Y = ReduceMean: axis 3 is outside rank 3";
 }
 
+test "ArgMax taking the last of equal greatest elements stops the build" {
+    let source = `g (float[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1, select_last_index = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: attribute select_last_index is set, and the kernels take the first index";
+}
+
+test "ArgMax of an i64 operand stops the build" {
+    let source = `g (int64[2, 4] X) => (int64[2, 1] Y) {
+        Y = ArgMax <axis = 1> (X)
+    }`;
+    assert y_axes(source).unwrap_err() == "Y = ArgMax: operand X is i64, and ArgMax ranks f32";
+}
+
 test "Reshape merges adjacent axes into one named by its parts" {
     let source = `g (float[1, 16, 4, 4] X) => (float[1, 256] Y) <int64[2] S = {1, 256}> {
         Y = Reshape(X, S)

@@ -241,8 +241,8 @@ pub enum Kind {
     /// Each output element sums over whole rows of its operands: `MatMul`,
     /// `Gemm` and `Conv`.
     Contraction,
-    /// Each output element reads an axis whole: `ReduceMean`, `ReduceSum` and
-    /// `Softmax`.
+    /// Each output element reads an axis whole: `ReduceMean`, `ReduceSum`,
+    /// `Softmax` and `ArgMax`.
     Reduction,
     /// Each output element reads a window of its operand: `MaxPool`.
     Window,
@@ -273,7 +273,7 @@ pub fn kind_of(op: &String) -> Kind {
     }
     return match op.as_str_slice() {
         "MatMul" | "Gemm" | "Conv" => Kind::Contraction,
-        "ReduceMean" | "ReduceSum" | "Softmax" => Kind::Reduction,
+        "ReduceMean" | "ReduceSum" | "Softmax" | "ArgMax" => Kind::Reduction,
         "MaxPool" => Kind::Window,
         "Reshape" | "Flatten" | "Squeeze" | "Unsqueeze" | "Transpose" | "Concat" | "Split" | "Slice" | "Identity" | "Expand" => Kind::Regrouping,
         "Gather" | "Where" => Kind::Selection,

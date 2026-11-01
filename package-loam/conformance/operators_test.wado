@@ -440,6 +440,22 @@ test "ReduceSum with noop_with_empty_axes and no axes is the input" {
     assert_agrees(#include_bytes("./operators/ReduceSumNoop.onnx"), #include_str("./operators/ReduceSumNoop.txt"));
 }
 
+test "ArgMax keeps its axis at extent 1" {
+    assert_agrees(#include_bytes("./operators/ArgMaxKept.onnx"), #include_str("./operators/ArgMaxKept.txt"));
+}
+
+test "ArgMax with keepdims 0 drops its axis" {
+    assert_agrees(#include_bytes("./operators/ArgMaxDropped.onnx"), #include_str("./operators/ArgMaxDropped.txt"));
+}
+
+test "ArgMax defaults to the first axis" {
+    assert_agrees(#include_bytes("./operators/ArgMaxFirst.onnx"), #include_str("./operators/ArgMaxFirst.txt"));
+}
+
+test "ArgMax takes the first of equal greatest elements, an infinity among them" {
+    assert_agrees(#include_bytes("./operators/ArgMaxTies.onnx"), #include_str("./operators/ArgMaxTies.txt"));
+}
+
 test "Where broadcasts its branches" {
     assert_agrees(#include_bytes("./operators/WhereBroadcast.onnx"), #include_str("./operators/WhereBroadcast.txt"));
 }

@@ -21,8 +21,10 @@ use gemma from "https://huggingface.co/onnx-community/gemma-3-270m-it-ONNX/resol
             module: "lib:loam",
             options: {
                 dims: { batch_size: 1 },
-                // Only the last position ranks the next token.
+                // Only the last position ranks the next token, and only its
+                // index is read back.
                 last: { logits: 1 },
+                arg_max: { logits: 2 },
             },
         },
     };
@@ -91,9 +93,7 @@ impl<affine Bk: Backend> Model<Bk> {
             &self.cache,
             &self.weights,
         );
-        // The backend ranks the last position, so one index is read back
-        // rather than the vocabulary's logits.
-        let best = self.backend.download(&self.backend.arg_max(&passed.logits, 2)).data[0] as i32;
+        let best = self.backend.download(&passed.logits).data[0] as i32;
         self.cache = passed.cache;
         self.seen = *ids;
         return best;
@@ -147,16 +147,9 @@ impl<affine Bk: Graph> Built<Bk> {
             extents: [gemma::BatchSize::EXTENT, ids.len()],
         };
         let passed = gemma::compute(&mut self.backend, &input_ids, &mask, &self.cache, &mut self.model);
-        // The graph's one position's logits, the first of the greatest.
-        let mut best = 0;
-        for let [i, v] of passed.logits.data.into_iter().enumerate() {
-            if v > passed.logits.data[best] {
-                best = i;
-            }
-        }
         self.cache = passed.cache;
         self.seen = *ids;
-        return best;
+        return passed.logits.data[0] as i32;
     }
 }
 
@@ -167,7 +160,7 @@ fn positions() -> i32 {
 fn assert_readable(ids: &List<i32>) {
     assert 1 <= ids.len() <= positions(), "the model reads 1 to positions() tokens";
     for let id of ids {
-        assert 0 <= *id < gemma::Logits2::EXTENT, "every token id is in the vocabulary";
+        assert 0 <= *id < gemma::ModelEmbedTokensWeight0::EXTENT, "every token id is in the vocabulary";
     }
 }
 

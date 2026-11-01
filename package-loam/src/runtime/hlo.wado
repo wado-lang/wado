@@ -471,6 +471,25 @@ pub fn reduce_mean<affine G: Graph, In, Out>(
     return g.binary(Binary::Divide, &sum, &divisor);
 }
 
+/// ONNX's `ArgMax` keeping its axis: the index along `axis` of each lane's
+/// first greatest element, which a lane holding a NaN has none of. The indices
+/// are folded as f32 negated, so the greatest is the least index and a device
+/// folds it with `max`, the fold it runs.
+pub fn arg_max<affine G: Graph, Axes>(g: &mut G, x: &G::Tensor<f32, Axes>, axis: i32) -> G::Tensor<i64, Axes> with _ {
+    let extents = g.extents_of(x);
+    assert extents[axis] <= 1 << 24, "f32 holds each index along the axis exactly";
+    let kept = kept_axes(extents.len(), &[axis]);
+    let top: G::Tensor<f32, Rows> = g.reduce(x, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let at_top = g.compare(Comparison::Eq, x, &g.broadcast_in_dim(&top, extents, kept));
+    let negated = g.unary(Unary::Negate, &g.iota::<f32, Axes>(extents, axis));
+    let candidates = g.select(&at_top, &negated, &full::<G, f32, Axes>(g, f32::NEG_INFINITY, extents));
+    let first: G::Tensor<f32, Rows> = g.reduce(&candidates, Binary::Maximum, f32::NEG_INFINITY, [axis]);
+    let index = g.convert::<f32, i64, Rows>(&g.unary(Unary::Negate, &first));
+    let mut one = extents;
+    one[axis] = 1;
+    return g.reshape(&index, one);
+}
+
 /// The one axis of a mask along an axis of a wider tensor.
 struct Along {
 }
