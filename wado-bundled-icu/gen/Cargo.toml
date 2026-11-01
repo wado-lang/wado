@@ -1,0 +1,19 @@
+# Writes the `properties` interface of the shippable surface from ICU4X's own
+# property value names: the WIT, the Rust tables that map each case to its
+# ICU4X value, and the `core:icu` facade over them. Its own workspace root, run
+# on the host by `mise run update-bundled-icu`. The ICU4X versions are pinned to
+# the ones the component's lockfile resolves, so the names listed are the names
+# the component answers.
+[workspace]
+
+[package]
+name = "icu-gen-properties"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+# `alloc` is what gives Canonical_Combining_Class its value names.
+icu_properties = { version = "=2.3.0", features = ["compiled_data", "alloc"] }
+heck = "0.5"

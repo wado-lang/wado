@@ -891,13 +891,14 @@ fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
 }
 
 /// The bundled ICU component: one core module inside a component whose lifts
-/// name its exports. A program importing only `has` traps every other lift, as
-/// the compiler stubs every function a program leaves unused.
+/// name its exports. A program asking one binary property traps every other
+/// lift, as the compiler stubs every function a program leaves unused.
 #[test]
 fn a_component_asset_is_collected_through_its_core_module() {
     let wat = include_str!("../../wado-compiler/lib/core/icu.wat");
     let component = wat::parse_str(wat).expect("the bundled asset must parse");
-    let used = "wado:icu/properties@0.1.0#has";
+    let used = "wado:icu/properties@0.1.0#binary-property-contains";
+    assert!(wat.contains(used), "the asset must export `{used}`");
     let out = wado_wasm_embed::embed_component(
         &component,
         &Embed {

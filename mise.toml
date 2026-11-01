@@ -752,6 +752,10 @@ description = "Rebuild the bundled ICU component"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# The `properties` interface and the facade over it, from ICU4X's own names. A
+# host tool, so the target is named over the crate's wasm32 default.
+(cd wado-bundled-icu/gen && cargo run --release --target "$(rustc -vV | grep host: | cut -d' ' -f2)" -- "$PWD/../..")
+scripts/dev-bin.sh wado format -w wado-compiler/lib/core/icu/properties.wado
 # --emit-relocs keeps the `linking` and `reloc.*` sections the data-reference
 # map is resolved from; STRIP=none keeps the `name` section it is keyed by.
 # A subshell, as in `update-bundled`.

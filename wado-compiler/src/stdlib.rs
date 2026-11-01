@@ -161,6 +161,8 @@ stdlib_table! {
     "core:secure_random" => "core/secure_random.wado",
     "core:uuid" => "core/uuid.wado",
     "core:icu" => "core/icu.wado",
+    "core:icu/code_point_set.wado" => "core/icu/code_point_set.wado",
+    "core:icu/properties.wado" => "core/icu/properties.wado",
     "core:temporal" => "core/temporal.wado",
     "core:log" => "core/log.wado",
     "core:jwt" => "core/jwt.wado",

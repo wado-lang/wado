@@ -1,49 +1,78 @@
 use icu from "core:icu";
-use { Locale, Properties } from "core:icu";
+use {
+    BinaryProperty,
+    GeneralCategoryGroup,
+    GraphemeClusterBreak,
+    Locale,
+    Property,
+    Script,
+} from "core:icu";
 
-test "a property named in the source needs no name lookup" {
-    assert icu::has(Properties::BinaryProperty::Uppercase, 'À');
-    assert !icu::has(Properties::BinaryProperty::Uppercase, 'à');
-    assert icu::set(Properties::BinaryProperty::WhiteSpace)[0] == [9, 13];
-    assert icu::set(Properties::BinaryProperty::HexDigit)[0] == [48, 57];
+test "a binary property answers its set" {
+    assert icu::contains(BinaryProperty::Uppercase, 'À');
+    assert !icu::contains(BinaryProperty::Uppercase, 'à');
+    assert icu::ranges(BinaryProperty::WhiteSpace)[0] == [9, 13];
+    assert icu::ranges(BinaryProperty::HexDigit)[0] == [48, 57];
 }
 
-test "the two paths answer with the same set" {
-    assert icu::set(Properties::BinaryProperty::WhiteSpace) == icu::ranges("White_Space").unwrap();
-    assert icu::set(Properties::BinaryProperty::HexDigit) == icu::ranges("Hex_Digit").unwrap();
-    assert icu::has(Properties::BinaryProperty::Math, '+') == icu::contains("Math", '+').unwrap();
+test "an enumerated property answers the set of one value" {
+    assert icu::ranges(GeneralCategoryGroup::UppercaseLetter)[0] == [65, 90];
+    assert icu::ranges(Script::Hiragana)[0] == [12353, 12438];
+    assert icu::contains(GraphemeClusterBreak::RegionalIndicator, '\u{1F1EF}');
+    assert !icu::contains(Script::Hiragana, 'ア');
 }
 
-test "an enumerated property takes its value" {
-    assert icu::value_ranges("gc", "Lu").unwrap()[0] == [65, 90];
-    assert icu::value_ranges("sc", "Hiragana").unwrap()[0] == [12353, 12438];
-}
-
-test "a General_Category value may name a group" {
-    let group = icu::value_ranges("gc", "L").unwrap();
+test "a General_Category group spans its categories" {
+    let group = icu::ranges(GeneralCategoryGroup::Letter);
     assert group[0] == [65, 90];
     assert group[1] == [97, 122];
+    assert icu::contains(GeneralCategoryGroup::Letter, 'a');
+    assert !icu::contains(GeneralCategoryGroup::Letter, '1');
 }
 
-test "a name matches as UAX 44 matches it" {
-    assert icu::ranges("white space") == icu::ranges("WSpace");
-    assert icu::value_ranges("General_Category", "uppercase letter") == icu::value_ranges("gc", "Lu");
+test "a strict name is spelled as UCD spells it" {
+    assert BinaryProperty::from_str("White_Space") == Result::Ok(BinaryProperty::WhiteSpace);
+    assert BinaryProperty::from_str("WSpace") == Result::Ok(BinaryProperty::WhiteSpace);
+    assert Script::from_str("Hira") == Result::Ok(Script::Hiragana);
+    assert BinaryProperty::from_str("white space") matches { Err(_) };
+    assert Script::from_str("hiragana") matches { Err(_) };
 }
 
-test "one character is answered without building the ranges" {
-    assert icu::contains("Uppercase", 'À').unwrap();
-    assert !icu::contains("Uppercase", 'à').unwrap();
-    assert icu::value_contains("gcb", "Regional_Indicator", '\u{1F1EF}').unwrap();
+test "a lenient name matches as UAX 44 matches it" {
+    assert BinaryProperty::from_str_lenient("white space") == Result::Ok(BinaryProperty::WhiteSpace);
+    assert Script::from_str_lenient("HIRAGANA") == Result::Ok(Script::Hiragana);
+    assert GeneralCategoryGroup::from_str_lenient("uppercase letter") == Result::Ok(GeneralCategoryGroup::UppercaseLetter);
+    assert GeneralCategoryGroup::from_str_lenient("l") == Result::Ok(GeneralCategoryGroup::Letter);
+}
+
+test "a property takes a value after `=`, or is binary without one" {
+    assert Property::from_str("sc=Hira") == Result::Ok(Property::Script(Script::Hiragana));
+    assert Property::from_str("General_Category=Lu")
+        == Result::Ok(Property::GeneralCategoryGroup(GeneralCategoryGroup::UppercaseLetter));
+    assert Property::from_str("Math") == Result::Ok(Property::BinaryProperty(BinaryProperty::Math));
+    assert Property::from_str_lenient("gcb = regional indicator")
+        == Result::Ok(Property::GraphemeClusterBreak(GraphemeClusterBreak::RegionalIndicator));
+    assert Property::from_str_lenient("white space") == Result::Ok(Property::BinaryProperty(BinaryProperty::WhiteSpace));
+    assert icu::contains(Property::from_str("sc=Hira").unwrap(), 'あ');
+    assert icu::ranges(Property::from_str("WSpace").unwrap())[0] == [9, 13];
 }
 
 // A caller complementing an approximate set would admit real members of the
 // property, which is the failure that matters for a `\P{...}` in a grammar.
-test "a name this build does not answer is null, not an empty set" {
-    assert icu::ranges("Other_ID_Start") matches { None };
-    assert icu::ranges("Other_Alphabetic") matches { None };
-    assert icu::value_ranges("blk", "Greek") matches { None };
-    assert icu::value_ranges("dt", "Font") matches { None };
-    assert icu::contains("Other_Math", 'x') matches { None };
+test "a name this build does not answer is refused, not an empty set" {
+    assert BinaryProperty::from_str_lenient("Other_ID_Start") matches { Err(_) };
+    assert BinaryProperty::from_str_lenient("Other_Alphabetic") matches { Err(_) };
+    assert Property::from_str_lenient("blk=Greek") matches { Err(_) };
+    assert Property::from_str_lenient("dt=Font") matches { Err(_) };
+    assert Property::from_str_lenient("sc=Klingon") matches { Err(_) };
+    let Err(property) = Property::from_str("blk=Greek") else {
+        panic("a property this build lacks must be refused");
+    };
+    assert `${property}` == "\"blk=Greek\" is not a property=value pair";
+    let Err(script) = Script::from_str("Klingon") else {
+        panic("a script this build lacks must be refused");
+    };
+    assert `${script}` == "\"Klingon\" is not a value of Script";
 }
 
 test "a locale keeps the language, script and region, in canonical case" {
