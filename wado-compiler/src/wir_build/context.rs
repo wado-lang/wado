@@ -893,7 +893,7 @@ impl<'a> WirContext<'a> {
                 } else {
                     type_table.struct_head_module(*def).clone()
                 };
-                // The WIR struct map is keyed on the rendered spelling: each
+                // The WIR struct map is keyed on the mangled spelling: each
                 // instantiation is its own struct type.
                 let lookup_name = StructName::new(
                     lookup_module,
@@ -925,7 +925,7 @@ impl<'a> WirContext<'a> {
                 Self::ref_to(&type_id)
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                // The rendered name, which is what the registrar wrote: a
+                // The mangled name, which is what the registrar wrote: a
                 // function-local declaration's spelling carries its
                 // disambiguator, and two sibling functions' `struct Box<T>`
                 // are two registrations.

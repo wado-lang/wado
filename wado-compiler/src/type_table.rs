@@ -896,7 +896,8 @@ impl TypeTable {
         &self.defs
     }
 
-    /// The name `def` writes — a rendering, for a diagnostic or a mangle.
+    /// The name `def` writes, for a diagnostic or a by-name lookup. A mangle
+    /// takes [`Self::decl_mangled_name`].
     #[must_use]
     pub fn decl_name(&self, def: DefId) -> &str {
         self.defs.name(def)
@@ -5998,7 +5999,7 @@ impl TypeTable {
     }
 
     fn render_name(&self, id: TypeId, qualified: bool) -> String {
-        let type_name = |t: TypeId| self.render_name(t, qualified);
+        let render = |t: TypeId| self.render_name(t, qualified);
         match self.get(id) {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
@@ -6006,12 +6007,12 @@ impl TypeTable {
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),
             ResolvedType::BuiltinArray(elem) => {
-                display_generic_name(ARRAY_TYPE_NAME, &[type_name(*elem)])
+                display_generic_name(ARRAY_TYPE_NAME, &[render(*elem)])
             }
             ResolvedType::Struct {
                 def: StructDef::Anon(id),
                 ..
-            } => self.render_anon_struct(*id, &type_name),
+            } => self.render_anon_struct(*id, &render),
             ResolvedType::Struct { def, type_args } => {
                 // The declared head, not the mangled one: a message shows
                 // `Box<i32>`, never the `Box@<local>` a local declaration is
@@ -6020,7 +6021,7 @@ impl TypeTable {
                     (true, Some(decl)) => self.head_name(decl, true),
                     _ => self.struct_head_decl_name(*def),
                 };
-                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let args: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 display_generic_name(&head, &args)
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
@@ -6032,7 +6033,7 @@ impl TypeTable {
                 return_type,
                 effects,
             } => {
-                let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
+                let param_names: Vec<String> = params.iter().map(|p| render(*p)).collect();
                 // A variable is a row still to be worked out: nothing the
                 // source wrote, so nothing to show.
                 let effect_names: Vec<String> = effects
@@ -6043,13 +6044,13 @@ impl TypeTable {
                 name::display_fn_type(
                     *is_mut,
                     &param_names,
-                    &type_name(*return_type),
+                    &render(*return_type),
                     matches!(self.get(*return_type), ResolvedType::Function { .. }),
                     &effect_names,
                 )
             }
-            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &type_name(*inner)),
-            ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &type_name(*inner)),
+            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &render(*inner)),
+            ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &render(*inner)),
             ResolvedType::Variant { def } => self.head_name(*def, qualified),
             ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
@@ -6064,7 +6065,7 @@ impl TypeTable {
                 ..
             } => {
                 let names =
-                    |ids: &[TypeId]| -> Vec<String> { ids.iter().map(|a| type_name(*a)).collect() };
+                    |ids: &[TypeId]| -> Vec<String> { ids.iter().map(|a| render(*a)).collect() };
                 // The owning trait and its arguments are part of a
                 // projection's identity, so two that differ only there render
                 // the same without them.
@@ -6075,14 +6076,14 @@ impl TypeTable {
                     )
                 });
                 display_assoc_type_projection(
-                    &type_name(*param_id),
+                    &render(*param_id),
                     assoc_name,
                     &names(args),
                     owner.as_deref(),
                 )
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let arg_names: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 // A tuple is module-independent, so it has nothing to qualify.
                 if self.is_tuple_def(*def) {
                     display_tuple_type(&arg_names)
@@ -6091,7 +6092,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Newtype { def, type_args, .. } => {
-                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let args: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 display_generic_name(&self.head_name(*def, qualified), &args)
             }
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
@@ -6100,7 +6101,7 @@ impl TypeTable {
                 name,
                 mapped_elem: Some(element),
                 ..
-            } if repeated_element(name).is_some() => type_pack_name(&type_name(*element)),
+            } if repeated_element(name).is_some() => type_pack_name(&render(*element)),
             ResolvedType::TypePack { name, .. } => type_pack_name(name),
             ResolvedType::PackElement { pack, walk } => {
                 pack_element_name(self.pack_name(*pack), *walk)

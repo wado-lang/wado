@@ -1562,6 +1562,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // It is the only spelling — a bare `T::members()` never resolves, so
         // type namespaces stay the author's.
         let head = self.written_head(&static_call.target_type);
+        // `Trait::<T>::method` names the trait's own declaration, so its
+        // reservation answers whatever `T`'s impl is, a synthesized one included.
+        if let Some(head) = &head
+            && let Some(owner) = self.tysys.resolutions.declared(head.site)
+            && let Some(method) = self.tysys.declared_method(owner, &static_call.method)
+            && self.report_unavailable(method, static_call.span)
+        {
+            return self.resolve_args_without_callee(&static_call.args, ctx);
+        }
         if let Some(head) = &head
             && let Some(dispatch) = self.reflect_dispatch_of(head.site, &static_call.method)
         {

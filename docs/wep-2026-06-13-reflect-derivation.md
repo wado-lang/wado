@@ -250,8 +250,8 @@ register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
 always quoted), the notation the compiler's diagnostics and dumps read back.
 Rendering runs one way, and no single rendering serves every consumer — a
 `$defs` key comes back through a `$ref`'s URI reference, where `<` and `>` must
-be escaped — so a schema library builds its key from the parts. Type arguments
-are joined without a space (`Pair<String,i32>`), matching the spelling the
+be escaped — so a schema library builds its key from the parts. In `canonical_name()` type
+arguments are joined without a space (`Pair<String,i32>`), matching the spelling the
 compiler renders internally; a type with none is written bare.
 
 ### What can be named
@@ -275,9 +275,10 @@ to a global and read from there.
 
 `TypeInfo` compares structurally (`Eq` over module, name, and arguments) because
 that is what a `$defs` key or a registry lookup needs, and it is `Inspect`-able
-for diagnostics. `Display` is deliberately absent: symbol notation's other
-register — the shorthand that drops the quotes where unambiguous — has no
-consumer yet, and `canonical_name()` serves the machine one.
+for diagnostics. `Display` is deliberately absent: `name()` serves a reader and
+`canonical_name()` the machine
+([Total Reflection](./wep-2026-09-05-total-reflection.md)), and neither is the
+one spelling a `Display` would have to pick.
 
 It carries no base type. A newtype's base is `ReflectNewtype::Base` and a
 refined type's is `ReflectRefined::Base`; a third spelling on `TypeInfo` would

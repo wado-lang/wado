@@ -139,12 +139,12 @@ impl DceAnalysis {
         }
         // The struct's own head, not a declaration found by `generic_name`:
         // that index answers with whichever declaration of a spelling came
-        // first, so two functions' `struct Box<T>` rendered one name and one
+        // first, so two functions' `struct Box<T>` answered one name and one
         // of them was swept while its uses survived.
-        let rendered = type_table.struct_mangled_name(s.def, &mono.impl_type_args);
-        self.struct_monomorph_names.contains(rendered.as_str())
+        let mangled = type_table.struct_mangled_name(s.def, &mono.impl_type_args);
+        self.struct_monomorph_names.contains(mangled.as_str())
             || type_table
-                .find_struct_by_name(&rendered, &s.module_source)
+                .find_struct_by_name(&mangled, &s.module_source)
                 .is_some_and(|id| self.types.contains(&id))
     }
 }

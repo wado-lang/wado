@@ -1013,6 +1013,9 @@ Rules the table does not carry:
   name. A function used as a value renders as a closure that forwards to it:
   `|x: i32| double(x)`.
 
+> Not yet implemented: no type argument is written, so `Option::<i32>::Some(42)`
+> renders `Option::Some(42)`, as the example below still shows.
+
 Under `#`, each composite writes one element, field or entry per line, indented
 two spaces per level, each followed by a comma. An empty one stays on one line
 (`[]`, `{}`), and a variant's payload goes on its own line:

@@ -665,7 +665,7 @@ pub enum ResolvedType {
         /// wherever the two were matched together.
         def: StructDef,
         /// What this instantiation was made with; empty for a declaration
-        /// written as such. The rendered spelling is derived from the two —
+        /// written as such. The mangled spelling is derived from the two —
         /// see [`TypeTable::struct_mangled_name`].
         type_args: Vec<TypeId>,
     },

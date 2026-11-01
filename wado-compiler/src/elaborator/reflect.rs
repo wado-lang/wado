@@ -1657,7 +1657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The subject's case (enum) / member (flags) count, off the declaration
-    /// its own type names rather than its rendered head.
+    /// its own type names rather than its mangled head.
     fn scalar_member_count(&self, spec: ScalarReflectSpec, self_ty: TypeId) -> usize {
         let structure_ty = self
             .tysys

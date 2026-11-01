@@ -23,6 +23,8 @@ type's identity. Each kind trait carries the structure of that kind.
 
 The prelude declares all of them, so a bound names one with no import.
 
+> Not yet implemented: `ReflectResource` is not declared.
+
 Each kind trait has `Reflect` as a
 [supertrait](./spec-traits.md#supertraits). So a kind bound alone reaches the
 root's methods:

@@ -669,7 +669,7 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// [`Self::declaring_module_at`] for a caller holding a rendered head and
+    /// [`Self::declaring_module_at`] for a caller holding a mangled head and
     /// no reference site.
     pub(super) fn declaring_module_of(&self, struct_name: &str) -> ModuleSource {
         self.declaring_module_at(None, struct_name)

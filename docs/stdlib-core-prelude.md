@@ -121,8 +121,13 @@ compiler-synthesized like the kinds. See WEP 2026-06-13.
 
 `#[compiler_item("reflect_decl_name")]`
 
-Returns the declaration's name, or `""` for an anonymous struct, which
-names none.
+Returns the declaration's name. A shape no declaration names answers
+for itself: an anonymous struct with `""`, and a tagged template's type
+with its holes (`` `${i32:04}` ``).
+
+#### `fn type_name()`
+
+``#[unavailable("renamed to `decl_name`")]``
 
 #### `fn wire_name_policy() -> CaseStyle`
 

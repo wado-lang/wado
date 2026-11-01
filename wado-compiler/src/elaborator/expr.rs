@@ -4677,7 +4677,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // An anonymous struct literal names no declaration: its head is the
         // shape its fields make, so two literals of one shape intern to one
-        // type, and the rendered spelling is derived from that shape.
+        // type, and the mangled spelling is derived from that shape.
         let shape = self.tysys.type_table.borrow_mut().intern_anon_struct(
             self.current_module_source.clone(),
             effective_fields

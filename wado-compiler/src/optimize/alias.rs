@@ -441,7 +441,7 @@ impl<'a> CallImmutability<'a> {
                 if is_box_or_list(type_id, self.type_table) {
                     false
                 } else {
-                    // `struct_fields` is keyed by the NIR struct's rendered
+                    // `struct_fields` is keyed by the NIR struct's mangled
                     // name, so an instantiation must be spelled with its args.
                     let key = (
                         self.type_table.struct_mangled_name(*def, type_args),

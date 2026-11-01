@@ -1695,14 +1695,14 @@ impl<T: ReflectStruct<FieldTypes = [..F], FieldInputs = [..F]>, ..F: Serialize> 
 impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         let policy = Reflect::<V>::wire_name_policy();
-        let type_name = Reflect::<V>::decl_name();
+        let decl_name = Reflect::<V>::decl_name();
         for let case of ReflectVariant::<V>::members() {
             if case.holds(self) {
                 let name = wire_name(&case, policy);
                 // A compile-time fact, so an untagged variant keeps none of this.
                 if let Some(tag) = ReflectVariant::<V>::wire_tag() {
                     if case.is_unit() {
-                        let mut st = s.begin_struct(&type_name, 1)?;
+                        let mut st = s.begin_struct(&decl_name, 1)?;
                         st.field(&tag, &name)?;
                         return st.end();
                     }
@@ -1710,9 +1710,9 @@ impl<V: ReflectVariant<CasePayloads = [..P]>, ..P: Serialize> Serialize for V {
                     return payload.serialize(&mut TaggedCaseSerializer { inner: s, tag, case_name: name });
                 }
                 if case.is_unit() {
-                    return s.serialize_unit_variant(&type_name, &name, case.discriminant());
+                    return s.serialize_unit_variant(&decl_name, &name, case.discriminant());
                 }
-                let mut var = s.begin_variant(&type_name, &name, case.discriminant())?;
+                let mut var = s.begin_variant(&decl_name, &name, case.discriminant())?;
                 let payload = case.extract(self);
                 var.payload(&payload)?;
                 return var.end();
