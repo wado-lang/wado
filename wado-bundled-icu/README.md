@@ -23,16 +23,18 @@ subtags, each packed into a `u32`, so nothing on this side parses a tag:
 
 ### Character properties
 
-`has` and `set` name a binary property as an enum case: the call site resolves
-it, so there is no string to copy and no name to search, and the operation is
-total. `contains` and `ranges` take the name as a string instead, for a name a
-program reads at run time rather than writes. Both take a value as well, for an
-enumerated property, and match names as UAX #44 matches them, loosely.
+Each property has three exports of its own: its ranges, whether it holds one
+character, and the parser of its value names, strict or loose per UAX #44. A
+value crosses as its position in the property's list, a `u16`. Since a call
+reaches one property's exports, the toolchain's collection keeps that
+property's data alone. The binary properties are the exception: they are one
+property here, `binary-property`, so naming one keeps all 63.
 
-Built without collation, it is a **326 KB** import-free component, covering 63 binary properties, 15 enumerated
-ones, and General_Category groups (`L` as well as `Lu`). 35 KB of that is the
-`wado.dataref` map and the `name` section it is keyed by, which is what lets a
-program carry a slice of the rest rather than all of it.
+The property interface is generated, with the Rust tables behind it and the
+Wado enums `core:icu` names the values with. `gen/` holds the generator, and
+`mise run update-bundled-icu` runs it before the build. It covers 63 binary
+properties, 15 enumerated ones, and the General_Category groups (`L` as well as
+`Lu`).
 
 Three things it deliberately does not answer:
 
@@ -42,7 +44,7 @@ Three things it deliberately does not answer:
   follows that.
 - **`Decomposition_Type`.** ICU4X ships no data for it.
 
-Each returns `none` rather than a close-enough set. A caller complementing an
+Each name is refused rather than answered with a close-enough set. A caller complementing an
 approximate set would admit real members of the property instead of missing
 some.
 
@@ -104,12 +106,8 @@ So segmenter+collator are ~93% of the bytes. Dropping word/line segmentation
 (the `auto` dictionary) or collation shrinks the bundle dramatically.
 
 The 44 KB row answers seven properties by name in the WIT. The shippable
-surface answers every one, which roots all of their data at once.
-
-What a program carries is narrower than what the asset holds: the toolchain
-collects the asset down to the lifted functions the program imports, so one
-reaching a single property carries 104 KB rather than 303 KB. Naming a property
-as an enum case does not narrow it further — the dispatch reaches every case.
+surface answers every one, and the toolchain collects it down to the lifted
+functions a program imports. The WEP measures what a program carries.
 
 ## Post-hoc slicing: one asset, sliced per program
 

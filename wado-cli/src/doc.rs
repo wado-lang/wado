@@ -443,28 +443,6 @@ mod format_contract_tests {
         );
     }
 
-    #[test]
-    fn a_type_of_an_interface_reexported_from_a_component_is_documented() {
-        // `core:icu` publishes `Properties` with
-        // `pub use { Properties } from "./icu.wat"`. Its type `BinaryProperty`
-        // is named in two signatures, so a reader who cannot see its cases
-        // cannot call them.
-        let out = render_single(
-            &stdlib_doc("core:icu"),
-            "markdown",
-            "core:icu",
-            OutputFormat::Markdown,
-        );
-        assert!(
-            out.contains("enum Properties::BinaryProperty"),
-            "a component's re-exported enum must be documented:\n{out}"
-        );
-        assert!(
-            out.contains("Uppercase"),
-            "the enum's cases must be documented:\n{out}"
-        );
-    }
-
     fn assert_dprint_stable(content: &str, label: &str) {
         let reformatted = format_markdown(content);
         assert_eq!(

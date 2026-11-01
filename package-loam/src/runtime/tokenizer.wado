@@ -8,6 +8,7 @@
 
 use { HashMap } from "core:collections";
 use icu from "core:icu";
+use { GeneralCategoryGroup } from "core:icu";
 
 /// How a tokenizer spells text before it merges, and back after.
 pub enum TokenSpelling {
@@ -117,8 +118,8 @@ impl BpeTokenizer {
             bytes_of,
             unknown,
             prefix,
-            letters: icu::value_ranges("gc", "L").unwrap(),
-            numbers: icu::value_ranges("gc", "N").unwrap(),
+            letters: icu::ranges(GeneralCategoryGroup::Letter),
+            numbers: icu::ranges(GeneralCategoryGroup::Number),
         };
     }
 

@@ -6,6 +6,7 @@
 
 use { CharRange } from "../ir.wado";
 use icu from "core:icu";
+use { BinaryProperty, CodePointSet, GeneralCategoryGroup, Property, PropertyNameError, Script } from "core:icu";
 
 /// Highest Unicode scalar value.
 internal global CODE_POINT_MAX: i32 = 0x10FFFF;
@@ -116,20 +117,20 @@ pub fn expand_unicode_property<S: AsStrSlice>(name: S, ranges: &mut List<CharRan
         let found = if head == "emojipresentation" {
             emoji_presentation_ranges(&value);
         } else {
-            value_ranges(&head, &value);
+            parsed_ranges(Property::from_str_lenient(&key));
         };
         return push_found_ranges(found, ranges);
     }
     if push_found_ranges(posix_property_ranges(&key), ranges) {
         return true;
     }
-    if push_found_ranges(value_ranges("gc", &key), ranges) {
+    if push_found_ranges(parsed_ranges(GeneralCategoryGroup::from_str_lenient(&key)), ranges) {
         return true;
     }
-    if push_found_ranges(value_ranges("sc", &key), ranges) {
+    if push_found_ranges(parsed_ranges(Script::from_str_lenient(&key)), ranges) {
         return true;
     }
-    return push_found_ranges(binary_ranges(&key), ranges);
+    return push_found_ranges(parsed_ranges(BinaryProperty::from_str_lenient(&key)), ranges);
 }
 
 /// `a - b`, via De Morgan (`!(!a | b)`) so the only set primitive here is the
@@ -147,27 +148,21 @@ fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharR
     return subtract_char_ranges(a, &complement_char_ranges(b));
 }
 
-/// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
-/// does not answer, which is what lets the caller reject it.
-fn binary_ranges<S: AsStrSlice>(property: S) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::ranges(property.to_string()));
-}
-
-/// An enumerated property value's ranges, as Unicode scalars. `gc` takes a
-/// group letter (`L`) as well as a category (`Lu`).
-fn value_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<List<CharRange>> {
-    return scalar_ranges(icu::value_ranges(property.to_string(), value.to_string()));
-}
-
-fn scalar_ranges(found: Option<List<[u32, u32]>>) -> Option<List<CharRange>> {
-    let Some(found) = found else {
+/// The ranges of a parsed property, as Unicode scalars. Null for a name
+/// `core:icu` does not answer, which is what lets the caller reject it.
+fn parsed_ranges<P: CodePointSet>(parsed: Result<P, PropertyNameError>) -> Option<List<CharRange>> {
+    let Ok(property) = parsed else {
         return null;
     };
+    return Option::Some(scalar_ranges(property));
+}
+
+fn scalar_ranges<P: CodePointSet>(property: P) -> List<CharRange> {
     let mut out: List<CharRange> = [];
-    for let r of &found {
+    for let r of &icu::ranges(property) {
         clip_to_scalars(&mut out, r.0 as i32, r.1 as i32);
     }
-    return Option::Some(out);
+    return out;
 }
 
 fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange>) -> bool {
@@ -180,23 +175,6 @@ fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange
     return true;
 }
 
-/// Ranges for a property this file names literally, so a name `core:icu` does
-/// not answer is Gale's own mistake rather than user input.
-fn required_ranges<S: AsStrSlice>(found: Option<List<CharRange>>, name: S) -> List<CharRange> {
-    let Some(ranges) = found else {
-        panic(`core:icu does not answer '${name}'`);
-    };
-    return ranges;
-}
-
-fn gc_set<S: AsStrSlice>(key: S) -> List<CharRange> {
-    return required_ranges(value_ranges("gc", key), key);
-}
-
-fn binary_set<S: AsStrSlice>(key: S) -> List<CharRange> {
-    return required_ranges(binary_ranges(key), key);
-}
-
 /// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
 /// ICU. `core:icu` ships five of them itself; `cntrl` and `digit` it does not,
 /// each being a `General_Category` under another name. `Alpha`, `Lower`, `Upper`
@@ -204,9 +182,13 @@ fn binary_set<S: AsStrSlice>(key: S) -> List<CharRange> {
 /// properties already answer with the same set.
 fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
     return match key {
-        "cntrl" => Option::Some(gc_set("cc")),
-        "digit" => Option::Some(gc_set("nd")),
-        "alnum" | "blank" | "graph" | "print" | "xdigit" => Option::Some(binary_set(key)),
+        "cntrl" => Option::Some(scalar_ranges(GeneralCategoryGroup::Control)),
+        "digit" => Option::Some(scalar_ranges(GeneralCategoryGroup::DecimalNumber)),
+        "alnum" => Option::Some(scalar_ranges(BinaryProperty::Alnum)),
+        "blank" => Option::Some(scalar_ranges(BinaryProperty::Blank)),
+        "graph" => Option::Some(scalar_ranges(BinaryProperty::Graph)),
+        "print" => Option::Some(scalar_ranges(BinaryProperty::Print)),
+        "xdigit" => Option::Some(scalar_ranges(BinaryProperty::Xdigit)),
         _ => null,
     };
 }
@@ -215,12 +197,12 @@ fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
 /// `lexer-rules.md` defines the three values). Derived from the UCD's `Emoji`
 /// and `Emoji_Presentation`, and pinned character-by-character.
 fn emoji_presentation_ranges<S: AsStrSlice>(value: S) -> Option<List<CharRange>> {
-    let emoji = binary_set("emoji");
+    let emoji = scalar_ranges(BinaryProperty::Emoji);
     return match value {
         // Colourful by default.
-        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set("emojipresentation"))),
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &scalar_ranges(BinaryProperty::EmojiPresentation))),
         // Emoji-capable, but drawn as text unless asked otherwise.
-        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set("emojipresentation"))),
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &scalar_ranges(BinaryProperty::EmojiPresentation))),
         // Text-only: never emoji at all.
         "text" => Option::Some(complement_char_ranges(&emoji)),
         _ => null,

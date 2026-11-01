@@ -1,0 +1,44 @@
+#![stdlib("core:icu/code_point_set.wado")]
+//! What every property answers, and how a name of one is refused. The impls
+//! for each property are generated beside this file, in `properties.wado`.
+
+/// A property, or a value of one: the set of code points that have it.
+pub trait CodePointSet with () {
+    /// The inclusive code point ranges of the set, lowest first.
+    fn ranges(&self) -> List<[u32, u32]>;
+
+    /// Whether `ch` is in the set, without building the ranges.
+    fn contains(&self, ch: char) -> bool;
+}
+
+/// Why a name was refused: it names nothing this build answers. That is never
+/// answered with an approximate set instead, since a caller complementing one
+/// would admit real members of the property rather than miss some.
+pub struct PropertyNameError {
+    message: String,
+}
+
+impl Display for PropertyNameError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for PropertyNameError {
+}
+
+internal fn refused(name: String, what: String) -> PropertyNameError {
+    return PropertyNameError { message: `"${name}" is not ${what}` };
+}
+
+/// UAX #44 loose matching: case, `_`, `-` and spaces are not significant.
+internal fn fold<S: AsStrSlice>(name: S) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        if c == '_' || c == '-' || c == ' ' {
+            continue;
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
+}
