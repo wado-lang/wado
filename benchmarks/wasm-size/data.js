@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793537341665,
+  "lastUpdate": 1793566994991,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73361,6 +73361,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/84c115a8b6eb6c753bf620543a934db9c13312a3"
         },
         "date": 1793537340611,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c09dd641aa4dd25bed176b0e6ad0b5e57fd10d0c",
+          "message": "Merge pull request #2520 from wado-lang/claude/dazzling-brahmagupta-xiwqk3\n\nfeat(emi): draw the corpus from packages and benchmarks, and report what each source costs",
+          "timestamp": "2026-11-02T05:50:10+09:00",
+          "tree_id": "e5d44cfadb55f497d842ac3c9a57332ab1ae2748",
+          "url": "https://github.com/wado-lang/wado/commit/c09dd641aa4dd25bed176b0e6ad0b5e57fd10d0c"
+        },
+        "date": 1793566994424,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
