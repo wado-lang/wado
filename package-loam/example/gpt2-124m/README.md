@@ -33,9 +33,9 @@ from that commit:
   `tokenizer_config.json`.
 - `generate.json` is the oracle for the model: the tokens onnxruntime picks
   greedily after a prompt, and its time per token on the CPU and on WebGPU,
-  which must pick the same tokens. `generate.mjs`
-  writes it, running `onnx/decoder_model_merged.onnx` with `onnxruntime-node`
-  and carrying the attention cache from step to step, as Loam does.
+  which must pick the same tokens. `generate.mjs` writes it, running
+  `onnx/decoder_model_merged.onnx` with `onnxruntime-node` and carrying the
+  attention cache from step to step, as Loam does.
 
 `model.wado` imports `onnx/decoder_model_merged.onnx` by its URL, pinned by its
 SHA-256. The graph branches on whether it is given a past, so the prompt and

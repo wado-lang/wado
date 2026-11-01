@@ -65,7 +65,7 @@ a test file to run it once `fetch.sh` has.
   greedily after each prompt, and its time per token on the CPU and on WebGPU,
   which must pick the same tokens. `generate.mjs` writes it, running
   `build/model.onnx` with `onnxruntime-node` and feeding each step the attention
-  cache, as `model.wado` does. `generate_test.wado` checks
-  Loam's tokens against it:
+  cache, as `model.wado` does. `generate_test.wado` checks Loam's tokens
+  against it:
 
       wado test --collector drc generate_test.wado

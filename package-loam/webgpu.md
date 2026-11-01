@@ -344,7 +344,7 @@ attention cache on the device and reads back the logits.
 
 | Model        | Backend                | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
 | ------------ | ---------------------- | ----------------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend`        | 0.69                                      | 159                | 2                  |
+| GPT-2 (124M) | `WebGpuBackend`        | 0.63                                      | 164                | 2                  |
 | GPT-2 (124M) | `Cpu`                  | 4.1                                       |                    |                    |
 | GPT-2 (124M) | onnxruntime on WebGPU  | 1.4                                       |                    |                    |
 | Gemma 3 270M | `WebGpuBackend`        | 0.18–0.19                                 | 204                | 1                  |
@@ -358,9 +358,9 @@ the first, and near 0.35 or near 0.75 on the second from one run to the next.
 On llvmpipe, which binds 128 MiB at most, GPT-2's head runs in two chunks, its
 weight being the 154 MB embedding.
 
-The figures below are against onnxruntime on the CPU as `generate.mjs` timed it
-before, the prompt's token included, on a build of `wado-run-webgpu` that this
-table's does not record.
+The ratios in the next paragraph are against onnxruntime on the CPU timed with
+the prompt's token included, and the build of `wado-run-webgpu` behind them is
+not recorded.
 
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and

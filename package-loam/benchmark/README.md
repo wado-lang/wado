@@ -16,7 +16,8 @@ package-loam/example/gemma3-270m/fetch.sh
 The tasks fetch the rest themselves, each pinned by version and SHA-256 and
 cached under `~/.cache/loam`:
 
-- `fetch_onnxruntime.sh`: Microsoft's onnxruntime release.
+- `fetch_onnxruntime.sh`: Microsoft's onnxruntime release for the CPU, which
+  ships no GPU provider, so every onnxruntime arm runs on the CPU.
 - `fetch_llama_cpp.sh`: llama.cpp's Vulkan release.
 - `gemma3_270m/fetch_gguf.sh`: Gemma 3 (270M) as GGUF, for llama.cpp.
 

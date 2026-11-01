@@ -750,9 +750,9 @@ impl CmBuffer {
     }
 }
 
-/// The name of `ty` where it is a number, whose `list` lies in linear memory as
-/// a `List` of it holds it, so a copy lifts the list. `bool` and `char` are
-/// not: a `bool` is any nonzero byte.
+/// The name of `ty` where it is a number type: a `list` of one lies in linear
+/// memory as the elements themselves, so one copy lifts it. `bool` is not one,
+/// since any nonzero byte is `true`.
 fn number_name(ty: &Type) -> Option<&str> {
     let Type::Named(named) = ty else {
         return None;
