@@ -133,50 +133,50 @@ test "from traps on a tag that is not well-formed" {
 test "case mapping follows the language" {
     let en = Locale::from("en");
     let tr = Locale::from("tr-TR");
-    assert en.uppercase(&"istanbul") == "ISTANBUL";
-    assert tr.uppercase(&"istanbul") == "İSTANBUL";
-    assert en.lowercase(&"DIYARBAKIR") == "diyarbakir";
-    assert tr.lowercase(&"DIYARBAKIR") == "dıyarbakır";
+    assert en.uppercase("istanbul") == "ISTANBUL";
+    assert tr.uppercase("istanbul") == "İSTANBUL";
+    assert en.lowercase("DIYARBAKIR") == "diyarbakir";
+    assert tr.lowercase("DIYARBAKIR") == "dıyarbakır";
     // Greek drops the accent that the root mapping keeps.
-    assert Locale::from("und").uppercase(&"άδεια") == "ΆΔΕΙΑ";
-    assert Locale::from("el").uppercase(&"άδεια") == "ΑΔΕΙΑ";
+    assert Locale::from("und").uppercase("άδεια") == "ΆΔΕΙΑ";
+    assert Locale::from("el").uppercase("άδεια") == "ΑΔΕΙΑ";
 }
 
 test "folding is full, and Turkic in tr and az" {
     let en = Locale::from("en");
-    assert en.fold(&"Straße") == "strasse";
-    assert en.fold(&"I") == "i";
-    assert Locale::from("tr").fold(&"I") == "ı";
-    assert Locale::from("az").fold(&"İ") == "i";
-    assert en.eq_ignore_case(&"STRASSE", &"straße");
-    assert en.eq_ignore_case(&"I", &"i");
-    assert !Locale::from("tr").eq_ignore_case(&"I", &"i");
-    assert !en.eq_ignore_case(&"a", &"b");
+    assert en.fold("Straße") == "strasse";
+    assert en.fold("I") == "i";
+    assert Locale::from("tr").fold("I") == "ı";
+    assert Locale::from("az").fold("İ") == "i";
+    assert en.eq_ignore_case("STRASSE", "straße");
+    assert en.eq_ignore_case("I", "i");
+    assert !Locale::from("tr").eq_ignore_case("I", "i");
+    assert !en.eq_ignore_case("a", "b");
 }
 
 test "graphemes are what a reader counts as characters" {
     let text = "e\u{301}👨‍👩‍👧🇯🇵!";
     let mut clusters: List<String> = [];
-    for let g of icu::graphemes(&text) {
+    for let g of icu::graphemes(text) {
         clusters.push(g.to_string());
     }
     assert clusters == ["e\u{301}", "👨‍👩‍👧", "🇯🇵", "!"];
-    assert icu::grapheme_count(&text) == 4;
+    assert icu::grapheme_count(text) == 4;
 }
 
 test "an empty string has no graphemes" {
-    let mut none = icu::graphemes(&"");
+    let mut none = icu::graphemes("");
     assert none.next() matches { None };
-    assert icu::grapheme_count(&"") == 0;
+    assert icu::grapheme_count("") == 0;
 }
 
 test "a collator sorts as its locale does" {
     let german = icu::Collator::new(&Locale::from("de"));
     let swedish = icu::Collator::new(&Locale::from("sv"));
     // German sorts `ä` with `a`; Swedish sorts it after `z`.
-    assert german.compare(&"ä", &"z") matches { Less };
-    assert swedish.compare(&"ä", &"z") matches { Greater };
-    assert german.compare(&"a", &"a") matches { Equal };
+    assert german.compare("ä", "z") matches { Less };
+    assert swedish.compare("ä", "z") matches { Greater };
+    assert german.compare("a", "a") matches { Equal };
 }
 
 test "a locale CLDR tailors nothing for sorts as its fallback does" {
@@ -189,6 +189,6 @@ test "a locale CLDR tailors nothing for sorts as its fallback does" {
     ];
     for let [tag, sorts_after_z] of cases {
         let collator = icu::Collator::new(&Locale::from(tag));
-        assert collator.compare(&"ä", &"z") matches { Greater } == sorts_after_z, tag;
+        assert collator.compare("ä", "z") matches { Greater } == sorts_after_z, tag;
     }
 }

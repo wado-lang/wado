@@ -2048,7 +2048,7 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:router`](./stdlib-core-router.md) — HTTP path router
 - [`core:icu`](./stdlib-core-icu.md) — Unicode character properties, as code
   point ranges or per character; `Locale`, whose methods map case
-  (`tr.uppercase(&s)`); `Collator`, which compares strings the way a locale
+  (`tr.uppercase(s)`); `Collator`, which compares strings the way a locale
   sorts them; and `graphemes`, a string's user-perceived characters
 - [`core:kiln`](./stdlib-core-kiln.md) — Kiln IDL host bindings
 - [`core:benchmark`](./stdlib-core-benchmark.md) — benchmark timing/throughput utilities

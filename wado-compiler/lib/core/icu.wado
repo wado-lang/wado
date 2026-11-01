@@ -16,14 +16,14 @@ test {
     assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 
     let tr = Locale::from("tr");
-    assert tr.uppercase(&"istanbul") == "İSTANBUL";
+    assert tr.uppercase("istanbul") == "İSTANBUL";
 
     let swedish = Collator::new(&Locale::from("sv"));
     let mut words: List<String> = ["ö", "z", "a"];
-    words.sort_by(|a, b| swedish.compare(a, b));
+    words.sort_by(|a, b| swedish.compare(*a, *b));
     assert words == ["a", "z", "ö"];
 
-    assert grapheme_count(&"🇯🇵") == 1;
+    assert grapheme_count("🇯🇵") == 1;
 }
 
 /// A locale: the language, script and region subtags of a BCP 47 tag, which
@@ -72,24 +72,24 @@ impl Locale {
     }
 
     /// Full uppercase mapping of `text`.
-    pub fn uppercase(&self, text: &String) -> String {
-        return Casemap::uppercase(*text, self.language);
+    pub fn uppercase(&self, text: String) -> String {
+        return Casemap::uppercase(text, self.language);
     }
 
     /// Full lowercase mapping of `text`.
-    pub fn lowercase(&self, text: &String) -> String {
-        return Casemap::lowercase(*text, self.language);
+    pub fn lowercase(&self, text: String) -> String {
+        return Casemap::lowercase(text, self.language);
     }
 
     /// Full case folding of `text`, for caseless matching. `tr` and `az` fold
     /// `I` to dotless `ı` and `İ` to `i`, as Turkic does.
-    pub fn fold(&self, text: &String) -> String {
-        return Casemap::fold(*text, self.language);
+    pub fn fold(&self, text: String) -> String {
+        return Casemap::fold(text, self.language);
     }
 
     /// Whether `left` and `right` fold to the same text.
-    pub fn eq_ignore_case(&self, left: &String, right: &String) -> bool {
-        return Casemap::eq_ignore_case(*left, *right, self.language);
+    pub fn eq_ignore_case(&self, left: String, right: String) -> bool {
+        return Casemap::eq_ignore_case(left, right, self.language);
     }
 }
 
@@ -319,8 +319,8 @@ impl Collator {
     }
 
     /// How `left` sorts against `right`.
-    pub fn compare(&self, left: &String, right: &String) -> Ordering {
-        return match self.inner.compare(*left, *right) {
+    pub fn compare(&self, left: String, right: String) -> Ordering {
+        return match self.inner.compare(left, right) {
             Less => Ordering::Less,
             Equal => Ordering::Equal,
             Greater => Ordering::Greater,
@@ -365,18 +365,18 @@ pub fn value_contains(property: String, value: String, ch: char) -> Option<bool>
 
 /// The extended grapheme clusters of `text` (UAX #29), in order: what a reader
 /// counts as one character each.
-pub fn graphemes(text: &String) -> Graphemes {
+pub fn graphemes(text: String) -> Graphemes {
     return Graphemes {
+        ends: Segmenter::grapheme_ends(text),
         text: text.as_str_slice(),
-        ends: Segmenter::grapheme_ends(*text),
         index: 0,
         start: 0,
     };
 }
 
 /// How many extended grapheme clusters `text` holds.
-pub fn grapheme_count(text: &String) -> i32 {
-    return Segmenter::grapheme_count(*text) as i32;
+pub fn grapheme_count(text: String) -> i32 {
+    return Segmenter::grapheme_count(text) as i32;
 }
 
 /// The iterator [`graphemes`] returns.

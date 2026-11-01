@@ -72,7 +72,7 @@ The `own` handle the component returns is a new entry in the program's handle
 table each time, so only a drop frees it, whatever the component shares behind
 it. An interned handle with value semantics would leak one entry per
 construction. Affine costs little where the handle is used: a closure sees what
-it captures by reference, so `list.sort_by(|a, b| c.compare(a, b))` is written
+it captures by reference, so `list.sort_by(|a, b| c.compare(*a, *b))` is written
 the obvious way, and a function takes `&Collator`.
 
 Where a capability serves both a one-shot and a loop, the facade offers both: a
@@ -85,9 +85,15 @@ paid.
 No operation falls back to an implicit locale, root included. A program that
 uses ICU always has a locale in mind, and an implicit one hides which. Hanging
 the stateless operations off `Locale` puts that in the types:
-`tr.uppercase(&s)` cannot be written without naming a locale. The names follow
+`tr.uppercase(s)` cannot be written without naming a locale. The names follow
 ICU4X's (`uppercase`, `fold`) rather than Rust's `to_uppercase`, which takes no
 locale; a Rust reader would otherwise take one for the other.
+
+The receiver is `&self`, since copying a struct is not free. The text is taken
+as a `String` by value: it crosses the boundary as a copy into linear memory
+whatever the parameter says, so a reference would save nothing. A `StrSlice`
+cannot cross at all, so taking `AsStrSlice` would copy a view into a `String`
+first.
 
 `Locale` holds what ICU4X's `LanguageIdentifier` holds, minus variants: the
 language, script and region subtags, each as its ASCII bytes in a `u32` in

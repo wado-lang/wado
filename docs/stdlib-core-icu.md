@@ -19,14 +19,14 @@ assert has(Properties::BinaryProperty::Uppercase, 'À');
 assert value_contains("sc", "Hiragana", 'あ') == Option::Some(true);
 
 let tr = Locale::from("tr");
-assert tr.uppercase(&"istanbul") == "İSTANBUL";
+assert tr.uppercase("istanbul") == "İSTANBUL";
 
 let swedish = Collator::new(&Locale::from("sv"));
 let mut words: List<String> = ["ö", "z", "a"];
-words.sort_by(|a, b| swedish.compare(a, b));
+words.sort_by(|a, b| swedish.compare(*a, *b));
 assert words == ["a", "z", "ö"];
 
-assert grapheme_count(&"🇯🇵") == 1;
+assert grapheme_count("🇯🇵") == 1;
 ```
 
 ## Functions
@@ -60,12 +60,12 @@ name written into the source.
 Whether `ch` has that enumerated property value, without building the
 ranges.
 
-### `pub fn graphemes(text: &String) -> Graphemes`
+### `pub fn graphemes(text: String) -> Graphemes`
 
 The extended grapheme clusters of `text` (UAX #29), in order: what a reader
 counts as one character each.
 
-### `pub fn grapheme_count(text: &String) -> i32`
+### `pub fn grapheme_count(text: String) -> i32`
 
 How many extended grapheme clusters `text` holds.
 
@@ -106,20 +106,20 @@ Whether `tag` is a well-formed Unicode BCP 47 locale identifier
 (UTS #35), with `-` between subtags. A language subtag of 5 to 8
 letters is refused: BCP 47 reserves the length, and no language has one.
 
-#### `pub fn uppercase(&self, text: &String) -> String`
+#### `pub fn uppercase(&self, text: String) -> String`
 
 Full uppercase mapping of `text`.
 
-#### `pub fn lowercase(&self, text: &String) -> String`
+#### `pub fn lowercase(&self, text: String) -> String`
 
 Full lowercase mapping of `text`.
 
-#### `pub fn fold(&self, text: &String) -> String`
+#### `pub fn fold(&self, text: String) -> String`
 
 Full case folding of `text`, for caseless matching. `tr` and `az` fold
 `I` to dotless `ı` and `İ` to `i`, as Turkic does.
 
-#### `pub fn eq_ignore_case(&self, left: &String, right: &String) -> bool`
+#### `pub fn eq_ignore_case(&self, left: String, right: String) -> bool`
 
 Whether `left` and `right` fold to the same text.
 
@@ -159,7 +159,7 @@ _Fields are private._
 A collator for `locale`. A locale CLDR tailors nothing for sorts as its
 fallback does, ending at the root collation.
 
-#### `pub fn compare(&self, left: &String, right: &String) -> Ordering`
+#### `pub fn compare(&self, left: String, right: String) -> Ordering`
 
 How `left` sorts against `right`.
 
