@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793528923398,
+  "lastUpdate": 1793537341665,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73317,6 +73317,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c55d2b03918a4e27bdf7404953488578998694fe"
         },
         "date": 1793528922058,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "84c115a8b6eb6c753bf620543a934db9c13312a3",
+          "message": "Merge pull request #2519 from wado-lang/loam/webgpu-compiler\n\nfeat(loam): compile a recorded pass into fused WebGPU kernels once per shape class",
+          "timestamp": "2026-11-01T21:33:55+09:00",
+          "tree_id": "010188f73510829eb0f3db3636113aaedcb83e60",
+          "url": "https://github.com/wado-lang/wado/commit/84c115a8b6eb6c753bf620543a934db9c13312a3"
+        },
+        "date": 1793537340611,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
