@@ -1138,25 +1138,49 @@ pub fn compile_capturing_diagnostics(
     display_filename: Option<&str>,
     stubs: HostStubs,
 ) -> CapturedCompile {
+    let host = StubHost::new(source_dir(path)).with_stubs(stubs);
+    compile_on(&host, path, source, options, display_filename)
+}
+
+/// Compile `source`, at `path`, in the package the `wado.toml` files on disk
+/// put it in, with the dependencies they declare.
+pub fn compile_in_package(
+    path: &Path,
+    source: &str,
+    options: CompilerOptions,
+) -> Result<wado_compiler::CompileResult, CompileError> {
+    let host = StubHost::reading_manifests(source_dir(path));
+    compile_on(&host, path, source, options, None).result
+}
+
+fn source_dir(path: &Path) -> PathBuf {
+    path.parent().map(Path::to_path_buf).unwrap_or_default()
+}
+
+fn compile_on(
+    host: &StubHost,
+    path: &Path,
+    source: &str,
+    options: CompilerOptions,
+    display_filename: Option<&str>,
+) -> CapturedCompile {
     use wado_compiler::Severity;
     assert!(
         options.invocations.is_empty(),
         "the harness runs the source's generators for its redirect index"
     );
-    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = StubHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
 
     let result = runtime()
         .block_on(async {
-            let invocations = run_local_generators(path, source, &filename, &host)
+            let invocations = run_local_generators(path, source, &filename, host)
                 .await
                 .ok_or(())?;
             wado_compiler::compile_with_options(
                 source,
-                &host,
+                host,
                 Some(&filename),
                 CompilerOptions {
                     invocations,

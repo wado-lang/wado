@@ -129,12 +129,27 @@ enum Root {
     /// The standard library, whose `test` blocks are the observable output.
     Stdlib,
     /// The examples: CLI programs observed through stdout. Only the top-level
-    /// files; the directories under it are packages, which the runner cannot
-    /// draw from yet.
+    /// files; the directories under it are packages.
     Example,
+    /// A package, by its directory: its `test` blocks, compiled with the
+    /// dependencies its `wado.toml` files declare.
+    Package(&'static str),
 }
 
-const ROOTS: [Root; 3] = [Root::Fixtures, Root::Stdlib, Root::Example];
+/// Gale and Loam are left out: their generated parsers and graphs cost far more
+/// compile time than the code shapes they add.
+const ROOTS: [Root; 10] = [
+    Root::Fixtures,
+    Root::Stdlib,
+    Root::Example,
+    Root::Package("package-cm-catalog"),
+    Root::Package("package-eddy"),
+    Root::Package("package-grog"),
+    Root::Package("package-jade"),
+    Root::Package("package-marl"),
+    Root::Package("package-wadopoet"),
+    Root::Package("package-web"),
+];
 
 impl Root {
     fn name(self) -> &'static str {
@@ -142,6 +157,7 @@ impl Root {
             Root::Fixtures => "fixtures",
             Root::Stdlib => "stdlib",
             Root::Example => "example",
+            Root::Package(dir) => dir,
         }
     }
 
@@ -152,6 +168,7 @@ impl Root {
             Root::Fixtures => "wado-compiler/tests/fixtures",
             Root::Stdlib => "wado-compiler/lib",
             Root::Example => "example",
+            Root::Package(dir) => dir,
         }
     }
 
@@ -159,9 +176,15 @@ impl Root {
         repository_root().join(self.rel_dir())
     }
 
-    /// The stdlib is a tree; the other two are flat.
+    /// The fixtures and the examples are flat; the rest are trees.
     fn is_recursive(self) -> bool {
-        self == Root::Stdlib
+        !matches!(self, Root::Fixtures | Root::Example)
+    }
+
+    /// Whether a source here is compiled in the package its `wado.toml` puts it
+    /// in, rather than on its own.
+    fn reads_manifests(self) -> bool {
+        matches!(self, Root::Package(_))
     }
 
     /// How a source here runs when it carries no `__DATA__` section.
@@ -173,6 +196,7 @@ impl Root {
         Spec {
             test_world: self != Root::Example,
             allocator: "debug".to_string(),
+            reads_manifests: self.reads_manifests(),
         }
     }
 
@@ -236,7 +260,7 @@ impl Source {
     fn from_name(name: &str) -> Self {
         let root = ROOTS
             .into_iter()
-            .find(|root| name.starts_with(root.rel_dir()))
+            .find(|root| name.starts_with(&format!("{}/", root.rel_dir())))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
         Self::new(root, repository_root().join(name))
     }
@@ -284,6 +308,7 @@ fn key_is_understood(key: &str) -> bool {
 struct Spec {
     test_world: bool,
     allocator: String,
+    reads_manifests: bool,
 }
 
 impl Spec {
@@ -324,6 +349,7 @@ impl Spec {
         Ok(Self {
             test_world: object.contains_key("test"),
             allocator: allocator.to_string(),
+            reads_manifests: root.reads_manifests(),
         })
     }
 
@@ -1058,7 +1084,12 @@ fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
 
 fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
     let options = spec.compiler_options(opt_level);
-    let compiled = match common::compile_source_with_compiler_options(path, source, options) {
+    let compiled = if spec.reads_manifests {
+        common::compile_in_package(path, source, options)
+    } else {
+        common::compile_source_with_compiler_options(path, source, options)
+    };
+    let compiled = match compiled {
         Ok(compiled) => compiled,
         Err(e) => return Evaluation::CompileError(e.to_string()),
     };
@@ -1596,7 +1627,8 @@ fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
     for entry in entries {
         let path = entry.expect("directory entry").path();
         if path.is_dir() {
-            if recursive {
+            // `build/` holds what a package's generators wrote, not its source.
+            if recursive && !path.ends_with("build") {
                 paths.extend(wado_files(&path, true));
             }
         } else if path.extension().is_some_and(|ext| ext == "wado") {
@@ -2655,6 +2687,7 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     let spec = Spec {
         test_world: false,
         allocator: "freelist".to_string(),
+        reads_manifests: false,
     };
     let injection = Injection {
         path: Path::new("never-read.wado"),
@@ -2695,10 +2728,7 @@ test {
 }
 "#;
     let canonical = wado_compiler::format(source).expect("the source formats");
-    let spec = Spec {
-        test_world: true,
-        allocator: "debug".to_string(),
-    };
+    let spec = Root::Fixtures.default_spec();
     let path = Path::new("closure_source.wado");
     let level = OptLevel::O0;
     let baseline = baseline(path, &canonical, &spec, level).expect("the baseline runs");
@@ -2728,10 +2758,7 @@ test {
 #[test]
 fn a_run_that_spends_its_budget_is_told_apart() {
     let source = "#[timeout_ms(100)]\ntest {\n    while builtin::black_box(true) {}\n}\n";
-    let spec = Spec {
-        test_world: true,
-        allocator: "debug".to_string(),
-    };
+    let spec = Root::Fixtures.default_spec();
     let excluded = baseline(Path::new("never_ends.wado"), source, &spec, OptLevel::O0)
         .err()
         .expect("the baseline never finishes");

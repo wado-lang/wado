@@ -1,17 +1,22 @@
 //! A filesystem `CompilerHost` that answers from stubs what a real host would
 //! ask its environment, for compiling the e2e fixtures outside `wado`.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock};
 
 use indexmap::IndexMap;
+use wado_compiler::kiln::GENERATOR_WORLD_FQ;
 use wado_compiler::remote::{Integrity, is_remote};
 use wado_compiler::{
     CompilerHost, DependencyIndex, Diagnostic, GeneratorRequest, GeneratorResponse,
     GeneratorRunnerError, ModuleDir, PackageDir, ProbeRequest, SourceError, SourceReader,
 };
 use wado_lsp::FilesystemCompilerHost;
-use wado_lsp::host::discovery::{normalize_path, slash_separated};
+use wado_lsp::host::dependency_key;
+use wado_lsp::host::discovery::{
+    nearest_manifest_dir, normalize_path, resolve_member_manifest, slash_separated,
+};
+use wado_manifest::{DependencySource, MANIFEST_FILENAME, Manifest};
 
 use crate::kiln::component_cache::ComponentCache;
 use crate::kiln::runtime::{generate_for, probe_for};
@@ -41,6 +46,17 @@ pub struct HostStubs {
 pub struct StubHost {
     filesystem: FilesystemCompilerHost,
     stubs: HostStubs,
+    packages: Packages,
+}
+
+/// Where a [`StubHost`] learns which package a module is in and what it
+/// depends on.
+#[derive(Debug, Clone, Copy)]
+enum Packages {
+    /// From [`HostStubs`], as a fixture states them.
+    Stubbed,
+    /// From the `wado.toml` files on disk, as `wado` reads them.
+    Manifests,
 }
 
 /// The generator components every [`StubHost`] shares, so a run of many
@@ -55,6 +71,29 @@ impl StubHost {
         Self {
             filesystem: FilesystemCompilerHost::new(base_path),
             stubs: HostStubs::default(),
+            packages: Packages::Stubbed,
+        }
+    }
+
+    /// A host loading sources relative to `base_path` whose packages are the
+    /// `wado.toml` files on disk. The nearest one's path `[build-dependencies]`
+    /// name the generators its clauses may run, each by its package's
+    /// `[world]."core:kiln/generator"` entry.
+    ///
+    /// # Panics
+    ///
+    /// When that manifest does not parse, or a path build dependency declares no
+    /// generator: the caller chose this tree as a package.
+    #[must_use]
+    pub fn reading_manifests(base_path: PathBuf) -> Self {
+        let build_dependencies = manifest_generators(&base_path);
+        Self {
+            stubs: HostStubs {
+                build_dependencies,
+                ..HostStubs::default()
+            },
+            packages: Packages::Manifests,
+            ..Self::new(base_path)
         }
     }
 
@@ -139,6 +178,9 @@ impl CompilerHost for StubHost {
     /// fixture directory holds no symlink. A stubbed package has no
     /// `[package]`.
     fn module_dir(&self, path: &str) -> ModuleDir {
+        if let Packages::Manifests = self.packages {
+            return self.filesystem.module_dir(path);
+        }
         let base = self.filesystem.base_path();
         let file = normalize_path(&base.join(path));
         let dir = file.parent().expect("a module path names a file");
@@ -161,11 +203,17 @@ impl CompilerHost for StubHost {
     }
 
     /// A stubbed package declares no dependencies of its own.
-    fn package_index(&self, _root: &str) -> DependencyIndex {
-        DependencyIndex::default()
+    fn package_index(&self, root: &str) -> DependencyIndex {
+        match self.packages {
+            Packages::Stubbed => DependencyIndex::default(),
+            Packages::Manifests => self.filesystem.package_index(root),
+        }
     }
 
     fn dependency_index(&self) -> DependencyIndex {
+        if let Packages::Manifests = self.packages {
+            return self.filesystem.dependency_index();
+        }
         let mut index = DependencyIndex::default();
         for (name, lib) in &self.stubs.dependencies {
             index.resolved.insert(name.clone(), lib.clone());
@@ -211,4 +259,44 @@ fn assert_diagnostic_is_attributed(diagnostic: &Diagnostic) {
             span.column,
         );
     }
+}
+
+/// The generator each path `[build-dependencies]` entry of the manifest
+/// nearest `base` names, keyed by its nickname, as a path relative to `base`.
+/// No manifest above `base` names none.
+fn manifest_generators(base: &Path) -> IndexMap<String, String> {
+    let Some(dir) = nearest_manifest_dir(base) else {
+        return IndexMap::new();
+    };
+    let manifest = read_manifest(&dir);
+    manifest
+        .build_dependencies
+        .iter()
+        .filter_map(|(nickname, dependency)| match &dependency.source {
+            DependencySource::Path { path, .. } => Some((nickname, dir.join(path))),
+            DependencySource::Git { .. }
+            | DependencySource::Registry { .. }
+            | DependencySource::Workspace => None,
+        })
+        .map(|(nickname, root)| {
+            let entry = read_manifest(&root)
+                .world_entry(GENERATOR_WORLD_FQ)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "{} declares no `{GENERATOR_WORLD_FQ}` world",
+                        root.display()
+                    )
+                })
+                .to_string();
+            (nickname.clone(), dependency_key(&root.join(entry), base))
+        })
+        .collect()
+}
+
+fn read_manifest(dir: &Path) -> Manifest {
+    let path = dir.join(MANIFEST_FILENAME);
+    let text = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
+    resolve_member_manifest(dir, &text)
+        .unwrap_or_else(|e| panic!("{} does not parse: {e}", path.display()))
 }
