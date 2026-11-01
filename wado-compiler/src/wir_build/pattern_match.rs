@@ -1375,19 +1375,11 @@ impl FunctionTranslator<'_, '_> {
         let binding_wir = self.ctx.type_id_to_wir_type(self.type_table, binding_type);
         let local_type = self.tir_func.locals[local_index as usize].type_id;
         let local_wir = self.ctx.type_id_to_wir_type(self.type_table, local_type);
+        // Only `boxing` gives a binding's local a type of its own: a box.
         let value = if local_wir == binding_wir {
             value
         } else {
-            let WirType::Ref {
-                type_id: box_tid, ..
-            } = &local_wir
-            else {
-                unreachable!("only `boxing` gives a binding's local a type of its own: a box")
-            };
-            WirInstr::StructNew {
-                type_id: box_tid.clone(),
-                fields: vec![value],
-            }
+            box_new(&local_wir, value)
         };
         if !matches!(local_wir, WirType::Unit) {
             instrs.push(WirInstr::LocalSet {
@@ -1412,18 +1404,8 @@ impl FunctionTranslator<'_, '_> {
             let value_wir = binding_wir.clone();
             return self.binding_value(binding_type, &value_wir, value);
         }
-        let needs_boxing = ref_binding_needs_boxing(binding_wir, source_wir);
-        if needs_boxing {
-            let WirType::Ref {
-                type_id: box_tid, ..
-            } = binding_wir
-            else {
-                unreachable!("ref_binding_needs_boxing only reports boxing for a Ref binding")
-            };
-            WirInstr::StructNew {
-                type_id: box_tid.clone(),
-                fields: vec![source],
-            }
+        if ref_binding_needs_boxing(binding_wir, source_wir) {
+            box_new(binding_wir, source)
         } else if matches!(
             binding_wir,
             WirType::Ref {
@@ -1606,6 +1588,17 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
 /// The declared type of a tuple's `i`-th element. Arity is fixed by type
 /// checking, so an out-of-range index is a lowering bug.
 #[track_caller]
+/// `value` wrapped in the `Box<T>` struct `box_wir` references.
+fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
+    let WirType::Ref { type_id, .. } = box_wir else {
+        unreachable!("a box is a struct reference, not {box_wir:?}")
+    };
+    WirInstr::StructNew {
+        type_id: type_id.clone(),
+        fields: vec![value],
+    }
+}
+
 fn tuple_element_type(element_types: &[TypeId], index: usize) -> TypeId {
     *element_types.get(index).unwrap_or_else(|| {
         panic!(
