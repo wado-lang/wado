@@ -603,12 +603,7 @@ impl Monomorphizer {
             let mut made_progress = false;
 
             while let Some(func_rc) = unscanned.pop() {
-                self.scan_taken(
-                    &func_rc,
-                    &module.type_table,
-                    &scannable_generic_functions,
-                    &mut unscanned,
-                );
+                self.scan_taken(&func_rc, &module.type_table, &generic_functions, &mut unscanned);
                 module.functions.push(func_rc);
                 made_progress = true;
             }

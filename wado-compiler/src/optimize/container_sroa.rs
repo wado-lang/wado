@@ -86,26 +86,19 @@ fn classify_array_method_sig(func: &NirFunction, type_table: &TypeTable) -> Opti
     if mono.impl_type_args.len() != 1 {
         return None;
     }
-    let elem_ty = mono.impl_type_args[0];
+    let elem_key = type_table.type_key(mono.impl_type_args[0]);
 
     let params: Vec<TypeId> = func.params.iter().map(|p| p.type_id).collect();
     let ret = func.return_type;
 
-    let is_list_of_t = |ty: TypeId| type_table.as_list(ty) == Some(elem_ty);
-    let is_ref_list_of_t = |ty: TypeId| {
-        matches!(
-            type_table.get(ty),
-            ResolvedType::Ref(inner) if type_table.as_list(*inner) == Some(elem_ty)
-        )
-    };
-    let is_mut_ref_list_of_t = |ty: TypeId| {
-        matches!(
-            type_table.get(ty),
-            ResolvedType::MutRef(inner) if type_table.as_list(*inner) == Some(elem_ty)
-        )
-    };
-    let is_t = |ty: TypeId| ty == elem_ty;
-    let is_array_of_t = |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if *inner == elem_ty);
+    let is_t = |ty: TypeId| type_table.type_key(ty) == elem_key;
+    let is_list_of_t = |ty: TypeId| type_table.as_list(ty).is_some_and(is_t);
+    let is_ref_list_of_t =
+        |ty: TypeId| matches!(type_table.get(ty), ResolvedType::Ref(inner) if is_list_of_t(*inner));
+    let is_mut_ref_list_of_t =
+        |ty: TypeId| matches!(type_table.get(ty), ResolvedType::MutRef(inner) if is_list_of_t(*inner));
+    let is_array_of_t =
+        |ty: TypeId| matches!(type_table.get(ty), ResolvedType::BuiltinArray(inner) if is_t(*inner));
     let is_i32 = |ty: TypeId| ty == TypeTable::I32;
     let is_unit = |ty: TypeId| ty == TypeTable::UNIT;
     // Names the impl exactly, the receiver being `List<T>` already: a second
@@ -166,12 +159,12 @@ struct MethodSig {
     id_sigkeys: IndexMap<FuncId, SigKey>,
     /// Element type `T` and [`ListMethodKind`] → the [`SigKey`] of a
     /// monomorphized `List<T>` method of that kind, for [`field_constructor`].
-    kind_index: IndexMap<(TypeId, ListMethodKind), SigKey>,
+    kind_index: IndexMap<(TypeKey, ListMethodKind), SigKey>,
 }
 
 /// Lookup table: (element type `T_k`, (trait, method)) → `FunctionRef` for
 /// `List<T_k>::method`. Built once per pass.
-type MethodCatalog = IndexMap<(TypeId, SigKey), (FunctionRef, FuncId)>;
+type MethodCatalog = IndexMap<(TypeKey, SigKey), (FunctionRef, FuncId)>;
 
 /// A local that is a candidate for container SROA.
 struct Candidate {
@@ -208,9 +201,9 @@ enum ElementLayout {
     Tuple,
     /// `List<UserStruct>` — decomposable sources are `StructLiteral` of that
     /// specific struct (or another decomposable container's `index_value`).
-    /// The `type_id` identifies the exact struct type so we reject literals
+    /// The `key` identifies the exact struct type so we reject literals
     /// of a different (even structurally-compatible) struct.
-    Struct { type_id: TypeId },
+    Struct { key: TypeKey },
 }
 
 /// How the candidate was initialized, and so how each field's list is built.
@@ -310,12 +303,15 @@ pub fn scalarize_containers(project: &mut NirPackage, gate: &mut FunctionGate) -
     // `List<Tuple>::m` calls to per-field `List<F>::m` callees shifts the
     // function's call edges, which only costs propagation precision, not
     // correctness.
+    let type_table = project.type_table.borrow();
+    let type_table: &TypeTable = &type_table;
     gate.sweep_pending_par(GatedPass::ContainerSroa, &pending, |buffers, fid| {
         let Some(plan) = plans.get(&fid) else {
             return false;
         };
         let mut func = functions[fid.index()].borrow_mut();
         let rule = ContainerSroaRule {
+            type_table,
             catalog: &catalog,
             sig: &method_sig,
             plan,
@@ -357,6 +353,7 @@ fn holds_candidate(
 /// Standalone-session rule whose single `apply_block` performs the whole-
 /// function container SROA at the body root.
 pub(super) struct ContainerSroaRule<'a> {
+    type_table: &'a TypeTable,
     catalog: &'a MethodCatalog,
     sig: &'a MethodSig,
     /// What this body decomposes: [`plan_body`]'s answer.
@@ -403,7 +400,7 @@ fn build_method_catalog(
     let mut sig_kinds = SigKindIndex::default();
     let mut id_kinds = IdKindIndex::default();
     let mut id_sigkeys: IndexMap<FuncId, SigKey> = IndexMap::default();
-    let mut kind_index: IndexMap<(TypeId, ListMethodKind), SigKey> = IndexMap::default();
+    let mut kind_index: IndexMap<(TypeKey, ListMethodKind), SigKey> = IndexMap::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
         // Skip dead/extern declarations: a bodyless function's signature types
@@ -427,7 +424,7 @@ fn build_method_catalog(
         if mono.impl_type_args.len() != 1 {
             continue;
         }
-        let element_ty = mono.impl_type_args[0];
+        let element_ty = type_table.type_key(mono.impl_type_args[0]);
         let sig_key: SigKey = (
             method_info.trait_name.clone(),
             method_info.method_name.clone(),
@@ -1115,7 +1112,7 @@ fn plan_body(
     // Also track which `ListMethodKind`s were observed on each whitelisted use,
     // so step 3 can demand only the monomorphizations that will actually be
     // emitted per field (rather than unconditionally requiring all four kinds).
-    let (safe_indices, used_kinds_map) = compute_safe_set(body, &candidates, sig, value_copy_ids);
+    let (safe_indices, used_kinds_map) = compute_safe_set(body, type_table, &candidates, sig, value_copy_ids);
     if safe_indices.is_empty() {
         return None;
     }
@@ -1129,7 +1126,7 @@ fn plan_body(
         .filter(|c| safe_indices.contains(&c.local_index))
         .filter(|c| {
             let used = used_kinds_map.get(&c.local_index).unwrap_or(&empty_used);
-            required_methods_available(c, used, sig, catalog)
+            required_methods_available(c, used, type_table, sig, catalog)
         })
         .collect();
     (!safe_candidates.is_empty()).then_some(safe_candidates)
@@ -1160,6 +1157,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
                     name,
                     list_type,
                     elem_type: elem_ty,
+                    elem_key: rule.type_table.type_key(elem_ty),
                 },
             );
         }
@@ -1185,6 +1183,7 @@ fn scalarize_at_root(engine: &mut Engine, rule: &ContainerSroaRule) -> bool {
 
     // Step 5: rewrite the body via the engine edit API.
     let ctx = RewriteCtx {
+        type_table: rule.type_table,
         decomposed: &decomposed,
         field_map: &field_map,
         candidate_data: &candidate_data,
@@ -1214,11 +1213,14 @@ struct FieldList {
     name: String,
     /// `List<T_k>` — the new local's own type.
     list_type: TypeId,
-    /// `T_k` — the per-field element type, the catalog's lookup key.
+    /// `T_k` — the per-field element type.
     elem_type: TypeId,
+    /// `T_k`'s key, the catalog's lookup key.
+    elem_key: TypeKey,
 }
 
 struct RewriteCtx<'a> {
+    type_table: &'a TypeTable,
     decomposed: &'a IndexSet<u32>,
     field_map: &'a IndexMap<(u32, u32), FieldList>,
     candidate_data: &'a IndexMap<u32, CandidateRewriteInfo>,
@@ -1232,10 +1234,12 @@ struct RewriteCtx<'a> {
 fn required_methods_available(
     c: &Candidate,
     used: &IndexSet<(ListMethodKind, FuncId)>,
+    type_table: &TypeTable,
     sig: &MethodSig,
     catalog: &MethodCatalog,
 ) -> bool {
-    for (fi, &t) in c.element_types.iter().enumerate() {
+    for (fi, &elem_ty) in c.element_types.iter().enumerate() {
+        let t = type_table.type_key(elem_ty);
         if field_constructor(&c.init, t, sig).is_none_or(|key| !catalog.contains_key(&(t, key))) {
             return false;
         }
@@ -1255,12 +1259,12 @@ fn required_methods_available(
 }
 
 /// The `Constructor` family that builds the `List<elem_ty>` of one field.
-fn field_constructor(init: &CandidateInit, elem_ty: TypeId, sig: &MethodSig) -> Option<SigKey> {
+fn field_constructor(init: &CandidateInit, elem: TypeKey, sig: &MethodSig) -> Option<SigKey> {
     match init {
         CandidateInit::Constructor { method, .. } => Some(method.clone()),
         CandidateInit::EmptyLiteral => sig
             .kind_index
-            .get(&(elem_ty, ListMethodKind::Constructor))
+            .get(&(elem, ListMethodKind::Constructor))
             .cloned(),
     }
 }
@@ -1363,7 +1367,10 @@ fn element_layout_of(
             }
         }
         let field_types: Vec<TypeId> = ordered.iter().map(|f| f.type_id).collect();
-        return Some((ElementLayout::Struct { type_id: elem_ty }, field_types));
+        let layout = ElementLayout::Struct {
+            key: type_table.type_key(elem_ty),
+        };
+        return Some((layout, field_types));
     }
     None
 }
@@ -1468,6 +1475,7 @@ fn sig_key_of_id(sig: &MethodSig, func_id: FuncId) -> Option<SigKey> {
 /// analysis plus a fixpoint for element-source dependency.
 fn compute_safe_set(
     body: &Body,
+    type_table: &TypeTable,
     candidates: &[Candidate],
     sig: &MethodSig,
     value_copy_ids: &IndexSet<FuncId>,
@@ -1495,6 +1503,7 @@ fn compute_safe_set(
     let mut safe: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
     let used_kinds = loop {
         let mut checker = WhitelistChecker {
+            type_table,
             safe: &safe,
             shape_of: &shape_of,
             value_copy_ids,
@@ -1524,6 +1533,7 @@ struct CandidateShape {
 }
 
 struct WhitelistChecker<'a> {
+    type_table: &'a TypeTable,
     safe: &'a IndexSet<u32>,
     shape_of: &'a IndexMap<u32, CandidateShape>,
     value_copy_ids: &'a IndexSet<FuncId>,
@@ -1632,13 +1642,10 @@ impl WhitelistChecker<'_> {
                 fields,
                 ..
             } => {
-                let ElementLayout::Struct {
-                    type_id: expected_ty,
-                } = expected_layout
-                else {
+                let ElementLayout::Struct { key } = expected_layout else {
                     return false;
                 };
-                if struct_type != expected_ty {
+                if self.type_table.type_key(*struct_type) != *key {
                     return false;
                 }
                 if fields.len() != expected_arity {
@@ -1838,7 +1845,7 @@ impl WhitelistChecker<'_> {
 fn layouts_compatible(a: &ElementLayout, b: &ElementLayout) -> bool {
     match (a, b) {
         (ElementLayout::Tuple, ElementLayout::Tuple) => true,
-        (ElementLayout::Struct { type_id: ta }, ElementLayout::Struct { type_id: tb }) => ta == tb,
+        (ElementLayout::Struct { key: ka }, ElementLayout::Struct { key: kb }) => ka == kb,
         _ => false,
     }
 }
@@ -2169,13 +2176,10 @@ impl Rewriter<'_, '_> {
                 fields,
                 ..
             } => {
-                let ElementLayout::Struct {
-                    type_id: expected_ty,
-                } = expected_layout
-                else {
+                let ElementLayout::Struct { key } = expected_layout else {
                     return None;
                 };
-                if struct_type != expected_ty {
+                if ctx.type_table.type_key(*struct_type) != *key {
                     return None;
                 }
                 if fields.len() != expected_arity {
@@ -2358,7 +2362,7 @@ impl Rewriter<'_, '_> {
             let field = ctx.field_map[&(rec_local, 0)].clone();
             let (_, new_func_id) = ctx
                 .catalog
-                .get(&(field.elem_type, sig))
+                .get(&(field.elem_key, sig))
                 .cloned()
                 .expect("Query monomorphization must exist for decomposed element type");
             let span = engine.body.exprs[e].span;
@@ -2465,7 +2469,7 @@ fn build_receiver(engine: &mut Engine, field: &FieldList, mut_ref: bool, span: S
 /// The `func_id` of `List<field.elem_type>`'s method with signature `sig`.
 fn field_method(field: &FieldList, sig: &SigKey, ctx: &RewriteCtx) -> FuncId {
     ctx.catalog
-        .get(&(field.elem_type, sig.clone()))
+        .get(&(field.elem_key, sig.clone()))
         .expect("method entry checked by required_methods_available")
         .1
 }
@@ -2479,7 +2483,7 @@ fn build_constructor_call(
     span: Span,
     ctx: &RewriteCtx,
 ) -> ExprId {
-    let sig = field_constructor(init, field.elem_type, ctx.sig)
+    let sig = field_constructor(init, field.elem_key, ctx.sig)
         .expect("Constructor checked by required_methods_available");
     let func_id = field_method(field, &sig, ctx);
     engine.alloc_expr(
