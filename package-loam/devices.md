@@ -537,25 +537,32 @@ wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph buil
 
 ### Gemma 3 on WebGPU
 
-Gemma 3 (270M) continuing the two prompts `generate.json` records on
-`WebGpuBackend`, each token after the prompt's first. Both pick onnxruntime's
-tokens. The device is an RTX 4060 Ti under Vulkan, and onnxruntime is
-`generate.mjs` on `onnxruntime-node`, on the CPU. The range spans the two
-prompts. `wado run-webgpu` here is the `dev` build of `wado-run-webgpu`, and
-[Loam on WebGPU](./webgpu.md#measurements) records the `pass` at 0.13.
+Gemma 3 (270M) continuing the two prompts `generate.json` records, each token
+after the prompt's first. Every entry picks onnxruntime's tokens. The device is
+an RTX 4060 Ti under Vulkan, and `wado run-webgpu` is the `dev` build of
+`wado-run-webgpu`. onnxruntime is `generate.mjs` on `onnxruntime-node`, on the
+CPU and on its WebGPU provider, which keeps the attention cache on the device
+and reads back the logits. The range spans the two prompts.
 
-| Entry                                             | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
-| ------------------------------------------------- | -------------------------------- | ------------------ | ------------------ |
-| `pass`, the kernels                               | 0.19–0.21                        | 204                | 1                  |
-| `compute`, the compiled program at the capacities | 1.03–1.13                        | 309–314            | 1                  |
+| Entry                                             | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
+| ------------------------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
+| `pass`, the kernels                               | 0.18–0.19                                 | 204                | 1                  |
+| `compute`, the compiled program at the capacities | 0.75–0.81                                 | 309–314            | 1                  |
+| onnxruntime on WebGPU                             | 0.34–0.75                                 |                    |                    |
+| onnxruntime on the CPU                            | 1                                         |                    |                    |
 
-Each is one program in `example/gemma3-270m`, which prints each prompt's time a
-token beside onnxruntime's:
+onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
+near 0.75 on the second from one run to the next. `compute` reads back the
+vocabulary's logits each token, where `pass` ranks them on the device and reads
+back one index.
+
+Each Loam entry is one program in `example/gemma3-270m`, which prints each
+prompt's time a token beside onnxruntime's on both:
 
 ```sh
 cd package-loam/example/gemma3-270m
-wado run-webgpu webgpu.wado
-wado run-webgpu webgpu_compute.wado
+wado run-webgpu -O2 webgpu.wado
+wado run-webgpu -O2 webgpu_compute.wado
 ```
 
 ## Known gaps

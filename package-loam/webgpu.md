@@ -332,27 +332,35 @@ waits for a measurement that shows a pass's footprint matters.
 ## Measurements
 
 `example/gpt2-124m/webgpu.wado` continues "Hello, my name is" with eight
-greedy tokens on each backend, and picks the tokens onnxruntime picks on the
-device. It runs the whole sequence each token, having no attention cache.
-`example/gemma3-270m/webgpu.wado` continues two prompts with eight greedy
-tokens each, one token a pass against the attention cache, and picks
-onnxruntime's tokens. The device is an RTX 4060 Ti under Vulkan. GPT-2's `Cpu`
-runs under `wado run-webgpu`'s wasmtime, and Gemma's is
-`example/gemma3-270m/gemma3.wado` under `wado run`. onnxruntime is each
-example's `generate.mjs` on `onnxruntime-node`, on the CPU.
+greedy tokens on each backend, and `example/gemma3-270m/webgpu.wado` continues
+two prompts with eight each. Both run one token a pass against the attention
+cache, pick onnxruntime's tokens, and time each token after the prompt's first.
+The device is an RTX 4060 Ti under Vulkan, and `wado run-webgpu` is the `dev`
+build of `wado-run-webgpu`. GPT-2's `Cpu` runs under `wado run-webgpu`'s
+wasmtime, and Gemma's is `example/gemma3-270m/gemma3.wado` under `wado run`.
+Every Loam program runs at `-O2`. onnxruntime is each example's `generate.mjs`
+on `onnxruntime-node`, on the CPU and on its WebGPU provider, which keeps the
+attention cache on the device and reads back the logits.
 
-| Model        | Backend         | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
-| ------------ | --------------- | -------------------------------- | ------------------ | ------------------ |
-| GPT-2 (124M) | `WebGpuBackend` | 2.5                              | 128                | 1                  |
-| GPT-2 (124M) | `Cpu`           | 18                               |                    |                    |
-| Gemma 3 270M | `WebGpuBackend` | 0.13                             | 204                | 1                  |
-| Gemma 3 270M | `Cpu`           | 5.0                              |                    |                    |
-| either       | onnxruntime     | 1                                |                    |                    |
+| Model        | Backend                | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
+| ------------ | ---------------------- | ----------------------------------------- | ------------------ | ------------------ |
+| GPT-2 (124M) | `WebGpuBackend`        | 0.69                                      | 159                | 2                  |
+| GPT-2 (124M) | `Cpu`                  | 4.1                                       |                    |                    |
+| GPT-2 (124M) | onnxruntime on WebGPU  | 1.4                                       |                    |                    |
+| Gemma 3 270M | `WebGpuBackend`        | 0.18–0.19                                 | 204                | 1                  |
+| Gemma 3 270M | `Cpu`                  | 2.5                                       |                    |                    |
+| Gemma 3 270M | onnxruntime on WebGPU  | 0.34–0.75                                 |                    |                    |
+| either       | onnxruntime on the CPU | 1                                         |                    |                    |
 
-GPT-2's dispatches are the 126 kernels the layer table predicts and
-`arg_max`'s two: one workgroup reduces each part of 4096 logits, and another
-the parts. On llvmpipe, which binds 128 MiB at most, its head runs in two
-chunks, its weight being the 154 MB embedding.
+A range spans Gemma's two prompts. onnxruntime on WebGPU reads near 0.35 on
+the first, and near 0.35 or near 0.75 on the second from one run to the next.
+
+On llvmpipe, which binds 128 MiB at most, GPT-2's head runs in two chunks, its
+weight being the 154 MB embedding.
+
+The figures below are against onnxruntime on the CPU as `generate.mjs` timed it
+before, the prompt's token included, on a build of `wado-run-webgpu` that this
+table's does not record.
 
 Gemma's token cost the host more than the device until the dispatches shared
 one compute pass and one parameter buffer, `wado run-webgpu` built wasmtime and

@@ -39,25 +39,28 @@ struct Generated {
     ids: List<i32>,
     generated: List<i32>,
     ms_per_token: f64,
+    webgpu_ms_per_token: f64,
 }
 
 struct Oracle {
     generate: List<Generated>,
 }
 
-/// `steps` greedy tokens after `ids`, and the milliseconds each took.
+/// `steps` greedy tokens after `ids`, and the milliseconds each after the
+/// prompt's first took.
 fn continued<affine Bk: Backend>(
     model: &mut Model<Bk>,
     ids: &List<i32>,
     steps: i32,
 ) -> [List<i32>, f64] with (MonotonicClock, _) {
     let mut all = *ids;
+    all.push(model.next_token(&all));
     let started = MonotonicClock::now();
-    for let _ of 0..<steps {
+    for let _ of 1..<steps {
         all.push(model.next_token(&all));
     }
     let elapsed = (MonotonicClock::now() - started) as u64;
-    return [all[ids.len()..<all.len()].to_list(), elapsed as f64 / 1_000_000.0 / steps as f64];
+    return [all[ids.len()..<all.len()].to_list(), elapsed as f64 / 1_000_000.0 / (steps - 1) as f64];
 }
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
@@ -101,7 +104,7 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
             println("the CPU picks other tokens");
         }
         println(
-            `device ${device_ms:.0} ms a token in ${dispatches} dispatches and ${reads} read backs, cpu ${cpu_ms:.0} ms, onnxruntime ${g.ms_per_token:.0} ms`,
+            `device ${device_ms:.0} ms a token in ${dispatches} dispatches and ${reads} read backs, cpu ${cpu_ms:.0} ms, onnxruntime ${g.ms_per_token:.0} ms on the CPU and ${g.webgpu_ms_per_token:.0} on WebGPU`,
         );
     }
 }

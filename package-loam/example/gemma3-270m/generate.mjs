@@ -1,7 +1,8 @@
 // Writes generate.json: the tokens onnxruntime picks greedily after each
-// prompt, from the prompt ids tokenize.json records, and how long each of its
-// steps took on the CPU. It runs build/model.onnx as Loam does, feeding each
-// step only the new token and the attention cache of the rest.
+// prompt, from the prompt ids tokenize.json records, and how long a token after
+// the prompt's first took on the CPU and on WebGPU. It runs build/model.onnx as
+// Loam does, feeding each step only the new token and the attention cache of
+// the rest. Both providers must pick the same tokens.
 //
 //   mise run loam-oracle-deps
 //   node generate.mjs
@@ -20,10 +21,8 @@ const STEPS = 8;
 const LAYERS = 18;
 const DIM = 256;
 
-const session = await ort.InferenceSession.create(join(here, 'build', 'model.onnx'));
-
 /** The next token after `fresh`, given the caches of the `seen` ids before it. */
-async function next(fresh, caches, seen) {
+async function next(session, fresh, caches, seen) {
   const total = seen + fresh.length;
   const feeds = {
     input_ids: new ort.Tensor('int64', BigInt64Array.from(fresh, BigInt), [1, fresh.length]),
@@ -44,27 +43,55 @@ async function next(fresh, caches, seen) {
   return [best, last[best] - second, out];
 }
 
-let lead = Infinity;
-const generate = [];
-for (const prompt of PROMPTS) {
-  const { ids } = recorded.find((t) => t.text === prompt);
-  const generated = [];
-  let caches = {};
-  let fresh = ids;
-  let seen = 0;
-  const started = performance.now();
-  for (let s = 0; s < STEPS; s++) {
-    const [token, margin, out] = await next(fresh, caches, seen);
-    seen += fresh.length;
-    caches = out;
-    generated.push(token);
-    fresh = [token];
-    lead = Math.min(lead, margin);
+/** Each prompt's tokens on `provider`, the time a token after the first, and the smallest lead. */
+async function generate(provider) {
+  // On WebGPU the cache stays on the device between steps, and only the
+  // logits come back.
+  const preferredOutputLocation = provider === 'webgpu' ? { logits: 'cpu' } : undefined;
+  for (let l = 0; preferredOutputLocation && l < LAYERS; l++) {
+    for (const kind of ['key', 'value']) preferredOutputLocation[`present.${l}.${kind}`] = 'gpu-buffer';
   }
-  const ms_per_token = (performance.now() - started) / STEPS;
-  generate.push({ prompt, ids, generated, ms_per_token });
+  const session = await ort.InferenceSession.create(join(here, 'build', 'model.onnx'), {
+    executionProviders: [provider],
+    preferredOutputLocation,
+  });
+  let lead = Infinity;
+  const prompts = [];
+  for (const prompt of PROMPTS) {
+    const { ids } = recorded.find((t) => t.text === prompt);
+    const generated = [];
+    let caches = {};
+    let fresh = ids;
+    let seen = 0;
+    let started;
+    for (let s = 0; s < STEPS; s++) {
+      const [token, margin, out] = await next(session, fresh, caches, seen);
+      if (s === 0) started = performance.now();
+      seen += fresh.length;
+      caches = out;
+      generated.push(token);
+      fresh = [token];
+      lead = Math.min(lead, margin);
+    }
+    prompts.push({ prompt, ids, generated, ms_per_token: (performance.now() - started) / (STEPS - 1) });
+  }
+  return { prompts, lead };
 }
 
-writeFileSync(join(here, 'generate.json'), `${JSON.stringify({ generate }, null, 2)}\n`);
-console.log(`smallest lead of a greedy pick over the runner-up: ${lead}`);
-for (const g of generate) console.log(`${JSON.stringify(g.prompt)} -> ${g.generated} (${g.ms_per_token.toFixed(1)} ms a token)`);
+const cpu = await generate('cpu');
+const webgpu = await generate('webgpu');
+const generate_ = cpu.prompts.map((c, i) => {
+  const w = webgpu.prompts[i];
+  if (`${w.generated}` !== `${c.generated}`) {
+    throw new Error(`WebGPU picks ${w.generated} after ${JSON.stringify(c.prompt)}, the CPU ${c.generated}`);
+  }
+  return { ...c, webgpu_ms_per_token: w.ms_per_token };
+});
+
+writeFileSync(join(here, 'generate.json'), `${JSON.stringify({ generate: generate_ }, null, 2)}\n`);
+console.log(`smallest lead of a greedy pick over the runner-up: ${cpu.lead}`);
+for (const g of generate_) {
+  console.log(
+    `${JSON.stringify(g.prompt)} -> ${g.generated} (${g.ms_per_token.toFixed(1)} ms a token on the CPU, ${g.webgpu_ms_per_token.toFixed(1)} on WebGPU)`,
+  );
+}
