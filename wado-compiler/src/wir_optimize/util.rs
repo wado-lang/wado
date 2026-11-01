@@ -145,8 +145,13 @@ impl Footprint {
         self.locals.contains(name)
     }
 
-    pub(super) fn may_have_field(&self, name: &str) -> bool {
-        self.call || self.fields.contains(name)
+    pub(super) fn locals(&self) -> impl Iterator<Item = &str> {
+        self.locals.iter().map(String::as_str)
+    }
+
+    /// The fields named, or `None` where a call may reach any.
+    pub(super) fn fields(&self) -> Option<impl Iterator<Item = &str>> {
+        (!self.call).then(|| self.fields.iter().map(String::as_str))
     }
 
     pub(super) fn touches_heap(&self) -> bool {

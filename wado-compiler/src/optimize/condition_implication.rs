@@ -244,7 +244,8 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
         engine,
         reassigned,
         tick: 0,
-        last_write: hashmap::IndexMap::default(),
+        carried_by: hashmap::IndexMap::default(),
+        invalid: hashmap::IndexSet::default(),
         aliased_writes: Vec::new(),
         reached: hashmap::IndexMap::default(),
         last_call: 0,
@@ -264,7 +265,6 @@ pub(super) fn build_copy_bindings(engine: &Engine) -> Binds {
 struct PendingBind {
     value: Operand,
     since: u64,
-    deps: Vec<u32>,
     /// The kinds of object the value reads through, where it names them all:
     /// an aliased store changes it only through one of these.
     reads: Option<Vec<TypeKey>>,
@@ -283,7 +283,13 @@ struct BindWalk<'e, 'a> {
     /// for the local alone and passes on no dependency of its initializer.
     reassigned: hashmap::IndexSet<u32>,
     tick: u64,
-    last_write: hashmap::IndexMap<u32, u64>,
+    /// The binds a change to each local leaves standing for a value it no
+    /// longer has: those whose value reads it, and the bind of it.
+    carried_by: hashmap::IndexMap<u32, Vec<u32>>,
+    /// The binds a local they depend on changed after: written, or itself a
+    /// bind gone invalid. A write only follows a bind, so each goes invalid
+    /// once, and the walk visits each dependence once.
+    invalid: hashmap::IndexSet<u32>,
     aliased_writes: Vec<(u64, Stored)>,
     /// Whether a type reaches an object kind, by both their keys.
     reached: hashmap::IndexMap<(TypeKey, TypeKey), bool>,
@@ -349,29 +355,40 @@ impl BindWalk<'_, '_> {
             return;
         }
         let reads = operand_read_locals(body, value);
-        let mut deps: hashmap::IndexSet<u32> = reads.iter().copied().collect();
-        deps.insert(t);
-        // A read of `t` stands for `value`, and through it for each bind it
-        // reads, so it goes stale as they would.
-        let mut kinds = read_kinds(self.engine, value);
-        for r in &reads {
-            if let Some(p) = self.pending.get(r) {
-                deps.extend(p.deps.iter().copied());
+        let mut aliased = reachable_elsewhere(self.engine, t);
+        let mut escaped = self.engine.mut_escaped().contains(&t);
+        let mut kinds: Option<hashmap::IndexSet<TypeKey>> =
+            read_kinds(self.engine, value).map(|k| k.into_iter().collect());
+        self.carried_by.entry(t).or_default().push(t);
+        for &r in &reads {
+            aliased |= reachable_elsewhere(self.engine, r);
+            escaped |= self.engine.mut_escaped().contains(&r);
+            // A read of `t` stands for `value`, and through it for each bind it
+            // reads, so it goes stale as they would. A bind already invalid
+            // goes stale at this read and is never substituted, and nothing
+            // writes its local, so `value` reads it as the local it is.
+            if self.invalid.contains(&r) {
+                self.stale.insert(r);
+            }
+            if self.stale.contains(&r) {
+                continue;
+            }
+            self.carried_by.entry(r).or_default().push(t);
+            if let Some(p) = self.pending.get(&r) {
+                aliased |= p.aliased;
+                escaped |= p.escaped;
                 kinds = kinds.zip(p.reads.as_ref()).map(|(mut own, theirs)| {
-                    own.extend(theirs);
+                    own.extend(theirs.iter().copied());
                     own
                 });
             }
         }
-        let aliased = deps.iter().any(|&d| reachable_elsewhere(self.engine, d));
-        let escaped = deps.iter().any(|d| self.engine.mut_escaped().contains(d));
         self.pending.insert(
             t,
             PendingBind {
                 value,
                 since: self.tick,
-                deps: deps.into_iter().collect(),
-                reads: kinds,
+                reads: kinds.map(|k| k.into_iter().collect()),
                 aliased,
                 aliased_checked: self.tick,
                 escaped,
@@ -389,10 +406,7 @@ impl BindWalk<'_, '_> {
         };
         let since = p.since;
         let checked = std::mem::replace(&mut p.aliased_checked, self.tick);
-        let stale = p
-            .deps
-            .iter()
-            .any(|d| self.last_write.get(d).is_some_and(|&at| at > since))
+        let stale = self.invalid.contains(&t)
             || (p.aliased
                 && self
                     .aliased_writes
@@ -413,11 +427,22 @@ impl BindWalk<'_, '_> {
     fn write(&mut self, w: Write) {
         self.tick += 1;
         match w {
-            Write::Root(r) => {
-                self.last_write.insert(r, self.tick);
-            }
+            Write::Root(r) => self.invalidate(r),
             Write::Aliased(stored) => self.aliased_writes.push((self.tick, stored)),
             Write::Call => self.last_call = self.tick,
+        }
+    }
+
+    /// Marks invalid each bind a change to `changed` reaches, through the
+    /// binds that read one.
+    fn invalidate(&mut self, changed: u32) {
+        let mut work = vec![changed];
+        while let Some(local) = work.pop() {
+            for &t in self.carried_by.get(&local).into_iter().flatten() {
+                if self.invalid.insert(t) {
+                    work.push(t);
+                }
+            }
         }
     }
 }
