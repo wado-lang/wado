@@ -88,6 +88,7 @@ type Role = "host" | "target";
 type Graph = {
   units: Unit[];
   ids: string[];
+  bySlot: Map<string, number[]>;
   // A crate a build script or a proc macro uses is compiled for the host, apart
   // from the same crate compiled for the program unless both come out alike;
   // nothing else in the unit graph tells the two apart.
@@ -122,7 +123,12 @@ function unitGraph(args: string[]): Graph {
   for (const root of roots) {
     visit(root, "target");
   }
-  return { units, ids: identities(units), roles };
+  const slots = units.map(slot);
+  const bySlot = Map.groupBy(
+    units.map((_, i) => i),
+    (i) => slots[i],
+  );
+  return { units, ids: identities(units, slots), bySlot, roles };
 }
 
 // A profile's name is not part of a unit's artifact name: a `cargo build` and
@@ -146,7 +152,7 @@ function slot(unit: Unit): string {
 }
 
 // One digest per unit, over what cargo hashes into the unit's artifact name.
-function identities(units: Unit[]): string[] {
+function identities(units: Unit[], slots: string[]): string[] {
   const memo = new Map<number, string>();
   const identity = (index: number): string => {
     const known = memo.get(index);
@@ -156,7 +162,7 @@ function identities(units: Unit[]): string[] {
     const unit = units[index];
     const dependencies = unit.dependencies.map((d) => identity(d.index)).sort();
     const digest = createHash("sha256")
-      .update(JSON.stringify([slot(unit), unit.features, dependencies]))
+      .update(JSON.stringify([slots[index], unit.features, dependencies]))
       .digest("hex");
     memo.set(index, digest);
     return digest;
@@ -172,11 +178,10 @@ function label(graph: Graph, index: number): string {
 
 // The units of `taken` compiled in the slot and for a role of `given`'s unit.
 function counterparts(given: Graph, index: number, taken: Graph): number[] {
-  const key = slot(given.units[index]);
   const roles = given.roles[index];
-  return taken.units
-    .map((unit, i) => (slot(unit) === key && [...taken.roles[i]].some((r) => roles.has(r)) ? i : -1))
-    .filter((i) => i >= 0);
+  return (taken.bySlot.get(slot(given.units[index])) ?? []).filter((i) =>
+    [...taken.roles[i]].some((r) => roles.has(r)),
+  );
 }
 
 // How `taken`'s unit differs from `given`'s, its counterpart: in features, or
