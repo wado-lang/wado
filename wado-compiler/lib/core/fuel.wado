@@ -36,6 +36,7 @@ pub fn measure<T, effect E>(label: String, mut f: fn mut() -> T with E) -> T wit
         return f();
     };
     let value = builtin::black_box(f());
-    FuelHost::report(label, FuelHost::spent().unwrap() - start);
+    let end = FuelHost::spent().unwrap();
+    FuelHost::report(label, end - start);
     return value;
 }
