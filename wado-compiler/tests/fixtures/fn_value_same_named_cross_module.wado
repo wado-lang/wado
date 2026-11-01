@@ -1,0 +1,18 @@
+// Two modules each pass their own `measured` as a value. The forwarding closure
+// a function value becomes calls the function of its own module, at that
+// function's signature.
+
+use { measure_all } from "./sub/fn_value_same_named_dep.wado";
+
+fn measured() -> String {
+    return "here";
+}
+
+fn called(f: fn() -> String) -> String {
+    return f();
+}
+
+test "each function value forwards to its own module's function" {
+    assert called(measured) == "here";
+    assert measure_all(&[1, 2, 3]) == 3;
+}

@@ -25,6 +25,8 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
 use crate::type_table::TypeTable;
 use crate::unparse::unparse_tir_closure_source;
+
+use super::value_copy::funcset::FuncKeyMap;
 use crate::{hashmap, tir};
 
 /// The `Formatter` facts a synthesized format body is written against, read
@@ -498,17 +500,14 @@ impl ClosureLowerer {
     /// zero-capture `Closure` nodes. This enables named functions to be passed as function-type
     /// arguments (e.g., `apply(double, 21)` or `apply(&double, 21)`).
     fn convert_func_refs_to_closures(&self, flat: &mut FlatPackage) {
-        // Build a map from function name to (param_types, return_type).
-        //
-        // `lower::lower` operates on a flattened `FlatPackage` — all functions
-        // from every module (entry, prelude, stdlib, transitively-loaded user
-        // modules) are placed into a single `module.functions` before this
-        // runs, so a bare-name lookup here covers imported function refs like
-        // `&println` from `core:cli` without an additional cross-module pass.
-        let mut func_sigs: IndexMap<String, FuncSig> = IndexMap::default();
+        // Every module's functions are in the flattened package, so one map
+        // covers imported function refs like `&println` from `core:cli`. Two
+        // modules may each declare a function of one name.
+        let mut func_sigs: FuncKeyMap<FuncSig> = FuncKeyMap::default();
         for func_rc in &flat.functions {
             let func = func_rc.borrow();
             func_sigs.insert(
+                func.module_source.clone(),
                 func.name.clone(),
                 FuncSig {
                     params: func
@@ -1289,7 +1288,7 @@ impl TirMutVisitor for CollectClosuresVisitor<'_> {
 /// zero-capture closure and the outer `Unary::Ref` stays put, producing a
 /// genuine `&fn(...)` reference value.
 struct FuncRefToClosureRewriter<'a> {
-    func_sigs: &'a IndexMap<String, FuncSig>,
+    func_sigs: &'a FuncKeyMap<FuncSig>,
     type_table: &'a mut TypeTable,
 }
 
@@ -1306,7 +1305,7 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             template: _,
         } = &expr.kind
         {
-            let Some(sig) = self.func_sigs.get(name.as_str()) else {
+            let Some(sig) = self.func_sigs.get(func_module, name) else {
                 return;
             };
             let span = expr.span;
