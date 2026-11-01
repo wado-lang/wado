@@ -185,6 +185,12 @@ impl Root {
         }
     }
 
+    /// Whether a test named `name` is left out, as `TestSelection::skipped`
+    /// matches it.
+    fn skips(self, name: Option<&str>) -> bool {
+        name.is_some_and(|name| self.skipped_tests().iter().any(|f| name.contains(f)))
+    }
+
     fn dir(self) -> PathBuf {
         repository_root().join(self.rel_dir())
     }
@@ -233,7 +239,7 @@ impl Root {
         let items = wado_compiler::parse(&source).ast.items;
         items.iter().any(|item| {
             if spec.test_world {
-                matches!(item, Item::Test(_))
+                matches!(item, Item::Test(test) if !self.skips(test.name.as_deref()))
             } else {
                 matches!(item, Item::Function(f) if f.is_export && f.name == "run")
             }
@@ -2798,4 +2804,12 @@ fn a_compile_time_expectation_keeps_the_fixture() {
     let source =
         "fn f() {}\n\n__DATA__\n{\"stdout\": \"\", \"wir_scope\": \"f\", \"remarks\": {}}\n";
     assert!(Spec::parse(Root::Fixtures, source).is_ok());
+}
+
+/// A benchmark whose every test is skipped has nothing left to run.
+#[test]
+fn a_source_with_only_skipped_tests_is_no_subject() {
+    let dir = Root::Benchmark.dir();
+    assert!(!Root::Benchmark.is_subject(&dir.join("gale_gen/gale_gen.wado")));
+    assert!(Root::Benchmark.is_subject(&dir.join("sieve/sieve.wado")));
 }
