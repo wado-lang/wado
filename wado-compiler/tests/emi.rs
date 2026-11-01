@@ -1028,10 +1028,16 @@ struct Outcome {
 }
 
 impl Outcome {
-    /// Whether `other` traps, or fails a test, where this does not, or the
-    /// reverse.
-    fn trap_differs(&self, other: &Self) -> bool {
-        self.trapped != other.trapped || self.test_failed != other.test_failed
+    /// What `mutant` did that this baseline did not: a flipped trap or test
+    /// verdict is `Trapped` even when its output moved too.
+    fn misbehaviour(&self, mutant: &Self) -> Option<Misbehaviour> {
+        if self.trapped != mutant.trapped || self.test_failed != mutant.test_failed {
+            Some(Misbehaviour::Trapped)
+        } else if self.differences(mutant).is_empty() {
+            None
+        } else {
+            Some(Misbehaviour::Diverged)
+        }
     }
 
     fn differences(&self, other: &Self) -> Vec<String> {
@@ -1449,10 +1455,9 @@ impl Injection<'_> {
         let level = self.level;
         match evaluate(self.path, &self.mutant(sites), self.spec, level) {
             Evaluation::Ran(outcome) => {
-                let differences = self.baseline.differences(&outcome);
-                if differences.is_empty() {
+                let Some(what) = self.baseline.misbehaviour(&outcome) else {
                     return Ok(());
-                }
+                };
                 if let Some(detail) =
                     baseline_moved(self.path, self.canonical, self.spec, level, self.baseline)
                 {
@@ -1461,12 +1466,8 @@ impl Injection<'_> {
                         detail: self.report(&detail),
                     });
                 }
-                let what = if self.baseline.trap_differs(&outcome) {
-                    Misbehaviour::Trapped
-                } else {
-                    Misbehaviour::Diverged
-                };
-                Err(self.excluded(what, sites, &differences.join("; ")))
+                let differences = self.baseline.differences(&outcome).join("; ");
+                Err(self.excluded(what, sites, &differences))
             }
             // A guard is valid wherever a statement is, except where the
             // surrounding value must stay constant; that is a rejection, not a
@@ -1495,11 +1496,7 @@ impl Injection<'_> {
 
     fn reproduces(&self, subset: &[Site], what: Misbehaviour) -> bool {
         match evaluate(self.path, &self.mutant(subset), self.spec, self.level) {
-            Evaluation::Ran(outcome) => match what {
-                Misbehaviour::Diverged => !self.baseline.differences(&outcome).is_empty(),
-                Misbehaviour::Trapped => self.baseline.trap_differs(&outcome),
-                Misbehaviour::Crashed => false,
-            },
+            Evaluation::Ran(outcome) => self.baseline.misbehaviour(&outcome) == Some(what),
             Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
             Evaluation::CompileError(_) | Evaluation::OutOfBudget(_) => false,
         }
@@ -2804,4 +2801,21 @@ fn a_source_with_only_skipped_tests_is_no_subject() {
     let dir = Root::Benchmark.dir();
     assert!(!Root::Benchmark.is_subject(&dir.join("gale_gen/gale_gen.wado")));
     assert!(Root::Benchmark.is_subject(&dir.join("sieve/sieve.wado")));
+}
+
+/// Reduction keeps the misbehaviour it reduces: a subset whose output moved
+/// and whose trap flipped is a trap, never a divergence.
+#[test]
+fn an_outcome_that_flips_a_trap_is_never_a_divergence() {
+    let outcome = |stdout: &str, trapped: bool| Outcome {
+        stdout: stdout.to_string(),
+        trapped,
+        exit_code: None,
+        test_failed: false,
+        detail: String::new(),
+    };
+    let baseline = outcome("a", false);
+    assert!(baseline.misbehaviour(&outcome("a", false)).is_none());
+    assert!(baseline.misbehaviour(&outcome("b", false)) == Some(Misbehaviour::Diverged));
+    assert!(baseline.misbehaviour(&outcome("b", true)) == Some(Misbehaviour::Trapped));
 }
