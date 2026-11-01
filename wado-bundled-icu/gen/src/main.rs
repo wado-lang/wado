@@ -516,9 +516,10 @@ fn quoted_alternatives(names: &[String]) -> String {
 
 fn wado(properties: &[Property]) -> String {
     let mut out = String::new();
-    writeln!(out, "// {HEADER}").unwrap();
     out.push_str(
-        "
+        "#![generated(by = \"icu-gen-properties\")]
+#![stdlib(\"core:icu/properties.wado\")]
+
 use { Properties } from \"../icu.wat\" with { type: \"wat\" };
 use { CodePointSet, PropertyNameError, fold, refused } from \"core:icu/code_point_set.wado\";
 ",
