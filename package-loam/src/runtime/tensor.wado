@@ -2070,17 +2070,22 @@ pub struct Read<Axes> {
     pub extents: List<i32>,
 }
 
-/// `op` over `operands`, stretched to the extents they broadcast to.
-pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
-    let extents = broadcast_reads(operands);
+/// `op` over `operands` at each element of `extents`, each operand stretched
+/// to them.
+pub fn fused<Axes>(operands: &List<Read<Axes>>, op: &Expr, extents: List<i32>) -> Tensor<f32, Axes> {
     return Tensor { data: op.over(element_count(&extents), &repeated_over(operands, &extents)), extents };
 }
 
-/// `op` over `operands`, a row being the last `row_axes` axes of the extents
-/// they broadcast to, so a `Fold` step folds along one. Where `reduced`, the
+/// `op` over `operands` row by row of `extents`, a row being its last
+/// `row_axes` axes, so a `Fold` step folds along one. Where `reduced`, the
 /// output holds each row's first element, the row axes at extent 1.
-pub fn fused_rows<In, Out>(operands: &List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
-    let extents = broadcast_reads(operands);
+pub fn fused_rows<In, Out>(
+    operands: &List<Read<In>>,
+    op: &Expr,
+    row_axes: i32,
+    reduced: bool,
+    extents: List<i32>,
+) -> Tensor<f32, Out> {
     let rank = extents.len();
     assert 0 < row_axes <= rank;
     let row = element_count(&extents[rank - row_axes..<rank].to_list());
@@ -2580,11 +2585,11 @@ impl Backend for Cpu {
     }
 
     fn fused<Axes>(&mut self, operands: List<Read<Axes>>, op: &Expr) -> Tensor<f32, Axes> {
-        return fused(&operands, op);
+        return fused(&operands, op, broadcast_reads(&operands));
     }
 
     fn rows<In, Out>(&mut self, operands: List<Read<In>>, op: &Expr, row_axes: i32, reduced: bool) -> Tensor<f32, Out> {
-        return fused_rows(&operands, op, row_axes, reduced);
+        return fused_rows(&operands, op, row_axes, reduced, broadcast_reads(&operands));
     }
 
     fn cast<A: Element, B: Element, Axes>(&mut self, t: &Tensor<A, Axes>) -> Tensor<B, Axes> {

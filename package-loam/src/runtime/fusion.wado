@@ -118,7 +118,7 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
         }
         if let Some(g) = shared_group(&readers, &group_of, id)
             && !groups[g].product matches { Some(p) && readers[id].contains(&p) }
-            && let Some(joined) = joined(recorded, &groups[g], id) {
+            && let Some(joined) = joined(recorded, &groups[g], id, splats) {
             groups[g] = joined;
             group_of[id] = g;
             continue;
@@ -252,7 +252,7 @@ fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
 /// `group` with `id` in it, or `None` where the kernel cannot compute it: each
 /// element it holds must be one the kernel computes at an element, or at a
 /// row, of the space it iterates.
-fn joined(recorded: &Recorded, group: &Group, id: i32) -> Option<Group> {
+fn joined(recorded: &Recorded, group: &Group, id: i32, splats: &HashMap<i32, Option<f32>>) -> Option<Group> {
     let node = &recorded.nodes[id];
     let e = &node.extents;
     let mut members = group.members;
@@ -263,8 +263,7 @@ fn joined(recorded: &Recorded, group: &Group, id: i32) -> Option<Group> {
             let rows = &recorded.nodes[node.operands[0]].extents;
             let whole = same_space(rows, &group.space) && rows[rows.len() - 1] == group.space[group.space.len() - 1];
             let fits = group.product matches { None } && (whole || !group.folds && per_row(&group.space, rows));
-            let all_fit = group.members.into_iter().all(|m| fits_in(&recorded.nodes[m].extents, rows));
-            if fits && all_fit {
+            if fits && reads_fit(recorded, &group.members, rows, splats) {
                 Option::Some(Group { ..added, space: *rows, folds: true });
             } else {
                 null;
@@ -293,6 +292,24 @@ fn joined(recorded: &Recorded, group: &Group, id: i32) -> Option<Group> {
         },
         _ => if fits_in(e, &group.space) { Option::Some(added) } else { null },
     };
+}
+
+/// Whether a kernel iterating `space` computes each of `members` and reads
+/// each value they read from outside it, a folded constant aside.
+fn reads_fit(recorded: &Recorded, members: &List<i32>, space: &List<i32>, splats: &HashMap<i32, Option<f32>>) -> bool {
+    for let m of *members {
+        let node = &recorded.nodes[m];
+        if !fits_in(&node.extents, space) {
+            return false;
+        }
+        for let o of node.operands {
+            let folded = splats.get(o) matches { Some(Some(_)) };
+            if !members.contains(&o) && !folded && !fits_in(&recorded.nodes[o].extents, space) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 /// Whether a broadcast of `x` to `e` along `dims` only adds axes of 1, so it

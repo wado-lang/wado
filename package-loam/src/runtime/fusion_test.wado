@@ -92,6 +92,18 @@ test "a broadcast along a row's axis is a view the kernel reads, not a step of i
     assert spelled(&plan_of(&recorded)) == [`node ${x.id}`, `node ${column.id}`, `node ${spread.id}`, `kernel ${y.id}`] as List<String>;
 }
 
+test "a fold joins no kernel whose operands it would read neither per element nor per row" {
+    let mut r = Recorder::new();
+    let z = r.parameter::<f32, Untyped>([3, 4, 5]);
+    let y = r.parameter::<f32, Untyped>([3]);
+    let sum = r.reduce::<Untyped, Untyped>(&z, Binary::Add, 0.0, [2]);
+    let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&y, [3, 4], [0]);
+    let biased = r.binary(Binary::Add, &sum, &spread);
+    let recorded = r.finished([biased.id]);
+    // `y` is one value per row of `[3, 4]`, and of no row of `[3, 4, 5]`.
+    assert spelled(&plan_of(&recorded)) == [`node ${z.id}`, `node ${y.id}`, `kernel ${sum.id}`, `kernel ${biased.id}`] as List<String>;
+}
+
 test "a gated layer is one product with the gate in its epilogue, the other product written" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([1, 4, 2]);

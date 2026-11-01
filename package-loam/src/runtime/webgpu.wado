@@ -26,6 +26,8 @@ use {
     Window,
     broadcast_extents,
     element_count,
+    fused,
+    fused_rows,
     group_query_attention,
     operand,
     optional,
@@ -1108,13 +1110,12 @@ impl WebGpuBackend {
         if let Some(out) = computed {
             return Placed::Device(out);
         }
-        assert broadcast_all(operands) == extents, "the CPU's kernels iterate their operands' extents";
         let held = self.held(operands);
         let reads = self.cpu_reads::<Axes>(&held, operands);
         if rows {
-            return Placed::Host(self.cpu.rows::<Axes, Axes>(reads, op, 1, reduced));
+            return Placed::Host(fused_rows::<Axes, Axes>(&reads, op, 1, reduced, extents));
         }
-        return Placed::Host(self.cpu.fused(reads, op));
+        return Placed::Host(fused(&reads, op, extents));
     }
 
     /// Each operand's elements on the host, for a kernel the device cannot run.
