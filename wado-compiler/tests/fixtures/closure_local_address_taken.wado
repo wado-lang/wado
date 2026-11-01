@@ -1,0 +1,30 @@
+// A closure local's type carries no effect row while its `&` spells one, and
+// both must reach the same box.
+
+struct Pair {
+    a: i32,
+}
+
+export fn run() {
+    let f = |x: i32| x + 1;
+    let rf = &f;
+    builtin::black_box(rf);
+    assert f(1) == 2;
+
+    let bump = |w: &mut Pair| { w.a += 1000; };
+    let rb = &bump;
+    builtin::black_box(rb);
+    let mut v = Pair { a: 1 };
+    let mut bump_v = || {
+        let rb2 = &bump;
+        builtin::black_box(rb2);
+        v.a += 1000;
+    };
+    bump_v();
+    assert v.a == 1001;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

@@ -333,6 +333,21 @@ impl TypeBuilder {
             let box_type = self.get_or_create_box_type(key, type_table);
             self.box_struct_types.insert(base_type_id, box_type);
         }
+        // A referent's id need not be the one its `&` spells: a closure local
+        // is `fn(i32) -> i32` while `&f` reads `&fn(i32) -> i32 with($e)`. Each
+        // id sharing a boxed representation maps to that box, or the local
+        // stays unboxed while its `&` reads a box.
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            if self.box_struct_types.contains_key(&type_id)
+                || !type_table.is_boxed_reference_target(type_id)
+            {
+                continue;
+            }
+            let key = self.box_key(type_id, type_table);
+            if let Some(&box_type) = self.box_struct_types.get(&key) {
+                self.box_struct_types.insert(type_id, box_type);
+            }
+        }
         for ty in boxed_slots {
             type_table.register_slot_box(ty, self.box_struct_types[&ty]);
         }
