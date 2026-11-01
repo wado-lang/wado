@@ -151,7 +151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .type_names_for_mismatch(ef.ty, ef.ty);
+                .names_for_mismatch(ef.ty, ef.ty);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected,
                 found: format!("a closure of {} or more parameters", index + 1),
@@ -337,7 +337,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 Some(t) => {
                     if !self.ast_block_always_exits(block) && body_type != t && !body_diverges {
                         let _ = self.emit(TypeError::MissingReturn {
-                            return_type: self.tysys.type_table.borrow().type_name(t),
+                            return_type: self.tysys.type_table.borrow().name(t),
                             span: closure.span,
                         });
                     }
@@ -346,7 +346,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None if body_type == TypeTable::UNIT || body_diverges => body_type,
                 None => {
                     let _ = self.emit(TypeError::MissingReturn {
-                        return_type: self.tysys.type_table.borrow().type_name(body_type),
+                        return_type: self.tysys.type_table.borrow().name(body_type),
                         span: closure.span,
                     });
                     TypeTable::UNIT

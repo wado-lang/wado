@@ -298,7 +298,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.resolve_generic_reflect_static_call(self_ty, &name, static_call, ctx);
         }
 
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+        let self_name = self.tysys.type_table.borrow().name(self_ty);
 
         if method == StructMethods::resolve(&self.tysys.type_table.borrow()).from_fields
             && let Some(closure) = self.reflect_struct_closure(self_ty)
@@ -775,7 +775,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let arg_ty = arg_types[0];
         let peeled = self.tysys.type_table.borrow().peel_refs(arg_ty);
         if arg_ty != TypeTable::ERROR && peeled != self_ty {
-            let found = self.tysys.type_table.borrow().type_name(peeled);
+            let found = self.tysys.type_table.borrow().name(peeled);
             let _ = self.emit(TypeError::TypeMismatch {
                 expected: self_name.to_string(),
                 found,
@@ -814,7 +814,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .type_names_for_mismatch(param, arg);
+                    .names_for_mismatch(param, arg);
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected,
                     found,
@@ -838,7 +838,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (dispatch, declares) = match trait_ {
             OnBoundTrait::Reflect => {
                 let items = tt.compiler_items();
-                let declares = method == items.method_name(CompilerItem::ReflectTypeName)
+                let declares = method == items.method_name(CompilerItem::ReflectDeclName)
                     || method == items.method_name(CompilerItem::ReflectWireNamePolicy);
                 (ReflectDispatch::Root, declares)
             }
@@ -925,7 +925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let Some((base_name, module_source, type_args)) = self.tysys.reflect_root_subject(self_ty)
         else {
-            let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+            let self_name = self.tysys.type_table.borrow().name(self_ty);
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("{}::<{self_name}>::{method}", trait_name.base_name()),
                 span: static_call.span,
@@ -1014,7 +1014,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         let Some(holes) = self.tysys.reflect_template_holes(self_ty) else {
-            let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+            let self_name = self.tysys.type_table.borrow().name(self_ty);
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("{}::<{self_name}>::{method}", trait_name.base_name()),
                 span: static_call.span,
@@ -1085,7 +1085,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
         }
 
-        let self_name = self.tysys.type_table.borrow().type_name(self_ty);
+        let self_name = self.tysys.type_table.borrow().name(self_ty);
         let Some(subject) = self.reflect_variant_subject(self_ty) else {
             let _ = self.emit(TypeError::UnknownFunction {
                 name: format!("ReflectVariant::<{self_name}>::{method}"),
@@ -1332,7 +1332,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             (
                 tt.compiler_items().trait_fq(spec.trait_item),
-                tt.type_name(self_ty),
+                tt.name(self_ty),
             )
         };
         let subject = self.tysys.type_table.borrow().get(structure_ty).clone();
@@ -1474,7 +1474,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if arg_types[0] != TypeTable::ERROR && arg_types[0] != spec.value_type {
                 let (expected, found) = {
                     let tt = self.tysys.type_table.borrow();
-                    tt.type_names_for_mismatch(spec.value_type, arg_types[0])
+                    tt.names_for_mismatch(spec.value_type, arg_types[0])
                 };
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected,
@@ -1657,7 +1657,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The subject's case (enum) / member (flags) count, off the declaration
-    /// its own type names rather than its rendered head.
+    /// its own type names rather than its mangled head.
     fn scalar_member_count(&self, spec: ScalarReflectSpec, self_ty: TypeId) -> usize {
         let structure_ty = self
             .tysys

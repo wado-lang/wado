@@ -42,7 +42,7 @@ trait Describe with () {
 
 impl<T: ReflectStruct<FieldTypes = [..F]>, ..F> Describe for T {
     fn describe(&self) -> String {
-        let mut out = Reflect::<T>::type_name();
+        let mut out = Reflect::<T>::decl_name();
         for let f of ReflectStruct::<T>::members() {
             out = out + "." + f.name();
         }
@@ -98,25 +98,25 @@ test "a variant newtype reflects the base's cases" {
 test "a chained newtype names its own link and walks the base's fields" {
     let pp = Point { x: 1, y: 2 } as PP;
     assert pp.describe() == "PP.x.y";
-    assert Reflect::<PP>::type_name() == "PP";
+    assert Reflect::<PP>::decl_name() == "PP";
     assert `${pp:?}` == "Point { x: 1, y: 2 } as P as PP";
 }
 
 test "a generic newtype names itself and inherits the base's structure" {
     let w = Point { x: 1, y: 2 } as Wrapped<i32>;
     assert w.describe() == "Wrapped.x.y";
-    assert Reflect::<Wrapped<i32>>::type_name() == "Wrapped";
+    assert Reflect::<Wrapped<i32>>::decl_name() == "Wrapped";
     assert `${w:?}` == "Point { x: 1, y: 2 } as Wrapped";
 }
 
 // Identity is not inherited: a newtype names itself, while the structure above
 // is the base's.
 test "a newtype names itself through the root" {
-    assert Reflect::<P>::type_name() == "P";
-    assert Reflect::<C>::type_name() == "C";
-    assert Reflect::<M>::type_name() == "M";
-    assert Reflect::<S>::type_name() == "S";
-    assert Reflect::<Point>::type_name() == "Point";
+    assert Reflect::<P>::decl_name() == "P";
+    assert Reflect::<C>::decl_name() == "C";
+    assert Reflect::<M>::decl_name() == "M";
+    assert Reflect::<S>::decl_name() == "S";
+    assert Reflect::<Point>::decl_name() == "Point";
 }
 
 __DATA__

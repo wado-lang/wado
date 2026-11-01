@@ -200,7 +200,7 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         };
         module.synthesis_requests.push(SynthesisRequest {
             trait_ref,
-            target_type_name: target_head.rendered().to_string(),
+            target_type_name: target_head.mangled().to_string(),
             target_type_id,
             type_params: Vec::new(),
             span: Span::default(),

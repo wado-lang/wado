@@ -4764,7 +4764,11 @@ impl<'a> Reify<'a> {
                 .clone();
             // The name the shape was registered under, not the one a message
             // shows: both render the shape, and only the mangle is a key.
-            (tt.struct_head_name(*def), shape, tt.anon_shape_is_open(*id))
+            (
+                tt.struct_head_mangled_name(*def),
+                shape,
+                tt.anon_shape_is_open(*id),
+            )
         };
         let hole_types = shape.hole_types();
         assert_eq!(values.len(), hole_types.len());

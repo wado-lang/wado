@@ -61,7 +61,7 @@ fn coerce_value_to_binding(
         ResolvedType::Struct { def, type_args }
             if type_table.box_payload_of(binding_type).is_some() =>
         {
-            let struct_name = type_table.struct_rendered_name(*def, type_args);
+            let struct_name = type_table.struct_mangled_name(*def, type_args);
             TirExpr::new(
                 TirExprKind::StructLiteral {
                     struct_type: binding_type,

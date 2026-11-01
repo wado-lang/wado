@@ -698,13 +698,13 @@ impl FunctionTranslator<'_, '_> {
     fn total_cases(&self, scrut_type: TypeId) -> Option<usize> {
         match self.type_table.get(scrut_type) {
             ResolvedType::Variant { def } => self.variant_total_cases(
-                self.type_table.def_name(*def),
+                self.type_table.decl_name(*def),
                 self.type_table.def_module(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
                 let mangled = generic_instance_name(
                     self.type_table,
-                    self.type_table.def_name(*def),
+                    self.type_table.decl_name(*def),
                     type_args,
                 );
                 self.variant_total_cases(&mangled, self.type_table.def_module(*def))
@@ -715,7 +715,7 @@ impl FunctionTranslator<'_, '_> {
                 .enums
                 .iter()
                 .find(|e| {
-                    e.name == self.type_table.def_name(*def)
+                    e.name == self.type_table.decl_name(*def)
                         && e.module_source == *self.type_table.def_module(*def)
                 })
                 .map(|e| e.cases.len()),
@@ -744,12 +744,12 @@ impl FunctionTranslator<'_, '_> {
         match self.type_table.get(type_id) {
             ResolvedType::Variant { def } => wir_type_key(
                 self.type_table.def_module(*def),
-                self.type_table.def_name(*def),
+                self.type_table.decl_name(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
                 let mangled = generic_instance_name(
                     self.type_table,
-                    self.type_table.def_name(*def),
+                    self.type_table.decl_name(*def),
                     type_args,
                 );
                 wir_type_key(self.type_table.def_module(*def), &mangled)
@@ -1436,7 +1436,7 @@ impl FunctionTranslator<'_, '_> {
         let ResolvedType::Struct { def, type_args } = self.type_table.get(struct_type) else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");
         };
-        let name = self.type_table.struct_rendered_name(*def, type_args);
+        let name = self.type_table.struct_mangled_name(*def, type_args);
         let module_source = self.type_table.struct_head_module(*def).clone();
         self.ctx
             .package

@@ -383,7 +383,7 @@ impl Monomorphizer {
         // not register as one wasm-GC type.
         let head = key
             .def
-            .map_or_else(|| key.name.clone(), |def| type_table.decl_render_name(def));
+            .map_or_else(|| key.name.clone(), |def| type_table.decl_mangled_name(def));
         mangle_generic_name(&head, &args)
     }
 
@@ -549,12 +549,12 @@ impl Monomorphizer {
         }
         match type_table.get(type_id) {
             ResolvedType::Struct { def, type_args } => {
-                Some((type_table.struct_head_name(*def), type_args.clone()))
+                Some((type_table.struct_head_mangled_name(*def), type_args.clone()))
             }
             ResolvedType::Newtype { def, type_args, .. }
                 if own_newtype && !type_args.is_empty() =>
             {
-                Some((type_table.decl_render_name(*def), type_args.clone()))
+                Some((type_table.decl_mangled_name(*def), type_args.clone()))
             }
             ResolvedType::Newtype { base_type, .. } => {
                 self.struct_info(*base_type, type_table, own_newtype)

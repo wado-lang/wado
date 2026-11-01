@@ -49,9 +49,9 @@ test "an anonymous struct names no declaration" {
     let p = { x: 1, y: 2 };
     assert `${p:?}` == "{ x: 1, y: 2 }";
     assert `${{}:?}` == "{}";
-    assert type_name_of(&p) == "";
+    assert decl_name_of(&p) == "";
 }
 
-fn type_name_of<T: Reflect>(_v: &T) -> String {
-    return Reflect::<T>::type_name();
+fn decl_name_of<T: Reflect>(_v: &T) -> String {
+    return Reflect::<T>::decl_name();
 }

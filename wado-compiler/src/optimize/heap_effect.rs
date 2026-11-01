@@ -732,12 +732,12 @@ impl HeapEffects<'_> {
         let tt = self.type_table;
         let key = if let ResolvedType::Struct { def, type_args } = tt.get(ty) {
             (
-                tt.struct_rendered_name(*def, type_args),
+                tt.struct_mangled_name(*def, type_args),
                 tt.struct_head_module(*def).clone(),
             )
         } else if let ResolvedType::GenericInstance { def, type_args } = tt.get(ty) {
             (
-                tt.generic_rendered_name(*def, type_args),
+                tt.generic_mangled_name(*def, type_args),
                 tt.def_module(*def).clone(),
             )
         } else {

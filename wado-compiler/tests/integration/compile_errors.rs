@@ -169,7 +169,7 @@ fn test_orphan_error_attributed_to_the_submodule_that_defines_it() {
 #[test]
 fn test_sealed_reflect_error_attributed_to_user_file() {
     let filename = analyzer_filename(
-        "struct Point { x: i32, y: i32 }\n\nimpl ReflectStruct for Point {\n    type FieldTypes = [i32, i32];\n    fn type_name() -> String { return \"forged\"; }\n}\n\nexport fn run() {}\n",
+        "struct Point { x: i32, y: i32 }\n\nimpl ReflectStruct for Point {\n    type FieldTypes = [i32, i32];\n    fn decl_name() -> String { return \"forged\"; }\n}\n\nexport fn run() {}\n",
     );
     assert_eq!(filename, "orphan_phase_diag.wado");
 }

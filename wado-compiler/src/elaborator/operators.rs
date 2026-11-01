@@ -447,7 +447,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
         );
         if both_refs {
-            let type_name = self.tysys.type_table.borrow().type_name(left);
+            let type_name = self.tysys.type_table.borrow().name(left);
             let _ = self.emit(TypeError::OperatorNotApplicable {
                 op: binary_op_str(op).to_string(),
                 operands: vec![type_name],
@@ -732,7 +732,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
                 let op_char = binary_op_str(op);
-                let type_name = self.tysys.type_table.borrow().type_name(left);
+                let type_name = self.tysys.type_table.borrow().name(left);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_char.to_string(),
                     operands: vec![type_name],
@@ -802,8 +802,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && right != TypeTable::ERROR
             {
                 let type_table = self.tysys.type_table.borrow();
-                let left_name = type_table.type_name(left);
-                let right_name = type_table.type_name(right);
+                let left_name = type_table.name(left);
+                let right_name = type_table.name(right);
                 let op_char = binary_op_str(op);
                 drop(type_table);
                 if left_name == right_name {
@@ -843,7 +843,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             && !self.tysys.type_table.borrow().contains_undecided(right)
         {
             let type_table = self.tysys.type_table.borrow();
-            let (left_name, right_name) = type_table.type_names_for_mismatch(left, right);
+            let (left_name, right_name) = type_table.names_for_mismatch(left, right);
             if left_name != right_name {
                 let _ = self.emit(TypeError::TypeMismatch {
                     expected: left_name,
@@ -995,7 +995,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.emit(TypeError::TypeMismatch {
                             expected: "reference type".to_string(),
-                            found: self.tysys.type_table.borrow().type_name(expr_type),
+                            found: self.tysys.type_table.borrow().name(expr_type),
                             span: unary.span,
                         });
                         TypeTable::ERROR
@@ -1084,7 +1084,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.report_unmet_trait_impl_bound(expr_type, &[item], None, span) {
                 return Some(TypeTable::ERROR);
             }
-            let operand = self.tysys.type_table.borrow().type_name(expr_type);
+            let operand = self.tysys.type_table.borrow().name(expr_type);
             let _ = self.emit(TypeError::OperatorNotApplicable {
                 op: op_symbol.to_string(),
                 operands: vec![operand],
@@ -1173,7 +1173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .as_tuple(value_type)
             .filter(|elements| elements.len() == targets.len());
         let Some(element_types) = element_types else {
-            let found = self.tysys.type_table.borrow().type_name(value_type);
+            let found = self.tysys.type_table.borrow().name(value_type);
             let _ = self.emit(TypeError::DestructuringArity {
                 targets: targets.len(),
                 found,
@@ -1248,8 +1248,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let no_index_swap = |this: &Self, key: Option<TypeId>| {
             let tt = this.tysys.type_table.borrow();
             Err(Some(DestructuringFallback::NoIndexSwap {
-                container: tt.type_name(base_type_id),
-                key: key.map(|key| tt.type_name(key)),
+                container: tt.name(base_type_id),
+                key: key.map(|key| tt.name(key)),
             }))
         };
         let Some(head) = self.index_dispatch_head(base_type_id) else {
@@ -1952,7 +1952,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .unwrap_or_default();
-        let type_name = self.tysys.type_table.borrow().type_name(left);
+        let type_name = self.tysys.type_table.borrow().name(left);
         let _ = self.emit(TypeError::OperatorNotApplicable {
             op: binary_op_str(op).to_string(),
             operands: vec![type_name],
@@ -2078,7 +2078,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Some(param) = bound_param_name(&tt, ty) {
                 (FqTypeName::binder(param), param.clone())
             } else if matches!(resolved, ResolvedType::AssocTypeProjection { .. }) {
-                (tt.fq_type_name(ty), tt.type_name(ty))
+                (tt.fq_type_name(ty), tt.name(ty))
             } else {
                 return None;
             }

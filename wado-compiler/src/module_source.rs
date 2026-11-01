@@ -1351,7 +1351,7 @@ impl fmt::Display for ModuleSource {
             | Self::EntryPoint { name, .. }
             | Self::Redirected { name, .. }
             | Self::Wasm { name, .. } => write!(f, "{name}"),
-            Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.rendered())),
+            Self::Effect(head) => write!(f, "{}", effect_namespace(head.module(), head.mangled())),
         }
     }
 }

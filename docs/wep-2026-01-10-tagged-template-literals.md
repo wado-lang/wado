@@ -85,7 +85,7 @@ value, and the type stays one per shape. A segment field is a `String` built
 from the literal, which constant object globalization hoists as it hoists any
 constant literal, and a tag reads a segment as a `StrSlice` over it.
 
-The name the type shows a reader, in a diagnostic and as `Reflect::type_name()`,
+The name the type shows a reader, in a diagnostic and as `Reflect::decl_name()`,
 is its holes, each spelled as its type and specifier, cut to 50 characters with
 `...`: `` sql`id = ${id:04}` `` is named `` `${i32:04}` ``. The name describes
 the shape but does not identify it: past the cut, two shapes can read alike.
@@ -473,7 +473,7 @@ introduces a mechanism; each item names the existing one it extends.
   whose shape is a template; `is_sealed_reflect_member` adds the `TemplateHole` handle.
 - `anon_struct_mangle` renders a template shape under a `$tmpl` prefix over the
   shape's hash, and `anon_struct_name` renders the reader's name above, which
-  `Reflect::type_name()` answers. The mangle is
+  `Reflect::decl_name()` answers. The mangle is
   fixed when the shape is interned: it renders the hole types, and erasure
   later redirects a newtype among them to its base, so a second rendering
   would name a struct WIR never registered — the same failure a struct literal
@@ -579,7 +579,7 @@ serial advances on read, so a template nested inside a hole mints its own
 
 - `collect_reflect_targets` routes a template-shaped `TirStruct` to
   `generate_template_reflect_impls` instead of the struct kind. Per shape it
-  emits `type_name` and `wire_name_policy` under the root, registers `Holes = [V_k]` and `Members = [TemplateHole<T, V_k>]`, and emits `members()` through
+  emits `decl_name` and `wire_name_policy` under the root, registers `Holes = [V_k]` and `Members = [TemplateHole<T, V_k>]`, and emits `members()` through
   `generate_template_members_fn` with one `TemplateHole` literal per hole,
   plus `tail(t)` and `raw_tail(t)` reading the last segment fields. The impl
   is recorded into `TraitEnv` like the struct kind's.
@@ -641,7 +641,7 @@ things the optimizer gains here.
 - `tagged_template_format_equiv.wado`: `String::format` against the untagged form over
   the specifier matrix.
 - `tagged_template_string_raw.wado`: `String::raw` keeps escapes verbatim.
-- `tagged_template_type_name.wado`: the reader's name, specifiers and the cut
+- `tagged_template_decl_name.wado`: the reader's name, specifiers and the cut
   included.
 - `tagged_template_inspect.wado`: a value inspects as the template it was
   written as, in both forms, through an affine hole and through a hole whose

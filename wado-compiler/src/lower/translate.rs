@@ -2780,7 +2780,7 @@ impl FunctionTranslator<'_, '_> {
                 .base
                 .type_table
                 .borrow()
-                .struct_type_rendered_name(seq_type_id),
+                .struct_type_mangled_name(seq_type_id),
             fields: vec![
                 ArenaStructField {
                     name: SeqField::Backing.field_name().to_string(),

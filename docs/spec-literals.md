@@ -949,31 +949,32 @@ from its shape, and a resource and a closure have a built-in one.
 
 The output follows Wado's literal syntax where it has one:
 
-| Type                     | Output                                    | Example                                    |
-| ------------------------ | ----------------------------------------- | ------------------------------------------ |
-| Integer                  | decimal                                   | `42`, `-7`                                 |
-| `f32`, `f64`             | shortest round-trip digits, see below     | `3.14`, `5.0`, `inf`, `-0.0`               |
-| `f16`, `bf16`            | exponent form of the `f32` value          | `1e0`                                      |
-| `bool`                   | `true` / `false`                          | `true`                                     |
-| `char`                   | quoted, escaped                           | `'A'`, `'\n'`                              |
-| `String`, `StrSlice`     | quoted, escaped                           | `"say \"hi\""`                             |
-| `()`                     | `()`                                      | `()`                                       |
-| `v128`                   | its 16 bytes in hex, byte lane 0 first    | `v128(0x000102030405060708090a0b0c0d0e0f)` |
-| Struct                   | `Name { field: value, ... }`              | `Point { x: 10, y: 20 }`                   |
-| Struct, no fields        | `Name {}`                                 | `Empty {}`                                 |
-| Tuple                    | `[elem, ...]`                             | `[1, "a", true]`                           |
-| `List`, `Array`, `Slice` | `[elem, ...]`                             | `[1, 2, 3]`                                |
-| `TreeMap<K, V>`          | `{key: value, ...}`                       | `{"a": 1, "b": 2}`                         |
-| `TreeSet<T>`             | `{elem, ...}`                             | `{10, 20, 30}`                             |
-| Enum                     | `Type::Case`                              | `Color::Red`                               |
-| Variant                  | `Type::Case(payload)`, a unit case bare   | `Shape::Circle(5.0)`, `Option::None`       |
-| Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`              |
-| Flags, none set          | `Type::none()`                            | `Perms::none()`                            |
-| Newtype                  | base value, then `as Name`                | `1.5 as Meters`                            |
-| Tagged template value    | the template as written, holes inspected  | `` `n=${7:04}` ``                          |
-| `&T`, `&mut T`           | `&` or `&mut`, then the referent          | `&42`, `&mut Point { x: 1, y: 2 }`         |
-| Closure                  | its signature                             | `\|i32, i32\| -> i32`                      |
-| Affine resource          | `Name#0x` and the handle in lowercase hex | `Widget#0xff`                              |
+| Type                     | Output                                    | Example                                     |
+| ------------------------ | ----------------------------------------- | ------------------------------------------- |
+| Integer                  | decimal                                   | `42`, `-7`                                  |
+| `f32`, `f64`             | shortest round-trip digits, see below     | `3.14`, `5.0`, `inf`, `-0.0`                |
+| `f16`, `bf16`            | exponent form of the `f32` value          | `1e0`                                       |
+| `bool`                   | `true` / `false`                          | `true`                                      |
+| `char`                   | quoted, escaped                           | `'A'`, `'\n'`                               |
+| `String`, `StrSlice`     | quoted, escaped                           | `"say \"hi\""`                              |
+| `()`                     | `()`                                      | `()`                                        |
+| `v128`                   | its 16 bytes in hex, byte lane 0 first    | `v128(0x000102030405060708090a0b0c0d0e0f)`  |
+| Struct                   | `Name { field: value, ... }`              | `Point { x: 10, y: 20 }`                    |
+| Struct, generic          | `Name::<Args> { field: value, ... }`      | `Box::<i32> { value: 42 }`                  |
+| Struct, no fields        | `Name {}`                                 | `Empty {}`                                  |
+| Tuple                    | `[elem, ...]`                             | `[1, "a", true]`                            |
+| `List`, `Array`, `Slice` | `[elem, ...]`                             | `[1, 2, 3]`                                 |
+| `TreeMap<K, V>`          | `{key: value, ...}`                       | `{"a": 1, "b": 2}`                          |
+| `TreeSet<T>`             | `{elem, ...}`                             | `{10, 20, 30}`                              |
+| Enum                     | `Type::Case`                              | `Color::Red`                                |
+| Variant                  | `Type::Case(payload)`, a unit case bare   | `Shape::Circle(5.0)`, `Option::<i32>::None` |
+| Flags                    | set members joined by `\|`                | `Perms::Read \| Perms::Write`               |
+| Flags, none set          | `Type::none()`                            | `Perms::none()`                             |
+| Newtype                  | base value, then `as Name`                | `1.5 as Meters`                             |
+| Tagged template value    | the template as written, holes inspected  | `` `n=${7:04}` ``                           |
+| `&T`, `&mut T`           | `&` or `&mut`, then the referent          | `&42`, `&mut Point { x: 1, y: 2 }`          |
+| Closure                  | its signature                             | `\|i32, i32\| -> i32`                       |
+| Affine resource          | `Name#0x` and the handle in lowercase hex | `Widget#0xff`, `Stream<u8>#0x1f`            |
 
 Rules the table does not carry:
 
@@ -986,8 +987,13 @@ Rules the table does not carry:
   renders as `\u{HEX}` in lowercase hex. Every other character, non-ASCII
   included, renders as itself. A `char` escapes `'`, `\`, newline, carriage
   return and tab the same way.
-- A struct writes its fields in declaration order and never its type arguments,
-  so `Box<i32>` renders `Box { value: 42 }`. A
+- A generic type writes its type arguments wherever it writes its name, a
+  default included, so the output names the instance. A struct or variant
+  spells them as a turbofish, as its construction is spelled
+  (`Option::<i32>::Some(42)`). A newtype and an affine resource spell them as
+  a type (`1.5 as Wrapper<f64>`, `Stream<u8>#0x1f`). Each argument is written as
+  source spells a type, with no module.
+- A struct writes its fields in declaration order. A
   [`#[secret]`](./spec-attributes.md#secret) field is left out and `..` appended:
   `User { name: "Alice", .. }`, or `Name { .. }` when every field is secret.
 - An enum, variant or flags case is always qualified by its type, as its
@@ -1006,6 +1012,9 @@ Rules the table does not carry:
   operation parenthesised: `|x: i32| (x + 1)`. A captured variable appears by
   name. A function used as a value renders as a closure that forwards to it:
   `|x: i32| double(x)`.
+
+> Not yet implemented: no type argument is written, so `Option::<i32>::Some(42)`
+> renders `Option::Some(42)`, as the example below still shows.
 
 Under `#`, each composite writes one element, field or entry per line, indented
 two spaces per level, each followed by a comma. An empty one stays on one line
@@ -1079,7 +1088,7 @@ template's holes, each a type and a specifier, so `` tag`a=${a}` `` and
 `` tag`b: ${b}` `` are one type where `a` and `b` share one, and one
 instantiation of the tag. A value of it holds each hole and the literal text the
 site wrote. The type is unnameable and reached only through the bound; a
-diagnostic and `Reflect::type_name()` show it as its holes, each spelled by its
+diagnostic and `Reflect::decl_name()` show it as its holes, each spelled by its
 type and specifier, `` `${i32:04}` ``, cut at 50 characters with `...`.
 
 `ReflectTemplate` is

@@ -557,7 +557,7 @@ impl Semantics {
     /// the binding's body.
     #[must_use]
     pub fn local_type_name(&self, id: AstId) -> Option<String> {
-        Some(self.types.type_name(self.local_type(id)?))
+        Some(self.types.name(self.local_type(id)?))
     }
 
     /// Inferred [`TypeId`] for the local binding at `id` (a `let` pattern, a

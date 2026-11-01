@@ -15,7 +15,7 @@ impl Show for String {
 
 impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Show> Show for T {
     fn show(&self) -> String {
-        let mut out = `${Reflect::<T>::type_name()}(`;
+        let mut out = `${Reflect::<T>::decl_name()}(`;
         for let f of ReflectStruct::<T>::members() {
             out.push_str(`${f.name()}=${f.get(self).show()};`);
         }

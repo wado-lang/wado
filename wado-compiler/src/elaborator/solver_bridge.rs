@@ -2188,7 +2188,7 @@ impl SolverBridge {
             }
             Err(Unsaid::Unsayable) => panic!(
                 "the lowering states no `{}: {asked}`",
-                tysys.type_table.borrow().type_name(type_id)
+                tysys.type_table.borrow().name(type_id)
             ),
         };
         let held = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, &q.args)?;

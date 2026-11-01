@@ -172,7 +172,7 @@ impl ImplTargetKey {
         }
     }
 
-    pub(crate) fn type_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
+    pub(crate) fn decl_name<'a>(&'a self, defs: &'a DefTable) -> Option<&'a str> {
         match self {
             ImplTargetKey::Decl(def) => Some(defs.name(*def)),
             ImplTargetKey::Undeclared(_, name)
@@ -211,7 +211,7 @@ impl ImplTargetKey {
 /// The spelling a declaration renders to in a mangled head: its declared name,
 /// with a function-local declaration's disambiguator applied.
 ///
-/// [`TypeTable::decl_render_name`] one layer down, for the callers
+/// [`TypeTable::decl_mangled_name`] one layer down, for the callers
 /// that hold a [`crate::defs::DefTable`] and no type table.
 pub(crate) fn render_decl_name(defs: &DefTable, def: DefId) -> String {
     if defs.is_function_local(def) {

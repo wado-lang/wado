@@ -8,7 +8,7 @@ author cannot name:
 
 | Plane     | Carried by                                  | An unknown `T`                     |
 | --------- | ------------------------------------------- | ---------------------------------- |
-| Identity  | `Reflect` — `type_name`, `wire_name_policy` | answers                            |
+| Identity  | `Reflect` — `decl_name`, `wire_name_policy` | answers                            |
 | Structure | the kind sub-traits (`ReflectStruct`, …)    | needs the kind named in the bound  |
 | Value     | the member bridges (`get` / `extract` / …)  | needs the payload types statically |
 
@@ -64,7 +64,7 @@ spelling of it would be the parallel classification
 ```wado
 pub trait Reflect {
     fn type_info() -> TypeInfo;
-    fn type_name() -> String;
+    fn decl_name() -> String;
     fn wire_name_policy() -> CaseStyle;
 }
 
@@ -88,6 +88,7 @@ pub variant TypeInfo {
 }
 
 impl TypeInfo {
+    pub fn name(&self) -> String;              // surface spelling: "Pair<String, i32>", "&Point"
     pub fn canonical_name(&self) -> String;    // symbol notation, every case
 }
 
@@ -95,7 +96,8 @@ impl TypeInfo {
 pub struct DeclInfo { … }
 
 impl DeclInfo {
-    pub fn name(&self) -> String;              // "Pair"
+    pub fn name(&self) -> String;              // "Pair<String, i32>"
+    pub fn decl_name(&self) -> String;         // "Pair"
     pub fn module(&self) -> String;            // "core:collections" / "./pair.wado"
     pub fn type_args(&self) -> List<TypeInfo>; // [String, i32]
 }
@@ -128,6 +130,22 @@ pub enum PrimitiveKind {
 `TypeInfo` keeps the seal the earlier WEP put on it: a program reads a case and
 mints none. A Wado case carries exactly one payload type, so a reference and a
 function type, each holding several facts, take a sealed struct.
+
+`name()` spells the type as source writes it, with every type argument a
+default fills in spelled out, and each argument in the same surface spelling.
+`decl_name()` is the declaration's name alone, as `Reflect::decl_name()`
+answers it. The surface spelling names no module,
+so two declarations of one name in different modules spell alike. It serves a
+reader, `Inspect` among them; `canonical_name()` is the one that tells them
+apart.
+
+The three names are one vocabulary across reflection: `name()` with the
+arguments, `decl_name()` without them, `canonical_name()` with the module.
+`Reflect::decl_name()` is named to join it: it answers the declaration's name,
+and `type_name` would read as the other one. The
+declaration's name is not `base_name()`: a newtype's base is its underlying
+type (`ReflectNewtype::Base`), so `base_name()` on `Meters` would read as
+`f64`'s name. The compiler names these the same way.
 
 A function type is the whole signature or it is not the type: `fn mut(…)`
 differs from `fn(…)`, and `with (Stdout, Stderr)` is a row member of the type
@@ -285,11 +303,11 @@ fn describe<T: Reflect>(v: &T) -> String {
     match type T {
         struct(FieldTypes = [..F]) => return fields_of(v),
         variant(CasePayloads = [..P]) => return live_case_of(v),
-        enum | flags => return Reflect::<T>::type_name(),
+        enum | flags => return Reflect::<T>::decl_name(),
         newtype(Base = B) => return describe(&B::from(*v)),
-        template(Holes = [..V]) => return Reflect::<T>::type_name(),
+        template(Holes = [..V]) => return Reflect::<T>::decl_name(),
         resource | array | primitive | unit | never | tuple | reference
-            | function | opaque => return Reflect::<T>::type_name(),
+            | function | opaque => return Reflect::<T>::decl_name(),
     }
 }
 ```
@@ -334,7 +352,7 @@ and a `match type` node is expanded the same way against the concrete subject.
 The call it leaves behind is a solved problem too: a `Reflect*` static call on a
 type parameter records a dispatch fact (`is_type_param_receiver`) that
 monomorphization redirects to the concrete type's synthesized impl. That is how
-`fn root_name_of<T: Reflect>()` works today (`reflect_root_type_name.wado`).
+`fn root_name_of<T: Reflect>()` works today (`reflect_root_decl_name.wado`).
 
 An arm binds what its kind's trait associates. The pack cannot be left to a
 helper function's header: a call site projects `[..F]` from the _concrete_
@@ -382,6 +400,48 @@ A consumer composes the two: in the fallback arm `type_info()` still answers
 `Struct`, so "a struct this module may not enumerate" is expressible. Neither
 construct states it alone.
 
+### A resource's kind trait reads its identity
+
+A resource holds one thing, its handle, so its kind trait carries one member as
+`ReflectNewtype` carries one `Base`:
+
+```wado
+#[compiler_item("reflect_resource")]
+pub trait ReflectResource: Reflect with () {
+    fn id(&self) -> ResourceId;
+}
+```
+
+The member is the handle's `ResourceId`, which a program can already read with
+`ResourceId::of`. Nothing converts one back into a resource, so reflection
+exposes nothing a move-only resource would lose. `Future<T>` and `Stream<T>`
+implement it like any other affine resource.
+
+An unrestricted resource does not implement it. Its handle is an `f64` rather
+than a `ResourceId`, and its design is expected to change, so it gets no kind
+trait to hold the design in place. It is a known gap
+([An unrestricted resource has no kind trait](#an-unrestricted-resource-has-no-kind-trait)).
+The trait keeps the case's name rather than `ReflectAffineResource`, so it can
+admit unrestricted resources later without a rename.
+
+### Inspect names a type with its arguments
+
+`Inspect` writes a generic type's arguments wherever it writes the type's name,
+spelled as a turbofish so the output stays Wado's literal syntax:
+`Pair::<i32, String> { first: 1, second: "a" }`,
+`Option::<i32>::Some(42)`. A newtype's name follows `as`, where a type is
+written, so it takes no turbofish: `1.5 as Wrapper<f64>`. An affine resource
+reads `Stream<u8>#0x1f`. A type argument a default fills in is written too, so
+the output names the instance.
+
+The arguments come from `TypeInfo`: the declaration from `decl_name()` and each
+argument from `name()`. `Reflect::decl_name()` stays the bare declaration name,
+which serde's wire format reads.
+
+The output grows: an `Option` inside a `List` writes its argument at every
+element. That is accepted. A debug form that drops the arguments cannot tell
+`Pair<i32, i32>` from `Pair<i64, i64>`.
+
 ### Rejected: dispatching on an associated kind type
 
 `Reflect` could carry `type Kind` (a marker per kind) and a derivation could
@@ -424,14 +484,39 @@ nothing at a use site: it is a closed constant expression, so
 hoists it to a global and the call reads from there — the same treatment
 `members()` gets. Asking only for the case is therefore a load, not an
 allocation, which is what makes a separate scalar query unnecessary rather than
-merely redundant. `type_name()` stays beside it as the allocation-free
+merely redundant. `decl_name()` stays beside it as the allocation-free
 shorthand serde's `begin_struct` calls.
 
 The value plane stays out of reflection, as it was: a uniform walk over an
 unknown _value_ is `core:value::Value` through `Serialize`, and reflection
 answers for the _type_.
 
+## Roadmap
+
+1. [x] The names follow the vocabulary. `Reflect::decl_name()` answers the
+   declaration's name. In the compiler, `TypeTable::name` and
+   `TypeTable::canonical_name` spell a `TypeId`, `TypeTable::decl_name` spells a
+   `DefId`, and the disambiguated spelling a mangle embeds is `mangled`
+   (`DeclaredHead::mangled`, `TypeTable::decl_mangled_name`).
+2. [ ] `TypeInfo`, `DeclInfo`, `ReflectResource`, and type arguments in
+   `Inspect`. Done when `type_info()` answers every case above, `name()` and
+   `decl_name()` spell each, an affine resource derives `Inspect` from a prelude
+   blanket over `ReflectResource`, and every generic type's `Inspect` writes its
+   arguments.
+3. [ ] `match type`. Done when `Inspect`'s per-kind blankets are arms of one body
+   and `mise run report-wasm-size` does not regress.
+
 ## Known gaps
+
+### An unrestricted resource has no kind trait
+
+An unrestricted resource implements no `ReflectResource`, so no blanket derives
+its `Inspect`. The compiler synthesizes one per instance before
+monomorphization instead, which leaves two defects:
+
+- An instance only monomorphization creates gets none: `Buf<T>` inspected in a
+  generic body that `Buf<u8>` instantiates does not compile.
+- Its output writes no type arguments, unlike every other generic type's.
 
 ### A struct with private fields opens everywhere
 
