@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793502055545,
+  "lastUpdate": 1793509149023,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73009,6 +73009,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0d5009ae0dfeaa80e6b9e3d9f688ef3629f2bef2"
         },
         "date": 1793502055151,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e52a46286fc72289cc1caaafda05d1acb9bb9f33",
+          "message": "Merge pull request #2511 from wado-lang/ccr-9283f52f-j00xb6\n\nfeat(core:icu): locale-aware case mapping and grapheme segmentation",
+          "timestamp": "2026-11-01T13:41:15+09:00",
+          "tree_id": "c01964b0f25157e74bfdd62dbde908518da92be4",
+          "url": "https://github.com/wado-lang/wado/commit/e52a46286fc72289cc1caaafda05d1acb9bb9f33"
+        },
+        "date": 1793509147990,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
