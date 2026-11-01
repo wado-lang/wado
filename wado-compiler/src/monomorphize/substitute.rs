@@ -137,8 +137,8 @@ impl Monomorphizer {
     }
 
     /// Queue each concrete `GenericInstance` of a struct in `generic_structs`
-    /// that the pool holds; the generic variants' instances held, whose
-    /// payloads are held too.
+    /// that the pool holds, and return the held instances of generic variants,
+    /// whose payloads the drain lays out.
     pub(super) fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,

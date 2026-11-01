@@ -656,7 +656,11 @@ fn collect_local_uses(
 /// not have visited yet.
 fn collect_place_contexts(
     body: &Body,
-) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>, IndexSet<ExprId>) {
+) -> (
+    IndexMap<ExprId, Operand>,
+    IndexSet<ExprId>,
+    IndexSet<ExprId>,
+) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
     let mut referenced: IndexSet<ExprId> = IndexSet::default();
     let mut projected: IndexSet<ExprId> = IndexSet::default();

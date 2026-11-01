@@ -701,7 +701,7 @@ impl Monomorphizer {
             scanned: scanned_functions,
         };
 
-        // Phase 1.5: expand the packs their own site settled, before Phase 2
+        // Phase 7.5: expand the packs their own site settled, before Phase 2
         // holds the types that interns and Phase 8 collects the calls it makes.
         func_inst::expand_settled_packs(self, &module.type_table, unrewritten.functions(&module));
 
