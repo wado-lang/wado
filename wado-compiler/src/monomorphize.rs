@@ -143,6 +143,11 @@ pub(crate) struct Pool {
     /// Each generic variant's type parameter indices and case payloads, which
     /// a held instance of it holds substituted.
     generic_variants: IndexMap<DefId, (Vec<u32>, Vec<TypeId>)>,
+    /// Each declaration's field and payload types, as declared. A value holds
+    /// its members' values, which drop glue drops through their own impls.
+    members: IndexMap<DefId, Vec<TypeId>>,
+    /// The declarations whose members [`Self::hold`] has held.
+    opened: IndexSet<DefId>,
 }
 
 impl Pool {
@@ -163,19 +168,39 @@ impl Pool {
     }
 
     /// Note that a scanned body holds a value of `id`, and so of every type it
-    /// is built over: release what waited on one, and keep each
-    /// `GenericInstance` for the struct drain.
+    /// is built over and every member of those: release what waited on one,
+    /// and keep each `GenericInstance` for the struct drain.
     fn hold(&mut self, id: TypeId, type_table: &TypeTable) {
-        let found = built_over(id, type_table, &mut self.held);
-        self.keep_instances(&found, type_table);
-        for id in found {
-            let Some(head) = type_head(type_table, id) else {
-                continue;
-            };
-            for key in self.waiting.swap_remove(&head).into_iter().flatten() {
-                self.released.extend(self.by_key.swap_remove(&key));
+        let mut stack = vec![id];
+        while let Some(id) = stack.pop() {
+            let found = built_over(id, type_table, &mut self.held);
+            self.keep_instances(&found, type_table);
+            for id in found {
+                if let Some(def) = type_table.nominal_def(id)
+                    && let Some(members) = self.members.get(&def)
+                    && self.opened.insert(def)
+                {
+                    stack.extend(members);
+                }
+                let Some(head) = type_head(type_table, id) else {
+                    continue;
+                };
+                for key in self.waiting.swap_remove(&head).into_iter().flatten() {
+                    self.released.extend(self.by_key.swap_remove(&key));
+                }
             }
         }
+    }
+
+    /// Record `def`'s members, holding them at once where a value of it is
+    /// held already.
+    fn declare_members(&mut self, def: DefId, members: Vec<TypeId>, type_table: &TypeTable) {
+        if self.opened.contains(&def) {
+            for id in &members {
+                self.hold(*id, type_table);
+            }
+        }
+        self.members.insert(def, members);
     }
 
     /// Keep for the struct drain each `GenericInstance` that a declaration's
@@ -186,13 +211,13 @@ impl Pool {
         self.keep_instances(&found, type_table);
     }
 
+    /// A generic declaration's member names its own parameters, which no
+    /// instance of it is.
     fn keep_instances(&mut self, found: &[TypeId], type_table: &TypeTable) {
-        self.instances.extend(
-            found
-                .iter()
-                .copied()
-                .filter(|&id| matches!(type_table.get(id), ResolvedType::GenericInstance { .. })),
-        );
+        self.instances.extend(found.iter().copied().filter(|&id| {
+            matches!(type_table.get(id), ResolvedType::GenericInstance { .. })
+                && !type_table.contains_type_param(id)
+        }));
     }
 
     /// The function `callee` names, if it is still here. A template's body
@@ -251,6 +276,7 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
     let type_table = flat.type_table.borrow();
     for variant in &flat.variants {
         let payloads = variant.cases.iter().map(|case| case.payload);
+        pool.declare_members(variant.def, payloads.clone().collect(), &type_table);
         if variant.type_params.is_empty() {
             for payload in payloads {
                 pool.lay_out(payload, &type_table);
@@ -685,8 +711,16 @@ impl Monomorphizer {
         // scanned hold, and the struct fields every declaration lays out.
         {
             let tt = module.type_table.borrow();
-            for field in module.structs.iter().flat_map(|s| &s.fields) {
-                self.pool.lay_out(field.type_id, &tt);
+            for s in &module.structs {
+                for field in &s.fields {
+                    self.pool.lay_out(field.type_id, &tt);
+                }
+                if let StructDef::Decl(def) = s.def
+                    && s.monomorph_info.is_none()
+                {
+                    let fields = s.fields.iter().map(|field| field.type_id).collect();
+                    self.pool.declare_members(def, fields, &tt);
+                }
             }
             for func_rc in unrewritten.functions(&module) {
                 let func = func_rc.borrow();
