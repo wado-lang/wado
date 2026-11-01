@@ -434,9 +434,15 @@ pub fn compute_ref_targets(
         }
     }
     // A root that is itself a reference owns nothing: `let b = a` with `a: &T`
-    // points where `a` does, which is no local at all for a parameter.
+    // points where `a` does, which is no local at all for a parameter. Rebound
+    // `mut` reference parameters can close a loop (`x = y; y = z; z = x;`),
+    // and a loop of references reaches no storage either.
     let referent = |mut root: u32| {
+        let mut seen = IndexSet::default();
         while is_reference_local(func, root, type_table) {
+            if !seen.insert(root) {
+                return None;
+            }
             root = *taken_over.get(&root)?;
         }
         Some(root)
