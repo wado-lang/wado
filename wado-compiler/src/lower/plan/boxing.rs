@@ -63,7 +63,7 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
 }
 
 /// Per function: for address-taken parameters, allocate a `Box`
-/// shadow local + prelude `Let` + remap reads; for non-param
+/// shadow local + prelude `Let` + remap the `&` (and a `mut` one's reads); for non-param
 /// address-taken locals, retag the declaration to its box type.
 /// Function bodies are otherwise untouched.
 pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
@@ -422,8 +422,8 @@ impl TirMutVisitor for RemapReferences {
 }
 
 /// Rewrite every `Local { index }` reference in `block` according to
-/// `remap`. Used by [`shadow_one_function`] to redirect address-taken
-/// parameter reads to the param's `Box`-typed shadow local.
+/// `remap`. Used by [`shadow_one_function`] to redirect an address-taken
+/// `mut` parameter's reads to its `Box`-typed shadow local.
 ///
 /// Closure bodies are skipped: closure locals live in their own scope
 /// and reuse the same indices, so descending would cause unrelated
