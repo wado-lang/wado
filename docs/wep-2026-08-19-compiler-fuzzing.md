@@ -170,3 +170,15 @@ itself: it must emit programs that type-check, terminate, are deterministic and
 produce observable output, which is what the oracle requires of any subject.
 Generating from the typed AST, so well-typedness holds by construction, is the
 approach this design assumes.
+
+## Known gaps
+
+The harness reads the scope at a site from the syntax alone, so it offers a
+payload names the compiler does not take there. A source where that happens
+loses the payload at every site, and the report lists it under
+`guard failed to compile`.
+
+- A binding an earlier statement moved, such as `rx` after `rx.drop()`, still
+  counts as in scope. Every payload then uses it after the move.
+- A bare case name in a `let` pattern (`let Only = e;`) matches rather than
+  binds, but the harness counts it as a binding.
