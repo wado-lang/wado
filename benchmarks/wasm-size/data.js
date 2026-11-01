@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793520457203,
+  "lastUpdate": 1793522937303,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73229,6 +73229,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f76a6b4cc97746ff63c9076d7d90c46db2aa7a4c"
         },
         "date": 1793520455949,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f77e7d4bdefee42358372a0c6531dfbcc809cd4d",
+          "message": "Merge pull request #2517 from wado-lang/ccr-9283f52f-j00xb6\n\nchore(icu): remove the bdp-spike experiment",
+          "timestamp": "2026-11-01T17:32:29+09:00",
+          "tree_id": "e499d1560dbc0627244d7a0dd312071c6aa00506",
+          "url": "https://github.com/wado-lang/wado/commit/f77e7d4bdefee42358372a0c6531dfbcc809cd4d"
+        },
+        "date": 1793522936006,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
