@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793566994991,
+  "lastUpdate": 1793568461268,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73405,6 +73405,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c09dd641aa4dd25bed176b0e6ad0b5e57fd10d0c"
         },
         "date": 1793566994424,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "54791e34877d7d042e01c57a82607656b8fbdf3d",
+          "message": "Merge pull request #2521 from wado-lang/ccr-7083226d-1gayz9\n\nfeat(core:icu)!: name each Unicode property by an enum, so a program carries only what it names",
+          "timestamp": "2026-11-02T05:56:48+09:00",
+          "tree_id": "0a66f3b9b903bb51f7b687fca7d53df22dde202b",
+          "url": "https://github.com/wado-lang/wado/commit/54791e34877d7d042e01c57a82607656b8fbdf3d"
+        },
+        "date": 1793568460487,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
