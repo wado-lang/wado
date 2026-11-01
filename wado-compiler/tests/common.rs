@@ -383,6 +383,32 @@ pub fn limit_store<T>(store: &mut Store<T>, timeout_ms: u64) {
     store.set_epoch_deadline(epoch_deadline_ticks(timeout_ms));
 }
 
+/// The guest spent the budget [`limit_store`] gave it. Not a trap: a run that
+/// never ends would otherwise satisfy an expected trap, so every runner returns
+/// it as this error, and a caller that must tell it apart downcasts to it.
+#[derive(Debug)]
+pub struct BudgetExhausted(pub String);
+
+impl std::fmt::Display for BudgetExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the guest ran out of its fuel or time budget: {}",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for BudgetExhausted {}
+
+/// Whether `e` is the trap one of [`limit_store`]'s limits raises.
+fn is_budget_exhausted(e: &wasmtime::Error) -> bool {
+    matches!(
+        e.downcast_ref::<wasmtime::Trap>(),
+        Some(wasmtime::Trap::OutOfFuel | wasmtime::Trap::Interrupt)
+    )
+}
+
 /// Report what the guest spent of the budget `limit_store` gave it, given the
 /// same `timeout_ms`.
 pub fn report_fuel_used<T>(store: &mut Store<T>, label: &str, timeout_ms: u64) {
@@ -1112,25 +1138,49 @@ pub fn compile_capturing_diagnostics(
     display_filename: Option<&str>,
     stubs: HostStubs,
 ) -> CapturedCompile {
+    let host = StubHost::new(source_dir(path)).with_stubs(stubs);
+    compile_on(&host, path, source, options, display_filename)
+}
+
+/// Compile `source`, at `path`, in the package the `wado.toml` files on disk
+/// put it in, with the dependencies they declare.
+pub fn compile_in_package(
+    path: &Path,
+    source: &str,
+    options: CompilerOptions,
+) -> Result<wado_compiler::CompileResult, CompileError> {
+    let host = StubHost::reading_manifests(source_dir(path));
+    compile_on(&host, path, source, options, None).result
+}
+
+fn source_dir(path: &Path) -> PathBuf {
+    path.parent().map(Path::to_path_buf).unwrap_or_default()
+}
+
+fn compile_on(
+    host: &StubHost,
+    path: &Path,
+    source: &str,
+    options: CompilerOptions,
+    display_filename: Option<&str>,
+) -> CapturedCompile {
     use wado_compiler::Severity;
     assert!(
         options.invocations.is_empty(),
         "the harness runs the source's generators for its redirect index"
     );
-    let base_path = path.parent().map(Path::to_path_buf).unwrap_or_default();
-    let host = StubHost::new(base_path).with_stubs(stubs);
     let filename = display_filename
         .map(std::borrow::Cow::Borrowed)
         .unwrap_or_else(|| path.to_string_lossy());
 
     let result = runtime()
         .block_on(async {
-            let invocations = run_local_generators(path, source, &filename, &host)
+            let invocations = run_local_generators(path, source, &filename, host)
                 .await
                 .ok_or(())?;
             wado_compiler::compile_with_options(
                 source,
-                &host,
+                host,
                 Some(&filename),
                 CompilerOptions {
                     invocations,
@@ -1348,6 +1398,9 @@ pub fn run_wasm_with_full_options(
             .await
         {
             Ok(Ok(result)) => (result.is_err(), None, String::new()),
+            Ok(Err(e)) | Err(e) if is_budget_exhausted(&e) => {
+                return Err(BudgetExhausted(format_wasm_trap(&e)).into());
+            }
             Ok(Err(e)) | Err(e) => classify_run_error(e),
         };
         report_fuel_used(&mut store, "cli-world", DEFAULT_TIMEOUT_MS);
@@ -1494,6 +1547,13 @@ pub fn run_test_world(
                     anyhow::bail!(
                         "[{test_id}] test '{test_name}' returned error. stderr: {stderr_text}"
                     );
+                }
+                Err(e) if is_budget_exhausted(&e) && !is_todo => {
+                    return Err(BudgetExhausted(format!(
+                        "[{test_id}] test '{test_name}': {}",
+                        format_wasm_trap(&e)
+                    ))
+                    .into());
                 }
                 Err(e) => {
                     if !expect_trap && !is_todo {

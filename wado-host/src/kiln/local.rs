@@ -114,7 +114,7 @@ async fn run(
             .iter()
             .any(|(m, _)| m == &invocation.module)
         {
-            let resolved = compile_generator(root, &invocation.module, host.stubs(), chain).await;
+            let resolved = compile_generator(root, &invocation.module, host, chain).await;
             provider
                 .compiled
                 .push((invocation.module.clone(), resolved));
@@ -211,7 +211,7 @@ impl GeneratorProvider for LocalGenerators {
 async fn compile_generator(
     root: &Path,
     module: &GeneratorModule,
-    stubs: &HostStubs,
+    host: &StubHost,
     chain: &[String],
 ) -> Result<ResolvedGenerator, ProviderError> {
     static COMPILED: Mutex<Vec<(CompileKey, ResolvedGenerator)>> = Mutex::new(Vec::new());
@@ -243,7 +243,8 @@ async fn compile_generator(
     let key = CompileKey {
         file,
         source,
-        build_dependencies: stubs.build_dependencies.clone(),
+        build_dependencies: host.stubs().build_dependencies.clone(),
+        reads_manifests: host.reads_manifests(),
     };
     let cached = lock(&COMPILED)
         .iter()
@@ -253,7 +254,7 @@ async fn compile_generator(
         return Ok(resolved);
     }
     let resolved =
-        compile_generator_source(root, &key.file, path.as_str(), &key.source, stubs, chain).await?;
+        compile_generator_source(root, &key.file, path.as_str(), &key.source, host, chain).await?;
     let mut compiled = lock(&COMPILED);
     if !compiled.iter().any(|(k, _)| k == &key) {
         compiled.push((key, resolved.clone()));
@@ -267,6 +268,7 @@ struct CompileKey {
     file: PathBuf,
     source: String,
     build_dependencies: IndexMap<String, String>,
+    reads_manifests: bool,
 }
 
 /// `source`, the text of the generator `file` at `path` from `root`, compiled
@@ -276,7 +278,7 @@ async fn compile_generator_source(
     file: &Path,
     path: &str,
     source: &str,
-    stubs: &HostStubs,
+    host: &StubHost,
     chain: &[String],
 ) -> Result<ResolvedGenerator, ProviderError> {
     let name = file
@@ -289,9 +291,9 @@ async fn compile_generator_source(
         identity: &name,
         key: path,
     };
-    let invocations = nested_invocations(root, &generator, stubs, chain).await?;
+    let invocations = nested_invocations(root, &generator, host, chain).await?;
 
-    let host = StubHost::new(
+    let host = host.for_generator(
         file.parent()
             .expect("a generator names a file")
             .to_path_buf(),
@@ -317,11 +319,12 @@ async fn compile_generator_source(
 async fn nested_invocations(
     root: &Path,
     generator: &Entry<'_>,
-    stubs: &HostStubs,
+    host: &StubHost,
     chain: &[String],
 ) -> Result<InvocationIndex, ProviderError> {
     let chain = [chain, &[generator.key.to_string()]].concat();
-    let host = StubHost::new(root.to_path_buf()).with_stubs(stubs.clone());
+    let generator_dir = generator.file.parent().expect("a generator names a file");
+    let host = host.for_generator_clauses(root.to_path_buf(), generator_dir);
     Box::pin(run(root, generator, &host, &chain))
         .await
         .map_err(|error| {

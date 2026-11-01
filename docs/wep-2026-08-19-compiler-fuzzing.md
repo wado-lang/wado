@@ -37,8 +37,8 @@ is why the oracle transfers unchanged to inputs from any source.
 ### Inputs are transformed, not generated
 
 The corpus is the repository's own Wado, drawn from a set of roots: the e2e
-fixtures, the stdlib modules that carry `test` blocks, and the `example/`
-programs. Every mutant is an existing program plus guards; nothing invents a
+fixtures, the stdlib modules that carry `test` blocks, the `example/` programs,
+and the `test` blocks of some packages and of `benchmark/`. Every mutant is an existing program plus guards; nothing invents a
 program. Compiler coverage is therefore bounded by what that material happens to
 exercise, which is the known cost of this choice. The roadmap states the
 condition for lifting it.
@@ -95,6 +95,14 @@ case, and conflating it with a guard's doing is how a campaign learns to cry
 wolf. A divergence re-runs the baseline first, and a baseline that disagrees
 with itself is recorded as nondeterministic.
 
+Calibration still reports only a crash as a finding. An empty guard can make a
+test fail legitimately: a test that asserts on a closure's rendered source sees
+the guard in it. So the report keeps such a case apart, under its own reason,
+from a guard that only moved text, and a person reads it there. A run that
+spends the harness's fuel or time budget is a reason of its own too. It says
+the program is heavy at that level, not what it computes. The report opens
+with the count for each reason, largest first.
+
 ### A finding is reduced before it is reported
 
 Injecting one site per compile is tens of thousands of compile-and-run cycles,
@@ -147,10 +155,13 @@ each shape and payload reached.
   stdlib's own tests under `O3`, which nothing else does — `wado test` runs
   them at `O2` — and the baselines that failed there were two wrong-code
   bugs the fixtures never reached.
-- [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
-  package is many files behind a manifest, so the runner needs to resolve
-  dependencies and to compile an entry while one module below it carries the
-  injection — neither of which a single-file subject asks for.
+- [x] Draw the corpus from packages and `benchmark/` too. A source there
+  compiles in the package its `wado.toml` puts it in, with the dependencies
+  and generators the manifests declare. The report gives each root's time and
+  the costliest sources, and that cost chose the packages: Marl, Jade and the
+  CM catalog every night, and the benchmarks without their `test "fuel"`
+  blocks, which are sized for `-O2`. Gale, Loam, Grog and `SurfaceDom`'s tests
+  cost several times more for the shapes they add and stay out.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
