@@ -26,7 +26,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead};
 use crate::prelower_reach::{
-    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, prunes, type_head,
+    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types, prunes,
+    type_head,
 };
 use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
@@ -128,6 +129,19 @@ pub(crate) struct Pool {
     /// What waits on a type no scanned body has held a value of yet.
     waiting: IndexMap<TypeHead, Vec<FreeFunctionName>>,
     held: IndexSet<TypeKey>,
+    /// The types a declaration's members are built over, as [`Self::lay_out`]
+    /// has walked them.
+    laid_out: IndexSet<TypeKey>,
+    /// What a held type released, for the caller to scan.
+    released: Vec<Rc<RefCell<TirFunction>>>,
+    /// The `GenericInstance`s held since the struct drain last read them.
+    instances: Vec<TypeId>,
+    /// Whether the struct drain instantiates what is held rather than every
+    /// instance the type table spells.
+    drives_structs: bool,
+    /// Each generic variant's type parameter indices and case payloads, which
+    /// a held instance of it holds substituted.
+    generic_variants: IndexMap<DefId, (Vec<u32>, Vec<TypeId>)>,
 }
 
 impl Pool {
@@ -148,28 +162,29 @@ impl Pool {
     }
 
     /// Note that a scanned body holds a value of `id`, and so of every type it
-    /// is built over, taking out what waited on one.
-    fn hold(
-        &mut self,
-        id: TypeId,
-        type_table: &TypeTable,
-        unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
-    ) {
-        let mut stack = vec![id];
-        while let Some(id) = stack.pop() {
-            if !self.held.insert(type_table.type_key(id)) {
-                continue;
+    /// is built over: release what waited on one, and keep each
+    /// `GenericInstance` for the struct drain.
+    fn hold(&mut self, id: TypeId, type_table: &TypeTable) {
+        for id in built_over(id, type_table, &mut self.held) {
+            if matches!(type_table.get(id), ResolvedType::GenericInstance { .. }) {
+                self.instances.push(id);
             }
-            stack.extend(type_table.get_newtype_base(id));
-            type_table.any_constituent(id, &mut |part| {
-                stack.push(part);
-                false
-            });
             let Some(head) = type_head(type_table, id) else {
                 continue;
             };
             for key in self.waiting.swap_remove(&head).into_iter().flatten() {
-                unscanned.extend(self.by_key.swap_remove(&key));
+                self.released.extend(self.by_key.swap_remove(&key));
+            }
+        }
+    }
+
+    /// Keep for the struct drain each `GenericInstance` that a declaration's
+    /// member of type `id` is built over. A declaration is no reached body, so
+    /// it releases nothing.
+    fn lay_out(&mut self, id: TypeId, type_table: &TypeTable) {
+        for id in built_over(id, type_table, &mut self.laid_out) {
+            if matches!(type_table.get(id), ResolvedType::GenericInstance { .. }) {
+                self.instances.push(id);
             }
         }
     }
@@ -183,6 +198,25 @@ impl Pool {
             self.by_key.swap_remove(key)
         })
     }
+}
+
+/// `id` and every type it is built over that `seen` does not hold yet, which
+/// it then does.
+fn built_over(id: TypeId, type_table: &TypeTable, seen: &mut IndexSet<TypeKey>) -> Vec<TypeId> {
+    let mut found = Vec::new();
+    let mut stack = vec![id];
+    while let Some(id) = stack.pop() {
+        if !seen.insert(type_table.type_key(id)) {
+            continue;
+        }
+        stack.extend(type_table.get_newtype_base(id));
+        type_table.any_constituent(id, &mut |part| {
+            stack.push(part);
+            false
+        });
+        found.push(id);
+    }
+    found
 }
 
 /// Instantiate every generic the linked package reaches, and hand back the
@@ -203,6 +237,21 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         elaborated_functions: 0,
         roots: prunes().then(|| Roots::new(flat)),
     };
+    let pool = &mut session.monomorphizer.pool;
+    pool.drives_structs = prunes();
+    let type_table = flat.type_table.borrow();
+    for variant in &flat.variants {
+        let payloads = variant.cases.iter().map(|case| case.payload);
+        if variant.type_params.is_empty() {
+            for payload in payloads {
+                pool.lay_out(payload, &type_table);
+            }
+        } else {
+            let params = variant.type_params.iter().map(|param| param.index).collect();
+            pool.generic_variants.insert(variant.def, (params, payloads.collect()));
+        }
+    }
+    drop(type_table);
     session.run(flat);
     session
 }
@@ -365,25 +414,31 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 }
 
 impl Monomorphizer {
-    /// Take out of the pool, onto `unscanned`, what `func` names and what
-    /// waited on a type it holds.
-    fn take_reached(
+    /// Hold every type `func`'s signature and body hold a value of.
+    fn note_types(&mut self, func: &TirFunction, type_table: &TypeTable) {
+        let signature = func.params.iter().map(|param| param.type_id);
+        for id in signature.chain([func.return_type]) {
+            self.pool.hold(id, type_table);
+        }
+        if let Some(body) = &func.body {
+            for id in expr_types(body) {
+                self.pool.hold(id, type_table);
+            }
+        }
+    }
+
+    /// Take out of the pool, onto `unscanned`, what `func` names and what a
+    /// held type released.
+    fn take_callees(
         &mut self,
         func: &TirFunction,
         type_table: &TypeTable,
         unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
     ) {
-        let signature = func.params.iter().map(|param| param.type_id);
-        for id in signature.chain([func.return_type]) {
-            self.pool.hold(id, type_table, unscanned);
+        if let Some(body) = &func.body {
+            self.take_from_pool(&callees(body, type_table), unscanned);
         }
-        let Some(body) = &func.body else {
-            return;
-        };
-        for id in expr_types(body) {
-            self.pool.hold(id, type_table, unscanned);
-        }
-        self.take_from_pool(&callees(body, type_table), unscanned);
+        unscanned.append(&mut self.pool.released);
     }
 
     fn take_from_pool(
@@ -394,8 +449,9 @@ impl Monomorphizer {
         unscanned.extend(callees.iter().filter_map(|callee| self.pool.take(callee)));
     }
 
-    /// Ready a function taken out of the pool as Phases 6 and 7.5 readied the
-    /// roots, then queue what it instantiates and take out what it names.
+    /// Ready a function taken out of the pool, its types noted and drained, as
+    /// Phases 6 and 7.5 readied the roots, then queue what it instantiates and
+    /// take out what it names.
     fn scan_taken(
         &mut self,
         func_rc: &Rc<RefCell<TirFunction>>,
@@ -415,7 +471,7 @@ impl Monomorphizer {
             }
             .visit_block(body);
         }
-        self.take_reached(&func, &type_table, unscanned);
+        self.take_callees(&func, &type_table, unscanned);
     }
 
     /// Instantiate the queued structs, and those their fields queue, to a
@@ -427,25 +483,54 @@ impl Monomorphizer {
     ) -> Vec<TirStruct> {
         let mut new_structs = Vec::new();
         loop {
-            self.collect_instantiation_sites(&type_table.borrow(), generic_structs);
-            if self.structs.pending.is_empty() {
+            let variant_instances =
+                self.collect_instantiation_sites(&type_table.borrow(), generic_structs);
+            let payloads = self.variant_payloads(&variant_instances, &mut type_table.borrow_mut());
+            for payload in payloads {
+                self.pool.lay_out(payload, &type_table.borrow());
+            }
+            if self.structs.pending.is_empty() && self.pool.instances.is_empty() {
                 break;
             }
             while let Some(key) = self.structs.pending.pop() {
                 let def = key
                     .def
                     .expect("a struct instantiation names its declaration");
-                if let Some(concrete) = self.instantiate_struct(
+                let concrete = self.instantiate_struct(
                     &generic_structs[&def],
                     &key,
                     &mut type_table.borrow_mut(),
-                ) {
+                );
+                if let Some(concrete) = concrete {
+                    let tt = type_table.borrow();
+                    for field in &concrete.fields {
+                        self.pool.lay_out(field.type_id, &tt);
+                    }
+                    drop(tt);
                     new_structs.push(concrete);
                 }
             }
         }
         new_structs.extend(self.substituted_anon_structs(&mut type_table.borrow_mut()));
         new_structs
+    }
+
+    /// The payload types of each of `instances`, a generic variant's
+    /// `GenericInstance`, substituted with its type arguments.
+    fn variant_payloads(&self, instances: &[TypeId], tt: &mut TypeTable) -> Vec<TypeId> {
+        let mut payloads = Vec::new();
+        for &id in instances {
+            let ResolvedType::GenericInstance { def, type_args } = tt.get(id).clone() else {
+                unreachable!("only a `GenericInstance` is kept for the struct drain");
+            };
+            let (params, cases) = &self.pool.generic_variants[&def];
+            let substitution: IndexMap<u32, TypeId> =
+                params.iter().copied().zip(type_args).collect();
+            for &payload in cases {
+                payloads.push(tt.substitute_type_params(payload, &substitution));
+            }
+        }
+        payloads
     }
 
     /// A struct for each closed anonymous shape a substitution first reached
@@ -518,26 +603,6 @@ impl Monomorphizer {
         }
         drop(tt);
 
-        // Phase 2-4: a struct's fields may name further instances, hence a fixpoint.
-        let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
-        // Only an instantiated body substitutes into a template shape: no
-        // field can name one. Phase 9 gives each its `$hole_fmt`.
-        assert!(new_structs.iter().all(|s| match s.def {
-            StructDef::Anon(shape) => module.type_table.borrow().template_shape(shape).is_none(),
-            StructDef::Decl(_) => true,
-        }));
-        module.structs.extend(new_structs);
-
-        // Phase 5: Remove generic structs and open shapes from the concrete
-        // struct list
-        {
-            let tt = module.type_table.borrow();
-            module.structs.retain(|s| match s.def {
-                StructDef::Anon(shape) => !tt.anon_shape_is_open(shape),
-                StructDef::Decl(_) => s.type_params.is_empty() || s.monomorph_info.is_some(),
-            });
-        }
-
         // Phase 7: Collect all generic function definitions
         let mut generic_functions = external_generic_functions.clone();
 
@@ -599,6 +664,47 @@ impl Monomorphizer {
             scanned: scanned_functions,
         };
 
+        // Phase 2: what the drain instantiates — the types the bodies yet to be
+        // scanned hold, and the struct fields every declaration lays out.
+        {
+            let tt = module.type_table.borrow();
+            for field in module.structs.iter().flat_map(|s| &s.fields) {
+                self.pool.lay_out(field.type_id, &tt);
+            }
+            for func_rc in unrewritten.functions(&module) {
+                let func = func_rc.borrow();
+                if !func.is_template() {
+                    self.note_types(&func, &tt);
+                }
+            }
+            for global in unrewritten.globals(&module) {
+                self.pool.hold(global.ty, &tt);
+                for id in init_types(global.init.slot_expr()) {
+                    self.pool.hold(id, &tt);
+                }
+            }
+        }
+
+        // Phase 3-4: a struct's fields may name further instances, hence a fixpoint.
+        let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
+        // Only an instantiated body substitutes into a template shape: no
+        // field can name one. Phase 9 gives each its `$hole_fmt`.
+        assert!(new_structs.iter().all(|s| match s.def {
+            StructDef::Anon(shape) => module.type_table.borrow().template_shape(shape).is_none(),
+            StructDef::Decl(_) => true,
+        }));
+        module.structs.extend(new_structs);
+
+        // Phase 5: Remove generic structs and open shapes from the concrete
+        // struct list
+        {
+            let tt = module.type_table.borrow();
+            module.structs.retain(|s| match s.def {
+                StructDef::Anon(shape) => !tt.anon_shape_is_open(shape),
+                StructDef::Decl(_) => s.type_params.is_empty() || s.monomorph_info.is_some(),
+            });
+        }
+
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module, unrewritten);
 
@@ -613,7 +719,7 @@ impl Monomorphizer {
         for func_rc in unrewritten.functions(&module) {
             let func = func_rc.borrow();
             if !func.is_template() {
-                self.take_reached(&func, &module.type_table.borrow(), &mut unscanned);
+                self.take_callees(&func, &module.type_table.borrow(), &mut unscanned);
             }
         }
         let tt = module.type_table.borrow();
@@ -622,23 +728,17 @@ impl Monomorphizer {
             self.take_from_pool(&callees, &mut unscanned);
         }
         drop(tt);
+        unscanned.append(&mut self.pool.released);
 
         // Phase 9: instantiate functions and structs to one fixpoint. A bodyless
         // template is a codegen intrinsic, never scanned again.
         let scannable_generic_functions = generic_functions.with_bodies();
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         loop {
-            let mut made_progress = false;
-
-            while let Some(func_rc) = unscanned.pop() {
-                self.scan_taken(
-                    &func_rc,
-                    &module.type_table,
-                    &generic_functions,
-                    &mut unscanned,
-                );
-                module.functions.push(func_rc);
-                made_progress = true;
+            let taken = std::mem::take(&mut unscanned);
+            let mut made_progress = !taken.is_empty();
+            for func_rc in &taken {
+                self.note_types(&func_rc.borrow(), &module.type_table.borrow());
             }
 
             // Call sites are collected only once the struct drain has run:
@@ -667,28 +767,50 @@ impl Monomorphizer {
                 }
             }
 
-            // Once per batch: the drain scans the whole type table.
-            let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
-            if !new_structs.is_empty() {
-                made_progress = true;
-                self.alias_canonical_keys(&mut module.type_table.borrow_mut());
+            // Every function scanned below has its types instantiated first,
+            // the helpers and shape methods a drain itself adds included.
+            let mut noted = 0;
+            loop {
+                for concrete in &batch[noted..] {
+                    self.note_types(concrete, &module.type_table.borrow());
+                }
+                noted = batch.len();
+                let new_structs = self.drain_pending_structs(&module.type_table, &generic_structs);
+                if !new_structs.is_empty() {
+                    made_progress = true;
+                    self.alias_canonical_keys(&mut module.type_table.borrow_mut());
+                }
+                // A shape only a substitution reaches has no `$hole_fmt` from
+                // synthesis; built here, what it calls is instantiated in turn.
+                batch.extend(hole_fmt_helpers(
+                    &new_structs,
+                    &module.type_table,
+                    &self.functions.trait_env,
+                ));
+                module.structs.extend(new_structs);
+                for (shape, index) in std::mem::take(&mut self.structs.pending_shapes) {
+                    let instances = self.instantiate_shape_substitution(
+                        shape,
+                        index,
+                        &mut module.type_table.borrow_mut(),
+                    );
+                    made_progress |= !instances.is_empty();
+                    batch.extend(instances);
+                }
+                if noted == batch.len() {
+                    break;
+                }
             }
-            // A shape only a substitution reaches has no `$hole_fmt` from
-            // synthesis; built here, what it calls is instantiated in turn.
-            batch.extend(hole_fmt_helpers(
-                &new_structs,
-                &module.type_table,
-                &self.functions.trait_env,
-            ));
-            module.structs.extend(new_structs);
-            for (shape, index) in std::mem::take(&mut self.structs.pending_shapes) {
-                let instances = self.instantiate_shape_substitution(
-                    shape,
-                    index,
-                    &mut module.type_table.borrow_mut(),
+            unscanned.append(&mut self.pool.released);
+
+            for func_rc in taken {
+                self.scan_taken(
+                    &func_rc,
+                    &module.type_table,
+                    &generic_functions,
+                    &mut unscanned,
                 );
-                made_progress |= !instances.is_empty();
-                batch.extend(instances);
+                module.functions.push(func_rc);
             }
 
             for mut concrete in batch {
@@ -702,11 +824,11 @@ impl Monomorphizer {
                     };
                     collector.visit_block(body);
                 }
-                self.take_reached(&concrete, &module.type_table.borrow(), &mut unscanned);
+                self.take_callees(&concrete, &module.type_table.borrow(), &mut unscanned);
                 new_functions.push(Rc::new(RefCell::new(concrete)));
             }
 
-            if !made_progress && unscanned.is_empty() {
+            if !made_progress && unscanned.is_empty() && self.pool.instances.is_empty() {
                 break;
             }
         }

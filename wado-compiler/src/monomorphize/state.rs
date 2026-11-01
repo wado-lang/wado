@@ -37,6 +37,8 @@ pub(super) struct StructInstState {
     pub sites_scanned: TypeId,
     /// Every generic struct a scan has tested the types against.
     pub sites_tested: IndexSet<DefId>,
+    /// The held `GenericInstance`s that named no generic struct when read.
+    pub unmatched: Vec<TypeId>,
     /// Substitutions into closed shapes, as the shape and the substitution's
     /// index, whose origin's methods are yet to be instantiated.
     pub pending_shapes: Vec<(AnonStructId, usize)>,
@@ -175,6 +177,7 @@ impl Monomorphizer {
                 anon_scanned: 0,
                 sites_scanned: TypeId(0),
                 sites_tested: IndexSet::default(),
+                unmatched: Vec::new(),
                 pending_shapes: Vec::new(),
                 open_shape_heads: IndexMap::default(),
                 shape_methods: IndexMap::default(),

@@ -136,30 +136,54 @@ impl Monomorphizer {
         }
     }
 
-    /// Queue every concrete `GenericInstance` of a struct in `generic_structs`.
-    pub fn collect_instantiation_sites(
+    /// Queue each concrete `GenericInstance` of a struct in `generic_structs`
+    /// that the pool holds, or every one the type table spells where the pool
+    /// does not drive the drain; the generic variants' instances held, whose
+    /// payloads are held too.
+    pub(super) fn collect_instantiation_sites(
         &mut self,
         type_table: &TypeTable,
         generic_structs: &IndexMap<DefId, TirStruct>,
-    ) {
+    ) -> Vec<TypeId> {
         let tested = &mut self.structs.sites_tested;
         let untested = generic_structs
             .keys()
             .filter(|def| tested.insert(**def))
             .count();
-        let from = if untested == 0 {
-            self.structs.sites_scanned
+        let held = std::mem::take(&mut self.pool.instances);
+        let ids: Vec<TypeId> = if self.pool.drives_structs {
+            // A site naming no generic struct yet may name one a later run adds.
+            let mut ids = if untested == 0 {
+                Vec::new()
+            } else {
+                std::mem::take(&mut self.structs.unmatched)
+            };
+            ids.extend(held);
+            ids
         } else {
-            TypeId(0)
+            let from = if untested == 0 {
+                self.structs.sites_scanned
+            } else {
+                TypeId(0)
+            };
+            let (ids, end) = type_table.type_ids_since(from);
+            self.structs.sites_scanned = end;
+            ids.collect()
         };
-        let (ids, end) = type_table.type_ids_since(from);
-        self.structs.sites_scanned = end;
+        let mut variants = Vec::new();
         for id in ids {
             if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
-                if type_args.is_empty()
-                    || type_table.is_list(id)
-                    || !generic_structs.contains_key(def)
-                {
+                if self.pool.drives_structs && self.pool.generic_variants.contains_key(def) {
+                    variants.push(id);
+                    continue;
+                }
+                if type_args.is_empty() || type_table.is_list(id) {
+                    continue;
+                }
+                if !generic_structs.contains_key(def) {
+                    if self.pool.drives_structs {
+                        self.structs.unmatched.push(id);
+                    }
                     continue;
                 }
                 let name = &type_table.decl_name(*def).to_string();
@@ -186,6 +210,7 @@ impl Monomorphizer {
                 }
             }
         }
+        variants
     }
 
     /// Substitute type parameters in a type with concrete types, delegating the

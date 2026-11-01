@@ -191,16 +191,25 @@ fn settled(head: TypeHead) -> Option<TypeHead> {
 
 /// Every type a value in `body` holds.
 pub(crate) fn expr_types(body: &TirBlock) -> Vec<TypeId> {
-    struct Types(Vec<TypeId>);
-    impl TirRefVisitor for Types {
-        fn visit_expr(&mut self, expr: &TirExpr) {
-            self.0.push(expr.type_id);
-            self.walk_expr(expr);
-        }
-    }
     let mut types = Types(Vec::new());
     types.walk_block(body);
     types.0
+}
+
+/// Every type a value in `expr` holds.
+pub(crate) fn init_types(expr: &TirExpr) -> Vec<TypeId> {
+    let mut types = Types(Vec::new());
+    types.visit_expr(expr);
+    types.0
+}
+
+struct Types(Vec<TypeId>);
+
+impl TirRefVisitor for Types {
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.0.push(expr.type_id);
+        self.walk_expr(expr);
+    }
 }
 
 /// What [`reachable`] found, against the population it walked.
