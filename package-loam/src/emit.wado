@@ -1542,9 +1542,11 @@ fn emit_compute(
     };
     // Bound by a pattern, the run reads the `cache` the pattern shadows.
     let mut bind_run = |pattern: String| {
-        lines.push(`let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
-            ", ",
-        )}]) {`);
+        lines.push(
+            `let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
+                ", ",
+            )}]) {`,
+        );
         lines.push(`    Some(results) => ${results},`);
         lines.push(`    None => build(${arguments.join(", ")}),`);
         lines.push("};");

@@ -15,10 +15,18 @@ use state from "./state.onnxtext"
 test "compute hands a state of fixed extents to the next pass" {
     let mut cpu = Cpu {};
     let mut model = state::Model::new(state::Params::embedded(&mut cpu));
-    let x = Tensor::<f32, [state::N, state::X1]> { data: [1.0, 2.0, 3.0], extents: [1, 3] };
+    let x = Tensor::<f32, [state::N, state::X1]> {
+        data: [1.0, 2.0, 3.0],
+        extents: [1, 3],
+    };
     let first = state::compute(&mut cpu, &x, &state::Cache::empty(&mut cpu), &mut model);
     assert first.Y.data == [1.0, 2.0, 3.0];
-    let past = state::Cache::<Cpu> { past_state: Tensor { data: [1.0, -2.0, 0.5], extents: [3] } };
+    let past = state::Cache::<Cpu> {
+        past_state: Tensor {
+            data: [1.0, -2.0, 0.5],
+            extents: [3],
+        },
+    };
     let second = state::compute(&mut cpu, &x, &past, &mut model);
     assert second.Y.data == [2.0, 0.0, 3.5];
     assert second.cache.past_state.data == [-1.0, 2.0, -0.5];
@@ -44,7 +52,9 @@ fn mask(data: List<f32>) -> Tensor<f32, [grown::X0, grown::Mask1, grown::T]> {
 test "compute hands keys that grow by each pass's positions to the next pass" {
     let mut cpu = Cpu {};
     let mut model = grown::Model::new(grown::Params::embedded(&mut cpu));
-    let prompt = grown::compute(&mut cpu, &keys([-1.0, 2.0, 3.0, -4.0]), &mask([1.0, 1.0]), &grown::Cache::empty(&mut cpu), &mut model);
+    let prompt = grown::compute(&mut cpu, &keys([-1.0, 2.0, 3.0, -4.0]), &mask([1.0, 1.0]), &grown::Cache::empty(
+        &mut cpu,
+    ), &mut model);
     assert prompt.Y.data == [2.0, -2.0];
     let step = grown::compute(&mut cpu, &keys([5.0, 6.0]), &mask([1.0, 0.0, 1.0]), &prompt.cache, &mut model);
     assert step.Y.data == [4.0, 8.0];
