@@ -141,9 +141,7 @@ impl TestSelection {
         if self.workloads_only && !test.is_workload {
             return false;
         }
-        if let Some(name) = test.name.as_deref()
-            && self.skipped.iter().any(|f| name.contains(f.as_str()))
-        {
+        if self.skips(test.name.as_deref()) {
             return false;
         }
         if self.names.is_empty() {
@@ -152,6 +150,12 @@ impl TestSelection {
         test.name
             .as_deref()
             .is_some_and(|name| self.names.iter().any(|f| name.contains(f.as_str())))
+    }
+
+    /// Whether `skipped` leaves out a test named `name`.
+    #[must_use]
+    pub fn skips(&self, name: Option<&str>) -> bool {
+        name.is_some_and(|name| self.skipped.iter().any(|f| name.contains(f.as_str())))
     }
 }
 

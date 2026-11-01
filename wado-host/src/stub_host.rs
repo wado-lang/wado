@@ -86,10 +86,16 @@ impl StubHost {
     /// generator: the caller chose this tree as a package.
     #[must_use]
     pub fn reading_manifests(base_path: PathBuf) -> Self {
-        let build_dependencies = manifest_generators(&base_path, &base_path);
+        let package_dir = base_path.clone();
+        Self::reading_manifests_of(base_path, &package_dir)
+    }
+
+    /// [`Self::reading_manifests`], with the generators the manifest nearest
+    /// `package_dir` declares.
+    fn reading_manifests_of(base_path: PathBuf, package_dir: &Path) -> Self {
         Self {
             stubs: HostStubs {
-                build_dependencies,
+                build_dependencies: manifest_generators(package_dir, &base_path),
                 ..HostStubs::default()
             },
             packages: Packages::Manifests,
@@ -125,14 +131,7 @@ impl StubHost {
     pub fn for_generator_clauses(&self, base_path: PathBuf, generator_dir: &Path) -> Self {
         match self.packages {
             Packages::Stubbed => Self::new(base_path).with_stubs(self.stubs.clone()),
-            Packages::Manifests => Self {
-                stubs: HostStubs {
-                    build_dependencies: manifest_generators(generator_dir, &base_path),
-                    ..HostStubs::default()
-                },
-                packages: Packages::Manifests,
-                ..Self::new(base_path)
-            },
+            Packages::Manifests => Self::reading_manifests_of(base_path, generator_dir),
         }
     }
 

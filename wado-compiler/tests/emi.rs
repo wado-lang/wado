@@ -178,18 +178,16 @@ impl Root {
         }
     }
 
-    /// The `test` names whose blocks are left out of a compile here.
-    fn skipped_tests(self) -> &'static [&'static str] {
-        match self {
-            Root::Benchmark => &["fuel"],
-            Root::Fixtures | Root::Stdlib | Root::Example | Root::Tree(_) => &[],
+    /// The `test` blocks a compile here keeps.
+    fn test_selection(self) -> TestSelection {
+        let skipped = match self {
+            Root::Benchmark => vec!["fuel".to_string()],
+            Root::Fixtures | Root::Stdlib | Root::Example | Root::Tree(_) => Vec::new(),
+        };
+        TestSelection {
+            skipped,
+            ..TestSelection::default()
         }
-    }
-
-    /// Whether a test named `name` is left out, as `TestSelection::skipped`
-    /// matches it.
-    fn skips(self, name: Option<&str>) -> bool {
-        name.is_some_and(|name| self.skipped_tests().iter().any(|f| name.contains(f)))
     }
 
     fn dir(self) -> PathBuf {
@@ -238,9 +236,10 @@ impl Root {
             return true;
         };
         let items = wado_compiler::parse(&source).ast.items;
+        let selection = self.test_selection();
         items.iter().any(|item| {
             if spec.test_world {
-                matches!(item, Item::Test(test) if !self.skips(test.name.as_deref()))
+                matches!(item, Item::Test(test) if !selection.skips(test.name.as_deref()))
             } else {
                 matches!(item, Item::Function(f) if f.is_export && f.name == "run")
             }
@@ -379,15 +378,7 @@ impl Spec {
             opt_level,
             target_world: self.test_world.then(|| "test".to_string()),
             allocator: Some(self.allocator.clone()),
-            test_selection: TestSelection {
-                skipped: self
-                    .root
-                    .skipped_tests()
-                    .iter()
-                    .map(|name| (*name).to_string())
-                    .collect(),
-                ..TestSelection::default()
-            },
+            test_selection: self.root.test_selection(),
             ..Default::default()
         }
     }
