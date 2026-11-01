@@ -1540,13 +1540,15 @@ fn emit_compute(
     } else {
         typed_result(checked, &returned[0], 0);
     };
-    lines.push(`let passed = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
-        ", ",
-    )}]) {`);
-    lines.push(`    Some(results) => ${results},`);
-    lines.push(`    None => build(${arguments.join(", ")}),`);
-    lines.push("};");
-    let built = "passed";
+    // Bound by a pattern, the run reads the `cache` the pattern shadows.
+    let mut bind_run = |pattern: String| {
+        lines.push(`let ${pattern} = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
+            ", ",
+        )}]) {`);
+        lines.push(`    Some(results) => ${results},`);
+        lines.push(`    None => build(${arguments.join(", ")}),`);
+        lines.push("};");
+    };
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
         let mut downloaded = `backend.download(&${place})`;
         if converted(checked, held, tensor) {
@@ -1568,7 +1570,7 @@ fn emit_compute(
             idents.push("cache");
             fields.push(`cache: ${fitted_cache}`);
         }
-        lines.push(`let ${PASSED} { ${idents.join(", ")} } = ${built};`);
+        bind_run(`${PASSED} { ${idents.join(", ")} }`);
         lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
         if has_cache {
             `${OUTPUTS}<${BACKEND_PARAM}>`;
@@ -1576,7 +1578,8 @@ fn emit_compute(
             OUTPUTS;
         }
     } else {
-        lines.push(`return ${read_back(&returned[0], built)?};`);
+        bind_run("passed");
+        lines.push(`return ${read_back(&returned[0], "passed")?};`);
         tensor_type(checked, held, &returned[0]);
     };
     compute.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
@@ -1814,7 +1817,7 @@ fn fitted_at_capacities(
         }
         fields.push(`${ident}: ${field}`);
     }
-    return Result::Ok(`${CACHE} { ${fields.join(", ")} }`);
+    return Result::Ok(`${CACHE}::<${BACKEND_PARAM}> { ${fields.join(", ")} }`);
 }
 
 /// The key a padded symbol's capacity takes among the names `compute` binds.
