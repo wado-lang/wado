@@ -131,24 +131,23 @@ enum Root {
     /// The examples: CLI programs observed through stdout. Only the top-level
     /// files; the directories under it are packages.
     Example,
-    /// A package, by its directory: its `test` blocks, compiled with the
-    /// dependencies its `wado.toml` files declare.
-    Package(&'static str),
+    /// A tree, by its directory: the `test` blocks of its sources, each
+    /// compiled in the package its `wado.toml` files put it in.
+    Tree(&'static str),
 }
 
-/// Gale and Loam are left out: their generated parsers and graphs cost far more
-/// compile time than the code shapes they add.
-const ROOTS: [Root; 10] = [
+/// The packages are the ones whose code shapes are worth their compile time
+/// every night. The rest cost far more for what they add: Gale's and Loam's
+/// generated code, Grog through Gale, and `SurfaceDom`'s tests. The
+/// benchmarks reach Gale's generated code too, but one parser each.
+const ROOTS: [Root; 7] = [
     Root::Fixtures,
     Root::Stdlib,
     Root::Example,
-    Root::Package("package-cm-catalog"),
-    Root::Package("package-eddy"),
-    Root::Package("package-grog"),
-    Root::Package("package-jade"),
-    Root::Package("package-marl"),
-    Root::Package("package-wadopoet"),
-    Root::Package("package-web"),
+    Root::Tree("package-cm-catalog"),
+    Root::Tree("package-jade"),
+    Root::Tree("package-marl"),
+    Root::Tree("benchmark"),
 ];
 
 impl Root {
@@ -157,7 +156,7 @@ impl Root {
             Root::Fixtures => "fixtures",
             Root::Stdlib => "stdlib",
             Root::Example => "example",
-            Root::Package(dir) => dir,
+            Root::Tree(dir) => dir,
         }
     }
 
@@ -168,7 +167,7 @@ impl Root {
             Root::Fixtures => "wado-compiler/tests/fixtures",
             Root::Stdlib => "wado-compiler/lib",
             Root::Example => "example",
-            Root::Package(dir) => dir,
+            Root::Tree(dir) => dir,
         }
     }
 
@@ -184,7 +183,7 @@ impl Root {
     /// Whether a source here is compiled in the package its `wado.toml` puts it
     /// in, rather than on its own.
     fn reads_manifests(self) -> bool {
-        matches!(self, Root::Package(_))
+        matches!(self, Root::Tree(_))
     }
 
     /// How a source here runs when it carries no `__DATA__` section.
