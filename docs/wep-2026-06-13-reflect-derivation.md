@@ -250,9 +250,10 @@ register of [Symbol Notation](./wep-2026-06-14-symbol-notation.md) (`MODULE`
 always quoted), the notation the compiler's diagnostics and dumps read back.
 Rendering runs one way, and no single rendering serves every consumer — a
 `$defs` key comes back through a `$ref`'s URI reference, where `<` and `>` must
-be escaped — so a schema library builds its key from the parts. In `canonical_name()` type
-arguments are joined without a space (`Pair<String,i32>`), matching the spelling the
-compiler renders internally; a type with none is written bare.
+be escaped — so a schema library builds its key from the parts. In
+`canonical_name()` type arguments are joined without a space
+(`Pair<String,i32>`), matching the spelling the compiler renders internally; a
+type with none is written bare.
 
 ### What can be named
 
