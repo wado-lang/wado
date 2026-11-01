@@ -414,10 +414,13 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 }
 
 impl Monomorphizer {
-    /// Hold every type `func`'s signature and body hold a value of.
+    /// Hold every type `func`'s signature, locals and body hold a value of. A
+    /// local may outlive the expressions of its type: unrolling a pack loop
+    /// leaves the loop variable declared at the pack's type.
     fn note_types(&mut self, func: &TirFunction, type_table: &TypeTable) {
         let signature = func.params.iter().map(|param| param.type_id);
-        for id in signature.chain([func.return_type]) {
+        let locals = func.locals.iter().map(|local| local.type_id);
+        for id in signature.chain([func.return_type]).chain(locals) {
             self.pool.hold(id, type_table);
         }
         if let Some(body) = &func.body {
