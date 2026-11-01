@@ -288,7 +288,7 @@ pub(super) fn internal_tag_faults(
                 span: Some(DiagnosticSpan::from_span(&case.span, None)),
             };
             let Some(payload) = derived_struct_decl_of(data.payload, tysys, modules) else {
-                let payload = tysys.type_table.borrow().type_name(data.payload);
+                let payload = tysys.type_table.borrow().name(data.payload);
                 faults.push(fault(format!(
                     "`{case_path}` carries `{payload}`, but a case of a variant with \
                      `#[wire(tag)]` carries nothing or a struct its derivation writes"

@@ -507,7 +507,7 @@ fn by_value_structs(
     match type_table.get(ty) {
         ResolvedType::Struct { def, type_args } => {
             let key = (
-                type_table.struct_rendered_name(*def, type_args),
+                type_table.struct_mangled_name(*def, type_args),
                 type_table.struct_head_module(*def).clone(),
             );
             let fields = struct_fields.get(&key).cloned();
@@ -602,7 +602,7 @@ fn mut_reachable_contains(
     let (inner, inner_writable) = match type_table.get(ty) {
         ResolvedType::Struct { def, type_args } => {
             let key = (
-                type_table.struct_rendered_name(*def, type_args),
+                type_table.struct_mangled_name(*def, type_args),
                 type_table.struct_head_module(*def).clone(),
             );
             let writable_here = writable || type_table.is_mut_box(ty);

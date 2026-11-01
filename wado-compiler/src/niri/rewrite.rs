@@ -142,7 +142,7 @@ impl Interpreter<'_> {
         compiler_trace!(
             "region_seed",
             "commit {e:?} ({}): aggregate materialize -> {committed} (consumes={consumes})",
-            self.type_table.type_name(node_type)
+            self.type_table.name(node_type)
         );
         if consumes {
             self.frame.scratch_folds.insert(e, value);
@@ -517,7 +517,7 @@ impl Interpreter<'_> {
             sink.alloc_expr(
                 ExprKind::StructLiteral {
                     struct_type: type_id,
-                    struct_name: self.type_table.struct_type_rendered_name(type_id),
+                    struct_name: self.type_table.struct_type_mangled_name(type_id),
                     fields: fields
                         .into_iter()
                         .enumerate()

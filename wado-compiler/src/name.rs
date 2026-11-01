@@ -198,6 +198,12 @@ pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
 /// Prefix of [`effect_default_impl_name`].
 const EFFECT_DEFAULT_PREFIX: &str = "$effect_default$";
 
+/// Whether `name` is an [`effect_default_impl_name`].
+#[must_use]
+pub fn is_effect_default(name: &str) -> bool {
+    name.starts_with(EFFECT_DEFAULT_PREFIX)
+}
+
 /// How a function name reads where a user sees it — `#function`, and the
 /// call-site name a defaulted argument captures. A default implementation's
 /// storage name is an internal detail, so it renders as the operation it
@@ -230,7 +236,7 @@ pub fn diagnostic_function_name(
     module: &ModuleSource,
     method: Option<&LocalMethodName>,
 ) -> String {
-    if name.starts_with(EFFECT_DEFAULT_PREFIX) {
+    if is_effect_default(name) {
         return name.to_string();
     }
     if let Some(method) = method {
@@ -559,11 +565,14 @@ pub const DROP_GLUE_PREFIX: &str = "$drop$";
 /// Every such helper spells the mangle of the type it belongs to after its
 /// kind, so a second [`INTERNAL_PREFIX`] is what tells one from the plainly
 /// synthesized functions that carry no type (`$initialize_module`, `$test_0`,
-/// `$cm_export__run`).
+/// `$cm_export__run`). A [`global_init_function`] spells a global there, not a
+/// type, and its global's uses reach it.
 #[must_use]
 pub fn is_type_bridge(name: &str) -> bool {
-    name.strip_prefix(INTERNAL_PREFIX)
-        .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
+    global_init_target(name).is_none()
+        && name
+            .strip_prefix(INTERNAL_PREFIX)
+            .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
 /// A minted name's digest part: the first 8 bytes of `digest`, in hex.
@@ -1223,7 +1232,7 @@ pub struct LocalMethodName {
     /// `head_key()` is the base identity string preserved across monomorphization.
     ///
     /// With [`Self::struct_type_args`] this is the whole of the receiver's
-    /// identity — the rendered `Point<i32>` spelling is [`Self::struct_name`],
+    /// identity — the mangled `Point<i32>` spelling is [`Self::struct_name`],
     /// derived rather than stored, so the two cannot disagree.
     pub receiver: Receiver,
     /// The trait / effect / resource this method implements, named by the
@@ -1245,7 +1254,7 @@ pub struct LocalMethodName {
     pub trait_type_args: Vec<tir::TypeId>,
     /// The receiver's type arguments, structured. Together with `receiver`
     /// they *are* `struct_name`: [`Self::fq_struct_name`] rebuilds the
-    /// instantiated receiver from them rather than reading the rendered
+    /// instantiated receiver from them rather than reading the mangled
     /// `struct_name` back apart.
     pub struct_type_args: Vec<FqTypeName>,
     /// The method name (e.g., "sum" or "fmt")
@@ -2852,7 +2861,15 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
 ///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("$effect_dispatch__{label}__{op_name}")
+    format!("{DISPATCH_WRAPPER_PREFIX}{label}__{op_name}")
+}
+
+const DISPATCH_WRAPPER_PREFIX: &str = "$effect_dispatch__";
+
+/// Whether `name` is a [`dispatch_wrapper_name`].
+#[must_use]
+pub fn is_dispatch_wrapper(name: &str) -> bool {
+    name.starts_with(DISPATCH_WRAPPER_PREFIX)
 }
 
 /// Build the dispatch struct's per-operation field name.
@@ -3548,7 +3565,7 @@ impl TypeHead {
     }
 
     /// The head's own name, as its declaration writes it. Diagnostics; a mangle
-    /// takes [`Self::rendered`], which disambiguates a function-local
+    /// takes [`Self::mangled`], which disambiguates a function-local
     /// declaration.
     #[must_use]
     pub fn name(&self) -> &str {
@@ -3569,9 +3586,9 @@ impl TypeHead {
     /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
     /// a projection's base.
     #[must_use]
-    pub fn rendered(&self) -> &str {
+    pub fn mangled(&self) -> &str {
         match self {
-            Self::Declared(head) => head.rendered(),
+            Self::Declared(head) => head.mangled(),
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
@@ -3956,7 +3973,7 @@ impl FqTypeName {
         }
         match &self.head {
             TypeHead::Declared(head) => {
-                out.push_str(&mangle_declared(head.module(), head.rendered()));
+                out.push_str(&mangle_declared(head.module(), head.mangled()));
             }
             TypeHead::Shape { module, name } => out.push_str(&mangle_declared(module, name)),
             // A bucket keys an index and heads no function name; spelled apart
@@ -3966,7 +3983,7 @@ impl FqTypeName {
             }
             TypeHead::Builtin(name) | TypeHead::Unresolved(name) => out.push_str(name),
             TypeHead::Binder { name, owner } => match owner {
-                Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
+                Some(owner) => out.push_str(&format!("{name}#{}", owner.mangled())),
                 None => out.push_str(name),
             },
             TypeHead::Projection(head) => {
@@ -3975,7 +3992,7 @@ impl FqTypeName {
                     head.base.to_mangled(),
                     head.assoc,
                     head.owning_trait.module(),
-                    head.owning_trait.rendered()
+                    head.owning_trait.mangled()
                 ));
                 if let Some(trait_args) = head.trait_args.as_ref().filter(|args| !args.is_empty()) {
                     let args: Vec<String> = trait_args.iter().map(FqTypeName::to_mangled).collect();
@@ -3997,7 +4014,7 @@ impl FqTypeName {
     /// the whole name when it *is* `old`, and otherwise each argument,
     /// recursively.
     ///
-    /// A substitution over the structure. Rewriting the rendered spelling
+    /// A substitution over the structure. Rewriting the mangled spelling
     /// instead means finding `old`'s mangling inside `self`'s and splicing,
     /// which cannot tell a type from a type whose name contains it and leaves
     /// the identity that produced the spelling unchanged.
@@ -4187,7 +4204,7 @@ pub struct BinderOwner {
     /// *module-local* `AstId` index — never the `AstIdSpace`, which is a
     /// process-global counter and would make mangled names non-deterministic
     /// (see [`mangle_local_item_name`]).
-    rendered: String,
+    mangled: String,
 }
 
 impl PartialEq for BinderOwner {
@@ -4211,7 +4228,7 @@ impl BinderOwner {
         Self {
             id,
             assoc: None,
-            rendered: format!("{module}/{}", id.local()),
+            mangled: format!("{module}/{}", id.local()),
         }
     }
 
@@ -4226,13 +4243,13 @@ impl BinderOwner {
         Self {
             id,
             assoc: Some(assoc.to_string()),
-            rendered: format!("{module}/{}::{assoc}", id.local()),
+            mangled: format!("{module}/{}::{assoc}", id.local()),
         }
     }
 
     /// The spelling a mangle embeds.
-    fn rendered(&self) -> &str {
-        &self.rendered
+    fn mangled(&self) -> &str {
+        &self.mangled
     }
 }
 
@@ -4246,7 +4263,7 @@ pub struct DeclaredHead {
     name: String,
     /// What a mangle embeds: [`Self::name`] with a function-local
     /// declaration's disambiguator applied.
-    rendered: String,
+    mangled: String,
 }
 
 impl PartialEq for DeclaredHead {
@@ -4269,7 +4286,7 @@ impl DeclaredHead {
     #[must_use]
     pub fn new(defs: &DefTable, def: DefId) -> Self {
         let name = defs.name(def).to_string();
-        let rendered = if defs.is_function_local(def) {
+        let mangled = if defs.is_function_local(def) {
             mangle_local_item_name(&name, defs.ast_id(def))
         } else {
             name.clone()
@@ -4278,14 +4295,14 @@ impl DeclaredHead {
             def,
             module: defs.module(def).clone(),
             name,
-            rendered,
+            mangled,
         }
     }
 
     /// The spelling a mangle embeds.
     #[must_use]
-    pub fn rendered(&self) -> &str {
-        &self.rendered
+    pub fn mangled(&self) -> &str {
+        &self.mangled
     }
 
     #[must_use]
@@ -4442,7 +4459,7 @@ impl FqTraitName {
     #[must_use]
     pub fn to_mangled(&self) -> String {
         let head = match &self.head {
-            TraitHead::Declared(head) => mangle_declared(head.module(), head.rendered()),
+            TraitHead::Declared(head) => mangle_declared(head.module(), head.mangled()),
             TraitHead::Binder(name) => name.clone(),
         };
         let args: Vec<String> = self.args.iter().map(FqTypeName::to_mangled).collect();

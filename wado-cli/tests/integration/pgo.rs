@@ -158,7 +158,8 @@ fn a_run_with_nothing_sound_to_record_keeps_the_profile() {
         ));
     assert_eq!(fs::read_to_string(&profile).unwrap(), "kept\n");
 
-    // A pending TODO does not fail the run, but its workload trapped all the same.
+    // A `#![TODO]` file that does not compile is pending, and does not fail the
+    // run, but none of what it holds was recorded.
     fs::write(
         tmp.path().join("bench_test.wado"),
         "#![TODO]\n\n#[workload]\ntest \"pending\" {\n    assert 1 == 2;\n}\n",

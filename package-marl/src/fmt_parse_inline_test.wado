@@ -249,10 +249,9 @@ test "parse_inline resolves a shortcut reference link" {
 
 test "parse_inline resolves a shortcut reference link whose text is a code span" {
     // The label is the raw source text between the brackets, backticks
-    // included — CommonMark matches on unprocessed label text, and the real
-    // corpus defines this exact reference the same way: see
-    // `wado-bundled-icu/bdp-spike/README.md`'s
-    // "[`BlobDataProvider`]: https://docs.rs/icu_provider_blob/".
+    // included — CommonMark matches on unprocessed label text. The case comes
+    // from this repository's own corpus: `wado-bundled-icu/bdp-spike/README.md`
+    // at e52a46286 defined this exact reference.
     let mut refs = new_ref_table();
     ref_table_insert(&mut refs, LinkReferenceDef {
         label: normalize_label("`BlobDataProvider`"),

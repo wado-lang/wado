@@ -476,6 +476,7 @@ impl TirMutVisitor for Rewriter<'_, '_> {
             ));
             capture.source = CaptureSource::Local(proxy);
             capture.type_id = ref_type;
+            capture.through_ref = true;
             SlotThroughRef { slot, ref_type }.visit_expr(body);
         }
         let mut closure_locals = FrameLocals::Closure {
@@ -538,6 +539,7 @@ impl TirMutVisitor for SlotThroughRef {
             for (slot, capture) in captures.iter_mut().enumerate() {
                 if capture.source == CaptureSource::Capture(self.slot) {
                     capture.type_id = self.ref_type;
+                    capture.through_ref = true;
                     SlotThroughRef {
                         slot: u32::try_from(slot).unwrap(),
                         ref_type: self.ref_type,

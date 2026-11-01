@@ -139,12 +139,12 @@ impl DceAnalysis {
         }
         // The struct's own head, not a declaration found by `generic_name`:
         // that index answers with whichever declaration of a spelling came
-        // first, so two functions' `struct Box<T>` rendered one name and one
+        // first, so two functions' `struct Box<T>` answered one name and one
         // of them was swept while its uses survived.
-        let rendered = type_table.struct_rendered_name(s.def, &mono.impl_type_args);
-        self.struct_monomorph_names.contains(rendered.as_str())
+        let mangled = type_table.struct_mangled_name(s.def, &mono.impl_type_args);
+        self.struct_monomorph_names.contains(mangled.as_str())
             || type_table
-                .find_struct_by_name(&rendered, &s.module_source)
+                .find_struct_by_name(&mangled, &s.module_source)
                 .is_some_and(|id| self.types.contains(&id))
     }
 }
@@ -983,7 +983,7 @@ impl<'a> DceWalker<'a> {
                 ref type_args,
             } if !type_args.is_empty() => {
                 let module_source = self.type_table.struct_head_module(*def);
-                let name = &self.type_table.struct_rendered_name(*def, type_args);
+                let name = &self.type_table.struct_mangled_name(*def, type_args);
                 // Monomorphized struct method (e.g. `Box<i32>::get`):
                 // monomorphized functions live in the *using* module, so
                 // route the callee id through `current_module`.
@@ -1081,7 +1081,7 @@ impl<'a> DceWalker<'a> {
             ResolvedType::GenericInstance { def, type_args }
                 if self.type_table.is_resource_def(def) =>
             {
-                let name = self.type_table.def_name(def).to_string();
+                let name = self.type_table.decl_name(def).to_string();
                 // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
                 let resource_args: Vec<FqTypeName> = type_args
                     .iter()
@@ -1096,7 +1096,7 @@ impl<'a> DceWalker<'a> {
                 self.analysis.callees.insert(method_id);
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let name = self.type_table.def_name(def).to_string();
+                let name = self.type_table.decl_name(def).to_string();
                 // Generic instance method (e.g. `Box<i32>::get`,
                 // `TreeMap<String,i32>^Index::index`). Trait methods
                 // need the trait name baked into the mangle so trait-
@@ -1448,25 +1448,25 @@ impl DceAnalysis {
         for &id in &self.types {
             match type_table.get(id) {
                 ResolvedType::Struct { def, type_args } => {
-                    let decl_name = type_table.struct_head_name(*def);
+                    let decl_name = type_table.struct_head_mangled_name(*def);
                     let module_source = type_table.struct_head_module(*def);
                     if type_args.is_empty() {
                         self.struct_exact.insert((decl_name, module_source.clone()));
                     } else {
                         self.struct_monomorph_names
-                            .insert(type_table.struct_rendered_name(*def, type_args));
+                            .insert(type_table.struct_mangled_name(*def, type_args));
                         self.struct_monomorph_bases.insert(decl_name);
                     }
                 }
                 ResolvedType::Variant { def } => {
                     self.variant_exact.insert((
-                        type_table.def_name(*def).to_string(),
+                        type_table.decl_name(*def).to_string(),
                         type_table.def_module(*def).clone(),
                     ));
                 }
                 ResolvedType::Enum { def } => {
                     self.enum_exact.insert((
-                        type_table.def_name(*def).to_string(),
+                        type_table.decl_name(*def).to_string(),
                         type_table.def_module(*def).clone(),
                     ));
                 }
@@ -1474,13 +1474,13 @@ impl DceAnalysis {
                     if !type_table.is_resource_def(*def) =>
                 {
                     self.generic_instance_names
-                        .insert(type_table.def_name(*def).to_string());
+                        .insert(type_table.decl_name(*def).to_string());
                     // The spelling a live `Struct` with type args records, so
                     // `keeps_struct` recognises the monomorph either way: a dead
                     // local still declares its type, and `wir_build` declares a
                     // Wasm local for it.
                     self.struct_monomorph_names
-                        .insert(type_table.struct_rendered_name(StructDef::Decl(*def), type_args));
+                        .insert(type_table.struct_mangled_name(StructDef::Decl(*def), type_args));
                 }
                 _ => {}
             }

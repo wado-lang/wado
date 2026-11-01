@@ -281,7 +281,7 @@ impl TypeTable {
     pub fn generic_dispatch_components(&self, type_id: TypeId) -> Option<(String, Vec<TypeId>)> {
         match self.get(type_id) {
             ResolvedType::GenericInstance { def, type_args } => {
-                Some((self.def_name(*def).to_string(), type_args.clone()))
+                Some((self.decl_name(*def).to_string(), type_args.clone()))
             }
             ResolvedType::BuiltinArray(elem) => Some((ARRAY_TYPE_NAME.to_string(), vec![*elem])),
             _ => None,
@@ -386,16 +386,19 @@ impl TypeTable {
 
     fn index_type(&mut self, id: TypeId, ty: &ResolvedType) {
         // Update struct name index for O(1) lookups by (name, module_source).
-        // Keyed on the *rendered* spelling: every instantiation of a generic
+        // Keyed on the *mangled* spelling: every instantiation of a generic
         // struct is a distinct type, and keying on the declaration would
         // collapse them all onto one entry.
         if let ResolvedType::Struct { def, type_args } = ty {
-            let rendered = self.struct_rendered_name(*def, type_args);
+            let mangled = self.struct_mangled_name(*def, type_args);
             let module_source = self.struct_head_module(*def).clone();
-            self.struct_name_index.insert((rendered, module_source), id);
+            self.struct_name_index.insert((mangled, module_source), id);
         }
         if let Some(def) = Self::nominal_key(ty) {
-            let key = (self.def_name(def).to_string(), self.def_module(def).clone());
+            let key = (
+                self.decl_name(def).to_string(),
+                self.def_module(def).clone(),
+            );
             self.decl_name_index.insert(key, id);
         }
     }
@@ -893,24 +896,25 @@ impl TypeTable {
         &self.defs
     }
 
-    /// The name `def` writes — a rendering, for a diagnostic or a mangle.
+    /// The name `def` writes, for a diagnostic or a by-name lookup. A mangle
+    /// takes [`Self::decl_mangled_name`].
     #[must_use]
-    pub fn def_name(&self, def: DefId) -> &str {
+    pub fn decl_name(&self, def: DefId) -> &str {
         self.defs.name(def)
     }
 
-    /// The name `def` renders to — its declared name, with a function-local
+    /// The name `def` mangles to — its declared name, with a function-local
     /// declaration's disambiguator applied.
     ///
-    /// [`Self::def_name`] is the *declared* name, which is what an `impl`
+    /// [`Self::decl_name`] is the *declared* name, which is what an `impl`
     /// header spells and what a by-name declaration lookup keys on. This is
-    /// the *rendered* one, which is what a mangle embeds and what every
+    /// the *mangled* one, which is what a mangle embeds and what every
     /// name-keyed downstream registry stores. They differ for exactly one kind
     /// of declaration: two sibling functions may each declare a `struct
     /// Point`, and a registry keyed on the declared name would hold one entry
     /// for two types.
     #[must_use]
-    pub fn decl_render_name(&self, def: DefId) -> String {
+    pub fn decl_mangled_name(&self, def: DefId) -> String {
         let name = self.defs.name(def);
         if self.defs.is_function_local(def) {
             return mangle_local_item_name(name, self.defs.ast_id(def));
@@ -1349,7 +1353,7 @@ impl TypeTable {
     /// [`Self::anon_struct_mangle`] is what a key is built from.
     #[must_use]
     pub fn anon_struct_name(&self, id: AnonStructId) -> String {
-        self.render_anon_struct(id, &|t| self.type_name(t))
+        self.render_anon_struct(id, &|t| self.name(t))
     }
 
     /// [`Self::anon_struct_name`] with each field or hole type spelled by
@@ -1465,11 +1469,11 @@ impl TypeTable {
         }
     }
 
-    /// The name a struct head renders to: the declaration's, or the shape's.
+    /// The name a struct head mangles to: the declaration's, or the shape's.
     #[must_use]
-    pub fn struct_head_name(&self, head: StructDef) -> String {
+    pub fn struct_head_mangled_name(&self, head: StructDef) -> String {
         match head {
-            StructDef::Decl(def) => self.decl_render_name(def),
+            StructDef::Decl(def) => self.decl_mangled_name(def),
             StructDef::Anon(id) => self.anon_struct_mangle(id),
         }
     }
@@ -1493,17 +1497,17 @@ impl TypeTable {
     }
 
     /// The head as source spells it: the declared name, with no storage
-    /// disambiguator. [`Self::struct_head_name`]'s counterpart in the
+    /// disambiguator. [`Self::struct_head_mangled_name`]'s counterpart in the
     /// declaration namespace — what a diagnostic shows, never a lookup key.
     #[must_use]
     pub fn struct_head_decl_name(&self, head: StructDef) -> String {
         match head {
-            StructDef::Decl(def) => self.def_name(def).to_string(),
+            StructDef::Decl(def) => self.decl_name(def).to_string(),
             StructDef::Anon(id) => self.anon_struct_name(id),
         }
     }
 
-    /// What `Reflect::type_name()` answers for a struct: its declaration's name.
+    /// What `Reflect::decl_name()` answers for a struct: its declaration's name.
     /// A struct literal's anonymous struct names no declaration, so it answers
     /// `""`, and its `Inspect` writes `{ x: 1 }` as the literal does.
     #[must_use]
@@ -1625,7 +1629,7 @@ impl TypeTable {
     pub fn nominal_head(&self, id: TypeId) -> Option<(String, ModuleSource)> {
         match self.get(id) {
             ResolvedType::Struct { def, .. } => Some((
-                self.struct_head_name(*def),
+                self.struct_head_mangled_name(*def),
                 self.struct_head_module(*def).clone(),
             )),
             ResolvedType::Enum { def }
@@ -1634,7 +1638,7 @@ impl TypeTable {
             | ResolvedType::Flags { def }
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::GenericInstance { def, .. } => {
-                Some((self.decl_render_name(*def), self.def_module(*def).clone()))
+                Some((self.decl_mangled_name(*def), self.def_module(*def).clone()))
             }
             _ => None,
         }
@@ -2521,35 +2525,35 @@ impl TypeTable {
         })
     }
 
-    /// A struct type's rendered spelling: the declaration alone, or the
+    /// A struct type's mangled spelling: the declaration alone, or the
     /// declaration with its arguments applied. Derived rather than stored, so
     /// there is no fused name for a declaration lookup to mistake for one.
     #[must_use]
-    pub fn struct_rendered_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
-        self.rendered_name(&self.struct_head_name(head), type_args)
+    pub fn struct_mangled_name(&self, head: StructDef, type_args: &[TypeId]) -> String {
+        self.mangled_name(&self.struct_head_mangled_name(head), type_args)
     }
 
-    /// The rendered spelling of the struct type `id`, which a struct literal
+    /// The mangled spelling of the struct type `id`, which a struct literal
     /// of it carries as its name.
     #[must_use]
-    pub fn struct_type_rendered_name(&self, id: TypeId) -> String {
+    pub fn struct_type_mangled_name(&self, id: TypeId) -> String {
         match self.get(id) {
-            ResolvedType::Struct { def, type_args } => self.struct_rendered_name(*def, type_args),
+            ResolvedType::Struct { def, type_args } => self.struct_mangled_name(*def, type_args),
             ResolvedType::GenericInstance { def, type_args } => {
-                self.generic_rendered_name(*def, type_args)
+                self.generic_mangled_name(*def, type_args)
             }
             other => panic!("`{other:?}` is not a struct type"),
         }
     }
 
-    /// The rendered spelling of an instantiation of `def`: the sibling of
-    /// [`Self::struct_rendered_name`] for a declaration named by `DefId`.
+    /// The mangled spelling of an instantiation of `def`: the sibling of
+    /// [`Self::struct_mangled_name`] for a declaration named by `DefId`.
     #[must_use]
-    pub fn generic_rendered_name(&self, def: DefId, type_args: &[TypeId]) -> String {
-        self.rendered_name(&self.decl_render_name(def), type_args)
+    pub fn generic_mangled_name(&self, def: DefId, type_args: &[TypeId]) -> String {
+        self.mangled_name(&self.decl_mangled_name(def), type_args)
     }
 
-    fn rendered_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
+    fn mangled_name(&self, decl_name: &str, type_args: &[TypeId]) -> String {
         let args: Vec<String> = type_args
             .iter()
             .map(|&a| self.mangle_type_arg_rowless(a))
@@ -2558,7 +2562,7 @@ impl TypeTable {
     }
 
     /// Intern the instantiation of `def` with `type_args`, deriving its
-    /// rendered spelling rather than taking one from the caller. An empty
+    /// mangled spelling rather than taking one from the caller. An empty
     /// `type_args` interns the *declaration* — a different type.
     pub fn make_monomorphized_struct_from_args(
         &mut self,
@@ -3775,6 +3779,18 @@ impl TypeTable {
             })
             .or_default()
             .insert(trait_ref.args, filled, resolved_id, None);
+    }
+
+    /// Every associated type a concrete receiver answers, with that receiver.
+    pub fn assoc_type_answers(&self) -> impl Iterator<Item = (&InstanceKey, TypeId)> {
+        self.assoc_type_resolutions
+            .iter()
+            .flat_map(|(key, answers)| {
+                answers
+                    .0
+                    .iter()
+                    .map(|answer| (&key.receiver, answer.answer))
+            })
     }
 
     /// Each associated type `receiver` answers: what synthesis registered for
@@ -5194,7 +5210,7 @@ impl TypeTable {
     /// The monomorphized `Struct` an instantiation of `def` became, when the run
     /// made one. Monomorphization registers each one under this spelling.
     pub fn monomorphized_struct_of(&self, def: DefId, type_args: &[TypeId]) -> Option<TypeId> {
-        let name = self.generic_rendered_name(def, type_args);
+        let name = self.generic_mangled_name(def, type_args);
         self.find_struct_by_name(&name, self.def_module(def))
     }
 
@@ -5359,7 +5375,7 @@ impl TypeTable {
                 if self.find_variant_type(def).is_some() {
                     Some(CompilerItem::ReflectVariant)
                 } else if self
-                    .find_struct_by_name(self.def_name(def), self.def_module(def))
+                    .find_struct_by_name(self.decl_name(def), self.def_module(def))
                     .is_some()
                 {
                     Some(CompilerItem::ReflectStruct)
@@ -5727,7 +5743,7 @@ impl TypeTable {
 
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
-    fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+    pub(crate) fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
@@ -5940,30 +5956,31 @@ impl TypeTable {
         }
     }
 
-    /// Get a human-readable name for a type
-    pub fn type_name(&self, id: TypeId) -> String {
-        self.render_type_name(id, false)
+    /// The type as a reader writes it, its arguments included: `Pair<i32>`.
+    #[must_use]
+    pub fn name(&self, id: TypeId) -> String {
+        self.render_name(id, false)
     }
 
-    /// [`Self::type_name`] as the type read before `boxing::prepare_types`
+    /// [`Self::name`] as the type read before `boxing::prepare_types`
     /// redefined a reference into `Box<T>`: what the source wrote, `&i32`.
     #[must_use]
-    pub fn type_name_unboxed(&self, id: TypeId) -> String {
+    pub fn name_unboxed(&self, id: TypeId) -> String {
         match self.spelled_ref(id) {
-            Some((payload, kind)) => ref_type_name(kind, &self.type_name_unboxed(payload)),
-            None => self.type_name(id),
+            Some((payload, kind)) => ref_type_name(kind, &self.name_unboxed(payload)),
+            None => self.name(id),
         }
     }
 
-    /// [`Self::type_name`] with every declared head written in the spec's
+    /// [`Self::name`] with every declared head written in the spec's
     /// `MODULE#SYMBOL` notation.
     ///
-    /// Ask [`Self::type_names_for_mismatch`] rather than this directly:
+    /// Ask [`Self::names_for_mismatch`] rather than this directly:
     /// qualifying a name that was already unambiguous only makes the message
     /// longer.
     #[must_use]
-    pub fn type_name_qualified(&self, id: TypeId) -> String {
-        self.render_type_name(id, true)
+    pub fn canonical_name(&self, id: TypeId) -> String {
+        self.render_name(id, true)
     }
 
     /// The two spellings a mismatch message prints.
@@ -5972,15 +5989,12 @@ impl TypeTable {
     /// reader cannot settle from the message — and only then is each qualified.
     /// Every other mismatch keeps the short form it prints today.
     #[must_use]
-    pub fn type_names_for_mismatch(&self, expected: TypeId, found: TypeId) -> (String, String) {
-        let (a, b) = (self.type_name(expected), self.type_name(found));
+    pub fn names_for_mismatch(&self, expected: TypeId, found: TypeId) -> (String, String) {
+        let (a, b) = (self.name(expected), self.name(found));
         if a != b {
             return (a, b);
         }
-        let (qa, qb) = (
-            self.type_name_qualified(expected),
-            self.type_name_qualified(found),
-        );
+        let (qa, qb) = (self.canonical_name(expected), self.canonical_name(found));
         // Two renderings that stay equal even qualified are the same type, or
         // two shapes no module names. Neither is helped by the longer form.
         if qa == qb { (a, b) } else { (qa, qb) }
@@ -5988,7 +6002,7 @@ impl TypeTable {
 
     /// The declared name of `def`, qualified by its module when `qualified`.
     fn head_name(&self, def: DefId, qualified: bool) -> String {
-        let name = self.def_name(def);
+        let name = self.decl_name(def);
         if qualified {
             render(&self.def_module(def).to_string(), name)
         } else {
@@ -5996,8 +6010,8 @@ impl TypeTable {
         }
     }
 
-    fn render_type_name(&self, id: TypeId, qualified: bool) -> String {
-        let type_name = |t: TypeId| self.render_type_name(t, qualified);
+    fn render_name(&self, id: TypeId, qualified: bool) -> String {
+        let render = |t: TypeId| self.render_name(t, qualified);
         match self.get(id) {
             ResolvedType::Primitive(p) => p.as_str().to_string(),
             ResolvedType::Unit => UNIT_TYPE_NAME.to_string(),
@@ -6005,21 +6019,21 @@ impl TypeTable {
             ResolvedType::Unknown => "<unknown>".to_string(),
             ResolvedType::Error => "<error>".to_string(),
             ResolvedType::BuiltinArray(elem) => {
-                display_generic_name(ARRAY_TYPE_NAME, &[type_name(*elem)])
+                display_generic_name(ARRAY_TYPE_NAME, &[render(*elem)])
             }
             ResolvedType::Struct {
                 def: StructDef::Anon(id),
                 ..
-            } => self.render_anon_struct(*id, &type_name),
+            } => self.render_anon_struct(*id, &render),
             ResolvedType::Struct { def, type_args } => {
-                // The declared head, not the rendered one: a message shows
+                // The declared head, not the mangled one: a message shows
                 // `Box<i32>`, never the `Box@<local>` a local declaration is
                 // stored under.
                 let head = match (qualified, def.decl()) {
                     (true, Some(decl)) => self.head_name(decl, true),
                     _ => self.struct_head_decl_name(*def),
                 };
-                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let args: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 display_generic_name(&head, &args)
             }
             ResolvedType::Enum { def } | ResolvedType::Resource { def } => {
@@ -6031,7 +6045,7 @@ impl TypeTable {
                 return_type,
                 effects,
             } => {
-                let param_names: Vec<String> = params.iter().map(|p| type_name(*p)).collect();
+                let param_names: Vec<String> = params.iter().map(|p| render(*p)).collect();
                 // A variable is a row still to be worked out: nothing the
                 // source wrote, so nothing to show.
                 let effect_names: Vec<String> = effects
@@ -6042,13 +6056,13 @@ impl TypeTable {
                 name::display_fn_type(
                     *is_mut,
                     &param_names,
-                    &type_name(*return_type),
+                    &render(*return_type),
                     matches!(self.get(*return_type), ResolvedType::Function { .. }),
                     &effect_names,
                 )
             }
-            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &type_name(*inner)),
-            ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &type_name(*inner)),
+            ResolvedType::Ref(inner) => ref_type_name(RefKind::Shared, &render(*inner)),
+            ResolvedType::MutRef(inner) => ref_type_name(RefKind::Mut, &render(*inner)),
             ResolvedType::Variant { def } => self.head_name(*def, qualified),
             ResolvedType::TypeParam { name, .. } | ResolvedType::AssocParam { name, .. } => {
                 name.clone()
@@ -6063,7 +6077,7 @@ impl TypeTable {
                 ..
             } => {
                 let names =
-                    |ids: &[TypeId]| -> Vec<String> { ids.iter().map(|a| type_name(*a)).collect() };
+                    |ids: &[TypeId]| -> Vec<String> { ids.iter().map(|a| render(*a)).collect() };
                 // The owning trait and its arguments are part of a
                 // projection's identity, so two that differ only there render
                 // the same without them.
@@ -6074,14 +6088,14 @@ impl TypeTable {
                     )
                 });
                 display_assoc_type_projection(
-                    &type_name(*param_id),
+                    &render(*param_id),
                     assoc_name,
                     &names(args),
                     owner.as_deref(),
                 )
             }
             ResolvedType::GenericInstance { def, type_args } => {
-                let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let arg_names: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 // A tuple is module-independent, so it has nothing to qualify.
                 if self.is_tuple_def(*def) {
                     display_tuple_type(&arg_names)
@@ -6090,7 +6104,7 @@ impl TypeTable {
                 }
             }
             ResolvedType::Newtype { def, type_args, .. } => {
-                let args: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
+                let args: Vec<String> = type_args.iter().map(|t| render(*t)).collect();
                 display_generic_name(&self.head_name(*def, qualified), &args)
             }
             ResolvedType::Flags { def } => self.head_name(*def, qualified),
@@ -6099,7 +6113,7 @@ impl TypeTable {
                 name,
                 mapped_elem: Some(element),
                 ..
-            } if repeated_element(name).is_some() => type_pack_name(&type_name(*element)),
+            } if repeated_element(name).is_some() => type_pack_name(&render(*element)),
             ResolvedType::TypePack { name, .. } => type_pack_name(name),
             ResolvedType::PackElement { pack, walk } => {
                 pack_element_name(self.pack_name(*pack), *walk)
@@ -6131,7 +6145,7 @@ impl TypeTable {
                 if self.is_tuple_def(*def) {
                     mangle_tuple_type(&args)
                 } else {
-                    let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
+                    let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
                     mangle_declared(module_source, &unqualified)
                 }
             }
@@ -6197,7 +6211,7 @@ impl TypeTable {
     }
 
     /// Mangle a type for use inside struct / function names — `Tuple<i32,String>`
-    /// where [`Self::type_name`] would give the human-readable `[i32, String]`.
+    /// where [`Self::name`] would give the human-readable `[i32, String]`.
     /// A generic renders as `Name<T1,T2,…>`, a function as [`crate::name::mangle_fn_type`]
     /// spells it, and references are stripped.
     #[must_use]
@@ -6250,7 +6264,7 @@ impl TypeTable {
                 if self.is_tuple_def(*def) {
                     return mangle_tuple_type(&args);
                 }
-                let unqualified = mangle_generic_name(&self.decl_render_name(*def), &args);
+                let unqualified = mangle_generic_name(&self.decl_mangled_name(*def), &args);
                 mangle_declared(self.def_module(*def), &unqualified)
             }
             ResolvedType::Ref(inner) => {
@@ -6285,8 +6299,8 @@ impl TypeTable {
             // A generic resource heads its methods bare, like a generic struct:
             // spelling the argument into the head applies it twice
             // (`StreamWritable<u8><u8>::write_all`) and resolves to nothing.
-            ResolvedType::GenericInstance { def, .. } => self.def_name(*def).to_string(),
-            ResolvedType::Struct { def, .. } => self.struct_head_name(*def),
+            ResolvedType::GenericInstance { def, .. } => self.decl_name(*def).to_string(),
+            ResolvedType::Struct { def, .. } => self.struct_head_mangled_name(*def),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => self.base_type_name(*inner),
             _ => self.mangle_type_name(id),
         }
@@ -6301,7 +6315,7 @@ impl TypeTable {
     pub fn struct_list_name(&self, id: TypeId) -> Option<String> {
         match self.get(id) {
             ResolvedType::Struct { def, type_args } => {
-                Some(self.struct_rendered_name(*def, type_args))
+                Some(self.struct_mangled_name(*def, type_args))
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let args: Vec<String> = type_args
@@ -6311,7 +6325,7 @@ impl TypeTable {
                 Some(if self.is_tuple_def(*def) {
                     mangle_tuple_type(&args)
                 } else {
-                    mangle_generic_name(&self.decl_render_name(*def), &args)
+                    mangle_generic_name(&self.decl_mangled_name(*def), &args)
                 })
             }
             _ => None,
@@ -6563,7 +6577,7 @@ impl TypeTable {
                 if rowless { Vec::new() } else { effects.clone() },
             ),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
-            // module, so the rendered spelling is already their whole identity.
+            // module, so the mangled spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
         }
     }
@@ -6577,18 +6591,18 @@ impl TypeTable {
             // the module collapses them onto one identity — the hazard
             // `mangle_type_arg_for_generic` documents, reached from here as
             // well.
-            // The identity every mangled name embeds, so the rendered
+            // The identity every mangled name embeds, so the mangled
             // spelling: each instantiation is its own type.
             ResolvedType::Struct { def, type_args } => TypeNameInfo::Named(mangle_declared(
                 self.struct_head_module(*def),
-                &self.struct_rendered_name(*def, type_args),
+                &self.struct_mangled_name(*def, type_args),
             )),
             ResolvedType::Enum { def }
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Newtype { def, .. }
             | ResolvedType::Flags { def } => {
-                TypeNameInfo::Named(mangle_declared(self.def_module(*def), self.def_name(*def)))
+                TypeNameInfo::Named(mangle_declared(self.def_module(*def), self.decl_name(*def)))
             }
             // A type parameter is a template's own binder, not a declaration.
             ResolvedType::TypeParam { name, .. } => TypeNameInfo::Named(name.clone()),
@@ -6608,9 +6622,9 @@ impl TypeTable {
                     return TypeNameInfo::Tuple(args);
                 }
                 let name = if self.is_resource_def(*def) {
-                    self.def_name(*def).to_string()
+                    self.decl_name(*def).to_string()
                 } else {
-                    mangle_declared(self.def_module(*def), &self.decl_render_name(*def))
+                    mangle_declared(self.def_module(*def), &self.decl_mangled_name(*def))
                 };
                 TypeNameInfo::Generic { name, args }
             }
@@ -7754,7 +7768,7 @@ mod tests {
         keep.insert(anon);
         table.retain(&keep);
 
-        assert_eq!(table.type_name(anon), "{ a: &i64 }");
+        assert_eq!(table.name(anon), "{ a: &i64 }");
     }
 
     #[test]

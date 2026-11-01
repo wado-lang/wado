@@ -1007,7 +1007,7 @@ impl MoveWalker<'_, '_> {
             .sem()
             .expression_type(expr.id())
             .expect("an affine read has a type");
-        self.sem().types.type_name(ty)
+        self.sem().types.name(ty)
     }
 
     /// Refuse a move of the field `expr` names out of a holder whose type
@@ -1113,7 +1113,7 @@ impl MoveWalker<'_, '_> {
             return;
         };
         if self.type_implements_drop(ty) {
-            let type_name = self.sem().types.type_name(ty);
+            let type_name = self.sem().types.name(ty);
             self.report(MoveError::DropPartialMove { type_name }, span);
         }
     }

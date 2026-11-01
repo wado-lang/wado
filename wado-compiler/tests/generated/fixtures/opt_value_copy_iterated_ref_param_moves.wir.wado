@@ -79,9 +79,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" 
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_iterated_ref_param_moves.wado/Item>::grow" = fn(ref "core:prelude//List<opt_value_copy_iterated_ref_param_moves.wado/Item>");  // TypeId(27)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(28)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>") -> ref null "core:prelude/string.wado//String";  // TypeId(28)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>^core:prelude/traits.wado/Iterator::next" = fn(ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>") -> ref null "core:prelude/string.wado//String";  // TypeId(29)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow" = fn(ref "core:prelude//List<core:prelude/string.wado/String>");  // TypeId(29)
 
 type "functype//opt_value_copy_iterated_ref_param_moves.wado/opt_value_copy_iterated_ref_param_moves.wado/$Closure_0::$call$dae[self]" = fn(ref "core:prelude/string.wado//String") -> bool;  // TypeId(30)
 
@@ -312,14 +312,6 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<opt_value_copy_iterated_r
     self.repr = new_repr;
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
-    let $load_0: ref "Array<core:prelude/string.wado/String>";
-    let new_repr: ref "Array<core:prelude/string.wado/String>";
-    let a: i32;
-    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,fn mut(core:prelude/string.wado/String)->bool>^core:prelude/traits.wado/Iterator::next"(self) {
     let $load_6: i32;
     let v_5: ref "core:prelude/string.wado//String";
@@ -358,6 +350,14 @@ fn "core:prelude/traits.wado/core:prelude/traits.wado/IterFilter<core:prelude/sl
             continue l26;
         };
     };
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self) {
+    let $load_0: ref "Array<core:prelude/string.wado/String>";
+    let new_repr: ref "Array<core:prelude/string.wado/String>";
+    let a: i32;
+    builtin::array_copy<ref "core:prelude/string.wado//String">(local.tee new_repr(builtin::array_new<ref "core:prelude/string.wado//String">(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
 }
 
 fn "opt_value_copy_iterated_ref_param_moves.wado/opt_value_copy_iterated_ref_param_moves.wado/$Closure_0::$call$dae[self]"(n) {

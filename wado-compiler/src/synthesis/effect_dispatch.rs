@@ -261,7 +261,7 @@ fn instantiation_label(
     type_args: &[TypeId],
     type_table: &TypeTable,
 ) -> String {
-    let base = effect_namespace(effect.module(), effect.rendered());
+    let base = effect_namespace(effect.module(), effect.mangled());
     instance_name(&base, type_args, type_table)
 }
 
@@ -2316,6 +2316,7 @@ fn build_handler_op_closure(
             name: h_name.to_string(),
             source: CaptureSource::Local(h_local_index),
             type_id: handler_type,
+            through_ref: false,
         }]
     } else {
         Vec::new()

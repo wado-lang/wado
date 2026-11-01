@@ -234,8 +234,8 @@ fn fixup_adapter_return_from_call_site(
             "call sites disagree on the return type of shared CM binding `{}`: \
              `{}` vs `{}`; one binding cannot satisfy both",
             adapter.name,
-            tt.type_name(prev),
-            tt.type_name(call_site_type)
+            tt.name(prev),
+            tt.name(call_site_type)
         );
     }
     if adapter.return_type == call_site_type {

@@ -5,6 +5,8 @@
 
 use wasmtime::{Collector, Config, Engine, OptLevel};
 
+use crate::fuel::meter_fuel;
+
 /// wado's default GC collector.
 ///
 /// wasmtime's own default ([`Collector::Auto`]) still resolves to the deferred
@@ -55,6 +57,6 @@ pub fn default_config(opt_level: OptLevel) -> Config {
 /// Fails when wasmtime rejects the configuration.
 pub fn fuel_engine(opt_level: OptLevel) -> anyhow::Result<Engine> {
     let mut config = default_config(opt_level);
-    config.consume_fuel(true);
+    meter_fuel(&mut config);
     Ok(Engine::new(&config)?)
 }

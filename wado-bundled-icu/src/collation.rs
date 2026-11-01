@@ -1,10 +1,10 @@
 //! Locale-aware string comparison. See `wit-properties/world.wit`.
 
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 use icu::collator::{Collator, CollatorBorrowed, CollatorPreferences, options::CollatorOptions};
-use icu::locale::Locale;
 
+use crate::locale::langid;
 use crate::properties::Component;
 use crate::properties::exports::wado::icu::collation::{
     Collator as CollatorHandle, Guest, GuestCollator, Ordering,
@@ -15,11 +15,11 @@ pub struct CollatorRes {
 }
 
 impl GuestCollator for CollatorRes {
-    fn create(locale: String) -> Result<CollatorHandle, String> {
-        let locale = Locale::try_from_str(&locale).map_err(|e| e.to_string())?;
-        let inner = Collator::try_new(CollatorPreferences::from(&locale), CollatorOptions::default())
+    fn create(language: u32, script: u32, region: u32) -> CollatorHandle {
+        let prefs = CollatorPreferences::from(&langid(language, script, region));
+        let inner = Collator::try_new(prefs, CollatorOptions::default())
             .expect("compiled data falls back to the root collation for every locale");
-        Ok(CollatorHandle::new(CollatorRes { inner }))
+        CollatorHandle::new(CollatorRes { inner })
     }
 
     fn compare(&self, left: String, right: String) -> Ordering {

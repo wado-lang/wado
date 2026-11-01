@@ -16,7 +16,10 @@ The crate builds one of two worlds:
 
 ## The shippable surface
 
-It exports two interfaces: character properties, and collation.
+It exports four interfaces: character properties, collation, case mapping, and
+grapheme segmentation. A locale crosses as its language, script and region
+subtags, each packed into a `u32`, so nothing on this side parses a tag:
+`core:icu` checks it once, in Wado.
 
 ### Character properties
 
@@ -51,10 +54,19 @@ out by hand instead.
 
 ### Collation
 
-`collator` is a resource with a destructor: `create` parses a BCP 47 tag and
+`collator` is a resource with a destructor: `create` takes a locale and
 `compare` orders two strings the way that locale sorts them. Collation data is
-baked for every locale, which takes the core module from 0.35 MB to 1.69 MB. A
-program that never constructs a collator collects it away.
+baked for every locale, 1.34 MB of the core module. A program that never
+constructs a collator collects it away.
+
+### Case mapping and graphemes
+
+`casemap` maps and folds by the language subtag alone, the only one that selects
+a tailoring. `fold` picks ICU4X's Turkic folding for `tr` and `az`.
+`segmenter` returns where each grapheme cluster ends, or only how many there
+are. The core module holding all four interfaces is 1.68 MB, the size of
+`target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm` after
+`cargo build --release`.
 
 ## What the spike surface exposes
 
@@ -205,5 +217,6 @@ cd runtime-check && cargo run --release
 Both worlds bake their data in via `compiled_data`. The alternative is a
 **data-free feature component** that loads a postcard blob at runtime via
 ICU4X's `BlobDataProvider`, with the blob supplied by a shared **data**
-component composed in over the Component Model. It is validated in
-[`bdp-spike/`](bdp-spike/).
+component composed in over the Component Model. `bdp-spike/` validated it and
+was then removed. At e52a46286, `bdp-spike/build.sh` reproduces its
+measurements.

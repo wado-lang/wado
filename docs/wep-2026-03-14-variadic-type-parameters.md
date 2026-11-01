@@ -323,7 +323,7 @@ its members are reached only as `ReflectStruct::<T>::members()` (see
 
 ```wado
 #[compiler_item("reflect_struct")]
-pub trait ReflectStruct: Reflect {   // `Reflect` carries `type_name()`
+pub trait ReflectStruct: Reflect {   // `Reflect` carries `decl_name()`
     type FieldTypes;
     type Members;
     fn members() -> Self::Members;
@@ -337,7 +337,7 @@ struct with fields `f_0: F_0, f_1: F_1, …`:
 - `type Members = [StructField<S, F_0>, StructField<S, F_1>, …]`
 - `members()` returns one `StructField` per field, carrying its name, attributes and a
   `get(&self, v: &S) -> F_k` value accessor
-- `Reflect::<S>::type_name()` returns the struct name as a string (the identity
+- `Reflect::<S>::decl_name()` returns the struct name as a string (the identity
   root, reached through `ReflectStruct`'s supertrait)
 
 #### Why compiler-synthesized
@@ -348,7 +348,7 @@ each struct individually.
 
 #### Why only in monomorphized contexts
 
-`ReflectStruct::<T>::members()` and `Reflect::<T>::type_name()` are only callable when `T`
+`ReflectStruct::<T>::members()` and `Reflect::<T>::decl_name()` are only callable when `T`
 is a concrete struct type, because the implementation is generated per struct, not for a
 generic `T`.
 
@@ -363,7 +363,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Inspect> Inspect for T {
         for let f of ReflectStruct::<T>::members() {
             parts.push(`${f.name()}: ${f.get(self).inspect()}`);
         }
-        return `${Reflect::<T>::type_name()} \{ ${parts.join(", ")} \}`;
+        return `${Reflect::<T>::decl_name()} \{ ${parts.join(", ")} \}`;
     }
 }
 ```

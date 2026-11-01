@@ -13,7 +13,7 @@ fn field_names<T: ReflectStruct<FieldTypes = [..F]>, ..F>(v: &T) -> String {
 
 test "a closed struct still reads through reflection" {
     let o = make_opaque();              // `pub struct Opaque { root: i32, size: i32 }`
-    assert Reflect::<Opaque>::type_name() == "Opaque";
+    assert Reflect::<Opaque>::decl_name() == "Opaque";
     assert field_names(&o) == "root size ";
     assert `${o:?}` == "Opaque { root: 0, size: 0 }";
 }

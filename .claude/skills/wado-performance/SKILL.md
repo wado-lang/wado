@@ -328,12 +328,12 @@ runs from `benchmark/`, must be absolute.
 
 ### Counting fuel
 
-Fuel counts the Wasm instructions the guest ran (about one unit each). It does
-not depend on the host, so one run per arm is enough, even on a noisy machine.
-It counts instructions, not time: GC and other host work are left out. It also
-prices every instruction alike, so a change of branch shape needs a timed A/B: a
-`br_table` counts as one instruction however often it mispredicts
-(`trade-offs.md`).
+Fuel prices each Wasm instruction the guest ran near the time it takes, an
+`i32.add` at 2 (`wado-host/src/fuel.rs`). It does not depend on the host, so
+one run per arm is enough, even on a noisy machine. It is still a price list,
+not time: an allocation is priced for a small live set, and a `br_table` costs
+the same however often it mispredicts, so a change of GC pressure or branch
+shape needs a timed A/B (`trade-offs.md`).
 
 Wrap the code under test in `core:fuel`'s `measure` inside a `test` block. The
 region's fuel leaves out the setup around it. The `core:benchmark` harness

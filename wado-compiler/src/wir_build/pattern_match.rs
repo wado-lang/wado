@@ -380,7 +380,7 @@ impl FunctionTranslator<'_, '_> {
                     if self.is_unit_element(tuple_element_type(&element_types, i)) {
                         continue;
                     }
-                    if let PatKind::Binding { local_index, .. } = &arena.pats[*sub_pattern].kind {
+                    if matches!(arena.pats[*sub_pattern].kind, PatKind::Binding { .. }) {
                         let field_name_str = format!("{i}");
                         let field_result_ty = self.struct_field_wir_type(&type_id, &field_name_str);
                         let field = WirInstr::StructGet {
@@ -393,7 +393,7 @@ impl FunctionTranslator<'_, '_> {
                             result_ty: field_result_ty.clone(),
                         };
                         self.emit_pattern_binding_set(
-                            *local_index,
+                            *sub_pattern,
                             &field_result_ty,
                             field,
                             &mut instrs,
@@ -403,10 +403,10 @@ impl FunctionTranslator<'_, '_> {
 
                 WirInstr::Seq(instrs)
             }
-            PatKind::Binding { local_index, .. } => {
+            PatKind::Binding { .. } => {
                 let mut instrs = Vec::new();
                 self.emit_pattern_binding_set(
-                    *local_index,
+                    pattern,
                     &self.wir_type(value_ty),
                     value_instr,
                     &mut instrs,
@@ -698,13 +698,13 @@ impl FunctionTranslator<'_, '_> {
     fn total_cases(&self, scrut_type: TypeId) -> Option<usize> {
         match self.type_table.get(scrut_type) {
             ResolvedType::Variant { def } => self.variant_total_cases(
-                self.type_table.def_name(*def),
+                self.type_table.decl_name(*def),
                 self.type_table.def_module(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
                 let mangled = generic_instance_name(
                     self.type_table,
-                    self.type_table.def_name(*def),
+                    self.type_table.decl_name(*def),
                     type_args,
                 );
                 self.variant_total_cases(&mangled, self.type_table.def_module(*def))
@@ -715,7 +715,7 @@ impl FunctionTranslator<'_, '_> {
                 .enums
                 .iter()
                 .find(|e| {
-                    e.name == self.type_table.def_name(*def)
+                    e.name == self.type_table.decl_name(*def)
                         && e.module_source == *self.type_table.def_module(*def)
                 })
                 .map(|e| e.cases.len()),
@@ -744,12 +744,12 @@ impl FunctionTranslator<'_, '_> {
         match self.type_table.get(type_id) {
             ResolvedType::Variant { def } => wir_type_key(
                 self.type_table.def_module(*def),
-                self.type_table.def_name(*def),
+                self.type_table.decl_name(*def),
             ),
             ResolvedType::GenericInstance { def, type_args } => {
                 let mangled = generic_instance_name(
                     self.type_table,
-                    self.type_table.def_name(*def),
+                    self.type_table.decl_name(*def),
                     type_args,
                 );
                 wir_type_key(self.type_table.def_module(*def), &mangled)
@@ -1061,13 +1061,13 @@ impl FunctionTranslator<'_, '_> {
     ) {
         let arena = self.body;
         match &arena.pats[pattern].kind {
-            PatKind::Binding { local_index, .. } => {
+            PatKind::Binding { .. } => {
                 let scrut_wir = self.wir_type(scrut_type);
                 let scrut = WirInstr::LocalGet {
                     name: scrut_local.to_string(),
                     result_ty: scrut_wir.clone(),
                 };
-                self.emit_pattern_binding_set(*local_index, &scrut_wir, scrut, instrs);
+                self.emit_pattern_binding_set(pattern, &scrut_wir, scrut, instrs);
             }
             PatKind::Variant {
                 variant_name,
@@ -1166,11 +1166,11 @@ impl FunctionTranslator<'_, '_> {
                             expr: Box::new(cast_source(self)),
                             result_ty: payload_result_ty.clone(),
                         };
-                        if let PatKind::Binding { local_index, .. } = &arena.pats[*binding].kind {
+                        if matches!(arena.pats[*binding].kind, PatKind::Binding { .. }) {
                             let payload_field_wir =
                                 self.get_case_payload_wir_type(&case_type_id, i);
                             self.emit_pattern_binding_set(
-                                *local_index,
+                                *binding,
                                 &payload_field_wir,
                                 payload_get,
                                 instrs,
@@ -1248,9 +1248,9 @@ impl FunctionTranslator<'_, '_> {
                         result_ty: field_result_ty.clone(),
                     };
                     match &arena.pats[*sub_pattern].kind {
-                        PatKind::Binding { local_index, .. } => {
+                        PatKind::Binding { .. } => {
                             self.emit_pattern_binding_set(
-                                *local_index,
+                                *sub_pattern,
                                 &field_result_ty,
                                 field_get,
                                 instrs,
@@ -1288,9 +1288,9 @@ impl FunctionTranslator<'_, '_> {
                         result_ty: field_result_ty.clone(),
                     };
                     match &arena.pats[field.pattern].kind {
-                        PatKind::Binding { local_index, .. } => {
+                        PatKind::Binding { .. } => {
                             self.emit_pattern_binding_set(
-                                *local_index,
+                                field.pattern,
                                 &field_result_ty,
                                 field_get,
                                 instrs,
@@ -1353,40 +1353,59 @@ impl FunctionTranslator<'_, '_> {
         }
     }
 
-    /// Store `source` into a pattern `Binding`'s local, coercing so the
-    /// `LocalSet` is well-typed under wasm GC's exact-type rules. In priority
-    /// order: wrap in a `StructNew` when the local is a `Box` the source is not,
-    /// narrow with `RefAsNonNull` when the local is non-nullable and the source
-    /// is not, and skip a unit binding, which has no Wasm local.
+    /// Store `source` into a pattern `Binding`'s local, coerced first to the
+    /// pattern's own type and then, where `boxing` retagged the local to its
+    /// `Box<T>`, wrapped in that box. A unit binding has no Wasm local.
     fn emit_pattern_binding_set(
         &mut self,
-        local_index: u32,
+        binding: PatId,
         source_wir: &WirType,
         source: WirInstr,
         instrs: &mut Vec<WirInstr>,
     ) {
-        // The local's own type: boxing may have promoted it past the pattern's.
-        let binding_type = self.tir_func.locals[local_index as usize].type_id;
+        let PatKind::Binding {
+            local_index,
+            type_id: binding_type,
+            ..
+        } = self.body.pats[binding].kind
+        else {
+            unreachable!("a binding set is asked of a `Binding` pattern")
+        };
+        let value = self.binding_value(binding_type, source_wir, source);
+        let binding_wir = self.ctx.type_id_to_wir_type(self.type_table, binding_type);
+        let local_type = self.tir_func.locals[local_index as usize].type_id;
+        let local_wir = self.ctx.type_id_to_wir_type(self.type_table, local_type);
+        // Only `boxing` gives a binding's local a type of its own: a box.
+        let value = if local_wir == binding_wir {
+            value
+        } else {
+            box_new(&local_wir, value)
+        };
+        if !matches!(local_wir, WirType::Unit) {
+            instrs.push(WirInstr::LocalSet {
+                name: self.local_name(local_index),
+                value: Box::new(value),
+            });
+        }
+    }
+
+    /// `source` as a value of `binding_type`: unboxed from a slot that holds it
+    /// in a box, boxed where a reference binding takes a value (match
+    /// ergonomics).
+    fn binding_value(
+        &mut self,
+        binding_type: TypeId,
+        source_wir: &WirType,
+        source: WirInstr,
+    ) -> WirInstr {
         let binding_wir = &self.ctx.type_id_to_wir_type(self.type_table, binding_type);
-        // A slot holding its value in a box binds the value by value, and the
-        // box itself by reference.
         if let Some(slot_box) = self.held_box(source_wir, binding_type) {
             let value = self.unbox_slot(source, slot_box);
             let value_wir = binding_wir.clone();
-            return self.emit_pattern_binding_set(local_index, &value_wir, value, instrs);
+            return self.binding_value(binding_type, &value_wir, value);
         }
-        let needs_boxing = ref_binding_needs_boxing(binding_wir, source_wir);
-        let value = if needs_boxing {
-            let WirType::Ref {
-                type_id: box_tid, ..
-            } = binding_wir
-            else {
-                unreachable!("ref_binding_needs_boxing only reports boxing for a Ref binding")
-            };
-            WirInstr::StructNew {
-                type_id: box_tid.clone(),
-                fields: vec![source],
-            }
+        if ref_binding_needs_boxing(binding_wir, source_wir) {
+            box_new(binding_wir, source)
         } else if matches!(
             binding_wir,
             WirType::Ref {
@@ -1398,12 +1417,6 @@ impl FunctionTranslator<'_, '_> {
             WirInstr::RefAsNonNull(Box::new(source))
         } else {
             source
-        };
-        if !matches!(binding_wir, WirType::Unit) {
-            instrs.push(WirInstr::LocalSet {
-                name: self.local_name(local_index),
-                value: Box::new(value),
-            });
         }
     }
 
@@ -1436,7 +1449,7 @@ impl FunctionTranslator<'_, '_> {
         let ResolvedType::Struct { def, type_args } = self.type_table.get(struct_type) else {
             panic!("[WIR] struct pattern on non-struct {struct_type:?}");
         };
-        let name = self.type_table.struct_rendered_name(*def, type_args);
+        let name = self.type_table.struct_mangled_name(*def, type_args);
         let module_source = self.type_table.struct_head_module(*def).clone();
         self.ctx
             .package
@@ -1574,6 +1587,17 @@ fn pattern_has_bindings(body: &Body, pattern: PatId) -> bool {
 
 /// The declared type of a tuple's `i`-th element. Arity is fixed by type
 /// checking, so an out-of-range index is a lowering bug.
+/// `value` wrapped in the `Box<T>` struct `box_wir` references.
+fn box_new(box_wir: &WirType, value: WirInstr) -> WirInstr {
+    let WirType::Ref { type_id, .. } = box_wir else {
+        unreachable!("a box is a struct reference, not {box_wir:?}")
+    };
+    WirInstr::StructNew {
+        type_id: type_id.clone(),
+        fields: vec![value],
+    }
+}
+
 #[track_caller]
 fn tuple_element_type(element_types: &[TypeId], index: usize) -> TypeId {
     *element_types.get(index).unwrap_or_else(|| {

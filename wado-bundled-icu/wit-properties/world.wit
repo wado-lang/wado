@@ -1,5 +1,10 @@
 // The shippable `core:icu` surface: Unicode character properties as code point
-// ranges, and collation. `wit/world.wit` keeps the full spike surface.
+// ranges, collation, case mapping and grapheme segmentation. `wit/world.wit`
+// keeps the full spike surface.
+//
+// A locale crosses as its subtags, never as a tag to parse: each is its ASCII
+// bytes in a `u32`, first byte lowest, and an absent one is 0. `core:icu` has
+// already checked the tag, so a subtag ICU4X refuses traps.
 package wado:icu@0.1.0;
 
 // Two paths to the same data. `has` and `set` name a binary property as an
@@ -104,17 +109,37 @@ interface collation {
   }
 
   resource collator {
-    /// A collator for the BCP 47 tag `locale`. A tag that does not parse is an
-    /// error; a locale CLDR tailors nothing for sorts as its fallback does,
-    /// ending at the root collation.
-    create: static func(locale: string) -> result<collator, string>;
+    /// A collator for the locale. One CLDR tailors nothing for sorts as its
+    /// fallback does, ending at the root collation.
+    create: static func(language: u32, script: u32, region: u32) -> collator;
 
     /// How `left` sorts against `right`.
     compare: func(left: string, right: string) -> ordering;
   }
 }
 
+// Full case mapping. Only the language selects a tailoring (`tr`, `az`, `lt`,
+// `el`, `nl`, `hy`), so it is the one subtag that crosses.
+interface casemap {
+  uppercase: func(text: string, language: u32) -> string;
+  lowercase: func(text: string, language: u32) -> string;
+  /// Full case folding, for caseless matching. `tr` and `az` fold `I` to
+  /// dotless `ı` and `İ` to `i`, as Turkic does.
+  fold: func(text: string, language: u32) -> string;
+  /// Whether the two fold to the same text.
+  eq-ignore-case: func(left: string, right: string, language: u32) -> bool;
+}
+
+// Extended grapheme clusters (UAX #29), which no locale tailors.
+interface segmenter {
+  /// The byte offset where each cluster ends, in order.
+  grapheme-ends: func(text: string) -> list<u32>;
+  grapheme-count: func(text: string) -> u32;
+}
+
 world icu-properties {
   export properties;
   export collation;
+  export casemap;
+  export segmenter;
 }

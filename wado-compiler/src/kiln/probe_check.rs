@@ -61,8 +61,8 @@ pub fn check_probe(sem: &Semantics, module: &ModuleSource) -> Vec<Diagnostic> {
                 format!(
                     "`probe` takes `{}` as `{}`, but a host supplies it as `{}`",
                     param.name,
-                    types.type_name(param.type_id),
-                    types.type_name(want)
+                    types.name(param.type_id),
+                    types.name(want)
                 ),
             ),
             Some(_) => {}
@@ -82,7 +82,7 @@ pub fn check_probe(sem: &Semantics, module: &ModuleSource) -> Vec<Diagnostic> {
             &probe.span,
             format!(
                 "`probe` returns `{}`, but must return `Result<u64, _>` with `generate`'s error",
-                types.type_name(probe.return_type)
+                types.name(probe.return_type)
             ),
         );
     }
@@ -106,7 +106,7 @@ fn supplied_parameters<'a>(
     let input_file = sem
         .tir_modules
         .get(types.struct_head_module(*def))?
-        .find_struct(&types.struct_head_name(*def))?;
+        .find_struct(&types.struct_head_mangled_name(*def))?;
     let mut supplied: IndexMap<&str, TypeId> = input_file
         .fields
         .iter()

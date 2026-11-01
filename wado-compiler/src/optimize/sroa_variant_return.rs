@@ -1699,7 +1699,7 @@ struct Rebind<'t> {
     /// The key of each declared local type, references stripped: `&T` is `T` at
     /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
     peeled_keys: Vec<TypeKey>,
-    /// Declared `Box<T>` local type → (`T`'s key, the struct's rendered name).
+    /// Declared `Box<T>` local type → (`T`'s key, the struct's mangled name).
     boxes: IndexMap<TypeId, (TypeKey, String)>,
 }
 
@@ -1717,7 +1717,7 @@ impl<'t> Rebind<'t> {
                         declared,
                         (
                             type_table.type_key(type_args[0]),
-                            type_table.struct_rendered_name(*def, type_args),
+                            type_table.struct_mangled_name(*def, type_args),
                         ),
                     ))
                 }

@@ -665,8 +665,8 @@ pub enum ResolvedType {
         /// wherever the two were matched together.
         def: StructDef,
         /// What this instantiation was made with; empty for a declaration
-        /// written as such. The rendered spelling is derived from the two —
-        /// see [`TypeTable::struct_rendered_name`].
+        /// written as such. The mangled spelling is derived from the two —
+        /// see [`TypeTable::struct_mangled_name`].
         type_args: Vec<TypeId>,
     },
     Enum {
@@ -1811,6 +1811,9 @@ pub struct TirCapture {
     pub name: String,
     pub source: CaptureSource,
     pub type_id: TypeId,
+    /// Lowering made the slot hold a `&T` to the binding and wrapped each
+    /// read of it in a `Deref` the source never wrote.
+    pub through_ref: bool,
 }
 
 /// The constructing frame's locals `captures` reads, in order. A slot read off

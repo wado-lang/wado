@@ -89,6 +89,41 @@ fn regions_are_reported_in_order_and_reproduce() {
     assert_eq!(report(tmp.path()), first);
 }
 
+/// Inlining `measure` once sank the label's construction between the closure
+/// and the closing `spent`, so a longer label cost its region more.
+#[test]
+fn a_region_does_not_pay_for_its_label() {
+    let tmp = tempfile::tempdir().unwrap();
+    fs::write(
+        tmp.path().join("label_test.wado"),
+        r#"use { measure } from "core:fuel";
+
+fn count() -> i32 {
+    let mut s = 0;
+    for let i of 0..<builtin::black_box(100) {
+        s += i;
+    }
+    return s;
+}
+
+test "labels" {
+    measure("a", || count());
+    measure("a label long enough that building it costs fuel", || count());
+}
+"#,
+    )
+    .unwrap();
+    wado_in(tmp.path())
+        .args(["test", "--report-fuel", "label_test.wado"])
+        .assert()
+        .success();
+    let json: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(tmp.path().join("build/fuel.json")).unwrap())
+            .unwrap();
+    let regions = json[0]["regions"].as_array().unwrap();
+    assert_eq!(regions[0]["fuel"], regions[1]["fuel"], "{json}");
+}
+
 /// `spent` answers `None` in every unmetered run, so `core:fuel` decides
 /// nothing a cache key does not.
 #[test]

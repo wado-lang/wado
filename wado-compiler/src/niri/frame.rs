@@ -1150,7 +1150,7 @@ impl Interpreter<'_> {
         compiler_trace!(
             "region_seed",
             "region {e:?} ({}): shaped",
-            self.type_table.type_name(body.exprs[e].type_id)
+            self.type_table.name(body.exprs[e].type_id)
         );
         if let Some(value) = self.frame.scratch_folds.get(&e) {
             return Some(value.clone());

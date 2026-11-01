@@ -270,7 +270,7 @@ pub enum CompilerItem {
     /// `FromLeBytes` — whose prelude impls a folded `List::from_le_bytes` reads.
     FromLeBytes,
     /// `Reflect` — the identity root every reflected kind sits under, carrying
-    /// `type_name` for all of them (WEP 2026-06-13).
+    /// `decl_name` for all of them (WEP 2026-06-13).
     Reflect,
     /// `ReflectStruct` — compile-time struct-introspection anchor; the
     /// per-struct `impl ReflectStruct for S` synthesis points at it.
@@ -511,8 +511,8 @@ pub enum CompilerItem {
     ListIndexAssign,
     /// `List::from_le_bytes` — a call on a byte literal folds to a constant.
     ListFromLeBytes,
-    /// `Reflect::type_name` — the declaration's name, for every kind.
-    ReflectTypeName,
+    /// `Reflect::decl_name` — the declaration's name, for every kind.
+    ReflectDeclName,
     /// `Reflect::wire_name_policy` — the declaration's `#[wire(name_policy)]`.
     /// Every kind carries the attribute and it says the same thing on each, so
     /// the root states it once.
@@ -947,7 +947,7 @@ impl CompilerItem {
         Self::ListIndexValue,
         Self::ListIndexAssign,
         Self::ListFromLeBytes,
-        Self::ReflectTypeName,
+        Self::ReflectDeclName,
         Self::ReflectWireNamePolicy,
         Self::TreeMapIndexAssign,
         Self::MapEntriesIterNext,
@@ -1224,7 +1224,7 @@ impl CompilerItem {
             Self::ListIndexValue => "list_index_value",
             Self::ListIndexAssign => "list_index_assign",
             Self::ListFromLeBytes => "list_from_le_bytes",
-            Self::ReflectTypeName => "reflect_type_name",
+            Self::ReflectDeclName => "reflect_decl_name",
             Self::ReflectWireNamePolicy => "reflect_wire_name_policy",
             Self::TreeMapIndexAssign => "tree_map_index_assign",
             Self::MapEntriesIterNext => "map_entries_iter_next",
@@ -1480,7 +1480,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
-            | Self::ReflectTypeName
+            | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::ReflectStructMembers
             | Self::ReflectStructFromFields
@@ -1656,6 +1656,40 @@ impl CompilerItem {
         )
     }
 
+    /// Whether a phase from `lower` on calls this item's function with no TIR
+    /// body naming it, so `prelower_reach` must keep the function. Every other
+    /// one is called from code the elaborator or synthesis wrote, which its walk
+    /// follows. `lower`'s `Interner::resolve` catches an omission.
+    pub fn minted_after_tir(self) -> bool {
+        matches!(
+            self,
+            // `lower`
+            Self::AssertFailed
+                | Self::FormatterWriteLiteral
+                | Self::I128FromF64
+                | Self::I128FromI64
+                | Self::I128FromPair
+                | Self::I128FromU64
+                | Self::I64Add128Soft
+                | Self::I64MulWideSSoft
+                | Self::I64MulWideUSoft
+                | Self::I64Sub128Soft
+                | Self::ListIndexAssign
+                | Self::U128FromF64
+                | Self::U128FromI64
+                | Self::U128FromPair
+                | Self::U128FromU64
+                // `optimize`
+                | Self::StringLen
+                | Self::StringPushAscii
+                | Self::StringPushChar
+                | Self::StringPushStr
+                | Self::StringReserveUninit
+                | Self::StringSetByteUnchecked
+                | Self::StringWriteStrAt
+        )
+    }
+
     /// The kind of declaration this item must be attached to. Used by
     /// the elaborator to reject misuse like
     /// `#[compiler_item("option")]` on a trait.
@@ -1807,7 +1841,7 @@ impl CompilerItem {
             | Self::ListIndexValue
             | Self::ListIndexAssign
             | Self::ListFromLeBytes
-            | Self::ReflectTypeName
+            | Self::ReflectDeclName
             | Self::ReflectWireNamePolicy
             | Self::TreeMapIndexAssign
             | Self::MapEntriesIterNext

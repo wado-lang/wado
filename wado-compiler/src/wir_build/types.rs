@@ -38,12 +38,12 @@ pub enum TypeDecl<'a> {
 fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String> {
     match type_table.get(type_id) {
         ResolvedType::Struct { def, type_args } => {
-            let name = type_table.struct_rendered_name(*def, type_args);
+            let name = type_table.struct_mangled_name(*def, type_args);
             vec![wir_type_key(type_table.struct_head_module(*def), &name)]
         }
         ResolvedType::Variant { def } => vec![wir_type_key(
             type_table.def_module(*def),
-            type_table.def_name(*def),
+            type_table.decl_name(*def),
         )],
         ResolvedType::GenericInstance { def, type_args } if type_table.is_resource_def(*def) => {
             type_args
@@ -868,7 +868,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                 else {
                     continue;
                 };
-                let name = &type_table.def_name(*def).to_string();
+                let name = &type_table.decl_name(*def).to_string();
                 let module_source = &type_table.def_module(*def).clone();
                 // Option is now handled as a regular variant (SubtypeHierarchy).
                 // TODO: NullableRef optimization — when T is non-nullable (ref type,

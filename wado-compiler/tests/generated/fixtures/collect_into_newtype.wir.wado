@@ -55,9 +55,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::reallo
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(21)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(22)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow" = fn(ref "core:prelude//List<u8>");  // TypeId(23)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow" = fn(ref "core:prelude//List<u32>");  // TypeId(23)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
@@ -457,19 +457,19 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
     "core:prelude/string.wado/core:prelude/string.wado/String::realloc_to"(self, select i32(min_capacity > 8, local.tee min_capacity(select i32(capacity > min_capacity, local.tee capacity(capacity * 2), min_capacity)), 8));
 }
 
-fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
-    let $load_0: ref Array<u32>;
-    let new_repr: ref Array<u32>;
-    let a: i32;
-    builtin::array_copy<u32>(local.tee new_repr(builtin::array_new<u32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
-    self.repr = new_repr;
-}
-
 fn "core:prelude/list.wado/core:prelude/list.wado/List<u8>::grow"(self) {
     let $load_0: ref Array<u8>;
     let new_repr: ref Array<u8>;
     let a: i32;
     builtin::array_copy<u8>(local.tee new_repr(builtin::array_new<u8>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
+    self.repr = new_repr;
+}
+
+fn "core:prelude/list.wado/core:prelude/list.wado/List<u32>::grow"(self) {
+    let $load_0: ref Array<u32>;
+    let new_repr: ref Array<u32>;
+    let a: i32;
+    builtin::array_copy<u32>(local.tee new_repr(builtin::array_new<u32>(select i32(a > 4, local.tee a(builtin::array_len(local.tee $load_0(self.repr)) * 2), 4))), 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

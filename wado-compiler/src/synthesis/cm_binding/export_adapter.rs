@@ -552,7 +552,7 @@ fn lower_to_flat_inner(
             result
         }
         ResolvedType::Variant { def } => {
-            let name = &ctx.type_table.borrow().def_name(*def).to_string();
+            let name = &ctx.type_table.borrow().decl_name(*def).to_string();
             // Named variant → disc(i32) + join of the case payload flats, per
             // the Canonical ABI. Reuses the same discriminant-plus-Match
             // lowering the memory path uses; a payload-less variant flattens
@@ -603,7 +603,7 @@ fn lower_to_flat_inner(
                 .collect()
         }
         ResolvedType::Struct { def, type_args } if !ctx.type_table.borrow().is_string(type_id) => {
-            let name = &ctx.type_table.borrow().struct_head_name(*def);
+            let name = &ctx.type_table.borrow().struct_head_mangled_name(*def);
             // Struct: concatenation of field flat types
             if let Some(struct_decl) = struct_decl_of(*def, type_args, tir_modules) {
                 let mut result = Vec::new();

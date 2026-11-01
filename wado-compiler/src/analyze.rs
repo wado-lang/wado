@@ -1051,7 +1051,8 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 | AttributeFault::Repeated { .. }
                 | AttributeFault::NamePolicy { .. }
                 | AttributeFault::StdlibOnly
-                | AttributeFault::TrapsByDesign { .. } => Code::AttrMisuse,
+                | AttributeFault::TrapsByDesign { .. }
+                | AttributeFault::WorkloadInTodoModule => Code::AttrMisuse,
             };
             let _ = self.logger.error_in(
                 module_source,

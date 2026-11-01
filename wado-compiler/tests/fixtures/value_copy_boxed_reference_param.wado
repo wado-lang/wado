@@ -1,0 +1,67 @@
+// A by-value argument read through a reference parameter keeps its copy when a
+// later argument writes the referent, though the body takes the parameter's
+// own address and so boxes it.
+
+struct Point {
+    x: i32,
+}
+
+struct Holder {
+    p: &Point,
+}
+
+#[inline("never")]
+fn read_x(a: Point, b: i32) -> i32 {
+    return a.x * 100 + b;
+}
+
+#[inline("never")]
+fn set(q: &mut Point) -> i32 {
+    q.x = 5;
+    return 1;
+}
+
+#[inline("never")]
+fn one_hop(r: &Point, q: &mut Point) -> i32 {
+    let rr = &r;
+    builtin::black_box(rr);
+    return read_x(*r, set(q));
+}
+
+#[inline("never")]
+fn two_hops(r: &Holder, q: &mut Point) -> i32 {
+    let rr = &r;
+    builtin::black_box(rr);
+    return read_x(*r.p, set(q));
+}
+
+struct Rows {
+    items: List<i32>,
+}
+
+// The box holds the caller's reference: the parameter binding being immutable
+// says nothing of the storage behind it, so `kept` stays a copy.
+#[inline("never")]
+fn len_across_push(rows: &mut Rows) -> i32 {
+    let rr = &rows;
+    builtin::black_box(rr);
+    let kept = rows.items;
+    rows.items.push(9);
+    return kept.len();
+}
+
+export fn run() {
+    let mut u = Point { x: 1 };
+    assert one_hop(&u, &mut u) == 101;
+    let mut t = Point { x: 1 };
+    let h = Holder { p: &t };
+    assert two_hops(&h, &mut t) == 101;
+    let mut rows = Rows { items: [1, 2, 3] };
+    assert len_across_push(&mut rows) == 3;
+    assert rows.items.len() == 4;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

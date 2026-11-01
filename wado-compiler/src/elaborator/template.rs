@@ -118,7 +118,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (type_name, trait_name) = {
             let tt = self.tysys.type_table.borrow();
             (
-                tt.type_name(receiver),
+                tt.name(receiver),
                 tt.compiler_items().trait_name(item).to_string(),
             )
         };

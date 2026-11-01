@@ -655,7 +655,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !self.report_unmet_impl_bound(receiver, span, |s, def| {
                 s.impl_offers_method(def, method_name, required_trait)
             }) {
-                let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+                let type_name = self.tysys.type_table.borrow().name(base_type_id);
                 let hint = [OnBoundTrait::Ord, OnBoundTrait::Hash]
                     .into_iter()
                     .find_map(|tr| {
@@ -730,7 +730,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Static methods (no self parameter) cannot be called with instance method syntax.
         // e.g., `obj.static_method()` should be `Type::static_method()` instead.
         if self_kind == ast::SelfKind::None {
-            let type_name = self.tysys.type_table.borrow().type_name(base_type_id);
+            let type_name = self.tysys.type_table.borrow().name(base_type_id);
             let _ = self.emit(TypeError::MethodNotFound {
                 type_name: type_name.clone(),
                 method_name: method_name.to_string(),
@@ -1706,7 +1706,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inherited = own_static.is_none();
         let (struct_name_for_lookup, struct_key_for_lookup) = match own_static {
             Some(key) => (
-                key.type_name(self.tysys.resolutions.defs())
+                key.decl_name(self.tysys.resolutions.defs())
                     .map(str::to_string),
                 Some(key),
             ),
@@ -2955,7 +2955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<DefId> {
         let defs = self.tysys.resolutions.defs();
         let target = self.static_receiver_key(struct_name, target_hint);
-        let declared_name = target.type_name(defs).unwrap_or(struct_name).to_string();
+        let declared_name = target.decl_name(defs).unwrap_or(struct_name).to_string();
 
         let env = &self.tysys.trait_env;
         let declared = env.entries_by_receiver_vec(&target.receiver(defs));
@@ -3767,7 +3767,7 @@ impl TypeSystem {
         };
         let name = key
             .as_ref()
-            .and_then(|key| key.type_name(self.resolutions.defs()))
+            .and_then(|key| key.decl_name(self.resolutions.defs()))
             .map(str::to_string);
         (name, key)
     }
@@ -3800,7 +3800,7 @@ impl TypeSystem {
         }
         let first = &layouts[0];
         let odd = layouts.iter().position(|l| l != first)?;
-        Some(table.type_name(rows[odd]))
+        Some(table.name(rows[odd]))
     }
 
     /// Whether the resource `def` declares `method_name` as a static of its own.
@@ -3901,17 +3901,12 @@ pub(super) struct ArgCandidate {
 /// A parameter or argument list as one spelling: the type alone where there is
 /// one, a parenthesised list where there are several.
 pub(super) fn render_type_list(table: &TypeTable, types: &[TypeId]) -> String {
-    render_names(types.iter().map(|&t| table.type_name(t)).collect())
+    render_names(types.iter().map(|&t| table.name(t)).collect())
 }
 
 /// [`render_type_list`], each type qualified by its declaring module.
 fn render_type_list_qualified(table: &TypeTable, types: &[TypeId]) -> String {
-    render_names(
-        types
-            .iter()
-            .map(|&t| table.type_name_qualified(t))
-            .collect(),
-    )
+    render_names(types.iter().map(|&t| table.canonical_name(t)).collect())
 }
 
 fn render_names(names: Vec<String>) -> String {

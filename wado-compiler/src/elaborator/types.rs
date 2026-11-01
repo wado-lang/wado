@@ -4527,7 +4527,7 @@ pub(crate) struct TypeLookup<'a> {
     /// This walk's own additions, read ahead of `program`: its local data
     /// declarations, anonymous shapes and function-local items.
     pub(crate) walk: &'a ModuleDecls,
-    /// The declaration indexes, for a caller holding a rendered head rather than
+    /// The declaration indexes, for a caller holding a mangled head rather than
     /// its site. No import alias steers them; a name several modules declare misses.
     pub(crate) decls: &'a TraitEnv,
 }

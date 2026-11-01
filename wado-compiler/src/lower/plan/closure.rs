@@ -123,9 +123,9 @@ fn format_closure_signature(
 ) -> String {
     let param_names: Vec<String> = params
         .iter()
-        .map(|(_, ty)| type_table.type_name_unboxed(*ty))
+        .map(|(_, ty)| type_table.name_unboxed(*ty))
         .collect();
-    let ret_name = type_table.type_name_unboxed(return_type);
+    let ret_name = type_table.name_unboxed(return_type);
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
@@ -209,7 +209,7 @@ fn build_functor_suffix(functor_types: &[(u32, TypeId)], type_table: &TypeTable)
     functor_types
         .iter()
         .fold(String::new(), |mut acc, (_, tid)| {
-            let _ = write!(acc, "${}", type_table.struct_type_rendered_name(*tid));
+            let _ = write!(acc, "${}", type_table.struct_type_mangled_name(*tid));
             acc
         })
 }

@@ -913,7 +913,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(held) = self.tysys.type_table.borrow().as_tuple(binding_type) else {
             let _ = self.emit(TypeError::PatternTypeMismatch {
                 expected: "tuple type".to_string(),
-                found: self.tysys.type_table.borrow().type_name(binding_type),
+                found: self.tysys.type_table.borrow().name(binding_type),
                 span,
             });
             return false;
@@ -1151,7 +1151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.namespace_alias_source(alias, site).is_none() {
             return false;
         }
-        let name = self.tysys.type_table.borrow().def_name(def).to_string();
+        let name = self.tysys.type_table.borrow().decl_name(def).to_string();
         let member = namespace_member_alias(alias, &name);
         let resolved = self.resolve_unsited_type_name(&member, span);
         self.tysys.type_table.borrow().nominal_def(resolved) == Some(def)
@@ -1245,7 +1245,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(head) = head else {
             let _ = self.emit(TypeError::PatternTypeMismatch {
                 expected: "struct type".to_string(),
-                found: self.tysys.type_table.borrow().type_name(scrutinee),
+                found: self.tysys.type_table.borrow().name(scrutinee),
                 span,
             });
             return None;
@@ -1271,14 +1271,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The written qualifier and the scrutinee's rendering can be the same
     /// text — two declarations of one name is precisely what this mismatch
     /// reports — so each takes its module then, in the same notation and under
-    /// the same rule as [`TypeTable::type_names_for_mismatch`].
+    /// the same rule as [`TypeTable::names_for_mismatch`].
     fn pattern_mismatch_names(
         &self,
         site: Option<AstId>,
         written: &str,
         scrutinee: TypeId,
     ) -> (String, String) {
-        let found = self.tysys.type_table.borrow().type_name(scrutinee);
+        let found = self.tysys.type_table.borrow().name(scrutinee);
         let plain = || (written.to_string(), found.clone());
         if found != written {
             return plain();
@@ -1289,11 +1289,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let defs = self.tysys.resolutions.defs();
         let expected = render(&defs.module(def).to_string(), defs.name(def));
-        let qualified = self
-            .tysys
-            .type_table
-            .borrow()
-            .type_name_qualified(scrutinee);
+        let qualified = self.tysys.type_table.borrow().canonical_name(scrutinee);
         if expected == qualified {
             return plain();
         }
@@ -1763,7 +1759,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     } else {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "tuple type".to_string(),
-                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                            found: self.tysys.type_table.borrow().name(scrutinee_type),
                             span,
                         });
                         vec![TypeTable::UNKNOWN; patterns.len()]
@@ -1838,7 +1834,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: format!(
                             "valid case of {}",
-                            self.tysys.type_table.borrow().type_name(scrutinee_type)
+                            self.tysys.type_table.borrow().name(scrutinee_type)
                         ),
                         found: qualified_variant_name,
                         span: *span,
@@ -1859,7 +1855,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     // The scrutinee's type, not its declaration: the qualifier
                     // is compared against the instantiation.
-                    let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
+                    let scrutinee_name = self.tysys.type_table.borrow().name(scrutinee_type);
                     let expected = match &resolved_type {
                         ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),
                         ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
@@ -1910,7 +1906,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return Vec::new();
                     }
-                    let enum_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
+                    let enum_name = self.tysys.type_table.borrow().name(scrutinee_type);
                     let _ = self.emit(TypeError::PatternTypeMismatch {
                         expected: format!("enum type `{enum_name}`"),
                         found: "unknown enum".to_string(),
@@ -1959,7 +1955,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                 *span,
                             )
                         } else {
-                            let found = self.tysys.type_table.borrow().type_name(scrutinee_type);
+                            let found = self.tysys.type_table.borrow().name(scrutinee_type);
                             let _ = self.emit(TypeError::PatternTypeMismatch {
                                 expected: "variant type".to_string(),
                                 found,
@@ -1971,7 +1967,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     _ => {
                         let _ = self.emit(TypeError::PatternTypeMismatch {
                             expected: "variant or enum type".to_string(),
-                            found: self.tysys.type_table.borrow().type_name(scrutinee_type),
+                            found: self.tysys.type_table.borrow().name(scrutinee_type),
                             span: *span,
                         });
                         TypeTable::UNKNOWN
@@ -1979,7 +1975,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 };
                 if self.is_uninhabited(payload_type) {
                     let [scrutinee_name, payload_name] = [scrutinee_type, payload_type]
-                        .map(|t| self.tysys.type_table.borrow().type_name(t));
+                        .map(|t| self.tysys.type_table.borrow().name(t));
                     let _ = self.emit(TypeError::InvalidPattern {
                         message: format!(
                             "unreachable: no `{scrutinee_name}` is a `{normalized_variant_name}`, whose payload `{payload_name}` has no value"
@@ -2127,7 +2123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             let tt = self.tysys.type_table.borrow();
                             names
                                 .iter()
-                                .map(|(n, ty)| format!("`{n}: {}`", tt.type_name(*ty)))
+                                .map(|(n, ty)| format!("`{n}: {}`", tt.name(*ty)))
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         };
@@ -2228,7 +2224,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             tt.narrowing_classes(target)
                 .is_none()
-                .then(|| tt.type_name(target))
+                .then(|| tt.name(target))
         };
         if let Some(name) = unnumbered {
             let _ = self.emit(TypeError::ResourceClasses {
@@ -2256,7 +2252,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::TypeParam { .. }
         );
         if is_type_param && scrutinee != target {
-            let name = self.tysys.type_table.borrow().type_name(target);
+            let name = self.tysys.type_table.borrow().name(target);
             let _ = self.emit(TypeError::InvalidPattern {
                 message: format!(
                     "a type pattern needs a concrete type: `{name}` is a type parameter, \
@@ -2298,11 +2294,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let reason = {
             let tt = self.tysys.type_table.borrow();
-            format!(
-                "not every `{}` is `{}`",
-                tt.type_name(value),
-                tt.type_name(target)
-            )
+            format!("not every `{}` is `{}`", tt.name(value), tt.name(target))
         };
         self.reject_refutable(site, &reason, span);
     }
@@ -2348,7 +2340,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let (written, method) = {
             let type_table = self.tysys.type_table.borrow();
             (
-                type_table.type_name(scrutinee),
+                type_table.name(scrutinee),
                 type_table
                     .compiler_items()
                     .trait_method_name(CompilerItem::Eq)
@@ -2494,7 +2486,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         if !util::takes_range_patterns(&self.tysys.type_table.borrow(), scrutinee) {
-            let found = self.tysys.type_table.borrow().type_name(scrutinee);
+            let found = self.tysys.type_table.borrow().name(scrutinee);
             let _ = self.emit(TypeError::PatternTypeMismatch {
                 expected: "an integer, char or float type".to_string(),
                 found,
@@ -2687,7 +2679,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         for_of.span,
                     )
                 {
-                    let type_name = self.tysys.type_table.borrow().type_name(iterable_type_id);
+                    let type_name = self.tysys.type_table.borrow().name(iterable_type_id);
                     let _ = self.emit(TypeError::MissingTraitImpl {
                         type_name,
                         trait_name: "IntoIterator".to_string(),
@@ -2935,7 +2927,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             )
             && !self.report_unmet_trait_impl_bound(iter_type, &[CompilerItem::Iterator], None, span)
         {
-            let type_name = self.tysys.type_table.borrow().type_name(iter_type);
+            let type_name = self.tysys.type_table.borrow().name(iter_type);
             let _ = self.emit(TypeError::MissingTraitImpl {
                 type_name,
                 trait_name: "Iterator".to_string(),
@@ -3017,7 +3009,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if let ResolvedType::MutRef(elem) = self.tysys.type_table.borrow().get(item_type).clone() {
             let elem_resolved = self.tysys.type_table.borrow().get(elem).clone();
-            let elem_name = self.tysys.type_table.borrow().type_name(elem);
+            let elem_name = self.tysys.type_table.borrow().name(elem);
             if matches!(elem_resolved, ResolvedType::TypeParam { .. }) {
                 let _ = self.emit(TypeError::CannotMutate {
                     message: format!(

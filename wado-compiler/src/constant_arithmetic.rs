@@ -313,7 +313,7 @@ impl ConstantArithmetic<'_> {
             .sem
             .expression_type(expr.id())
             .expect("an operation the lints report has an integer type");
-        self.sem.types.type_name(ty)
+        self.sem.types.name(ty)
     }
 
     fn report_overflow(&mut self, expr: &Expr, ty: IntType, wrapped: Value) {

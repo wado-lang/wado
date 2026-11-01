@@ -285,7 +285,7 @@ fn lower_type(
                 field_name,
                 &format!(
                     "map key type `{}` is not supported in generator options; a map option is keyed by `String`",
-                    types.type_name(key_id)
+                    types.name(key_id)
                 ),
             );
             return None;
@@ -322,7 +322,7 @@ fn lower_type(
         },
         ResolvedType::Struct { .. } if types.is_string(type_id) => Some(OptionsType::String),
         ResolvedType::Struct { def, .. } => {
-            let name = &types.struct_head_name(*def);
+            let name = &types.struct_head_mangled_name(*def);
             let module_source = &types.struct_head_module(*def).clone();
             let nested = nested_struct_descriptor(
                 name,
@@ -339,7 +339,7 @@ fn lower_type(
             })
         }
         ResolvedType::Enum { def } => {
-            let name = &types.def_name(*def).to_string();
+            let name = &types.decl_name(*def).to_string();
             let module_source = &types.def_module(*def).clone();
             let variants =
                 enum_variants(name, module_source, sem, module, field_name, diagnostics)?;
@@ -355,7 +355,7 @@ fn lower_type(
                 field_name,
                 &format!(
                     "type `{}` is not supported in generator options",
-                    types.type_name(type_id)
+                    types.name(type_id)
                 ),
             );
             None
