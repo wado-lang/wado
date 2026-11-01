@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793509149023,
+  "lastUpdate": 1793515271560,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73053,6 +73053,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e52a46286fc72289cc1caaafda05d1acb9bb9f33"
         },
         "date": 1793509147990,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "add0aad758c85b3d684b7f8a69243021809843a5",
+          "message": "Merge pull request #2515 from wado-lang/ccr-597afb92-alcbrd\n\nrefactor!: one naming vocabulary for reflection and the compiler — name, decl_name, canonical_name, mangled",
+          "timestamp": "2026-11-01T15:30:06+09:00",
+          "tree_id": "454b4f78a6c7c4f9d712b33711270c52bfd4d6db",
+          "url": "https://github.com/wado-lang/wado/commit/add0aad758c85b3d684b7f8a69243021809843a5"
+        },
+        "date": 1793515270707,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
