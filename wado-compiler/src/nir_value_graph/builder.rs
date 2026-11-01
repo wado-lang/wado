@@ -405,7 +405,6 @@ pub(crate) fn walk_scoped(
     b.ctfe_builtins.clone_from(calls.ctfe_builtins);
     b.call_writes.clone_from(calls.writes);
     b.current_value.extend(seed.iter().map(|(&l, &v)| (l, v)));
-    b.rebump_all = true;
     // Seed the heap with the caller's version state at the call site so a
     // spliced field read carries the version a fresh whole-function build
     // would assign (a fresh `INITIAL` heap collapses distinct versions — e.g.

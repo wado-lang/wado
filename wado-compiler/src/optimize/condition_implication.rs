@@ -287,8 +287,8 @@ struct BindWalk<'e, 'a> {
     /// longer has: those whose value reads it, and the bind of it.
     carried_by: hashmap::IndexMap<u32, Vec<u32>>,
     /// The binds a local they depend on changed after: written, or itself a
-    /// bind gone invalid. A write only follows a bind, so each goes invalid
-    /// once, and the walk visits each dependence once.
+    /// bind gone invalid. Each goes invalid once, so a write follows each
+    /// dependence at most once over the whole walk.
     invalid: hashmap::IndexSet<u32>,
     aliased_writes: Vec<(u64, Stored)>,
     /// Whether a type reaches an object kind, by both their keys.

@@ -46,9 +46,9 @@ impl Key {
 #[derive(Clone, Default)]
 struct Avail {
     chains: IndexMap<Key, usize>,
-    /// The chains read off each local, and through each field: every chain
-    /// there is one, and some no longer available, so a write reaches the
-    /// chains it ends and no others.
+    /// The chains read off each local, and through each field, so a write
+    /// reaches the chains it ends and no others. A list may still hold a
+    /// chain already forgotten.
     by_root: IndexMap<String, Vec<Key>>,
     by_field: IndexMap<String, Vec<Key>>,
 }
@@ -59,9 +59,15 @@ impl Avail {
     }
 
     fn insert(&mut self, key: Key, id: usize) {
-        self.by_root.entry(key.root.clone()).or_default().push(key.clone());
+        self.by_root
+            .entry(key.root.clone())
+            .or_default()
+            .push(key.clone());
         for (_, field) in &key.fields {
-            self.by_field.entry(field.clone()).or_default().push(key.clone());
+            self.by_field
+                .entry(field.clone())
+                .or_default()
+                .push(key.clone());
         }
         self.chains.insert(key, id);
     }
