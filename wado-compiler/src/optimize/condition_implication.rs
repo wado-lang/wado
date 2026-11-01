@@ -1100,11 +1100,13 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
-    let roots: Vec<u32> = [Some(var), bound_root(bound)]
-        .into_iter()
-        .flatten()
-        .collect();
+    let roots: Vec<u32> = guard_roots(var, bound).collect();
     modifies_any_root(engine, node, &roots)
+}
+
+/// The locals a guard `var < bound` reads.
+fn guard_roots(var: u32, bound: BoundKey) -> impl Iterator<Item = u32> {
+    [Some(var), bound_root(bound)].into_iter().flatten()
 }
 
 /// One write an expression node may perform, in the engine's alias sets, so it
@@ -1456,6 +1458,12 @@ impl Summary {
             || (self.aliased && write_hits(engine, Write::Aliased(Stored::Unknown), root))
             || (self.call && write_hits(engine, Write::Call, root))
     }
+
+    /// Whether the subtree may change `var` or what `bound` reads, as
+    /// [`node_modifies`] answers.
+    fn modifies_guard(&self, engine: &Engine, var: u32, bound: BoundKey) -> bool {
+        guard_roots(var, bound).any(|root| self.modifies(engine, root))
+    }
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
@@ -1548,7 +1556,8 @@ fn structural_loop_guard(
     let cap = hi.filter(|_| goff == 0);
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
-        guarded.retain(|&v| !stmt_modifies(engine, s, v, bound));
+        let summary = Summaries::default().of(engine, NodeRef::Stmt(s));
+        guarded.retain(|&v| !summary.modifies_guard(engine, v, bound));
         if guarded.is_empty() {
             break;
         }
@@ -2066,20 +2075,27 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         let node = NodeRef::Stmt(s);
-        for &(var, k, bound) in &seguards {
-            if !stmt_modifies(engine, s, var, bound) {
-                changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
+        let carried = !seguards.is_empty() || !capped.is_empty();
+        if carried {
+            let before = Summaries::default().of(engine, node);
+            for &(var, k, bound) in &seguards {
+                if !before.modifies_guard(engine, var, bound) {
+                    changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
+                }
             }
-        }
-        for &((root, ref fields), cap) in &capped {
-            if fields.is_empty() && !modifies_any_root(engine, node, &[root]) {
-                changed |= refute_past_cap(engine, node, binds, root, cap);
+            for &((root, ref fields), cap) in &capped {
+                if fields.is_empty() && !before.modifies(engine, root) {
+                    changed |= refute_past_cap(engine, node, binds, root, cap);
+                }
             }
         }
         changed |= apply_dominating_if(engine, s, binds);
         changed |= process_stmt(engine, block, s, binds);
-        seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
-        capped.retain(|((root, _), _)| !modifies_any_root(engine, node, &[*root]));
+        if carried {
+            let after = Summaries::default().of(engine, node);
+            seguards.retain(|&(var, _, bound)| !after.modifies_guard(engine, var, bound));
+            capped.retain(|((root, _), _)| !after.modifies(engine, *root));
+        }
         // As at a loop guard, a `let c = var` carries what is proven of `var`.
         if let StmtKind::Let {
             local_index, value, ..

@@ -582,10 +582,17 @@ pub struct Env {
 impl Program {
     /// Adds `declarations`, and grows [`Self::projecting`] to every
     /// declaration a member of reaches a projection off a parameter through
-    /// the others.
+    /// the others. Each derived trait declares the same ones again.
     pub fn declare(&mut self, declarations: &[Declaration]) {
+        let mut changed = false;
         for decl in declarations {
-            self.declarations.insert(decl.id, decl.clone());
+            if self.declarations.get(&decl.id) != Some(decl) {
+                self.declarations.insert(decl.id, decl.clone());
+                changed = true;
+            }
+        }
+        if !changed {
+            return;
         }
         loop {
             let reached: Vec<TypeDeclId> = self
