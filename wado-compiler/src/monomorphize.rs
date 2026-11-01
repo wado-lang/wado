@@ -32,7 +32,7 @@ use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirGlobal, TirModule, TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::{AnonStructId, TypeKey, TypeTable};
@@ -89,6 +89,32 @@ impl Templates {
                 .filter(|(_, func)| func.borrow().body.is_some())
                 .map(|(id, func)| (id.clone(), Rc::clone(func)))
                 .collect(),
+        }
+    }
+}
+
+/// The bodies a run has yet to rewrite: an earlier run left the functions
+/// before `scanned` rewritten, and the global initializers, which a resume
+/// adds none of.
+#[derive(Clone, Copy)]
+struct Unrewritten {
+    scanned: usize,
+}
+
+impl Unrewritten {
+    fn functions(self, module: &TirModule) -> &[Rc<RefCell<TirFunction>>] {
+        &module.functions[self.scanned..]
+    }
+
+    fn globals(self, module: &TirModule) -> &[TirGlobal] {
+        if self.scanned == 0 { &module.globals } else { &[] }
+    }
+
+    fn globals_mut(self, module: &mut TirModule) -> &mut [TirGlobal] {
+        if self.scanned == 0 {
+            &mut module.globals
+        } else {
+            &mut []
         }
     }
 }
@@ -569,30 +595,33 @@ impl Monomorphizer {
             }
         }
 
+        let unrewritten = Unrewritten {
+            scanned: scanned_functions,
+        };
+
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
-        self.rewrite_types_in_module(&mut module);
+        self.rewrite_types_in_module(&mut module, unrewritten);
 
         // Phase 7.5: expand the packs their own site settled, before Phase 8
         // collects the calls that produces.
-        func_inst::expand_settled_packs(self, &module.type_table, &module.functions);
+        func_inst::expand_settled_packs(self, &module.type_table, unrewritten.functions(&module));
 
         // Phase 8: Collect function instantiation sites from Call expressions,
         // and take out of the pool what the bodies name.
-        self.collect_function_instantiation_sites(&module, &generic_functions, scanned_functions);
+        self.collect_function_instantiation_sites(&module, &generic_functions, unrewritten);
         let mut unscanned = Vec::new();
-        for func_rc in &module.functions[scanned_functions..] {
+        for func_rc in unrewritten.functions(&module) {
             let func = func_rc.borrow();
             if !func.is_template() {
                 self.take_reached(&func, &module.type_table.borrow(), &mut unscanned);
             }
         }
-        if scanned_functions == 0 {
-            let tt = module.type_table.borrow();
-            for global in &module.globals {
-                let callees = expr_callees(global.init.slot_expr(), &tt);
-                self.take_from_pool(&callees, &mut unscanned);
-            }
+        let tt = module.type_table.borrow();
+        for global in unrewritten.globals(&module) {
+            let callees = expr_callees(global.init.slot_expr(), &tt);
+            self.take_from_pool(&callees, &mut unscanned);
         }
+        drop(tt);
 
         // Phase 9: instantiate functions and structs to one fixpoint. A bodyless
         // template is a codegen intrinsic, never scanned again.
@@ -699,14 +728,14 @@ impl Monomorphizer {
         });
 
         // Phase 12: Rewrite function calls to use monomorphized names
-        self.rewrite_function_calls_in_module(&mut module);
+        self.rewrite_function_calls_in_module(&mut module, unrewritten);
 
         // Phase 12.5: Lower the comparisons on non-primitive types left to trait calls
-        func_inst::lower_comparisons_in_module(&mut module, &self.functions.trait_env);
-        never_dispatch::trap_never_dispatch_in_module(&mut module);
+        func_inst::lower_comparisons_in_module(&mut module, unrewritten, &self.functions.trait_env);
+        never_dispatch::trap_never_dispatch_in_module(&mut module, unrewritten);
 
         // Phase 13: Rewrite types (single pass — unified loop above ensures all structs exist)
-        self.rewrite_types_in_module(&mut module);
+        self.rewrite_types_in_module(&mut module, unrewritten);
 
         module
     }

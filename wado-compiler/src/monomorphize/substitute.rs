@@ -4,6 +4,8 @@
 //! `rewrite_type_id` (rewriting `GenericInstance` to concrete struct types),
 //! and `rewrite_types_in_module` (applying rewrites across a module).
 
+use std::rc::Rc;
+
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::tir::{
@@ -13,14 +15,17 @@ use crate::tir::{
 use crate::tir_visitor::TirMutVisitor;
 use crate::type_table::TypeTable;
 
+use super::Unrewritten;
 use super::state::Monomorphizer;
 
 impl Monomorphizer {
-    /// Rewrite all `GenericInstance` `type_ids` in expressions to use monomorphized struct types
-    pub fn rewrite_types_in_module(&self, module: &mut TirModule) {
+    /// Rewrite the `GenericInstance` `type_ids` in the struct fields and in
+    /// what is `unrewritten` to monomorphized struct types.
+    pub(super) fn rewrite_types_in_module(&self, module: &mut TirModule, unrewritten: Unrewritten) {
+        let type_table = Rc::clone(&module.type_table);
         let mut rewriter = TypeRewriter {
             mono: self,
-            type_table: &mut module.type_table.borrow_mut(),
+            type_table: &mut type_table.borrow_mut(),
         };
 
         // Rewrite struct field types
@@ -31,13 +36,13 @@ impl Monomorphizer {
         }
 
         // Rewrite function signatures and bodies
-        for func_rc in &module.functions {
+        for func_rc in unrewritten.functions(module) {
             let mut func = func_rc.borrow_mut();
             Self::rewrite_types_in_function_inner(&mut rewriter, &mut func);
         }
 
         // Rewrite global variable initializers
-        for global in &mut module.globals {
+        for global in unrewritten.globals_mut(module) {
             global.ty = rewriter.rewrite_type_id(global.ty);
             rewriter.visit_expr(global.init.slot_expr_mut());
         }

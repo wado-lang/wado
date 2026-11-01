@@ -1,5 +1,7 @@
 //! Post-monomorphization rewrites: function call rewriting to monomorphized names.
 
+use std::rc::Rc;
+
 use crate::tir::{
     FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBlock, TirExpr, TirExprKind,
     TirLocal, TirModule, TirStmt, TirStmtKind,
@@ -7,18 +9,25 @@ use crate::tir::{
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::type_table::TypeTable;
 
+use super::Unrewritten;
 use super::state::Monomorphizer;
 
 impl Monomorphizer {
-    /// Rewrite function calls in all functions to use monomorphized names
-    pub(super) fn rewrite_function_calls_in_module(&self, module: &mut TirModule) {
-        let mut type_table = module.type_table.borrow_mut();
+    /// Rewrite the function calls in what is `unrewritten` to use monomorphized
+    /// names.
+    pub(super) fn rewrite_function_calls_in_module(
+        &self,
+        module: &mut TirModule,
+        unrewritten: Unrewritten,
+    ) {
+        let type_table = Rc::clone(&module.type_table);
+        let mut type_table = type_table.borrow_mut();
         let mut rewriter = CallRewriter {
             mono: self,
             type_table: &mut type_table,
         };
 
-        for func_rc in &module.functions {
+        for func_rc in unrewritten.functions(module) {
             let mut func = func_rc.borrow_mut();
             if let Some(mut body) = func.body.take() {
                 rewriter.visit_block(&mut body);
@@ -28,7 +37,7 @@ impl Monomorphizer {
             }
         }
 
-        for global in &mut module.globals {
+        for global in unrewritten.globals_mut(module) {
             rewriter.visit_expr(global.init.slot_expr_mut());
         }
     }
