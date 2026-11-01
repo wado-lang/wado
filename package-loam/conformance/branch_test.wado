@@ -2,7 +2,7 @@
 //! picks it.
 
 use { Cpu, Tensor } from "lib:loam";
-use { C0, M, N, Params, Prepared, X1, compute, forward } from "./branch.onnxtext"
+use { C0, M, Model, N, Params, Prepared, X1, compute, forward } from "./branch.onnxtext"
     with {
         type: "onnxtext",
         generator: { module: "lib:loam" },
@@ -62,12 +62,12 @@ test "what a branch owes is checked where it runs" {
 
 test "build adds a conditional, each branch computing what forward's does" {
     let mut cpu = Cpu {};
-    let params = Params::embedded(&mut cpu);
-    let then = compute(&mut cpu, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &params);
+    let mut model = Model::new(Params::embedded(&mut cpu));
+    let then = compute(&mut cpu, &cond(true), &x([1.0, 2.0]), &past([3.0, 4.0]), &x([3.0, 4.0]), &mut model);
     assert then.Y.extents == [2, 2];
     assert then.Y.data == [3.0, 4.0, 1.0, 2.0];
     assert then.Z.data == [14.0, -26.0];
-    let otherwise = compute(&mut cpu, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &params);
+    let otherwise = compute(&mut cpu, &cond(false), &x([-1.0, 2.0]), &past([]), &x([]), &mut model);
     assert otherwise.Y.extents == [1, 2];
     assert otherwise.Y.data == [0.0, 2.0];
     assert otherwise.Z.data == [-11.0, -18.0];

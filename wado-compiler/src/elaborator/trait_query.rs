@@ -1119,11 +1119,40 @@ impl TypeSystem {
                         self.type_id_to_string(type_id)
                     ))
                 }
-                _ => self
-                    .comparison_withheld_note(tr, type_id)
-                    .or_else(|| self.unsourced_note(scope, type_id, trait_)),
+                _ => self.comparison_withheld_note(tr, type_id),
             };
             if let Some(why) = written_instead {
+                chain.push(why);
+                break;
+            }
+            // A written impl reads none of the members the walk below names.
+            if let Some(bounded) = self.written_bounded_args(type_id, trait_) {
+                let unmet = bounded.into_iter().find(|&(arg, bound)| {
+                    !self.type_implements_trait(
+                        ctx,
+                        arg,
+                        &FqTraitName::declared(self.resolutions.defs(), bound),
+                    )
+                });
+                let Some((arg, bound)) = unmet else {
+                    break;
+                };
+                let owner = self.type_id_to_string(type_id);
+                let arg_ty = self.type_id_to_string(arg);
+                if bound != trait_ {
+                    let bound_name = self.resolutions.defs().name(bound);
+                    chain.push(format!(
+                        "`{owner}` implements `{trait_name}` only where `{arg_ty}` implements `{bound_name}`"
+                    ));
+                    break;
+                }
+                chain.push(format!(
+                    "`{owner}` implements `{trait_name}` only where `{arg_ty}` does"
+                ));
+                type_id = arg;
+                continue;
+            }
+            if let Some(why) = self.unsourced_note(scope, type_id, trait_) {
                 chain.push(why);
                 break;
             }
@@ -1143,6 +1172,27 @@ impl TypeSystem {
             type_id = member_tid;
         }
         chain
+    }
+
+    /// [`SolverBridge::written_over`] at `type_id`'s declaration, each bound
+    /// with the argument it is on.
+    fn written_bounded_args(&self, type_id: TypeId, trait_: DefId) -> Option<Vec<(TypeId, DefId)>> {
+        let bounds = self
+            .solver()
+            .written_over(self.represented_decl(type_id)?, trait_)?;
+        if bounds.is_empty() {
+            return Some(Vec::new());
+        }
+        let table = self.type_table.borrow();
+        let args = table
+            .generic_type_args(table.representation_head(type_id))
+            .expect("an argument the impl bounds is one the instance carries");
+        Some(
+            bounds
+                .into_iter()
+                .map(|(position, bound)| (args[position], bound))
+                .collect(),
+        )
     }
 
     /// The declaration `type_id` represents, where no source of `trait_` holds

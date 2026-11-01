@@ -429,6 +429,8 @@ struct Site {
     mutables: Vec<String>,
     /// The bindings in scope here, all of them. A payload may read any.
     readables: Vec<String>,
+    /// Whether `self` names a method's receiver here.
+    receiver: bool,
 }
 
 /// A binding a payload may name, and whether it may be assigned to.
@@ -474,6 +476,8 @@ struct SiteCollector {
     /// Where the innermost body's own scopes start. Below it stands a closure
     /// capture: readable, but not assignable.
     capture_floor: usize,
+    /// Whether the innermost function body is a method's. A closure keeps it.
+    receiver: bool,
 }
 
 impl SiteCollector {
@@ -483,6 +487,7 @@ impl SiteCollector {
             body_depth: 0,
             scopes: Vec::new(),
             capture_floor: 0,
+            receiver: false,
         };
         for item in &module.items {
             collector.visit_item(item);
@@ -523,14 +528,16 @@ impl SiteCollector {
     /// Enter a function or `test` body with its own scope stack, seeded with
     /// its parameters, so a nested body does not inherit bindings it cannot
     /// name.
-    fn in_body(&mut self, params: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
+    fn in_body(&mut self, params: Vec<Binding>, receiver: bool, walk: impl FnOnce(&mut Self)) {
         self.body_depth += 1;
         let outer = std::mem::take(&mut self.scopes);
         let floor = std::mem::replace(&mut self.capture_floor, 0);
+        let outer_receiver = std::mem::replace(&mut self.receiver, receiver);
         self.scopes.push(params);
         walk(self);
         self.scopes = outer;
         self.capture_floor = floor;
+        self.receiver = outer_receiver;
         self.body_depth -= 1;
     }
 
@@ -655,14 +662,20 @@ impl AstVisitor<'_> for SiteCollector {
         // A `test` body is a function body in every way that matters here; the
         // rest reach their bodies through `visit_function`.
         if matches!(item, Item::Test(_)) {
-            self.in_body(Vec::new(), |s| walk_item(s, item));
+            self.in_body(Vec::new(), false, |s| walk_item(s, item));
         } else {
             walk_item(self, item);
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
-        self.in_body(params_of(&func.params), |s| walk_function(s, func));
+        let receiver = func
+            .params
+            .iter()
+            .any(|param| param.self_kind != SelfKind::None);
+        self.in_body(params_of(&func.params), receiver, |s| {
+            walk_function(s, func);
+        });
     }
 
     /// A closure body keeps the enclosing scopes: it may read a capture, while
@@ -761,6 +774,7 @@ impl AstVisitor<'_> for SiteCollector {
                     kind: stmt_kind(stmt),
                     mutables: self.visible_mutables(),
                     readables: self.visible_readables(),
+                    receiver: self.receiver,
                 });
             }
             self.visit_stmt(stmt);
@@ -857,8 +871,9 @@ struct Payload {
 }
 
 /// Ordered by the analysis family each attacks: alias and mod/ref for the
-/// write, liveness and escape for the read.
-static PAYLOADS: [Payload; 2] = [
+/// write, liveness and escape for the read, the boxing rewrite and
+/// scalarization for the reference.
+static PAYLOADS: [Payload; 3] = [
     Payload {
         name: "write",
         render: opaque_writes,
@@ -866,6 +881,10 @@ static PAYLOADS: [Payload; 2] = [
     Payload {
         name: "read",
         render: opaque_reads,
+    },
+    Payload {
+        name: "reference",
+        render: opaque_references,
     },
 ];
 
@@ -885,6 +904,29 @@ fn opaque_reads(site: &Site) -> String {
     render(&site.readables, |name| {
         format!("builtin::black_box({name});")
     })
+}
+
+/// An opaque reference to every binding the dead region can name, which makes
+/// each a referenced place. Unlike a read, taking a reference moves nothing, so
+/// it reaches the resources the read payload is refused at. A receiver takes
+/// `&`, the one reference every receiver kind admits.
+fn opaque_references(site: &Site) -> String {
+    let receiver = site
+        .receiver
+        .then(|| "builtin::black_box(&self);".to_string());
+    let bindings = site.readables.iter().map(|name| {
+        let reference = if site.mutables.contains(name) {
+            "&mut "
+        } else {
+            "&"
+        };
+        format!("builtin::black_box({reference}{name});")
+    });
+    receiver
+        .into_iter()
+        .chain(bindings)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn render(names: &[String], one: impl Fn(&String) -> String) -> String {
@@ -2265,6 +2307,61 @@ fn a_site_sees_the_readable_bindings_in_scope() {
     assert_eq!(seen, expected);
 }
 
+/// The reference payload makes every binding in scope a referenced place, and
+/// takes a `&mut` to an assignable one, the stronger claim the passes must
+/// honour.
+#[test]
+fn the_reference_payload_takes_a_mutable_reference_to_an_assignable_binding() {
+    let source = r#"fn f(n: i32) -> i32 {
+    let a = 1;
+    let mut b = 2;
+    return n + a + b;
+}
+"#;
+    let last = injection_sites(source)
+        .pop()
+        .expect("the return statement is a site");
+    assert_eq!(
+        opaque_references(&last),
+        "builtin::black_box(&n); builtin::black_box(&a); builtin::black_box(&mut b);"
+    );
+}
+
+/// A receiver is a reference parameter like any other to the reference
+/// payload, inside the method and the closures it holds, and taken by `&`
+/// whatever its kind. The read and write payloads leave it alone.
+#[test]
+fn the_reference_payload_takes_a_reference_to_the_receiver() {
+    let source = r#"struct P { x: i32 }
+impl P {
+    fn add(&mut self, n: i32) -> i32 {
+        let f = || { return self.x + n; };
+        return f();
+    }
+}
+"#;
+    let sites = injection_sites(source);
+    let seen: Vec<(Vec<String>, String)> = sites
+        .iter()
+        .map(|site| (site.readables.clone(), opaque_references(site)))
+        .collect();
+    let expected: Vec<(Vec<String>, String)> = vec![
+        (
+            vec!["n".into()],
+            "builtin::black_box(&self); builtin::black_box(&n);".into(),
+        ),
+        (
+            vec!["n".into()],
+            "builtin::black_box(&self); builtin::black_box(&n);".into(),
+        ),
+        (
+            vec!["n".into(), "f".into()],
+            "builtin::black_box(&self); builtin::black_box(&n); builtin::black_box(&f);".into(),
+        ),
+    ];
+    assert_eq!(seen, expected);
+}
+
 /// A name reaches the binding that shadows it, so an outer `let mut` an inner
 /// `let` shadows is not assignable — writing to it would not compile.
 #[test]
@@ -2381,6 +2478,7 @@ fn reduction_keeps_only_the_sites_that_matter() {
             kind: "let",
             mutables: Vec::new(),
             readables: Vec::new(),
+            receiver: false,
         })
         .collect();
     let culprits = [3, 11];
@@ -2419,6 +2517,7 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
             kind: "let",
             mutables: Vec::new(),
             readables: Vec::new(),
+            receiver: false,
         })
         .collect();
 

@@ -17,7 +17,7 @@ use crate::trait_solver::{
     ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
     Source, TraitDeclId, TypeDeclId, TypeDef, bound_candidates, candidates, cmp_giving_eq,
     comparison_row, derive, derive_alongside, holds_with_args, instance_candidates,
-    mark_duplicates, owed, pair_comparisons, rank, sourced, written_comparison,
+    mark_duplicates, owed, pair_comparisons, rank, sourced, written_comparison, written_over,
 };
 use crate::type_table::{AnonStructId, TypeTable};
 
@@ -2159,6 +2159,21 @@ impl SolverBridge {
             .declarations
             .get(&head)
             .is_none_or(|declaration| sourced(&self.program, trait_, declaration))
+    }
+
+    /// [`written_over`] at `decl`.
+    pub(super) fn written_over(&self, decl: DefId, trait_: DefId) -> Option<Vec<(usize, DefId)>> {
+        let bounds = written_over(
+            &self.program,
+            self.lowering.known_trait(trait_)?,
+            self.lowering.known_type(&DeclKey::Def(decl))?,
+        )?;
+        Some(
+            bounds
+                .into_iter()
+                .map(|(position, bound)| (position, self.lowering.trait_def_of(bound)))
+                .collect(),
+        )
     }
 
     /// Whether `type_id` satisfies `asked`, with the bodies the answer owes,

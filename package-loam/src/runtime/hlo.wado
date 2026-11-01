@@ -19,6 +19,7 @@ use {
     stretched_strides,
     walked,
 } from "./tensor.wado";
+use { Any, Recorded, Recorder } from "./recorded.wado";
 
 /// A StableHLO elementwise operation of one operand. `Erf` is CHLO's, as
 /// StableHLO has no error function.
@@ -105,7 +106,28 @@ pub struct WindowReduce {
 /// A pass built as a graph. Each method adds one operation and returns the
 /// tensor it computes. An operation whose output axes are not its operands'
 /// takes them as `Out`, which the caller spells.
+///
+/// A device records the pass once per shape class and compiles it, and
+/// `compute` then runs the program it compiled.
 pub affine trait Graph: Holds with _ {
+    /// What [`Self::compiled`] makes of a recorded pass.
+    type Program;
+
+    /// `t` under the axes `Out`: how a program's arguments and results cross
+    /// the generated module, each `Untyped`.
+    fn relabeled<E: Element, In, Out>(&self, t: &Self::Tensor<E, In>) -> Self::Tensor<E, Out> with ();
+    /// The pass `record` records, compiled to run on this, or `None` where
+    /// this computes each operation as `build` adds it.
+    fn compiled(&mut self, record: fn(&mut Recorder) -> Recorded with _) -> Option<Self::Program> with _ {
+        return null;
+    }
+    /// `program` over `arguments`, in the order the recorded pass took its
+    /// parameters: what it returns, in that order.
+    fn executed(&mut self, program: &Self::Program, arguments: &List<Any<Self>>) -> List<Any<Self>> {
+        // Only a backend whose `compiled` returns a program is given one.
+        unreachable();
+    }
+
     /// StableHLO's `iota`: each element its index along `dimension`.
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Self::Tensor<E, Axes>;
     fn convert<A: Element, B: Element, Axes>(&mut self, x: &Self::Tensor<A, Axes>) -> Self::Tensor<B, Axes>;
@@ -729,7 +751,15 @@ fn attention_mask<affine G: Graph, B, N, S, T>(
     return g.broadcast_in_dim(&hidden, *extents, [2, 3]);
 }
 
+/// `Cpu` compiles nothing: it computes each operation as `build` adds it, the
+/// reference a device's program is held to.
 impl Graph for Cpu {
+    type Program = ();
+
+    fn relabeled<E: Element, In, Out>(&self, t: &Tensor<E, In>) -> Tensor<E, Out> {
+        return Tensor { data: t.data, extents: t.extents };
+    }
+
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Tensor<E, Axes> {
         let mut data = List::<E>::with_capacity(element_count(&extents));
         let mut index = List::<i32>::filled(extents.len(), 0);

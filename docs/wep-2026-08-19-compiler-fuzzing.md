@@ -68,6 +68,11 @@ Payload decides what the dead region does to the live program:
 - An opaque read of every binding in scope makes live values appear used. It
   demands no mutability, so it reaches every site, and it attacks liveness, DCE,
   escape analysis and value-copy elision instead.
+- An opaque reference to every binding in scope makes each a referenced place:
+  `&mut` where the binding is assignable, `&` elsewhere, a method's receiver
+  included. It attacks the boxing rewrite, `field_scalarize`, `sroa` and escape
+  analysis. Taking a reference moves nothing, so it also reaches the resources
+  the read payload is refused at.
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
@@ -125,8 +130,6 @@ each shape and payload reached.
   names. A resource binding whose read is a move costs a fixture the whole
   read payload; the report names each one under `dropped combinations`, so
   the cost of leaving this undone is on the page.
-- [ ] Recompile determinism as a second oracle: compile each fixture twice and
-  compare the Wasm byte for byte. Catches what no output comparison can see.
 - [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
   is calibrated for each shape and loses one at a time, as it does a
   payload. The loop's own value block puts a reference in a call argument,
@@ -151,6 +154,9 @@ each shape and payload reached.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
+- [ ] Recompile determinism as a second oracle: compile each fixture twice and
+  compare the Wasm byte for byte. Catches what no output comparison can see.
+  Last, because the WIR goldens already show drift on every change.
 
 ### When to generate programs
 
@@ -164,3 +170,15 @@ itself: it must emit programs that type-check, terminate, are deterministic and
 produce observable output, which is what the oracle requires of any subject.
 Generating from the typed AST, so well-typedness holds by construction, is the
 approach this design assumes.
+
+## Known gaps
+
+The harness reads the scope at a site from the syntax alone, so it offers a
+payload names the compiler does not take there. A source where that happens
+loses the payload at every site, and the report lists it under
+`guard failed to compile`.
+
+- A binding an earlier statement moved, such as `rx` after `rx.drop()`, still
+  counts as in scope. Every payload then uses it after the move.
+- A bare case name in a `let` pattern (`let Only = e;`) matches rather than
+  binds, but the harness counts it as a binding.

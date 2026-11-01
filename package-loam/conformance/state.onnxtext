@@ -1,0 +1,7 @@
+# A decoder whose state keeps its extents from one pass to the next.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+state (float[N, 3] X, float[3] past_state) => (float[N, 3] Y, float[3] present_state)
+{
+    Y = Add(X, past_state)
+    present_state = Neg(past_state)
+}

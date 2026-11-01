@@ -24,8 +24,8 @@ fn reproduces(input_ids: ByteList, attention_mask: ByteList, logits: ByteList) {
     assert got.extents == want_extents;
     assert_close(&got.data, &want);
 
-    let params = gpt2::Params::load(&mut cpu, &checkpoint).unwrap();
-    let built = gpt2::compute(&mut cpu, &ids, &mask, &params);
+    let mut model = gpt2::Model::new(gpt2::Params::load(&mut cpu, &checkpoint).unwrap());
+    let built = gpt2::compute(&mut cpu, &ids, &mask, &mut model);
     assert built.extents == want_extents;
     assert_close(&built.data, &want);
 }

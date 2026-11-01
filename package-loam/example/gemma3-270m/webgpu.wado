@@ -1,12 +1,12 @@
-//! Gemma 3 (270M) on a WebGPU device. It continues each prompt `generate.json`
-//! records with greedy tokens on the device, and says whether it picks the
-//! tokens onnxruntime picks. It prints the time per token, and the dispatches
-//! and read backs a token takes. `README.md` says how to run it.
+//! Gemma 3 (270M) on a WebGPU device, a token a `pass` through the kernels. It
+//! continues each prompt `generate.json` records with greedy tokens on the
+//! device, and says whether it picks the tokens onnxruntime picks. It prints the
+//! time per token, and the dispatches and read backs a token takes. `README.md`
+//! says how to run it.
 
-use { eprintln, println, Stderr, Stdout } from "core:cli";
+use { eprintln, Stderr, Stdout } from "core:cli";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { from_string } from "core:json";
 use { MonotonicClock } from "wasi:clocks";
 use {
     Webgpu,
@@ -26,20 +26,8 @@ use {
     RecordOptionGpuSize64,
 } from "wasi:webgpu";
 use { WebGpuBackend } from "lib:loam";
+use { continued, recorded } from "./continued.wado";
 use { Model } from "./model.wado";
-
-/// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
-/// writes them.
-struct Generated {
-    prompt: String,
-    ids: List<i32>,
-    generated: List<i32>,
-    ms_per_token: f64,
-}
-
-struct Oracle {
-    generate: List<Generated>,
-}
 
 export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let checkpoint = match fs::read_linear("build/model.onnx_data") {
@@ -49,8 +37,7 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
             return;
         },
     };
-    let Ok(text) = fs::read_to_string("generate.json") else {
-        eprintln("generate.json is missing; run generate.mjs");
+    let Some(generate) = recorded() else {
         return;
     };
     let Some(gpu) = WebGpuBackend::new() else {
@@ -60,33 +47,8 @@ export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, Gpu
     let mut model = Model::load(gpu, &checkpoint).unwrap();
     // The device holds the weights.
     builtin::drop(checkpoint);
-    for let g of from_string::<Oracle>(&text).unwrap().generate {
-        let mut all = g.ids;
-        let started = MonotonicClock::now();
-        all.push(model.next_token(&all));
-        let prompted = MonotonicClock::now();
-        let [read, dispatched] = [
-            model.backend().read_backs(),
-            model.backend().dispatches(),
-        ];
-        let steps = g.generated.len();
-        for let _ of 1..<steps {
-            all.push(model.next_token(&all));
-        }
-        let ended = MonotonicClock::now();
-        let reads = (model.backend().read_backs() - read) / (steps - 1);
-        let dispatches = (model.backend().dispatches() - dispatched) / (steps - 1);
-        let generated = all[g.ids.len()..<all.len()].to_list();
-        let verdict = if generated == g.generated {
-            "matches onnxruntime";
-        } else {
-            `onnxruntime picks ${g.generated:?}`;
-        };
-        let first = (prompted - started) as u64 as f64 / 1_000_000.0;
-        let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (steps - 1) as f64;
-        println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
-        println(
-            `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${dispatches} dispatches and ${reads} read backs (onnxruntime ${g.ms_per_token:.1})`,
-        );
-    }
+    continued(generate, |ids| model.next_token(ids), || [
+        model.backend().read_backs(),
+        model.backend().dispatches(),
+    ]);
 }

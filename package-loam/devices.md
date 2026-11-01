@@ -126,10 +126,13 @@ graph being built.
   body as the devices and stays the reference they are held to. `run` executes
   a recorded graph on `Cpu` node by node, so a compiled program has something
   to agree with.
-- Until its compiler lands, `WebGpuBackend`'s `Graph` computes each node as it
-  is added, as `Cpu`'s does, through the kernels `forward` dispatches.
-  `conformance/webgpu_graph.wado` holds it to `Cpu` on the graphs in
-  `src/runtime/graph_cases.wado`.
+- `WebGpuBackend`'s `Graph` computes each node as it is added, as `Cpu`'s
+  does, through the kernels `forward` dispatches. Its `compiled` records the
+  pass, folds the nodes that read no argument on `Cpu`, and groups the rest
+  into kernels (`src/runtime/fusion.wado`); `executed` launches them. A
+  generated `compute` keeps one program per shape class in the caller's
+  `Model`. `conformance/webgpu_graph.wado` holds both to `Cpu` on the graphs
+  in `src/runtime/graph_cases.wado` and on `gated`.
 
 `Holds` is what a backend and a graph share: a tensor type, `upload`,
 `extents_of`, and the pass `begin` starts and `retain` keeps a tensor through. `Backend` and `Graph` both extend it, so `Cache<H>` and
@@ -482,6 +485,22 @@ and a program for each shape class it has met. The caller owns it, and
    methods are deleted. The merged tiny GPT-2 pads its lengths and gets a
    `compute` there, though a `Slice` starts at its past's length and the graph
    owes the total equal to the past and the sequence only inside a branch.
+   - [x] A pass recorded once per shape class into the caller's `Model`, which
+     `compute` replays.
+   - [x] Fusion over the recorded pass: elementwise chains, row groups,
+     epilogues and prologues of products, and products in pairs.
+   - [x] Attention over a shared cache, with or without a bias, in its kernels.
+   - [ ] Each kernel's variant for the device and the shape class's extents,
+     and the memory plan: one arena, a buffer reused once its tensor is dead.
+   - [ ] The per-call path: the per-call values in one write, and a list
+     encoded from objects that already exist. The host's time per token
+     recorded beside the device's.
+   - [ ] An `If` on a value as indirect dispatches, with no condition read
+     back.
+   - [ ] The merged tiny GPT-2's `compute`.
+   - [ ] Gemma 3's `compute` at most the `pass`'s time per token
+     ([measured](#gemma-3-on-webgpu)), then `plan.wado` and the fused `Backend`
+     methods deleted.
 5. [ ] Attention matched from its parts. Finished when GPT-2's attention runs
    as the composite on `WebGpuBackend` with onnxruntime's tokens, and its
    dispatches a layer are recorded beside the ten
@@ -514,6 +533,29 @@ Each is one test of `example/gemma3-270m/generate_test.wado`, run alone:
 cd package-loam/example
 wado test --collector drc gemma3-270m/generate_test.wado --test-name greedily
 wado test --collector drc gemma3-270m/generate_test.wado --test-name "graph build"
+```
+
+### Gemma 3 on WebGPU
+
+Gemma 3 (270M) continuing the two prompts `generate.json` records on
+`WebGpuBackend`, each token after the prompt's first. Both pick onnxruntime's
+tokens. The device is an RTX 4060 Ti under Vulkan, and onnxruntime is
+`generate.mjs` on `onnxruntime-node`, on the CPU. The range spans the two
+prompts. `wado run-webgpu` here is the `dev` build of `wado-run-webgpu`, and
+[Loam on WebGPU](./webgpu.md#measurements) records the `pass` at 0.13.
+
+| Entry                                             | Time a token, onnxruntime's as 1 | Dispatches a token | Read backs a token |
+| ------------------------------------------------- | -------------------------------- | ------------------ | ------------------ |
+| `pass`, the kernels                               | 0.19–0.21                        | 204                | 1                  |
+| `compute`, the compiled program at the capacities | 1.03–1.13                        | 309–314            | 1                  |
+
+Each is one program in `example/gemma3-270m`, which prints each prompt's time a
+token beside onnxruntime's:
+
+```sh
+cd package-loam/example/gemma3-270m
+wado run-webgpu webgpu.wado
+wado run-webgpu webgpu_compute.wado
 ```
 
 ## Known gaps

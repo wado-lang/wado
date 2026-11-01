@@ -1,0 +1,134 @@
+// An immutable parameter whose address is taken is read as itself, its box
+// serving only `&k`, so `param_spec` carries a constant down the chain in one
+// round rather than one link per round, which never converged.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn g01(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g02(k, n + k);
+}
+
+#[inline(never)]
+fn g02(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g03(k, n + k);
+}
+
+#[inline(never)]
+fn g03(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g04(k, n + k);
+}
+
+#[inline(never)]
+fn g04(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g05(k, n + k);
+}
+
+#[inline(never)]
+fn g05(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g06(k, n + k);
+}
+
+#[inline(never)]
+fn g06(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g07(k, n + k);
+}
+
+#[inline(never)]
+fn g07(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g08(k, n + k);
+}
+
+#[inline(never)]
+fn g08(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g09(k, n + k);
+}
+
+#[inline(never)]
+fn g09(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g10(k, n + k);
+}
+
+#[inline(never)]
+fn g10(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g11(k, n + k);
+}
+
+#[inline(never)]
+fn g11(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g12(k, n + k);
+}
+
+#[inline(never)]
+fn g12(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g13(k, n + k);
+}
+
+#[inline(never)]
+fn g13(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g14(k, n + k);
+}
+
+#[inline(never)]
+fn g14(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g15(k, n + k);
+}
+
+#[inline(never)]
+fn g15(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g16(k, n + k);
+}
+
+#[inline(never)]
+fn g16(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g17(k, n + k);
+}
+
+#[inline(never)]
+fn g17(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g18(k, n + k);
+}
+
+#[inline(never)]
+fn g18(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g19(k, n + k);
+}
+
+#[inline(never)]
+fn g19(k: i32, n: i32) -> i32 {
+    builtin::black_box(&k);
+    return g20(k, n + k);
+}
+
+#[inline(never)]
+fn g20(k: i32, n: i32) -> i32 {
+    return n + k;
+}
+
+export fn run() with Stdout {
+    println(`${g01(3, builtin::black_box(0))}`);
+}
+
+__DATA__
+{
+    "stdout": "60\n",
+    "wir_expect:O2": ["g20$spec"]
+}

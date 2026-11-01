@@ -447,6 +447,18 @@ impl Query<'_> {
                 }
             }
         }
+        // No bound on the parameters answers for a member projected off one,
+        // so a derivation asks each at the instance.
+        if def.origin == ImplOrigin::Derived
+            && let SolverType::Decl(head, args) = ty
+            && let Some(decl) = program.declarations.get(head)
+        {
+            for member in decl.projected_members_at(args, &program.projecting) {
+                let member = self.normalized(&member);
+                self.member_next = true;
+                requests.extend(self.holds(&member, implemented, &[])?.requests);
+            }
+        }
         // A projection may name a parameter only a later pin binds, so each is
         // read in full once every answer has bound what it binds.
         if !self.projections_met(&deferred, &bindings) {

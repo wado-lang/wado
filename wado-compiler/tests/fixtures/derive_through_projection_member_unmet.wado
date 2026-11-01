@@ -1,0 +1,24 @@
+// A member that is an associated type of a parameter is asked at each
+// instance: where the impl binds it to a type that is not `Eq`, the type
+// holding it is not `Eq` either.
+trait Holds {
+    type T;
+}
+
+variant Any<G: Holds> {
+    F(G::T),
+}
+
+struct Callback {}
+
+impl Holds for Callback {
+    type T = fn() -> i32;
+}
+
+export fn run() {
+    let a: Any<Callback> = Any::F(|| 1);
+    assert a == a;
+}
+
+__DATA__
+{"compile_error": "operator `==` cannot be applied to type `Any<Callback>`: type does not implement `Eq`"}

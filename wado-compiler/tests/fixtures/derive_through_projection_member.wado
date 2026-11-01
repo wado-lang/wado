@@ -1,0 +1,33 @@
+// A type derives a trait where every member satisfies it, a member that is an
+// associated type of a parameter included: `Any<Dev>` holds `List<f32>` and
+// `List<i64>`, both `Eq`, so it is `Eq`, and so is the struct holding a list
+// of such members.
+trait Holds {
+    type T<E>;
+}
+
+variant Any<G: Holds> {
+    F(G::T<f32>),
+    I(G::T<i64>),
+}
+
+struct Pair<G: Holds> {
+    first: Any<G>,
+    rest: List<G::T<f32>>,
+}
+
+struct Dev {}
+
+impl Holds for Dev {
+    type T<E> = List<E>;
+}
+
+test {
+    let a: Any<Dev> = Any::F([1.0, 2.0]);
+    assert a == Any::F([1.0, 2.0]);
+    assert a != Any::F([1.0]);
+    assert a != Any::I([1, 2]);
+    let p = Pair::<Dev> { first: a, rest: [[3.0]] };
+    assert p == Pair::<Dev> { first: Any::F([1.0, 2.0]), rest: [[3.0]] };
+    assert p != Pair::<Dev> { first: a, rest: [] };
+}
