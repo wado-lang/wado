@@ -2160,12 +2160,12 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
-        prelower_reach::before_monomorphize(&mut flat);
         let mut mono = monomorphize(&mut flat);
         refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
         link::assert_no_stub_shadowing(&flat.functions, "monomorphize");
         bind_monomorphized(&mut flat, &mut mono, logger)?;
+        mono.finish(&mut flat);
         synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
     }
 
@@ -2639,10 +2639,10 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 lower::contract_checks::check_marked_calls(&flat);
-                prelower_reach::before_monomorphize(&mut flat);
                 let mut mono = monomorphize(&mut flat);
                 refuse_expanding_instances(&mono, &logger)?;
                 bind_monomorphized(&mut flat, &mut mono, &logger)?;
+                mono.finish(&mut flat);
                 synthesis::traits::synthesize_monomorphized_fn_inspect_stubs(&mut flat);
             }
             lower_instance_patterns(&flat, &logger)?;

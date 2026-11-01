@@ -85,18 +85,20 @@ pub fn lower_comparisons_in_module(module: &mut TirModule, trait_env: &Arc<Trait
     }
 }
 
-/// Expand every `TypePackExpansion` whose own site settled the pack, in every
-/// body of the module: a function's and a global initializer's alike.
+/// Expand every `TypePackExpansion` whose own site settled the pack, in each of
+/// `functions`.
 ///
 /// Such a node sits in a caller that may declare no type parameter, which
 /// `instantiate_function` never visits. Runs before instantiation sites are
 /// collected, so the calls it produces are monomorphized like any other.
-pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut TirModule) {
+pub fn expand_settled_packs(
+    mono: &mut Monomorphizer,
+    type_table_rc: &Rc<RefCell<TypeTable>>,
+    functions: &[Rc<RefCell<TirFunction>>],
+) {
     mono.current_param_substitution_key = IndexMap::default();
     mono.current_impl_type_param_count = 0;
     mono.current_impl_receiver = None;
-
-    let type_table_rc = module.type_table.clone();
 
     struct SettledPackExpander<'a> {
         mono: &'a Monomorphizer,
@@ -141,7 +143,7 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         }
     }
 
-    for func_rc in &module.functions {
+    for func_rc in functions {
         let mut func = func_rc.borrow_mut();
         let Some(mut body) = func.body.take() else {
             continue;
@@ -150,7 +152,7 @@ pub fn expand_settled_packs_in_module(mono: &mut Monomorphizer, module: &mut Tir
         let mut locals = std::mem::take(&mut func.locals);
         SettledPackExpander {
             mono,
-            type_table: &type_table_rc,
+            type_table: type_table_rc,
             local_count: &mut local_count,
             locals: &mut locals,
         }

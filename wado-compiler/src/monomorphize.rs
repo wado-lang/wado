@@ -18,17 +18,20 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::compiler_host::Diagnostic;
+use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::elaborator::TypeError;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, LocalMethodName};
+use crate::name::{FreeFunctionName, FunctionId, LocalMethodName};
+use crate::prelower_reach::{Callee, Roots, callees, expr_callees, function_key, prunes};
 use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule, TirStruct, TypeId,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirFunction, TirModule,
+    TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::type_table::{AnonStructId, TypeTable};
@@ -89,6 +92,36 @@ impl Templates {
     }
 }
 
+/// The concrete functions no reached body has named yet. A body that names one
+/// takes it out, to be scanned like any reached function.
+#[derive(Default)]
+pub(crate) struct Pool {
+    by_key: IndexMap<FunctionId, Rc<RefCell<TirFunction>>>,
+    by_template: IndexMap<TemplateId, FunctionId>,
+}
+
+impl Pool {
+    fn insert(&mut self, func_rc: Rc<RefCell<TirFunction>>) {
+        let func = func_rc.borrow();
+        let key = function_key(&func);
+        if let Some(template) = func.template_id() {
+            self.by_template.insert(template, key.clone());
+        }
+        drop(func);
+        self.by_key.insert(key, func_rc);
+    }
+
+    /// The function `callee` names, if it is still here. A template's body
+    /// may name one by its declaration under a spelling no function carries
+    /// (`EnumCase<E>::holds`).
+    fn take(&mut self, callee: &Callee) -> Option<Rc<RefCell<TirFunction>>> {
+        self.by_key.swap_remove(&callee.key).or_else(|| {
+            let key = self.by_template.get(callee.template.as_ref()?)?;
+            self.by_key.swap_remove(key)
+        })
+    }
+}
+
 /// Instantiate every generic the linked package reaches, and hand back the
 /// session so a pass that adds bodies later can resume it.
 pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
@@ -105,6 +138,7 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         scanned_functions: 0,
         generics: Generics::of(flat),
         elaborated_functions: 0,
+        roots: prunes().then(|| Roots::new(flat)),
     };
     session.run(flat);
     session
@@ -140,12 +174,28 @@ pub struct Monomorphization {
     generics: Generics,
     /// How many leading `flat.functions` have had their drops elaborated.
     elaborated_functions: usize,
+    /// What the first run walks from, leaving the rest in the pool; `None`
+    /// once it has, and where nothing is pruned.
+    roots: Option<Roots>,
 }
 
 impl Monomorphization {
     /// Instantiate what the bodies added since the last run reach.
     pub fn resume(&mut self, flat: &mut FlatPackage) {
         self.run(flat);
+    }
+
+    /// Drop what no run reached, and record the drop for the assert in
+    /// `lower`'s `Interner::resolve`.
+    pub fn finish(self, flat: &mut FlatPackage) {
+        let pool = self.monomorphizer.pool.by_key;
+        compiler_trace!(
+            "prelower_reach",
+            "monomorphize left {} of {} functions unreached",
+            pool.len(),
+            pool.len() + flat.functions.len()
+        );
+        flat.pruned.extend(pool.into_keys());
     }
 
     /// The error refusing a template whose instances never end, with the
@@ -183,6 +233,7 @@ impl Monomorphization {
             &self.generic_functions,
             &self.generic_structs,
             self.scanned_functions,
+            self.roots.take().as_ref(),
         );
         self.scanned_functions = temp_module.functions.len();
         write_back(flat, temp_module);
@@ -251,6 +302,45 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 }
 
 impl Monomorphizer {
+    /// Take out of the pool, onto `unscanned`, what `body` names.
+    fn take_callees(
+        &mut self,
+        body: &TirBlock,
+        type_table: &TypeTable,
+        unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
+    ) {
+        self.take_from_pool(&callees(body, type_table), unscanned);
+    }
+
+    fn take_from_pool(&mut self, callees: &[Callee], unscanned: &mut Vec<Rc<RefCell<TirFunction>>>) {
+        unscanned.extend(callees.iter().filter_map(|callee| self.pool.take(callee)));
+    }
+
+    /// Ready a function taken out of the pool as Phases 6 and 7.5 readied the
+    /// roots, then queue what it instantiates and take out what it names.
+    fn scan_taken(
+        &mut self,
+        func_rc: &Rc<RefCell<TirFunction>>,
+        type_table: &Rc<RefCell<TypeTable>>,
+        generic_functions: &Templates,
+        unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
+    ) {
+        self.rewrite_types_in_function(&mut func_rc.borrow_mut(), &mut type_table.borrow_mut());
+        func_inst::expand_settled_packs(self, type_table, std::slice::from_ref(func_rc));
+        let func = func_rc.borrow();
+        let Some(body) = &func.body else {
+            return;
+        };
+        let mut type_table = type_table.borrow_mut();
+        func_inst::InstantiationCollector {
+            mono: self,
+            generic_functions,
+            type_table: &mut type_table,
+        }
+        .visit_block(body);
+        self.take_callees(body, &type_table, unscanned);
+    }
+
     /// Instantiate the queued structs, and those their fields queue, to a
     /// fixpoint; the concrete structs produced.
     fn drain_pending_structs(
@@ -316,6 +406,7 @@ impl Monomorphizer {
         external_generic_functions: &Templates,
         external_generic_structs: &IndexMap<DefId, TirStruct>,
         scanned_functions: usize,
+        roots: Option<&Roots>,
     ) -> TirModule {
         // Phase 0: index what written impls define (coherence Rule 1). A generic
         // free function has no rival impl, and indexing it would shadow itself.
@@ -370,9 +461,6 @@ impl Monomorphizer {
             });
         }
 
-        // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
-        self.rewrite_types_in_module(&mut module);
-
         // Phase 7: Collect all generic function definitions
         let mut generic_functions = external_generic_functions.clone();
 
@@ -406,12 +494,46 @@ impl Monomorphizer {
             false
         });
 
+        // Phase 7.25: leave in the pool what no root is, for a reached body
+        // naming it to take out.
+        if let Some(roots) = roots {
+            for func_rc in std::mem::take(&mut module.functions) {
+                let reached = {
+                    let func = func_rc.borrow();
+                    func.is_template() || roots.before_monomorphize(&func)
+                };
+                if reached {
+                    module.functions.push(func_rc);
+                } else {
+                    self.pool.insert(func_rc);
+                }
+            }
+        }
+
+        // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
+        self.rewrite_types_in_module(&mut module);
+
         // Phase 7.5: expand the packs their own site settled, before Phase 8
         // collects the calls that produces.
-        func_inst::expand_settled_packs_in_module(self, &mut module);
+        func_inst::expand_settled_packs(self, &module.type_table, &module.functions);
 
-        // Phase 8: Collect function instantiation sites from Call expressions
+        // Phase 8: Collect function instantiation sites from Call expressions,
+        // and take out of the pool what the bodies name.
         self.collect_function_instantiation_sites(&module, &generic_functions, scanned_functions);
+        let mut unscanned = Vec::new();
+        for func_rc in &module.functions[scanned_functions..] {
+            let func = func_rc.borrow();
+            if let Some(body) = func.body.as_ref().filter(|_| !func.is_template()) {
+                self.take_callees(body, &module.type_table.borrow(), &mut unscanned);
+            }
+        }
+        if scanned_functions == 0 {
+            let tt = module.type_table.borrow();
+            for global in &module.globals {
+                let callees = expr_callees(global.init.slot_expr(), &tt);
+                self.take_from_pool(&callees, &mut unscanned);
+            }
+        }
 
         // Phase 9: instantiate functions and structs to one fixpoint. A bodyless
         // template is a codegen intrinsic, never scanned again.
@@ -419,6 +541,12 @@ impl Monomorphizer {
         let mut new_functions: Vec<Rc<RefCell<TirFunction>>> = Vec::new();
         loop {
             let mut made_progress = false;
+
+            while let Some(func_rc) = unscanned.pop() {
+                self.scan_taken(&func_rc, &module.type_table, &generic_functions, &mut unscanned);
+                module.functions.push(func_rc);
+                made_progress = true;
+            }
 
             // Call sites are collected only once the struct drain has run:
             // collecting earlier queues under `GenericInstance` form.
@@ -480,11 +608,12 @@ impl Monomorphizer {
                         type_table: &mut type_table,
                     };
                     collector.visit_block(body);
+                    self.take_callees(body, &type_table, &mut unscanned);
                 }
                 new_functions.push(Rc::new(RefCell::new(concrete)));
             }
 
-            if !made_progress {
+            if !made_progress && unscanned.is_empty() {
                 break;
             }
         }

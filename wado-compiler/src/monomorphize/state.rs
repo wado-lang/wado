@@ -8,7 +8,7 @@ use crate::defs::DefId;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::monomorphize::Templates;
+use crate::monomorphize::{Pool, Templates};
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName, MethodName, mangle_generic_name};
 use crate::synthesis::template::written_impl_at;
 use crate::tir::{InstantiationKey, ResolvedType, TemplateId, TirFunction, TirTypeParam, TypeId};
@@ -122,6 +122,7 @@ impl FuncInstState {
 pub(super) struct Monomorphizer {
     pub structs: StructInstState,
     pub functions: FuncInstState,
+    pub pool: Pool,
     /// How many leading substitution slots of the function being instantiated
     /// are its impl's type params rather than its own.
     pub current_impl_type_param_count: usize,
@@ -187,6 +188,7 @@ impl Monomorphizer {
                 templates: Rc::new(Templates::default()),
                 concrete_names: IndexMap::default(),
             },
+            pool: Pool::default(),
             current_impl_type_param_count: 0,
             current_impl_receiver: None,
             current_param_substitution_key: IndexMap::default(),
