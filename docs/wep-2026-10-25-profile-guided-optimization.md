@@ -216,8 +216,9 @@ profile, as LLVM's `ProfileSummaryInfo` does. With every count the profile holds
 sorted from the largest down, the hot line is the smallest count still inside
 the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
 the cold line the same for `--optimize-profile-summary-cutoff-cold`. A count at
-or above the hot line is hot, and one at or below the cold line is cold. Both
-shares are in parts per million, with LLVM's defaults for its options of the
+or above the hot line is hot, and any other at or below the cold line is cold.
+A profile whose counts are nearly all one value puts both lines on it, and such
+a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in parts per million, with LLVM's defaults for its options of the
 same names: 990000 and 999999. A share of all runs stays put when a workload
 runs twice, so a workload need not be large, only like real use.
 
@@ -243,8 +244,8 @@ The marker the compiler puts on a `?`'s failure path is its own guess, and a
 workload modelled on real use measures better than any guess. The guess is
 usually right: an HTTP service answers well under 1% of its requests with a 4xx
 or 5xx. So the marker stays while the summary calls the failure path's count
-cold. Above the cold line the profile wins: the marker is dropped, and the same
-remark names the count. Comparing with zero would drop a right guess, since a
+cold. Otherwise the profile wins: the marker is dropped, and the same remark
+names the count. Comparing with zero would drop a right guess, since a
 rare path still runs now and then. LLVM settles the same question the same way,
 letting a measured count override a `__builtin_expect`.
 
@@ -325,9 +326,9 @@ level.
    and the compile looks each module up by its name.
 6. [ ] The profile summary. A compile derives the hot and cold lines from its
    profile under `--optimize-profile-summary-cutoff-hot` and
-   `--optimize-profile-summary-cutoff-cold`, and a `?`'s failure path above the
-   cold line loses its marker, with the remark. An e2e fixture states both
-   sides of the cold line.
+   `--optimize-profile-summary-cutoff-cold`, and a `?`'s failure path that is
+   not cold loses its marker, with the remark. An e2e fixture states both
+   sides of the cold line, and a count on both lines.
 7. [ ] Hot and cold call sites. The inliner prices a site by the summary under
    `--optimize-inline-hot-callsite-threshold` and
    `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
