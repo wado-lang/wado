@@ -1537,7 +1537,8 @@ impl WebGpuBackend {
     /// turned, and values to the attention cache, one attends each
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
-    /// tables. `None` where the operands outgrow what a dispatch binds.
+    /// tables. The cache holds at least `spanned` positions. `None` where the
+    /// operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
         q: &DeviceTensor,
@@ -1548,12 +1549,13 @@ impl WebGpuBackend {
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
+        spanned: i32,
     ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let [batch, s, past, d] = [q.extents[0], q.extents[1], past_k.extents[2], past_k.extents[3]];
         let [heads, kv] = [options.heads, options.kv_heads];
         let total = past + s;
         let rows = batch * s * heads;
-        let capacity = self.cache_capacity(batch * kv * d, total);
+        let capacity = self.cache_capacity(batch * kv * d, i32::max(total, spanned));
         let n = batch * kv * capacity * d;
         // The parts are held for every position the cache holds, as its
         // views are, so their bindings too stay those of the step before.
@@ -2179,6 +2181,7 @@ impl Backend for WebGpuBackend {
             &rotary,
             &bias_view,
             options,
+            0,
         ) {
             return [
                 Placed::Device(out),
@@ -2499,7 +2502,7 @@ fn reach(t: &DeviceTensor) -> [i32, i32] {
 }
 
 /// `t` along `axis` from `start`, `length` of it.
-fn sliced(t: &DeviceTensor, axis: i32, start: i32, length: i32) -> DeviceTensor {
+internal fn sliced(t: &DeviceTensor, axis: i32, start: i32, length: i32) -> DeviceTensor {
     let mut view = *t;
     view.offset += start * t.strides[axis];
     view.extents[axis] = length;

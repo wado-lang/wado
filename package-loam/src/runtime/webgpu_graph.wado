@@ -53,7 +53,7 @@ use {
 } from "./tensor.wado";
 use { Kernel, Plan, binary_op, compared_op, planned, splats_of, unary_of } from "./fusion.wado";
 use { Any, Recorded, Recorder, Run, Untyped, bools, constants } from "./recorded.wado";
-use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted } from "./webgpu.wado";
+use { DeviceTensor, Placed, PlacedRead, WebGpuBackend, contiguous, permuted, sliced } from "./webgpu.wado";
 
 /// A pass recorded once per shape class and planned into kernels, which each
 /// call launches, and the values of the nodes that read no argument, kept on
@@ -395,8 +395,11 @@ impl Graph for WebGpuBackend {
         return if condition.data[0] { then() } else { otherwise() };
     }
 
-    /// The backend's attention kernels where the past is not a shared buffer,
-    /// and the decomposition where it is.
+    /// The backend's attention kernels, and the decomposition where they
+    /// cannot run it. A shared past holds `past_length` valid positions, the
+    /// kernels attend over those and the new ones, and the present spans the
+    /// past's positions. Past the valid ones a causal attention reads none,
+    /// so the kernels compute what the decomposition does.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,
@@ -410,7 +413,8 @@ impl Graph for WebGpuBackend {
         bias: Option<&Placed<f32, [BB, BH, S, T]>>,
         options: &Attention,
     ) -> [Placed<f32, [B, S, Q]>, Placed<f32, [B, H, T, D]>, Placed<f32, [B, H, T, D]>] with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        if past_length matches { None } {
+        let shared = past_length matches { Some(_) };
+        if !shared || options.causal && bias matches { None } {
             let rotary = match [cos, sin] {
                 [Some(c), Some(s)] => Option::Some([
                     self.device_view(c),
@@ -422,20 +426,32 @@ impl Graph for WebGpuBackend {
                 Some(b) => Option::Some(self.device_view(b)),
                 None => null,
             };
+            let [held_k, held_v] = [
+                self.device_view(past_k),
+                self.device_view(past_v),
+            ];
+            let positions = held_k.extents[2];
+            let valid = match past_length {
+                Some(l) => self.host(l).data[0] as i32,
+                None => positions,
+            };
+            let spanned = if shared { positions } else { 0 };
             if let Some([out, present_k, present_v]) = self.attended(
                 &self.device_view(q),
                 &self.device_view(k),
                 &self.device_view(v),
-                &self.device_view(past_k),
-                &self.device_view(past_v),
+                &sliced(&held_k, 2, 0, valid),
+                &sliced(&held_v, 2, 0, valid),
                 &rotary,
                 &biased,
                 options,
+                spanned,
             ) {
+                let span = |t: DeviceTensor| if shared { DeviceTensor { ..t, extents: held_k.extents } } else { t };
                 return [
                     Placed::Device(out),
-                    Placed::Device(present_k),
-                    Placed::Device(present_v),
+                    Placed::Device(span(present_k)),
+                    Placed::Device(span(present_v)),
                 ];
             }
         }
