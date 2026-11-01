@@ -43,7 +43,7 @@ use crate::synthesis::common::{
     bool_lit, locals_from_params, option_some, relocate_synthetic_locals, unreachable_call,
 };
 use crate::synthesis::template::{
-    answered_by_link, blanket_dispatch_for, ref_blanket_call, trait_call_template,
+    answering_link, blanket_dispatch_for, ref_blanket_call, trait_call_template,
 };
 use crate::{hashmap, tir};
 
@@ -5158,7 +5158,7 @@ pub(super) fn trait_call_on_type(
     // A newtype inheriting its base's answer is called by the base's name.
     let named = match blanket {
         None if !is_type_param => {
-            answered_by_link(trait_env, trait_name, value_type, tt).unwrap_or(value_type)
+            answering_link(trait_env, trait_name, value_type, tt).unwrap_or(value_type)
         }
         _ => value_type,
     };

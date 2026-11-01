@@ -938,21 +938,20 @@ pub fn extract_stdlib_doc_with(
     if !reexport_sources.is_empty() {
         let exported_names = collect_pub_use_names(&parsed.ast);
         for reexport_source in &reexport_sources {
-            if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
-                let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-                // Admit `internal` items so a `pub use` re-export can publish
-                // them, but keep `include_private = false` to hide their fields.
-                let sub_doc = extract_doc_filtered(
-                    &sub_parsed.ast,
-                    &sub_parsed.trivia,
-                    sub_source,
-                    reexport_source,
-                    false,
-                    true,
-                    Some(&scope.at(reexport_source)),
-                );
-                merge_reexported_items(&mut doc, &sub_doc, &exported_names);
-            }
+            let sub_source = reexported_stdlib_module(module_name, reexport_source);
+            let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+            // Admit `internal` items so a `pub use` re-export can publish
+            // them, but keep `include_private = false` to hide their fields.
+            let sub_doc = extract_doc_filtered(
+                &sub_parsed.ast,
+                &sub_parsed.trivia,
+                sub_source,
+                reexport_source,
+                false,
+                true,
+                Some(&scope.at(reexport_source)),
+            );
+            merge_reexported_items(&mut doc, &sub_doc, &exported_names);
         }
     }
 
@@ -973,35 +972,43 @@ pub fn extract_stdlib_doc_with(
 
     // Also collect from any pub use re-export sources that may have primitive impls
     for reexport_source in &reexport_sources {
-        if let Some(sub_source) = stdlib::get_stdlib_module(reexport_source) {
-            let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
-            let sub_scope = scope.at(reexport_source);
-            // Recursively follow side-effect imports from re-exported sub-modules
-            let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
-            for sub_se in &sub_se_sources {
-                if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
-                    let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
-                    let prim_types = collect_primitive_types_from_module(
-                        &se_parsed.ast,
-                        &se_parsed.trivia,
-                        include_private,
-                        &sub_scope.at(sub_se),
-                    );
-                    merge_primitive_types(&mut doc.primitive_types, prim_types);
-                }
+        let sub_source = reexported_stdlib_module(module_name, reexport_source);
+        let sub_parsed = parse_stdlib_for_doc(reexport_source, sub_source);
+        let sub_scope = scope.at(reexport_source);
+        // Recursively follow side-effect imports from re-exported sub-modules
+        let sub_se_sources = collect_side_effect_import_sources(&sub_parsed.ast);
+        for sub_se in &sub_se_sources {
+            if let Some(se_source) = stdlib::get_stdlib_module(sub_se) {
+                let se_parsed = parse_stdlib_for_doc(sub_se, se_source);
+                let prim_types = collect_primitive_types_from_module(
+                    &se_parsed.ast,
+                    &se_parsed.trivia,
+                    include_private,
+                    &sub_scope.at(sub_se),
+                );
+                merge_primitive_types(&mut doc.primitive_types, prim_types);
             }
-            // Also check the re-exported module itself
-            let prim_types = collect_primitive_types_from_module(
-                &sub_parsed.ast,
-                &sub_parsed.trivia,
-                include_private,
-                &sub_scope,
-            );
-            merge_primitive_types(&mut doc.primitive_types, prim_types);
         }
+        // Also check the re-exported module itself
+        let prim_types = collect_primitive_types_from_module(
+            &sub_parsed.ast,
+            &sub_parsed.trivia,
+            include_private,
+            &sub_scope,
+        );
+        merge_primitive_types(&mut doc.primitive_types, prim_types);
     }
 
     Some(doc)
+}
+
+/// The source of a module a stdlib module re-exports. The page follows only
+/// Wado source, so a re-export from anything else, such as a component asset,
+/// would publish nothing for the names it re-exports.
+fn reexported_stdlib_module(module_name: &str, reexport_source: &str) -> &'static str {
+    stdlib::get_stdlib_module(reexport_source).unwrap_or_else(|| {
+        panic!("{module_name} re-exports `{reexport_source}`, which is not a stdlib module")
+    })
 }
 
 /// Collect source paths from `pub use { ... } from "source"` declarations.

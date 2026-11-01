@@ -632,30 +632,15 @@ pub(crate) fn trait_method_template(
     receiver: TypeId,
     tt: &TypeTable,
 ) -> Option<TemplateId> {
-    answering_link(trait_env, trait_name, method, receiver, tt).map(|(_, template)| template)
-}
-
-/// [`trait_method_template`] with the link of `receiver`'s newtype chain whose
-/// answer it is: the receiver, or the base it inherits the answer from. A call
-/// names that link, as the elaborator's does.
-pub(crate) fn answering_link(
-    trait_env: &TraitEnv,
-    trait_name: &FqTraitName,
-    method: &str,
-    receiver: TypeId,
-    tt: &TypeTable,
-) -> Option<(TypeId, TemplateId)> {
-    let (link, body) = answering_instance(trait_env, trait_name, receiver, tt)?;
-    Some((
-        link,
-        instance_template(trait_env, body, trait_name.called_decl(), method)?,
-    ))
+    let (_, body) = answering_instance(trait_env, trait_name, receiver, tt)?;
+    instance_template(trait_env, body, trait_name.called_decl(), method)
 }
 
 /// The link of `receiver`'s newtype chain whose answer to `trait_name` a call
-/// takes, whether a template or a derived body supplies it: a newtype field
-/// over an enum compares by the enum's derived `eq`, named by the enum.
-pub(crate) fn answered_by_link(
+/// names, as the elaborator's does: the receiver, or the base it inherits the
+/// answer from, whether a template or a derived body supplies it. A newtype
+/// field over an enum compares by the enum's derived `eq`, named by the enum.
+pub(crate) fn answering_link(
     trait_env: &TraitEnv,
     trait_name: &FqTraitName,
     receiver: TypeId,
