@@ -1876,6 +1876,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     }
                 }
                 Item::Resource(resource_decl) => {
+                    self.record_decl_type_params(resource_decl.id, &resource_decl.type_params);
                     self.record_effect_ops(resource_decl.id);
                     self.reject_unsupported_operation_clauses(
                         &resource_decl.name,

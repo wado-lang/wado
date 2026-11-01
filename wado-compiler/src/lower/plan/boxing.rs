@@ -480,6 +480,7 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         TirExprKind::ListViewOf { .. } => {
             unreachable!("synthesis::list_view expands every conversion")
         }
+        TirExprKind::Widen { .. } => unreachable!("synthesis::widen expands every widening"),
         TirExprKind::Index { expr: e, index, .. } => {
             remap_locals_in_expr(e, remap);
             remap_locals_in_expr(index, remap);

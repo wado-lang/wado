@@ -1316,6 +1316,7 @@ fn walk_dispatch_children(expr: &mut TirExpr, env: &DispatchEnv, ctx: &mut Lower
             unreachable!("synthesis::list_view expands every conversion before dispatch")
         }
         TirExprKind::Unary { expr, .. }
+        | TirExprKind::Widen { value: expr }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }
@@ -2069,6 +2070,7 @@ impl<'a, 'b> ExitRedirector<'a, 'b> {
                 unreachable!("synthesis::list_view expands every conversion before dispatch")
             }
             TirExprKind::Unary { expr: inner, .. }
+            | TirExprKind::Widen { value: inner }
             | TirExprKind::Cast { expr: inner, .. }
             | TirExprKind::Move { expr: inner }
             | TirExprKind::FieldAccess { expr: inner, .. }
@@ -2692,11 +2694,9 @@ fn declaring_resource(method_info: &LocalMethodName) -> Option<DefId> {
 /// The type args of a resource type behind any `Ref`/`MutRef`, if the type is
 /// a resource.
 fn resource_type_args(type_id: TypeId, type_table: &TypeTable) -> Option<Vec<TypeId>> {
-    match type_table.get(type_table.peel_refs(type_id)) {
-        ResolvedType::Resource { .. } => Some(Vec::new()),
-        ResolvedType::GenericResource { type_args, .. } => Some(type_args.clone()),
-        _ => None,
-    }
+    let head = type_table.peel_refs(type_id);
+    type_table.resource_def_of(head)?;
+    Some(type_table.generic_type_args(head).unwrap_or_default())
 }
 
 fn rewrite_calls_in_block(block: &mut TirBlock, ctx: &RewriteCtx<'_>) {
@@ -2896,6 +2896,7 @@ fn rewrite_call_children(expr: &mut TirExpr, ctx: &RewriteCtx<'_>) {
             unreachable!("synthesis::list_view expands every conversion before dispatch")
         }
         TirExprKind::Unary { expr, .. }
+        | TirExprKind::Widen { value: expr }
         | TirExprKind::Cast { expr, .. }
         | TirExprKind::Move { expr }
         | TirExprKind::FieldAccess { expr, .. }

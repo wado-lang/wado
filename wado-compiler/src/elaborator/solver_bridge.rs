@@ -710,8 +710,7 @@ impl Lowering {
             | ResolvedType::Resource { def }
             | ResolvedType::Variant { def }
             | ResolvedType::Flags { def } => instance(*def, &[]),
-            ResolvedType::GenericResource { def, type_args }
-            | ResolvedType::GenericInstance { def, type_args }
+            ResolvedType::GenericInstance { def, type_args }
             | ResolvedType::Newtype { def, type_args, .. } => instance(*def, type_args),
             ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Ok(SolverType::Ref {
                 is_mut: matches!(table.get(id), ResolvedType::MutRef(_)),
@@ -1981,9 +1980,11 @@ impl SolverBridge {
         }
         let handles = data
             .resource_types
-            .keys()
-            .filter(|&&def| table.is_unrestricted_resource(def))
-            .filter_map(|&def| lowered(def, 0, &mut std::iter::empty()))
+            .iter()
+            .filter(|(def, _)| table.is_unrestricted_resource(**def))
+            .filter_map(|(&def, info)| {
+                lowered(def, info.type_params.len(), &mut std::iter::empty())
+            })
             .collect();
         (out, handles)
     }
@@ -2281,7 +2282,6 @@ impl SolverBridge {
                 type_args,
             }
             | ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }
             | ResolvedType::Newtype { type_args, .. } => each(type_args),
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)

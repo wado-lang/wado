@@ -4724,7 +4724,7 @@ Error returned by float parsing.
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
-### `pub struct ParseBoolError`
+### `pub struct ParseBoolError {}`
 
 Error returned by `bool::from_str`, which takes `true` and `false` alone.
 

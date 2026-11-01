@@ -864,6 +864,15 @@ impl<'a> WirContext<'a> {
             // A `Never`-typed expression diverges, so it leaves no value behind —
             // the same absence `Unit` denotes.
             ResolvedType::Never => WirType::Unit,
+            ResolvedType::Resource { .. } | ResolvedType::GenericInstance { .. }
+                if type_table.is_resource_type(type_id) =>
+            {
+                if type_table.is_unrestricted_handle(type_id) {
+                    self.lookup_wir_type(type_table, TypeTable::U64)?
+                } else {
+                    Self::ref_to(self.handle_box())
+                }
+            }
             // A list instance is one wrapper struct whether spelled as the
             // instance or as its monomorphized struct.
             ResolvedType::Struct { type_args, .. }
@@ -997,15 +1006,9 @@ impl<'a> WirContext<'a> {
                 // Newtypes resolve to their base type
                 self.lookup_wir_type(type_table, *base_type)?
             }
-            ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                if type_table.is_unrestricted_handle(type_id) {
-                    self.lookup_wir_type(type_table, TypeTable::U64)?
-                } else {
-                    Self::ref_to(self.handle_box())
-                }
-            }
             // Flags are bitmasks stored as i32
             ResolvedType::Flags { .. } => WirType::I32,
+            ResolvedType::Resource { .. } => unreachable!("a resource is handled above"),
             // These should never reach codegen — must be resolved by monomorphization
             ResolvedType::TypeParam { name, index } => {
                 panic!("unsubstituted TypeParam `{name}` (index {index}) reached codegen")

@@ -521,6 +521,7 @@ fn by_value_structs(
         }
         // `List<T>` among them: a builtin aggregate the package lists no fields
         // for, whose arguments may still sit in it by value.
+        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => {}
         ResolvedType::GenericInstance { type_args, .. } => {
             let key = generic_instance_key(ty, type_table);
             if out.insert(key) {
@@ -629,17 +630,14 @@ fn mut_reachable_contains(
         | ResolvedType::Newtype {
             base_type: inner, ..
         } => (*inner, writable),
-        ResolvedType::GenericInstance { type_args, .. } => {
-            if writable && generic_instance_key(ty, type_table) == *target {
+        ResolvedType::GenericInstance { def, type_args } => {
+            if writable
+                && !type_table.is_resource_def(*def)
+                && generic_instance_key(ty, type_table) == *target
+            {
                 return true;
             }
             return type_args.iter().any(|&t| {
-                mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
-            });
-        }
-        ResolvedType::GenericResource { type_args, .. } => {
-            let args = type_args.clone();
-            return args.iter().any(|&t| {
                 mut_reachable_contains(t, writable, target, type_table, struct_fields, visited)
             });
         }

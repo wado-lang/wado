@@ -158,25 +158,18 @@ fn a_profile_path_that_cannot_be_written_fails_before_the_run() {
 /// in another order, and `erf` as WGSL approximates it.
 const LOAM_TOLERANCE: f32 = 1e-4;
 
-#[test]
-fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
-    let program =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../package-loam/conformance/webgpu.wado");
+/// Runs a Loam conformance program, each line of which ends in how far one
+/// output sits from the CPU's, and holds it to `lines` lines within tolerance.
+fn assert_loam_conformance(program: &str, lines: usize) {
+    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../package-loam/conformance")
+        .join(program);
     let output = run(&[program.to_str().unwrap()]);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "stderr: {stderr}");
-    let lines: Vec<&str> = stdout.lines().collect();
-    // Thirteen outputs, from a device's own binding limit and from one
-    // smaller than a weight, which splits the kernels reading it, then three
-    // `arg_max`es, then four products of a few rows from each limit, then two
-    // across weights of few columns and of many, then six reads of a weight
-    // kept in bf16 or f32 from each limit, then three paired products, then
-    // two under a binding only half their columns fit, then three products of
-    // a normalization, paired and alone, then both parts of three
-    // concatenated products of one.
-    assert_eq!(lines.len(), 68, "stdout: {stdout}");
-    for line in lines {
+    assert_eq!(stdout.lines().count(), lines, "stdout: {stdout}");
+    for line in stdout.lines() {
         let deviation: f32 = line
             .rsplit(' ')
             .next()
@@ -186,6 +179,18 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
     }
 }
 
+/// Thirteen outputs, from a device's own binding limit and from one smaller
+/// than a weight, which splits the kernels reading it, then three `arg_max`es,
+/// then four products of a few rows from each limit, then two across weights
+/// of few columns and of many, then six reads of a weight kept in bf16 or f32
+/// from each limit, then three paired products, then two under a binding only
+/// half their columns fit, then three products of a normalization, paired and
+/// alone, then both parts of three concatenated products of one.
+#[test]
+fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
+    assert_loam_conformance("webgpu.wado", 68);
+}
+
 /// Grouped query attention runs on the device, with a past and without, turned
 /// in whole or in part, biased, capped and windowed, over one part of positions
 /// and over several, along a chain of steps through its cache: appended in
@@ -193,22 +198,15 @@ fn loams_webgpu_backend_computes_what_its_cpu_backend_does() {
 /// a prompt whose parts grow to fit a binding.
 #[test]
 fn loams_webgpu_attention_computes_what_its_cpu_attention_does() {
-    let program = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../package-loam/conformance/webgpu_attention.wado");
-    let output = run(&[program.to_str().unwrap()]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "stderr: {stderr}");
-    let lines: Vec<&str> = stdout.lines().collect();
-    assert_eq!(lines.len(), 11, "stdout: {stdout}");
-    for line in lines {
-        let deviation: f32 = line
-            .rsplit(' ')
-            .next()
-            .and_then(|d| d.parse().ok())
-            .unwrap_or_else(|| panic!("no deviation in {line:?}"));
-        assert!(deviation <= LOAM_TOLERANCE, "{line}");
-    }
+    assert_loam_conformance("webgpu_attention.wado", 11);
+}
+
+/// Graphs built through `Graph` compute on the device what they compute on the
+/// CPU: every operation, a branch either way, and attention through a shared
+/// cache.
+#[test]
+fn loams_webgpu_graph_computes_what_its_cpu_graph_does() {
+    assert_loam_conformance("webgpu_graph.wado", 11);
 }
 
 /// A whole model's pass stays on the device: each sequence length reads back

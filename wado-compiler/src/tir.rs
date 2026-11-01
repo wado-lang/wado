@@ -283,16 +283,6 @@ impl SubstitutionContext {
                 let new_return = self.substitute(return_type, type_table);
                 type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
             }
-            ResolvedType::GenericResource { def, type_args } => {
-                let new_args: Vec<TypeId> = type_args
-                    .iter()
-                    .map(|&a| self.substitute(a, type_table))
-                    .collect();
-                type_table.intern(ResolvedType::GenericResource {
-                    def,
-                    type_args: new_args,
-                })
-            }
             // Other types don't contain type parameters
             _ => type_id,
         }
@@ -690,18 +680,11 @@ pub enum ResolvedType {
         def: DefId,
     },
     // `Option<T>` is a `GenericInstance`, not a variant here — see
-    // `TypeTable::as_option`. `Future<T>` / `Stream<T>` and their writable twins
-    // are `GenericResource`, built by `make_future` / `make_future_writable`.
+    // `TypeTable::as_option`.
     //
     // TODO: represent `Option<T>` as `ref null T` when `T` is a non-nullable
     // reference, dropping the discriminant struct. `Option<Option<T>>` must not
     // take that route — its null would be ambiguous.
-    /// Generic resource instantiation (e.g., `Future<i32>`, `Stream<String>`).
-    /// Represents opaque i32 handles to Component Model resources with type parameters.
-    GenericResource {
-        def: DefId,
-        type_args: Vec<TypeId>,
-    },
     Ref(TypeId),
     MutRef(TypeId),
     Function {
@@ -776,8 +759,10 @@ pub enum ResolvedType {
         /// The declaration's spelling, for messages.
         name: String,
     },
-    /// Generic struct instantiation (e.g., `Box<i32>`)
-    /// Used to track instantiation sites before monomorphization
+    /// An application of a generic declaration (`Box<i32>`, `Option<T>`,
+    /// `Stream<u8>`). A struct's or a variant's is replaced by its
+    /// monomorphized `Struct` / `Variant`; a resource's is the handle type
+    /// itself and lasts to codegen ([`TypeTable::is_resource_def`]).
     GenericInstance {
         /// The generic declaration this instantiates.
         def: DefId,
@@ -1452,6 +1437,14 @@ pub enum TirExprKind {
     /// (the node's type) from a `ListArg<T>`. The synthesis phase
     /// (pre-monomorphize) expands it to `&ListArg::lowered(&value)`.
     ListViewOf {
+        value: Box<TirExpr>,
+    },
+
+    /// A value whose type holds an `Option<!>` where the node's type holds an
+    /// `Option<T>`, `Option<!>` being a value of every `Option<T>`. Once
+    /// monomorphization makes both concrete, `synthesis::widen` rebuilds it
+    /// as the node's type.
+    Widen {
         value: Box<TirExpr>,
     },
 
@@ -3827,7 +3820,7 @@ pub struct TirResource {
     pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
-    pub is_generic: bool,
+    pub type_params: Vec<TirTypeParam>,
     pub span: Span,
 }
 

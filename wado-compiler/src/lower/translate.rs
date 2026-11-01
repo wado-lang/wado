@@ -2410,6 +2410,7 @@ impl FunctionTranslator<'_, '_> {
             TirExprKind::ListViewOf { .. } => {
                 unreachable!("synthesis::list_view expands every conversion")
             }
+            TirExprKind::Widen { .. } => unreachable!("synthesis::widen expands every widening"),
             TirExprKind::WithHandler { .. } => unreachable!(
                 "TirExprKind::WithHandler should be desugared by synthesis::effect_dispatch before lower::translate runs"
             ),

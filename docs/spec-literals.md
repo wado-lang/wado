@@ -56,6 +56,12 @@ test {
 }
 ```
 
+A value whose type holds an `Option<!>`, in a tuple, a struct, a payload or a
+list, goes wherever the same type with an `Option<T>` there is expected, and is
+rebuilt as that type. A reference to one is not a reference to the wider type:
+it names the value it points to, which is not rebuilt. An `if`, a `match` or a
+labeled block whose every branch is a `null` is an `Option<!>`, as `x` is.
+
 So `x` takes no `Some`:
 
 <!-- {"fixture":"spec_literals_null_assign.wado"} -->

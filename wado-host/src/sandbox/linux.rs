@@ -156,7 +156,8 @@ fn probe_listener() -> io::Result<bool> {
 }
 
 pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Result<Spawned> {
-    let ruleset = ruleset(command.policy)?;
+    let stream_files = stream_files(command)?;
+    let ruleset = ruleset(command.policy, &stream_files)?;
     let listens = listens()?;
     let (refer, trace) = if listens {
         (libc::SECCOMP_RET_USER_NOTIF, command.trace)
@@ -166,7 +167,13 @@ pub(super) fn spawn(command: &Command<'_>, terminal: Option<RawFd>) -> io::Resul
     let filter = seccomp_filter(command.policy.network(), trace, refer);
     let traced = match trace {
         Trace::Off => None,
-        Trace::Files => Some(command.policy.resolved()),
+        Trace::Files => {
+            let mut policy = command.policy.resolved();
+            for stream in &stream_files {
+                policy.grant_stream_file(descriptor_path(&stream.file)?, stream.written);
+            }
+            Some(policy)
+        }
     };
     let (listener_tx, listener_rx) = match listens.then(socket_pair).transpose()? {
         Some([tx, rx]) => (Some(tx), Some(rx)),
@@ -1278,6 +1285,47 @@ pub(super) fn descriptor_path(file: &File) -> io::Result<PathBuf> {
     std::fs::read_link(format!("/proc/self/fd/{}", file.as_raw_fd()))
 }
 
+/// A standard stream the child inherits on a file. The child may open it again
+/// through `/dev/stdin`, `/dev/stdout` or `/dev/fd/N`, which Landlock judges
+/// on the file wherever it lies, so the file is granted for the direction the
+/// stream goes.
+struct StreamFile {
+    /// An `O_PATH` descriptor for the file.
+    file: File,
+    written: bool,
+}
+
+fn stream_files(command: &Command<'_>) -> io::Result<Vec<StreamFile>> {
+    let mut files = Vec::new();
+    for (fd, stdio) in [(0, command.stdin), (1, command.stdout), (2, command.stderr)] {
+        if stdio != Stdio::Inherit {
+            continue;
+        }
+        let file = match open_path(format!("/proc/self/fd/{fd}")) {
+            Ok(file) => file,
+            // A stream the host holds closed, or a host without `/proc`,
+            // where no device path reaches the stream either.
+            Err(err) if err.kind() == io::ErrorKind::NotFound => continue,
+            Err(err) => return Err(err),
+        };
+        if file.metadata()?.is_file() {
+            files.push(StreamFile {
+                file,
+                written: fd != 0,
+            });
+        }
+    }
+    Ok(files)
+}
+
+/// An `O_PATH` descriptor, which names a file without opening it for reading.
+fn open_path(path: impl AsRef<Path>) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH)
+        .open(path)
+}
+
 fn std_stdio(stdio: Stdio) -> StdStdio {
     match stdio {
         Stdio::Null => StdStdio::null(),
@@ -1366,7 +1414,7 @@ fn install_filter(filter: &[libc::sock_filter], flags: libc::c_ulong) -> io::Res
     Ok(ret as RawFd)
 }
 
-fn ruleset(policy: &Policy) -> io::Result<OwnedFd> {
+fn ruleset(policy: &Policy, stream_files: &[StreamFile]) -> io::Result<OwnedFd> {
     let attr = RulesetAttr {
         handled_access_fs: ACCESS_FS_ALL,
         handled_access_net: 0,
@@ -1390,11 +1438,7 @@ fn ruleset(policy: &Policy) -> io::Result<OwnedFd> {
         let opened: File;
         let file: &File = match &rule.dir {
             Some(dir) => dir,
-            None => match OpenOptions::new()
-                .read(true)
-                .custom_flags(libc::O_PATH)
-                .open(&rule.path)
-            {
+            None => match open_path(&rule.path) {
                 Ok(file) => {
                     opened = file;
                     &opened
@@ -1417,6 +1461,15 @@ fn ruleset(policy: &Policy) -> io::Result<OwnedFd> {
         }
         add_rule(&ruleset, file.as_raw_fd(), allowed)
             .map_err(|err| io::Error::new(err.kind(), format!("{}: {err}", rule.path.display())))?;
+    }
+    for stream in stream_files {
+        let allowed = if stream.written {
+            // A shell's `>` truncates.
+            ACCESS_FS_WRITE_FILE | ACCESS_FS_TRUNCATE
+        } else {
+            ACCESS_FS_READ & ACCESS_FS_FILE
+        };
+        add_rule(&ruleset, stream.file.as_raw_fd(), allowed)?;
     }
     Ok(ruleset)
 }

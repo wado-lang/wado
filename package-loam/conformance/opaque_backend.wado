@@ -77,6 +77,11 @@ impl Holds for Opaque {
         self.prepared += 1;
         return handle(widen(t));
     }
+
+    fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
+        self.downloads += 1;
+        return t.held;
+    }
 }
 
 impl Backend for Opaque {
@@ -101,11 +106,6 @@ impl Backend for Opaque {
     fn prepare_rhs_transposed<E: Held, K, N>(&mut self, t: &Tensor<E, [N, K]>) -> Packed<K, N> {
         self.prepared += 1;
         return self.cpu.keep_rhs_transposed(&widen(t));
-    }
-
-    fn download<E: Element, Axes>(&mut self, t: &Handle<E, Axes>) -> Tensor<E, Axes> {
-        self.downloads += 1;
-        return t.held;
     }
 
     fn filled<E: Element, Axes>(&mut self, extents: List<i32>, value: E) -> Handle<E, Axes> {

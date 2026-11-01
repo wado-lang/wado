@@ -85,6 +85,20 @@ test "an expression reads any number of operands" {
     assert e.over(2, &[&x, &y, &z]) == [1100.0, 4400.0] as List<f32>;
 }
 
+test "maximum and minimum are NaN where either operand is, and a comparison is 1.0 where it holds" {
+    let x: List<f32> = [1.0, f32::NAN, 3.0];
+    let y: List<f32> = [2.0, 0.0, 3.0];
+    let at = |op: BinaryOp| operand(0).binary(op, &operand(1)).over(3, &[&x, &y]);
+    assert at(BinaryOp::Maximum)[0] == 2.0 && at(BinaryOp::Maximum)[1].is_nan();
+    assert at(BinaryOp::Minimum)[0] == 1.0 && at(BinaryOp::Minimum)[1].is_nan();
+    assert at(BinaryOp::Lt) == [1.0, 0.0, 0.0] as List<f32>;
+    assert at(BinaryOp::Le) == [1.0, 0.0, 1.0] as List<f32>;
+    assert at(BinaryOp::Gt) == [0.0, 0.0, 0.0] as List<f32>;
+    assert at(BinaryOp::Ge) == [0.0, 0.0, 1.0] as List<f32>;
+    assert at(BinaryOp::Eq) == [0.0, 0.0, 1.0] as List<f32>;
+    assert at(BinaryOp::Ne) == [1.0, 1.0, 0.0] as List<f32>;
+}
+
 test "a step two operators both read is computed once" {
     let square = operand(0).binary(BinaryOp::Mul, &operand(0));
     let e = square.binary(BinaryOp::Add, &square.unary(UnaryOp::Neg));

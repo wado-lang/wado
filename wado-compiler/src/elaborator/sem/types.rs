@@ -153,6 +153,10 @@ macro_rules! with_body_facts {
             /// [`AstId`]. `expression_types` keeps the argument's own type,
             /// which is what reify builds the value at.
             ann_list_view_conversions => list_view_conversions: $crate::tir::TypeId,
+            /// The slot a value meets where its type holds, or may yet hold, an
+            /// `Option<!>`, keyed by the value's [`AstId`]. Reify rebuilds the
+            /// value as the slot's type where that holds an `Option<T>` there.
+            ann_widenings => widenings: $crate::tir::TypeId,
             /// Desugar-kind tag for each TIR-direct rewrite site (assert,
             /// matches, comparison chain, for-of, while, compound assignment),
             /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].

@@ -3796,6 +3796,7 @@ fn generate_eq_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_, '_>)
                 let ref_type = tt.make_ref(ty);
                 generate_scalar_eq_fn(
                     &target.receiver,
+                    &target.type_params,
                     ty,
                     ref_type,
                     &eq_trait_name,
@@ -3866,9 +3867,21 @@ fn eq_targets(
             continue;
         }
         let receiver = FqTypeName::declared(tt.defs(), def);
-        targets.extend(eq_target(&requested, receiver, Vec::new(), r.span, || {
-            EqMembers::Scalar(tt.make_resource(def), common::handle_bits)
-        }));
+        targets.extend(eq_target(
+            &requested,
+            receiver,
+            r.type_params.clone(),
+            r.span,
+            || {
+                let ty = if r.type_params.is_empty() {
+                    tt.make_resource(def)
+                } else {
+                    let ids = make_type_param_ids(&r.type_params, tt);
+                    tt.make_generic_instance(def, ids)
+                };
+                EqMembers::Scalar(ty, common::handle_bits)
+            },
+        ));
     }
     for (_name, fields, span, def) in collect_struct_fields(module) {
         let receiver = tt.fq_struct_head(def);
@@ -4338,7 +4351,7 @@ fn generate_inspect_impls(module: &mut TirModule, ctx: &mut SynthesisCtx<'_, '_,
     let resource_infos: Vec<(String, Span, DefId)> = module
         .resources
         .iter()
-        .filter(|r| !r.is_generic)
+        .filter(|r| r.type_params.is_empty())
         .map(|r| (r.head.name().to_string(), r.span, r.head.def()))
         .collect();
 
@@ -4715,7 +4728,7 @@ fn generate_opaque_inspect_fn(
     let fmt = || local_expr(1, "f", fmt_type, span);
     let deref_self = deref_local(0, "self", ref_type, resource_type, span);
     let mut locals = inspect_locals(ref_type, fmt_type);
-    let body = if let ResolvedType::Resource { def } = *tt.get(resource_type)
+    let body = if let Some(def) = tt.resource_def_of(resource_type)
         && tt.is_unrestricted_resource(def)
     {
         unrestricted_inspect_body(
@@ -4908,8 +4921,7 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Variant { .. }
         | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
-        | ResolvedType::GenericInstance { .. }
-        | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
+        | ResolvedType::GenericInstance { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
         ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
         ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
@@ -4931,8 +4943,8 @@ fn resolve_impl_module_via_env(
 fn collect_generic_resource_instances(tt: &TypeTable) -> Vec<(TypeId, DefId, Vec<FqTypeName>)> {
     tt.all_types()
         .filter_map(|(id, resolved)| match resolved {
-            ResolvedType::GenericResource { def, type_args }
-                if type_args.iter().all(|t| tt.is_concrete(*t)) =>
+            ResolvedType::GenericInstance { def, type_args }
+                if tt.is_resource_def(*def) && type_args.iter().all(|t| tt.is_concrete(*t)) =>
             {
                 let args = type_args.iter().map(|t| tt.fq_type_name(*t)).collect();
                 Some((id, *def, args))
@@ -4960,6 +4972,7 @@ struct FnSignature {
 /// the scalar `scalar` maps each dereferenced operand to.
 fn generate_scalar_eq_fn(
     receiver: &FqTypeName,
+    impl_type_params: &[TirTypeParam],
     ty: TypeId,
     ref_type: TypeId,
     eq_trait_name: &FqTraitName,
@@ -4981,14 +4994,16 @@ fn generate_scalar_eq_fn(
     );
     let body = TirBlock::new(vec![return_stmt(comparison, span)], span);
 
-    make_synthetic_method(
+    let mut function = make_synthetic_method(
         qualified_name,
         method_info,
         binary_method_params(ref_type, span),
         TypeTable::BOOL,
         body,
         binary_method_locals(ref_type),
-    )
+    );
+    function.impl_type_params = impl_type_params.to_vec();
+    function
 }
 
 /// Generate `EnumName^Ord::cmp(&self, &Self) -> Ordering`, comparing the two

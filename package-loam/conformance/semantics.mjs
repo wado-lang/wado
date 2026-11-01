@@ -112,6 +112,12 @@ const cases = [
     node('Concat', ['MinusOne', 'Two'], 'RestFirstShape', { axis: 0 }),
     node('Reshape', ['P', 'RestFirstShape'], 'ReshapeRestFirst'),
   ]],
+  ['ReduceSumOverLength', [node('ReduceSum', ['P', 'Zero'], 'ReduceSumOverLength', { keepdims: 0 })]],
+  ['ReduceMeanOverLength', [node('ReduceMean', ['P'], 'ReduceMeanOverLength', { axes: [0], keepdims: 0 })]],
+  ['SoftmaxOverLength', [node('Softmax', ['X'], 'SoftmaxOverLength', { axis: 0 })]],
+  ['MatMulOverLength', [node('MatMul', ['X', 'P'], 'MatMulOverLength')]],
+  ['ConcatAlongLength', [node('Concat', ['X', 'X'], 'ConcatAlongLength', { axis: 0 })]],
+  ['GatherLast', [node('Gather', ['X', 'ScalarMinusOne'], 'GatherLast')]],
 ];
 
 function int64Initializer(name, value, dims) {

@@ -44,7 +44,7 @@ use super::expr::UnionSource;
 use super::operators::takes_shape_from_expected_type;
 use super::sem::{ModuleSemantics, TypeAnnotations};
 use super::transposition::Transposition;
-use super::typecheck::admits_condition;
+use super::typecheck::{admits_condition, widens};
 use super::types::{FunctionContext, TypeLookup, VariantInfo};
 use super::tysys::TypeSystem;
 use super::util::{self, enumerate_index_local, split_enumerate};
@@ -558,6 +558,8 @@ struct ReifyFacts<'r, 'a> {
     affine_params: &'r [tir::TypeId],
 }
 
+// Ownership reads the recorded type itself: a value holding an `Option<!>`
+// moves as the type it widens to does.
 impl ownership::BodyFacts for ReifyFacts<'_, '_> {
     fn consumes_receiver(&self, call: AstId) -> bool {
         self.reify
@@ -567,7 +569,7 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
 
     fn indexes_tuple(&self, base: &ast::Expr) -> bool {
         self.reify
-            .ann_expression_types(base.id())
+            .ann_recorded_expression_type(base.id())
             .is_some_and(|ty| {
                 let tt = self.reify.tysys.type_table.borrow();
                 matches!(tt.get(tt.peel_refs(ty)), ResolvedType::GenericInstance { def, .. }
@@ -577,7 +579,7 @@ impl ownership::BodyFacts for ReifyFacts<'_, '_> {
 
     fn is_affine(&self, expr: AstId) -> bool {
         self.reify
-            .ann_expression_types(expr)
+            .ann_recorded_expression_type(expr)
             .is_some_and(|ty| self.reify.tysys.is_affine(ty, self.affine_params))
     }
 
@@ -681,6 +683,23 @@ impl<'a> Reify<'a> {
             |facts| ownership::body_modes(body, facts),
             reify,
         )
+    }
+
+    /// [`Self::with_body_ownership`] for one element of a tuple `for-of`: its
+    /// overlay holds the types and dispatches that decide which places of
+    /// `body` move, and the enclosing body's walk saw none of them.
+    fn with_element_ownership<R>(
+        &mut self,
+        body: &ast::Block,
+        reify: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let affine_params = self
+            .body_ownership
+            .as_ref()
+            .expect("a tuple `for-of` is reified inside a body")
+            .affine_params
+            .clone();
+        self.with_body_ownership(body, affine_params, reify)
     }
 
     /// [`Self::with_body_ownership`] for an expression reified where no body
@@ -1364,18 +1383,21 @@ impl<'a> Reify<'a> {
 
     /// Reify a `resource R<T> { … }` declaration. Resource methods take
     /// a synthesised `self` parameter (`&Self` or `&mut Self`) at index
-    /// 0; for generic resources `Self = GenericResource<…>` with the
+    /// 0; for generic resources `Self` is a `GenericInstance` with the
     /// decl's own `TypeParam`s as type args. The op signatures are read
     /// from the facts the body walk recorded.
     fn reify_resource_decl(&mut self, decl: &ast::ResourceDecl) -> tir::TirResource {
         let operations = self
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
+        let type_params = self
+            .ann_decl_type_params(decl.id)
+            .expect("the body walk records the type params for every resource reify emits");
         tir::TirResource {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
-            is_generic: !decl.type_params.is_empty(),
+            type_params,
             span: decl.span,
         }
     }
@@ -2497,17 +2519,28 @@ impl<'a> Reify<'a> {
         let view = self.ann_list_view_conversions(expr.id());
         let tir = self.reify_unmoved(expr, ctx, if view.is_some() { None } else { expected_type });
         let tir = if self.moves(expr) { tir.moved() } else { tir };
-        match view {
-            Some(view) => {
-                let span = tir.span;
-                TirExpr::new(
-                    TirExprKind::ListViewOf {
-                        value: Box::new(tir),
-                    },
-                    view,
-                    span,
-                )
-            }
+        let span = tir.span;
+        if let Some(view) = view {
+            return TirExpr::new(
+                TirExprKind::ListViewOf {
+                    value: Box::new(tir),
+                },
+                view,
+                span,
+            );
+        }
+        let widened = self
+            .ann_widenings(expr.id())
+            .or(expected_type)
+            .filter(|&slot| widens(tir.type_id, slot, &self.tysys.type_table.borrow()));
+        match widened {
+            Some(widened) => TirExpr::new(
+                TirExprKind::Widen {
+                    value: Box::new(tir),
+                },
+                widened,
+                span,
+            ),
             None => tir,
         }
     }
@@ -2522,15 +2555,19 @@ impl<'a> Reify<'a> {
         // `TirExpr::type_id`. Falls back to `expected_type` (or
         // `UNKNOWN` when neither is available) for AST shapes that
         // evaporated during annotate (e.g. a stmt-position match
-        // whose recorder fires only at the stmt level). An indefinite one
-        // (a bare `null`'s `Option<!>`) holds only where nothing else decides.
+        // whose recorder fires only at the stmt level). A `null` is built at
+        // the type expected of it; any other value holding an `Option<!>` is
+        // built at its own and widened where it goes (`reify_expr`).
+        let is_null =
+            matches!(expr, ast::Expr::Literal(lit) if matches!(lit.value, ast::Literal::Null));
         let recorded_type = self
             .ann_expression_types(expr.id())
-            .or(expected_type)
+            .or(expected_type.filter(|_| is_null))
             .or_else(|| {
                 self.ann_recorded_expression_type(expr.id())
                     .filter(|&t| self.tysys.type_table.borrow().contains_never_arg(t))
             })
+            .or(expected_type)
             .unwrap_or(TypeTable::UNKNOWN);
         let span = expr.span();
 
@@ -2708,9 +2745,12 @@ impl<'a> Reify<'a> {
             }
             ast::Expr::Binary(binary) => self.reify_binary(binary, ctx, recorded_type),
             ast::Expr::Call(call) => self.reify_call(call, ctx, recorded_type),
-            ast::Expr::Match(match_expr) => {
-                self.reify_match_expr(match_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::Match(match_expr) => self.reify_match_expr(
+                match_expr,
+                ctx,
+                branch_expectation(expected_type, recorded_type),
+                recorded_type,
+            ),
             ast::Expr::StructLiteral(struct_lit) => {
                 self.reify_struct_literal(struct_lit, ctx, recorded_type)
             }
@@ -2729,13 +2769,11 @@ impl<'a> Reify<'a> {
                 self.reify_static_method_call(static_call, ctx, recorded_type)
             }
             ast::Expr::LabeledBlock(lb) => {
-                // Annotate unified the breaks into the recorded type, so a `null` that only a
-                // sibling break types still coerces where the use site expects nothing.
-                let branch_expected = expected_type.or(Some(recorded_type));
+                let expected_type = branch_expectation(expected_type, recorded_type);
                 let tir_block = self.reify_block(
                     &lb.block,
-                    &mut ctx.enter_labeled_block(lb.label.clone(), branch_expected),
-                    branch_expected,
+                    &mut ctx.enter_labeled_block(lb.label.clone(), expected_type),
+                    expected_type,
                 );
                 TirExpr::new(
                     TirExprKind::LabeledBlock {
@@ -2754,9 +2792,12 @@ impl<'a> Reify<'a> {
                 // diagnosed a stray spread.
                 panic!("reify_expr: bare Spread is invalid outside TupleLiteral")
             }
-            ast::Expr::If(if_expr) => {
-                self.reify_if_expr(if_expr, ctx, expected_type, recorded_type)
-            }
+            ast::Expr::If(if_expr) => self.reify_if_expr(
+                if_expr,
+                ctx,
+                branch_expectation(expected_type, recorded_type),
+                recorded_type,
+            ),
             ast::Expr::Assign(assign) => match &assign.target {
                 ast::AssignTarget::Place(target) => {
                     self.reify_write(target, &assign.value, span, ctx)
@@ -3720,7 +3761,9 @@ impl<'a> Reify<'a> {
                     }
                 }
 
-                let body = this.reify_block(&for_of.body, ctx, None);
+                let body = this.with_element_ownership(&for_of.body, |this| {
+                    this.reify_block(&for_of.body, ctx, None)
+                });
                 block_stmts.extend(body.stmts);
                 block_stmts
             });
@@ -4283,12 +4326,6 @@ impl<'a> Reify<'a> {
         expected_type: Option<TypeId>,
         recorded_type: TypeId,
     ) -> TirExpr {
-        // With no expected type from the use site (`let x = if c { Some(v) }
-        // else { null };`), fall back to the if-expression's own unified
-        // `recorded_type` so the bare `null` branch reifies as `Option<T>`
-        // rather than UNKNOWN — a branch type disagreeing with the `If` node's
-        // own produces invalid Wasm. Same fallback as `LabeledBlockTarget`.
-        let branch_expected = expected_type.or(Some(recorded_type));
         let cond_expr = match &if_expr.condition {
             ast::Condition::Expr(e) => e,
             ast::Condition::LetChain { elements, .. } => {
@@ -4303,12 +4340,12 @@ impl<'a> Reify<'a> {
                     if_expr.else_block.as_ref(),
                     if_expr.id,
                     if_expr.span,
-                    |r, b| r.reify_block_value(b, ctx, branch_expected),
+                    |r, b| r.reify_block_value(b, ctx, expected_type),
                 );
                 let stmts = self.reify_let_chain_stmts(
                     elements,
                     |r, ctx| {
-                        r.reify_block_with_position(&if_expr.then_block, ctx, branch_expected, true)
+                        r.reify_block_with_position(&if_expr.then_block, ctx, expected_type, true)
                             .stmts
                     },
                     else_block.as_ref(),
@@ -4320,12 +4357,12 @@ impl<'a> Reify<'a> {
             }
         };
         let condition = self.reify_condition_expr(cond_expr, ctx);
-        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, branch_expected);
+        let then_branch = self.reify_block_value(&if_expr.then_block, ctx, expected_type);
         let else_branch = self.else_branch(
             if_expr.else_block.as_ref(),
             if_expr.id,
             if_expr.span,
-            |r, b| r.reify_block_value(b, ctx, branch_expected),
+            |r, b| r.reify_block_value(b, ctx, expected_type),
         );
         TirExpr::new(
             TirExprKind::If {
@@ -7001,13 +7038,6 @@ impl<'a> Reify<'a> {
         let scrutinee = self.reify_expr(&match_expr.expr, ctx, None);
         let scrutinee_type = scrutinee.type_id;
 
-        // Same fallback as `reify_if_expr` (this file, above): without a
-        // top-down expected type, an arm body that is a bare `null` reifies
-        // as `UNKNOWN` unless it falls back to the match's own already-unified
-        // `recorded_type`, producing the same invalid-Wasm shape for
-        // `let x = match v { A => Option::Some(1), B => null };`.
-        let branch_expected = expected_type.or(Some(recorded_type));
-
         let arms: Vec<TirMatchArm> = match_expr
             .arms
             .iter()
@@ -7018,7 +7048,7 @@ impl<'a> Reify<'a> {
                     .guard
                     .as_ref()
                     .map(|g| self.reify_condition_expr(g, ctx));
-                let body = self.reify_expr(&arm.body, ctx, branch_expected);
+                let body = self.reify_expr(&arm.body, ctx, expected_type);
                 let body = self.probe_expr(ProbeSite::Around, arm.body.id(), body);
                 TirMatchArm {
                     pattern,
@@ -9523,14 +9553,21 @@ impl<'a> Reify<'a> {
                 })
                 .unwrap_or_default()
         };
+        let type_args = self
+            .tysys
+            .type_table
+            .borrow()
+            .nominal_type_args(peeled_scrutinee)
+            .unwrap_or_default();
 
         let tir_fields: Vec<TirStructPatternField> = fields
             .iter()
             .map(|f| {
-                let (field_index, field_ty) = field_info
+                let (field_index, declared) = field_info
                     .get(&f.field_name)
                     .copied()
                     .unwrap_or((0, TypeTable::UNKNOWN));
+                let field_ty = self.tysys.substitute_type_params(declared, &type_args);
                 // Match ergonomics: a field bound through a `&Point` /
                 // `&mut Point` scrutinee is `&field` / `&mut field`.
                 let binding_ty = self
@@ -9880,6 +9917,13 @@ fn adjust_receiver_for_self_kind(
         return deref_to_layers(receiver, held, &tt);
     }
     to_layers_of(deref_to_layers(receiver, held - 1, &tt), target, &tt)
+}
+
+/// What a branch of a construct yielding `recorded` is reified against: the
+/// construct's own expectation, else the type its branches settled on, which a
+/// branch typed by an `Option<!>` widens to.
+fn branch_expectation(expected: Option<TypeId>, recorded: TypeId) -> Option<TypeId> {
+    expected.or(Some(recorded))
 }
 
 /// The TIR read of a resolved binding: a local, a by-value capture, or a

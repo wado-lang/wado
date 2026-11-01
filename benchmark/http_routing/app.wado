@@ -9,7 +9,7 @@
 // Run with wado serve:
 //   cargo run --bin wado -- serve benchmark/http_routing/app.wado
 
-use { Request, Response, ErrorCode, Headers, FieldValue, Trailers, StatusCode } from "wasi:http";
+use { Request, Response, ErrorCode, Headers, FieldValue, Trailers, StatusCode, Method } from "wasi:http";
 use { Router, PathParams } from "core:router";
 use { Serialize } from "core:serde";
 use json from "core:json";
@@ -67,12 +67,35 @@ fn build_router() -> Router<Handler> {
 
 global ROUTER: Router<Handler> = build_router();
 
+fn dispatch(request: Request) -> RouteResponse {
+    if let Some(m) = ROUTER.match_request(&request) {
+        return (m.handler)(request, m.params);
+    }
+    return RouteResponse { status: 404, body: body_for("not-found", [] as List<String>) };
+}
+
+// The requests `bench.sh` sends, routed short of streaming the response, which
+// would wait for a reader. A request's trailers end is written once the
+// request is dropped: an end dropped unwritten traps.
+#[workload]
+test "routes" {
+    for let [method, path] of [
+        [Method::Get, "/user"],
+        [Method::Get, "/user/lookup/username/hey"],
+        [Method::Post, "/event/abcd1234/comment"],
+        [Method::Get, "/static/index.html"],
+    ] {
+        let [trailers, end] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
+        let [request, _] = Request::new(Headers::new(), null, trailers, null);
+        request.set_method(method);
+        request.set_path_with_query(Option::Some(path));
+        assert dispatch(request).status == 200;
+        end.write(Result::<Option<Trailers>, ErrorCode>::Ok(null));
+    }
+}
+
 export async fn handle(request: Request) -> Result<Response, ErrorCode> {
-    let resp = if let Some(m) = ROUTER.match_request(&request) {
-        (m.handler)(request, m.params);
-    } else {
-        RouteResponse { status: 404, body: body_for("not-found", [] as List<String>) };
-    };
+    let resp = dispatch(request);
 
     let [trailers_future, trailers_tx] = Future::<Result<Option<Trailers>, ErrorCode>>::new();
     let [body_rx, body_tx] = Stream::<u8>::new();

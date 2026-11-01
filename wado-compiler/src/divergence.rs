@@ -336,6 +336,7 @@ fn tir_expr_always_exits(tt: &TypeTable, expr: &TirExpr) -> bool {
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Move { expr: inner }
         | TirExprKind::ListViewOf { value: inner }
+        | TirExprKind::Widen { value: inner }
         | TirExprKind::FieldAccess { expr: inner, .. }
         | TirExprKind::TupleSpread { expr: inner }
         | TirExprKind::TupleZip { expr: inner }

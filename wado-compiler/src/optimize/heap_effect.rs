@@ -623,6 +623,7 @@ impl HeapEffects<'_> {
                     }
                 }
             }
+            ResolvedType::GenericInstance { def, .. } if tt.is_resource_def(*def) => {}
             ResolvedType::GenericInstance { def, type_args } => {
                 if let Some(mono) = tt.monomorphized_struct(ty) {
                     self.reach_into(mono, seen, out);
@@ -693,7 +694,6 @@ impl HeapEffects<'_> {
             | ResolvedType::Never
             | ResolvedType::Enum { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::Flags { .. } => {}
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::Newtype { .. } => {
                 unreachable!("strip_handles removes every reference and newtype")

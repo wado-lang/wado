@@ -150,7 +150,7 @@ impl CompileKnobOpt {
                 long: None,
                 short: Some('f'),
                 value: Some("<flag>"),
-                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)",
+                desc: "Toggle a codegen feature flag (repeatable; prefix no- to disable):\nbranch-hinting   emit metadata.code.branch_hint entries (default: on)\ncold-paths       keep the cold_path() markers, the compiler's included (default: on)\nbare-asserts     assertion failures trap without a message (default: on at -Os)\nwide-arithmetic  native i64.mul_wide/add128/sub128 (default: on)\ncontract-checks  check the contract of a call marked unchecked (default: on in the test world, at -O0 and -O1)\npgo              apply the entry's profile, pgo/default.pgo or pgo/<stem>.pgo (default: on outside the test world)",
             },
             Self::NoCache => OptSpec {
                 long: Some("no-cache"),

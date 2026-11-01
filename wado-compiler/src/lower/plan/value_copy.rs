@@ -459,6 +459,7 @@ fn needs_copy_in_env(
         // the `Box<T>` shortcut whose semantics intentionally share
         // the underlying cell.
         ResolvedType::Struct { .. } => !is_box,
+        ResolvedType::GenericInstance { def, .. } if type_table.is_resource_def(*def) => false,
         ResolvedType::GenericInstance { def, type_args } => {
             if is_box {
                 return false;
@@ -553,7 +554,7 @@ fn needs_copy_in_env(
         // (which deep-copy via `array_clone` on their internal
         // `Array<T>`), not `&mut T`.
         ResolvedType::Ref(_) | ResolvedType::MutRef(_) => false,
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => false,
+        ResolvedType::Resource { .. } => false,
         _ => false,
     }
 }

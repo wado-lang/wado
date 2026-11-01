@@ -86,7 +86,7 @@ signature.
   axes with `reshape`, which moves no element, before it returns the cache.
 - `Cache::empty` takes the length axis to be the one symbolic axis on which
   the past and its present differ, and gives it 0.
-- `forward` retains the cache before it begins. A caller that drives `pass`
+- `forward` and `compute` retain the cache before they begin. A caller that drives `pass`
   itself calls `cache.retain(&mut backend)` there, as the Gemma 3 and GPT-2
   (124M) examples do.
 

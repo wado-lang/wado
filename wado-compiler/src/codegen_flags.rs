@@ -46,6 +46,31 @@ pub struct CodegenFlags {
     /// checks in every build. On in the test world and at `-O0` and `-O1`, off
     /// otherwise (see [`CodegenFlags::for_build`]).
     pub contract_checks: bool,
+
+    /// Apply the entry's profile. On outside the test world, off in it (see
+    /// [`CodegenFlags::for_build`]): a test checks what a program computes,
+    /// which a profile never changes.
+    pub pgo: Pgo,
+}
+
+/// Whether a build applies the entry's profile, and whether `-f pgo` asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pgo {
+    Off,
+    /// On by the build's default.
+    On,
+    /// On by `-f pgo`, so a build that finds no profile says so.
+    Requested,
+}
+
+impl Pgo {
+    #[must_use]
+    pub fn applies(self) -> bool {
+        match self {
+            Self::Off => false,
+            Self::On | Self::Requested => true,
+        }
+    }
 }
 
 impl Default for CodegenFlags {
@@ -56,6 +81,7 @@ impl Default for CodegenFlags {
             bare_asserts: false,
             wide_arithmetic: true,
             contract_checks: false,
+            pgo: Pgo::On,
         }
     }
 }
@@ -64,13 +90,15 @@ impl CodegenFlags {
     /// The defaults for a build, before any `-f` flag is applied.
     ///
     /// Identical to [`CodegenFlags::default`] except that `-Os` turns
-    /// [`bare_asserts`](Self::bare_asserts) on, and the test world, `-O0` or
-    /// `-O1` turns [`contract_checks`](Self::contract_checks) on.
+    /// [`bare_asserts`](Self::bare_asserts) on, the test world, `-O0` or
+    /// `-O1` turns [`contract_checks`](Self::contract_checks) on, and the test
+    /// world turns [`pgo`](Self::pgo) off.
     #[must_use]
     pub fn for_build(opt_level: OptLevel, test_world: bool) -> Self {
         Self {
             bare_asserts: matches!(opt_level, OptLevel::Os),
             contract_checks: test_world || matches!(opt_level, OptLevel::O0 | OptLevel::O1),
+            pgo: if test_world { Pgo::Off } else { Pgo::On },
             ..Self::default()
         }
     }
@@ -84,6 +112,7 @@ impl CodegenFlags {
         "bare-asserts",
         "wide-arithmetic",
         "contract-checks",
+        "pgo",
     ];
 
     /// The diagnostic for a flag [`Self::parse`] rejected.
@@ -125,6 +154,7 @@ impl CodegenFlags {
                 "bare-asserts" => result.bare_asserts = enabled,
                 "wide-arithmetic" => result.wide_arithmetic = enabled,
                 "contract-checks" => result.contract_checks = enabled,
+                "pgo" => result.pgo = if enabled { Pgo::Requested } else { Pgo::Off },
                 _ => return Err(flag.to_string()),
             }
         }
@@ -218,6 +248,20 @@ mod tests {
         assert!(!off.contract_checks);
         let on = CodegenFlags::parse(["contract-checks"], OptLevel::O2, false).unwrap();
         assert!(on.contract_checks);
+    }
+
+    #[test]
+    fn pgo_defaults_on_outside_the_test_world() {
+        assert_eq!(CodegenFlags::for_build(OptLevel::O2, false).pgo, Pgo::On);
+        assert_eq!(CodegenFlags::for_build(OptLevel::O2, true).pgo, Pgo::Off);
+    }
+
+    #[test]
+    fn pgo_flags_override_the_defaults_and_say_they_asked() {
+        let on = CodegenFlags::parse(["pgo"], OptLevel::O2, true).unwrap();
+        assert_eq!(on.pgo, Pgo::Requested);
+        let off = CodegenFlags::parse(["no-pgo"], OptLevel::O2, false).unwrap();
+        assert_eq!(off.pgo, Pgo::Off);
     }
 
     #[test]
