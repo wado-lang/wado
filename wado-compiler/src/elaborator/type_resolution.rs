@@ -622,19 +622,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         true
     }
 
-    /// The types a turbofish supplies. One naming an `interface` or a `trait`
-    /// is rejected here, since `unknown` would satisfy every bound in silence.
+    /// The types a turbofish supplies. One naming what is not a type here, an
+    /// `interface`, a `trait` or a type this module never imported, is rejected
+    /// as an annotation's is, since `unknown` would satisfy every bound in
+    /// silence.
     pub(super) fn resolve_turbofish_args(&mut self, args: &[Type]) -> Vec<TypeId> {
-        args.iter()
-            .map(|ty| {
-                // A name no declaration answers is left to the position's own
-                // resolution, which reports it where an annotation would not.
-                self.walk_type_heads(ty, &mut |scope, id, name, span, _| {
-                    scope.reject_non_type_decl(id, name, span)
-                });
-                self.resolve_type(ty)
-            })
-            .collect()
+        self.reject_unresolved_args(args);
+        args.iter().map(|ty| self.resolve_type(ty)).collect()
     }
 
     /// Walk the named heads a written type reaches, outermost first. `head`

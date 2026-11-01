@@ -1596,6 +1596,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Resolve the target type first to get struct name for parameter type
         // lookup. A `_` in its turbofish is filled once the arguments answer it.
+        if let Some(head) = &head {
+            self.reject_unresolved_args(head.args);
+        }
         let mut target_type_id = self.resolve_type(&static_call.target_type);
 
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;

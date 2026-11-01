@@ -1284,6 +1284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !ident.type_args_on_prefix {
                 return self.value_without_turbofish(ident, assoc.ty);
             }
+            self.reject_unresolved_args(&ident.type_args);
             let owner_type =
                 self.resolve_generic_type(owner.id, &owner.name, &ident.type_args, ident.span);
             return if owner_type == TypeTable::ERROR {
@@ -3726,10 +3727,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         cast: &ast::CastExpr,
         ctx: &mut FunctionContext,
     ) -> TypeId {
-        let target_type = self.resolve_type(&cast.target_type);
         // A cast names its own result type, so nothing downstream reports an
         // unresolved target: reify's `ann_expression_types` filters the
         // recorded `UNKNOWN` out and its `.expect` is what fails instead.
+        if self.reject_unresolved_annotation(&cast.target_type) {
+            return TypeTable::ERROR;
+        }
+        let target_type = self.resolve_type(&cast.target_type);
         if target_type == TypeTable::UNKNOWN {
             let _ = self.emit(TypeError::UnknownType {
                 name: self.get_type_name_full(&cast.target_type),
@@ -4021,6 +4025,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .name_id
                 .zip(name.as_deref())
                 .expect("only a named literal parses a turbofish");
+            self.reject_unresolved_args(&struct_lit.type_args);
             Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
         };
 
