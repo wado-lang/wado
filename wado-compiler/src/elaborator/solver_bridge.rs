@@ -2161,13 +2161,20 @@ impl SolverBridge {
             .is_none_or(|declaration| sourced(&self.program, trait_, declaration))
     }
 
-    /// The positions of `decl`'s arguments that a written impl of `trait_`
-    /// over every instance of it bounds by `trait_` ([`written_over`]).
-    pub(super) fn written_over(&self, decl: DefId, trait_: DefId) -> Option<Vec<usize>> {
-        written_over(
+    /// Each bound a written impl of `trait_` over every instance of `decl`
+    /// puts on one of its arguments, by the argument's position
+    /// ([`written_over`]).
+    pub(super) fn written_over(&self, decl: DefId, trait_: DefId) -> Option<Vec<(usize, DefId)>> {
+        let bounds = written_over(
             &self.program,
             self.lowering.known_trait(trait_)?,
             self.lowering.known_type(&DeclKey::Def(decl))?,
+        )?;
+        Some(
+            bounds
+                .into_iter()
+                .map(|(position, bound)| (position, self.lowering.trait_def_of(bound)))
+                .collect(),
         )
     }
 

@@ -128,15 +128,16 @@ fn decl_params(decl: &Declaration) -> Vec<SolverType> {
         .collect()
 }
 
-/// The positions of `head`'s arguments that a written impl of `trait_` over
-/// every instance of `head` bounds by `trait_` itself: an instance holds the
-/// trait only where those arguments do. `None` where no such impl is written.
+/// Each bound a written impl of `trait_` over every instance of `head` puts on
+/// one of `head`'s arguments, by the argument's position: an instance holds
+/// the trait only where its arguments meet them. A bound that writes the
+/// trait's arguments is left out. `None` where no such impl is written.
 #[must_use]
 pub fn written_over(
     program: &Program,
     trait_: TraitDeclId,
     head: TypeDeclId,
-) -> Option<Vec<usize>> {
+) -> Option<Vec<(usize, TraitDeclId)>> {
     program.impls_of(trait_).find_map(|(_, def)| {
         let SolverType::Decl(target, args) = &def.target else {
             return None;
@@ -145,11 +146,17 @@ pub fn written_over(
             || {
                 args.iter()
                     .enumerate()
-                    .filter(|(_, arg)| {
-                        matches!(arg, SolverType::Param(index)
-                            if def.params[*index as usize].bounds.iter().any(|b| b.trait_ == trait_))
+                    .filter_map(|(position, arg)| match arg {
+                        SolverType::Param(index) => Some((position, *index)),
+                        _ => None,
                     })
-                    .map(|(position, _)| position)
+                    .flat_map(|(position, index)| {
+                        def.params[index as usize]
+                            .bounds
+                            .iter()
+                            .filter(|b| b.args.is_empty())
+                            .map(move |b| (position, b.trait_))
+                    })
                     .collect()
             },
         )

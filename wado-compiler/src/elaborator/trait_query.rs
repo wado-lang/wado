@@ -1127,16 +1127,27 @@ impl TypeSystem {
             }
             // A written impl reads none of the members the walk below names.
             if let Some(bounded) = self.written_bounded_args(type_id, trait_) {
-                let Some(arg) = bounded
-                    .into_iter()
-                    .find(|&arg| !self.type_implements_trait(ctx, arg, &fq_trait))
-                else {
+                let unmet = bounded.into_iter().find(|&(arg, bound)| {
+                    !self.type_implements_trait(
+                        ctx,
+                        arg,
+                        &FqTraitName::declared(self.resolutions.defs(), bound),
+                    )
+                });
+                let Some((arg, bound)) = unmet else {
                     break;
                 };
+                let owner = self.type_id_to_string(type_id);
+                let arg_ty = self.type_id_to_string(arg);
+                if bound != trait_ {
+                    let bound_name = self.resolutions.defs().name(bound);
+                    chain.push(format!(
+                        "`{owner}` implements `{trait_name}` only where `{arg_ty}` implements `{bound_name}`"
+                    ));
+                    break;
+                }
                 chain.push(format!(
-                    "`{}` implements `{trait_name}` only where `{}` does",
-                    self.type_id_to_string(type_id),
-                    self.type_id_to_string(arg)
+                    "`{owner}` implements `{trait_name}` only where `{arg_ty}` does"
                 ));
                 type_id = arg;
                 continue;
@@ -1163,14 +1174,14 @@ impl TypeSystem {
         chain
     }
 
-    /// The arguments of `type_id` that a written impl of `trait_` over every
-    /// instance of its declaration bounds by `trait_` ([`SolverBridge::written_over`]).
-    /// `None` where no such impl is written.
-    fn written_bounded_args(&self, type_id: TypeId, trait_: DefId) -> Option<Vec<TypeId>> {
-        let positions = self
+    /// Each bound a written impl of `trait_` over every instance of
+    /// `type_id`'s declaration puts on one of its arguments, with the argument
+    /// ([`SolverBridge::written_over`]). `None` where no such impl is written.
+    fn written_bounded_args(&self, type_id: TypeId, trait_: DefId) -> Option<Vec<(TypeId, DefId)>> {
+        let bounds = self
             .solver()
             .written_over(self.represented_decl(type_id)?, trait_)?;
-        if positions.is_empty() {
+        if bounds.is_empty() {
             return Some(Vec::new());
         }
         let table = self.type_table.borrow();
@@ -1178,9 +1189,9 @@ impl TypeSystem {
             .generic_type_args(table.representation_head(type_id))
             .expect("an argument the impl bounds is one the instance carries");
         Some(
-            positions
+            bounds
                 .into_iter()
-                .map(|position| args[position])
+                .map(|(position, bound)| (args[position], bound))
                 .collect(),
         )
     }
