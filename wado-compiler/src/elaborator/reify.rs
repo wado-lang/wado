@@ -5638,14 +5638,10 @@ impl<'a> Reify<'a> {
             )
         };
 
-        // A failure is no trap, so its rarity is a guess, which the profile
-        // overrides.
-        let failure_marker = (!self.cold.is_some_and(|cold| cold.is_warm_try(qm.id)))
-            .then(|| cold_path_stmt(qm.span));
         let mut desugared = if is_option {
-            self.reify_question_mark_option(inner, ctx, qm.span, failure_marker)
+            self.reify_question_mark_option(inner, ctx, qm.span)
         } else if is_result {
-            self.reify_question_mark_result(inner, ctx, qm.span, qm.id, failure_marker)
+            self.reify_question_mark_result(inner, ctx, qm.span, qm.id)
         } else {
             // Annotate already diagnosed; produce a Unit-typed
             // placeholder of `ERROR` so downstream phases see the
@@ -5657,7 +5653,15 @@ impl<'a> Reify<'a> {
             && let Some(exit) = arms.last_mut()
         {
             let placeholder = TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, qm.span);
-            let body = std::mem::replace(&mut exit.body, placeholder);
+            let mut body = std::mem::replace(&mut exit.body, placeholder);
+            // A failure is no trap, so its rarity is a guess, which the
+            // profile overrides.
+            if !self.cold.is_some_and(|cold| cold.is_warm_try(qm.id)) {
+                let TirExprKind::Block(block) = &mut body.kind else {
+                    unreachable!("a `?`'s early return is a block");
+                };
+                block.stmts.insert(0, cold_path_stmt(qm.span));
+            }
             exit.body = self.probe_expr(ProbeSite::TryExit, qm.id, body);
         }
         desugared
@@ -5670,7 +5674,6 @@ impl<'a> Reify<'a> {
         inner: TirExpr,
         ctx: &mut FunctionContext,
         span: Span,
-        failure_marker: Option<TirStmt>,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let (some_type, some_name, some_index, none_name, none_index) = {
@@ -5729,18 +5732,15 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    failure_marker
-                        .into_iter()
-                        .chain([TirStmt::new(
-                            TirStmtKind::Return {
-                                // `Option<U>` and the operand's `Option<T>`
-                                // are distinct GC types, so the propagated
-                                // `None` is the enclosing function's.
-                                value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
-                            },
-                            span,
-                        )])
-                        .collect(),
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            // `Option<U>` and the operand's `Option<T>` are
+                            // distinct GC types, so the propagated `None` is
+                            // the enclosing function's.
+                            value: Some(TirExpr::new(TirExprKind::Null, ctx.return_type, span)),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,
@@ -5768,7 +5768,6 @@ impl<'a> Reify<'a> {
         ctx: &mut FunctionContext,
         span: Span,
         qm_id: AstId,
-        failure_marker: Option<TirStmt>,
     ) -> TirExpr {
         let inner_type = inner.type_id;
         let return_type = ctx.return_type;
@@ -5863,15 +5862,12 @@ impl<'a> Reify<'a> {
             guard: None,
             body: TirExpr::new(
                 TirExprKind::Block(TirBlock::new(
-                    failure_marker
-                        .into_iter()
-                        .chain([TirStmt::new(
-                            TirStmtKind::Return {
-                                value: Some(err_variant),
-                            },
-                            span,
-                        )])
-                        .collect(),
+                    vec![TirStmt::new(
+                        TirStmtKind::Return {
+                            value: Some(err_variant),
+                        },
+                        span,
+                    )],
                     span,
                 )),
                 TypeTable::NEVER,

@@ -146,6 +146,7 @@ impl Summary {
                     runs += count as u128;
                     runs >= share
                 })
+                // A profile with no count has nothing to read a line against.
                 .unwrap_or(i64::MAX)
         };
         Self {
@@ -534,7 +535,13 @@ mod tests {
 
     #[test]
     fn each_line_is_the_smallest_count_inside_its_share() {
-        let lines = summary(&[600, 300, 60, 30, 10], Cutoffs { hot: 900_000, cold: 990_000 });
+        let lines = summary(
+            &[600, 300, 60, 30, 10],
+            Cutoffs {
+                hot: 900_000,
+                cold: 990_000,
+            },
+        );
         assert_eq!(lines, Summary { hot: 300, cold: 30 });
         assert!(lines.is_hot(300) && !lines.is_cold(300));
         assert!(!lines.is_hot(60) && !lines.is_cold(60));

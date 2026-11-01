@@ -176,7 +176,7 @@ pub fn optimize(
         inline_growth,
         iterations: opt_iterations,
         specializations,
-        // Read where the profile is applied, in reify.
+        // The profile's summary reads these, ahead of reify.
         profile_summary_cutoff_hot: _,
         profile_summary_cutoff_cold: _,
     } = opt;
