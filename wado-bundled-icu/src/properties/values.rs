@@ -954,7 +954,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_general_category_group(name: String, matching: wit::Matching) -> Option<u16> {
-        position(GENERAL_CATEGORY_GROUP, parse::<GeneralCategoryGroup>(&name, matching)?)
+        position(GENERAL_CATEGORY_GROUP, parse(&name, matching)?)
     }
 
     fn bidi_class_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -966,7 +966,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_bidi_class(name: String, matching: wit::Matching) -> Option<u16> {
-        position(BIDI_CLASS, parse::<BidiClass>(&name, matching)?)
+        position(BIDI_CLASS, parse(&name, matching)?)
     }
 
     fn canonical_combining_class_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -978,7 +978,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_canonical_combining_class(name: String, matching: wit::Matching) -> Option<u16> {
-        position(CANONICAL_COMBINING_CLASS, parse::<CanonicalCombiningClass>(&name, matching)?)
+        position(CANONICAL_COMBINING_CLASS, parse(&name, matching)?)
     }
 
     fn east_asian_width_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -990,7 +990,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_east_asian_width(name: String, matching: wit::Matching) -> Option<u16> {
-        position(EAST_ASIAN_WIDTH, parse::<EastAsianWidth>(&name, matching)?)
+        position(EAST_ASIAN_WIDTH, parse(&name, matching)?)
     }
 
     fn grapheme_cluster_break_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1002,7 +1002,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_grapheme_cluster_break(name: String, matching: wit::Matching) -> Option<u16> {
-        position(GRAPHEME_CLUSTER_BREAK, parse::<GraphemeClusterBreak>(&name, matching)?)
+        position(GRAPHEME_CLUSTER_BREAK, parse(&name, matching)?)
     }
 
     fn hangul_syllable_type_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1014,7 +1014,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_hangul_syllable_type(name: String, matching: wit::Matching) -> Option<u16> {
-        position(HANGUL_SYLLABLE_TYPE, parse::<HangulSyllableType>(&name, matching)?)
+        position(HANGUL_SYLLABLE_TYPE, parse(&name, matching)?)
     }
 
     fn indic_conjunct_break_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1026,7 +1026,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_indic_conjunct_break(name: String, matching: wit::Matching) -> Option<u16> {
-        position(INDIC_CONJUNCT_BREAK, parse::<IndicConjunctBreak>(&name, matching)?)
+        position(INDIC_CONJUNCT_BREAK, parse(&name, matching)?)
     }
 
     fn indic_syllabic_category_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1038,7 +1038,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_indic_syllabic_category(name: String, matching: wit::Matching) -> Option<u16> {
-        position(INDIC_SYLLABIC_CATEGORY, parse::<IndicSyllabicCategory>(&name, matching)?)
+        position(INDIC_SYLLABIC_CATEGORY, parse(&name, matching)?)
     }
 
     fn joining_group_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1050,7 +1050,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_joining_group(name: String, matching: wit::Matching) -> Option<u16> {
-        position(JOINING_GROUP, parse::<JoiningGroup>(&name, matching)?)
+        position(JOINING_GROUP, parse(&name, matching)?)
     }
 
     fn joining_type_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1062,7 +1062,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_joining_type(name: String, matching: wit::Matching) -> Option<u16> {
-        position(JOINING_TYPE, parse::<JoiningType>(&name, matching)?)
+        position(JOINING_TYPE, parse(&name, matching)?)
     }
 
     fn line_break_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1074,7 +1074,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_line_break(name: String, matching: wit::Matching) -> Option<u16> {
-        position(LINE_BREAK, parse::<LineBreak>(&name, matching)?)
+        position(LINE_BREAK, parse(&name, matching)?)
     }
 
     fn numeric_type_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1086,7 +1086,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_numeric_type(name: String, matching: wit::Matching) -> Option<u16> {
-        position(NUMERIC_TYPE, parse::<NumericType>(&name, matching)?)
+        position(NUMERIC_TYPE, parse(&name, matching)?)
     }
 
     fn script_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1098,7 +1098,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_script(name: String, matching: wit::Matching) -> Option<u16> {
-        position(SCRIPT, parse::<Script>(&name, matching)?)
+        position(SCRIPT, parse(&name, matching)?)
     }
 
     fn sentence_break_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1110,7 +1110,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_sentence_break(name: String, matching: wit::Matching) -> Option<u16> {
-        position(SENTENCE_BREAK, parse::<SentenceBreak>(&name, matching)?)
+        position(SENTENCE_BREAK, parse(&name, matching)?)
     }
 
     fn vertical_orientation_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1122,7 +1122,7 @@ impl wit::Guest for Component {
     }
 
     fn parse_vertical_orientation(name: String, matching: wit::Matching) -> Option<u16> {
-        position(VERTICAL_ORIENTATION, parse::<VerticalOrientation>(&name, matching)?)
+        position(VERTICAL_ORIENTATION, parse(&name, matching)?)
     }
 
     fn word_break_ranges(value: u16) -> Vec<(u32, u32)> {
@@ -1134,6 +1134,6 @@ impl wit::Guest for Component {
     }
 
     fn parse_word_break(name: String, matching: wit::Matching) -> Option<u16> {
-        position(WORD_BREAK, parse::<WordBreak>(&name, matching)?)
+        position(WORD_BREAK, parse(&name, matching)?)
     }
 }

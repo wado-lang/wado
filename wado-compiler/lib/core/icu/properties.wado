@@ -1426,7 +1426,7 @@ impl FromStr for Property {
         let Some([name, value]) = text.split_once("=") else {
             return Ok(Property::BinaryProperty(BinaryProperty::from_str(&text)?));
         };
-        return match name.to_string() {
+        return match name {
             "General_Category" | "gc" => Ok(Property::GeneralCategoryGroup(GeneralCategoryGroup::from_str(value)?)),
             "Bidi_Class" | "bc" => Ok(Property::BidiClass(BidiClass::from_str(value)?)),
             "Canonical_Combining_Class" | "ccc" => Ok(Property::CanonicalCombiningClass(

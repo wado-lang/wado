@@ -40,8 +40,8 @@ assert grapheme_count("🇯🇵") == 1;
 ### `pub fn ranges<P: CodePointSet>(property: P) -> List<[u32, u32]>`
 
 The inclusive code point ranges of a property or property value, lowest
-first: `ranges(Properties::BinaryProperty::WhiteSpace)`,
-`ranges(Properties::GeneralCategoryGroup::Letter)`.
+first: `ranges(BinaryProperty::WhiteSpace)`,
+`ranges(GeneralCategoryGroup::Letter)`.
 
 ### `pub fn contains<P: CodePointSet>(property: P, ch: char) -> bool`
 
