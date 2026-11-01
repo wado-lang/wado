@@ -72,6 +72,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run check-deps
+mise run check-unit-graph
 mise run check-rust-paths
 mise run check-spec-examples
 mise run check-wadopoet-vocabulary
@@ -170,6 +171,10 @@ fi
 echo "ok: wasm-tools crates are deduped on wasmtime's generation"
 """
 
+[tasks.check-unit-graph]
+description = "Fail if a build that starts from another's target/ would recompile a unit of it: CI's handoffs, and a session's `cargo build` over the shared cache"
+run = "node scripts/prebuilt.ts check"
+
 [tasks.release-build]
 description = "Build the wado CLI with the release profile (LTO, fully optimized)"
 run = """
@@ -253,7 +258,7 @@ run = """
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- --test-threads="$threads"
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- --test-threads="$threads"
 """
 
 [tasks.test-e2e-level]
@@ -274,7 +279,7 @@ case "${level}" in
 esac
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- \
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- \
     --include-ignored "fixture_test_${level,,}" --test-threads="$threads"
 """
 
@@ -444,7 +449,7 @@ WADO_EMI_ROOTS (fixtures,stdlib,example,package-cm-catalog,package-jade,\
 package-marl,benchmark), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture calibrate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture calibrate_corpus"
 
 [tasks.emi-mutate]
 description = """\
@@ -456,7 +461,7 @@ Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture mutate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture mutate_corpus"
 
 [tasks.test-format]
 description = """\
@@ -464,7 +469,7 @@ Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \
 AST round-trip, and no comment drop. The corpus is not reformatted in place \
 (fixtures double as parser tests), but it is the richest edge-case input.\
 """
-run = "cargo test -p wado-compiler-tests --test format"
+run = "cargo test --workspace --test format"
 
 # Disjoint file sets, so the three run concurrently — except that the other two
 # build the workspace `cargo fmt` is rewriting, so they wait for it. `wait_for`
@@ -629,19 +634,6 @@ run = """
 set -xe -o pipefail
 scripts/dev-bin.sh wado syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
 scripts/dev-bin.sh wado syntax --format language-config -o wado-vscode/language-configuration.json
-"""
-
-[tasks.update-json-schema-files]
-description = "Download TextMate grammar and language-configuration JSON schemas"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-mkdir -p wado-cli/schemas
-curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
-    | sed 's|"$schema": "http://json-schema.org/schema#"|"$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$id":|g' \
-    > wado-cli/schemas/tmlanguage.schema.json
-curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
-    > wado-cli/schemas/language-configuration.schema.json
 """
 
 [tasks.sync-vendor]

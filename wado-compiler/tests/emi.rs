@@ -11,7 +11,7 @@
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
 //!
 //! ```sh
-//! cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture
+//! cargo test --workspace --test emi -- --ignored --nocapture
 //! ```
 //!
 //! Knobs: `WADO_EMI_JOBS`, `WADO_EMI_FILTER`, `WADO_EMI_ROOTS`,
@@ -2078,7 +2078,7 @@ fn describe_sites(source: &str, sites: &[Site]) -> String {
 /// source instead of inferred from a line and column.
 ///
 /// ```sh
-/// WADO_EMI_FILTER=if_expression cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture dump_mutants
+/// WADO_EMI_FILTER=if_expression cargo test --workspace --test emi -- --ignored --nocapture dump_mutants
 /// ```
 #[test]
 #[ignore = "inspection aid — writes files, asserts nothing"]

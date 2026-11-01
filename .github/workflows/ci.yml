@@ -73,6 +73,10 @@ jobs:
   # as an artifact. The runners' concurrency cap, not any one job, is what a run
   # waits on, so a compile repeated per job is paid for in queue time: `wado`
   # was compiled nine times a run and the e2e binary five.
+  #
+  # The jobs that compile more start from this one's target/, so the workspace
+  # compiles once too. `mise run check-unit-graph` keeps their feature
+  # resolution the same as this build's, without which they would share no unit.
   build-wado:
     name: Build (wado)
     needs: changes
@@ -91,7 +95,7 @@ jobs:
 
       # cargo-cache.yml builds this same command, so only the workspace crates
       # compile here.
-      - run: cargo build --locked --bin wado --bin wado-dev-tools
+      - run: node scripts/prebuilt.ts build wado
       - uses: actions/upload-artifact@v7
         with:
           name: prebuilt-wado
@@ -99,10 +103,13 @@ jobs:
             target/debug/wado
             target/debug/wado-dev-tools
           if-no-files-found: error
+      - uses: ./.github/actions/target-handoff
+        with:
+          mode: save
 
   build-e2e:
     name: Build (E2E)
-    needs: changes
+    needs: [changes, build-wado]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -115,15 +122,11 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/target-handoff
+        with:
+          mode: restore
 
-      # The test binary's name carries a hash; cargo reports where it put it.
-      - name: cargo test --locked -p wado-compiler-tests --test e2e --no-run
-        run: |
-          set -euo pipefail
-          exe="$(cargo test --locked -p wado-compiler-tests --test e2e --no-run \
-            --message-format=json-render-diagnostics \
-            | jq -r 'select(.reason == "compiler-artifact" and .target.name == "e2e") | .executable // empty')"
-          cp "${exe}" target/debug/e2e
+      - run: node scripts/prebuilt.ts build e2e
       - uses: actions/upload-artifact@v7
         with:
           name: prebuilt-e2e
@@ -139,7 +142,7 @@ jobs:
   # every I/O call delegated to the wado-cli host.
   test-core:
     name: Test (Rust)
-    needs: changes
+    needs: [changes, build-wado]
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -152,15 +155,20 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: ./.github/actions/target-handoff
+        with:
+          mode: restore
 
       - run: mise run check-deps
+      - run: mise run check-unit-graph
       - run: mise run test-hooks
       - run: mise run check-review-filters
       - run: cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
-      - run: cargo test --locked --all -- --skip fixture_test_
+      - run: node scripts/prebuilt.ts build test
+      - run: cargo test --locked --workspace -- --skip fixture_test_
       # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
       # a lint with no automatic fix reaches main unless this step fails on it.
       - run: mise run clippy
