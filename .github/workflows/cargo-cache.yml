@@ -17,10 +17,11 @@
 # hook re-checks them against the published manifest, failing closed.
 #
 # The configuration set below is load-bearing. Feature resolution differs
-# between builds that include dev-dependencies and those that do not (16
-# registry crates change features, propagating to ~72 units), and again between
-# `--workspace` and a single `-p` selection. Each configuration is a separate
-# artifact set, so the cache covers only the commands the runner actually ran.
+# between `--workspace` and a single `-p` selection, and `cargo check` builds
+# no unit `cargo build` does. Each configuration is a separate artifact set, so
+# the cache covers only the commands the runner actually ran. Dev-dependencies
+# add no feature: `mise run check-unit-graph` keeps them from splitting a
+# build of `wado` from a build of the tests.
 #
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
@@ -89,7 +90,6 @@ jobs:
           # configuration note above before trimming this list.
           cargo check --workspace --locked
           cargo build --workspace --locked --all-targets
-          cargo build --workspace --locked
           cargo check -p wado-compiler --locked
           cargo check -p wado-lsp --locked
           cargo check -p wado-manifest --locked

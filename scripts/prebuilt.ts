@@ -92,35 +92,6 @@ function profileOf(unit: Unit): Record<string, unknown> {
   return profile;
 }
 
-// One digest per unit, over what cargo hashes into the unit's artifact name.
-function identities(units: Unit[]): string[] {
-  const memo = new Map<number, string>();
-  const identity = (index: number): string => {
-    const known = memo.get(index);
-    if (known !== undefined) {
-      return known;
-    }
-    const unit = units[index];
-    const digest = createHash("sha256")
-      .update(
-        JSON.stringify([
-          unit.pkg_id,
-          unit.target.name,
-          unit.target.kind,
-          unit.mode,
-          unit.features,
-          profileOf(unit),
-          unit.platform,
-          unit.dependencies.map((d) => identity(d.index)).sort(),
-        ]),
-      )
-      .digest("hex");
-    memo.set(index, digest);
-    return digest;
-  };
-  return units.map((_, index) => identity(index));
-}
-
 // Which unit it is, whatever features and dependencies it was compiled with.
 // The profile tells a crate built for a build script or a proc macro, where
 // cargo drops debuginfo, from the same crate built for the program.
@@ -133,6 +104,25 @@ function slot(unit: Unit): string {
     profileOf(unit),
     unit.platform,
   ]);
+}
+
+// One digest per unit, over what cargo hashes into the unit's artifact name.
+function identities(units: Unit[]): string[] {
+  const memo = new Map<number, string>();
+  const identity = (index: number): string => {
+    const known = memo.get(index);
+    if (known !== undefined) {
+      return known;
+    }
+    const unit = units[index];
+    const dependencies = unit.dependencies.map((d) => identity(d.index)).sort();
+    const digest = createHash("sha256")
+      .update(JSON.stringify([slot(unit), unit.features, dependencies]))
+      .digest("hex");
+    memo.set(index, digest);
+    return digest;
+  };
+  return units.map((_, index) => identity(index));
 }
 
 function check(): boolean {
@@ -156,7 +146,7 @@ function check(): boolean {
     // A unit whose features match was split by a dependency, named on its own line.
     const causes = new Set<string>();
     for (const unit of split) {
-      for (const theirs of bySlot.get(slot(unit)) ?? []) {
+      for (const theirs of bySlot.get(slot(unit))!) {
         const added = theirs.features.filter((f) => !unit.features.includes(f));
         const dropped = unit.features.filter((f) => !theirs.features.includes(f));
         if (added.length > 0 || dropped.length > 0) {
