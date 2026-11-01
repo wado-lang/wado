@@ -8,7 +8,8 @@ is a findings document grounded in two measured spikes under
 - `wado-bundled-icu/` — the whole library baked into one self-contained
   component (the monolith baseline).
 - `wado-bundled-icu/bdp-spike/` — data-free feature components that load data at
-  runtime, plus a shared data component (reproduce with `bdp-spike/build.sh`).
+  runtime, plus a shared data component. It has been removed; at e52a46286,
+  `bdp-spike/build.sh` reproduces its measurements.
 
 ## The two things you split: code and data
 
