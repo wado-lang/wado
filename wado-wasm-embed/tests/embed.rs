@@ -372,6 +372,42 @@ fn stripping_drops_every_custom_section() {
     assert!(sections.is_empty(), "{sections:?}");
 }
 
+/// A component's own names describe items the collection leaves alone, so they
+/// stay true; stripping drops them all the same, as it does a module's.
+#[test]
+fn stripping_a_component_drops_its_own_custom_sections_too() {
+    let component = wat::parse_str(
+        r#"
+        (component
+          (@custom "component-name" "stale")
+          (core module $m
+            (@custom "producers" "\00")
+            (func (export "f") (result i32) (i32.const 1)))
+          (@custom "producers" "\00"))
+        "#,
+    )
+    .expect("fixture must parse");
+    let collect = |strip| {
+        let out = wado_wasm_embed::embed_component(
+            &component,
+            &Embed {
+                memory_import: None,
+                keep_export: &|_| true,
+                stub_export: &|_| false,
+                strip_custom_sections: strip,
+            },
+        )
+        .expect("embed_component");
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&out)
+            .unwrap_or_else(|e| panic!("the collected component must validate: {e}"));
+        custom_sections(&out)
+    };
+    assert!(collect(true).is_empty(), "{:?}", collect(true));
+    let kept = collect(false);
+    assert!(kept.contains(&"component-name".to_string()), "{kept:?}");
+}
+
 /// `ref.func` needs its target declared, and an export is a declaration. When
 /// the prune drops that export the function is still live, so the declaration
 /// has to be put back or the module no longer validates.

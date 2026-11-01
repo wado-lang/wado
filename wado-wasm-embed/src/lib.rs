@@ -132,7 +132,9 @@ pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
 }
 
 /// Collect over a component: each core module it holds is embedded, and every
-/// other section is copied byte for byte.
+/// other section is copied byte for byte. `strip_custom_sections` drops the
+/// component's own custom sections as well as its modules'; those of a
+/// component nested inside stay with it.
 pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     use wasmparser::Payload;
 
@@ -157,11 +159,19 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
                     // The length already written ahead of the range describes
                     // the module that was there, so it goes with it. `Encode`
                     // writes the new one back, length and payload together.
-                    drop_module_length(&mut out);
+                    drop_section_length(&mut out, MODULE_SECTION_ID);
                     embed(&component[unchecked_range.clone()], opts)?.encode(&mut out);
                     copied = unchecked_range.end;
                 }
                 nesting += 1;
+            }
+            Payload::CustomSection(reader) if nesting == 0 && opts.strip_custom_sections => {
+                let range = reader.range();
+                let range = range.start as usize..range.end as usize;
+                out.extend_from_slice(&component[copied..range.start]);
+                drop_section_length(&mut out, CUSTOM_SECTION_ID);
+                out.pop();
+                copied = range.end;
             }
             Payload::ComponentSection { .. } => nesting += 1,
             Payload::End(_) if nesting > 0 => nesting -= 1,
@@ -175,18 +185,18 @@ pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Er
     Ok(out)
 }
 
-/// Take the module length off the tail of `out`. Read backwards, a LEB128 is
-/// its one byte without a continuation bit, then however many with one.
-fn drop_module_length(out: &mut Vec<u8>) {
+const CUSTOM_SECTION_ID: u8 = 0x00;
+const MODULE_SECTION_ID: u8 = 0x01;
+
+/// Take a section's length off the tail of `out`, leaving its id. Read
+/// backwards, a LEB128 is its one byte without a continuation bit, then however
+/// many with one.
+fn drop_section_length(out: &mut Vec<u8>, id: u8) {
     out.pop();
     while out.last().is_some_and(|byte| byte & 0x80 != 0) {
         out.pop();
     }
-    assert_eq!(
-        out.last(),
-        Some(&0x01),
-        "a module section is the byte 0x01 and a length"
-    );
+    assert_eq!(out.last(), Some(&id), "a section is its id byte and a length");
 }
 
 /// Everything the pass needs from the asset, in its original index space.
