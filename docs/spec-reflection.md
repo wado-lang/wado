@@ -18,6 +18,7 @@ type's identity. Each kind trait carries the structure of that kind.
 | `ReflectEnum`     | every enum                     | `Members`, `members()`, `discriminant()`, `from_discriminant()`                               |
 | `ReflectFlags`    | every flags type               | `Members`, `members()`, `bits()`, `from_bits()`                                               |
 | `ReflectNewtype`  | every newtype                  | `Base`                                                                                        |
+| `ReflectResource` | every affine resource          | `id()`                                                                                        |
 | `ReflectTemplate` | the shape of a tagged template | see [Tagged Template Literals](./spec-literals.md#tagged-template-literals)                   |
 
 The prelude declares all of them, so a bound names one with no import.
