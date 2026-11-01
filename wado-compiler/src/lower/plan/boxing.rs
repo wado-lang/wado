@@ -13,7 +13,7 @@ use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
     TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
@@ -114,11 +114,15 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
     if !shadowed_params.is_empty()
         && let Some(body) = &mut func.body
     {
-        let mut remap: IndexMap<u32, u32> = IndexMap::default();
-        for (param_idx, shadow_idx, _, _) in &shadowed_params {
-            remap.insert(*param_idx, *shadow_idx);
-        }
-        remap_locals_in_block(body, &remap);
+        // An immutable parameter's box only gives `&param` an address: nothing
+        // writes it, so every other read stays on the parameter, where a
+        // constant argument stays visible to `param_spec` in the same round.
+        let (mutable, immutable): (Vec<_>, Vec<_>) = shadowed_params
+            .iter()
+            .map(|(param_idx, shadow_idx, _, _)| (*param_idx, *shadow_idx))
+            .partition(|(param_idx, _)| func.params[*param_idx as usize].is_mut);
+        remap_locals_in_block(body, &mutable.into_iter().collect());
+        RemapReferences(immutable.into_iter().collect()).visit_block(body);
 
         // The shadow is declared as a boxed `let` local is: of the parameter's
         // own type, which the lowering wraps in the box, sharing the
@@ -389,6 +393,30 @@ impl TypeBuilder {
         type_table.follow_redefinitions();
         for (&inner, &wrapper) in &self.box_struct_types {
             type_table.register_box_payload(wrapper, inner);
+        }
+    }
+}
+
+/// Point each `&local` and `&mut local` at the local's shadow, leaving its
+/// value reads alone. A closure body numbers its own locals, so it is not
+/// entered.
+struct RemapReferences(IndexMap<u32, u32>);
+
+impl TirMutVisitor for RemapReferences {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } if matches!(inner.kind, TirExprKind::Local { .. }) => {
+                if let TirExprKind::Local { index, .. } = &mut inner.kind
+                    && let Some(&shadow) = self.0.get(index)
+                {
+                    *index = shadow;
+                }
+            }
+            TirExprKind::Closure { .. } => {}
+            _ => self.walk_expr(expr),
         }
     }
 }
