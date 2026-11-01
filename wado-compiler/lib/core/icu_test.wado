@@ -63,8 +63,19 @@ test "a locale drops variants and extensions" {
 
 test "a well-formed tag is accepted" {
     for let tag of [
-        "en", "haw-US", "en-1994", "en-u-ca-gregory-nu-latn", "en-u-attr-ca-gregory", "und-t-en-h0-hybrid",
-        "en-t-k0-qwerty", "en-a-bbb-x-a-b", "en-x-1",
+        "en",
+        "haw-US",
+        "en-1994",
+        "en-u-ca-gregory-nu-latn",
+        "en-u-attr-ca-gregory",
+        "und-t-en-h0-hybrid",
+        "en-t-k0-qwerty",
+        "en-a-bbb-x-a-b",
+        "en-x-1",
+        "sl-rozaj-biske",
+        "en-a-bbb-b-ccc",
+        // A repeated `u` key is allowed; the first is the one that counts.
+        "en-u-ca-gregory-ca-buddhist",
     ] {
         assert Locale::is_well_formed(tag), tag;
     }
@@ -72,8 +83,32 @@ test "a well-formed tag is accepted" {
 
 test "a tag that is not well-formed is refused" {
     for let tag of [
-        "", "e", "en-", "-en", "en--US", "en_US", "root", "x-private", "1en", "en-USA", "en-u", "en-u-a1", "en-t",
-        "en-t-k0", "en-a", "en-a-b", "en-x", "en-x-toolongsub", "en-ü",
+        "",
+        "e",
+        "en-",
+        "-en",
+        "en--US",
+        "en_US",
+        "root",
+        "x-private",
+        "1en",
+        "en-USA",
+        "en-u",
+        "en-u-a1",
+        "en-t",
+        "en-t-k0",
+        "en-a",
+        "en-a-b",
+        "en-x",
+        "en-x-toolongsub",
+        "en-ü",
+        // UTS #35 forbids a repeated variant or extension singleton, which the
+        // grammar alone admits.
+        "en-1994-1994",
+        "sl-rozaj-ROZAJ",
+        "en-t-sl-rozaj-rozaj",
+        "en-a-bbb-a-ccc",
+        "de-u-co-phonebk-U-kn",
     ] {
         assert !Locale::is_well_formed(tag), tag;
         assert Locale::try_from(tag) matches { Err(_) }, tag;

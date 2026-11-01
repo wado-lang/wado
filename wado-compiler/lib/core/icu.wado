@@ -42,16 +42,25 @@ impl Locale {
     /// letters is refused: BCP 47 reserves the length, and no language has one.
     pub fn is_well_formed<S: AsStrSlice>(tag: S) -> bool {
         let mut s = Scanner::new(tag.as_str_slice());
-        if !s.take(is_language) {
+        if s.take(is_language) matches { None } {
             return false;
         }
-        s.language_rest();
-        while let Some(singleton) = s.current {
-            if !(singleton.len() == 1 && is_alnum(&singleton)) {
+        s.script_and_region();
+        if !s.distinct_variants() {
+            return false;
+        }
+        let mut singletons: List<u8> = [];
+        while let Some(subtag) = s.current {
+            if !(subtag.len() == 1 && is_alnum(&subtag)) {
                 return false;
             }
+            let singleton = (unchecked subtag.byte_at(0)).to_ascii_lowercase();
+            if singletons.contains(&singleton) {
+                return false;
+            }
+            singletons.push(singleton);
             s.advance();
-            let complete = match (unchecked singleton.byte_at(0)).to_ascii_lowercase() {
+            let complete = match singleton {
                 b'x' => {
                     return s.take_all(|p| is_alnum_of(p, 1, 8)) && s.current matches { None };
                 },
@@ -95,7 +104,7 @@ impl TryFrom<String> for Locale {
         if !Locale::is_well_formed(&tag) {
             return Err(LocaleError { message: `"${tag}" is not a well-formed BCP 47 language tag` });
         }
-        return Ok(unchecked Locale::from(tag));
+        return Ok(pack_well_formed(tag.as_str_slice()));
     }
 }
 
@@ -105,20 +114,19 @@ impl From<String> for Locale {
     fn from(tag: String) -> Locale
         contract Locale::is_well_formed(&tag)
     {
-        let mut s = Scanner::new(tag.as_str_slice());
-        let language = pack(&s.current.unwrap(), 0);
-        s.advance();
-        let mut script: u32 = 0;
-        if let Some(p) = s.current && is_script(&p) {
-            script = pack(&p, 1);
-            s.advance();
-        }
-        let mut region: u32 = 0;
-        if let Some(p) = s.current && is_region(&p) {
-            region = pack(&p, 3);
-        }
-        return Locale { language, script, region };
+        return pack_well_formed(tag.as_str_slice());
     }
+}
+
+fn pack_well_formed(tag: StrSlice) -> Locale {
+    let mut s = Scanner::new(tag);
+    let language = pack(&s.take(is_language).unwrap(), 0);
+    let [script, region] = s.script_and_region();
+    return Locale {
+        language,
+        script: script.map(|p| pack(&p, 1)).unwrap_or(0),
+        region: region.map(|p| pack(&p, 3)).unwrap_or(0),
+    };
 }
 
 impl Display for Locale {
@@ -185,39 +193,57 @@ impl Scanner {
     }
 
     /// Steps past the current subtag if `pred` holds for it.
-    fn take(&mut self, pred: fn(&StrSlice) -> bool) -> bool {
+    fn take(&mut self, pred: fn(&StrSlice) -> bool) -> Option<StrSlice> {
         if let Some(p) = self.current && pred(&p) {
             self.advance();
-            return true;
+            return Some(p);
         }
-        return false;
+        return null;
     }
 
     /// Steps past each subtag in a row that `pred` holds for; whether there
     /// was one.
     fn take_all(&mut self, pred: fn(&StrSlice) -> bool) -> bool {
         let mut any = false;
-        while self.take(pred) {
+        while self.take(pred) matches { Some(_) } {
             any = true;
         }
         return any;
     }
 
-    /// The optional script, region and variants after a language subtag.
-    fn language_rest(&mut self) {
-        self.take(is_script);
-        self.take(is_region);
-        self.take_all(is_variant);
+    /// The script and region either of which may follow a language subtag.
+    fn script_and_region(&mut self) -> [Option<StrSlice>, Option<StrSlice>] {
+        return [
+            self.take(is_script),
+            self.take(is_region),
+        ];
+    }
+
+    /// Steps past the variants; whether no variant repeats.
+    fn distinct_variants(&mut self) -> bool {
+        let mut seen: List<StrSlice> = [];
+        while let Some(subtag) = self.take(is_variant) {
+            for let prior of &seen {
+                if prior.eq_ignore_ascii_case(&subtag) {
+                    return false;
+                }
+            }
+            seen.push(subtag);
+        }
+        return true;
     }
 
     /// The subtags of a `t` extension: a source language, fields, or both.
     fn transformed_extension(&mut self) -> bool {
         let mut any = false;
-        if self.take(|p| is_alpha_of(p, 2, 3) || is_alpha_of(p, 5, 8)) {
-            self.language_rest();
+        if self.take(|p| is_alpha_of(p, 2, 3) || is_alpha_of(p, 5, 8)) matches { Some(_) } {
+            self.script_and_region();
+            if !self.distinct_variants() {
+                return false;
+            }
             any = true;
         }
-        while self.take(is_tkey) {
+        while self.take(is_tkey) matches { Some(_) } {
             if !self.take_all(|p| is_alnum_of(p, 3, 8)) {
                 return false;
             }
@@ -236,7 +262,7 @@ fn is_script(p: &StrSlice) -> bool {
 }
 
 fn is_region(p: &StrSlice) -> bool {
-    return is_alpha_of(p, 2, 2) || p.len() == 3 && all_bytes(p, |b| b.is_ascii_digit());
+    return is_alpha_of(p, 2, 2) || p.len() == 3 && p.bytes().all(|b| b.is_ascii_digit());
 }
 
 fn is_variant(p: &StrSlice) -> bool {
@@ -254,7 +280,7 @@ fn is_tkey(p: &StrSlice) -> bool {
 }
 
 fn is_alpha_of(p: &StrSlice, min: i32, max: i32) -> bool {
-    return min <= p.len() <= max && all_bytes(p, |b| b.is_ascii_alphabetic());
+    return min <= p.len() <= max && p.bytes().all(|b| b.is_ascii_alphabetic());
 }
 
 fn is_alnum_of(p: &StrSlice, min: i32, max: i32) -> bool {
@@ -262,16 +288,7 @@ fn is_alnum_of(p: &StrSlice, min: i32, max: i32) -> bool {
 }
 
 fn is_alnum(p: &StrSlice) -> bool {
-    return all_bytes(p, |b| b.is_ascii_alphanumeric());
-}
-
-fn all_bytes(p: &StrSlice, pred: fn(u8) -> bool) -> bool {
-    for let b of p.bytes() {
-        if !pred(b) {
-            return false;
-        }
-    }
-    return true;
+    return p.bytes().all(|b| b.is_ascii_alphanumeric());
 }
 
 /// Why a locale was refused: the tag is not well-formed BCP 47.
