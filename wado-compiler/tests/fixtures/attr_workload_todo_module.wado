@@ -1,0 +1,12 @@
+// Every test of a `#![TODO]` module is pending, so none of them is a workload,
+// which must return. The module is imported because the harness reads
+// `#![TODO]` on a fixture itself as the fixture's own pending mark.
+
+use { answer } from "./sub/attr_workload_todo_module_lib.wado";
+
+export fn run() {
+    assert answer() == 42;
+}
+
+__DATA__
+{"compile_error": "attr_workload_todo_module_lib.wado:7:1: analysis error: `workload` cannot mark a test in a module that `#![TODO]` marks: a workload must return, and every test there traps by design", "compile_error_codes": ["ATTR_MISUSE"]}

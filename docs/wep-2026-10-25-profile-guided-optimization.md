@@ -53,9 +53,9 @@ test "sieve to 200k" {
 
 `wado test` runs a workload like any other test, so a workload that breaks
 fails the suite instead of rotting. The attribute combines with
-`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]` it is a
-compile error: such a test traps by design, and a workload that traps fails
-the recording (below).
+`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]`, or in a
+module marked `#![TODO]`, it is a compile error: such a test traps by design,
+and a workload that traps fails the recording (below).
 
 A workload should be deterministic and small. Its counts then come out the same
 on every run, so the committed profile changes only when the code or the
@@ -271,6 +271,13 @@ hint section, the trap-derived hints included. It answers what branch hints are
 worth to wasmtime; `-f no-cold-paths` answers what the markers are worth to the
 whole pipeline.
 
+A marker in an arm that `match_to_switch` turns into a `br_table` target still
+reaches every optimizer pass, but no hint: Wasm's branch-hint section has no
+form for `br_table`. That is accepted. A hint only moves a block in wasmtime's
+code layout, and across every shape tried, branch hints have not made wasmtime's
+code measurably faster. Carrying one there would take a guard ahead of the
+table, a compare on every dispatch, for a gain nobody has measured.
+
 ### A profile changes no output
 
 A profile, stale or wrong, only moves where the optimizer spends its effort. It
@@ -316,14 +323,6 @@ level.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] A workload that traps fails the recording, so a package cannot profile a
-  path that ends in a trap.
-- [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
-  a module is pending, so the workload fails the recording if it traps, and is
-  reported as unexpectedly passing if it returns.
-- [ ] Wasm's branch-hint section has no form for `br_table`, so a cold marker in
-  an arm `match_to_switch` turns into a `br_table` target reaches no hint the
-  engine reads.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.
