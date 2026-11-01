@@ -163,15 +163,16 @@ jobs:
         with:
           shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
 
-      # One command per ci.yml job that compiles: each resolves features its
-      # own way, so each needs its own artifact set (see the configuration
-      # note at the top).
+      # One command per ci.yml job that compiles. `mise run check-unit-graph`
+      # holds the e2e and test builds to the feature resolution of the `wado`
+      # build, but a crate only a build script or a proc macro of the e2e build
+      # uses is compiled for it alone.
       - name: Build what ci.yml builds
         run: |
           # build-wado
           cargo build --locked --bin wado --bin wado-dev-tools
           # build-e2e
-          cargo test --locked -p wado-compiler-tests --test e2e --no-run
+          cargo test --locked --workspace --test e2e --no-run
           # test-core
           cargo build --workspace --locked --all-targets
           cargo check --locked -p wado-compiler --target wasm32-unknown-unknown

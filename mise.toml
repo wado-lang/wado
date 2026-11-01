@@ -72,6 +72,7 @@ run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
 mise run check-deps
+mise run check-unit-graph
 mise run check-rust-paths
 mise run check-spec-examples
 mise run check-wadopoet-vocabulary
@@ -169,6 +170,10 @@ if [ -n "${offenders}" ]; then
 fi
 echo "ok: wasm-tools crates are deduped on wasmtime's generation"
 """
+
+[tasks.check-unit-graph]
+description = "Fail if CI's e2e or test build would recompile a unit of its `wado` build (a dev-dependency feature split)"
+run = "node scripts/prebuilt.ts check"
 
 [tasks.release-build]
 description = "Build the wado CLI with the release profile (LTO, fully optimized)"
@@ -628,19 +633,6 @@ run = """
 set -xe -o pipefail
 scripts/dev-bin.sh wado syntax --format tmLanguage -o wado-vscode/syntaxes/wado.tmLanguage.json
 scripts/dev-bin.sh wado syntax --format language-config -o wado-vscode/language-configuration.json
-"""
-
-[tasks.update-json-schema-files]
-description = "Download TextMate grammar and language-configuration JSON schemas"
-run = """
-#!/usr/bin/env bash
-set -xe -o pipefail
-mkdir -p wado-cli/schemas
-curl -sL "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json" \
-    | sed 's|"$schema": "http://json-schema.org/schema#"|"$schema": "http://json-schema.org/draft-07/schema#"|g; s|"id":|"$id":|g' \
-    > wado-cli/schemas/tmlanguage.schema.json
-curl -sL "https://raw.githubusercontent.com/SchemaStore/schemastore/master/src/schemas/json/language-configuration.json" \
-    > wado-cli/schemas/language-configuration.schema.json
 """
 
 [tasks.sync-vendor]

@@ -107,9 +107,12 @@ assert_cmd = { version = "2" }
 heck = { version = "0.5" }
 lexopt = { version = "0.3.2" }
 predicates = { version = "3" }
-regex = { version = "1" }
+# Unused by name: `dfa-search` is what `assert_cmd`, a dev-dependency, enables
+# through bstr. Naming it for the build too keeps a build of `wado` on the
+# feature resolution of a build of the tests, so the two share every compiled
+# unit; `mise run check-unit-graph` holds them to it.
+regex-automata = { version = "0.4", default-features = false, features = ["dfa-search"] }
 tempfile = { version = "3" }
-jsonschema = { version = "0.60" }
 zlib-rs = { version = "0.6" }
 toml = { version = "1", default-features = false, features = ["parse", "display", "serde", "preserve_order"] }
 libc = { version = "0.2" }
