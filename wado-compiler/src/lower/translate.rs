@@ -548,7 +548,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
                         &base.value_copy.closure_captures,
                     ),
                 ),
-                value_copy::last_use::compute_ref_targets(func, &resolver),
+                value_copy::last_use::compute_ref_targets(func, &resolver, &type_table),
             )
         } else {
             (

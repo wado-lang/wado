@@ -98,6 +98,7 @@ pub(super) fn link_parent_captures(
                 name,
                 source,
                 type_id: local.type_id,
+                through_ref: false,
             }
         })
         .collect()

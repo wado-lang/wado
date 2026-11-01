@@ -2263,6 +2263,7 @@ impl Monomorphizer {
                 params,
                 body,
                 captures,
+                body_locals,
                 ..
             } => {
                 for (_, type_id) in params {
@@ -2270,6 +2271,9 @@ impl Monomorphizer {
                 }
                 for cap in captures {
                     cap.type_id = self.substitute_type(cap.type_id, substitution, type_table);
+                }
+                for local in body_locals {
+                    local.type_id = self.substitute_type(local.type_id, substitution, type_table);
                 }
                 self.substitute_types_in_expr(body, substitution, type_table, local_count, locals);
             }
