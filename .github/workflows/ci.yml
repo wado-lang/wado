@@ -167,6 +167,7 @@ jobs:
       - run: cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
       - run: cargo check --locked -p wado-manifest --target wasm32-unknown-unknown
 
+      - run: node scripts/prebuilt.ts build test
       - run: cargo test --locked --workspace -- --skip fixture_test_
       # tidy's `clippy-fix` applies what clippy can fix but fails on nothing, so
       # a lint with no automatic fix reaches main unless this step fails on it.

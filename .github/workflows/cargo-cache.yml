@@ -19,9 +19,9 @@
 # The configuration set below is load-bearing. Feature resolution differs
 # between `--workspace` and a single `-p` selection, and `cargo check` builds
 # no unit `cargo build` does. Each configuration is a separate artifact set, so
-# the cache covers only the commands the runner actually ran. Dev-dependencies
-# add no feature: `mise run check-unit-graph` keeps them from splitting a
-# build of `wado` from a build of the tests.
+# the cache covers only the commands the runner actually ran. A plain `cargo
+# build --workspace` needs no set of its own: `mise run check-unit-graph` holds
+# it to the units of a build of the tests.
 #
 # Required repo variables (none are secret — all are plain identifiers):
 #   vars.GCP_WIF_PROVIDER    workload identity provider resource name
@@ -40,6 +40,7 @@ on:
       - "*/Cargo.toml"
       - rust-toolchain.toml
       - scripts/pack-target-deps.sh
+      - scripts/prebuilt.ts
       - .github/workflows/cargo-cache.yml
       - .github/workflows/ci.yml
   workflow_dispatch:
@@ -161,7 +162,11 @@ jobs:
       # The same key `.github/actions/setup` restores.
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
+          shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml', 'scripts/prebuilt.ts') }}
+      # mise.toml's Node, which runs scripts/prebuilt.ts as TypeScript.
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 26
 
       # One command per ci.yml job that compiles. `mise run check-unit-graph`
       # holds the e2e and test builds to the feature resolution of the `wado`
@@ -170,11 +175,11 @@ jobs:
       - name: Build what ci.yml builds
         run: |
           # build-wado
-          cargo build --locked --bin wado --bin wado-dev-tools
+          node scripts/prebuilt.ts build wado
           # build-e2e
-          cargo test --locked --workspace --test e2e --no-run
+          node scripts/prebuilt.ts build e2e
           # test-core
-          cargo build --workspace --locked --all-targets
+          node scripts/prebuilt.ts build test
           cargo check --locked -p wado-compiler --target wasm32-unknown-unknown
           cargo check --locked -p wado-lsp --target wasm32-unknown-unknown
           cargo check --locked -p wado-manifest --target wasm32-unknown-unknown

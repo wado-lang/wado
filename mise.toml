@@ -172,7 +172,7 @@ echo "ok: wasm-tools crates are deduped on wasmtime's generation"
 """
 
 [tasks.check-unit-graph]
-description = "Fail if CI's e2e or test build would recompile a unit of its `wado` build (a dev-dependency feature split)"
+description = "Fail if a build that starts from another's target/ would recompile a unit of it: CI's handoffs, and a session's `cargo build` over the shared cache"
 run = "node scripts/prebuilt.ts check"
 
 [tasks.release-build]
@@ -258,7 +258,7 @@ run = """
 set -xe -o pipefail
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- --test-threads="$threads"
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- --test-threads="$threads"
 """
 
 [tasks.test-e2e-level]
@@ -279,7 +279,7 @@ case "${level}" in
 esac
 touch wado-compiler/tests/e2e.rs
 n=$(nproc); threads=$(( n > 1 ? n - 1 : 1 ))
-./scripts/exclusive.sh test cargo test -p wado-compiler-tests --test e2e -- \
+./scripts/exclusive.sh test cargo test --workspace --test e2e -- \
     --include-ignored "fixture_test_${level,,}" --test-threads="$threads"
 """
 
@@ -448,7 +448,7 @@ Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
 WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture calibrate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture calibrate_corpus"
 
 [tasks.emi-mutate]
 description = """\
@@ -460,7 +460,7 @@ Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
 """
-run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture mutate_corpus"
+run = "cargo test --workspace --test emi -- --ignored --nocapture mutate_corpus"
 
 [tasks.test-format]
 description = """\
@@ -468,7 +468,7 @@ Run formatter invariant tests over the fixtures + stdlib corpus: idempotency, \
 AST round-trip, and no comment drop. The corpus is not reformatted in place \
 (fixtures double as parser tests), but it is the richest edge-case input.\
 """
-run = "cargo test -p wado-compiler-tests --test format"
+run = "cargo test --workspace --test format"
 
 # Disjoint file sets, so the three run concurrently — except that the other two
 # build the workspace `cargo fmt` is rewriting, so they wait for it. `wait_for`

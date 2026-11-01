@@ -21,29 +21,32 @@ runs:
       run: |
         set -euo pipefail
         find target/debug -newer .git/HEAD \( -type f -o -type l \) -print0 \
-          | tar -cf target-handoff.tar --null -T -
-        ls -lh target-handoff.tar
+          | tar -cf target-handoff.tar.zst --zstd --null -T -
+        ls -lh target-handoff.tar.zst
+    # An artifact belongs to its run, which is all a handoff lives for.
     - if: inputs.mode == 'save'
-      uses: actions/cache/save@v6
+      uses: actions/upload-artifact@v7
       with:
-        path: target-handoff.tar
-        key: target-handoff-${{ github.run_id }}
+        name: target-handoff
+        path: target-handoff.tar.zst
+        compression-level: 0
+        retention-days: 1
+        if-no-files-found: error
 
     - if: inputs.mode == 'restore'
-      id: restore
-      uses: actions/cache/restore@v6
+      uses: actions/download-artifact@v8
       with:
-        path: target-handoff.tar
-        key: target-handoff-${{ github.run_id }}
+        name: target-handoff
     # cargo calls a unit stale when a source it read is newer than the unit, and
     # the checkout stamped every source with the time it ran, after the build
-    # that compiled the restored units. Back-dating the sources to the commit,
-    # which that build compiled as they are, keeps those units fresh. `-c`
-    # leaves alone a submodule path the checkout did not fill.
-    - if: inputs.mode == 'restore' && steps.restore.outputs.cache-hit == 'true'
+    # that compiled the restored units. That build compiled these sources as
+    # they are, and the shared cache holds no unit of them, so any time before
+    # it keeps the restored units fresh; a fixed one does not depend on clocks.
+    # `-c` leaves alone a submodule path the checkout did not fill.
+    - if: inputs.mode == 'restore'
       shell: bash
       run: |
         set -euo pipefail
-        tar -xf target-handoff.tar
-        rm target-handoff.tar
-        git ls-files -z | xargs -0 touch -c -d "@$(git log -1 --format=%ct)"
+        tar -xf target-handoff.tar.zst --zstd
+        rm target-handoff.tar.zst
+        git ls-files -z | xargs -0 touch -c -d 2000-01-01T00:00:00Z

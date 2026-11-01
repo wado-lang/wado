@@ -26,12 +26,13 @@ inputs:
 runs:
   using: composite
   steps:
-    # The shared key hashes the workflow that fills the cache, so a change to
-    # what it builds starts a new cache: an exact hit is never saved over.
+    # The shared key hashes the workflow that fills the cache and the commands
+    # it runs, so a change to what it builds starts a new cache: an exact hit is
+    # never saved over.
     - if: inputs.rust-cache == 'true'
       uses: Swatinem/rust-cache@v2
       with:
-        shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml') }}
+        shared-key: ci-${{ hashFiles('.github/workflows/cargo-cache.yml', 'scripts/prebuilt.ts') }}
         save-if: false
     - if: contains(inputs.prebuilt, 'wado')
       uses: actions/download-artifact@v8
