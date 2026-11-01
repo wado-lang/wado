@@ -30,7 +30,7 @@ use wado_compiler::ast::{
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::trace::parse_env_list;
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::{CompilerOptions, OptLevel, TestSelection};
 
 /// The levels both stages compare a mutant against its own baseline at. Each
 /// answers only for the pipeline it runs, and `O2` is what a release build and
@@ -134,6 +134,10 @@ enum Root {
     /// A tree, by its directory: the `test` blocks of its sources, each
     /// compiled in the package its `wado.toml` files put it in.
     Tree(&'static str),
+    /// The benchmarks, a tree whose `test "fuel"` blocks are left out: each is
+    /// sized for measuring at `-O2`, and reads fuel through a host this
+    /// harness does not provide.
+    Benchmark,
 }
 
 /// The packages are the ones whose code shapes are worth their compile time
@@ -147,7 +151,7 @@ const ROOTS: [Root; 7] = [
     Root::Tree("package-cm-catalog"),
     Root::Tree("package-jade"),
     Root::Tree("package-marl"),
-    Root::Tree("benchmark"),
+    Root::Benchmark,
 ];
 
 impl Root {
@@ -157,6 +161,7 @@ impl Root {
             Root::Stdlib => "stdlib",
             Root::Example => "example",
             Root::Tree(dir) => dir,
+            Root::Benchmark => "benchmark",
         }
     }
 
@@ -168,6 +173,15 @@ impl Root {
             Root::Stdlib => "wado-compiler/lib",
             Root::Example => "example",
             Root::Tree(dir) => dir,
+            Root::Benchmark => "benchmark",
+        }
+    }
+
+    /// The `test` names whose blocks are left out of a compile here.
+    fn skipped_tests(self) -> &'static [&'static str] {
+        match self {
+            Root::Benchmark => &["fuel"],
+            Root::Fixtures | Root::Stdlib | Root::Example | Root::Tree(_) => &[],
         }
     }
 
@@ -183,7 +197,7 @@ impl Root {
     /// Whether a source here is compiled in the package its `wado.toml` puts it
     /// in, rather than on its own.
     fn reads_manifests(self) -> bool {
-        matches!(self, Root::Tree(_))
+        matches!(self, Root::Tree(_) | Root::Benchmark)
     }
 
     /// How a source here runs when it carries no `__DATA__` section.
@@ -195,7 +209,7 @@ impl Root {
         Spec {
             test_world: self != Root::Example,
             allocator: "debug".to_string(),
-            reads_manifests: self.reads_manifests(),
+            root: self,
         }
     }
 
@@ -307,7 +321,8 @@ fn key_is_understood(key: &str) -> bool {
 struct Spec {
     test_world: bool,
     allocator: String,
-    reads_manifests: bool,
+    /// What the source is compiled under: its package, and the tests left out.
+    root: Root,
 }
 
 impl Spec {
@@ -348,7 +363,7 @@ impl Spec {
         Ok(Self {
             test_world: object.contains_key("test"),
             allocator: allocator.to_string(),
-            reads_manifests: root.reads_manifests(),
+            root,
         })
     }
 
@@ -357,6 +372,15 @@ impl Spec {
             opt_level,
             target_world: self.test_world.then(|| "test".to_string()),
             allocator: Some(self.allocator.clone()),
+            test_selection: TestSelection {
+                skipped: self
+                    .root
+                    .skipped_tests()
+                    .iter()
+                    .map(|name| (*name).to_string())
+                    .collect(),
+                ..TestSelection::default()
+            },
             ..Default::default()
         }
     }
@@ -1083,7 +1107,7 @@ fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
 
 fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
     let options = spec.compiler_options(opt_level);
-    let compiled = if spec.reads_manifests {
+    let compiled = if spec.root.reads_manifests() {
         common::compile_in_package(path, source, options)
     } else {
         common::compile_source_with_compiler_options(path, source, options)
@@ -2686,7 +2710,7 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     let spec = Spec {
         test_world: false,
         allocator: "freelist".to_string(),
-        reads_manifests: false,
+        root: Root::Fixtures,
     };
     let injection = Injection {
         path: Path::new("never-read.wado"),
