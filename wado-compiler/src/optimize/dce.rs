@@ -1615,6 +1615,7 @@ fn populate_type_reachability(
     // the loop mutates. Recomputing it per round put a whole-program walk inside
     // the pass's hot spot. `remove_unreachable_types` hoists it the same way.
     let kept_past_use = variant_decls_kept_past_use(project, &project.type_table.borrow());
+    let instance_payloads = variant_instance_payloads(project);
 
     let mut changed = true;
     while changed {
@@ -1669,6 +1670,13 @@ fn populate_type_reachability(
                 }
             }
         }
+        for (instance, payloads) in &instance_payloads {
+            if analysis.types.contains(instance) {
+                for &payload in payloads {
+                    collect_type_transitive(payload, &type_table, &mut analysis.types);
+                }
+            }
+        }
 
         // Collect type dependencies (array elements, option inner, etc.)
         let current_types: Vec<TypeId> = analysis.types.iter().copied().collect();
@@ -1690,6 +1698,42 @@ fn populate_type_reachability(
         let type_table = project.type_table.borrow();
         analysis.refresh_indexes(&type_table);
     }
+}
+
+/// Each concrete instance of a generic variant, with its case payloads as WIR
+/// lowers the instance with them. A reachable instance keeps these, where the
+/// declaration's own payloads name only its type parameters.
+fn variant_instance_payloads(project: &NirPackage) -> Vec<(TypeId, Vec<TypeId>)> {
+    let mut type_table = project.type_table.borrow_mut();
+    let instances: Vec<(TypeId, Vec<TypeId>, Vec<TypeId>)> = type_table
+        .iter_type_ids()
+        .filter_map(|id| {
+            let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                return None;
+            };
+            if type_args.iter().any(|&arg| type_table.contains_type_param(arg)) {
+                return None;
+            }
+            let variant = project
+                .find_variant(type_table.def_module(*def), &type_table.def_name(*def).to_string())
+                .filter(|v| !v.type_params.is_empty())?;
+            Some((
+                id,
+                type_args.clone(),
+                variant.cases.iter().map(|case| case.payload).collect(),
+            ))
+        })
+        .collect();
+    instances
+        .into_iter()
+        .map(|(id, type_args, payloads)| {
+            let substituted = payloads
+                .into_iter()
+                .map(|payload| type_table.substitute_positional(payload, &type_args))
+                .collect();
+            (id, substituted)
+        })
+        .collect()
 }
 
 /// Add a type and its dependencies to the reachable set

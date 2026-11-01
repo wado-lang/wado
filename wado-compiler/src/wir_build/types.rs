@@ -854,7 +854,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
             mangled: String,
             module_source: ModuleSource,
             template_cases: Vec<(String, TypeId)>,
-            substitution: IndexMap<u32, TypeId>,
+            type_args: Vec<TypeId>,
         }
 
         // Phase 1: collect unregistered instantiations of generic
@@ -903,11 +903,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         .iter()
                         .map(|case| (case.name.clone(), case.payload))
                         .collect(),
-                    substitution: type_args
-                        .iter()
-                        .enumerate()
-                        .map(|(i, arg)| (u32::try_from(i).expect("too many type params"), *arg))
-                        .collect(),
+                    type_args: type_args.clone(),
                 });
             }
         }
@@ -923,10 +919,7 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         .template_cases
                         .into_iter()
                         .map(|(name, payload)| {
-                            (
-                                name,
-                                type_table.substitute_type_params(payload, &c.substitution),
-                            )
+                            (name, type_table.substitute_positional(payload, &c.type_args))
                         })
                         .collect();
                     (c.mangled, c.module_source, cases)
