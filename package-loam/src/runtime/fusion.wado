@@ -117,7 +117,7 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
             continue;
         }
         if let Some(g) = shared_group(&readers, &group_of, id)
-            && !(groups[g].product matches { Some(p) && readers[id].contains(&p) })
+            && !groups[g].product matches { Some(p) && readers[id].contains(&p) }
             && let Some(joined) = joined(recorded, &groups[g], id) {
             groups[g] = joined;
             group_of[id] = g;
@@ -126,7 +126,13 @@ fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Op
         if moves_nothing(recorded, node) {
             continue;
         }
-        let alone = Group { root: id, space: node.extents, folds: false, product: null, members: [id] };
+        let alone = Group {
+            root: id,
+            space: node.extents,
+            folds: false,
+            product: null,
+            members: [id],
+        };
         let group = match node.op {
             Reduce(_) => Group { ..alone, space: recorded.nodes[node.operands[0]].extents, folds: true },
             DotGeneral(_) => Group { ..alone, product: Option::Some(id) },
@@ -208,11 +214,13 @@ fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
         Reduce([op, init, dims]) => {
             let x = &recorded.nodes[node.operands[0]].extents;
             let last = x.len() - 1;
-            dims == [last] as List<i32> && x[last] != 1 && match op {
-                Add => init.to_bits() == 0,
-                Maximum => init == f32::NEG_INFINITY,
-                _ => false,
-            }
+            dims == [last] as List<i32>
+                && x[last] != 1
+                && match op {
+                    Add => init.to_bits() == 0,
+                    Maximum => init == f32::NEG_INFINITY,
+                    _ => false,
+                };
         },
         // The epilogue reads a value per row of the product's own rows, which
         // are the result's last axis where its right operand leaves one free.
@@ -222,7 +230,7 @@ fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
                 recorded.nodes[node.operands[1]].extents.len(),
             ];
             lhs > dims.lhs_batch.len() + dims.lhs_contracting.len()
-                && rhs == dims.rhs_batch.len() + dims.rhs_contracting.len() + 1
+                && rhs == dims.rhs_batch.len() + dims.rhs_contracting.len() + 1;
         },
         _ => false,
     };
@@ -235,7 +243,7 @@ fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
         Reshape | BroadcastInDim(_) => true,
         Convert => {
             let from = recorded.nodes[node.operands[0]].kind;
-            from matches { Bool } || from == node.kind
+            from matches { Bool } || from == node.kind;
         },
         _ => false,
     };
@@ -256,11 +264,19 @@ fn joined(recorded: &Recorded, group: &Group, id: i32) -> Option<Group> {
             let whole = same_space(rows, &group.space) && rows[rows.len() - 1] == group.space[group.space.len() - 1];
             let fits = group.product matches { None } && (whole || !group.folds && per_row(&group.space, rows));
             let all_fit = group.members.into_iter().all(|m| fits_in(&recorded.nodes[m].extents, rows));
-            if fits && all_fit { Option::Some(Group { ..added, space: *rows, folds: true }) } else { null }
+            if fits && all_fit {
+                Option::Some(Group { ..added, space: *rows, folds: true });
+            } else {
+                null;
+            }
         },
         Reshape => {
             let x = &recorded.nodes[node.operands[0]].extents;
-            if fits_in(e, &group.space) && squeezed(x) == squeezed(e) { Option::Some(added) } else { null }
+            if fits_in(e, &group.space) && squeezed(x) == squeezed(e) {
+                Option::Some(added);
+            } else {
+                null;
+            }
         },
         BroadcastInDim(dims) => {
             let x = &recorded.nodes[node.operands[0]].extents;

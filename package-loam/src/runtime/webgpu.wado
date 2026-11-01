@@ -1083,13 +1083,10 @@ impl WebGpuBackend {
         &mut self,
         operands: &List<DeviceTensor>,
         op: &Expr,
-    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let extents = broadcast_all(operands);
-        if let Some(out) = self.elementwise(operands, extents, op) {
-            return Placed::Device(out);
-        }
-        let held = self.held(operands);
-        return Placed::Host(self.cpu.fused(self.cpu_reads::<Axes>(&held, operands), op));
+    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract !op.folds_rows()
+    {
+        return self.grouped(operands, broadcast_all(operands), op, false);
     }
 
     /// `op` over `operands` at each element of `extents`, or row by row of its

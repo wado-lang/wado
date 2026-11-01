@@ -570,7 +570,7 @@ fn kernel_result(
             let space = product_extents(&l.extents, &r.extents, &dims);
             let mut operands: List<PlacedRead<Untyped>> = [];
             for let o of k.operands {
-                let at = if element_count(&o.extents) == element_count(&k.extents) {
+                let at = if o.extents == k.extents {
                     space;
                 } else {
                     let mut per_row = space[0..<space.len() - 1].to_list();

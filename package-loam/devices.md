@@ -128,10 +128,11 @@ graph being built.
   to agree with.
 - `WebGpuBackend`'s `Graph` computes each node as it is added, as `Cpu`'s
   does, through the kernels `forward` dispatches. Its `compiled` records the
-  pass, and `executed` replays the recorded graph through `run`, node by node,
-  until fusion lands. A generated `compute` keeps one program per shape class
-  in the caller's `Model`. `conformance/webgpu_graph.wado` holds both to `Cpu`
-  on the graphs in `src/runtime/graph_cases.wado` and on `gated`.
+  pass, folds the nodes that read no argument on `Cpu`, and groups the rest
+  into kernels (`src/runtime/fusion.wado`); `executed` launches them. A
+  generated `compute` keeps one program per shape class in the caller's
+  `Model`. `conformance/webgpu_graph.wado` holds both to `Cpu` on the graphs
+  in `src/runtime/graph_cases.wado` and on `gated`.
 
 `Holds` is what a backend and a graph share: a tensor type, `upload`,
 `extents_of`, and the pass `begin` starts and `retain` keeps a tensor through. `Backend` and `Graph` both extend it, so `Cache<H>` and

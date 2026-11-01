@@ -21,11 +21,17 @@ fn spelled(plan: &Plan) -> List<String> {
 fn rms_norm(r: &mut Recorder, x: &Value<f32, Untyped>, w: &Value<f32, Untyped>) -> Value<f32, Untyped> {
     let squared = r.binary(Binary::Multiply, x, x);
     let sum = r.reduce::<Untyped, Untyped>(&squared, Binary::Add, 0.0, [2]);
-    let two = r.upload(&Tensor::<f32, []> { data: [2.0], extents: [] });
+    let two = r.upload(&Tensor::<f32, []> {
+        data: [2.0],
+        extents: [],
+    });
     let count = r.broadcast_in_dim::<f32, [], Untyped>(&two, [1, 4], []);
     let mean = r.binary(Binary::Divide, &sum, &count);
     let kept = r.reshape::<f32, Untyped, Untyped>(&mean, [1, 4, 1]);
-    let small = r.upload(&Tensor::<f32, []> { data: [0.000001], extents: [] });
+    let small = r.upload(&Tensor::<f32, []> {
+        data: [0.000001],
+        extents: [],
+    });
     let eps = r.broadcast_in_dim::<f32, [], Untyped>(&small, [1, 4, 1], []);
     let root = r.unary(Unary::Sqrt, &r.binary(Binary::Add, &kept, &eps));
     let spread = r.broadcast_in_dim::<f32, Untyped, Untyped>(&root, [1, 4, 2], [0, 1, 2]);
@@ -91,14 +97,21 @@ test "a gated layer is one product with the gate in its epilogue, the other prod
     let x = r.parameter::<f32, Untyped>([1, 4, 2]);
     let gate_w = r.parameter::<f32, Untyped>([2, 8]);
     let up_w = r.parameter::<f32, Untyped>([2, 8]);
-    let dims = DotDims { lhs_batch: [], rhs_batch: [], lhs_contracting: [2], rhs_contracting: [0] };
+    let dims = DotDims {
+        lhs_batch: [],
+        rhs_batch: [],
+        lhs_contracting: [2],
+        rhs_contracting: [0],
+    };
     let gate = r.dot_general::<Untyped, Untyped, Untyped>(&x, &gate_w, &dims);
     let up = r.dot_general::<Untyped, Untyped, Untyped>(&x, &up_w, &dims);
     let silu = r.binary(Binary::Multiply, &gate, &r.unary(Unary::Logistic, &gate));
     let y = r.binary(Binary::Multiply, &silu, &up);
     let recorded = r.finished([y.id]);
     let plan = plan_of(&recorded);
-    assert spelled(&plan) == [`node ${x.id}`, `node ${gate_w.id}`, `node ${up_w.id}`, `kernel ${gate.id}`, `kernel ${y.id}`] as List<String>;
+    assert spelled(&plan) == [
+        `node ${x.id}`, `node ${gate_w.id}`, `node ${up_w.id}`, `kernel ${gate.id}`, `kernel ${y.id}`,
+    ] as List<String>;
     let Kernel(k) = plan.launches[4] else {
         unreachable();
     };
@@ -110,7 +123,12 @@ test "a value the product reads is not computed in its epilogue" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([3, 2]);
     let w = r.parameter::<f32, Untyped>([2, 2]);
-    let dims = DotDims { lhs_batch: [], rhs_batch: [], lhs_contracting: [1], rhs_contracting: [0] };
+    let dims = DotDims {
+        lhs_batch: [],
+        rhs_batch: [],
+        lhs_contracting: [1],
+        rhs_contracting: [0],
+    };
     let doubled = r.binary(Binary::Add, &x, &x);
     let product = r.dot_general::<Untyped, Untyped, Untyped>(&doubled, &w, &dims);
     let y = r.binary(Binary::Add, &product, &doubled);
@@ -121,7 +139,10 @@ test "a value the product reads is not computed in its epilogue" {
 test "only a node that reads an argument is launched" {
     let mut r = Recorder::new();
     let x = r.parameter::<f32, Untyped>([2]);
-    let one = r.upload(&Tensor::<f32, Untyped> { data: [1.0, 1.0], extents: [2] });
+    let one = r.upload(&Tensor::<f32, Untyped> {
+        data: [1.0, 1.0],
+        extents: [2],
+    });
     let three = r.binary(Binary::Add, &one, &r.binary(Binary::Add, &one, &one));
     let y = r.binary(Binary::Multiply, &x, &three);
     let recorded = r.finished([y.id]);
