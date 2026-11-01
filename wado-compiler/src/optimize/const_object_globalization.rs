@@ -350,7 +350,8 @@ fn collect_candidates(
     collect_reads(body, &mut read_locals);
     promoted_local_reads(body, &mut read_locals);
     let buried = buried_promoted_reads(body);
-    let leaked_ref_args = ref_args_that_escape(body, gate);
+    let aliases = Aliases::of(body, gate);
+    let leaked_ref_args = ref_args_that_escape(body, &aliases, gate);
     let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
     let cold = ColdRuns::of(body, cold_path);
@@ -369,7 +370,7 @@ fn collect_candidates(
             && single_decl_locals.contains(local_index)
             && !immediate_locals.contains(local_index)
             && let Some(sibling_lets) =
-                let_stmt_qualifies(body, s, gate, &siblings, &read_locals, &buried)
+                let_stmt_qualifies(body, s, gate, &aliases, &siblings, &read_locals, &buried)
         {
             // A sibling `let` moves into the initializer at mutation time,
             // so it decides the guard as much as the candidate's own value.
@@ -474,17 +475,6 @@ fn collect_candidates(
     );
 }
 
-/// `idx` and every local bound from one of these names whole (`licm` hoists a
-/// loop's read into one). A use of any of them is a use of the binding.
-fn binding_names(body: &Body, idx: u32) -> Vec<u32> {
-    let sites = alias_sites(body);
-    alias_closure(idx, &sites, |i, names| {
-        sites[i].value.as_expr().is_some_and(|e| {
-            matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if names.contains(&index))
-        })
-    })
-}
-
 /// Whether the constant bound to `idx` is handed to a callee that delivers its
 /// referent's storage back out, or writes through it. [`is_readonly_body`] only
 /// sees the caller, where `$b."…build"()` reads.
@@ -581,7 +571,7 @@ fn refs_local(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> Option<Re
 /// A reference only reads while the callee keeps it one: `List::from(elements)`
 /// keeps the array as the list's spine, so hoisting the fresh literal it
 /// referenced hands every caller the same object to mutate.
-fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
+fn ref_args_that_escape(body: &Body, aliases: &Aliases, gate: &Gate<'_>) -> IndexSet<ExprId> {
     let mut out: IndexSet<ExprId> = IndexSet::default();
     let is_ref = |body: &Body, e: ExprId| {
         matches!(
@@ -603,7 +593,7 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
                     && let Some(e) = value.as_expr()
                     && is_ref(body, e)
                     && (local_leaks_through_call(body, *local_index, gate)
-                        || !is_readonly_body(body, *local_index, gate))
+                        || !is_readonly_body(body, aliases, *local_index, gate))
                 {
                     out.insert(e);
                 }
@@ -904,6 +894,7 @@ fn let_stmt_qualifies(
     body: &Body,
     stmt: StmtId,
     gate: &Gate<'_>,
+    aliases: &Aliases,
     siblings: &SiblingConsts,
     read_locals: &IndexSet<u32>,
     buried: &IndexSet<u32>,
@@ -937,16 +928,17 @@ fn let_stmt_qualifies(
     if !is_globalizable_const_operand(body, value, gate, &mut siblings.set.clone()) {
         return decline("initializer is not a closed constant");
     }
-    if let Some(why) = readonly_body_violation(body, local_index, gate) {
+    if let Some(why) = readonly_body_violation(body, aliases, local_index, gate) {
         return decline(why);
     }
-    if binding_names(body, local_index)
+    if aliases
+        .binding_names(body, local_index)
         .into_iter()
         .any(|name| local_leaks_through_call(body, name, gate))
     {
         return decline("storage leaks through a call");
     }
-    if storage_leaves_body(body, &delivered_alias_roots(body, local_index, gate), gate) {
+    if storage_leaves_body(body, &aliases.delivered_roots(body, local_index, gate), gate) {
         return decline("storage leaves the function");
     }
     // An unread binding is dead code on its way out, not a hoist target:
@@ -1681,7 +1673,9 @@ impl Gate<'_> {
         }
         f.body
             .as_ref()
-            .is_none_or(|body| !is_readonly_body(body, param.local_index, self))
+            .is_none_or(|body| {
+                !is_readonly_body(body, &Aliases::of(body, self), param.local_index, self)
+            })
     }
 
     /// Whether parameter `param_pos` is taken by value and never written or
@@ -1789,7 +1783,9 @@ impl Gate<'_> {
         };
         f.body
             .as_ref()
-            .is_none_or(|body| param_storage_escapes(body, param.local_index, self))
+            .is_none_or(|body| {
+                param_storage_escapes(body, &Aliases::of(body, self), param.local_index, self)
+            })
     }
 
     fn compute_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
@@ -1808,8 +1804,9 @@ impl Gate<'_> {
         let Some(body) = f.body.as_ref() else {
             return false;
         };
-        is_readonly_body(body, param.local_index, self)
-            && !param_storage_escapes(body, param.local_index, self)
+        let aliases = Aliases::of(body, self);
+        is_readonly_body(body, &aliases, param.local_index, self)
+            && !param_storage_escapes(body, &aliases, param.local_index, self)
     }
 }
 
@@ -1819,14 +1816,20 @@ impl Gate<'_> {
 /// A reference-typed projection bound out of the aggregate aliases it: `let s =
 /// writer.buf;` hands `writer`'s array handle to `s`, and a write through `s`
 /// is a write to `writer` that no use of `writer` shows. [`param_storage_escapes`]
-/// follows the same aliases, [`projection_alias_roots`], to where they go.
-fn is_readonly_body(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    readonly_body_violation(body, idx, gate).is_none()
+/// follows the same aliases, [`Aliases::projection_roots`], to where they go.
+fn is_readonly_body(body: &Body, aliases: &Aliases, idx: u32, gate: &Gate<'_>) -> bool {
+    readonly_body_violation(body, aliases, idx, gate).is_none()
 }
 
 /// [`is_readonly_body`], naming the check that rejected `idx` for `WADO_TRACE`.
-fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'static str> {
-    if !binding_names(body, idx)
+fn readonly_body_violation(
+    body: &Body,
+    aliases: &Aliases,
+    idx: u32,
+    gate: &Gate<'_>,
+) -> Option<&'static str> {
+    if !aliases
+        .binding_names(body, idx)
         .into_iter()
         .all(|name| block_readonly(body, body.root(), name, gate))
     {
@@ -1835,7 +1838,8 @@ fn readonly_body_violation(body: &Body, idx: u32, gate: &Gate<'_>) -> Option<&'s
     // The aliases answer a narrower question. `block_readonly` also rejects a
     // bare whole-value read, which is a consuming use of the constant but
     // ordinary for a local that merely names part of it.
-    let aliases: Vec<u32> = projection_alias_roots(body, idx, gate)
+    let aliases: Vec<u32> = aliases
+        .projection_roots(idx)
         .into_iter()
         .filter(|&root| root != idx)
         .collect();
@@ -1878,8 +1882,8 @@ fn written_through(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 /// [`is_readonly_body`] does not cover this: returning a field of the callee's
 /// own copy is legitimate and even counts as owned, a premise hoisting
 /// invalidates. A reference or a scalar projection is not an escape.
-fn param_storage_escapes(body: &Body, idx: u32, gate: &Gate<'_>) -> bool {
-    let roots = projection_alias_roots(body, idx, gate);
+fn param_storage_escapes(body: &Body, aliases: &Aliases, idx: u32, gate: &Gate<'_>) -> bool {
+    let roots = aliases.projection_roots(idx);
     storage_leaves_body(body, &roots, gate) || storage_passed_on(body, &roots, gate)
 }
 
@@ -1982,16 +1986,70 @@ fn storage_passed_on(body: &Body, roots: &[u32], gate: &Gate<'_>) -> bool {
 struct AliasSite {
     value: Operand,
     binds: Vec<u32>,
+    /// The locals whose storage evaluating `value` can produce.
+    yields: Vec<u32>,
+}
+
+/// A body's binding sites, gathered once: every local of a body asks which
+/// others alias it, and a generated body holds thousands of them.
+struct Aliases {
+    sites: Vec<AliasSite>,
+}
+
+impl Aliases {
+    fn of(body: &Body, gate: &Gate<'_>) -> Aliases {
+        Aliases {
+            sites: alias_sites(body, gate),
+        }
+    }
+
+    /// `idx` and every local bound from one of these names whole (`licm`
+    /// hoists a loop's read into one). A use of any of them is a use of the
+    /// binding.
+    fn binding_names(&self, body: &Body, idx: u32) -> Vec<u32> {
+        alias_closure(idx, &self.sites, |site, names| {
+            site.value.as_expr().is_some_and(|e| {
+                matches!(body.exprs[e].kind, ExprKind::Local { index, .. } if names.contains(&index))
+            })
+        })
+    }
+
+    /// `idx` plus every local bound from a source that *contains* a
+    /// reference-typed projection of one of them. All may name the same
+    /// storage, so a write through any is one of `idx`'s. Containment is the
+    /// test because nothing says which part flows out: `let r = if c { s.a }
+    /// else { s.b };` binds one of two, and `let r = f(s.a);` whatever `f`
+    /// hands back.
+    fn projection_roots(&self, idx: u32) -> Vec<u32> {
+        alias_closure(idx, &self.sites, |site, roots| {
+            site.yields.iter().any(|y| roots.contains(y))
+        })
+    }
+
+    /// `idx` plus every local bound from a source that *delivers* the storage
+    /// of one of them ([`delivers_projection`]). What a call hands back is not
+    /// followed: [`local_leaks_through_call`] refuses a callee that returns
+    /// what it was given.
+    fn delivered_roots(&self, body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
+        alias_closure(idx, &self.sites, |site, roots| {
+            delivers_projection_operand(body, site.value, roots, gate)
+        })
+    }
 }
 
 /// Every place locals are bound or filled from a source: a `let`, a
 /// destructuring `let`, a `match` arm over its scrutinee, or an assignment to
 /// the whole local.
-fn alias_sites(body: &Body) -> Vec<AliasSite> {
+fn alias_sites(body: &Body, gate: &Gate<'_>) -> Vec<AliasSite> {
     let mut sites = Vec::new();
     let mut site = |value: Operand, binds: Vec<u32>| {
         if !binds.is_empty() {
-            sites.push(AliasSite { value, binds });
+            let yields = yielded_roots(body, value, gate);
+            sites.push(AliasSite {
+                value,
+                binds,
+                yields,
+            });
         }
     };
     body.for_each_reachable_node(|node| {
@@ -2042,13 +2100,13 @@ fn alias_sites(body: &Body) -> Vec<AliasSite> {
 fn alias_closure(
     idx: u32,
     sites: &[AliasSite],
-    mut reaches: impl FnMut(usize, &[u32]) -> bool,
+    mut reaches: impl FnMut(&AliasSite, &[u32]) -> bool,
 ) -> Vec<u32> {
     let mut roots = vec![idx];
     loop {
         let before = roots.len();
-        for (i, s) in sites.iter().enumerate() {
-            if s.binds.iter().any(|b| !roots.contains(b)) && reaches(i, &roots) {
+        for s in sites {
+            if s.binds.iter().any(|b| !roots.contains(b)) && reaches(s, &roots) {
                 for &b in &s.binds {
                     if !roots.contains(&b) {
                         roots.push(b);
@@ -2060,33 +2118,6 @@ fn alias_closure(
             return roots;
         }
     }
-}
-
-/// `idx` plus every local bound from a source that *contains* a
-/// reference-typed projection of one of them. All may name the same storage,
-/// so a write through any is one of `idx`'s. Containment is the test because
-/// nothing says which part flows out: `let r = if c { s.a } else { s.b };`
-/// binds one of two, and `let r = f(s.a);` whatever `f` hands back.
-fn projection_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
-    let sites = alias_sites(body);
-    let yields: Vec<Vec<u32>> = sites
-        .iter()
-        .map(|s| yielded_roots(body, s.value, gate))
-        .collect();
-    alias_closure(idx, &sites, |i, roots| {
-        yields[i].iter().any(|y| roots.contains(y))
-    })
-}
-
-/// `idx` plus every local bound from a source that *delivers* the storage of
-/// one of them ([`delivers_projection`]). What a call hands back is not
-/// followed: [`local_leaks_through_call`] refuses a callee that returns what it
-/// was given.
-fn delivered_alias_roots(body: &Body, idx: u32, gate: &Gate<'_>) -> Vec<u32> {
-    let sites = alias_sites(body);
-    alias_closure(idx, &sites, |i, roots| {
-        delivers_projection_operand(body, sites[i].value, roots, gate)
-    })
 }
 
 /// The local an assignment targets whole, or `None` for a projection, an index
@@ -2215,7 +2246,7 @@ fn block_readonly(body: &Body, block: BlockId, idx: u32, gate: &Gate<'_>) -> boo
 
 fn stmt_readonly(body: &Body, stmt: StmtId, idx: u32, gate: &Gate<'_>) -> bool {
     match &body.stmts[stmt].kind {
-        // A second name for the binding, not a copy of it: `binding_names`
+        // A second name for the binding, not a copy of it: `Aliases::binding_names`
         // judges what is done through it as it judges the binding.
         StmtKind::Let {
             value,
@@ -2320,7 +2351,7 @@ fn expr_readonly(body: &Body, expr: ExprId, idx: u32, gate: &Gate<'_>) -> bool {
 
         // `&<…xs…>` — a `&` reference reads. What the reference is then bound to
         // is an alias [`is_readonly_body`] follows through
-        // [`projection_alias_roots`], so a write through it is still caught.
+        // [`Aliases::projection_roots`], so a write through it is still caught.
         ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
