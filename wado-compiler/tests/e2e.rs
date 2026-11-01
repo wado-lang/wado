@@ -1530,3 +1530,51 @@ test "passes unexpectedly" {
         resolved.0,
     );
 }
+
+fn compile_synthetic(source: &str, target_world: Option<&str>) -> Vec<u8> {
+    let options = CompilerOptions {
+        opt_level: OptLevel::O0,
+        target_world: target_world.map(str::to_string),
+        ..Default::default()
+    };
+    let path = std::path::Path::new("synthetic_budget.wado");
+    common::compile_source_with_compiler_options(path, source, options)
+        .expect("compilation should succeed")
+        .wasm
+}
+
+/// A run that never ends spends its budget rather than trapping, so it cannot
+/// satisfy a test that expects a trap.
+#[test]
+fn an_exhausted_budget_is_not_an_expected_trap() {
+    let wasm = compile_synthetic(
+        r#"#[expect_trap]
+#[timeout_ms(100)]
+test "never ends" {
+    while builtin::black_box(true) {}
+}
+"#,
+        Some("test"),
+    );
+    let error = common::run_test_world(
+        &wasm,
+        "synthetic-budget",
+        indexmap::IndexMap::new(),
+        indexmap::IndexMap::new(),
+    )
+    .expect_err("an exhausted budget must fail the test");
+    assert!(error.is::<common::BudgetExhausted>(), "{error:#}");
+}
+
+#[test]
+fn an_exhausted_budget_is_not_a_cli_trap() {
+    let wasm = compile_synthetic(
+        r#"export fn run() {
+    while builtin::black_box(true) {}
+}
+"#,
+        None,
+    );
+    let error = common::run_wasm(wasm).expect_err("an exhausted budget must not read as a trap");
+    assert!(error.is::<common::BudgetExhausted>(), "{error:#}");
+}

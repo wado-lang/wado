@@ -352,6 +352,10 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
+    BaselineOutOfBudget {
+        level: OptLevel,
+        detail: String,
+    },
     GuardRejected {
         level: OptLevel,
         detail: String,
@@ -360,6 +364,18 @@ enum Excluded {
     /// something an injection perturbs, so a real mutation could not be told
     /// apart from that.
     GuardChangedOutput {
+        level: OptLevel,
+        detail: String,
+    },
+    /// The empty guard made the program trap or a test fail, or stop doing
+    /// so. Kept apart from a changed text, which a source that prints its own
+    /// source or positions explains: this one is a trap to read.
+    GuardTrapped {
+        level: OptLevel,
+        detail: String,
+    },
+    /// The guard's own cost pushed the run past the harness's budget.
+    GuardOutOfBudget {
         level: OptLevel,
         detail: String,
     },
@@ -390,8 +406,11 @@ impl Excluded {
             Excluded::NoBindingInScope => "no binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
+            Excluded::BaselineOutOfBudget { .. } => "baseline ran out of budget",
             Excluded::GuardRejected { .. } => "guard failed to compile",
             Excluded::GuardChangedOutput { .. } => "guard changed the output",
+            Excluded::GuardTrapped { .. } => "guard changed whether it traps",
+            Excluded::GuardOutOfBudget { .. } => "guard ran out of budget",
             Excluded::Nondeterministic { .. } => "source is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
         }
@@ -406,8 +425,11 @@ impl Excluded {
             }
             Excluded::BaselineCompileFailed { level, detail }
             | Excluded::BaselineUnhealthy { level, detail }
+            | Excluded::BaselineOutOfBudget { level, detail }
             | Excluded::GuardRejected { level, detail }
             | Excluded::GuardChangedOutput { level, detail }
+            | Excluded::GuardTrapped { level, detail }
+            | Excluded::GuardOutOfBudget { level, detail }
             | Excluded::Nondeterministic { level, detail }
             | Excluded::GuardCrashed { level, detail } => {
                 format!("[{}] {detail}", common::opt_level_name(*level))
@@ -956,6 +978,12 @@ struct Outcome {
 }
 
 impl Outcome {
+    /// Whether `other` traps, or fails a test, where this does not, or the
+    /// reverse.
+    fn trap_differs(&self, other: &Self) -> bool {
+        self.trapped != other.trapped || self.test_failed != other.test_failed
+    }
+
     fn differences(&self, other: &Self) -> Vec<String> {
         let mut out = Vec::new();
         if self.stdout != other.stdout {
@@ -1005,6 +1033,9 @@ enum Evaluation {
     /// On a mutant this is a finding, not an exclusion: an injection that is
     /// unreachable at run time must not be able to crash the compiler.
     Crashed(String),
+    /// The run spent the harness's fuel or time budget, which says how heavy
+    /// the program is at this level, not what it computes.
+    OutOfBudget(String),
 }
 
 /// Compile and run `source`, catching a panic so one bad subject cannot take
@@ -1044,6 +1075,9 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
                 test_failed: false,
                 detail: String::new(),
             }),
+            Err(e) if e.is::<common::BudgetExhausted>() => {
+                Evaluation::OutOfBudget(format!("{e:#}"))
+            }
             Err(e) => Evaluation::Ran(Outcome {
                 stdout: String::new(),
                 trapped: false,
@@ -1062,6 +1096,7 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
             test_failed: false,
             detail: result.stderr,
         }),
+        Err(e) if e.is::<common::BudgetExhausted>() => Evaluation::OutOfBudget(format!("{e:#}")),
         Err(e) => Evaluation::Crashed(format!("runtime error: {e}")),
     }
 }
@@ -1122,6 +1157,7 @@ fn baseline(
         Evaluation::Ran(outcome) => Ok(outcome),
         Evaluation::CompileError(detail) => Err(Excluded::BaselineCompileFailed { level, detail }),
         Evaluation::Crashed(detail) => Err(Excluded::BaselineUnhealthy { level, detail }),
+        Evaluation::OutOfBudget(detail) => Err(Excluded::BaselineOutOfBudget { level, detail }),
     }
 }
 
@@ -1139,7 +1175,9 @@ fn baseline_moved(
             let differences = first.differences(&second);
             (!differences.is_empty()).then(|| differences.join("; "))
         }
-        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+        Evaluation::CompileError(detail)
+        | Evaluation::Crashed(detail)
+        | Evaluation::OutOfBudget(detail) => {
             Some(format!("the baseline stopped running: {detail}"))
         }
     }
@@ -1224,7 +1262,10 @@ fn site_positions(source: &str, sites: &[Site]) -> String {
 /// What a mutant did that an unreachable guard is not allowed to do.
 #[derive(Clone, Copy, PartialEq)]
 enum Misbehaviour {
+    /// The output text or exit code moved.
     Diverged,
+    /// Whether it traps, or fails a test, moved.
+    Trapped,
     Crashed,
 }
 
@@ -1240,7 +1281,9 @@ fn sites_for(sites: &[Site], payload: &Payload) -> Vec<Site> {
 fn is_finding(excluded: &Excluded) -> bool {
     matches!(
         excluded,
-        Excluded::GuardCrashed { .. } | Excluded::GuardChangedOutput { .. }
+        Excluded::GuardCrashed { .. }
+            | Excluded::GuardChangedOutput { .. }
+            | Excluded::GuardTrapped { .. }
     )
 }
 
@@ -1363,7 +1406,12 @@ impl Injection<'_> {
                         detail: self.report(&detail),
                     });
                 }
-                Err(self.excluded(Misbehaviour::Diverged, sites, &differences.join("; ")))
+                let what = if self.baseline.trap_differs(&outcome) {
+                    Misbehaviour::Trapped
+                } else {
+                    Misbehaviour::Diverged
+                };
+                Err(self.excluded(what, sites, &differences.join("; ")))
             }
             // A guard is valid wherever a statement is, except where the
             // surrounding value must stay constant; that is a rejection, not a
@@ -1375,6 +1423,10 @@ impl Injection<'_> {
             Evaluation::Crashed(detail) => {
                 Err(self.excluded(Misbehaviour::Crashed, sites, &detail))
             }
+            Evaluation::OutOfBudget(detail) => Err(Excluded::GuardOutOfBudget {
+                level,
+                detail: self.report(&detail),
+            }),
         }
     }
 
@@ -1388,11 +1440,13 @@ impl Injection<'_> {
 
     fn reproduces(&self, subset: &[Site], what: Misbehaviour) -> bool {
         match evaluate(self.path, &self.mutant(subset), self.spec, self.level) {
-            Evaluation::Ran(outcome) => {
-                what == Misbehaviour::Diverged && !self.baseline.differences(&outcome).is_empty()
-            }
+            Evaluation::Ran(outcome) => match what {
+                Misbehaviour::Diverged => !self.baseline.differences(&outcome).is_empty(),
+                Misbehaviour::Trapped => self.baseline.trap_differs(&outcome),
+                Misbehaviour::Crashed => false,
+            },
             Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
-            Evaluation::CompileError(_) => false,
+            Evaluation::CompileError(_) | Evaluation::OutOfBudget(_) => false,
         }
     }
 
@@ -1403,6 +1457,7 @@ impl Injection<'_> {
         let level = self.level;
         let build = |detail: String| match what {
             Misbehaviour::Diverged => Excluded::GuardChangedOutput { level, detail },
+            Misbehaviour::Trapped => Excluded::GuardTrapped { level, detail },
             Misbehaviour::Crashed => Excluded::GuardCrashed { level, detail },
         };
         let reported = build(self.report(seen));
@@ -1797,6 +1852,7 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
         results.excluded.len(),
         results.findings.len(),
     ));
+    report.push_str(&per_reason(results));
     report.push_str(&per_root(results, subjects));
     report.push_str(&per_shape(results));
     report.push_str(&dropped(results));
@@ -1831,6 +1887,21 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
         sites,
         path.display()
     );
+}
+
+/// How many sources each reason excluded, most first, so the loss worth
+/// winning back leads the report.
+fn per_reason(results: &Results) -> String {
+    let mut counts: IndexMap<&str, usize> = IndexMap::default();
+    for (_, excluded) in &results.excluded {
+        *counts.entry(excluded.kind()).or_default() += 1;
+    }
+    counts.sort_by(|kind_a, a, kind_b, b| b.cmp(a).then(kind_a.cmp(kind_b)));
+    let mut out = String::from("\n=== excluded by reason ===\n");
+    for (kind, count) in counts {
+        out.push_str(&format!("{count:>5}  {kind}\n"));
+    }
+    out
 }
 
 /// What each root contributed, so material that pays for its compile time can
@@ -2176,8 +2247,10 @@ fn a_stdlib_module_runs_from_its_own_path() {
             "the stdlib's own tests must pass: {}",
             outcome.detail
         ),
-        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
-            panic!("a stdlib module must compile from its own path: {detail}")
+        Evaluation::CompileError(detail)
+        | Evaluation::Crashed(detail)
+        | Evaluation::OutOfBudget(detail) => {
+            panic!("a stdlib module must compile and run from its own path: {detail}")
         }
     }
 }
@@ -2567,4 +2640,67 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     };
     assert_eq!(detail, "if guard: stdout differs");
     assert!(!out_dir().join("findings/never-written").exists());
+}
+
+/// A test asserting on a closure's rendered source fails once a guard lands in
+/// that source: a verdict the guard flips is reported apart from moved text.
+#[test]
+fn a_guard_that_flips_a_verdict_is_reported_as_a_trap() {
+    let source = r#"fn show(f: fn() -> i32) -> String {
+    return `${f:#?}`;
+}
+
+test {
+    let f = || {
+        let n = 1;
+        return n;
+    };
+    assert show(f) == "|| {\n    let n: i32 = 1;\n    return n;\n}";
+}
+"#;
+    let canonical = wado_compiler::format(source).expect("the source formats");
+    let spec = Spec {
+        test_world: true,
+        allocator: "debug".to_string(),
+    };
+    let path = Path::new("closure_source.wado");
+    let level = OptLevel::O0;
+    let baseline = baseline(path, &canonical, &spec, level).expect("the baseline runs");
+    assert!(!baseline.test_failed, "{}", baseline.detail);
+    let injection = Injection {
+        path,
+        canonical: &canonical,
+        spec: &spec,
+        level,
+        baseline: &baseline,
+        shape: &SHAPES[0],
+        render: &|_| String::new(),
+        label: "if guard".to_string(),
+        finding: "never-written".to_string(),
+        is_finding: is_calibration_finding,
+    };
+
+    let excluded = injection
+        .run(&injection_sites(&canonical))
+        .expect_err("the rendered source moves");
+    assert!(
+        matches!(excluded, Excluded::GuardTrapped { .. }),
+        "{excluded:?}"
+    );
+}
+
+#[test]
+fn a_run_that_spends_its_budget_is_told_apart() {
+    let source = "#[timeout_ms(100)]\ntest {\n    while builtin::black_box(true) {}\n}\n";
+    let spec = Spec {
+        test_world: true,
+        allocator: "debug".to_string(),
+    };
+    let excluded = baseline(Path::new("never_ends.wado"), source, &spec, OptLevel::O0)
+        .err()
+        .expect("the baseline never finishes");
+    assert!(
+        matches!(excluded, Excluded::BaselineOutOfBudget { .. }),
+        "{excluded:?}"
+    );
 }
