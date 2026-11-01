@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793517499146,
+  "lastUpdate": 1793518531054,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73141,6 +73141,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d44b7d0afe925371f9d94920b6d7e65dd199dc4c"
         },
         "date": 1793517498028,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cf1f465cd36da60af44d3a3b1fb014f8b84827ca",
+          "message": "Merge pull request #2513 from wado-lang/claude/busy-franklin-ow6dvg\n\nfeat(fuel): price each Wasm operator near the time it takes",
+          "timestamp": "2026-11-01T16:03:35+09:00",
+          "tree_id": "c0adcf5e41d522af2ed12b7176586bd491116f16",
+          "url": "https://github.com/wado-lang/wado/commit/cf1f465cd36da60af44d3a3b1fb014f8b84827ca"
+        },
+        "date": 1793518529845,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
