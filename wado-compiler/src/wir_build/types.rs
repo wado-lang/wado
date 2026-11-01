@@ -919,7 +919,10 @@ fn register_mono_variants(ctx: &mut WirContext<'_>) {
                         .template_cases
                         .into_iter()
                         .map(|(name, payload)| {
-                            (name, type_table.substitute_positional(payload, &c.type_args))
+                            (
+                                name,
+                                type_table.substitute_positional(payload, &c.type_args),
+                            )
                         })
                         .collect();
                     (c.mangled, c.module_source, cases)

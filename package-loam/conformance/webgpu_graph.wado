@@ -25,10 +25,11 @@ use {
 use { Cpu, Element, Graph, Holds, Placed, Tensor, WebGpuBackend } from "lib:loam";
 use cases from "lib:loam/src/runtime/graph_cases.wado";
 use { deviation } from "lib:loam/example/webgpu/compare.wado";
-use gated from "./gated.onnxtext" with {
-    type: "onnxtext",
-    generator: { module: "lib:loam" },
-};
+use gated from "./gated.onnxtext"
+    with {
+        type: "onnxtext",
+        generator: { module: "lib:loam" },
+    };
 
 export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
     let Some(mut gpu) = WebGpuBackend::new() else {
@@ -81,7 +82,11 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // positions share a capacity, 5 takes the next.
     let mut on_gpu = gated::Model::new(gated::Params::embedded(&mut gpu));
     let mut on_cpu = gated::Model::new(gated::Params::embedded(cpu));
-    for let [positions, programs] of [[3, 1], [4, 1], [5, 2]] as List<[i32, i32]> {
+    for let [positions, programs] of [
+        [3, 1],
+        [4, 1],
+        [5, 2],
+    ] as List<[i32, i32]> {
         let input = gated_input(positions);
         let on_device = gated::compute(&mut gpu, &input, &mut on_gpu);
         let reference = gated::compute(cpu, &input, &mut on_cpu);
@@ -96,7 +101,10 @@ fn gated_input(positions: i32) -> Tensor<f32, [gated::N, gated::S, gated::X2]> {
     for let i of 0..<positions * 2 {
         data.push((i % 7) as f32 * 0.25 - 0.75);
     }
-    return Tensor { data, extents: [1, positions, 2] };
+    return Tensor {
+        data,
+        extents: [1, positions, 2],
+    };
 }
 
 /// How far `got` sits from `want`, NaN where their extents differ.

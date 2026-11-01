@@ -334,10 +334,8 @@ mod tests {
         let mut p = prelude();
         let dev = p.push_impl(concrete(HOLDS, decl(DEV)));
         let opaque = p.push_impl(concrete(HOLDS, decl(OPAQUE)));
-        p.assoc_bindings.insert(
-            dev,
-            vec![(T, SolverType::Decl(LIST, vec![decl(I32)]))],
-        );
+        p.assoc_bindings
+            .insert(dev, vec![(T, SolverType::Decl(LIST, vec![decl(I32)]))]);
         p.assoc_bindings.insert(opaque, vec![(T, decl(OPAQUE))]);
         let declarations = [
             declaration(WRAPPER, 1, vec![projected]),

@@ -515,7 +515,13 @@ struct Run<affine G: Graph> {
 
 impl<affine G: Graph> Run<G> {
     /// Runs `region`'s nodes, and returns what it yields.
-    fn region(&mut self, g: &mut G, recorded: &Recorded, region: &Region, arguments: &List<Any<G>>) -> List<Any<G>> with _ {
+    fn region(
+        &mut self,
+        g: &mut G,
+        recorded: &Recorded,
+        region: &Region,
+        arguments: &List<Any<G>>,
+    ) -> List<Any<G>> with _ {
         for let id of region.nodes {
             let node = recorded.nodes[id];
             if let Case([first, second]) = node.op {
@@ -636,7 +642,12 @@ impl<affine G: Graph> Run<G> {
                 ] {
                     [F32(a), F32(u)] => Any::F32(g.scatter::<f32, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
                     [I64(a), I64(u)] => Any::I64(g.scatter::<i64, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
-                    [Bool(a), Bool(u)] => Any::Bool(g.scatter::<bool, Untyped, Untyped, Untyped>(&a, &indices, &u, &dims)),
+                    [Bool(a), Bool(u)] => Any::Bool(g.scatter::<bool, Untyped, Untyped, Untyped>(
+                        &a,
+                        &indices,
+                        &u,
+                        &dims,
+                    )),
                     _ => unreachable(),
                 }
             },

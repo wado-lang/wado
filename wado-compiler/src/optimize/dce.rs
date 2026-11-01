@@ -1711,11 +1711,17 @@ fn variant_instance_payloads(project: &NirPackage) -> Vec<(TypeId, Vec<TypeId>)>
             let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
                 return None;
             };
-            if type_args.iter().any(|&arg| type_table.contains_type_param(arg)) {
+            if type_args
+                .iter()
+                .any(|&arg| type_table.contains_type_param(arg))
+            {
                 return None;
             }
             let variant = project
-                .find_variant(type_table.def_module(*def), &type_table.def_name(*def).to_string())
+                .find_variant(
+                    type_table.def_module(*def),
+                    &type_table.def_name(*def).to_string(),
+                )
                 .filter(|v| !v.type_params.is_empty())?;
             Some((
                 id,
