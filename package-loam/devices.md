@@ -547,14 +547,15 @@ and reads back the logits. The range spans the two prompts.
 | Entry                                             | Time a token, onnxruntime on the CPU as 1 | Dispatches a token | Read backs a token |
 | ------------------------------------------------- | ----------------------------------------- | ------------------ | ------------------ |
 | `pass`, the kernels                               | 0.18–0.19                                 | 204                | 1                  |
-| `compute`, the compiled program at the capacities | 0.75–0.81                                 | 309–314            | 1                  |
+| `compute`, the compiled program at the capacities | 0.49–0.61                                 | 310–315            | 1                  |
 | onnxruntime on WebGPU                             | 0.34–0.75                                 |                    |                    |
 | onnxruntime on the CPU                            | 1                                         |                    |                    |
 
 onnxruntime on WebGPU reads near 0.35 on the first prompt, and near 0.35 or
-near 0.75 on the second from one run to the next. `compute` reads back the
-vocabulary's logits each token, where `pass` ranks them on the device and reads
-back one index.
+near 0.75 on the second from one run to the next. Both Loam entries rank the
+logits on the device and read back one index, `compute` through the generator's
+`arg_max` option. `compute` encodes each dispatch again on every call, which
+the per-call path above removes.
 
 Each Loam entry is one program in `example/gemma3-270m`, which prints each
 prompt's time a token beside onnxruntime's on both:
