@@ -34,8 +34,8 @@ test "smoke" {
 test "fuel" {
     let catalog = json_from_bytes::<CitmCatalog, _>(#include_bytes("../json_catalog/citm_catalog.json")).unwrap();
     let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();
-    measure("catalog/ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
-    let events = measure("catalog/de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
+    measure("serde/cbor/catalog/ser", || cbor_to_bytes::<CitmCatalog>(&catalog).unwrap().len());
+    let events = measure("serde/cbor/catalog/de", || event_count(&cbor_from_bytes::<CitmCatalog, _>(cbor).unwrap()));
     assert events == 184;
 }
 

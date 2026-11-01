@@ -28,7 +28,7 @@ test "smoke" {
 
 test "fuel" {
     let sql = #include_str("../sqlite_parse/queries.sql");
-    assert measure("highlight", || sqlite::highlight(&sql).len()) > 0;
+    assert measure("gale/sqlite/highlight", || sqlite::highlight(&sql).len()) > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {

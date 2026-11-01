@@ -33,8 +33,8 @@ test "smoke" {
 test "fuel" {
     let json_data = #include_bytes("./twitter.json");
     let resp = from_bytes::<TwitterResponse, _>(json_data).unwrap();
-    measure("ser", || to_bytes::<TwitterResponse>(&resp).unwrap().len());
-    let count = measure("de", || from_bytes::<TwitterResponse, _>(json_data).unwrap().statuses.len());
+    measure("serde/json/twitter/ser", || to_bytes::<TwitterResponse>(&resp).unwrap().len());
+    let count = measure("serde/json/twitter/de", || from_bytes::<TwitterResponse, _>(json_data).unwrap().statuses.len());
     assert count == 100;
 }
 
