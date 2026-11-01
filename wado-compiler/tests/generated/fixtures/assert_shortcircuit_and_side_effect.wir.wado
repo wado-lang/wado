@@ -132,11 +132,11 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//StrSlice");  // TypeId(46)
 
-type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e,bool>::lit$sroa[self.index]" = fn(i32, ref "assert_shortcircuit_and_side_effect.wado//$tmpl$34fafd55b47e8a9e") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(47)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(47)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(48)
+type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(48)
 
-type "functype//core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]" = fn(bool, ref "core:prelude/format.wado//Formatter");  // TypeId(49)
+type "functype//core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e,bool>::lit$sroa[self.index]" = fn(i32, ref "assert_shortcircuit_and_side_effect.wado//$tmpl$34fafd55b47e8a9e") -> ref "core:prelude/string.wado//StrSlice";  // TypeId(49)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]" = fn(ref Array<u8>, i32, i32) -> ref "core:prelude/string.wado//StrSlice";  // TypeId(50)
 
@@ -706,22 +706,15 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
     }
 }
 
-fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e,bool>::lit$sroa[self.index]"(self, t) {
-    return block -> ref "core:prelude/string.wado//StrSlice" {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("assert_shortcircuit_and_side_effect.wado/$template_segment$assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e"(t, 2 * self)).repr, $mv_arg_1.used);
-    };
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
     let i: i32;
     i = 0;
-    b71: block {
-        l72: loop {
-            break_if b71 i >= n;
+    b70: block {
+        l71: loop {
+            break_if b70 i >= n;
             "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c);
             i = i + 1;
-            continue l72;
+            continue l71;
         };
     };
 }
@@ -734,6 +727,13 @@ fn "core:prelude/primitive.wado/bool::fmt_into$sroa[self.value]"(self, f) {
         struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("false"), used: 5 };
     });
     "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, text);
+}
+
+fn "core:prelude/traits.wado/core:prelude/traits.wado/TemplateHole<assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e,bool>::lit$sroa[self.index]"(self, t) {
+    return block -> ref "core:prelude/string.wado//StrSlice" {
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1("assert_shortcircuit_and_side_effect.wado/$template_segment$assert_shortcircuit_and_side_effect.wado/$tmpl$34fafd55b47e8a9e"(t, 2 * self)).repr, $mv_arg_1.used);
+    };
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::slice$unchecked$spec0$dae[start]"($mv$self$repr, $mv$self$start, end) {

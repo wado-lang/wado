@@ -108,9 +108,9 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte" = fn(ref "core:prelude/string.wado//String", u8);  // TypeId(39)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(40)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>" = fn(ref "assert_call_arg_ident.wado//$tmpl$4432d2d1cbeba55c") -> ref "core:prelude/string.wado//String";  // TypeId(40)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::format<assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>" = fn(ref "assert_call_arg_ident.wado//$tmpl$4432d2d1cbeba55c") -> ref "core:prelude/string.wado//String";  // TypeId(41)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>" = fn(ref "core:prelude/format.wado//Formatter", bool, ref "core:prelude/string.wado//String", i32) -> i32;  // TypeId(41)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]" = fn(ref "core:prelude/string.wado//String", char, i32);  // TypeId(42)
 
@@ -505,6 +505,33 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_ascii_byte"(s
     builtin::array_set_u8(self.repr, start, byte);
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(t) {
+    let self_11: ref "core:prelude/string.wado//StrSlice";
+    let $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0: ref "core:prelude/format.wado//Formatter";
+    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((local.tee self_11("assert_call_arg_ident.wado/assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_11.start) + (local.tee self_11(block -> ref "core:prelude/string.wado//StrSlice" {
+        let $mv_arg_1: ref "core:prelude/string.wado//String";
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s0).repr, $mv_arg_1.used);
+    }).end - self_11.start + 16)) + (local.tee self_11(block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s1).repr, $mv_arg_1.used);
+    }).end - self_11.start + 16)), used: 0 };
+    self_11 = block -> ref "core:prelude/string.wado//StrSlice" {
+        let $mv_arg_3: ref "core:prelude/string.wado//String";
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_3(t.s0).repr, $mv_arg_3.used);
+    };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0);
+    self_11 = block -> ref "core:prelude/string.wado//StrSlice" {
+        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_3(t.s1).repr, $mv_arg_3.used);
+    };
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
+    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
+    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0);
+    self_11 = "assert_call_arg_ident.wado/assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c^core:prelude/traits.wado/ReflectTemplate::tail"(t);
+    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
+    return $mv_arg_1;
+}
+
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, alt_prefix, digit_count) {
     let $load_6: i32;
     let $load_26: char;
@@ -562,33 +589,6 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
         }
         return "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"(alt_prefix, digit_count);
     }
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::format<assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c,[i32,i32]>"(t) {
-    let self_11: ref "core:prelude/string.wado//StrSlice";
-    let $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0: ref "core:prelude/format.wado//Formatter";
-    $mv_arg_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(((local.tee self_11("assert_call_arg_ident.wado/assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c^core:prelude/traits.wado/ReflectTemplate::tail"(t)).end - self_11.start) + (local.tee self_11(block -> ref "core:prelude/string.wado//StrSlice" {
-        let $mv_arg_1: ref "core:prelude/string.wado//String";
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s0).repr, $mv_arg_1.used);
-    }).end - self_11.start + 16)) + (local.tee self_11(block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_1(t.s1).repr, $mv_arg_1.used);
-    }).end - self_11.start + 16)), used: 0 };
-    self_11 = block -> ref "core:prelude/string.wado//StrSlice" {
-        let $mv_arg_3: ref "core:prelude/string.wado//String";
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_3(t.s0).repr, $mv_arg_3.used);
-    };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h0, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0);
-    self_11 = block -> ref "core:prelude/string.wado//StrSlice" {
-        "core:prelude/string.wado/core:prelude/string.wado/String::internal_view"(local.tee $mv_arg_3(t.s1).repr, $mv_arg_3.used);
-    };
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
-    $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($mv_arg_1);
-    "core:prelude/primitive.wado/i32::fmt_decimal$sroa[self.value]"(t.h1, $temp_inline_core_prelude_traits_wado_TemplateHole_assert_call_arg_ident_wado__tmpl_4432d2d1cbeba55c_i32___fmt_6_0);
-    self_11 = "assert_call_arg_ident.wado/assert_call_arg_ident.wado/$tmpl$4432d2d1cbeba55c^core:prelude/traits.wado/ReflectTemplate::tail"(t);
-    "core:prelude/string.wado/core:prelude/string.wado/String::internal_push_view"($mv_arg_1, self_11.repr, self_11.start, self_11.end);
-    return $mv_arg_1;
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_char_n$sroa[self.buf]"(self, c, n) {
