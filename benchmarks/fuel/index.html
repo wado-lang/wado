@@ -161,7 +161,7 @@
       </div>
       <div class="header-item">
         <strong>Note:</strong>
-        <span>The graphs show fuel, the Wasm instructions a phase ran, so lower is better. They draw the latest <span id="max-commits"></span> commits; the data download holds every one.</span>
+        <span>The graphs show fuel, the Wasm instructions a phase ran, each priced near its time, so lower is better. They draw the latest <span id="max-commits"></span> commits; the data download holds every one.</span>
       </div>
     </header>
     <main id="main"></main>
@@ -185,6 +185,12 @@
 
         const OPT_PATTERN = / \((-O\d)\)$/;
 
+        // The `name` the Benchmark workflow stores the series under. It changes
+        // with the operator prices, whose figures do not compare across a
+        // change, so each price list starts a history of its own; the older
+        // ones stay in data.js.
+        const SUITE = 'v2026.11';
+
         function init() {
           const data = window.BENCHMARK_DATA;
 
@@ -206,19 +212,17 @@
           // recent entry to derive the graph order from.
           const benchesByName = new Map();
           let latestEntry = null;
-          for (const entries of Object.values(data.entries)) {
-            for (const entry of entries) {
-              if (!latestEntry || entry.date > latestEntry.date) {
-                latestEntry = entry;
+          for (const entry of data.entries[SUITE] ?? []) {
+            if (!latestEntry || entry.date > latestEntry.date) {
+              latestEntry = entry;
+            }
+            const {commit, date, tool, benches} = entry;
+            for (const bench of benches) {
+              const result = { commit, date, tool, bench };
+              if (!benchesByName.has(bench.name)) {
+                benchesByName.set(bench.name, []);
               }
-              const {commit, date, tool, benches} = entry;
-              for (const bench of benches) {
-                const result = { commit, date, tool, bench };
-                if (!benchesByName.has(bench.name)) {
-                  benchesByName.set(bench.name, []);
-                }
-                benchesByName.get(bench.name).push(result);
-              }
+              benchesByName.get(bench.name).push(result);
             }
           }
 
