@@ -2160,6 +2160,7 @@ fn compile_after_load<H: CompilerHost>(
     {
         let _span = logger.span("monomorphize");
         lower::contract_checks::check_marked_calls(&flat);
+        prelower_reach::before_monomorphize(&mut flat);
         let mut mono = monomorphize(&mut flat);
         refuse_expanding_instances(&mono, logger)?;
         #[cfg(debug_assertions)]
@@ -2638,6 +2639,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             {
                 let _span = logger.span("monomorphize");
                 lower::contract_checks::check_marked_calls(&flat);
+                prelower_reach::before_monomorphize(&mut flat);
                 let mut mono = monomorphize(&mut flat);
                 refuse_expanding_instances(&mono, &logger)?;
                 bind_monomorphized(&mut flat, &mut mono, &logger)?;

@@ -198,6 +198,12 @@ pub fn effect_default_impl_name(interface: &str, op: &str) -> String {
 /// Prefix of [`effect_default_impl_name`].
 const EFFECT_DEFAULT_PREFIX: &str = "$effect_default$";
 
+/// Whether `name` is an [`effect_default_impl_name`].
+#[must_use]
+pub fn is_effect_default(name: &str) -> bool {
+    name.starts_with(EFFECT_DEFAULT_PREFIX)
+}
+
 /// How a function name reads where a user sees it — `#function`, and the
 /// call-site name a defaulted argument captures. A default implementation's
 /// storage name is an internal detail, so it renders as the operation it
@@ -230,7 +236,7 @@ pub fn diagnostic_function_name(
     module: &ModuleSource,
     method: Option<&LocalMethodName>,
 ) -> String {
-    if name.starts_with(EFFECT_DEFAULT_PREFIX) {
+    if is_effect_default(name) {
         return name.to_string();
     }
     if let Some(method) = method {
@@ -559,11 +565,14 @@ pub const DROP_GLUE_PREFIX: &str = "$drop$";
 /// Every such helper spells the mangle of the type it belongs to after its
 /// kind, so a second [`INTERNAL_PREFIX`] is what tells one from the plainly
 /// synthesized functions that carry no type (`$initialize_module`, `$test_0`,
-/// `$cm_export__run`).
+/// `$cm_export__run`). A [`global_init_function`] spells a global there, not a
+/// type, and its global's uses reach it.
 #[must_use]
 pub fn is_type_bridge(name: &str) -> bool {
-    name.strip_prefix(INTERNAL_PREFIX)
-        .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
+    global_init_target(name).is_none()
+        && name
+            .strip_prefix(INTERNAL_PREFIX)
+            .is_some_and(|rest| rest.contains(INTERNAL_PREFIX))
 }
 
 /// A minted name's digest part: the first 8 bytes of `digest`, in hex.
@@ -2852,7 +2861,15 @@ pub fn dispatch_global_name(label: &str) -> String {
 /// - `dispatch_wrapper_name("./c.wado/Counter", "next")` →
 ///   `"$effect_dispatch__./c.wado/Counter__next"`
 pub fn dispatch_wrapper_name(label: &str, op_name: &str) -> String {
-    format!("$effect_dispatch__{label}__{op_name}")
+    format!("{DISPATCH_WRAPPER_PREFIX}{label}__{op_name}")
+}
+
+const DISPATCH_WRAPPER_PREFIX: &str = "$effect_dispatch__";
+
+/// Whether `name` is a [`dispatch_wrapper_name`].
+#[must_use]
+pub fn is_dispatch_wrapper(name: &str) -> bool {
+    name.starts_with(DISPATCH_WRAPPER_PREFIX)
 }
 
 /// Build the dispatch struct's per-operation field name.

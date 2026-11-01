@@ -305,9 +305,9 @@ impl Interner {
         // to a body-less stub and emit a component that fails to link.
         assert!(
             !self.pruned.contains(&key),
-            "[lower] `{key:?}` was pruned before `lower` and then minted here: \
-             this phase spelled a callee that no TIR body names, so \
-             `prelower_reach::is_root` owes it a root (WEP 2026-05-26)"
+            "[lower] `{key:?}` was pruned as unreached and then minted here: \
+             a phase spelled a callee that no TIR body named when \
+             `prelower_reach` walked, so `Roots::entry` owes it a root"
         );
         // A stub is for a callee outside the package. Minting one for a name the
         // package *does* define means the call and the definition disagree on
