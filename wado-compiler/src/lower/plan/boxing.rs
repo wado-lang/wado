@@ -11,7 +11,7 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp,
     TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -68,29 +68,23 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
 /// address-taken locals, retag the declaration to its box type.
 /// Function bodies are otherwise untouched.
 pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
-    let type_table = flat.type_table.clone();
-    let type_table = type_table.borrow();
     for func_rc in &flat.functions {
-        let mut func = func_rc.borrow_mut();
-        shadow_one_function(&mut func, plan, &type_table);
+        shadow_one_function(&mut func_rc.borrow_mut(), plan);
     }
 }
 
 pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
-    let type_table = flat.type_table.clone();
-    let type_table = type_table.borrow();
     for func_rc in &flat.functions[start..] {
-        let mut func = func_rc.borrow_mut();
-        shadow_one_function(&mut func, plan, &type_table);
+        shadow_one_function(&mut func_rc.borrow_mut(), plan);
     }
 }
 
-fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
+fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
     let address_taken = still_taken(func);
     let param_count = u32::try_from(func.params.len()).unwrap();
 
-    // (param_idx, shadow_local_idx, box_type_id, original_type_id, name)
-    let mut shadowed_params: Vec<(u32, u32, TypeId, TypeId, String)> = Vec::new();
+    // (param_idx, shadow_local_idx, original_type_id, name)
+    let mut shadowed_params: Vec<(u32, u32, TypeId, String)> = Vec::new();
     let mut effective_address_taken = address_taken.clone();
 
     for &local_idx in &address_taken {
@@ -110,7 +104,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
             });
             effective_address_taken.swap_remove(&local_idx);
             effective_address_taken.insert(shadow_idx);
-            shadowed_params.push((local_idx, shadow_idx, box_type_id, local_type_id, name));
+            shadowed_params.push((local_idx, shadow_idx, local_type_id, name));
         } else {
             // Retag the declaration so `convert_local` sees the box
             // type without the fold having to consult `BoxPlan`.
@@ -122,16 +116,17 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
         && let Some(body) = &mut func.body
     {
         let mut remap: IndexMap<u32, u32> = IndexMap::default();
-        for (param_idx, shadow_idx, _, _, _) in &shadowed_params {
+        for (param_idx, shadow_idx, _, _) in &shadowed_params {
             remap.insert(*param_idx, *shadow_idx);
         }
         remap_locals_in_block(body, &remap);
 
+        // The shadow is declared as a boxed `let` local is: of the parameter's
+        // own type, which the lowering wraps in the box. A `let` of the box
+        // itself would hide from every analysis that the box holds what the
+        // parameter does, the caller's storage included.
         let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
-        for (param_idx, shadow_idx, box_type_id, original_type_id, name) in &shadowed_params {
-            let box_struct_name = type_table
-                .struct_list_name(*box_type_id)
-                .expect("Box type should be a struct");
+        for (param_idx, shadow_idx, original_type_id, name) in &shadowed_params {
             let span = func.span;
             let param_read = TirExpr::new(
                 TirExprKind::Local {
@@ -141,26 +136,13 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
                 *original_type_id,
                 span,
             );
-            let wrap = TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: *box_type_id,
-                    struct_name: box_struct_name,
-                    fields: vec![TirStructField {
-                        name: "value".to_string(),
-                        value: param_read,
-                        field_index: 0,
-                    }],
-                },
-                *box_type_id,
-                span,
-            );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: format!("$boxed_param_{param_idx}"),
                     local_index: *shadow_idx,
                     is_mut: false,
-                    type_id: *box_type_id,
-                    value: wrap,
+                    type_id: *original_type_id,
+                    value: param_read,
                     storage: LetStorage::Taken,
                 },
                 span,
