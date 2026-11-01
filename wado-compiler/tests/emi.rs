@@ -23,6 +23,7 @@ use common::repository_root;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use wado_compiler::ast::{
     AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
     Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
@@ -273,6 +274,8 @@ fn key_is_understood(key: &str) -> bool {
             | "warnings_contains"
             | "warnings_not_contains"
             | "wat_lines"
+            | "wir_scope"
+            | "remarks"
     ) || key.starts_with("wir_expect:")
         || key.starts_with("wir_not_expect:")
 }
@@ -1683,6 +1686,9 @@ struct Results {
     eligible: Vec<Eligible>,
     excluded: Vec<(String, Excluded)>,
     findings: Vec<(String, Excluded)>,
+    /// What each source cost the stage, so material can be weighed against
+    /// the sites it brings.
+    costs: Vec<(String, Duration)>,
 }
 
 /// Silences the panic hook for as long as it is alive.
@@ -1742,13 +1748,16 @@ fn campaign(
                         std::fs::read_to_string(&subject.path).expect("source is readable");
                     let name = subject.name();
 
+                    let started = Instant::now();
                     let outcome = stage(subject, &source);
+                    let cost = started.elapsed();
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
                         eprintln!("[emi] {finished}/{total}");
                     }
 
                     let mut results = results.lock().expect("results lock");
+                    results.costs.push((name.clone(), cost));
                     match outcome {
                         Ok(eligible) => results.eligible.push(eligible),
                         Err(excluded) if is_finding(&excluded) => {
@@ -1769,6 +1778,9 @@ fn campaign(
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));
     results.excluded.sort_by(|a, b| a.0.cmp(&b.0));
     results.findings.sort_by(|(a, _), (b, _)| a.cmp(b));
+    results
+        .costs
+        .sort_by(|(a, a_cost), (b, b_cost)| b_cost.cmp(a_cost).then(a.cmp(b)));
     results
 }
 
@@ -1854,6 +1866,7 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     ));
     report.push_str(&per_reason(results));
     report.push_str(&per_root(results, subjects));
+    report.push_str(&costliest(results));
     report.push_str(&per_shape(results));
     report.push_str(&dropped(results));
 
@@ -1922,11 +1935,34 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             .filter(|(name, _)| drawn(name))
             .count();
         let findings = results.findings.iter().filter(|(n, _)| drawn(n)).count();
+        let cost: Duration = results
+            .costs
+            .iter()
+            .filter(|(name, _)| drawn(name))
+            .map(|(_, cost)| *cost)
+            .sum();
         out.push_str(&format!(
-            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s)\n",
+            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s), {:.0}s\n",
             root.name(),
             eligible.len(),
+            cost.as_secs_f64(),
         ));
+    }
+    out
+}
+
+/// The sources that cost the stage most, with the sites each brought: a
+/// source dear for its sites is the first to sample or drop.
+fn costliest(results: &Results) -> String {
+    const SHOWN: usize = 20;
+    let mut out = String::from("\n=== costliest sources ===\n");
+    for (name, cost) in results.costs.iter().take(SHOWN) {
+        let sites = results
+            .eligible
+            .iter()
+            .find(|e| &e.name == name)
+            .map_or_else(|| "excluded".to_string(), |e| format!("{} sites", e.sites));
+        out.push_str(&format!("{:>7.1}s  {name} ({sites})\n", cost.as_secs_f64()));
     }
     out
 }
@@ -2703,4 +2739,13 @@ fn a_run_that_spends_its_budget_is_told_apart() {
         matches!(excluded, Excluded::BaselineOutOfBudget { .. }),
         "{excluded:?}"
     );
+}
+
+/// A key that only states what the compiler emits says nothing about the run,
+/// so it keeps a fixture in the corpus.
+#[test]
+fn a_compile_time_expectation_keeps_the_fixture() {
+    let source =
+        "fn f() {}\n\n__DATA__\n{\"stdout\": \"\", \"wir_scope\": \"f\", \"remarks\": {}}\n";
+    assert!(Spec::parse(Root::Fixtures, source).is_ok());
 }
