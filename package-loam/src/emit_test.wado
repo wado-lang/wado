@@ -1352,7 +1352,7 @@ test "compute holds a cache at the capacity of the total, its past's length what
     }`;
     let out = generate(source).unwrap();
     let computed = out.substr_bytes(out.find("pub fn compute").unwrap(), out.len());
-    assert computed.contains("cache: &Cache<Bk>, weights: &Params<Bk>) -> Outputs<Bk>");
+    assert computed.contains("cache: &Cache<Bk>, model: &mut Model<Bk>) -> Outputs<Bk>");
     assert computed.contains("let dim_P = -dim_S + dim_T;");
     assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64;");
     assert computed.contains(

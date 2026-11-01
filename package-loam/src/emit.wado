@@ -11,10 +11,12 @@ use {
     KEPT,
     LENGTHS,
     MAP,
+    MODEL,
     OUTPUTS,
     PARAMS,
     PASSED,
     PREPARED,
+    RECORDED,
     RUNTIME_NAMES,
     is_bound,
     module_idents,
@@ -260,7 +262,19 @@ pub fn emit(
     } else {
         `${*input}.extents[${axis}]`;
     });
-    emit_compute(&mut w, graph, checked, &names, &held, &carriers, host_symbols, &padded, &read, &crossing)?;
+    emit_compute(
+        &mut w,
+        graph,
+        checked,
+        &names,
+        &held,
+        &carriers,
+        host_symbols,
+        &padded,
+        &read,
+        &kept.graph,
+        &crossing,
+    )?;
     return Result::Ok(w.to_string());
 }
 
@@ -1405,6 +1419,7 @@ fn emit_compute(
     mut symbols: Symbols,
     padded: &List<String>,
     read: &List<String>,
+    kept: &List<String>,
     crossing: &Crossing,
 ) -> Result<(), EmitError> {
     let shapes = &checked.shapes;
@@ -1481,18 +1496,57 @@ fn emit_compute(
     for let symbol of capacities.used {
         symbols.used.insert(symbol);
     }
+    // What the program takes, in the order `recorded` makes its parameters:
+    // the inputs and the cache, whose extents are the shape class, then the
+    // lengths and the weights.
+    let mut taken_args: List<ProgramArgument> = [];
+    for let vi of &taken {
+        taken_args.push(ProgramArgument::of(checked, names, &vi.name, Crossed::Input));
+    }
+    for let [past, _] of crossing.pairs {
+        taken_args.push(ProgramArgument::of(checked, names, &past, Crossed::Cache));
+    }
+    let class: List<String> = taken_args.into_iter().map(|a| `backend.extents_of(&${a.held()})`).collect();
     if !read.is_empty() {
         let mut fields: List<String> = [];
         for let symbol of *read {
-            fields.push(`${symbols.idents[symbol]}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
+            let ident = symbols.idents[symbol];
+            fields.push(`${ident}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
                 &Poly::symbol(&symbol),
             )?}], extents: [] })`);
+            taken_args.push(ProgramArgument { crossed: Crossed::Length, ident, element: "i64", axes: "[]" });
         }
         lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
         arguments.push("&lengths");
     }
-    arguments.push("weights");
-    let built = `build(${arguments.join(", ")})`;
+    for let weight of weight_names(graph, kept) {
+        taken_args.push(ProgramArgument::of(checked, names, &weight, Crossed::Weight));
+    }
+    arguments.push("&model.weights");
+    let erased: List<String> = taken_args.into_iter().map(|a| a.erased()).collect();
+    let results = if crossing.several() {
+        let mut fields: List<String> = [];
+        for let [at, output] of returned.into_iter().enumerate() {
+            fields.push(`${names.get(&output)}: ${typed_result(checked, &output, at)}`);
+        }
+        if has_cache {
+            let mut parts: List<String> = [];
+            for let [k, [past, _]] of crossing.pairs.into_iter().enumerate() {
+                parts.push(`${names.get(&past)}: ${typed_result(checked, &past, returned.len() + k)}`);
+            }
+            fields.push(`cache: ${CACHE} { ${parts.join(", ")} }`);
+        }
+        `${PASSED} { ${fields.join(", ")} }`;
+    } else {
+        typed_result(checked, &returned[0], 0);
+    };
+    lines.push(`let passed = match model.programs.run(backend, [${class.join(", ")}], ${RECORDED}, || [${erased.join(
+        ", ",
+    )}]) {`);
+    lines.push(`    Some(results) => ${results},`);
+    lines.push(`    None => build(${arguments.join(", ")}),`);
+    lines.push("};");
+    let built = "passed";
     let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
         let mut downloaded = `backend.download(&${place})`;
         if converted(checked, held, tensor) {
@@ -1525,10 +1579,12 @@ fn emit_compute(
         lines.push(`return ${read_back(&returned[0], built)?};`);
         tensor_type(checked, held, &returned[0]);
     };
-    compute.add_param("weights", `&${PARAMS}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
+    compute.add_param("model", `&mut ${MODEL}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
+    emit_model(w);
     w.blank();
     w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
-    w.line("/// outputs read back cut to their lengths.");
+    w.line("/// outputs read back cut to their lengths. A backend that compiles its");
+    w.line("/// pass runs the program it compiled for the capacities.");
     compute.emit_begin(w);
     // The checks come first, as a binding reads an extent they check is there.
     let checks = input_checks(graph, shapes, names, &crossing.cached).host;
@@ -1536,7 +1592,152 @@ fn emit_compute(
         w.line(&line);
     }
     w.end();
+    emit_recorded(w, names, &taken_args, &returned, crossing);
     return Result::Ok(());
+}
+
+/// Where an argument of the program crosses from: as `build` takes it, and
+/// so as `compute` holds it and `recorded` binds it.
+enum Crossed {
+    Input,
+    Cache,
+    Length,
+    Weight,
+}
+
+/// One argument of the program `compute` runs: where it crosses, its name
+/// there, and its element and axes.
+struct ProgramArgument {
+    crossed: Crossed,
+    ident: String,
+    element: String,
+    axes: String,
+}
+
+impl ProgramArgument {
+    fn of(checked: &Checked, names: &Names, tensor: &String, crossed: Crossed) -> ProgramArgument {
+        return ProgramArgument {
+            crossed,
+            ident: names.get(tensor),
+            element: checked.primitives[*tensor],
+            axes: `[${axis_list(&checked.shapes[*tensor])}]`,
+        };
+    }
+
+    /// Where `compute` holds the argument.
+    fn held(&self) -> String {
+        return match self.crossed {
+            Input => self.ident,
+            Cache => `cache.${self.ident}`,
+            Length => `lengths.${self.ident}`,
+            Weight => `model.weights.${self.ident}`,
+        };
+    }
+
+    /// The argument as the program takes it.
+    fn erased(&self) -> String {
+        return `Any::${any_case(&self.element)}(backend.relabeled::<${self.element}, ${self.axes}, Untyped>(&${self.held()}))`;
+    }
+
+    /// The parameter `recorded` makes of the argument.
+    fn parameter(&self, at: i32) -> String {
+        return `recorder.parameter::<${self.element}, ${self.axes}>(extents[${at}])`;
+    }
+}
+
+/// The program's `at`th result as `tensor`'s type.
+fn typed_result(checked: &Checked, tensor: &String, at: i32) -> String {
+    let axes = axis_list(&checked.shapes[*tensor]);
+    return `${checked.primitives[*tensor]}_of::<${BACKEND_PARAM}, [${axes}]>(backend, &results[${at}])`;
+}
+
+/// The case of `Any` holding an element of `primitive`.
+fn any_case(primitive: &String) -> String {
+    return match *primitive {
+        "f32" => "F32",
+        "i64" => "I64",
+        "bool" => "Bool",
+        _ => unreachable(),
+    };
+}
+
+/// The initializers, then the folded literals `kept`, as `Params` holds them.
+fn weight_names(graph: &Graph, kept: &List<String>) -> List<String> {
+    let mut weights: List<String> = graph.initializers.into_iter().map(|vi| vi.name).collect();
+    weights.extend(kept);
+    return weights;
+}
+
+/// `Model`, the weights beside the programs a backend compiled.
+fn emit_model(w: &mut CodeWriter) {
+    let mut model = StructSpec::new(MODEL, Vis::Pub);
+    model.add_generic(GRAPH_BOUND);
+    model.add_pub_field("weights", `${PARAMS}<${BACKEND_PARAM}>`);
+    model.add_pub_field("programs", `Programs<${BACKEND_PARAM}>`);
+    w.blank();
+    w.line("/// The weights as `Bk` holds them, and the program `Bk` compiled for each");
+    w.line("/// shape class `compute` has met.");
+    model.emit(w);
+    w.blank();
+    let mut held = ImplSpec::new(`${MODEL}<${BACKEND_PARAM}>`);
+    held.add_generic(GRAPH_BOUND);
+    held.emit_begin(w);
+    w.line(`pub fn new(weights: ${PARAMS}<${BACKEND_PARAM}>) -> ${MODEL}<${BACKEND_PARAM}> {`);
+    w.line(`    return ${MODEL} { weights, programs: Programs::new() };`);
+    w.line("}");
+    w.end();
+}
+
+/// `recorded`: [`build`] recorded over parameters, one for each of `taken`,
+/// in its order, for a backend to compile.
+fn emit_recorded(
+    w: &mut CodeWriter,
+    names: &Names,
+    taken: &List<ProgramArgument>,
+    returned: &List<String>,
+    crossing: &Crossing,
+) {
+    w.blank();
+    w.line("/// [`build`] recorded over parameters of `extents`, in the order `compute`");
+    w.line("/// passes its program the arguments.");
+    w.begin(`fn ${RECORDED}(recorder: &mut Recorder, extents: &List<List<i32>>) -> Recorded`);
+    let mut arguments: List<String> = ["recorder"];
+    for let [at, a] of taken.into_iter().enumerate() {
+        if a.crossed matches { Input } {
+            w.line(`let ${a.ident} = ${a.parameter(at)};`);
+            arguments.push(`&${a.ident}`);
+        }
+    }
+    for let [crossed, ty, local] of [
+        [Crossed::Cache, CACHE, "cache"],
+        [Crossed::Length, LENGTHS, "lengths"],
+        [Crossed::Weight, PARAMS, "weights"],
+    ] as List<[Crossed, String, String]> {
+        let mut fields: List<String> = [];
+        for let [at, a] of taken.into_iter().enumerate() {
+            if a.crossed == crossed {
+                fields.push(`${a.ident}: ${a.parameter(at)}`);
+            }
+        }
+        if !fields.is_empty() || crossed matches { Weight } {
+            w.line(`let ${local} = ${ty}::<Recorder> { ${fields.join(", ")} };`);
+            arguments.push(`&${local}`);
+        }
+    }
+    w.line(`let passed = build(${arguments.join(", ")});`);
+    let mut results: List<String> = [];
+    if crossing.several() {
+        for let output of *returned {
+            results.push(`passed.${names.get(&output)}.id`);
+        }
+        for let [past, _] of crossing.pairs {
+            results.push(`passed.cache.${names.get(&past)}.id`);
+        }
+    } else {
+        results.push("passed.id");
+    }
+    w.line(`return recorder.finished([${results.join(", ")}]);`);
+    w.end();
 }
 
 /// An axis of a past the present grows: the past's length on it, and the

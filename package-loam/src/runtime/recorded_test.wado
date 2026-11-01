@@ -20,7 +20,7 @@ use {
     windowed,
     windowed_input,
 } from "./graph_cases.wado";
-use { Host, Recorder, host_of, run } from "./recorded.wado";
+use { Any, Recorder, host_of, run } from "./recorded.wado";
 use { Cpu, Holds } from "./tensor.wado";
 
 test "a recorded graph run on the CPU computes what the CPU computes as each operation is added" {
@@ -42,7 +42,7 @@ test "a recorded graph run on the CPU computes what the CPU computes as each ope
         host_of(&want.2),
         host_of(&want.3),
         host_of(&want.4),
-    ] as List<Host>;
+    ] as List<Any<Cpu>>;
 }
 
 test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a constant of the graph" {
@@ -54,7 +54,7 @@ test "a recorded convolution and pooling compute the CPU's, an uploaded tensor a
     let got = windowed(&mut r, &rx);
     let recorded = r.finished([got.id]);
     assert recorded.nodes[got.id].extents == want.extents;
-    assert run(cpu, &recorded, &[host_of(&x)]) == [host_of(&want)] as List<Host>;
+    assert run(cpu, &recorded, &[host_of(&x)]) == [host_of(&want)] as List<Any<Cpu>>;
 }
 
 test "a recorded conditional runs the branch its predicate picks, the first branch's results naming those of either" {
@@ -70,7 +70,7 @@ test "a recorded conditional runs the branch its predicate picks, the first bran
         assert run(cpu, &recorded, &[
             host_of(&pred),
             host_of(&x),
-        ]) == [host_of(&want)] as List<Host>;
+        ]) == [host_of(&want)] as List<Any<Cpu>>;
     }
 }
 
@@ -106,7 +106,7 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
     let got = attending(&mut r, &inputs, &past, &rotation, &case.options);
     let recorded = r.finished([got.0.id, got.1.id, got.2.id]);
     assert recorded.nodes[got.1.id].extents == want.1.extents;
-    let arguments: List<Host> = [
+    let arguments: List<Any<Cpu>> = [
         host_of(&q),
         host_of(&k),
         host_of(&v),
@@ -120,5 +120,5 @@ test "a recorded attention composite computes the CPU's, its presents the buffer
         host_of(&want.0),
         host_of(&want.1),
         host_of(&want.2),
-    ] as List<Host>;
+    ] as List<Any<Cpu>>;
 }

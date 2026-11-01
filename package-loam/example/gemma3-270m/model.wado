@@ -105,7 +105,7 @@ impl<affine Bk: Backend> Model<Bk> {
 /// fixed capacity.
 pub struct Built<affine Bk: Graph> {
     backend: Bk,
-    weights: gemma::Params<Bk>,
+    model: gemma::Model<Bk>,
     seen: List<i32>,
     cache: gemma::Cache<Bk>,
 }
@@ -114,9 +114,9 @@ impl<affine Bk: Graph> Built<Bk> {
     /// Loads the weights onto `backend` from `data`, as `Model::load` does.
     pub fn load<affine Ck: CheckpointBytes>(backend: Bk, data: &Ck) -> Result<Built<Bk>, LoadError> with _ {
         let mut on = backend;
-        let weights = gemma::Params::load(&mut on, data)?;
+        let model = gemma::Model::new(gemma::Params::load(&mut on, data)?);
         let cache = gemma::Cache::empty(&mut on);
-        return Ok(Built { backend: on, weights, seen: [], cache });
+        return Ok(Built { backend: on, model, seen: [], cache });
     }
 
     /// The backend the model runs on.
@@ -141,7 +141,7 @@ impl<affine Bk: Graph> Built<Bk> {
             data: List::<i64>::filled(ids.len(), 1),
             extents: [gemma::BatchSize::EXTENT, ids.len()],
         };
-        let passed = gemma::compute(&mut self.backend, &input_ids, &mask, &self.cache, &self.weights);
+        let passed = gemma::compute(&mut self.backend, &input_ids, &mask, &self.cache, &mut self.model);
         // The graph's one position's logits, the first of the greatest.
         let mut best = 0;
         for let [i, v] of passed.logits.data.into_iter().enumerate() {

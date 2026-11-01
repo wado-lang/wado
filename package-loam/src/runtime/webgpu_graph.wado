@@ -49,9 +49,36 @@ use {
     element_count,
     operand,
 } from "./tensor.wado";
+use { Any, Recorded, Recorder, run } from "./recorded.wado";
 use { DeviceTensor, Placed, WebGpuBackend, contiguous, permuted } from "./webgpu.wado";
 
+/// A pass recorded once per shape class, which each call replays.
+pub struct WebGpuProgram {
+    recorded: Recorded,
+}
+
 impl Graph for WebGpuBackend {
+    type Program = WebGpuProgram;
+
+    fn relabeled<E: Element, In, Out>(&self, t: &Placed<E, In>) -> Placed<E, Out> {
+        return match t {
+            Host(h) => Placed::Host(Tensor { data: h.data, extents: h.extents }),
+            Device(d) => Placed::Device(*d),
+        };
+    }
+
+    fn compiled(&mut self, record: fn(&mut Recorder) -> Recorded with _) -> Option<WebGpuProgram> with _ {
+        return Option::Some(WebGpuProgram { recorded: record(&mut Recorder::new()) });
+    }
+
+    fn executed(
+        &mut self,
+        program: &WebGpuProgram,
+        arguments: &List<Any<WebGpuBackend>>,
+    ) -> List<Any<WebGpuBackend>> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        return run(self, &program.recorded, arguments);
+    }
+
     fn iota<E: Element, Axes>(&mut self, extents: List<i32>, dimension: i32) -> Placed<E, Axes> {
         return Placed::Host(self.cpu.iota(extents, dimension));
     }
