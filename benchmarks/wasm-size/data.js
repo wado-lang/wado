@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793522937303,
+  "lastUpdate": 1793528923398,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73273,6 +73273,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f77e7d4bdefee42358372a0c6531dfbcc809cd4d"
         },
         "date": 1793522936006,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c55d2b03918a4e27bdf7404953488578998694fe",
+          "message": "Merge pull request #2514 from wado-lang/claude/dazzling-brahmagupta-xiwqk3\n\nfix(compiler): a boxed reference parameter keeps the copy of what it reads, found by a new EMI payload",
+          "timestamp": "2026-11-01T19:14:42+09:00",
+          "tree_id": "bda10bc3eb86c9fe3a74d4bdf3ef2e9af04f3aa0",
+          "url": "https://github.com/wado-lang/wado/commit/c55d2b03918a4e27bdf7404953488578998694fe"
+        },
+        "date": 1793528922058,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
