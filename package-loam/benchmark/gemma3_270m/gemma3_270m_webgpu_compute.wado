@@ -1,0 +1,43 @@
+//! Gemma 3 (270M) on Loam's `WebGpuBackend` through `compute`, the program
+//! compiled once per shape class, under `wado run-webgpu` with the model's
+//! directory as the one grant, as `mise run gemma3-270m` does:
+//!
+//!     wado run-webgpu --dir ../example/gemma3-270m gemma3_270m/gemma3_270m_webgpu_compute.wado
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { Built } from "../../example/gemma3-270m/model.wado";
+use { timed } from "./generate.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Ok(checkpoint) = fs::read("build/model.onnx_data") else {
+        eprintln("build/model.onnx_data is missing; run package-loam/example/gemma3-270m/fetch.sh");
+        return;
+    };
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut model = Built::load(gpu, &checkpoint).unwrap();
+    timed("Gemma 3 (270M), Loam WebGPU compute", &mut model);
+}

@@ -124,13 +124,18 @@ impl<affine Bk: Graph> Built<Bk> {
         return &self.backend;
     }
 
+    /// Empties the cache, so the next call reads its ids from the start.
+    pub fn forget(&mut self) with _ {
+        self.seen = [];
+        self.cache = gemma::Cache::empty(&mut self.backend);
+    }
+
     /// The token the model ranks first after `ids`, as `Model::next_token`
     /// picks it.
     pub fn next_token(&mut self, ids: &List<i32>) -> i32 with _ {
         assert_readable(ids);
         if !extends(&self.seen, ids) {
-            self.seen = [];
-            self.cache = gemma::Cache::empty(&mut self.backend);
+            self.forget();
         }
         let fresh: List<i64> = ids.into_iter().skip(self.seen.len()).map(|id| id as i64).collect();
         let input_ids = Tensor::<i64, [gemma::BatchSize, gemma::SequenceLength]> {

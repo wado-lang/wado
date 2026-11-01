@@ -41,8 +41,9 @@ shipped.
 
 Wado 2026-10-24 (`-O2`), wasmtime 50.0.0, wgpu-core 29, onnxruntime 1.30.0,
 llama.cpp b11846, gcc 15.2.0 (`-O2`), AMD Ryzen 7 5700X (8 cores, 16 threads),
-NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. Each
-figure is the best of three runs.
+NVIDIA GeForce RTX 4060 Ti (driver 595.99.02, Vulkan), Linux x86_64. `wado`
+and `wado-run-webgpu` are release builds, as the tasks build them. Each figure
+is the best of three runs.
 
 ## GPT-2 (124M)
 
@@ -74,19 +75,22 @@ f32. llama.cpp
 reads GGUF in F16, the precision nearest it. Google ships no F16 GGUF and
 ggml-org only Q8_0, so it is unsloth's conversion.
 
-| Arm                              | Program                                        |
-| -------------------------------- | ---------------------------------------------- |
-| onnxruntime, its own thread pool | `gemma3_270m/onnxruntime.cpp`                  |
-| llama.cpp Vulkan                 | `gemma3_270m/llama_cpp.cpp`                    |
-| Loam `WebGpuBackend`             | `gemma3_270m_webgpu.wado`, `wado run-webgpu`   |
-| Loam `Cpu`                       | `gemma3_270m.wado`, `wado run --collector drc` |
+| Arm                              | Program                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| onnxruntime, its own thread pool | `gemma3_270m/onnxruntime.cpp`                        |
+| llama.cpp Vulkan                 | `gemma3_270m/llama_cpp.cpp`                          |
+| Loam `WebGpuBackend`             | `gemma3_270m_webgpu.wado`, `wado run-webgpu`         |
+| Loam `WebGpuBackend`, `compute`  | `gemma3_270m_webgpu_compute.wado`, `wado run-webgpu` |
+| Loam `Cpu`                       | `gemma3_270m.wado`, `wado run --collector drc`       |
 
 Every arm generated "[Your Name] and I am a", the tokens the example's
-`generate.json` records.
+`generate.json` records. The `compute` row is Wado 2026-11-02, and the rest
+the environment above.
 
-| Implementation                   |      Throughput |     ms/iter | vs best |
-| -------------------------------- | --------------: | ----------: | ------- |
-| llama.cpp Vulkan                 | 269.12 tokens/s |   29.726 ms | 1.00x   |
-| **Loam** `WebGpuBackend`         | 246.02 tokens/s |   32.517 ms | 1.09x   |
-| onnxruntime, its own thread pool |  35.88 tokens/s |  222.946 ms | 7.50x   |
-| **Loam** `Cpu`                   |   6.80 tokens/s | 1177.114 ms | 39.58x  |
+| Implementation                      |      Throughput |     ms/iter | vs best |
+| ----------------------------------- | --------------: | ----------: | ------- |
+| llama.cpp Vulkan                    | 269.12 tokens/s |   29.726 ms | 1.00x   |
+| **Loam** `WebGpuBackend`            | 246.02 tokens/s |   32.517 ms | 1.09x   |
+| **Loam** `WebGpuBackend`, `compute` |  45.50 tokens/s |  175.804 ms | 5.91x   |
+| onnxruntime, its own thread pool    |  35.88 tokens/s |  222.946 ms | 7.50x   |
+| **Loam** `Cpu`                      |   6.80 tokens/s | 1177.114 ms | 39.58x  |

@@ -113,6 +113,9 @@ fi
 echo "=== Loam (WebGPU) ==="
 WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu.wado
 
+echo "=== Loam (WebGPU, compute) ==="
+WADO="$wado_exe" ../../wado-run-webgpu/target/release/wado-run-webgpu -O2 $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m_webgpu_compute.wado
+
 # The weights outgrow the copying collector's half of the heap.
 echo "=== Loam (Cpu) ==="
 "$wado_exe" run -O2 --collector drc $WADO_BENCH_FLAGS --dir $model gemma3_270m/gemma3_270m.wado
