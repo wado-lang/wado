@@ -16,7 +16,7 @@
 //! the fuel suite the Benchmark workflow records (`name:` in
 //! `.github/workflows/benchmark.yml`).
 
-use wasmtime::{Config, OperatorCost};
+use wasmtime::{Config, OperatorCost, VariableOperatorCost};
 
 /// The fuel of `i32.add`. Two rather than one so that what costs half of it —
 /// a local or a constant, which Cranelift keeps in a register — has a price.
@@ -100,25 +100,26 @@ fn operator_cost() -> OperatorCost {
     // hundredth of a unit, so it charges nothing per byte.
     price!(c, units(14); MemoryCopy, MemoryFill, MemoryInit);
 
-    let v = &mut c.variable;
-    // wasmtime fills an array one element at a time.
-    v.array_new_per_element = UNIT;
-    v.array_new_default_per_element = UNIT;
-    v.array_new_elem_per_element = UNIT;
-    v.array_fill_per_element = UNIT;
-    v.array_init_elem_per_element = UNIT;
-    v.array_new_data_per_element = HALF_UNIT;
-    v.array_init_data_per_element = HALF_UNIT;
-    // A copy is a `memmove`; growth and table operations are priced flat.
-    v.array_copy_per_element = 0;
-    v.memory_copy_per_byte = 0;
-    v.memory_fill_per_byte = 0;
-    v.memory_init_per_byte = 0;
-    v.memory_grow_per_page = 0;
-    v.table_copy_per_element = 0;
-    v.table_fill_per_element = 0;
-    v.table_init_per_element = 0;
-    v.table_grow_per_element = 0;
+    c.variable = VariableOperatorCost {
+        // wasmtime fills an array one element at a time.
+        array_new_per_element: UNIT,
+        array_new_default_per_element: UNIT,
+        array_new_elem_per_element: UNIT,
+        array_fill_per_element: UNIT,
+        array_init_elem_per_element: UNIT,
+        array_new_data_per_element: HALF_UNIT,
+        array_init_data_per_element: HALF_UNIT,
+        // A copy is a `memmove`; growth and table operations are priced flat.
+        array_copy_per_element: 0,
+        memory_copy_per_byte: 0,
+        memory_fill_per_byte: 0,
+        memory_init_per_byte: 0,
+        memory_grow_per_page: 0,
+        table_copy_per_element: 0,
+        table_fill_per_element: 0,
+        table_init_per_element: 0,
+        table_grow_per_element: 0,
+    };
     c
 }
 
@@ -129,12 +130,21 @@ mod tests {
     use super::*;
     use crate::engine::default_config;
 
-    /// The fuel `export` spends on one call with `arg`.
-    fn fuel_of(wat: &str, export: &str, arg: i32) -> u64 {
+    const MODULE: &str = r#"(module
+        (type $words (array (mut i32)))
+        (func (export "add") (param i32) (result i32)
+            (i32.add (local.get 0) (local.get 0)))
+        (func (export "div") (param i32) (result i32)
+            (i32.div_u (local.get 0) (local.get 0)))
+        (func (export "array") (param i32) (result i32)
+            (array.len (array.new_default $words (local.get 0)))))"#;
+
+    /// The fuel `MODULE`'s `export` spends on one call with `arg`.
+    fn fuel_of(export: &str, arg: i32) -> u64 {
         let mut config = default_config(OptLevel::None);
         meter_fuel(&mut config);
         let engine = Engine::new(&config).unwrap();
-        let module = Module::new(&engine, wat).unwrap();
+        let module = Module::new(&engine, MODULE).unwrap();
         let mut store = Store::new(&engine, ());
         store.set_fuel(u64::MAX).unwrap();
         let instance = Instance::new(&mut store, &module, &[]).unwrap();
@@ -146,26 +156,17 @@ mod tests {
         before - store.get_fuel().unwrap()
     }
 
-    const MODULE: &str = r#"(module
-        (type $words (array (mut i32)))
-        (func (export "add") (param i32) (result i32)
-            (i32.add (local.get 0) (local.get 0)))
-        (func (export "div") (param i32) (result i32)
-            (i32.div_u (local.get 0) (local.get 0)))
-        (func (export "array") (param i32) (result i32)
-            (array.len (array.new_default $words (local.get 0)))))"#;
-
     #[test]
     fn integer_division_costs_ten_additions() {
-        let add = fuel_of(MODULE, "add", 1);
-        let div = fuel_of(MODULE, "div", 1);
+        let add = fuel_of("add", 1);
+        let div = fuel_of("div", 1);
         assert_eq!(div - add, 9 * u64::from(UNIT));
     }
 
     #[test]
     fn array_new_default_charges_each_element() {
-        let empty = fuel_of(MODULE, "array", 0);
-        let hundred = fuel_of(MODULE, "array", 100);
+        let empty = fuel_of("array", 0);
+        let hundred = fuel_of("array", 100);
         assert_eq!(hundred - empty, 100 * u64::from(UNIT));
     }
 }
