@@ -185,12 +185,13 @@ fn collect_synthesised_impls(project: &Package) -> SynthesisedImpls {
 
 /// Whether an impl on `receiver_type_id` is a *per-module* dispatch stub, to be
 /// kept out of the project-wide synthesis layer. Strips `&` / `&mut`:
-/// [`ResolvedType::Function`] and [`ResolvedType::GenericResource`] are
-/// anonymous, each using module synthesising its own stub, so a project-wide
-/// entry would mis-route. Every other type names one defining module.
+/// a function type and a generic resource instance are anonymous, each using
+/// module synthesising its own stub, so a project-wide entry would mis-route.
+/// Every other type names one defining module.
 fn receiver_is_per_module_synth(receiver_type_id: tir::TypeId, tt: &TypeTable) -> bool {
-    matches!(
-        tt.get(tt.peel_refs(receiver_type_id)),
-        ResolvedType::Function { .. } | ResolvedType::GenericResource { .. }
-    )
+    match tt.get(tt.peel_refs(receiver_type_id)) {
+        ResolvedType::Function { .. } => true,
+        ResolvedType::GenericInstance { def, .. } => tt.is_resource_def(*def),
+        _ => false,
+    }
 }

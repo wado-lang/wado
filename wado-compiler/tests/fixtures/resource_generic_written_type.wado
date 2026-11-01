@@ -1,0 +1,28 @@
+// A generic resource written with its arguments names that instance, in a
+// signature as anywhere: `Buf<i32>` is a type, and `Buf` defaults its `T`.
+use { println, Stdout } from "core:cli";
+
+#[cm("example:demo/buf", linearity = "unrestricted")]
+resource Buf<T = i32> {
+    #[cm("example:demo/buf#put")]
+    #[cm_params("self", "v")]
+    fn put(&self, v: T);
+}
+
+fn count(b: Option<Buf<i32>>) -> i32 {
+    if b matches { None } {
+        return 0;
+    }
+    return 1;
+}
+
+fn count_default(b: Option<Buf>) -> i32 {
+    return count(b);
+}
+
+export fn run() with Stdout {
+    println(`${count(null)} ${count_default(null)}`);
+}
+
+__DATA__
+{"stdout": "0 0\n"}

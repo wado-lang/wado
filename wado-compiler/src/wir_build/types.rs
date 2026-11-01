@@ -44,6 +44,12 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
             type_table.def_module(*def),
             type_table.def_name(*def),
         )],
+        ResolvedType::GenericInstance { def, type_args } if type_table.is_resource_def(*def) => {
+            type_args
+                .iter()
+                .flat_map(|a| get_type_dependencies(type_table, *a))
+                .collect()
+        }
         ResolvedType::GenericInstance { type_args, .. } => {
             // Skip unresolved generic instances (containing type params or projections)
             if type_args.iter().any(|t| type_table.contains_type_param(*t)) {
@@ -59,10 +65,6 @@ fn get_type_dependencies(type_table: &TypeTable, type_id: TypeId) -> Vec<String>
         ResolvedType::BuiltinArray(inner)
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner) => get_type_dependencies(type_table, *inner),
-        ResolvedType::GenericResource { type_args, .. } => type_args
-            .iter()
-            .flat_map(|a| get_type_dependencies(type_table, *a))
-            .collect(),
         _ => vec![],
     }
 }

@@ -276,8 +276,12 @@ impl<'a> AffineTypes<'a> {
             let base = tt.representation_head(type_id);
             (base, tt.get(base).clone())
         };
-        if let ResolvedType::Resource { def } = resolved {
+        let resource = self.tt.borrow().resource_def_of(base);
+        if let Some(def) = resource {
             let tt = self.tt.borrow();
+            if tt.is_stream_or_future_end(def) {
+                return Layout::End;
+            }
             if tt.is_unrestricted_resource(def) {
                 return Layout::Opaque;
             }
@@ -290,9 +294,6 @@ impl<'a> AffineTypes<'a> {
             } else {
                 Layout::Opaque
             };
-        }
-        if let ResolvedType::GenericResource { .. } = resolved {
-            return Layout::End;
         }
         if let ResolvedType::BuiltinArray(elem) = resolved {
             return Layout::Array { elem };

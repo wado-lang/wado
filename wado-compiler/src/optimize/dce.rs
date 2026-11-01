@@ -1078,6 +1078,23 @@ impl<'a> DceWalker<'a> {
                 ));
                 self.analysis.callees.insert(method_id);
             }
+            ResolvedType::GenericInstance { def, type_args }
+                if self.type_table.is_resource_def(def) =>
+            {
+                let name = self.type_table.def_name(def).to_string();
+                // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
+                let resource_args: Vec<FqTypeName> = type_args
+                    .iter()
+                    .map(|t| self.type_table.fq_type_name(*t))
+                    .collect();
+                let method_id = FunctionId::Method(MethodName::new(
+                    self.current_module.clone(),
+                    FqTypeName::builtin(name.as_str()).with_args(resource_args),
+                    trait_name,
+                    method_name,
+                ));
+                self.analysis.callees.insert(method_id);
+            }
             ResolvedType::GenericInstance { def, type_args } => {
                 let name = self.type_table.def_name(def).to_string();
                 // Generic instance method (e.g. `Box<i32>::get`,
@@ -1128,21 +1145,6 @@ impl<'a> DceWalker<'a> {
                 let method_id = FunctionId::Method(MethodName::new(
                     self.current_module.clone(),
                     self.type_table.fn_receiver_name(&base_receiver_type),
-                    trait_name,
-                    method_name,
-                ));
-                self.analysis.callees.insert(method_id);
-            }
-            ResolvedType::GenericResource { def, type_args } => {
-                let name = self.type_table.def_name(def).to_string();
-                // Generic resource method, e.g. `Future<T>^Inspect::inspect`.
-                let resource_args: Vec<FqTypeName> = type_args
-                    .iter()
-                    .map(|t| self.type_table.fq_type_name(*t))
-                    .collect();
-                let method_id = FunctionId::Method(MethodName::new(
-                    self.current_module.clone(),
-                    FqTypeName::builtin(name.as_str()).with_args(resource_args),
                     trait_name,
                     method_name,
                 ));
@@ -1468,7 +1470,9 @@ impl DceAnalysis {
                         type_table.def_module(*def).clone(),
                     ));
                 }
-                ResolvedType::GenericInstance { def, type_args } => {
+                ResolvedType::GenericInstance { def, type_args }
+                    if !type_table.is_resource_def(*def) =>
+                {
                     self.generic_instance_names
                         .insert(type_table.def_name(*def).to_string());
                     // The spelling a live `Struct` with type args records, so
@@ -1716,11 +1720,6 @@ fn collect_type_dependencies(
         | ResolvedType::Ref(inner)
         | ResolvedType::MutRef(inner) => {
             collect_type_transitive(*inner, type_table, reachable);
-        }
-        ResolvedType::GenericResource { type_args, .. } => {
-            for &arg in type_args {
-                collect_type_transitive(arg, type_table, reachable);
-            }
         }
         ResolvedType::Function {
             params,

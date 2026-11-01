@@ -236,7 +236,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::GenericInstance { .. }
             | ResolvedType::Primitive(_) => {}
             // Anything else can't be the target of an `impl Effect for T`
@@ -395,8 +394,7 @@ impl TypeSystem {
     fn handler_impl_target_name(&self, handler_type: TypeId) -> String {
         let resolved = self.type_table.borrow().get(handler_type).clone();
         match &resolved {
-            ResolvedType::GenericInstance { def, .. }
-            | ResolvedType::GenericResource { def, .. } => {
+            ResolvedType::GenericInstance { def, .. } => {
                 self.type_table.borrow().def_name(*def).to_string()
             }
             _ => self.type_table.borrow().type_name(handler_type),
