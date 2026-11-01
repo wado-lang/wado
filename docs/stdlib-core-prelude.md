@@ -125,10 +125,6 @@ Returns the declaration's name. A shape no declaration names answers
 for itself: an anonymous struct with `""`, and a tagged template's type
 with its holes (`` `${i32:04}` ``).
 
-#### `fn type_name()`
-
-``#[unavailable("renamed to `decl_name`")]``
-
 #### `fn wire_name_policy() -> CaseStyle`
 
 `#[compiler_item("reflect_wire_name_policy")]`
