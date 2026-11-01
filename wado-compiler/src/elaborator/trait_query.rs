@@ -1119,11 +1119,29 @@ impl TypeSystem {
                         self.type_id_to_string(type_id)
                     ))
                 }
-                _ => self
-                    .comparison_withheld_note(tr, type_id)
-                    .or_else(|| self.unsourced_note(scope, type_id, trait_)),
+                _ => self.comparison_withheld_note(tr, type_id),
             };
             if let Some(why) = written_instead {
+                chain.push(why);
+                break;
+            }
+            // A written impl reads none of the members the walk below names.
+            if let Some(bounded) = self.written_bounded_args(type_id, trait_) {
+                let Some(arg) = bounded
+                    .into_iter()
+                    .find(|&arg| !self.type_implements_trait(ctx, arg, &fq_trait))
+                else {
+                    break;
+                };
+                chain.push(format!(
+                    "`{}` implements `{trait_name}` only where `{}` does",
+                    self.type_id_to_string(type_id),
+                    self.type_id_to_string(arg)
+                ));
+                type_id = arg;
+                continue;
+            }
+            if let Some(why) = self.unsourced_note(scope, type_id, trait_) {
                 chain.push(why);
                 break;
             }
@@ -1143,6 +1161,23 @@ impl TypeSystem {
             type_id = member_tid;
         }
         chain
+    }
+
+    /// The arguments of `type_id` that a written impl of `trait_` over every
+    /// instance of its declaration bounds by `trait_` ([`SolverBridge::written_over`]).
+    /// `None` where no such impl is written.
+    fn written_bounded_args(&self, type_id: TypeId, trait_: DefId) -> Option<Vec<TypeId>> {
+        let positions = self
+            .solver()
+            .written_over(self.represented_decl(type_id)?, trait_)?;
+        if positions.is_empty() {
+            return Some(Vec::new());
+        }
+        let table = self.type_table.borrow();
+        let args = table
+            .generic_type_args(table.representation_head(type_id))
+            .expect("an argument the impl bounds is one the instance carries");
+        Some(positions.into_iter().map(|position| args[position]).collect())
     }
 
     /// The declaration `type_id` represents, where no source of `trait_` holds

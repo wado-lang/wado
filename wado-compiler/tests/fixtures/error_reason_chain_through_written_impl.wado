@@ -1,0 +1,27 @@
+// A type whose impl of a derivable trait is written, bounded by its argument,
+// misses the trait through that argument: the reason chain follows the bound,
+// not the type's own fields, which the written impl never reads.
+use { to_string } from "core:json";
+
+struct Inner {
+    f: fn(),
+}
+
+struct Outer {
+    items: List<Inner>,
+}
+
+export fn run() {
+    let o = Outer { items: [] };
+    assert o == o;
+    let r = to_string(&o);
+}
+
+__DATA__
+{
+    "compile_error": "note: `Outer` does not implement `Eq` because field `items` of type `List<Inner>` does not implement `Eq`\n  note: `List<Inner>` implements `Eq` only where `Inner` does\n  note: `Inner` does not implement `Eq` because field `f` of type `fn() -> ()` does not implement `Eq`",
+    "compile_errors_contains": [
+        "note: `List<Inner>` implements `Serialize` only where `Inner` does\n  note: `Inner` does not implement `Serialize` because field `f`"
+    ],
+    "compile_errors_not_contains": ["repr"]
+}

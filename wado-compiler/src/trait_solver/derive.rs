@@ -128,6 +128,34 @@ fn decl_params(decl: &Declaration) -> Vec<SolverType> {
         .collect()
 }
 
+/// The positions of `head`'s arguments that a written impl of `trait_` over
+/// every instance of `head` bounds by `trait_` itself: an instance holds the
+/// trait only where those arguments do. `None` where no such impl is written.
+#[must_use]
+pub fn written_over(
+    program: &Program,
+    trait_: TraitDeclId,
+    head: TypeDeclId,
+) -> Option<Vec<usize>> {
+    program.impls_of(trait_).find_map(|(_, def)| {
+        let SolverType::Decl(target, args) = &def.target else {
+            return None;
+        };
+        (def.origin == ImplOrigin::Written && *target == head && covers_every_instance(def)).then(
+            || {
+                args.iter()
+                    .enumerate()
+                    .filter(|(_, arg)| {
+                        matches!(arg, SolverType::Param(index)
+                            if def.params[*index as usize].bounds.iter().any(|b| b.trait_ == trait_))
+                    })
+                    .map(|(position, _)| position)
+                    .collect()
+            },
+        )
+    })
+}
+
 /// Whether `def` reaches every instance of its target's head: the target names
 /// a declaration over distinct parameters.
 fn covers_every_instance(def: &ImplDef) -> bool {
