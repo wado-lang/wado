@@ -1042,7 +1042,7 @@ fn validate_imports_representable(project: &Package) -> Result<(), SynthesisErro
             module
                 .resources
                 .iter()
-                .filter(|r| !r.is_generic)
+                .filter(|r| r.type_params.is_empty())
                 .flat_map(|r| &r.operations),
         );
         for op in operations.filter(|op| op.cm_name.is_some()) {

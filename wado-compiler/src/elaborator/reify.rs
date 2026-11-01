@@ -1371,11 +1371,14 @@ impl<'a> Reify<'a> {
         let operations = self
             .ann_effect_ops(decl.id)
             .expect("`record_effect_ops` records op signatures for every resource reify emits");
+        let type_params = self
+            .ann_decl_type_params(decl.id)
+            .expect("the body walk records the type params for every resource reify emits");
         tir::TirResource {
             head: DeclaredHead::new(self.tysys.resolutions.defs(), self.tysys.def_at(decl.id)),
             visibility: decl.visibility,
             operations,
-            is_generic: !decl.type_params.is_empty(),
+            type_params,
             span: decl.span,
         }
     }

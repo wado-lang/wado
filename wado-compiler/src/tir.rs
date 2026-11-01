@@ -3812,7 +3812,7 @@ pub struct TirResource {
     pub head: DeclaredHead,
     pub visibility: Visibility,
     pub operations: Vec<TirEffectOp>,
-    pub is_generic: bool,
+    pub type_params: Vec<TirTypeParam>,
     pub span: Span,
 }
 

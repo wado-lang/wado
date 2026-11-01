@@ -2521,14 +2521,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Resolve a variant declaration
     pub(super) fn resolve_variant_decl(&mut self, variant_decl: &ast::VariantDecl) {
-        let type_params = self
-            .enter_decl_params_scope(&variant_decl.type_params)
-            .data_type_params(&variant_decl.type_params);
+        self.record_decl_type_params(variant_decl.id, &variant_decl.type_params);
+    }
 
-        self.sem
-            .types
-            .decl_type_params
-            .insert(variant_decl.id, type_params);
+    /// Record a data declaration's type parameters, defaults resolved in its
+    /// own scope, for reify to read back.
+    pub(super) fn record_decl_type_params(
+        &mut self,
+        decl_id: ast::AstId,
+        params: &[ast::GenericParam],
+    ) {
+        let type_params = self
+            .enter_decl_params_scope(params)
+            .data_type_params(params);
+        self.sem.types.decl_type_params.insert(decl_id, type_params);
     }
 
     /// Resolve `func`'s canonical signature (see

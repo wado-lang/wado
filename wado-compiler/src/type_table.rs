@@ -776,16 +776,12 @@ impl TypeTable {
     /// an unrestricted handle is outside it, or an `i32`. `None` for a non-resource.
     #[must_use]
     pub fn handle_scalar(&self, ty: TypeId) -> Option<TypeId> {
-        match self.get(ty) {
-            ResolvedType::Resource { def } if self.is_unrestricted_resource(*def) => {
-                Some(Self::U64)
-            }
-            ResolvedType::Resource { .. } => Some(Self::I32),
-            ResolvedType::GenericInstance { def, .. } if self.is_resource_def(*def) => {
-                Some(Self::I32)
-            }
-            _ => None,
-        }
+        let def = self.resource_def_of(ty)?;
+        Some(if self.is_unrestricted_resource(def) {
+            Self::U64
+        } else {
+            Self::I32
+        })
     }
 
     /// Whether `ty` is an affine resource, which the guest holds as a GC object
@@ -1559,7 +1555,12 @@ impl TypeTable {
     /// The resource `ty` itself is a handle to, generic or not.
     #[must_use]
     pub fn resource_def_of(&self, ty: TypeId) -> Option<DefId> {
-        match self.get(ty) {
+        self.resource_def_in(self.get(ty))
+    }
+
+    #[must_use]
+    pub fn resource_def_in(&self, resolved: &ResolvedType) -> Option<DefId> {
+        match resolved {
             ResolvedType::Resource { def } => Some(*def),
             ResolvedType::GenericInstance { def, .. } if self.is_resource_def(*def) => Some(*def),
             _ => None,

@@ -1,0 +1,34 @@
+// An instance of a generic unrestricted resource is an unrestricted handle, the
+// bits of its `f64`, as a non-generic one is.
+#[cm("example:demo/buf", linearity = "unrestricted")]
+resource Buf<T> {
+    #[cm("example:demo/buf#put")]
+    #[cm_params("self", "v")]
+    fn put(&self, v: T);
+}
+
+struct Holder {
+    buf: Buf<i32>,
+}
+
+test "as keeps the bits" {
+    let bits = 0x7ff8_0000_dead_beef as u64;
+    let handle = f64::from_bits(builtin::black_box(bits)) as Buf<i32>;
+    assert (handle as f64).to_bits() == bits;
+}
+
+test "a handle compares by its bits" {
+    let nan = builtin::black_box(f64::NAN) as Buf<i32>;
+    assert nan == nan;
+    assert Holder { buf: nan } == Holder { buf: nan };
+    let zero = builtin::black_box(0.0) as Buf<i32>;
+    let negative_zero = builtin::black_box(-0.0) as Buf<i32>;
+    assert zero != negative_zero;
+}
+
+test "inspect shows the handle" {
+    assert `${builtin::black_box(1.5) as Buf<i32>:?}` == "Buf<i32> { handle: 1.5 }";
+}
+
+__DATA__
+{"test": {}}

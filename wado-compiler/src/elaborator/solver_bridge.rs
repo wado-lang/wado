@@ -1980,9 +1980,11 @@ impl SolverBridge {
         }
         let handles = data
             .resource_types
-            .keys()
-            .filter(|&&def| table.is_unrestricted_resource(def))
-            .filter_map(|&def| lowered(def, 0, &mut std::iter::empty()))
+            .iter()
+            .filter(|(def, _)| table.is_unrestricted_resource(**def))
+            .filter_map(|(&def, info)| {
+                lowered(def, info.type_params.len(), &mut std::iter::empty())
+            })
             .collect();
         (out, handles)
     }
