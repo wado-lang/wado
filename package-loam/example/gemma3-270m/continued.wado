@@ -1,0 +1,67 @@
+//! What the WebGPU programs share: each prompt `generate.json` records,
+//! continued with greedy tokens, and whether they are the tokens onnxruntime
+//! picks, with the time, dispatches and read backs a token takes.
+
+use { eprintln, println, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { from_string } from "core:json";
+use { MonotonicClock } from "wasi:clocks";
+
+/// One prompt and the tokens onnxruntime picks after it, as `generate.mjs`
+/// writes them.
+pub struct Generated {
+    pub prompt: String,
+    pub ids: List<i32>,
+    pub generated: List<i32>,
+    pub ms_per_token: f64,
+}
+
+struct Oracle {
+    generate: List<Generated>,
+}
+
+/// The prompts `generate.json` records, or `None` where it is missing.
+pub fn recorded() -> Option<List<Generated>> with (Stderr, Preopens) {
+    let Ok(text) = fs::read_to_string("generate.json") else {
+        eprintln("generate.json is missing; run generate.mjs");
+        return null;
+    };
+    return Option::Some(from_string::<Oracle>(&text).unwrap().generate);
+}
+
+/// Continues each of `generate` a token at a time by `next`, and prints how
+/// each went. `counts` is the backend's read backs and dispatches so far.
+pub fn continued<effect E>(
+    generate: List<Generated>,
+    mut next: fn mut(&List<i32>) -> i32 with E,
+    counts: fn() -> [i32, i32] with E,
+) with (E, Stdout, MonotonicClock) {
+    for let g of generate {
+        let mut all = g.ids;
+        let started = MonotonicClock::now();
+        all.push(next(&all));
+        let prompted = MonotonicClock::now();
+        let [read, dispatched] = counts();
+        let steps = g.generated.len();
+        for let _ of 1..<steps {
+            all.push(next(&all));
+        }
+        let ended = MonotonicClock::now();
+        let [reads_now, dispatches_now] = counts();
+        let reads = (reads_now - read) / (steps - 1);
+        let dispatches = (dispatches_now - dispatched) / (steps - 1);
+        let generated = all[g.ids.len()..<all.len()].to_list();
+        let verdict = if generated == g.generated {
+            "matches onnxruntime";
+        } else {
+            `onnxruntime picks ${g.generated:?}`;
+        };
+        let first = (prompted - started) as u64 as f64 / 1_000_000.0;
+        let rest = (ended - prompted) as u64 as f64 / 1_000_000.0 / (steps - 1) as f64;
+        println(`${g.prompt:?} -> ${generated:?}: ${verdict}`);
+        println(
+            `  ${first:.0} ms for the prompt, ${rest:.1} ms a token after it in ${dispatches} dispatches and ${reads} read backs (onnxruntime ${g.ms_per_token:.1})`,
+        );
+    }
+}
