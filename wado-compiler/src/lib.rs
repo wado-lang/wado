@@ -1523,6 +1523,36 @@ async fn resolve_inline_providers<H: CompilerHost>(
     Ok(providers)
 }
 
+/// The effect, purity and affine move checks, which read `Semantics` (the AST
+/// and its recorded facts) rather than the emitted TIR, so they see every
+/// source function whatever reify emits, and share their logic with the LSP.
+/// Every pipeline runs them before synthesis: a later phase assumes a program
+/// they passed.
+fn check_effects_and_moves<H: CompilerHost>(
+    sem: &mut semantics::Semantics,
+    provided_import_fqs: hashmap::IndexSet<String>,
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    let _span = logger.span("effect-check");
+    let diags = effect_check::check_semantics(sem, provided_import_fqs);
+    let move_errors = affine_move_check::check_affine_moves_semantic(sem);
+    let had_error = !diags.is_empty() || !move_errors.is_empty();
+    sem.redirect_effect_vars(&diags.rows);
+    for error in diags.effects {
+        let _ = logger.error(error);
+    }
+    for error in diags.purity {
+        let _ = logger.error(error);
+    }
+    for error in move_errors {
+        let _ = logger.error(error);
+    }
+    if had_error {
+        return Err(Bail);
+    }
+    Ok(())
+}
+
 /// Internal: run compilation phases after module loading.
 fn compile_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
@@ -1631,34 +1661,12 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 6b: Effect and Purity Checks ===
-    // Both are produced from `Semantics` (AST + recorded facts), not the
-    // emitted TIR, so they see every source function regardless of what reify
-    // emits and share their logic with the LSP.
-    {
-        let _span = logger.span("effect-check");
-        let provided_import_fqs: hashmap::IndexSet<String> = options
-            .providers
-            .iter()
-            .map(|p| p.import_fq.clone())
-            .collect();
-        let diags = effect_check::check_semantics(&sem, provided_import_fqs);
-        let move_errors = affine_move_check::check_affine_moves_semantic(&sem);
-        let had_error = !diags.is_empty() || !move_errors.is_empty();
-        sem.redirect_effect_vars(&diags.rows);
-        for error in diags.effects {
-            let _ = logger.error(error);
-        }
-        for error in diags.purity {
-            let _ = logger.error(error);
-        }
-        for error in move_errors {
-            let _ = logger.error(error);
-        }
-        if had_error {
-            return Err(Bail);
-        }
-    }
+    // === Phase 6b: Effect, Purity and Move Checks ===
+    check_effects_and_moves(
+        &mut sem,
+        options.providers.iter().map(|p| p.import_fq.clone()).collect(),
+        logger,
+    )?;
 
     // === Phase 6c: Kiln `Options` descriptor extraction ===
     // An `Options` no descriptor describes fails here: no options table could
@@ -2533,7 +2541,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // into `TypeId`s the cached `TirModule`s do not carry, and left an
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
-    let sem = semantics::semantics_with_logger(
+    let mut sem = semantics::semantics_with_logger(
         load_result,
         &logger,
         true,
@@ -2541,6 +2549,9 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         profile.filter(|_| parsed_codegen_flags.pgo.applies()),
         &LivenessScope::Compilation,
     );
+    // A rejected program reaches no phase after these, as under `compile`.
+    let checked = sem.is_complete()
+        && check_effects_and_moves(&mut sem, hashmap::IndexSet::default(), &logger).is_ok();
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
@@ -2560,6 +2571,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         // snapshot rather than the frozen dump view.
         if let Some(resolved_modules) = tir_modules_by_source
             .as_ref()
+            .filter(|_| checked)
             .map(snapshot_tir_modules)
         {
             let module_name = filename.clone().unwrap_or_else(|| "module".to_string());
