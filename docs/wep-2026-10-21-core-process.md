@@ -234,6 +234,10 @@ child may read more than the guest. It is defined, not open-ended:
   `HOME` and `TMPDIR`, `/dev/null`, and `/dev/tty` when it is inherited. On
   macOS `/dev/fd` is writable too: opening `/dev/fd/N` copies descriptor `N`,
   which the child already holds, with no access it lacks.
+- On Linux `/dev/stdout` and the rest open again the file a stream is on, and
+  Landlock judges that open on the file. So a file the child inherits a stream
+  on is granted alone: read and execute for stdin, as the baseline is, and
+  write alone for stdout and stderr, as the descriptor already is.
 - On macOS the developer tools are the Command Line Tools, which the `/usr/bin`
   stubs (`git`, `cc`, `python3`) run, and the plist that records that the Xcode
   license was accepted. A stub reads the link `xcode-select` keeps, but not the

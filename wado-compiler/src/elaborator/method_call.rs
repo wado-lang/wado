@@ -438,7 +438,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
             | ResolvedType::Resource { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::Newtype { .. }
             | ResolvedType::Flags { .. } => self
                 .tysys
@@ -967,6 +966,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected,
                     args_ast.get(i).map_or(span, Expr::span),
                 );
+                if let Some(value) = args_ast.get(i) {
+                    self.record_widening(value.id(), *arg, expected);
+                }
             }
         }
 
@@ -986,9 +988,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .get(method_impl_type_id)
             .clone()
         {
-            ResolvedType::GenericInstance { .. }
-            | ResolvedType::GenericResource { .. }
-            | ResolvedType::BuiltinArray(_) => {
+            ResolvedType::GenericInstance { .. } | ResolvedType::BuiltinArray(_) => {
                 let tt = self.tysys.type_table.borrow();
                 let type_args = tt
                     .nominal_type_args(method_impl_type_id)
@@ -1166,8 +1166,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         | ResolvedType::Variant { .. }
                         | ResolvedType::Newtype { .. }
                         | ResolvedType::Flags { .. }
-                        | ResolvedType::Resource { .. }
-                        | ResolvedType::GenericResource { .. } => self
+                        | ResolvedType::Resource { .. } => self
                             .tysys
                             .type_table
                             .borrow()
@@ -1516,7 +1515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::with_written_args`] can apply to others.
     fn applies_written_args(&self, target: TypeId) -> bool {
         match self.tysys.type_table.borrow().get(target) {
-            ResolvedType::GenericInstance { .. } | ResolvedType::GenericResource { .. } => true,
+            ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { type_args, .. } => !type_args.is_empty(),
             _ => false,
         }
@@ -1532,15 +1531,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .type_table
                 .borrow_mut()
                 .make_generic_instance(def, args.to_vec()),
-            ResolvedType::GenericResource { def, .. } => {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .intern(ResolvedType::GenericResource {
-                        def,
-                        type_args: args.to_vec(),
-                    })
-            }
             ResolvedType::Newtype { def, .. } => self.generic_newtype_instance(def, args.to_vec()),
             // A turbofish with a `_` applies a generic declaration: a struct,
             // variant or resource instance, or a newtype.
@@ -2025,11 +2015,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.recoerce_literal_args(&static_call.args, &mut args, &param_types);
             args
         };
-        let mut arg_sites: Vec<ArgSite> = static_call
-            .args
-            .iter()
-            .map(|arg| ArgSite::Written(arg.span()))
-            .collect();
+        let mut arg_sites: Vec<ArgSite> = static_call.args.iter().map(ArgSite::written).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
         let declaring_trait = callee_sig
@@ -2168,7 +2154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &static_type_bindings,
             Some(static_call.id),
             ctx,
-            |_, _, default_expr, _| arg_sites.push(ArgSite::Written(default_expr.span())),
+            |_, _, default_expr, _| arg_sites.push(ArgSite::written(default_expr)),
         );
 
         // A declared static is checked against its signature here, where the
@@ -2246,7 +2232,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | ResolvedType::Resource { .. }
             | ResolvedType::Enum { .. }
             | ResolvedType::Variant { .. }
-            | ResolvedType::GenericResource { .. }
             | ResolvedType::GenericInstance { .. } => {
                 nominal_receiver(&self.tysys.type_table.borrow(), target_type_id)
             }

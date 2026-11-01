@@ -281,7 +281,7 @@ test "forward keeps the cache it is given through the pass it begins" {
 
     let forward = out.substr_bytes(out.find("pub fn forward").unwrap(), out.len());
     assert forward.contains("cache: &Cache<Bk>, weights: &Prepared<Bk>) -> Outputs<Bk> with _ {");
-    assert out.contains("pub struct Outputs<affine Bk: Backend> {");
+    assert out.contains("pub struct Outputs<affine Bk: Holds> {");
     assert forward.find("cache.retain(backend);").unwrap() < forward.find("backend.begin();").unwrap();
     assert !forward.contains("input_mismatch(past_key");
     assert forward.contains("let Passed { Y, cache } = pass(backend, &X, cache, weights);");
@@ -1303,6 +1303,91 @@ test "a symbol nothing spells is not bound" {
     assert !kernel_entries(&out).contains("dim_");
 }
 
+test "a build reads the valid length where it sums, normalizes, contracts or joins along a padded axis" {
+    let source = `g (float[N] X, float[N, 4] P) => (float[] S, float[N] M, float[4] C, float[?] J) {
+        S = ReduceSum <keepdims = 0> (X)
+        M = Softmax <axis = 0> (X)
+        C = MatMul(X, P)
+        J = Concat <axis = 0> (X, X)
+    }`;
+    let out = generate(source).unwrap();
+    let built = out.substr_bytes(out.find("pub fn build").unwrap(), out.len());
+    assert built.contains("lengths: &Lengths<Bk>");
+    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, 0 as f32)");
+    assert built.contains("masked::<Bk, f32, [N]>(backend, X, 0, &lengths.dim_N, -f32::INFINITY)");
+    assert built.contains("masked::<Bk, f32, [N, P1]>(backend, P, 0, &lengths.dim_N, 0 as f32)");
+    assert built.contains("(backend, X, X, 0, &lengths.dim_N)");
+    assert built.contains("pub fn compute<");
+}
+
+test "a build takes a padded past to its attention as a buffer of fixed capacity, with its valid length" {
+    let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] PK, float[1, 1, P, 8] PV, int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] PY, float[1, 1, T, 8] VY) {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, PK, PV, L, T32)
+    }`;
+    let out = generate(source).unwrap();
+    let built = out.substr_bytes(out.find("pub fn build").unwrap(), out.len());
+    assert built.contains("(Q, K, V, PK, PV, Option::Some(&lengths.dim_P), null, null, null, &Attention {");
+    assert !kernel_entries(&out).contains("lengths");
+}
+
+test "compute holds a cache at the capacity of the total, its past's length what the graph owes it" {
+    let source = `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] "past_key_values.0.key", float[1, 1, P, 8] "past_key_values.0.value", int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] "present.0.key", float[1, 1, T, 8] "present.0.value") {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, "present.0.key", "present.0.value" = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1>(Q, K, V, "past_key_values.0.key", "past_key_values.0.value", L, T32)
+    }`;
+    let out = generate(source).unwrap();
+    let computed = out.substr_bytes(out.find("pub fn compute").unwrap(), out.len());
+    assert computed.contains("cache: &Cache<Bk>, weights: &Params<Bk>) -> Outputs<Bk>");
+    assert computed.contains("let dim_P = -dim_S + dim_T;");
+    assert computed.contains("let capacity_P = capacity_of(to_extent(dim_P + dim_S)) as i64;");
+    assert computed.contains(
+        "fitted::<Bk, f32, [Q0, PastKeyValues0Key1, P, PastKeyValues0Key3]>(backend, &cache.past_key_values_0_key, 2, to_extent(capacity_P))",
+    );
+    // A device releases the pass before at `begin`, but for the cache it retains.
+    let begun = computed.find("backend.begin();").unwrap();
+    assert computed.find("cache.retain(backend);").unwrap() < begun;
+    assert begun < computed.find("let Q = ").unwrap();
+    assert begun < computed.find("fitted::<Bk").unwrap();
+}
+
+test "what a padded length owes is checked at the length, by compute, and not at the capacity, by build" {
+    // The slice of `W` matches `X` only where N is at most 8.
+    let source = `g (float[N] X) => (float[N] Y) <float[8] W> {
+        S = Shape(X)
+        Zero = Constant<value_ints = [0]>()
+        Part = Slice(W, Zero, S)
+        Y = Add(X, Part)
+    }`;
+    let out = generate(source).unwrap();
+    let [build_at, compute_at] = [
+        out.find("pub fn build").unwrap(),
+        out.find("pub fn compute").unwrap(),
+    ];
+    assert out.substr_bytes(compute_at, out.len()).contains("refuse(unmet(");
+    assert !out.substr_bytes(build_at, compute_at).contains("refuse(unmet(");
+}
+
+test "a build whose lengths enter no value takes none" {
+    let out = generate(mlp("float")).unwrap();
+    assert !out.contains("Lengths");
+    assert out.contains("pub fn compute<");
+}
+
 test "a Range over a symbolic length is a kernel call" {
     let source = `g (int64[N] X) => (int64[N] Y) {
         S = Shape(X)
@@ -1597,6 +1682,16 @@ test "a name only arithmetic spells is read back from its length, after the name
     let n = body.find("let dim_n = to_extent((backend.extents_of(X)[0] as i64 - (1))) as i64;").unwrap();
     let m = body.find("let dim_m = to_extent((backend.extents_of(V)[0] as i64 - (dim_n)) / 2) as i64;").unwrap();
     assert n < m;
+}
+
+test "a built branch returns each result through yielded, kernels' as it is" {
+    let source = `g (bool[1] C, float[2] X) => (float[2] Y) {
+        Y = If <then_branch = t () => (float[2] A) { A = Neg(X) }, else_branch = e () => (float[2] B) { B = Relu(X) }> (C)
+    }`;
+    let body = generate(source).unwrap();
+    assert body.contains("return backend.yielded::<f32, [X0]>(&A);");
+    assert body.contains("return backend.yielded::<f32, [X0]>(&B);");
+    assert body.split("yielded").count() == 3;
 }
 
 test "a constant one branch folds is spelled in that branch" {

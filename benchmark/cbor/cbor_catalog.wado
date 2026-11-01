@@ -31,6 +31,7 @@ test "smoke" {
     assert event_count(&back) == 0;
 }
 
+#[workload]
 test "fuel" {
     let catalog = json_from_bytes::<CitmCatalog, _>(#include_bytes("../json_catalog/citm_catalog.json")).unwrap();
     let cbor = cbor_to_bytes::<CitmCatalog>(&catalog).unwrap();

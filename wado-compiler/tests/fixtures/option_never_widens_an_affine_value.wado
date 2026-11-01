@@ -1,0 +1,28 @@
+// An affine value holding an `Option<!>` moves into the value it widens to.
+// Its type holds an `Option<!>`, so reify read it as no type at all, took it
+// for a copyable value, and left its place unmarked; drop elaboration then
+// found an affine value moved out of a place not marked `Move`.
+
+use { Stdout } from "core:cli";
+
+affine struct Holder<T> {
+    fut: Future<i32>,
+    v: T,
+}
+
+fn take(h: Holder<Option<i32>>) -> i32 {
+    let Holder { fut, v } = h;
+    builtin::drop(fut);
+    return if v matches { None } { 1 } else { 2 };
+}
+
+export fn run() with Stdout {
+    let [rx, tx] = Future::<i32>::new();
+    let h: Holder<Option<!>> = Holder { fut: rx, v: null };
+    let taken = take(h);
+    assert taken == 1;
+    tx.write(1);
+}
+
+__DATA__
+{}

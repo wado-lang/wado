@@ -135,12 +135,14 @@ impl Policy {
     /// The rules at the real paths they name, as the sandbox matches them.
     #[must_use]
     pub fn resolved(&self) -> ResolvedPolicy {
-        ResolvedPolicy(
-            self.rules
+        ResolvedPolicy {
+            rules: self
+                .rules
                 .iter()
                 .filter_map(|rule| Some((rule.real_path().ok()?, rule.access)))
                 .collect(),
-        )
+            write_only: Vec::new(),
+        }
     }
 
     #[must_use]
@@ -156,15 +158,20 @@ impl Policy {
 
 /// A [`Policy`]'s rules at their real paths, a rule naming no file left out.
 #[derive(Clone, Debug)]
-pub struct ResolvedPolicy(Vec<(PathBuf, Access)>);
+pub struct ResolvedPolicy {
+    rules: Vec<(PathBuf, Access)>,
+    /// Files the child may write and not read.
+    write_only: Vec<PathBuf>,
+}
 
 impl ResolvedPolicy {
     /// Whether a rule grants `access` to `path`, itself a real path.
     #[must_use]
     pub fn permits(&self, path: &Path, access: Access) -> bool {
-        self.0
+        self.rules
             .iter()
             .any(|(root, granted)| path.starts_with(root) && *granted >= access)
+            || access == Access::ReadWrite && self.write_only.iter().any(|file| file == path)
     }
 
     /// The first interpreter that `exec` of `program`, a real path, opens and
@@ -181,8 +188,19 @@ impl ResolvedPolicy {
     /// entry.
     #[cfg(target_os = "linux")]
     fn grant_own_proc(&mut self, pid: libc::pid_t) {
-        self.0
+        self.rules
             .push((PathBuf::from(format!("/proc/{pid}")), Access::ReadExecute));
+    }
+
+    /// What Linux grants the child beyond its policy: a file it inherits a
+    /// stream on, for the direction the stream goes.
+    #[cfg(target_os = "linux")]
+    fn grant_stream_file(&mut self, path: PathBuf, written: bool) {
+        if written {
+            self.write_only.push(path);
+        } else {
+            self.rules.push((path, Access::ReadExecute));
+        }
     }
 }
 

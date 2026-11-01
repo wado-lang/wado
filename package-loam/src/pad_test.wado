@@ -1,0 +1,129 @@
+//! Which lengths the run may pad to a capacity, and the node that refuses one.
+
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { padding } from "./pad.wado";
+
+/// Each symbol `source`'s inputs read, as `loam dump` reports it.
+fn judged(source: String) -> List<String> {
+    let graph = read(&source).unwrap();
+    return padding(&graph, &infer(&graph).unwrap()).into_iter().map(|j| `${j}`).collect();
+}
+
+test "a length every operator keeps apart, or reads masked, is padded" {
+    let source = `g (float[N, 4] X) => (float[4, N] Y, int64[N] P) <float[4, 4] W> {
+        H = MatMul(X, W)
+        R = Relu(H)
+        T = Transpose<perm = [1, 0]>(R)
+        Y = Softmax<axis = 1>(T)
+        S = Shape(X)
+        Zero = Constant<value_int = 0>()
+        One = Constant<value_int = 1>()
+        L = Gather(S, Zero)
+        P = Range(Zero, L, One)
+    }`;
+    assert judged(source) == ["N: padded"] as List<String>;
+}
+
+test "a regrouping that merges a length with the axes after it keeps it padded" {
+    let source = `g (float[1, S, 8] X) => (float[1, ?, 2] Y) <int64[3] Shape = {0, -1, 2}> {
+        Y = Reshape(X, Shape)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a regrouping that merges a length behind an axis before it refuses it" {
+    let source = `g (float[2, S, 4] X) => (float[?, 4] Y) <int64[2] Shape = {-1, 4}> {
+        Y = Reshape(X, Shape)
+    }`;
+    assert judged(source) == ["S: refused at Y = Reshape: it merges behind an axis before it"] as List<String>;
+}
+
+test "a regrouping that cuts a length into axes it never lines up with refuses it" {
+    let source = `g (float[S] X) => (float[?, 2] Y) <int64[2] Shape = {-1, 2}> {
+        Y = Reshape(X, Shape)
+    }`;
+    assert judged(source) == ["S: refused at Y = Reshape: the regrouping lines up with it at no axis"] as List<String>;
+}
+
+test "an extent-1 axis before a length merges nothing in front of it" {
+    let source = `g (float[1, S, 4] X) => (float[?, 4] Y) <int64[2] Shape = {-1, 4}> {
+        Y = Reshape(X, Shape)
+    }`;
+    assert judged(source) == ["S: padded"] as List<String>;
+}
+
+test "a split along a length refuses it, and one along another axis keeps it" {
+    let along = `g (float[S, 4] X) => (float[?, 4] Y) {
+        Y, Z = Split<axis = 0, num_outputs = 2>(X)
+    }`;
+    assert judged(along) == ["S: refused at Y = Split: it splits along it"] as List<String>;
+    let across = `g (float[S, 4] X) => (float[S, 2] Y) {
+        Y, Z = Split<axis = 1, num_outputs = 2>(X)
+    }`;
+    assert judged(across) == ["S: padded"] as List<String>;
+}
+
+test "a window over a length refuses it, and the batch it runs over stays padded" {
+    let source = `g (float[N, 1, L] X) => (float[N, 1, ?] Y) <float[1, 1, 3] W> {
+        Y = Conv(X, W)
+    }`;
+    assert judged(source) == ["N: padded", "L: refused at Y = Conv: a window reads across it"] as List<String>;
+}
+
+test "an extent that falls as a length rises refuses it" {
+    let source = `g (float[N] X) => (int64[?] P) {
+        S = Shape(X)
+        Zero = Constant<value_int = 0>()
+        Eight = Constant<value_int = 8>()
+        L = Gather(S, Zero)
+        P = Range(Zero, Eight, L)
+    }`;
+    assert judged(source) == ["N: refused at P = Range: an extent may fall as it rises"] as List<String>;
+}
+
+test "a length owed equal to a sum with a refused one is refused with it" {
+    let source = `g (float[N, 2] X, float[M, 2] P, float[K, 2] Z) => (float[K, 2] Y, float[?, 2] H) {
+        J = Concat<axis = 0>(P, X)
+        Y = Add(J, Z)
+        H, R = Split<axis = 0, num_outputs = 2>(X)
+    }`;
+    let tied = "refused at H = Split: it must equal a sum of lengths, one refused there";
+    assert judged(source) == ["N: refused at H = Split: it splits along it", `M: ${tied}`, `K: ${tied}`] as List<String>;
+}
+
+/// A GroupQueryAttention over a past of `P` positions and `S` new ones, the
+/// total `T` the mask's, causal or not.
+fn attention(causal: i32) -> String {
+    return `g (float[1, S, 8] Q, float[1, S, 8] K, float[1, S, 8] V, float[1, 1, P, 8] PK, float[1, 1, P, 8] PV, int64[1, T] M)
+        => (float[1, S, 8] Y, float[1, 1, T, 8] PY, float[1, 1, T, 8] VY) {
+        Dims = Shape(M)
+        One = Constant<value_ints = [1]>()
+        Total = Gather(Dims, One)
+        Last = Sub(Total, One)
+        L = Cast<to = 6>(Last)
+        TotalScalar = Squeeze(Total)
+        T32 = Cast<to = 6>(TotalScalar)
+        Y, PY, VY = com.microsoft.GroupQueryAttention<num_heads = 1, kv_num_heads = 1, causal = ${causal}>(Q, K, V, PK, PV, L, T32)
+    }`;
+}
+
+test "a causal attention keeps its lengths padded, and one that is not refuses them" {
+    assert judged(attention(1)) == ["S: padded", "P: padded", "T: padded"] as List<String>;
+    let refused = judged(attention(0));
+    assert refused.len() == 3;
+    for let j of refused {
+        assert j.ends_with("= com.microsoft.GroupQueryAttention: a non-causal attention reads every key"), j;
+    }
+}
+
+test "a branch's nodes are judged as the graph's are" {
+    let source = `g (bool[1] C, float[2, S, 4] X, float[M, 4] Z) => (float[?, 4] Y) <int64[2] Shape = {-1, 4}> {
+        Y = If <then_branch = merged () => (float[?, 4] T) {
+            T = Reshape(X, Shape)
+        }, else_branch = kept () => (float[M, 4] E) {
+            E = Relu(Z)
+        }> (C)
+    }`;
+    assert judged(source) == ["S: refused at T = Reshape: it merges behind an axis before it", "M: padded"] as List<String>;
+}

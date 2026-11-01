@@ -33,6 +33,7 @@ test "smoke" {
 }
 
 // `cbor/` holds three benchmarks, so each label names its dataset.
+#[workload]
 test "fuel" {
     let resp = json_from_bytes::<TwitterResponse, _>(#include_bytes("../json_twitter/twitter.json")).unwrap();
     let cbor = cbor_to_bytes::<TwitterResponse>(&resp).unwrap();

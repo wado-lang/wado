@@ -502,7 +502,9 @@ fn check_cm_boundary_representable_inner(
             // The handle is an i32, but its payload is lifted and lowered by
             // value, so it must be classifiable too — `()` is representable
             // yet has no payload type.
-            ResolvedType::GenericResource { def, type_args } => {
+            ResolvedType::GenericInstance { def, type_args }
+                if type_table.is_resource_def(*def) =>
+            {
                 let item = type_table.compiler_type_item(*def);
                 let args = type_args.clone();
                 for &a in &args {
@@ -593,15 +595,14 @@ fn check_cm_boundary_representable_inner(
                 if boundary == Boundary::Import =>
             {
                 let inner = *inner;
-                match type_table.get(type_table.representation_head(inner)) {
-                    ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
-                        recurse(inner, Slot::Value, visited)
-                    }
-                    _ => Err(format!(
+                if type_table.is_resource_type(type_table.representation_head(inner)) {
+                    recurse(inner, Slot::Value, visited)
+                } else {
+                    Err(format!(
                         "a reference crosses a Component Model import only as a borrowed \
                          resource handle, and `{}` refers to no resource",
                         type_table.type_name(type_id)
-                    )),
+                    ))
                 }
             }
             ResolvedType::Never
@@ -945,7 +946,7 @@ fn flat_types_from_type_id_inner(
                 );
             }
         }
-        ResolvedType::Resource { .. } | ResolvedType::GenericResource { .. } => {
+        _ if type_table.is_resource_type(type_id) => {
             out.push(if type_table.is_unrestricted_handle(type_id) {
                 cm_abi::CmValType::F64
             } else {
@@ -1190,8 +1191,7 @@ pub(super) fn type_id_to_ast_type(
     let to_ast = |tid: &TypeId| type_id_to_ast_type(*tid, type_table, cm_interface_registry);
     if let Some(item) = cm_item_of_type(type_table, type_id) {
         let args = match resolved {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
+            ResolvedType::GenericInstance { type_args, .. } => {
                 type_args.iter().map(to_ast).collect()
             }
             _ => Vec::new(),
@@ -1243,8 +1243,7 @@ pub(super) fn type_id_to_ast_type(
         ResolvedType::GenericInstance { def, type_args } if type_table.is_tuple_def(*def) => {
             Type::Tuple(type_args.iter().map(to_ast).collect())
         }
-        ResolvedType::GenericInstance { def, type_args }
-        | ResolvedType::GenericResource { def, type_args } => {
+        ResolvedType::GenericInstance { def, type_args } => {
             declared(*def, type_args.iter().map(to_ast).collect())
         }
         ResolvedType::Ref(inner) => Type::Reference(Box::new(to_ast(inner))),

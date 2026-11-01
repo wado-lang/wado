@@ -819,8 +819,7 @@ fn holds_element(type_table: &TypeTable, ty: TypeId, element: TypeKey) -> bool {
         | ResolvedType::MutRef(inner)
         | ResolvedType::BuiltinArray(inner) => holds_element(type_table, *inner, element),
         ResolvedType::Struct { type_args, .. }
-        | ResolvedType::GenericInstance { type_args, .. }
-        | ResolvedType::GenericResource { type_args, .. } => type_args
+        | ResolvedType::GenericInstance { type_args, .. } => type_args
             .iter()
             .any(|t| holds_element(type_table, *t, element)),
         ResolvedType::Newtype {

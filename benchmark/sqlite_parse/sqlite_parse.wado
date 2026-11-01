@@ -22,6 +22,7 @@ test "smoke" {
     assert sqlite::parse("SELECT 1;").ok();
 }
 
+#[workload]
 test "fuel" {
     let sql = #include_str("./queries.sql");
     let result = measure("parse", || sqlite::parse(&sql));

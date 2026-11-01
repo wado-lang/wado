@@ -1,0 +1,42 @@
+// A tuple for-of reifies its body once per element, so which places the body
+// moves is read off that element's types.
+use { println, log_stdout, Stdout } from "core:cli";
+
+affine struct Token {
+    id: i32,
+}
+
+impl Token {
+    fn spend(self) -> i32 {
+        return self.id;
+    }
+}
+
+impl Drop for Token {
+    fn drop(self) {
+        log_stdout(`drop ${self.id}`);
+    }
+}
+
+affine struct Ticket {
+    seat: Token,
+}
+
+impl Ticket {
+    fn spend(self) -> i32 {
+        return self.seat.spend() + 1;
+    }
+}
+
+export fn run() with Stdout {
+    for let x of [1, "two"] {
+        let token = Token { id: 10 };
+        println(`${x}: ${token.spend()}`);
+    }
+    for let held of [Token { id: 20 }, Ticket { seat: Token { id: 30 } }] {
+        println(`${held.spend()}`);
+    }
+}
+
+__DATA__
+{"stdout": "drop 10\n1: 10\ndrop 10\ntwo: 10\ndrop 20\n20\ndrop 30\n31\n"}

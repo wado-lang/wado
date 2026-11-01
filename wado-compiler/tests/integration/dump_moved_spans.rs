@@ -30,6 +30,7 @@ fn dump_applies_last_use_moves() {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,

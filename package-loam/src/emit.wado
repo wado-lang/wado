@@ -9,6 +9,7 @@ use {
     CACHE,
     CHECKPOINT_PARAM,
     KEPT,
+    LENGTHS,
     MAP,
     OUTPUTS,
     PARAMS,
@@ -18,7 +19,8 @@ use {
     is_bound,
     module_idents,
 } from "./idents.wado";
-use { Poly } from "./poly.wado";
+use { padding } from "./pad.wado";
+use { Lowers, Op, Poly, equalities } from "./poly.wado";
 use { Axes, Axis, Shape } from "./shape.wado";
 use {
     Elements,
@@ -27,6 +29,7 @@ use {
     InPlace,
     KERNEL_ELEMENT,
     Node,
+    ValueInfo,
     case_named,
     element_of,
     is_binary_elementwise,
@@ -55,6 +58,7 @@ use { expected } from "./safetensors.wado";
 use {
     ATTENTION_BIAS,
     Checked,
+    Cut,
     ROTARY_COS,
     ROTARY_SIN,
     attention_options,
@@ -220,6 +224,7 @@ pub fn emit(
         paired: together.paired,
     };
     let crossing = Crossing::of(graph, cache_pairs(graph));
+    let held_symbols = Symbols::of(&carriers, &names, |input, axis| `backend.extents_of(${*input})[${axis}]`);
     emit_forward(
         &mut w,
         graph,
@@ -230,11 +235,32 @@ pub fn emit(
         exprs,
         &literals,
         &kept.kernels,
-        Symbols::of(&carriers, &names),
+        held_symbols,
         fuse,
         &crossing,
     )?;
-    emit_build(&mut w, graph, checked, &decided, &names, &built, &kept.graph, Symbols::of(&carriers, &names), &crossing)?;
+    // A length is padded where no node refuses it and an input carries it.
+    let padded: List<String> = padding(graph, checked).into_iter().filter(|j| j.refused matches { None }
+        && carriers.into_iter().any(|c| c.solved.symbol == j.symbol)).map(|j| j.symbol).collect();
+    let read = emit_build(
+        &mut w,
+        graph,
+        checked,
+        &decided,
+        &names,
+        &built,
+        &kept.graph,
+        held_symbols.padded(&padded),
+        &crossing,
+    )?;
+    // A past is held in the cache, at its capacity.
+    let cached: List<String> = crossing.cached.into_iter().map(|t| names.get(&t)).collect();
+    let host_symbols = Symbols::of(&carriers, &names, |input, axis| if cached.contains(input) {
+        `backend.extents_of(&cache.${*input})[${axis}]`;
+    } else {
+        `${*input}.extents[${axis}]`;
+    });
+    emit_compute(&mut w, graph, checked, &names, &held, &carriers, host_symbols, &padded, &read, &crossing)?;
     return Result::Ok(w.to_string());
 }
 
@@ -337,6 +363,7 @@ impl Names {
         scope_tensors(&mut tensors, graph, checked, literals);
         for let c of carriers {
             tensors.push(symbol_key(&c.solved.symbol));
+            tensors.push(capacity_key(&c.solved.symbol));
         }
         // Every symbol of an input's axes, of which `Cache::empty` takes the
         // ones a past leaves open.
@@ -968,10 +995,17 @@ struct Symbols {
     order: List<String>,
     requires: HashMap<String, List<String>>,
     used: HashSet<String>,
+    /// Each padded symbol's valid length, as `build` reads it from `lengths`.
+    /// Its extent in the inputs is the capacity.
+    lengths: HashMap<String, String> = HashMap::new(),
+    /// The padded symbols something read the value of.
+    read: HashSet<String> = HashSet::new(),
 }
 
 impl Symbols {
-    fn of(carriers: &List<Carrier>, names: &Names) -> Symbols {
+    /// The symbols `carriers` bind, each read from its input's extent as
+    /// `extent` spells it, given the input's identifier and the axis.
+    fn of(carriers: &List<Carrier>, names: &Names, extent: fn(&String, i32) -> String) -> Symbols {
         let mut symbols = Symbols {
             idents: HashMap::<String, String>::new(),
             sources: HashMap::<String, String>::new(),
@@ -981,7 +1015,7 @@ impl Symbols {
         };
         for let c of *carriers {
             let Solved { symbol, coefficient, rest, .. } = c.solved;
-            let extent = `backend.extents_of(${names.get(&c.input)})[${c.axis}] as i64`;
+            let extent = `${extent(&names.get(&c.input), c.axis)} as i64`;
             let mut value = if rest == Poly::constant(0) {
                 extent;
             } else {
@@ -998,8 +1032,38 @@ impl Symbols {
         return symbols;
     }
 
-    /// A symbolic integer as the `i64` expression `forward` computes it by.
-    fn spell(&mut self, p: &Poly) -> Result<String, EmitError> {
+    /// `symbol` bound to `value`, over the symbols the inputs carry, rather
+    /// than to its own extent.
+    fn derive(&mut self, symbol: &String, value: &Poly) {
+        self.sources[*symbol] = value.spelled(&self.idents);
+        self.requires[*symbol] = value.symbols();
+        self.order = self.order.into_iter().filter(|s| s != *symbol).collect();
+        self.order.push(*symbol);
+    }
+
+    /// The symbols as `build` reads them where `padded` names a symbol: its
+    /// extent the capacity, and its value `lengths`'s field of the symbol's name.
+    fn padded(&self, padded: &List<String>) -> Symbols {
+        let mut symbols = *self;
+        for let symbol of *padded {
+            symbols.lengths[symbol] = `lengths.${self.idents[symbol]}`;
+        }
+        return symbols;
+    }
+
+    /// A symbolic integer as the value of `[]` the graph computes it as. Where
+    /// it reads a padded symbol, that is its valid length, not the capacity.
+    fn value(&mut self, p: &Poly) -> Result<String, EmitError> {
+        if !self.reads_lengths(p) {
+            return Result::Ok(value_of(self.spell(p)?));
+        }
+        self.computable(p)?;
+        return Result::Ok(p.lowered(self));
+    }
+
+    /// Why the run cannot compute `p`, where it cannot: in `i64`, from the
+    /// symbols the inputs bind.
+    fn computable(&self, p: &Poly) -> Result<(), EmitError> {
         if !p.fits_i64() {
             builtin::cold_path();
             return Result::Err(EmitError::Wide(*p));
@@ -1009,6 +1073,19 @@ impl Symbols {
                 builtin::cold_path();
                 return Result::Err(EmitError::Unbound(symbol));
             }
+        }
+        return Result::Ok(());
+    }
+
+    /// Whether `p` reads a padded symbol, whose value is not its extent.
+    fn reads_lengths(&self, p: &Poly) -> bool {
+        return p.symbols().into_iter().any(|s| self.lengths.contains_key(s));
+    }
+
+    /// A symbolic integer as the `i64` expression `forward` computes it by.
+    fn spell(&mut self, p: &Poly) -> Result<String, EmitError> {
+        self.computable(p)?;
+        for let symbol of p.symbols() {
             self.used.insert(symbol);
         }
         return Result::Ok(p.spelled(&self.idents));
@@ -1056,6 +1133,59 @@ impl Symbols {
         }
         return lines;
     }
+}
+
+/// A value `build` computes from the lengths, each step an operation of the
+/// graph over `[]`.
+impl Lowers for Symbols {
+    fn constant(&mut self, c: i64) -> String {
+        return value_of(`${c}`);
+    }
+
+    fn symbol(&mut self, name: &String) -> String {
+        if let Some(length) = self.lengths.get(*name) {
+            self.read.insert(*name);
+            return length;
+        }
+        // `value` checked the polynomial binds every symbol it reads.
+        self.used.insert(*name);
+        return value_of(self.idents[*name]);
+    }
+
+    fn add(&mut self, a: String, b: String) -> String {
+        return value_binary("Add", a, b);
+    }
+
+    fn mul(&mut self, a: String, b: String) -> String {
+        return value_binary("Multiply", a, b);
+    }
+
+    fn derived(&mut self, op: Op, operands: List<String>) -> String {
+        let a = operands[0];
+        return match op {
+            Min => value_binary("Minimum", a, operands[1]),
+            Max => value_binary("Maximum", a, operands[1]),
+            CeilDiv | FloorDiv => `quotient::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]}, ${op matches { CeilDiv }})`,
+            FromEnd => `from_end_indices::<${BACKEND_PARAM}, []>(backend, &${a}, &${operands[1]})`,
+            // `a - 2^32 * floor((a + 2^31) / 2^32)`, as no tensor holds an `i32`.
+            Wrap32 => {
+                let turn = value_of("4294967296");
+                let shifted = value_binary("Add", a, value_of("2147483648"));
+                let turns = `quotient::<${BACKEND_PARAM}, []>(backend, &${shifted}, &${turn}, false)`;
+                value_binary("Subtract", a, value_binary("Multiply", turn, turns));
+            },
+        };
+    }
+}
+
+/// The `i64` the host computes as `host`, as a value of `[]`.
+fn value_of(host: String) -> String {
+    return `full::<${BACKEND_PARAM}, i64, []>(backend, ${host}, [])`;
+}
+
+/// `Binary::<op>` of two values of `[]`.
+fn value_binary(op: String, a: String, b: String) -> String {
+    return `backend.binary::<i64, []>(Binary::${op}, &${a}, &${b})`;
 }
 
 /// The key a symbol takes among the names `forward` binds, apart from any
@@ -1171,6 +1301,7 @@ fn emit_forward(
     w.line("/// computed them, for a caller to read only the part it needs. The caller");
     w.line("/// begins the pass, `backend.begin()`, before it uploads the inputs. The next");
     w.line("/// begin releases what the pass computed, but for what `backend.retain` keeps.");
+    // The kernels pad nothing, so they read no valid length.
     emit_entry(w, graph, checked, decided, names, Holder::Kernels, exprs, literals, kept, symbols, fuse, crossing)?;
 
     w.blank();
@@ -1209,8 +1340,9 @@ fn emit_forward(
     return Result::Ok(());
 }
 
-/// The pass built as a graph: each node as the operations of `Graph` that
-/// compute it.
+/// The pass built as a graph, each node as the operations of `Graph` that
+/// compute it, and `Lengths`. Returns the padded symbols it reads the value
+/// of, which `Lengths` holds.
 fn emit_build(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -1221,16 +1353,272 @@ fn emit_build(
     kept: &List<String>,
     symbols: Symbols,
     crossing: &Crossing,
-) -> Result<(), EmitError> {
+) -> Result<List<String>, EmitError> {
     let exprs = Operands {
         values: HashMap::<String, String>::new(),
         scalars: HashMap::<String, f32>::new(),
         rhs: HashMap::<String, bool>::new(),
     };
+    let idents = symbols.idents;
     w.blank();
     w.line("/// The graph's forward pass, each operation added to the graph `backend`");
     w.line("/// builds, over inputs it holds.");
-    return emit_entry(w, graph, checked, decided, names, Holder::Built, exprs, literals, kept, symbols, false, crossing);
+    let read = emit_entry(
+        w,
+        graph,
+        checked,
+        decided,
+        names,
+        Holder::Built,
+        exprs,
+        literals,
+        kept,
+        symbols,
+        false,
+        crossing,
+    )?;
+    if !read.is_empty() {
+        let mut lengths = StructSpec::new(LENGTHS, Vis::Pub);
+        lengths.add_generic(HOLDS_BOUND);
+        for let symbol of read {
+            lengths.add_pub_field(idents[symbol], `${BACKEND_PARAM}::Tensor<i64, []>`);
+        }
+        w.blank();
+        w.line("/// The valid length of each length the inputs pad to a capacity, their");
+        w.line("/// extent, where `build` reads it.");
+        lengths.emit(w);
+    }
+    return Result::Ok(read);
+}
+
+/// `compute`: [`build`] over inputs on the host. It checks them as `forward`
+/// does, pads each padded length to its capacity, builds, and reads the
+/// outputs back cut to their lengths. `symbols` reads the lengths off the
+/// inputs on the host, and `read` lists those `build` reads as values.
+fn emit_compute(
+    w: &mut CodeWriter,
+    graph: &Graph,
+    checked: &Checked,
+    names: &Names,
+    held: &HashMap<String, String>,
+    carriers: &List<Carrier>,
+    mut symbols: Symbols,
+    padded: &List<String>,
+    read: &List<String>,
+    crossing: &Crossing,
+) -> Result<(), EmitError> {
+    let shapes = &checked.shapes;
+    let returned = crossing.returned;
+    let has_cache = crossing.has_cache();
+    // The cache holds a past at a capacity, so its length is what the graph
+    // owes it to be, given the other inputs'.
+    let grown = grown_axes(checked, crossing);
+    for let g of &grown {
+        let Some(length) = owed_value(checked, &g.symbol, &grown) else {
+            return Result::Ok(());
+        };
+        symbols.derive(&g.symbol, &length);
+    }
+    let mut compute = FnSpec::new("compute", Vis::Pub);
+    compute.add_generic(GRAPH_BOUND).add_param("backend", `&mut ${BACKEND_PARAM}`);
+    let mut lines: List<String> = [];
+    let taken: List<ValueInfo> = graph.inputs.into_iter().filter(|vi| !crossing.cached.contains(vi.name)).collect();
+    // Every symbolic axis is its symbols' arithmetic over the lengths, but for
+    // the axis a symbol is read from.
+    for let vi of &taken {
+        let ident = names.get(&vi.name);
+        compute.add_param(ident, `&${tensor_type(checked, held, &vi.name)}`);
+        for let [i, axis] of shapes[vi.name].axes.into_iter().enumerate() {
+            let Symbolic(length) = axis.extent else {
+                continue;
+            };
+            if carriers.into_iter().any(|c| c.input == vi.name && c.axis == i) {
+                continue;
+            }
+            lines.push(
+                wado`refuse(extent_mismatch("${vi.name}", "${axis.name}", ${ident}.extents[${i}], "${length}", ${symbols.spell(
+                    &length,
+                )?}));`,
+            );
+        }
+    }
+    if has_cache {
+        compute.add_param("cache", `&${CACHE}<${BACKEND_PARAM}>`);
+    }
+    lines.extend(&owed_checks(checked, &mut symbols)?);
+    // Each padded length's capacity, which stands for it in every extent. A
+    // grown past's holds the present too, which the pass writes into it.
+    let mut capacities = symbols;
+    for let symbol of *padded {
+        let reach = match grown.into_iter().find(|g| g.symbol == symbol) {
+            Some(g) => g.present,
+            None => Poly::symbol(&symbol),
+        };
+        let length = symbols.spell(&reach)?;
+        let capacity = names.get(&capacity_key(&symbol));
+        lines.push(`let ${capacity} = capacity_of(to_extent(${length})) as i64;`);
+        capacities.idents[symbol] = capacity;
+    }
+    // The cache was computed before the pass this call begins.
+    if has_cache {
+        lines.push("cache.retain(backend);");
+    }
+    lines.push("backend.begin();");
+    let mut arguments: List<String> = ["backend"];
+    for let vi of &taken {
+        let ident = names.get(&vi.name);
+        let padded_to = `&resized(${ident}, ${capacities.spell_shape(&shapes[vi.name])?})`;
+        lines.push(`let ${ident} = ${preparation(checked, held, &vi.name, padded_to, Holding::Pass)};`);
+        arguments.push(`&${ident}`);
+    }
+    // The cache at the capacities, both as the pass takes it and as it returns it.
+    let fitted_cache = fitted_at_capacities(checked, names, crossing, &grown, padded, &mut capacities)?;
+    if has_cache {
+        lines.push(`let cache = ${fitted_cache};`);
+        arguments.push("&cache");
+    }
+    // A capacity reads its length, and an unpadded symbol is its own capacity.
+    for let symbol of capacities.used {
+        symbols.used.insert(symbol);
+    }
+    if !read.is_empty() {
+        let mut fields: List<String> = [];
+        for let symbol of *read {
+            fields.push(`${symbols.idents[symbol]}: backend.upload(&Tensor::<i64, []> { data: [${symbols.spell(
+                &Poly::symbol(&symbol),
+            )?}], extents: [] })`);
+        }
+        lines.push(`let lengths = ${LENGTHS} { ${fields.join(", ")} };`);
+        arguments.push("&lengths");
+    }
+    arguments.push("weights");
+    let built = `build(${arguments.join(", ")})`;
+    let mut read_back = |tensor: &String, place: String| -> Result<String, EmitError> {
+        let mut downloaded = `backend.download(&${place})`;
+        if converted(checked, held, tensor) {
+            downloaded = `narrow(&${downloaded})`;
+        }
+        let shape = shapes[*tensor];
+        let cut = shape.axes.into_iter().any(|a| a.extent.poly().symbols().into_iter().any(|s| padded.contains(&s)));
+        return Result::Ok(if cut { `resized(&${downloaded}, ${symbols.spell_shape(&shape)?})` } else { downloaded });
+    };
+    let returned_type = if crossing.several() {
+        let mut idents: List<String> = [];
+        let mut fields: List<String> = [];
+        for let output of returned {
+            let ident = names.get(&output);
+            idents.push(ident);
+            fields.push(`${ident}: ${read_back(&output, ident)?}`);
+        }
+        if has_cache {
+            idents.push("cache");
+            fields.push(`cache: ${fitted_cache}`);
+        }
+        lines.push(`let ${PASSED} { ${idents.join(", ")} } = ${built};`);
+        lines.push(`return ${OUTPUTS} { ${fields.join(", ")} };`);
+        if has_cache {
+            `${OUTPUTS}<${BACKEND_PARAM}>`;
+        } else {
+            OUTPUTS;
+        }
+    } else {
+        lines.push(`return ${read_back(&returned[0], built)?};`);
+        tensor_type(checked, held, &returned[0]);
+    };
+    compute.add_param("weights", `&${PARAMS}<${BACKEND_PARAM}>`).set_return_type(returned_type).add_effect("_");
+    w.blank();
+    w.line("/// [`build`] over inputs on the host, each length padded to a capacity, its");
+    w.line("/// outputs read back cut to their lengths.");
+    compute.emit_begin(w);
+    // The checks come first, as a binding reads an extent they check is there.
+    let checks = input_checks(graph, shapes, names, &crossing.cached).host;
+    for let line of checks.into_iter().chain(symbols.bindings().into_iter()).chain(lines.into_iter()) {
+        w.line(&line);
+    }
+    w.end();
+    return Result::Ok(());
+}
+
+/// An axis of a past the present grows: the past's length on it, and the
+/// present's extent.
+struct Grown {
+    past: String,
+    axis: i32,
+    symbol: String,
+    present: Poly,
+}
+
+/// Each axis a pass grows, where the present's axis is not the past's.
+fn grown_axes(checked: &Checked, crossing: &Crossing) -> List<Grown> {
+    let mut grown: List<Grown> = [];
+    for let [past, present] of crossing.pairs {
+        let [from, to] = [checked.shapes[past], checked.shapes[present]];
+        for let [i, axis] of from.axes.into_iter().enumerate() {
+            let Symbolic(length) = axis.extent else {
+                continue;
+            };
+            if axis.name == to.axes[i].name {
+                continue;
+            }
+            let symbols = length.symbols();
+            assert symbols.len() == 1 && length == Poly::symbol(&symbols[0]);
+            grown.push(Grown { past, axis: i, symbol: symbols[0], present: to.axes[i].extent.poly() });
+        }
+    }
+    return grown;
+}
+
+/// The value the graph owes `symbol` to be, where it owes it to equal a sum
+/// of the other inputs' lengths: `symbol` once in a slack owed to be 0,
+/// beside no grown length.
+fn owed_value(checked: &Checked, symbol: &String, grown: &List<Grown>) -> Option<Poly> {
+    for let slack of equalities(&checked.owed) {
+        let Some([coefficient, rest]) = slack.linear_in(symbol) else {
+            continue;
+        };
+        if rest.symbols().into_iter().any(|s| grown.into_iter().any(|g| g.symbol == s)) {
+            continue;
+        }
+        if coefficient == -1 {
+            return Option::Some(rest);
+        }
+        if coefficient == 1 {
+            return Poly::constant(0).try_sub(&rest);
+        }
+    }
+    return null;
+}
+
+/// `Cache { .. }` of the fields of `cache`, each grown axis whose length is
+/// padded fitted to its capacity.
+fn fitted_at_capacities(
+    checked: &Checked,
+    names: &Names,
+    crossing: &Crossing,
+    grown: &List<Grown>,
+    padded: &List<String>,
+    capacities: &mut Symbols,
+) -> Result<String, EmitError> {
+    let mut fields: List<String> = [];
+    for let [past, _] of crossing.pairs {
+        let ident = names.get(&past);
+        let mut field = `cache.${ident}`;
+        let typed = `${checked.primitives[past]}, [${axis_list(&checked.shapes[past])}]`;
+        for let g of *grown {
+            if g.past != past || !padded.contains(&g.symbol) {
+                continue;
+            }
+            let capacity = capacities.spell_extent(&Poly::symbol(&g.symbol))?;
+            field = `fitted::<${BACKEND_PARAM}, ${typed}>(backend, &${field}, ${g.axis}, ${capacity})`;
+        }
+        fields.push(`${ident}: ${field}`);
+    }
+    return Result::Ok(`${CACHE} { ${fields.join(", ")} }`);
+}
+
+/// The key a padded symbol's capacity takes among the names `compute` binds.
+fn capacity_key(symbol: &String) -> String {
+    return `capacity ${*symbol}`;
 }
 
 /// What crosses a pass's boundary beside its inputs and weights, which every
@@ -1265,9 +1653,10 @@ impl Crossing {
     }
 }
 
-/// `holder`'s entry: the inputs as the backend holds them, the cache and the
-/// weights in; the checks of what the inputs owe; the body; and the outputs
-/// out, the presents as the next pass's cache.
+/// `holder`'s entry: the inputs as the backend holds them, the cache, the
+/// valid lengths the body reads and the weights in; the checks of what the
+/// inputs owe; the body; and the outputs out, the presents as the next pass's
+/// cache. Returns the padded symbols the body reads the value of.
 fn emit_entry(
     w: &mut CodeWriter,
     graph: &Graph,
@@ -1281,7 +1670,7 @@ fn emit_entry(
     mut symbols: Symbols,
     fuse: bool,
     crossing: &Crossing,
-) -> Result<(), EmitError> {
+) -> Result<List<String>, EmitError> {
     let shapes = &checked.shapes;
     let mut entry = FnSpec::new(holder.entry(), Vis::Pub);
     entry.add_generic(holder.bound()).add_param("backend", `&mut ${BACKEND_PARAM}`);
@@ -1308,6 +1697,13 @@ fn emit_entry(
     for let tensor of kept {
         exprs.values[*tensor] = `weights.${names.get(tensor)}`;
     }
+    // A symbol is bound once something spells it, and a valid length taken
+    // once something reads it, which the body decides.
+    let body = scope_body(graph, checked, decided, names, &mut exprs, literals, &mut symbols, holder, fuse)?;
+    let read: List<String> = symbols.order.into_iter().filter(|s| symbols.read.contains(s)).collect();
+    if !read.is_empty() {
+        entry.add_param("lengths", `&${LENGTHS}<${BACKEND_PARAM}>`);
+    }
     let passed_type = if several { `${PASSED}<${BACKEND_PARAM}>` } else { prepared_type(checked, &returned[0]) };
     entry.add_param("weights", `&${holder.ty()}`).set_return_type(passed_type).add_effect("_");
     entry.emit_begin(w);
@@ -1319,8 +1715,6 @@ fn emit_entry(
     for let line of checks.held {
         w.line(&line);
     }
-    // A symbol is bound once something spells it, which the body decides.
-    let body = scope_body(graph, checked, decided, names, &mut exprs, literals, &mut symbols, holder, fuse)?;
     let mut owed: List<String> = [];
     for let spelled of checks.spelled {
         let SpelledAxis { tensor, axis, extent, length } = spelled;
@@ -1354,7 +1748,7 @@ fn emit_entry(
         w.line(`return ${PASSED} { ${fields.join(", ")} };`);
     }
     w.end();
-    return Result::Ok(());
+    return Result::Ok(read);
 }
 
 /// `Cache`, one field per pair, each held under its past's axes; its `empty`,
@@ -1428,11 +1822,7 @@ fn emit_cache(w: &mut CodeWriter, pairs: &List<[String, String]>, checked: &Chec
     }
     w.line("    };");
     w.line("}");
-    w.end();
     w.blank();
-    let mut block = ImplSpec::new(`${CACHE}<${BACKEND_PARAM}>`);
-    block.add_generic(BACKEND_BOUND);
-    block.emit_begin(w);
     w.line("/// Keeps the cache through the next `backend.begin()`.");
     w.line(`pub fn retain(&self, backend: &mut ${BACKEND_PARAM}) with _ {`);
     for let line of retains {
@@ -1484,6 +1874,11 @@ fn emit_passed(w: &mut CodeWriter, returned: &List<String>, has_cache: bool, che
 fn owed_checks(checked: &Checked, symbols: &mut Symbols) -> Result<List<String>, EmitError> {
     let mut lines: List<String> = [];
     for let c of &checked.owed {
+        // Its extents are capacities, which need not meet what the lengths
+        // meet: whoever pads the inputs checks it at the lengths.
+        if symbols.reads_lengths(&c.slack) {
+            continue;
+        }
         lines.push(wado`refuse(unmet(${symbols.spell(&c.slack)?}, "${c.reason}"));`);
     }
     return Result::Ok(lines);
@@ -1511,7 +1906,7 @@ fn scope_body(
             continue;
         }
         let ident = names.get(&tensor);
-        body.push(`let ${ident} = ${literal_tensor(checked, &tensor, symbols)?};`);
+        body.push(`let ${ident} = ${literal_tensor(checked, &tensor, symbols, holder)?};`);
         exprs.values[tensor] = ident;
     }
     for let [alias, spelled] of literals.aliases.entries() {
@@ -1629,7 +2024,7 @@ fn node_calls(
         while bound.len() < 3 {
             bound.push("_");
         }
-        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs)};`]);
+        return Result::Ok([`let [${bound.join(", ")}] = ${attention_call(node, checked, exprs, symbols, holder)?};`]);
     }
     let calls = match [holder, node.op == "Split"] {
         [Kernels, true] => split_calls(node, checked, exprs, symbols)?,
@@ -1644,9 +2039,17 @@ fn node_calls(
     return Result::Ok(lines);
 }
 
-/// A `GroupQueryAttention` as its kernel's call. An optional operand absent
-/// still needs its axes named, so the turbofish spells the query's for it.
-fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+/// A `GroupQueryAttention` as its kernel's call, or its composite's. An
+/// optional operand absent still needs its axes named, so the turbofish spells
+/// the query's for it. The composite takes a padded past as a buffer of fixed
+/// capacity, with its valid length.
+fn attention_call(
+    node: &Node,
+    checked: &Checked,
+    exprs: &Operands,
+    symbols: &mut Symbols,
+    holder: Holder,
+) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let options = settled(attention_options(node));
     let q = shapes[node.inputs[0]];
@@ -1683,13 +2086,17 @@ fn attention_call(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     for let i of 0..<5 {
         operands.push(exprs.reference(&node.inputs[i]));
     }
+    if holder matches { Built } {
+        let length = past.axes[2].extent.poly();
+        operands.push(if symbols.reads_lengths(&length) { `Option::Some(&${symbols.value(&length)?})` } else { "null" });
+    }
     // The caches are read only where the attribute asks for rotation.
     for let index of [ROTARY_COS, ROTARY_SIN] {
         operands.push(if options.rotary { optional(index) } else { "null" });
     }
     operands.push(optional(ATTENTION_BIAS));
     operands.push(attention);
-    return `backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`;
+    return Result::Ok(`backend.group_query_attention::<${turbofish.join(", ")}>(${operands.join(", ")})`);
 }
 
 /// The statement binding `call` to `output`'s name, which later reads of
@@ -1798,11 +2205,18 @@ fn branch_lines(
     for let [i, vi] of graph.outputs.into_iter().enumerate() {
         let from = branch.shapes[vi.name];
         let to = around.shapes[node.outputs[i]];
-        if axis_list(&from) == axis_list(&to) {
-            yielded.push(inner.value(&vi.name));
-            continue;
-        }
-        yielded.push(relabeled(holder, &around.primitives[node.outputs[i]], &from, &to, &inner.reference(&vi.name)));
+        let element = &around.primitives[node.outputs[i]];
+        let result = if axis_list(&from) == axis_list(&to) {
+            inner.value(&vi.name);
+        } else {
+            relabeled(holder, element, &from, &to, &inner.reference(&vi.name));
+        };
+        // A recording graph learns from `yielded` which of its tensors a
+        // branch returns.
+        yielded.push(match holder {
+            Kernels => result,
+            Built => `backend.yielded::<${*element}, [${axis_list(&to)}]>(&${result})`,
+        });
     }
     let value = if yielded.len() == 1 { yielded[0] } else { `[${yielded.join(", ")}]` };
     // A conditional's branch is a closure, which returns its value.
@@ -1834,7 +2248,7 @@ fn emit_outputs(
 ) {
     let mut outputs = StructSpec::new(OUTPUTS, Vis::Pub);
     if has_cache {
-        outputs.add_generic(BACKEND_BOUND);
+        outputs.add_generic(HOLDS_BOUND);
     }
     for let output of *returned {
         outputs.add_pub_field(names.get(&output), tensor_type(checked, held, &output));
@@ -1978,11 +2392,28 @@ fn read_as_tensor(graph: &Graph, checked: &Checked, scalars: &HashMap<String, f3
 }
 
 /// A folded tensor spelled out as a `Tensor` literal for this pass, under the
-/// shape stage 0 gave it.
-fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> Result<String, EmitError> {
+/// shape stage 0 gave it. An element reading a valid length is a value the
+/// graph computes, so `build` assembles those in the graph.
+fn literal_tensor(
+    checked: &Checked,
+    tensor: &String,
+    symbols: &mut Symbols,
+    holder: Holder,
+) -> Result<String, EmitError> {
     let shape = checked.shapes.get(*tensor).unwrap();
+    let extents = symbols.spell_shape(&shape)?;
     let data = match checked.known.get(*tensor).unwrap().elements {
         Symbolic(v) => {
+            if holder matches { Built } && v.into_iter().any(|p| symbols.reads_lengths(&p)) {
+                let mut values: List<String> = [];
+                for let p of v {
+                    values.push(symbols.value(&p)?);
+                }
+                let typed = `${checked.primitives[*tensor]}, [${axis_list(&shape)}]`;
+                return Result::Ok(
+                    `assembled::<${BACKEND_PARAM}, ${typed}>(backend, [${values.join(", ")}], ${extents})`,
+                );
+            }
             let mut spelled: List<String> = [];
             for let p of v {
                 spelled.push(symbols.spell(&p)?);
@@ -1991,7 +2422,6 @@ fn literal_tensor(checked: &Checked, tensor: &String, symbols: &mut Symbols) -> 
         },
         constant => constant_elements(&constant),
     };
-    let extents = symbols.spell_shape(&shape)?;
     return Result::Ok(`backend.upload(${host_literal(checked, tensor, data, extents)})`);
 }
 
@@ -2288,7 +2718,7 @@ fn built_call(
         let [start, _, delta] = settled(range_bounds(node, &checked.known));
         let count = symbols.spell_extent(&out.axes[0].extent.poly())?;
         return Result::Ok(
-            `range_i64::<${BACKEND_PARAM}, ${axes}>(backend, ${symbols.spell(&start)?}, ${count}, ${symbols.spell(
+            `range_i64::<${BACKEND_PARAM}, ${axes}>(backend, &${symbols.value(&start)?}, ${count}, &${symbols.value(
                 &delta,
             )?})`,
         );
@@ -2313,13 +2743,18 @@ fn built_call(
     if op == "Softmax" {
         let lane = settled(softmax_lane(node, out.rank(), opset));
         let helper = if lane.flattened { "softmax_flattened" } else { "softmax" };
-        return Result::Ok(`${helper}::<${BACKEND_PARAM}, [${axes}]>(backend, ${operand(0)}, ${lane.axis})`);
+        let normalized: List<i32> = if lane.flattened { (lane.axis..<out.rank()).collect() } else { [lane.axis] };
+        let mut x = operand(0);
+        for let axis of normalized {
+            x = masked_along(x, &out, axis, float_literal(f32::NEG_INFINITY), symbols)?;
+        }
+        return Result::Ok(`${helper}::<${BACKEND_PARAM}, [${axes}]>(backend, ${x}, ${lane.axis})`);
     }
     if is_reduction(&op) {
         return built_reduction(node, checked, exprs, symbols);
     }
     if op == "Concat" {
-        return Result::Ok(built_concat(node, checked, exprs));
+        return built_concat(node, checked, exprs, symbols);
     }
     if op == "Expand" {
         return broadcast_call(&element, &shapes[node.inputs[0]], &out, &operand(0), 0, symbols);
@@ -2351,6 +2786,8 @@ fn built_call(
             Mul => "Multiply",
             Div => "Divide",
             Pow => "Power",
+            // No ONNX operator is named as these are.
+            Maximum | Minimum | Eq | Ne | Lt | Le | Gt | Ge => unreachable(),
         };
         return Result::Ok(`backend.binary::<${element}, [${axes}]>(Binary::${name}, ${a}, ${b})`);
     }
@@ -2421,7 +2858,9 @@ fn scaled(operand: &String, shape: &Shape, factor: f32, symbols: &mut Symbols) -
 
 /// `dot_general` of `lhs`, of axes `left`, by `rhs`, of axes `right`, into
 /// `out`, over the axes `batch` on both sides, contracting the left's axis
-/// `contracting.0` with the right's `contracting.1`.
+/// `contracting.0` with the right's `contracting.1`. A contraction sums over
+/// its padding as a sum does, so where a valid length enters it, both
+/// operands hold zeros there: either may hold anything in its own.
 fn dot_call(
     left: &Shape,
     right: &Shape,
@@ -2430,10 +2869,17 @@ fn dot_call(
     rhs: &String,
     batch: List<i32>,
     contracting: [i32, i32],
-) -> String {
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
     let [l, r] = contracting;
     let dims = `&DotDims { lhs_batch: ${batch}, rhs_batch: ${batch}, lhs_contracting: [${l}], rhs_contracting: [${r}] }`;
-    return `backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${*lhs}, ${*rhs}, ${dims})`;
+    let [a, b] = [
+        masked_along(*lhs, left, l, "0 as f32", symbols)?,
+        masked_along(*rhs, right, r, "0 as f32", symbols)?,
+    ];
+    return Result::Ok(
+        `backend.dot_general::<[${axis_list(left)}], [${axis_list(right)}], [${axis_list(out)}]>(${a}, ${b}, ${dims})`,
+    );
 }
 
 /// A `MatMul` as `dot_general`. A right operand of rank 2 or less, or a left
@@ -2447,13 +2893,13 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
     let a = exprs.reference(&node.inputs[0]);
     let last = left.rank() - 1;
     if let Some(weight) = exprs.transposed.get(node.inputs[1]) {
-        return Result::Ok(dot_call(&left, &shapes[weight], &out, &a, &exprs.reference(&weight), [], [last, 1]));
+        return dot_call(&left, &shapes[weight], &out, &a, &exprs.reference(&weight), [], [last, 1], symbols);
     }
     let right = shapes[node.inputs[1]];
     let b = exprs.reference(&node.inputs[1]);
     if right.rank() <= 2 || left.rank() == 1 {
         let contracted = if right.rank() == 1 { 0 } else { right.rank() - 2 };
-        return Result::Ok(dot_call(&left, &right, &out, &a, &b, [], [last, contracted]));
+        return dot_call(&left, &right, &out, &a, &b, [], [last, contracted], symbols);
     }
     let batch = out.rank() - 2;
     let under_batch = |matrix: &Shape| {
@@ -2465,7 +2911,7 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         under_batch(&left),
         under_batch(&right),
     ];
-    return Result::Ok(dot_call(
+    return dot_call(
         &lhs,
         &rhs,
         &out,
@@ -2473,7 +2919,8 @@ fn built_matmul(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
         &stretched(checked, exprs, symbols, &node.inputs[1], &rhs, 0)?,
         (0..<batch).collect(),
         [batch + 1, batch],
-    ));
+        symbols,
+    );
 }
 
 /// `Gemm`'s `alpha * A' * B' + beta * C`: `dot_general` contracting the axes
@@ -2491,7 +2938,8 @@ fn built_gemm(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
         &exprs.reference(&node.inputs[1]),
         [],
         [if trans_a { 0 } else { 1 }, if trans_b { 1 } else { 0 }],
-    );
+        symbols,
+    )?;
     if alpha != 1.0 {
         call = scaled(&`&${call}`, &product, alpha, symbols)?;
     }
@@ -2518,12 +2966,12 @@ fn built_conv(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Sy
     // Stage 0 owed these already.
     let window = settled(window_of(node, &x, shapes, &mut [], &Axes {}));
     let spatial = x.rank() - 2;
-    let mut padding: List<String> = [];
+    let mut pads: List<String> = [];
     for let i of 0..<spatial {
-        padding.push(symbols.spell_extent(&window.pads[i])?);
-        padding.push(symbols.spell_extent(&window.pads[spatial + i])?);
+        pads.push(symbols.spell_extent(&window.pads[i])?);
+        pads.push(symbols.spell_extent(&window.pads[spatial + i])?);
     }
-    let conv = `&Convolution { window_strides: ${window.strides}, padding: [${padding.join(
+    let conv = `&Convolution { window_strides: ${window.strides}, padding: [${pads.join(
         ", ",
     )}], rhs_dilation: ${window.dilations}, feature_group_count: ${settled(conv_group(node, &w))} }`;
     let call = `backend.convolution::<[${axis_list(&x)}], [${axis_list(&w)}], [${axis_list(&y)}]>(${exprs.reference(
@@ -2560,7 +3008,7 @@ fn built_max_pool(
     let mut dimensions: List<i32> = [1, 1];
     let mut strides: List<i32> = [1, 1];
     let mut dilations: List<i32> = [1, 1];
-    let mut padding: List<String> = ["0", "0", "0", "0"];
+    let mut pads: List<String> = ["0", "0", "0", "0"];
     for let i of 0..<x.rank() - 2 {
         let [k, s, d] = [window.kernel[i], window.strides[i], window.dilations[i]];
         dimensions.push(k);
@@ -2571,10 +3019,10 @@ fn built_max_pool(
         let last_start = window.output[i].try_sub(&Poly::constant(1)).unwrap().try_mul(&Poly::constant(s as i64)).unwrap();
         let reached = last_start.try_add(&reach).unwrap().try_sub(&x.axes[2 + i].extent.poly()).unwrap().try_sub(&low).unwrap();
         let high = Poly::max_of(&reached, &Poly::constant(0), &node.site());
-        padding.push(symbols.spell_extent(&low)?);
-        padding.push(symbols.spell_extent(&high)?);
+        pads.push(symbols.spell_extent(&low)?);
+        pads.push(symbols.spell_extent(&high)?);
     }
-    let reduce = `&WindowReduce { window_dimensions: ${dimensions}, window_strides: ${strides}, window_dilations: ${dilations}, padding: [${padding.join(
+    let reduce = `&WindowReduce { window_dimensions: ${dimensions}, window_strides: ${strides}, window_dilations: ${dilations}, padding: [${pads.join(
         ", ",
     )}] }`;
     return Result::Ok(
@@ -2602,7 +3050,7 @@ fn built_gather(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut 
     let index_axes = axis_list(&indices);
     let wrapped = `&from_end_indices::<${BACKEND_PARAM}, [${index_axes}]>(backend, ${exprs.reference(
         &node.inputs[1],
-    )}, ${symbols.spell_extent(&data.axes[axis].extent.poly())?})`;
+    )}, &${symbols.value(&data.axes[axis].extent.poly())?})`;
     let dims = `&GatherDims { offset_dims: ${offset_dims}, collapsed_slice_dims: [${axis}], start_index_map: [${axis}], index_vector_dim: ${rank}, slice_sizes: [${sizes.join(
         ", ",
     )}] }`;
@@ -2627,9 +3075,14 @@ fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
         }
     }
     let types = `[${axis_list(&x)}], [${axis_list(&kept)}]`;
-    let a = exprs.reference(&node.inputs[0]);
+    let mut a = exprs.reference(&node.inputs[0]);
+    let mut count = Poly::constant(1);
+    for let d of reduced {
+        a = masked_along(a, &x, d, "0 as f32", symbols)?;
+        count = count.try_mul(&x.axes[d].extent.poly()).expect("a count of elements is within i64");
+    }
     let call = if node.op == "ReduceMean" {
-        `reduce_mean::<${BACKEND_PARAM}, ${types}>(backend, ${a}, ${reduced})`;
+        `reduce_mean::<${BACKEND_PARAM}, ${types}>(backend, ${a}, ${reduced}, &${symbols.value(&count)?})`;
     } else {
         `backend.reduce::<${types}>(${a}, Binary::Add, 0 as f32, ${reduced})`;
     };
@@ -2642,8 +3095,10 @@ fn built_reduction(node: &Node, checked: &Checked, exprs: &Operands, symbols: &m
 }
 
 /// A `Concat` as `concatenate` folded over its operands from the left, each
-/// partial join under the output's axes.
-fn built_concat(node: &Node, checked: &Checked, exprs: &Operands) -> String {
+/// partial join under the output's axes. Where the join so far reads a valid
+/// length, the next part is written from it on, past which the join's padding
+/// lies.
+fn built_concat(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
     let shapes = &checked.shapes;
     let out = axis_list(&shapes[node.outputs[0]]);
     let axis = settled(concat_axis(node, shapes[node.outputs[0]].rank()));
@@ -2652,15 +3107,40 @@ fn built_concat(node: &Node, checked: &Checked, exprs: &Operands) -> String {
     let mut call = exprs.value(&node.inputs[0]);
     let mut left = exprs.reference(&node.inputs[0]);
     let mut left_axes = axis_list(&shapes[node.inputs[0]]);
+    let mut length = shapes[node.inputs[0]].axes[axis].extent.poly();
     for let input of node.inputs[1..<node.inputs.len()].to_list() {
-        let right_axes = axis_list(&shapes[input]);
-        call = `backend.concatenate::<${element}, [${left_axes}], [${right_axes}], [${out}]>(${left}, ${exprs.reference(
-            &input,
-        )}, ${axis})`;
+        let right = shapes[input];
+        let types = `${element}, [${left_axes}], [${axis_list(&right)}], [${out}]`;
+        let operands = `${left}, ${exprs.reference(&input)}, ${axis}`;
+        call = if symbols.reads_lengths(&length) {
+            `joined_at::<${BACKEND_PARAM}, ${types}>(backend, ${operands}, &${symbols.value(&length)?})`;
+        } else {
+            `backend.concatenate::<${types}>(${operands})`;
+        };
         left = `&${call}`;
         left_axes = out;
+        length = length.try_add(&right.axes[axis].extent.poly()).expect("a joined extent is within i64");
     }
-    return call;
+    return Result::Ok(call);
+}
+
+/// `operand`, of axes `shape`, its padding along `axis` read as `fill`, where
+/// a valid length enters that axis's extent.
+fn masked_along(
+    operand: String,
+    shape: &Shape,
+    axis: i32,
+    fill: String,
+    symbols: &mut Symbols,
+) -> Result<String, EmitError> {
+    let extent = shape.axes[axis].extent.poly();
+    if !symbols.reads_lengths(&extent) {
+        return Result::Ok(operand);
+    }
+    let typed = `${KERNEL_ELEMENT}, [${axis_list(shape)}]`;
+    return Result::Ok(
+        `&masked::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${axis}, &${symbols.value(&extent)?}, ${fill})`,
+    );
 }
 
 /// The starts, limits and strides of a `slice` keeping every axis of `x` whole.
@@ -2692,15 +3172,44 @@ impl Bounds {
 }
 
 /// A `Slice` as one `slice`. An axis cut backwards is reversed first, where
-/// its cut starts at the mirror of its start; an empty cut starts at 0.
+/// its cut starts at the mirror of its start; an empty cut starts at 0. A cut
+/// starting at a valid length is a `strided_gather` first, since a `slice`
+/// starts where the capacity says.
 fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut Symbols) -> Result<String, EmitError> {
-    let x = checked.shapes[node.inputs[0]];
-    let cuts = settled(slice_cuts(node, &checked.known, &x));
+    let mut x = checked.shapes[node.inputs[0]];
+    let out = checked.shapes[node.outputs[0]];
+    let all = settled(slice_cuts(node, &checked.known, &x));
     // A slice that narrows nothing is its operand, read as a value.
-    if cuts.is_empty() {
+    if all.is_empty() {
         return Result::Ok(exprs.value(&node.inputs[0]));
     }
     let element = checked.primitives[node.inputs[0]];
+    let mut cuts: List<Cut> = [];
+    let mut gathered: Option<String> = null;
+    let operand_of = |so_far: &Option<String>| match so_far {
+        Some(call) => `&${*call}`,
+        None => exprs.reference(&node.inputs[0]),
+    };
+    for let cut of all {
+        let length = cut.extent.poly();
+        if !symbols.reads_lengths(&cut.start) || length.as_constant() == Option::Some(0) {
+            cuts.push(cut);
+            continue;
+        }
+        let operand = operand_of(&gathered);
+        let mut to = x;
+        to.axes[cut.axis] = out.axes[cut.axis];
+        let typed = `${element}, [${axis_list(&x)}], [${axis_list(&to)}]`;
+        gathered = Option::Some(
+            `strided_gather::<${BACKEND_PARAM}, ${typed}>(backend, ${operand}, ${cut.axis}, &${symbols.value(
+                &cut.start,
+            )?}, ${symbols.spell_extent(&length)?}, ${cut.step})`,
+        );
+        x = to;
+    }
+    if let Some(call) = gathered && cuts.is_empty() {
+        return Result::Ok(call);
+    }
     let mut bounds = Bounds::whole(&x, symbols)?;
     let mut reversed: List<i32> = [];
     for let cut of cuts {
@@ -2728,11 +3237,11 @@ fn built_slice(node: &Node, checked: &Checked, exprs: &Operands, symbols: &mut S
         };
         bounds.starts[a] = from;
     }
-    let mut operand = exprs.reference(&node.inputs[0]);
+    let mut operand = operand_of(&gathered);
     if !reversed.is_empty() {
         operand = `&backend.reverse::<${element}, [${axis_list(&x)}]>(${operand}, ${reversed})`;
     }
-    return Result::Ok(bounds.sliced(&element, &x, &checked.shapes[node.outputs[0]], &operand));
+    return Result::Ok(bounds.sliced(&element, &x, &out, &operand));
 }
 
 /// A `Split` as one `slice` per output, each taking the next run of the axis.

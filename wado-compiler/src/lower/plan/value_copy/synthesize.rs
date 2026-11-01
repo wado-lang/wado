@@ -19,7 +19,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
-use crate::type_table::{InstanceKey, TypeTable};
+use crate::type_table::TypeTable;
 
 use super::{ValueCopyHelpers, needs_value_copy};
 use crate::ast::Visibility;
@@ -378,7 +378,7 @@ fn build_copy_return_expr(
         .borrow()
         .struct_list_name(type_id)
         .expect("struct-shaped type has a stored struct name");
-    let listed = listed_struct(project, &type_table.borrow(), def, type_args);
+    let listed = project.listed_struct(&type_table.borrow(), def, type_args);
     if let Some(struct_def) = listed {
         let right_size_backing = type_table.borrow().is_seq_container(type_id);
         return Some(build_struct_copy(
@@ -425,24 +425,6 @@ fn single_return_block(value: TirExpr, span: Span) -> TirBlock {
     )
 }
 
-/// The listed struct `def` instantiated with `type_args`, each argument compared
-/// by [`InstanceKey`] so an instance matches the struct it became.
-fn listed_struct<'a>(
-    project: &'a FlatPackage,
-    type_table: &TypeTable,
-    def: StructDef,
-    type_args: &[TypeId],
-) -> Option<&'a TirStruct> {
-    let keys = |args: &[TypeId]| -> Vec<InstanceKey> {
-        args.iter().map(|&a| type_table.instance_key(a)).collect()
-    };
-    let wanted = keys(type_args);
-    project
-        .structs
-        .iter()
-        .find(|s| s.def == def && keys(&s.type_args) == wanted)
-}
-
 /// `List<T>`'s deep-copy emits a `StructLiteral` typed `List<T>`, which resolves
 /// to `AbstractRef(Struct)` whenever `T` is a shape the WIR struct registry
 /// never materialises — a resource, a function type, an unmaterialised generic
@@ -456,7 +438,6 @@ fn is_synth_safe_element(
     let resolved = type_table.borrow().get(elem_type).clone();
     match resolved {
         ResolvedType::Resource { .. }
-        | ResolvedType::GenericResource { .. }
         | ResolvedType::Function { .. }
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. } => false,
@@ -468,7 +449,9 @@ fn is_synth_safe_element(
                 || tt.is_list(elem_type)
                 || tt.is_compiler_struct_instance(elem_type, CompilerItem::Box)
                 || project.variants.iter().any(|v| v.def == def)
-                || listed_struct(project, &tt, StructDef::Decl(def), &type_args).is_some()
+                || project
+                    .listed_struct(&tt, StructDef::Decl(def), &type_args)
+                    .is_some()
         }
         _ => true,
     }

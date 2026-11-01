@@ -846,17 +846,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .expect("an enum or variant names a declaration");
                 (name, Some(module_source), None, None)
             }
-            // Generic resource types (Future<T>, Stream<T>, etc.)
-            ResolvedType::GenericResource { def, type_args } => (
-                self.tysys.type_table.borrow().def_name(*def).to_string(),
-                Some(self.tysys.type_table.borrow().def_module(*def).clone()),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
-                None,
-            ),
             _ => return None,
         };
 
@@ -929,7 +918,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Instance methods declared on a resource. A resource receiver's
-        // `ResolvedType::Resource` / `GenericResource` always carries the
+        // `ResolvedType::Resource` / `GenericInstance` always carries the
         // resource's defining `module_source` (resolved through imports,
         // re-export chains included), so the method is found in that module
         // directly — no global scan. `None`-module receivers (primitives,
@@ -1297,9 +1286,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<(DefId, TargetBinding)> {
         let (key, args) = {
             let tt = self.tysys.type_table.borrow();
-            let (ResolvedType::GenericInstance { def, type_args }
-            | ResolvedType::GenericResource { def, type_args }) = tt.get(receiver)
-            else {
+            let ResolvedType::GenericInstance { def, type_args } = tt.get(receiver) else {
                 return Vec::new();
             };
             if tt.is_tuple_def(*def) {

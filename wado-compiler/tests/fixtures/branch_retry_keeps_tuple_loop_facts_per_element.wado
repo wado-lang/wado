@@ -1,0 +1,45 @@
+// A branch whose `null` the sibling settles is resolved again under the
+// settled type. A tuple `for-of` inside it was recorded once per pass, and
+// reify, which takes one recording per walk, read the first pass's for a later
+// element of the loop around it: `v.w()` dispatched to another element's impl.
+
+trait W {
+    fn w(&self) -> i32;
+}
+
+impl W for i32 {
+    fn w(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl W for String {
+    fn w(&self) -> i32 {
+        return 10;
+    }
+}
+
+impl W for bool {
+    fn w(&self) -> i32 {
+        return 100;
+    }
+}
+
+export fn run() {
+    let mut total = 0;
+    for let t of [1, "abc", true] {
+        let r = if builtin::black_box(true) {
+            for let v of [t, t] {
+                total += v.w();
+            }
+            [null, 1]
+        } else {
+            [Option::Some(2), 1]
+        };
+        total += r.1;
+    }
+    assert total == 225;
+}
+
+__DATA__
+{}

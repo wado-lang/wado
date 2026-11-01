@@ -530,6 +530,7 @@ async fn render_phases(
         return out;
     };
 
+    let profile = inputs.profile(&base_path);
     if needs_dump {
         let host = StubHost::new(base_path.clone()).with_stubs(inputs.host_stubs());
         let dumped = wado_compiler::dump_with_host_and_world(
@@ -541,6 +542,7 @@ async fn render_phases(
             Some(&allocator),
             wado_compiler::OptOverrides::default(),
             &inputs.codegen_flags,
+            profile.as_deref(),
             &params,
             invocations.clone(),
             // More than one, so a golden that depends on the thread count
@@ -603,7 +605,6 @@ async fn render_phases(
     }
 
     if needs_compile {
-        let profile = inputs.profile(&base_path);
         let host = StubHost::new(base_path).with_stubs(inputs.host_stubs());
         let options = wado_compiler::CompilerOptions {
             opt_level,

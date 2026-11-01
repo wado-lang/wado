@@ -1175,11 +1175,16 @@ impl Interpreter<'_> {
         let mut seeds: Vec<(u32, Value)> = Vec::with_capacity(needs.free_reads.len());
         for read in needs.free_reads {
             let index = read.index;
-            if self.frame.alias_involves(index) {
+            // A view nothing can write reads as its referent's value, in the
+            // region as in the walker. Any other alias names storage a seed
+            // would copy.
+            let const_view = self.frame.place_aliases.contains_key(&index)
+                && self.frame.const_views.contains(index);
+            if !const_view && self.frame.alias_involves(index) {
                 compiler_trace!("region_seed", "region {e:?}: local {index} is aliased");
                 return None;
             }
-            let Some(Lattice::Const(value)) = self.frame.env.get(&index) else {
+            let Lattice::Const(value) = self.local_lattice(index) else {
                 compiler_trace!(
                     "region_seed",
                     "region {e:?}: local {index} not constant in the walker env"
@@ -1196,7 +1201,7 @@ impl Interpreter<'_> {
                 );
                 return None;
             }
-            seeds.push((index, value.clone()));
+            seeds.push((index, value));
         }
         self.charge(1)?;
         let mut scratch = body.nodes_only_clone();

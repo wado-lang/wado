@@ -28,6 +28,7 @@ fn dump_registers_a_user_modules_cm_declarations() {
         None,
         wado_compiler::OptOverrides::default(),
         &[],
+        None,
         &wado_compiler::param_resolution::ParamInputs::default(),
         wado_compiler::kiln::InvocationIndex::default(),
         1,

@@ -1,0 +1,89 @@
+//! The WebGPU backend's `Graph` computes what `Cpu`'s does. Each output of
+//! each graph prints how far it sits from `Cpu`'s. `wado test` cannot reach a
+//! device, so `wado-run-webgpu`'s tests run it:
+//!
+//!     wado run-webgpu package-loam/conformance/webgpu_graph.wado
+
+use { println, Stdout } from "core:cli";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { Cpu, Element, Graph, Holds, Placed, Tensor, WebGpuBackend } from "lib:loam";
+use cases from "lib:loam/src/runtime/graph_cases.wado";
+use { deviation } from "lib:loam/example/webgpu/compare.wado";
+
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let Some(mut gpu) = WebGpuBackend::new() else {
+        println("no WebGPU adapter");
+        return;
+    };
+    let cpu = &mut Cpu {};
+
+    let [x, ids] = cases::mixed_inputs();
+    let want = cases::mixed(cpu, &x, &ids);
+    let got = cases::mixed(&mut gpu, &gpu.upload(&x), &gpu.upload(&ids));
+    println(`mixed product ${apart(&mut gpu, &got.0, &want.0)}`);
+    println(`mixed scattered ${apart(&mut gpu, &got.1, &want.1)}`);
+    println(`mixed converted ${apart(&mut gpu, &got.2, &want.2)}`);
+    println(`mixed compared ${apart(&mut gpu, &got.3, &want.3)}`);
+    println(`mixed i64 ${apart(&mut gpu, &got.4, &want.4)}`);
+
+    let w = cases::windowed_input();
+    println(`windowed ${apart(&mut gpu, &cases::windowed(&mut gpu, &gpu.upload(&w)), &cases::windowed(cpu, &w))}`);
+
+    for let p of [true, false] as List<bool> {
+        let [pred, bx] = cases::branching_inputs(p);
+        let expected = cases::branching(cpu, &pred, &bx);
+        let branched = cases::branching(&mut gpu, &gpu.upload(&pred), &gpu.upload(&bx));
+        println(`branching ${p} ${apart(&mut gpu, &branched, &expected)}`);
+    }
+
+    let case = cases::attention_case();
+    let expected = cases::attending(cpu, &case.inputs, &case.past, &case.rotation, &case.options);
+    let inputs = [
+        gpu.upload(&case.inputs.0),
+        gpu.upload(&case.inputs.1),
+        gpu.upload(&case.inputs.2),
+    ];
+    let past = [
+        gpu.upload(&case.past.0),
+        gpu.upload(&case.past.1),
+        gpu.upload(&case.past.2),
+    ];
+    let rotation = [
+        gpu.upload(&case.rotation.0),
+        gpu.upload(&case.rotation.1),
+    ];
+    let attended = cases::attending(&mut gpu, &inputs, &past, &rotation, &case.options);
+    println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
+    println(`attending present_k ${apart(&mut gpu, &attended.1, &expected.1)}`);
+    println(`attending present_v ${apart(&mut gpu, &attended.2, &expected.2)}`);
+}
+
+/// How far `got` sits from `want`, NaN where their extents differ.
+fn apart<E: Element, Axes>(
+    gpu: &mut WebGpuBackend,
+    got: &Placed<E, Axes>,
+    want: &Tensor<E, Axes>,
+) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let cpu = &mut Cpu {};
+    let read: Tensor<f32, Axes> = cpu.convert(&gpu.download(got));
+    if read.extents != want.extents {
+        return f32::NAN;
+    }
+    return deviation(&read.data, &cpu.convert::<E, f32, Axes>(want).data);
+}
