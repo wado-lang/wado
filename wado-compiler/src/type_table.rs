@@ -3781,18 +3781,6 @@ impl TypeTable {
             .insert(trait_ref.args, filled, resolved_id, None);
     }
 
-    /// Every associated type a concrete receiver answers, with that receiver.
-    pub fn assoc_type_answers(&self) -> impl Iterator<Item = (&InstanceKey, TypeId)> {
-        self.assoc_type_resolutions
-            .iter()
-            .flat_map(|(key, answers)| {
-                answers
-                    .0
-                    .iter()
-                    .map(|answer| (&key.receiver, answer.answer))
-            })
-    }
-
     /// Each associated type `receiver` answers: what synthesis registered for
     /// an open shape, for [`Self::instantiate_assoc_types`] to instantiate at
     /// every shape substituted from it.
@@ -5743,7 +5731,7 @@ impl TypeTable {
 
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
-    pub(crate) fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+    fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)

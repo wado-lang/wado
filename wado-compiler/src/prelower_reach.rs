@@ -48,6 +48,8 @@ pub(crate) struct Roots {
     wasm_modules: IndexSet<ModuleSource>,
     /// [`MINTABLE`] as the set an impl's trait is tested against.
     mintable: IndexSet<DefId>,
+    /// `Drop`, whose impls the drop glue an instance's elaboration adds calls.
+    drop: Option<DefId>,
 }
 
 impl Roots {
@@ -60,7 +62,14 @@ impl Roots {
                 .iter()
                 .filter_map(|item| items.trait_def(*item))
                 .collect(),
+            drop: items.trait_def(CompilerItem::Drop),
         }
+    }
+
+    fn impl_trait(func: &TirFunction) -> Option<DefId> {
+        func.method_info
+            .as_ref()
+            .and_then(LocalMethodName::trait_decl)
     }
 
     /// Whether `lower` or a later phase may call `func` with no TIR body naming
@@ -72,23 +81,23 @@ impl Roots {
                 .compiler_item
                 .is_some_and(CompilerItem::minted_after_tir)
             || (is_type_bridge(&func.name) && !is_marker_bridge(&func.name))
-            || func
-                .method_info
-                .as_ref()
-                .and_then(LocalMethodName::trait_decl)
-                .is_some_and(|def| self.mintable.contains(&def))
+            || Self::impl_trait(func).is_some_and(|def| self.mintable.contains(&def))
     }
 
     /// [`Self::before_lower`], and what the phases between monomorphization and
     /// `lower` call with no body naming it: the CM binding's and effect
     /// dispatch's rewrites spell effect dispatch wrappers, default
-    /// implementations, `core:builtin` accessors and compiler items.
+    /// implementations, `core:builtin` accessors and compiler items; drop glue
+    /// calls `Drop` impls; and a reflection marker names its bridge by the
+    /// erased types, which no instance spells before erasure.
     pub(crate) fn before_monomorphize(&self, func: &TirFunction) -> bool {
         self.before_lower(func)
             || (func.compiler_item.is_some() && func.method_info.is_none())
             || is_effect_default(&func.name)
             || func.is_dispatch_wrapper
             || func.module_source.is_core_builtin()
+            || is_type_bridge(&func.name)
+            || Self::impl_trait(func).is_some_and(|def| Some(def) == self.drop)
     }
 }
 
