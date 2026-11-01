@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793515271560,
+  "lastUpdate": 1793517499146,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -73097,6 +73097,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/add0aad758c85b3d684b7f8a69243021809843a5"
         },
         "date": 1793515270707,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 3099,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 7303,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 21809,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 316578,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d44b7d0afe925371f9d94920b6d7e65dd199dc4c",
+          "message": "Merge pull request #2512 from wado-lang/pgo-roadmap\n\nfix(pgo): reject #[workload] in a #![TODO] module",
+          "timestamp": "2026-11-01T16:03:26+09:00",
+          "tree_id": "55f4bdcd937c6100fefd704165f36658beb06bce",
+          "url": "https://github.com/wado-lang/wado/commit/d44b7d0afe925371f9d94920b6d7e65dd199dc4c"
+        },
+        "date": 1793517498028,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
