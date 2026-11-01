@@ -80,10 +80,8 @@ export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuC
     // append, attend and join; the decomposition takes dozens.
     assert gpu.dispatches() - dispatched == 5, "a causal attention over a shared cache runs in its kernels";
     println(`attending out ${apart(&mut gpu, &attended.0, &expected.0)}`);
-    // Past the valid positions and the new ones, a present holds padding.
-    let valid = case.past.2.data[0] as i32 + case.inputs.0.extents[1];
-    println(`attending present_k ${apart_within(&mut gpu, &attended.1, &expected.1, valid)}`);
-    println(`attending present_v ${apart_within(&mut gpu, &attended.2, &expected.2, valid)}`);
+    println(`attending present_k ${apart(&mut gpu, &attended.1, &expected.1)}`);
+    println(`attending present_v ${apart(&mut gpu, &attended.2, &expected.2)}`);
 
     // `compute` compiles one program per shape class and replays it: 3 and 4
     // positions share a capacity, 5 takes the next.
@@ -116,28 +114,6 @@ fn gated_input(positions: i32) -> Tensor<f32, [gated::N, gated::S, gated::X2]> {
         data,
         extents: [1, positions, 2],
     };
-}
-
-/// How far a present's first `valid` positions sit from `want`'s, NaN where
-/// their extents differ.
-fn apart_within<Axes>(
-    gpu: &mut WebGpuBackend,
-    got: &Placed<f32, Axes>,
-    want: &Tensor<f32, Axes>,
-    valid: i32,
-) -> f32 with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-    let read = gpu.download(got);
-    if read.extents != want.extents {
-        return f32::NAN;
-    }
-    return deviation(&positions(&read, valid).data, &positions(want, valid).data);
-}
-
-/// `t`'s first `count` positions, its third axis.
-fn positions<Axes>(t: &Tensor<f32, Axes>, count: i32) -> Tensor<f32, Axes> {
-    let mut limit = t.extents;
-    limit[2] = count;
-    return Cpu {}.slice::<f32, Axes, Axes>(t, [0, 0, 0, 0], limit, [1, 1, 1, 1]);
 }
 
 /// How far `got` sits from `want`, NaN where their extents differ.

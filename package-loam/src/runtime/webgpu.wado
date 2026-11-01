@@ -1538,7 +1538,8 @@ impl WebGpuBackend {
     /// turned, and values to the attention cache, one attends each
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
-    /// tables. The cache holds at least `spanned` positions. `None` where the
+    /// tables. The past is the first `past` positions `past_k` and `past_v`
+    /// hold, and the cache holds every position they do. `None` where the
     /// operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
@@ -1547,16 +1548,18 @@ impl WebGpuBackend {
         v: &DeviceTensor,
         past_k: &DeviceTensor,
         past_v: &DeviceTensor,
+        past: i32,
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
-        spanned: i32,
-    ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let [batch, s, past, d] = [q.extents[0], q.extents[1], past_k.extents[2], past_k.extents[3]];
+    ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract 0 <= past <= past_k.extents[2]
+    {
+        let [batch, s, d] = [q.extents[0], q.extents[1], past_k.extents[3]];
         let [heads, kv] = [options.heads, options.kv_heads];
         let total = past + s;
         let rows = batch * s * heads;
-        let capacity = self.cache_capacity(batch * kv * d, i32::max(total, spanned));
+        let capacity = self.cache_capacity(batch * kv * d, i32::max(total, past_k.extents[2]));
         let n = batch * kv * capacity * d;
         // The parts are held for every position the cache holds, as its
         // views are, so their bindings too stay those of the step before.
@@ -2179,10 +2182,10 @@ impl Backend for WebGpuBackend {
             &self.device_view(v),
             &self.device_view(past_k),
             &self.device_view(past_v),
+            self.extents_of(past_k)[2],
             &rotary,
             &bias_view,
             options,
-            0,
         ) {
             return [
                 Placed::Device(out),

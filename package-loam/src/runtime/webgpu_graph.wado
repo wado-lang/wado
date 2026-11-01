@@ -398,8 +398,9 @@ impl Graph for WebGpuBackend {
     /// The backend's attention kernels, and the decomposition where they
     /// cannot run it. A shared past holds `past_length` valid positions, the
     /// kernels attend over those and the new ones, as many columns of the bias,
-    /// and the present spans the past's positions. Past the valid ones a causal
-    /// attention reads none, so the kernels compute what the decomposition does.
+    /// and the present is the past's buffer with the new ones written after
+    /// the valid ones. Past the valid ones a causal attention reads none, so
+    /// the kernels compute what the decomposition does.
     fn group_query_attention<B, S, Q, K, H, P, T, D, Pos, Half, BB, BH>(
         &mut self,
         q: &Placed<f32, [B, S, Q]>,
@@ -427,26 +428,26 @@ impl Graph for WebGpuBackend {
                 self.device_view(past_v),
             ];
             let positions = held_k.extents[2];
+            let query = self.device_view(q);
             let valid = match past_length {
                 Some(l) => self.host(l).data[0] as i32,
                 None => positions,
             };
-            let query = self.device_view(q);
+            assert !shared || valid + query.extents[1] <= positions, "a shared past holds the new positions after its valid ones";
             let biased = match bias {
                 Some(b) => Option::Some(sliced(&self.device_view(b), 3, 0, valid + query.extents[1])),
                 None => null,
             };
-            let spanned = if shared { positions } else { 0 };
             if let Some([out, present_k, present_v]) = self.attended(
                 &query,
                 &self.device_view(k),
                 &self.device_view(v),
-                &sliced(&held_k, 2, 0, valid),
-                &sliced(&held_v, 2, 0, valid),
+                &held_k,
+                &held_v,
+                valid,
                 &rotary,
                 &biased,
                 options,
-                spanned,
             ) {
                 let span = |t: DeviceTensor| if shared { DeviceTensor { ..t, extents: held_k.extents } } else { t };
                 return [
