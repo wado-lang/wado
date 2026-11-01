@@ -280,7 +280,7 @@ impl Source {
     fn from_name(name: &str) -> Self {
         let root = ROOTS
             .into_iter()
-            .find(|root| name.starts_with(&format!("{}/", root.rel_dir())))
+            .find(|root| Path::new(name).starts_with(root.rel_dir()))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
         Self::new(root, repository_root().join(name))
     }

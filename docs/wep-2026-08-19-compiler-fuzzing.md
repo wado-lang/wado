@@ -37,8 +37,8 @@ is why the oracle transfers unchanged to inputs from any source.
 ### Inputs are transformed, not generated
 
 The corpus is the repository's own Wado, drawn from a set of roots: the e2e
-fixtures, the stdlib modules that carry `test` blocks, and the `example/`
-programs. Every mutant is an existing program plus guards; nothing invents a
+fixtures, the stdlib modules that carry `test` blocks, the `example/` programs,
+and the `test` blocks of some packages and of `benchmark/`. Every mutant is an existing program plus guards; nothing invents a
 program. Compiler coverage is therefore bounded by what that material happens to
 exercise, which is the known cost of this choice. The roadmap states the
 condition for lifting it.
