@@ -23,6 +23,16 @@ export fn run() {
         },
         None => unreachable(),
     }
+    assert nested_leaf(&Some(Some(builtin::black_box(3)))) == 3;
+}
+
+fn nested_leaf(c: &Option<Option<i32>>) -> i32 {
+    if let Some(Some(v)) = c {
+        let rv = &v;
+        builtin::black_box(rv);
+        return *v;
+    }
+    return -1;
 }
 
 __DATA__

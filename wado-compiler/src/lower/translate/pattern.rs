@@ -58,26 +58,32 @@ fn coerce_value_to_binding(
         ),
         // A `&primitive` / `&variant` / `&fn` binding type that boxing
         // has redefined to its `Box<T>` struct: build the struct literal.
-        ResolvedType::Struct { def, type_args }
-            if type_table.box_payload_of(binding_type).is_some() =>
-        {
-            let struct_name = type_table.struct_rendered_name(*def, type_args);
-            TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: binding_type,
-                    struct_name,
-                    fields: vec![TirStructField {
-                        name: "value".to_string(),
-                        value,
-                        field_index: 0,
-                    }],
-                },
-                binding_type,
-                span,
-            )
+        ResolvedType::Struct { .. } if type_table.box_payload_of(binding_type).is_some() => {
+            box_literal(value, binding_type, type_table, span)
         }
         _ => value,
     }
+}
+
+/// `Box<T> { value }`, for the `Box<T>` struct `box_type` names.
+fn box_literal(value: TirExpr, box_type: TypeId, type_table: &TypeTable, span: Span) -> TirExpr {
+    let ResolvedType::Struct { def, type_args } = type_table.get(box_type) else {
+        unreachable!("a box is a struct")
+    };
+    let struct_name = type_table.struct_rendered_name(*def, type_args);
+    TirExpr::new(
+        TirExprKind::StructLiteral {
+            struct_type: box_type,
+            struct_name,
+            fields: vec![TirStructField {
+                name: "value".to_string(),
+                value,
+                field_index: 0,
+            }],
+        },
+        box_type,
+        span,
+    )
 }
 
 /// Peel `Ref` / `MutRef` and `Box<T>` wrappers off `expr`, returning the
@@ -979,10 +985,20 @@ impl<'a> PatternLowerer<'a> {
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
             TirPattern::Binding {
-                name, local_index, ..
+                name,
+                local_index,
+                type_id,
             } => {
                 let mut stmts = Vec::new();
-                self.emit_binding_let(name, *local_index, value, span, type_table, &mut stmts);
+                self.emit_binding_let(
+                    name,
+                    *local_index,
+                    *type_id,
+                    value,
+                    span,
+                    type_table,
+                    &mut stmts,
+                );
                 stmts.push(TirStmt::new(TirStmtKind::Expr(continuation), span));
                 let block = TirBlock::new(stmts, span);
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
@@ -1759,28 +1775,32 @@ impl<'a> PatternLowerer<'a> {
     }
 
     /// Emit the `Let` statement for a `TirPattern::Binding` destructure
-    /// target. The binding local's current type is authoritative —
-    /// `boxing` may have promoted an address-taken local to `Box<T>`
-    /// after the pattern's recorded `type_id` was set — and the value
-    /// is coerced to it (match ergonomics: a `&T` / `&mut T` binding
-    /// can capture a by-value `T`).
+    /// target. The value is coerced to the pattern's type (match
+    /// ergonomics: a `&T` / `&mut T` binding can capture a by-value `T`),
+    /// then held in the local's `Box` where `boxing` retagged it.
     fn emit_binding_let(
         &self,
         name: &str,
         local_index: u32,
+        pattern_type: TypeId,
         value: TirExpr,
         span: Span,
         type_table: &TypeTable,
         out: &mut Vec<TirStmt>,
     ) {
-        let binding_type = type_table.get_local_type(local_index, &self.locals);
-        let value = coerce_value_to_binding(value, binding_type, type_table, span);
+        let local_type = type_table.get_local_type(local_index, &self.locals);
+        let value = coerce_value_to_binding(value, pattern_type, type_table, span);
+        let value = if type_table.type_key(local_type) == type_table.type_key(pattern_type) {
+            value
+        } else {
+            box_literal(value, local_type, type_table, span)
+        };
         out.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.to_string(),
                 local_index,
                 is_mut: self.locals[local_index as usize].is_mut,
-                type_id: binding_type,
+                type_id: local_type,
                 value,
                 storage: LetStorage::Planned,
             },
@@ -2032,9 +2052,11 @@ impl<'a> PatternLowerer<'a> {
                 unreachable!("instance_patterns lowers every per-instance pattern")
             }
             TirPattern::Binding {
-                name, local_index, ..
+                name,
+                local_index,
+                type_id,
             } => {
-                self.emit_binding_let(name, *local_index, value, span, type_table, out);
+                self.emit_binding_let(name, *local_index, *type_id, value, span, type_table, out);
             }
             TirPattern::Tuple(sub_patterns, _) => {
                 self.lower_tuple_pattern(sub_patterns, value, span, out, type_table);
