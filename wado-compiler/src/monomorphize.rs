@@ -26,8 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead};
 use crate::prelower_reach::{
-    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types,
-    type_head,
+    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types, type_head,
 };
 use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
@@ -210,6 +209,10 @@ impl Pool {
 /// `id` and every type it is built over that `seen` does not hold yet, which
 /// it then does.
 fn built_over(id: TypeId, type_table: &TypeTable, seen: &mut IndexSet<TypeKey>) -> Vec<TypeId> {
+    // Most of a body's expressions hold a type held already.
+    if seen.contains(&type_table.type_key(id)) {
+        return Vec::new();
+    }
     let mut found = Vec::new();
     let mut stack = vec![id];
     while let Some(id) = stack.pop() {
@@ -314,9 +317,8 @@ impl Monomorphization {
         let pool = self.monomorphizer.pool.by_key;
         compiler_trace!(
             "prelower_reach",
-            "monomorphize left {} of {} functions unreached",
-            pool.len(),
-            pool.len() + flat.functions.len()
+            "monomorphize left {} functions unreached",
+            pool.len()
         );
         flat.pruned.extend(pool.into_keys().map(FunctionId::from));
     }
@@ -463,9 +465,9 @@ impl Monomorphizer {
         unscanned.extend(callees.iter().filter_map(|callee| self.pool.take(callee)));
     }
 
-    /// Ready a function taken out of the pool, its types noted and drained, as
-    /// Phases 6 and 7.5 readied the roots, then queue what it instantiates and
-    /// take out what it names.
+    /// Ready a function taken out of the pool, its packs expanded and its types
+    /// noted and drained, as Phase 6 readied the roots, then queue what it
+    /// instantiates and take out what it names.
     fn scan_taken(
         &mut self,
         func_rc: &Rc<RefCell<TirFunction>>,
@@ -474,7 +476,6 @@ impl Monomorphizer {
         unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
     ) {
         self.rewrite_types_in_function(&mut func_rc.borrow_mut(), &mut type_table.borrow_mut());
-        func_inst::expand_settled_packs(self, type_table, std::slice::from_ref(func_rc));
         let func = func_rc.borrow();
         let mut type_table = type_table.borrow_mut();
         if let Some(body) = &func.body {
@@ -676,6 +677,10 @@ impl Monomorphizer {
             scanned: scanned_functions,
         };
 
+        // Phase 1.5: expand the packs their own site settled, before Phase 2
+        // holds the types that interns and Phase 8 collects the calls it makes.
+        func_inst::expand_settled_packs(self, &module.type_table, unrewritten.functions(&module));
+
         // Phase 2: what the drain instantiates — the types the bodies yet to be
         // scanned hold, and the struct fields every declaration lays out.
         {
@@ -720,10 +725,6 @@ impl Monomorphizer {
         // Phase 6: Rewrite all GenericInstance type_ids to concrete struct type_ids
         self.rewrite_types_in_module(&mut module, unrewritten);
 
-        // Phase 7.5: expand the packs their own site settled, before Phase 8
-        // collects the calls that produces.
-        func_inst::expand_settled_packs(self, &module.type_table, unrewritten.functions(&module));
-
         // Phase 8: Collect function instantiation sites from Call expressions,
         // and take out of the pool what the bodies name.
         self.collect_function_instantiation_sites(&module, &generic_functions, unrewritten);
@@ -749,6 +750,7 @@ impl Monomorphizer {
         loop {
             let taken = std::mem::take(&mut unscanned);
             let mut made_progress = !taken.is_empty();
+            func_inst::expand_settled_packs(self, &module.type_table, &taken);
             for func_rc in &taken {
                 self.note_types(&func_rc.borrow(), &module.type_table.borrow());
             }
