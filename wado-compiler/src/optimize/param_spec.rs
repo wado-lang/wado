@@ -588,7 +588,7 @@ fn collect_local_uses(
     signatures: &Signatures,
     out: &mut IndexMap<u32, LocalUses>,
 ) {
-    let (assigned, referenced) = collect_place_contexts(body);
+    let (assigned, referenced, projected) = collect_place_contexts(body);
     let mut classified: IndexSet<ExprId> = alias_reads.clone();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
@@ -605,7 +605,11 @@ fn collect_local_uses(
                 };
                 classified.insert(expr.as_expr().expect("tracked local is a skeleton node"));
                 let uses = out.entry(local).or_default();
-                if referenced.contains(&id) {
+                // A struct-valued read hands out the object itself, not a
+                // copy: whatever it is bound to may write through it.
+                let escapes = !projected.contains(&id)
+                    && held_struct(body.exprs[id].type_id, types).is_some();
+                if referenced.contains(&id) || escapes {
                     uses.writes.push((*field_index, None));
                     uses.reads.insert(*field_index);
                 } else if let Some(value) = assigned.get(&id) {
@@ -646,18 +650,25 @@ fn collect_local_uses(
     mark_unclassified_opaque(body, tracked, &classified, out);
 }
 
-/// The value each assignment target receives, and the referents of `&` /
-/// `&mut`. Gathered up front because a `FieldAccess`'s role depends on its
-/// parent, which the classifying walk may not have visited yet.
-fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>) {
+/// The value each assignment target receives, the referents of `&` / `&mut`,
+/// and the receivers of a field or index projection. Gathered up front because
+/// a `FieldAccess`'s role depends on its parent, which the classifying walk may
+/// not have visited yet.
+fn collect_place_contexts(
+    body: &Body,
+) -> (IndexMap<ExprId, Operand>, IndexSet<ExprId>, IndexSet<ExprId>) {
     let mut assigned: IndexMap<ExprId, Operand> = IndexMap::default();
     let mut referenced: IndexSet<ExprId> = IndexSet::default();
+    let mut projected: IndexSet<ExprId> = IndexSet::default();
     let mut mut_referenced: Vec<ExprId> = Vec::new();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
         };
         match &body.exprs[id].kind {
+            ExprKind::FieldAccess { expr, .. } | ExprKind::Index { expr, .. } => {
+                projected.extend(expr.as_expr());
+            }
             ExprKind::Assign { target, value } => {
                 assigned.insert(*target, *value);
             }
@@ -695,7 +706,7 @@ fn collect_place_contexts(body: &Body) -> (IndexMap<ExprId, Operand>, IndexSet<E
             place = receiver;
         }
     }
-    (assigned, referenced)
+    (assigned, referenced, projected)
 }
 
 /// Mark every tracked local the classifying walk did not reach — a return
