@@ -319,20 +319,10 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
 
 /// What every pipeline does with `flat` on its way into `lower`. One entry
 /// point, because `compile` and `dump` lower separately.
-///
-/// `WADO_NO_PRELOWER_PRUNE` holds the prune back, so a missing root is a flag
-/// to flip rather than a compiler to rebuild.
 pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
     let found = enabled().then(|| reachable(flat));
-    if prunes() {
-        prune(flat);
-    }
+    prune(flat);
     found
-}
-
-/// Whether unreached functions are dropped, here and by `monomorphize`.
-pub(crate) fn prunes() -> bool {
-    std::env::var_os("WADO_NO_PRELOWER_PRUNE").is_none()
 }
 
 /// Drop what no root reaches, and record the drop for the assert in `lower`'s

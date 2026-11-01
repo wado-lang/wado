@@ -137,8 +137,7 @@ impl Monomorphizer {
     }
 
     /// Queue each concrete `GenericInstance` of a struct in `generic_structs`
-    /// that the pool holds, or every one the type table spells where the pool
-    /// does not drive the drain; the generic variants' instances held, whose
+    /// that the pool holds; the generic variants' instances held, whose
     /// payloads are held too.
     pub(super) fn collect_instantiation_sites(
         &mut self,
@@ -150,64 +149,44 @@ impl Monomorphizer {
             .keys()
             .filter(|def| tested.insert(**def))
             .count();
-        let held = std::mem::take(&mut self.pool.instances);
-        let ids: Vec<TypeId> = if self.pool.drives_structs {
-            // A site naming no generic struct yet may name one a later run adds.
-            let mut ids = if untested == 0 {
-                Vec::new()
-            } else {
-                std::mem::take(&mut self.structs.unmatched)
-            };
-            ids.extend(held);
-            ids
+        // A site naming no generic struct yet may name one a later run adds.
+        let mut ids = if untested == 0 {
+            Vec::new()
         } else {
-            let from = if untested == 0 {
-                self.structs.sites_scanned
-            } else {
-                TypeId(0)
-            };
-            let (ids, end) = type_table.type_ids_since(from);
-            self.structs.sites_scanned = end;
-            ids.collect()
+            std::mem::take(&mut self.structs.unmatched)
         };
+        ids.append(&mut self.pool.instances);
         let mut variants = Vec::new();
         for id in ids {
-            if let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) {
-                if self.pool.generic_variants.contains_key(def) {
-                    variants.push(id);
-                    continue;
-                }
-                if type_args.is_empty() || type_table.is_list(id) {
-                    continue;
-                }
-                if !generic_structs.contains_key(def) {
-                    if self.pool.drives_structs {
-                        self.structs.unmatched.push(id);
-                    }
-                    continue;
-                }
-                let name = &type_table.decl_name(*def).to_string();
-                let module_source = &type_table.def_module(*def).clone();
-
-                // Only process if all type args are concrete (no TypeParams)
-                let all_concrete = type_args
-                    .iter()
-                    .all(|&arg| !type_table.contains_type_param(arg));
-
-                if all_concrete {
-                    let key = InstantiationKey {
-                        def: Some(*def),
-                        name: name.clone(),
-                        module_source: module_source.clone(),
-                        impl_type_args: type_args.clone(),
-                        method_type_args: vec![],
-                        method_info: None, // Struct instantiation,
-                        template: None,
-                    };
-
-                    let mangled = self.instantiation_name(&key, type_table);
-                    self.try_queue_struct(key, mangled);
-                }
+            let ResolvedType::GenericInstance { def, type_args } = type_table.get(id) else {
+                unreachable!("the pool keeps only a `GenericInstance` for the drain");
+            };
+            if self.pool.generic_variants.contains_key(def) {
+                variants.push(id);
+                continue;
+            }
+            if type_args.is_empty() || type_table.is_list(id) {
+                continue;
+            }
+            if !generic_structs.contains_key(def) {
+                self.structs.unmatched.push(id);
+                continue;
+            }
+            let all_concrete = type_args
+                .iter()
+                .all(|&arg| !type_table.contains_type_param(arg));
+            if all_concrete {
+                let key = InstantiationKey {
+                    def: Some(*def),
+                    name: type_table.decl_name(*def).to_string(),
+                    module_source: type_table.def_module(*def).clone(),
+                    impl_type_args: type_args.clone(),
+                    method_type_args: vec![],
+                    method_info: None,
+                    template: None,
+                };
+                let mangled = self.instantiation_name(&key, type_table);
+                self.try_queue_struct(key, mangled);
             }
         }
         variants

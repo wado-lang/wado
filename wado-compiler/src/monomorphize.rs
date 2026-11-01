@@ -26,7 +26,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead};
 use crate::prelower_reach::{
-    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types, prunes,
+    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, init_types,
     type_head,
 };
 use crate::synthesis::affine_drop;
@@ -141,9 +141,6 @@ pub(crate) struct Pool {
     released: Vec<Rc<RefCell<TirFunction>>>,
     /// The `GenericInstance`s held since the struct drain last read them.
     instances: Vec<TypeId>,
-    /// Whether the struct drain instantiates what is held rather than every
-    /// instance the type table spells.
-    drives_structs: bool,
     /// Each generic variant's type parameter indices and case payloads, which
     /// a held instance of it holds substituted.
     generic_variants: IndexMap<DefId, (Vec<u32>, Vec<TypeId>)>,
@@ -245,29 +242,27 @@ pub fn monomorphize(flat: &mut FlatPackage) -> Monomorphization {
         scanned_functions: 0,
         generics: Generics::of(flat),
         elaborated_functions: 0,
-        roots: prunes().then(|| Roots::new(flat)),
+        roots: Some(Roots::new(flat)),
     };
-    if prunes() {
-        let pool = &mut session.monomorphizer.pool;
-        pool.drives_structs = true;
-        let type_table = flat.type_table.borrow();
-        for variant in &flat.variants {
-            let payloads = variant.cases.iter().map(|case| case.payload);
-            if variant.type_params.is_empty() {
-                for payload in payloads {
-                    pool.lay_out(payload, &type_table);
-                }
-            } else {
-                let params = variant
-                    .type_params
-                    .iter()
-                    .map(|param| param.index)
-                    .collect();
-                pool.generic_variants
-                    .insert(variant.def, (params, payloads.collect()));
+    let pool = &mut session.monomorphizer.pool;
+    let type_table = flat.type_table.borrow();
+    for variant in &flat.variants {
+        let payloads = variant.cases.iter().map(|case| case.payload);
+        if variant.type_params.is_empty() {
+            for payload in payloads {
+                pool.lay_out(payload, &type_table);
             }
+        } else {
+            let params = variant
+                .type_params
+                .iter()
+                .map(|param| param.index)
+                .collect();
+            pool.generic_variants
+                .insert(variant.def, (params, payloads.collect()));
         }
     }
+    drop(type_table);
     session.run(flat);
     session
 }
@@ -303,7 +298,7 @@ pub struct Monomorphization {
     /// How many leading `flat.functions` have had their drops elaborated.
     elaborated_functions: usize,
     /// What the first run walks from, leaving the rest in the pool; `None`
-    /// once it has, and where nothing is pruned.
+    /// once it has.
     roots: Option<Roots>,
 }
 

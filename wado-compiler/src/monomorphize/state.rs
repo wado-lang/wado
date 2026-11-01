@@ -31,13 +31,11 @@ pub(super) struct StructInstState {
     /// How long the type table's shape substitution log was when the last
     /// batch was read from it.
     pub anon_scanned: usize,
-    /// Where the last scan for instantiation sites stopped in the type table.
-    /// A type is immutable once interned, so only a generic struct missing
-    /// from [`Self::sites_tested`] can turn one it skipped into a site.
-    pub sites_scanned: TypeId,
     /// Every generic struct a scan has tested the types against.
     pub sites_tested: IndexSet<DefId>,
-    /// The held `GenericInstance`s that named no generic struct when read.
+    /// The held `GenericInstance`s that named no generic struct when read. A
+    /// type is immutable once interned, so only a generic struct missing from
+    /// [`Self::sites_tested`] can turn one into a site.
     pub unmatched: Vec<TypeId>,
     /// Substitutions into closed shapes, as the shape and the substitution's
     /// index, whose origin's methods are yet to be instantiated.
@@ -175,7 +173,6 @@ impl Monomorphizer {
                 type_to_mangled_name: IndexMap::default(),
                 anon_sites: IndexMap::default(),
                 anon_scanned: 0,
-                sites_scanned: TypeId(0),
                 sites_tested: IndexSet::default(),
                 unmatched: Vec::new(),
                 pending_shapes: Vec::new(),
