@@ -26,6 +26,12 @@ opt-level = 2
 debug-assertions = false
 overflow-checks = false
 
+# wasmtime's typed lift and lower are generic over `Host`, so they compile into
+# this crate. Unoptimized, they copy a list a byte per iterator call, and the
+# logits Gemma 3 reads back each token took longer than computing them.
+[profile.dev.package.wado-run-webgpu]
+opt-level = 2
+
 [dependencies]
 anyhow = "1"
 lexopt = "0.3"
