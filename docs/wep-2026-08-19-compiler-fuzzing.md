@@ -70,10 +70,9 @@ Payload decides what the dead region does to the live program:
   escape analysis and value-copy elision instead.
 - An opaque reference to every binding in scope makes each a referenced place:
   `&mut` where the binding is assignable, `&` elsewhere, a method's receiver
-  included. It attacks the boxing
-  rewrite, `field_scalarize`, `sroa` and escape analysis. Taking a reference
-  moves nothing, so it also reaches the resources the read payload is refused
-  at.
+  included. It attacks the boxing rewrite, `field_scalarize`, `sroa` and escape
+  analysis. Taking a reference moves nothing, so it also reaches the resources
+  the read payload is refused at.
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
