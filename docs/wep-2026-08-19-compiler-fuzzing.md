@@ -68,10 +68,11 @@ Payload decides what the dead region does to the live program:
 - An opaque read of every binding in scope makes live values appear used. It
   demands no mutability, so it reaches every site, and it attacks liveness, DCE,
   escape analysis and value-copy elision instead.
-- An opaque borrow of every binding in scope makes each a referenced place:
+- An opaque reference to every binding in scope makes each a referenced place:
   `&mut` where the binding is assignable, `&` elsewhere. It attacks the boxing
-  rewrite, `field_scalarize`, `sroa` and escape analysis. A borrow moves
-  nothing, so it also reaches the resources the read payload is refused at.
+  rewrite, `field_scalarize`, `sroa` and escape analysis. Taking a reference
+  moves nothing, so it also reaches the resources the read payload is refused
+  at.
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 

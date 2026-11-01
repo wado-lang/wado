@@ -858,7 +858,7 @@ struct Payload {
 
 /// Ordered by the analysis family each attacks: alias and mod/ref for the
 /// write, liveness and escape for the read, the boxing rewrite and
-/// scalarization for the borrow.
+/// scalarization for the reference.
 static PAYLOADS: [Payload; 3] = [
     Payload {
         name: "write",
@@ -869,8 +869,8 @@ static PAYLOADS: [Payload; 3] = [
         render: opaque_reads,
     },
     Payload {
-        name: "borrow",
-        render: opaque_borrows,
+        name: "reference",
+        render: opaque_references,
     },
 ];
 
@@ -892,17 +892,17 @@ fn opaque_reads(site: &Site) -> String {
     })
 }
 
-/// An opaque borrow of every binding the dead region can name, which makes each
-/// a referenced place. Unlike a read, a borrow moves nothing, so it reaches the
-/// resources the read payload is refused at.
-fn opaque_borrows(site: &Site) -> String {
+/// An opaque reference to every binding the dead region can name, which makes
+/// each a referenced place. Unlike a read, taking a reference moves nothing, so
+/// it reaches the resources the read payload is refused at.
+fn opaque_references(site: &Site) -> String {
     render(&site.readables, |name| {
-        let borrow = if site.mutables.contains(name) {
+        let reference = if site.mutables.contains(name) {
             "&mut "
         } else {
             "&"
         };
-        format!("builtin::black_box({borrow}{name});")
+        format!("builtin::black_box({reference}{name});")
     })
 }
 
@@ -2284,10 +2284,11 @@ fn a_site_sees_the_readable_bindings_in_scope() {
     assert_eq!(seen, expected);
 }
 
-/// The borrow payload makes every binding in scope a referenced place, and
-/// borrows an assignable one mutably, the stronger claim the passes must honour.
+/// The reference payload makes every binding in scope a referenced place, and
+/// takes a `&mut` to an assignable one, the stronger claim the passes must
+/// honour.
 #[test]
-fn the_borrow_payload_borrows_an_assignable_binding_mutably() {
+fn the_reference_payload_takes_a_mutable_reference_to_an_assignable_binding() {
     let source = r#"fn f(n: i32) -> i32 {
     let a = 1;
     let mut b = 2;
@@ -2298,7 +2299,7 @@ fn the_borrow_payload_borrows_an_assignable_binding_mutably() {
         .pop()
         .expect("the return statement is a site");
     assert_eq!(
-        opaque_borrows(&last),
+        opaque_references(&last),
         "builtin::black_box(&n); builtin::black_box(&a); builtin::black_box(&mut b);"
     );
 }
