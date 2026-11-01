@@ -31,8 +31,10 @@ test "smoke" {
 test "fuel" {
     let json_data = #include_bytes("./canada.json");
     let fc = from_bytes::<FeatureCollection, _>(json_data).unwrap();
-    measure("ser", || to_bytes::<FeatureCollection>(&fc).unwrap().len());
-    let total_points = measure("de", || count_points(&from_bytes::<FeatureCollection, _>(json_data).unwrap()));
+    measure("serde/json/canada/ser", || to_bytes::<FeatureCollection>(&fc).unwrap().len());
+    let total_points = measure("serde/json/canada/de", || count_points(
+        &from_bytes::<FeatureCollection, _>(json_data).unwrap(),
+    ));
     assert total_points == 55563;
 }
 

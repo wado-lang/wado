@@ -10,14 +10,13 @@
 // Each mode first measures, under `wado test --report-fuel` (the dev build,
 // through scripts/dev-bin.sh). Only `-O2` is held to a baseline: it is the
 // level a performance change answers for, and the others are for reference. A series is named
-// `<benchmark directory>/<region label> (<level>)` and holds the region's
+// `<region label> (<level>)`, the label a `<category>/…` path, and holds the region's
 // fuel, in github-action-benchmark's `customSmallerIsBetter` form. Fuel does
 // not depend on the host, so a difference is the program's or wasmtime's,
 // never noise.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
 
 const RECORDED_LEVELS = ["-O1", "-O2", "-O3"];
 const BASELINE_LEVELS = ["-O2"];
@@ -41,7 +40,7 @@ function measure(level: string): Series[] {
     .filter((entry) => entry.test === "fuel")
     .flatMap((entry) =>
       entry.regions.map((region) => ({
-        name: `${basename(dirname(entry.file))}/${region.label} (${level})`,
+        name: `${region.label} (${level})`,
         unit: "fuel",
         value: region.fuel,
       })),

@@ -32,6 +32,7 @@ use crate::process_host::{
     add_to_linker as add_process_to_linker,
 };
 use wado_host::engine::default_config;
+use wado_host::fuel::meter_fuel;
 use wado_host::random;
 use wado_host::sync::{join_in_drop, lock};
 use wado_host::timezone::add_to_linker;
@@ -485,7 +486,9 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeK
     let mut config = default_config(opt_level);
     config.collector(knobs.collector);
     config.gc_heap_initial_size(knobs.gc_heap_initial_size);
-    config.consume_fuel(knobs.report_fuel);
+    if knobs.report_fuel {
+        meter_fuel(&mut config);
+    }
 
     match profile {
         ProfileMode::None => {}
