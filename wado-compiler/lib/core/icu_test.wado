@@ -54,6 +54,41 @@ test "a property takes a value after `=`, or is binary without one" {
     assert icu::ranges(Property::from_str("WSpace").unwrap())[0] == [9, 13];
 }
 
+// Each property has its own exports and its own generated impls, so each is
+// asked once: its strict and lenient names, its refusal, and its set.
+test "every property answers through its own exports" {
+    let cases: List<[String, String, char]> = [
+        ["gc=Lu", "general category = uppercase letter", 'A'],
+        ["bc=L", "bidi_class=left to right", 'A'],
+        ["ccc=NR", "canonical combining class=not reordered", 'A'],
+        ["ea=Na", "east asian width=narrow", 'A'],
+        ["GCB=CR", "grapheme cluster break=cr", '\r'],
+        ["hst=L", "hangul syllable type=leading jamo", '\u{1100}'],
+        ["InCB=None", "indic conjunct break=none", 'A'],
+        ["InSC=Other", "indic syllabic category=other", 'A'],
+        ["jg=No_Joining_Group", "joining group=no joining group", 'A'],
+        ["jt=U", "joining type=non joining", 'A'],
+        ["lb=AL", "line break=alphabetic", 'A'],
+        ["nt=De", "numeric type=decimal", '1'],
+        ["sc=Latn", "script=latin", 'A'],
+        ["SB=UP", "sentence break=upper", 'A'],
+        ["vo=R", "vertical orientation=rotated", 'A'],
+        ["WB=LE", "word break=aletter", 'A'],
+    ];
+    assert icu::contains(Property::from_str("Alpha").unwrap(), 'A');
+    assert Property::from_str("Nope") matches { Err(_) };
+    assert Property::from_str_lenient("nope") matches { Err(_) };
+    for let [strict, lenient, member] of cases {
+        let property = Property::from_str(&strict).unwrap();
+        assert Property::from_str_lenient(&lenient) == Result::Ok(property), lenient;
+        assert icu::contains(property, member), strict;
+        assert icu::ranges(property).len() > 0, strict;
+        let [name, _] = strict.split_once("=").unwrap();
+        assert Property::from_str(`${name}=Nope`) matches { Err(_) }, strict;
+        assert Property::from_str_lenient(`${name}=Nope`) matches { Err(_) }, strict;
+    }
+}
+
 // A caller complementing an approximate set would admit real members of the
 // property, which is the failure that matters for a `\P{...}` in a grammar.
 test "a name this build does not answer is refused, not an empty set" {
