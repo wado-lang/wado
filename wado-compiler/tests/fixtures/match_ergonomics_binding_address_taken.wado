@@ -1,0 +1,31 @@
+// A match-ergonomics binding is a reference into the scrutinee, and taking its
+// own address boxes it: the box holds that reference, not the payload.
+
+struct P {
+    x: i32,
+}
+
+export fn run() {
+    let opt: Option<i32> = Some(builtin::black_box(42));
+    let ro = &opt;
+    if let Some(x) = ro {
+        let rx = &x;
+        builtin::black_box(rx);
+        assert *x == 42;
+    }
+    let point: Option<P> = Some(P { x: builtin::black_box(7) });
+    let rp = &point;
+    match rp {
+        Some(p) => {
+            let pp = &p;
+            builtin::black_box(pp);
+            assert p.x == 7;
+        },
+        None => unreachable(),
+    }
+}
+
+__DATA__
+{
+    "stdout": ""
+}
