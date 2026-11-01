@@ -496,8 +496,10 @@ impl Monomorphizer {
 
         // Phase 7.25: leave in the pool what no root is, for a reached body
         // naming it to take out.
+        let mut declared_order: IndexMap<FunctionId, usize> = IndexMap::default();
         if let Some(roots) = roots {
             for func_rc in std::mem::take(&mut module.functions) {
+                declared_order.insert(function_key(&func_rc.borrow()), declared_order.len());
                 let reached = {
                     let func = func_rc.borrow();
                     func.is_template() || roots.before_monomorphize(&func)
@@ -618,7 +620,14 @@ impl Monomorphizer {
             }
         }
 
-        // Phase 10: Add monomorphized functions to module
+        // Phase 10: Add monomorphized functions to module, after the reached
+        // functions put back in the order they were declared in rather than
+        // reached in, which every later phase emits them by.
+        if !declared_order.is_empty() {
+            module
+                .functions
+                .sort_by_cached_key(|func_rc| declared_order[&function_key(&func_rc.borrow())]);
+        }
         module.functions.extend(new_functions);
 
         // Phase 11: Remove generic functions from the functions list

@@ -460,15 +460,40 @@ fn wir_patterns_match_serials_by_hole() {
     assert!(!wir_contains("x_ = 1", "x_{} = 1"));
 }
 
-/// The body of the first function in `wir` whose name contains `scope`, from
-/// its `fn` line to the `}` closing it, or `None` when no name matches.
+#[test]
+fn wir_scope_names_one_function_whatever_the_order() {
+    let wir = "fn \"m/ascending.wado/$cm_export__run\"() {\n    a;\n}\n\
+               fn \"m/ascending.wado/ascending\"(xs) {\n    b;\n}\n\
+               fn \"m/ascending.wado/run\"() {\n    c;\n}\n";
+    let body = |scope| scope_to_function(wir, scope).map(|b| b.lines().nth(1).unwrap().trim());
+    assert_eq!(body("ascending"), Some("b;"));
+    assert_eq!(body(".wado/run\""), Some("c;"));
+    assert_eq!(body("export"), Some("a;"));
+    assert_eq!(body("missing"), None);
+}
+
+/// The body of the function in `wir` that `scope` names, from its `fn` line to
+/// the `}` closing it, or `None` when no name matches. A name ending in `scope`
+/// names it, else one merely containing it; either must be the only such name,
+/// since the order functions are emitted in is not the fixture's to rely on.
 fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
+    let mut bodies: Vec<(&str, &str)> = Vec::new();
     let mut start = None;
     let mut offset = 0;
     for line in wir.split_inclusive('\n') {
         match start {
-            Some(s) if line.starts_with('}') => return Some(&wir[s..offset + line.len()]),
-            None if line.starts_with("fn \"") && line.contains(scope) => start = Some(offset),
+            Some((s, name)) if line.starts_with('}') => {
+                bodies.push((name, &wir[s..offset + line.len()]));
+                start = None;
+            }
+            None => {
+                if let Some(rest) = line.strip_prefix("fn \"")
+                    && let Some(end) = rest.find('"')
+                {
+                    // With its closing quote, which a scope may spell.
+                    start = Some((offset, &line[..4 + end + 1]));
+                }
+            }
             _ => {}
         }
         offset += line.len();
@@ -479,7 +504,27 @@ fn scope_to_function<'a>(wir: &'a str, scope: &str) -> Option<&'a str> {
         start.is_none(),
         "WIR function matching {scope:?} is never closed"
     );
-    None
+    let suffix = scope.trim_end_matches('"');
+    let ending: Vec<&str> = bodies
+        .iter()
+        .filter(|(name, _)| name.trim_end_matches('"').ends_with(suffix))
+        .map(|(_, body)| *body)
+        .collect();
+    let candidates = if ending.is_empty() {
+        bodies
+            .iter()
+            .filter(|(name, _)| name.contains(scope))
+            .map(|(_, body)| *body)
+            .collect()
+    } else {
+        ending
+    };
+    assert!(
+        candidates.len() <= 1,
+        "wir_scope {scope:?} names {} functions; qualify it",
+        candidates.len()
+    );
+    candidates.first().copied()
 }
 
 // ---------------------------------------------------------------------------
