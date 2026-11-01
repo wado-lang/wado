@@ -5731,7 +5731,7 @@ impl TypeTable {
 
     /// Whether `f` holds of any type `id` is built over, through the
     /// constructors a use site substitutes into (`Self::subst_rec`).
-    fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
+    pub(crate) fn any_constituent(&self, id: TypeId, f: &mut dyn FnMut(TypeId) -> bool) -> bool {
         match self.get(id) {
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)

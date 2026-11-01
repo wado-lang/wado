@@ -13,11 +13,14 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{
-    FunctionId, LocalMethodName, global_init_function, is_effect_default, is_type_bridge,
+    FunctionId, LocalMethodName, Receiver, TypeHead, global_init_function, is_effect_default,
+    is_type_bridge,
 };
 use crate::nir_package::NirPackage;
 use crate::reflect_marker::{bridge_callee, is_marker_bridge};
-use crate::tir::{TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction};
+use crate::tir::{
+    ResolvedType, TemplateId, TirBlock, TirExpr, TirExprKind, TirFunction, TypeId,
+};
 use crate::tir_visitor::TirRefVisitor;
 use crate::trace;
 use crate::type_table::TypeTable;
@@ -84,21 +87,115 @@ impl Roots {
             || Self::impl_trait(func).is_some_and(|def| self.mintable.contains(&def))
     }
 
-    /// [`Self::before_lower`], and what the phases between monomorphization and
-    /// `lower` call with no body naming it: the CM binding's and effect
+    /// How `monomorphize` reaches `func` when no body it scans names it.
+    ///
+    /// Besides what `lower` mints, the phases between monomorphization and
+    /// `lower` call some with no body naming them: the CM binding's and effect
     /// dispatch's rewrites spell effect dispatch wrappers, default
-    /// implementations, `core:builtin` accessors and compiler items; drop glue
-    /// calls `Drop` impls; and a reflection marker names its bridge by the
-    /// erased types, which no instance spells before erasure.
-    pub(crate) fn before_monomorphize(&self, func: &TirFunction) -> bool {
-        self.before_lower(func)
+    /// implementations, `core:builtin` accessors and compiler items. Drop glue
+    /// calls `Drop` impls, and a reflection marker names its bridge by the
+    /// erased types, which no instance spells before erasure. A bridge and an
+    /// impl belong to one type, so they wait for a scanned body to hold it.
+    pub(crate) fn before_monomorphize(&self, func: &TirFunction, type_table: &TypeTable) -> Entry {
+        let root = func.is_cm_export
+            || (func.is_export && self.wasm_modules.contains(&func.module_source))
+            || func.compiler_item.is_some_and(CompilerItem::minted_after_tir)
             || (func.compiler_item.is_some() && func.method_info.is_none())
             || is_effect_default(&func.name)
             || func.is_dispatch_wrapper
-            || func.module_source.is_core_builtin()
-            || is_type_bridge(&func.name)
-            || Self::impl_trait(func).is_some_and(|def| Some(def) == self.drop)
+            || func.module_source.is_core_builtin();
+        if root {
+            return Entry::Root;
+        }
+        if is_type_bridge(&func.name) {
+            let head = func
+                .params
+                .first()
+                .and_then(|param| type_head(type_table, param.type_id));
+            return Entry::on_type(head);
+        }
+        let minted_impl = Self::impl_trait(func)
+            .is_some_and(|def| self.mintable.contains(&def) || Some(def) == self.drop);
+        if minted_impl {
+            return Entry::on_type(receiver_head(func.method_info.as_ref()));
+        }
+        Entry::Called
     }
+}
+
+/// How `monomorphize` reaches a function.
+pub(crate) enum Entry {
+    /// From the start.
+    Root,
+    /// Once a scanned body holds a value of the type it belongs to.
+    OnType(TypeHead),
+    /// Only through a body naming it.
+    Called,
+}
+
+impl Entry {
+    /// [`Self::OnType`] the head, or [`Self::Root`] where no head says which
+    /// type it waits on.
+    fn on_type(head: Option<TypeHead>) -> Self {
+        head.map_or(Self::Root, Self::OnType)
+    }
+}
+
+/// The head of a value's type, through references, which an impl header and a
+/// receiver share. `None` for a type a caller has yet to settle.
+pub(crate) fn type_head(type_table: &TypeTable, id: TypeId) -> Option<TypeHead> {
+    let id = type_table.peel_refs(id);
+    match type_table.get(id) {
+        ResolvedType::Primitive(_)
+        | ResolvedType::Unit
+        | ResolvedType::Struct { .. }
+        | ResolvedType::Enum { .. }
+        | ResolvedType::Variant { .. }
+        | ResolvedType::Resource { .. }
+        | ResolvedType::GenericInstance { .. }
+        | ResolvedType::Newtype { .. }
+        | ResolvedType::Flags { .. }
+        | ResolvedType::BuiltinArray(_)
+        | ResolvedType::Function { .. } => settled(type_table.fq_base_type_name(id).head().clone()),
+        _ => None,
+    }
+}
+
+/// The head an impl method's receiver writes. `None` for a blanket impl's,
+/// which any type may take.
+fn receiver_head(method: Option<&LocalMethodName>) -> Option<TypeHead> {
+    match &method?.receiver {
+        Receiver::Type(fq) | Receiver::RefTo(_, fq) => settled(fq.head().clone()),
+        Receiver::Ref(_) => None,
+    }
+}
+
+fn settled(head: TypeHead) -> Option<TypeHead> {
+    match head {
+        TypeHead::Binder { .. }
+        | TypeHead::ParamBucket { .. }
+        | TypeHead::Projection(_)
+        | TypeHead::Unresolved(_) => None,
+        TypeHead::Declared(_)
+        | TypeHead::Shape { .. }
+        | TypeHead::Builtin(_)
+        | TypeHead::Tuple
+        | TypeHead::Function { .. } => Some(head),
+    }
+}
+
+/// Every type a value in `body` holds.
+pub(crate) fn expr_types(body: &TirBlock) -> Vec<TypeId> {
+    struct Types(Vec<TypeId>);
+    impl TirRefVisitor for Types {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            self.0.push(expr.type_id);
+            self.walk_expr(expr);
+        }
+    }
+    let mut types = Types(Vec::new());
+    types.walk_block(body);
+    types.0
 }
 
 /// What [`reachable`] found, against the population it walked.

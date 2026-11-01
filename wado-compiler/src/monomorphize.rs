@@ -22,15 +22,17 @@ use crate::compiler_trace;
 use crate::defs::DefId;
 use crate::elaborator::TypeError;
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FreeFunctionName, FunctionId, LocalMethodName};
-use crate::prelower_reach::{Callee, Roots, callees, expr_callees, function_key, prunes};
+use crate::name::{FreeFunctionName, FunctionId, LocalMethodName, TypeHead};
+use crate::prelower_reach::{
+    Callee, Entry, Roots, callees, expr_callees, expr_types, function_key, prunes, type_head,
+};
 use crate::synthesis::affine_drop;
 use crate::synthesis::affine_drop::Generics;
 use crate::synthesis::template::hole_fmt_helpers;
 use crate::tir::{
-    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirBlock, TirFunction, TirModule,
+    MonomorphInfo, ResolvedType, StructDef, TemplateId, TirFunction, TirModule,
     TirStruct, TypeId,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -98,17 +100,57 @@ impl Templates {
 pub(crate) struct Pool {
     by_key: IndexMap<FunctionId, Rc<RefCell<TirFunction>>>,
     by_template: IndexMap<TemplateId, FunctionId>,
+    /// What waits on a type no scanned body has held a value of yet.
+    waiting: IndexMap<TypeHead, Vec<FunctionId>>,
+    held: IndexSet<TypeHead>,
+    seen: IndexSet<TypeId>,
 }
 
 impl Pool {
-    fn insert(&mut self, func_rc: Rc<RefCell<TirFunction>>) {
+    fn insert(&mut self, func_rc: Rc<RefCell<TirFunction>>) -> FunctionId {
         let func = func_rc.borrow();
         let key = function_key(&func);
         if let Some(template) = func.template_id() {
             self.by_template.insert(template, key.clone());
         }
         drop(func);
-        self.by_key.insert(key, func_rc);
+        self.by_key.insert(key.clone(), func_rc);
+        key
+    }
+
+    fn wait(&mut self, head: TypeHead, func_rc: Rc<RefCell<TirFunction>>) {
+        let key = self.insert(func_rc);
+        self.waiting.entry(head).or_default().push(key);
+    }
+
+    /// Note that a scanned body holds a value of `id`, and so of every type it
+    /// is built over, taking out what waited on one.
+    fn hold(
+        &mut self,
+        id: TypeId,
+        type_table: &TypeTable,
+        unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
+    ) {
+        let mut stack = vec![id];
+        while let Some(id) = stack.pop() {
+            if !self.seen.insert(id) {
+                continue;
+            }
+            stack.extend(type_table.get_newtype_base(id));
+            type_table.any_constituent(id, &mut |part| {
+                stack.push(part);
+                false
+            });
+            let Some(head) = type_head(type_table, id) else {
+                continue;
+            };
+            if !self.held.insert(head.clone()) {
+                continue;
+            }
+            for key in self.waiting.swap_remove(&head).into_iter().flatten() {
+                unscanned.extend(self.by_key.swap_remove(&key));
+            }
+        }
     }
 
     /// The function `callee` names, if it is still here. A template's body
@@ -302,13 +344,24 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
 }
 
 impl Monomorphizer {
-    /// Take out of the pool, onto `unscanned`, what `body` names.
-    fn take_callees(
+    /// Take out of the pool, onto `unscanned`, what `func` names and what
+    /// waited on a type it holds.
+    fn take_reached(
         &mut self,
-        body: &TirBlock,
+        func: &TirFunction,
         type_table: &TypeTable,
         unscanned: &mut Vec<Rc<RefCell<TirFunction>>>,
     ) {
+        let signature = func.params.iter().map(|param| param.type_id);
+        for id in signature.chain([func.return_type]) {
+            self.pool.hold(id, type_table, unscanned);
+        }
+        let Some(body) = &func.body else {
+            return;
+        };
+        for id in expr_types(body) {
+            self.pool.hold(id, type_table, unscanned);
+        }
         self.take_from_pool(&callees(body, type_table), unscanned);
     }
 
@@ -328,17 +381,16 @@ impl Monomorphizer {
         self.rewrite_types_in_function(&mut func_rc.borrow_mut(), &mut type_table.borrow_mut());
         func_inst::expand_settled_packs(self, type_table, std::slice::from_ref(func_rc));
         let func = func_rc.borrow();
-        let Some(body) = &func.body else {
-            return;
-        };
         let mut type_table = type_table.borrow_mut();
-        func_inst::InstantiationCollector {
-            mono: self,
-            generic_functions,
-            type_table: &mut type_table,
+        if let Some(body) = &func.body {
+            func_inst::InstantiationCollector {
+                mono: self,
+                generic_functions,
+                type_table: &mut type_table,
+            }
+            .visit_block(body);
         }
-        .visit_block(body);
-        self.take_callees(body, &type_table, unscanned);
+        self.take_reached(&func, &type_table, unscanned);
     }
 
     /// Instantiate the queued structs, and those their fields queue, to a
@@ -500,14 +552,20 @@ impl Monomorphizer {
         if let Some(roots) = roots {
             for func_rc in std::mem::take(&mut module.functions) {
                 declared_order.insert(function_key(&func_rc.borrow()), declared_order.len());
-                let reached = {
+                let entry = {
                     let func = func_rc.borrow();
-                    func.is_template() || roots.before_monomorphize(&func)
+                    if func.is_template() {
+                        Entry::Root
+                    } else {
+                        roots.before_monomorphize(&func, &module.type_table.borrow())
+                    }
                 };
-                if reached {
-                    module.functions.push(func_rc);
-                } else {
-                    self.pool.insert(func_rc);
+                match entry {
+                    Entry::Root => module.functions.push(func_rc),
+                    Entry::OnType(head) => self.pool.wait(head, func_rc),
+                    Entry::Called => {
+                        self.pool.insert(func_rc);
+                    }
                 }
             }
         }
@@ -525,8 +583,8 @@ impl Monomorphizer {
         let mut unscanned = Vec::new();
         for func_rc in &module.functions[scanned_functions..] {
             let func = func_rc.borrow();
-            if let Some(body) = func.body.as_ref().filter(|_| !func.is_template()) {
-                self.take_callees(body, &module.type_table.borrow(), &mut unscanned);
+            if !func.is_template() {
+                self.take_reached(&func, &module.type_table.borrow(), &mut unscanned);
             }
         }
         if scanned_functions == 0 {
@@ -545,7 +603,12 @@ impl Monomorphizer {
             let mut made_progress = false;
 
             while let Some(func_rc) = unscanned.pop() {
-                self.scan_taken(&func_rc, &module.type_table, &generic_functions, &mut unscanned);
+                self.scan_taken(
+                    &func_rc,
+                    &module.type_table,
+                    &scannable_generic_functions,
+                    &mut unscanned,
+                );
                 module.functions.push(func_rc);
                 made_progress = true;
             }
@@ -610,8 +673,8 @@ impl Monomorphizer {
                         type_table: &mut type_table,
                     };
                     collector.visit_block(body);
-                    self.take_callees(body, &type_table, &mut unscanned);
                 }
+                self.take_reached(&concrete, &module.type_table.borrow(), &mut unscanned);
                 new_functions.push(Rc::new(RefCell::new(concrete)));
             }
 
