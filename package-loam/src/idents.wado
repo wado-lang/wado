@@ -28,6 +28,12 @@ pub global LENGTHS: String = "Lengths";
 /// The struct a decoder's state crosses from one pass to the next in.
 pub global CACHE: String = "Cache";
 
+/// The struct holding the weights and the programs a backend compiled.
+pub global MODEL: String = "Model";
+
+/// The function recording `build` for a backend to compile.
+pub global RECORDED: String = "recorded";
+
 /// The functions the constructors of `Prepared` and `Params` keep each folded
 /// literal with.
 pub global KEPT: String = "Kept";
@@ -38,10 +44,11 @@ pub global MAP: String = "HashMap";
 /// What the generated module imports from the runtime: every name its code
 /// spells, whether or not one graph's code reads it.
 pub global RUNTIME_NAMES: List<String> = [
-    "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat", "Convolution",
-    "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError", "Merged", "One", "Paired",
-    "Prologue", "RowOp", "Step", "Tensor", "Unary", "UnaryOp", "Window", "WindowReduce", "assembled", "axis_mismatch",
-    "capacity_of", "expect_len", "extent_mismatch", "extents_mismatch", "fitted", "from_end", "from_end_indices", "full",
+    "Any", "Attention", "Backend", "Binary", "BinaryOp", "CheckpointBytes", "Columns", "Comparison", "Concat",
+    "Convolution", "DotDims", "Epilogue", "Expected", "Expr", "GatherDims", "Graph", "Holds", "LoadError", "Merged",
+    "One", "Paired", "Programs", "Prologue", "Recorded", "Recorder", "RowOp", "Step", "Tensor", "Unary", "UnaryOp",
+    "Untyped", "Window", "WindowReduce", "assembled", "axis_mismatch", "bool_of", "capacity_of", "expect_len",
+    "extent_mismatch", "extents_mismatch", "f32_of", "fitted", "from_end", "from_end_indices", "full", "i64_of",
     "input_mismatch", "joined_at", "lifted", "masked", "narrow", "payload_at", "quotient", "range_i64",
     "read_checkpoint", "read_shards", "reduce_mean", "refuse", "resized", "softmax", "softmax_flattened",
     "strided_gather", "to_extent", "unmet",
@@ -74,6 +81,14 @@ pub fn module_idents() -> HashSet<String> {
     reserved.insert(KEPT);
     reserved.insert(CACHE);
     reserved.insert("cache");
+    reserved.insert(MODEL);
+    reserved.insert("model");
+    reserved.insert(RECORDED);
+    // The locals `compute` and `recorded` bind.
+    reserved.insert("recorder");
+    reserved.insert("extents");
+    reserved.insert("results");
+    reserved.insert("passed");
     // The methods `Weights`, `Prepared`, `Params` and `Cache` carry, which a
     // field must not share.
     reserved.insert("empty");

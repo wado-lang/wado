@@ -427,8 +427,6 @@ fn write_back(flat: &mut FlatPackage, temp_module: TirModule) {
         let mut func = func_rc.borrow_mut();
         func.effects.retain(|e| !e.is_param());
     }
-
-    flat.rebuild_variant_indices();
 }
 
 /// The module a concrete type's trait impls are sought in, when a

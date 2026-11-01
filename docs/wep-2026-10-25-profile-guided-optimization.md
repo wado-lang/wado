@@ -201,14 +201,36 @@ reaches, such as a benchmark's timing loop: a function they never entered says
 nothing about how often it runs. Marking such functions at their start made
 every benchmark slower, by 24% to 74%. The optimizer does not inline into a
 function only cold sites reach, and that took in the whole path the benchmark
-measures. A region that ran any number
-of times gets no marker. The counts beyond zero decide only whether a `?`'s
-failure path stays cold (see below). Using them to optimize a hot path harder
-than the rest is left to a later proposal.
+measures. A region that ran any number of times gets no marker; what its count
+says beyond that is the profile summary's to decide (below).
 
 Each worker thread seeds its compiles from a snapshot of the reified standard
 library, built once. The thread builds it with the `core:` counts already
 applied, so a profiled compile seeds from the snapshot as a plain one does.
+
+### The profile summary says what is hot and what is cold
+
+A count alone says little: a million runs is a sliver of one program and most
+of another. So a compile reads each count against a summary of the whole
+profile, as LLVM's `ProfileSummaryInfo` does. With every count the profile holds
+sorted from the largest down, the hot line is the smallest count still inside
+the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
+the cold line the same for `--optimize-profile-summary-cutoff-cold`. A count at
+or above the hot line is hot, and any other at or below the cold line is cold.
+A profile whose counts are nearly all one value puts both lines on it, and such
+a count is hot: as in LLVM's inliner, hot is asked first. Both shares are in
+parts per million, with LLVM's defaults for its options of the same names:
+990000 and 999999. A share of all runs stays put when a workload
+runs twice, so a workload need not be large, only like real use.
+
+The inliner prices a call site by what the summary says of the region holding
+it. A hot site may inline a callee of up to
+`--optimize-inline-hot-callsite-threshold` statements, a cold one of up to
+`--optimize-inline-cold-callsite-threshold`, and any other site keeps
+`--optimize-inline-threshold`. They mirror LLVM's `hot-callsite-threshold`
+(3000) and `inline-cold-callsite-threshold` (45) beside its `inline-threshold`
+(225), but count statements as Wado's inliner does, so the benchmarks settle
+their defaults.
 
 ### The author wins over the profile; the compiler's guess does not
 
@@ -216,15 +238,17 @@ An author's `cold_path()` in a region the workload ran stays in force. It
 states an intent the workload may not cover, such as an error path a test
 exercises often. The compile reports the conflict as an optimizer remark at
 `--log-level info`, naming the marker and the count. The remark audits the
-author's guesses against measurement.
+author's guesses against measurement, as LLVM's `-pgo-warn-misexpect` audits a
+`__builtin_expect`.
 
 The marker the compiler puts on a `?`'s failure path is its own guess, and a
 workload modelled on real use measures better than any guess. The guess is
 usually right: an HTTP service answers well under 1% of its requests with a 4xx
-or 5xx. So the marker stays while the failure path ran in under 1% of the runs
-of the region holding the `?`. At 1% or more the profile wins: the marker is
-dropped, and the same remark names the count and the share. Comparing with zero
-would drop a right guess, since a rare path still runs now and then.
+or 5xx. So the marker stays while the summary calls the failure path's count
+cold. Otherwise the profile wins: the marker is dropped, and the same remark
+names the count. Comparing with zero would drop a right guess, since a rare
+path still runs now and then. LLVM settles the same question the same way,
+letting a measured count override a `__builtin_expect`.
 
 The other markers the compiler places sit ahead of a trap, or past a global's
 once-guard. A workload that reaches a trap fails the recording, and a once-guard
@@ -301,10 +325,17 @@ level.
    regions end up cold.
 5. [x] `-f pgo` and `-f no-pgo`. The CLI hands a compile the entry's profile,
    and the compile looks each module up by its name.
-6. [ ] A `?`'s failure path the profile ran 1% or more of the time loses its
-   marker, with the remark. An e2e fixture states both sides of the threshold.
-7. [ ] The random-profile differential test.
-8. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
+6. [ ] The profile summary. A compile derives the hot and cold lines from its
+   profile under `--optimize-profile-summary-cutoff-hot` and
+   `--optimize-profile-summary-cutoff-cold`, and a `?`'s failure path that is
+   not cold loses its marker, with the remark. An e2e fixture states both
+   sides of the cold line, and a count on both lines.
+7. [ ] Hot and cold call sites. The inliner prices a site by the summary under
+   `--optimize-inline-hot-callsite-threshold` and
+   `--optimize-inline-cold-callsite-threshold`, and the benchmarks, against
+   `-f no-pgo`, settle their defaults.
+8. [ ] The random-profile differential test.
+9. [ ] The `benchmark/` pilot. Each benchmark gains a workload and a committed
    profile, `http_routing` a test to carry it first, and a table compares the
    three builds the flags give. A workload runs a smaller input than the
    benchmark measures, so the table does not judge a profile on the run that

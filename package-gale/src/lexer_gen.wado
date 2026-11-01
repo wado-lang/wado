@@ -45,6 +45,7 @@ use {
 } from "./action_translate.wado";
 use { HashMap, HashSet } from "core:collections";
 use icu from "core:icu";
+use { GeneralCategoryGroup } from "core:icu";
 
 /// A grammar literal rendered the way ANTLR4's vocabulary shows it: the source
 /// form, single-quoted.
@@ -4615,8 +4616,8 @@ global UNPRINTED_CHARS: UnprintedChars = unprinted_chars();
 
 fn unprinted_chars() -> UnprintedChars {
     let mut ranges: List<[u32, u32]> = [];
-    for let group of ["Z", "M", "C"] {
-        for let r of icu::value_ranges("gc", group).unwrap() {
+    for let group of [GeneralCategoryGroup::Separator, GeneralCategoryGroup::Mark, GeneralCategoryGroup::Other] {
+        for let r of icu::ranges(group) {
             ranges.push(r);
         }
     }

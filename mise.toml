@@ -437,10 +437,11 @@ run = "cargo llvm-cov --all-features --workspace --html"
 description = """\
 Calibrate the EMI corpus: inject an empty `builtin::black_box(false)` guard, \
 as a branch and as a loop, at every statement boundary of every e2e fixture, \
-stdlib test module and example, and keep the ones whose output is unmoved. \
-Writes target/emi/{corpus,calibration}.txt. \
+stdlib test module, example, and package and benchmark test, and keep the \
+ones whose output is unmoved. Writes target/emi/{corpus,calibration}.txt. \
 Knobs: WADO_EMI_JOBS, WADO_EMI_FILTER, \
-WADO_EMI_ROOTS (fixtures,stdlib,example), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
+WADO_EMI_ROOTS (fixtures,stdlib,example,package-cm-catalog,package-jade,\
+package-marl,benchmark), WADO_EMI_LEVELS (O0,O1,O2,Os,O3), \
 WADO_EMI_SHARD (k/n), WADO_EMI_LIMIT, WADO_EMI_OUT.\
 """
 run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture calibrate_corpus"
@@ -448,8 +449,9 @@ run = "cargo test -p wado-compiler-tests --test emi -- --ignored --nocapture cal
 [tasks.emi-mutate]
 description = """\
 Mutate the calibrated EMI corpus: at every statement boundary, behind an \
-undecidable guard in each shape the source was calibrated for, write to and \
-read every binding in scope, then report any source whose output moves. \
+undecidable guard in each shape the source was calibrated for, write to, \
+read, and take a reference to every binding in scope, then report any source \
+whose output moves. \
 Reads target/emi/corpus.txt, so run emi-calibrate \
 first. Writes target/emi/mutation.txt and the reduced mutants under \
 target/emi/findings/.\
@@ -752,6 +754,10 @@ description = "Rebuild the bundled ICU component"
 run = """
 #!/usr/bin/env bash
 set -xe -o pipefail
+# The `properties` interface and the facade over it, from ICU4X's own names. A
+# host tool, so the target is named over the crate's wasm32 default.
+(cd wado-bundled-icu && cargo run -p icu-gen-properties --target "$(rustc -vV | grep host: | cut -d' ' -f2)" -- "$PWD/..")
+scripts/dev-bin.sh wado format -w wado-compiler/lib/core/icu/properties.wado
 # --emit-relocs keeps the `linking` and `reloc.*` sections the data-reference
 # map is resolved from; STRIP=none keeps the `name` section it is keyed by.
 # A subshell, as in `update-bundled`.

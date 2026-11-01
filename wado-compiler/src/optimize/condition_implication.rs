@@ -5,6 +5,7 @@
 //! and value pool, with flow-correctness from a position-aware modification scan.
 
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 use cranelift_entity::EntityRef;
 
@@ -56,6 +57,7 @@ pub(super) fn eliminate_at_root(engine: &mut Engine) -> bool {
         &mut facts,
         &binds,
         &mut frames,
+        &mut Summaries::default(),
     );
     changed
 }
@@ -1098,11 +1100,13 @@ pub(super) fn stmt_modifies(engine: &Engine, s: StmtId, var: u32, bound: BoundKe
 /// [`stmt_modifies`] over an arbitrary node subtree (e.g. the right operand of a
 /// short-circuit `||`).
 pub(super) fn node_modifies(engine: &Engine, node: NodeRef, var: u32, bound: BoundKey) -> bool {
-    let roots: Vec<u32> = [Some(var), bound_root(bound)]
-        .into_iter()
-        .flatten()
-        .collect();
+    let roots: Vec<u32> = guard_roots(var, bound).collect();
     modifies_any_root(engine, node, &roots)
+}
+
+/// The locals a guard `var < bound` reads.
+fn guard_roots(var: u32, bound: BoundKey) -> impl Iterator<Item = u32> {
+    [Some(var), bound_root(bound)].into_iter().flatten()
 }
 
 /// One write an expression node may perform, in the engine's alias sets, so it
@@ -1350,57 +1354,116 @@ fn is_reference(engine: &Engine, local: u32) -> bool {
 }
 
 /// Whether anything under `node` may change what one of `roots` holds for the
-/// code after it. A block that [`panics_before_any_exit`] never hands control
-/// on, so its writes do not count.
+/// code after it.
 pub(super) fn modifies_any_root(engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
-    let body = &*engine.body;
-    let mut diverging: hashmap::IndexSet<ExprId> = hashmap::IndexSet::default();
-    body.for_each_node_under(node, |n| {
-        if let NodeRef::Block(b) = n
-            && panics_before_any_exit(engine, b)
-        {
-            body.for_each_node_under(n, |m| {
-                if let NodeRef::Expr(e) = m {
-                    diverging.insert(e);
-                }
-            });
-        }
-    });
-    body.find_in_nodes_under(node, |n| {
-        let NodeRef::Expr(e) = n else { return None };
-        if diverging.contains(&e) {
-            return None;
-        }
-        let mut hit = false;
-        for_each_write(engine, e, &mut |w| {
-            hit |= roots.iter().any(|&r| write_hits(engine, w, r));
-        });
-        hit.then_some(())
-    })
-    .is_some()
+    Summaries::default().modifies_any_root(engine, node, roots)
 }
 
-/// Whether `block` reaches a top-level panic with no `return`, `break` or
-/// `continue` before it, which could leave the block first.
-fn panics_before_any_exit(engine: &Engine, block: BlockId) -> bool {
-    let body = &*engine.body;
-    for &s in &body.blocks[block].stmts {
-        if let StmtKind::Expr(op) = &body.stmts[s].kind
-            && op.as_expr().is_some_and(|e| is_panic_call(engine, e))
-        {
-            return true;
+/// What a subtree may do for the code after it, as [`modifies_any_root`] and
+/// [`is_quiet`] read it: the roots it writes, whether it stores through an
+/// alias or calls a callee that may write, whether a jump sits in it, and
+/// whether it stays quiet. A block that panics with no `return`, `break` or
+/// `continue` before it never hands control on, so its writes do not count.
+struct Summary {
+    roots: hashmap::IndexSet<u32>,
+    aliased: bool,
+    call: bool,
+    jumps: bool,
+    quiet: bool,
+}
+
+/// Each node's [`Summary`], computed once for a walk that asks of every node
+/// once per enclosing level. The walk's edits only drop nodes, so a summary
+/// kept past one claims more than remains: a fact it drops, never one kept
+/// wrongly.
+#[derive(Default)]
+struct Summaries {
+    of: hashmap::IndexMap<NodeRef, Rc<Summary>>,
+}
+
+impl Summaries {
+    fn of(&mut self, engine: &Engine, node: NodeRef) -> Rc<Summary> {
+        if let Some(s) = self.of.get(&node) {
+            return Rc::clone(s);
         }
-        let jumps = body
-            .find_in_nodes_under(NodeRef::Stmt(s), |n| match n {
-                NodeRef::Stmt(t) => body.stmts[t].kind.is_jump().then_some(()),
-                NodeRef::Block(_) | NodeRef::Expr(_) | NodeRef::Pat(_) => None,
-            })
-            .is_some();
-        if jumps {
-            return false;
+        let body = &*engine.body;
+        let mut children: Vec<Rc<Summary>> = Vec::new();
+        body.for_each_child(node, |c| children.push(self.of(engine, c)));
+        let mut own = Summary {
+            roots: hashmap::IndexSet::default(),
+            aliased: false,
+            call: false,
+            jumps: matches!(node, NodeRef::Stmt(s) if body.stmts[s].kind.is_jump()),
+            quiet: node_quiet(body, node, |id| engine.is_quiet_callee(id)),
+        };
+        if let NodeRef::Expr(e) = node {
+            for_each_write(engine, e, &mut |w| match w {
+                Write::Root(r) => {
+                    own.roots.insert(r);
+                }
+                Write::Aliased(_) => own.aliased = true,
+                Write::Call => own.call = true,
+            });
         }
+        for child in &children {
+            own.jumps |= child.jumps;
+            own.quiet &= child.quiet;
+        }
+        // A block that panics before any exit hands control on to nothing
+        // after it, so its writes do not count.
+        let diverges = match node {
+            NodeRef::Block(b) => self.panics_before_any_exit(engine, b),
+            _ => false,
+        };
+        if !diverges {
+            for child in &children {
+                own.roots.extend(child.roots.iter().copied());
+                own.aliased |= child.aliased;
+                own.call |= child.call;
+            }
+        }
+        let summary = Rc::new(own);
+        self.of.insert(node, Rc::clone(&summary));
+        summary
     }
-    false
+
+    /// Whether `block` reaches a top-level panic with no `return`, `break` or
+    /// `continue` before it, which could leave the block first.
+    fn panics_before_any_exit(&mut self, engine: &Engine, block: BlockId) -> bool {
+        for &s in &engine.body.blocks[block].stmts {
+            if let StmtKind::Expr(op) = &engine.body.stmts[s].kind
+                && op.as_expr().is_some_and(|e| is_panic_call(engine, e))
+            {
+                return true;
+            }
+            if self.of(engine, NodeRef::Stmt(s)).jumps {
+                return false;
+            }
+        }
+        false
+    }
+
+    /// [`modifies_any_root`] read off `node`'s summary.
+    fn modifies_any_root(&mut self, engine: &Engine, node: NodeRef, roots: &[u32]) -> bool {
+        let s = self.of(engine, node);
+        roots.iter().any(|&root| s.modifies(engine, root))
+    }
+}
+
+impl Summary {
+    /// Whether the subtree may change what `root` holds, as [`write_hits`]
+    /// answers for each write it summarizes.
+    fn modifies(&self, engine: &Engine, root: u32) -> bool {
+        self.roots.contains(&root)
+            || (self.aliased && write_hits(engine, Write::Aliased(Stored::Unknown), root))
+            || (self.call && write_hits(engine, Write::Call, root))
+    }
+
+    /// Whether the subtree may change `var` or what `bound` reads, as
+    /// [`node_modifies`] answers.
+    fn modifies_guard(&self, engine: &Engine, var: u32, bound: BoundKey) -> bool {
+        guard_roots(var, bound).any(|root| self.modifies(engine, root))
+    }
 }
 
 /// Structural loop-guard BCE (value_of-free, mirrors the `licm` migration off
@@ -1493,7 +1556,8 @@ fn structural_loop_guard(
     let cap = hi.filter(|_| goff == 0);
     let mut changed = false;
     for &s in stmts.iter().skip(guard_idx + 1) {
-        guarded.retain(|&v| !stmt_modifies(engine, s, v, bound));
+        let summary = Summaries::default().of(engine, NodeRef::Stmt(s));
+        guarded.retain(|&v| !summary.modifies_guard(engine, v, bound));
         if guarded.is_empty() {
             break;
         }
@@ -2011,20 +2075,27 @@ fn process_block(engine: &mut Engine, block: BlockId, binds: &Binds) -> bool {
     let stmts = engine.body.blocks[block].stmts.clone();
     for s in stmts {
         let node = NodeRef::Stmt(s);
-        for &(var, k, bound) in &seguards {
-            if !stmt_modifies(engine, s, var, bound) {
-                changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
+        let carried = !seguards.is_empty() || !capped.is_empty();
+        if carried {
+            let before = Summaries::default().of(engine, node);
+            for &(var, k, bound) in &seguards {
+                if !before.modifies_guard(engine, var, bound) {
+                    changed |= eliminate_checks_in_node(engine, node, var, k, bound, binds, None);
+                }
             }
-        }
-        for &((root, ref fields), cap) in &capped {
-            if fields.is_empty() && !modifies_any_root(engine, node, &[root]) {
-                changed |= refute_past_cap(engine, node, binds, root, cap);
+            for &((root, ref fields), cap) in &capped {
+                if fields.is_empty() && !before.modifies(engine, root) {
+                    changed |= refute_past_cap(engine, node, binds, root, cap);
+                }
             }
         }
         changed |= apply_dominating_if(engine, s, binds);
         changed |= process_stmt(engine, block, s, binds);
-        seguards.retain(|&(var, _, bound)| !stmt_modifies(engine, s, var, bound));
-        capped.retain(|((root, _), _)| !modifies_any_root(engine, node, &[*root]));
+        if carried {
+            let after = Summaries::default().of(engine, node);
+            seguards.retain(|&(var, _, bound)| !after.modifies_guard(engine, var, bound));
+            capped.retain(|((root, _), _)| !after.modifies(engine, *root));
+        }
         // As at a loop guard, a `let c = var` carries what is proven of `var`.
         if let StmtKind::Let {
             local_index, value, ..
@@ -2641,26 +2712,29 @@ fn is_quiet(engine: &Engine, node: NodeRef) -> bool {
 /// [`is_quiet`] over `body`, with `quiet_call` saying which callees qualify.
 fn subtree_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
     let mut quiet = true;
-    body.for_each_node_under(node, |n| {
-        quiet &= match n {
-            NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::Call { func_id, .. } => quiet_call(*func_id),
-                kind => !matches!(
-                    kind,
-                    ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
-                ),
-            },
-            NodeRef::Stmt(s) => !matches!(
-                body.stmts[s].kind,
-                StmtKind::Loop { .. }
-                    | StmtKind::Return { .. }
-                    | StmtKind::Break { .. }
-                    | StmtKind::Continue
-            ),
-            NodeRef::Block(_) | NodeRef::Pat(_) => true,
-        };
-    });
+    body.for_each_node_under(node, |n| quiet &= node_quiet(body, n, &quiet_call));
     quiet
+}
+
+/// [`subtree_quiet`] of `node` alone, its children aside.
+fn node_quiet(body: &Body, node: NodeRef, quiet_call: impl Fn(FuncId) -> bool) -> bool {
+    match node {
+        NodeRef::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Call { func_id, .. } => quiet_call(*func_id),
+            kind => !matches!(
+                kind,
+                ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
+            ),
+        },
+        NodeRef::Stmt(s) => !matches!(
+            body.stmts[s].kind,
+            StmtKind::Loop { .. }
+                | StmtKind::Return { .. }
+                | StmtKind::Break { .. }
+                | StmtKind::Continue
+        ),
+        NodeRef::Block(_) | NodeRef::Pat(_) => true,
+    }
 }
 
 /// Whether `var + j` cannot wrap for any `var` in `span`.
@@ -2803,21 +2877,10 @@ fn floor_of(facts: &[Fact], key: BoundKey) -> Option<i64> {
 
 /// Drop every fact whose `var` / `bound` root `node` may modify (conservative:
 /// a false "modifies" only keeps a fact, never invents one).
-fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>) {
-    // Facts share a few roots, and each answer walks `node`.
-    let mut verdicts: Vec<(u32, bool)> = Vec::new();
-    let mut kept = |key: BoundKey| {
-        let Some(root) = bound_root(key) else {
-            return true;
-        };
-        if let Some(&(_, kept)) = verdicts.iter().find(|&&(r, _)| r == root) {
-            return kept;
-        }
-        let kept = !modifies_any_root(engine, node, &[root]);
-        verdicts.push((root, kept));
-        kept
-    };
-    let quiet = !facts.iter().any(|f| matches!(f, Fact::Site(_))) || is_quiet(engine, node);
+fn invalidate(engine: &Engine, node: NodeRef, facts: &mut Vec<Fact>, summaries: &mut Summaries) {
+    let summary = summaries.of(engine, node);
+    let kept = |key: BoundKey| bound_root(key).is_none_or(|root| !summary.modifies(engine, root));
+    let quiet = !facts.iter().any(|f| matches!(f, Fact::Site(_))) || summary.quiet;
     facts.retain(|f| match *f {
         Fact::Site(Site { var, bound, .. }) => {
             quiet && var.is_none_or(|v| kept(BoundKey::Local(v))) && kept(bound)
@@ -3128,6 +3191,7 @@ fn rbce_walk(
     facts: &mut Vec<Fact>,
     binds: &Binds,
     frames: &mut Frames,
+    summaries: &mut Summaries,
 ) -> bool {
     if let Some(cond) = panic_guard_check(engine, node) {
         // A check passed proves every conjunct of it. One whose conjuncts are
@@ -3175,7 +3239,7 @@ fn rbce_walk(
             return changed || widened;
         }
         if let Some(ce) = cond.as_expr() {
-            return rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
+            return rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames, summaries);
         }
         return false;
     }
@@ -3183,35 +3247,49 @@ fn rbce_walk(
     if let Some((cond, then_b, else_b)) = if_parts(engine, node) {
         let mut changed = false;
         if let Some(ce) = cond.as_expr() {
-            changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames);
-            invalidate(engine, NodeRef::Expr(ce), facts);
+            changed |= rbce_walk(engine, NodeRef::Expr(ce), facts, binds, frames, summaries);
+            invalidate(engine, NodeRef::Expr(ce), facts, summaries);
         }
         let mut floors = condition_floors(engine, binds, cond);
         if let Some(ce) = cond.as_expr() {
-            invalidate(engine, NodeRef::Expr(ce), &mut floors);
+            invalidate(engine, NodeRef::Expr(ce), &mut floors, summaries);
         }
         let mut ft = branch_facts(facts);
         ft.extend(floors);
-        changed |= rbce_walk(engine, NodeRef::Block(then_b), &mut ft, binds, frames);
+        changed |= rbce_walk(
+            engine,
+            NodeRef::Block(then_b),
+            &mut ft,
+            binds,
+            frames,
+            summaries,
+        );
         if let Some(eb) = else_b {
             let mut fe = branch_facts(facts);
-            changed |= rbce_walk(engine, NodeRef::Block(eb), &mut fe, binds, frames);
-            invalidate(engine, NodeRef::Block(eb), facts);
+            changed |= rbce_walk(
+                engine,
+                NodeRef::Block(eb),
+                &mut fe,
+                binds,
+                frames,
+                summaries,
+            );
+            invalidate(engine, NodeRef::Block(eb), facts, summaries);
         }
-        invalidate(engine, NodeRef::Block(then_b), facts);
+        invalidate(engine, NodeRef::Block(then_b), facts, summaries);
         return changed;
     }
 
     if let Some((left, right)) = short_circuit_parts(engine, node) {
         let mut changed = false;
         if let Some(le) = left.as_expr() {
-            changed |= rbce_walk(engine, NodeRef::Expr(le), facts, binds, frames);
-            invalidate(engine, NodeRef::Expr(le), facts);
+            changed |= rbce_walk(engine, NodeRef::Expr(le), facts, binds, frames, summaries);
+            invalidate(engine, NodeRef::Expr(le), facts, summaries);
         }
         if let Some(re) = right.as_expr() {
             let mut fr = branch_facts(facts);
-            changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds, frames);
-            invalidate(engine, NodeRef::Expr(re), facts);
+            changed |= rbce_walk(engine, NodeRef::Expr(re), &mut fr, binds, frames, summaries);
+            invalidate(engine, NodeRef::Expr(re), facts, summaries);
         }
         return changed;
     }
@@ -3244,10 +3322,10 @@ fn rbce_walk(
         engine.body.for_each_child(node, |c| frames.push(c));
         for i in base..frames.len() {
             let c = frames[i];
-            changed |= rbce_walk(engine, c, &mut inner, binds, frames);
+            changed |= rbce_walk(engine, c, &mut inner, binds, frames, summaries);
         }
         frames.truncate(base);
-        invalidate(engine, node, facts);
+        invalidate(engine, node, facts, summaries);
         return changed;
     }
 
@@ -3271,15 +3349,15 @@ fn rbce_walk(
         for i in base..frames.len() {
             let c = frames[i];
             if Some(c) == scrut_child {
-                changed |= rbce_walk(engine, c, facts, binds, frames);
-                invalidate(engine, c, facts);
+                changed |= rbce_walk(engine, c, facts, binds, frames, summaries);
+                invalidate(engine, c, facts, summaries);
             } else {
                 let mut arm = branch_facts(facts);
-                changed |= rbce_walk(engine, c, &mut arm, binds, frames);
+                changed |= rbce_walk(engine, c, &mut arm, binds, frames, summaries);
             }
         }
         frames.truncate(base);
-        invalidate(engine, node, facts);
+        invalidate(engine, node, facts, summaries);
         return changed;
     }
 
@@ -3290,8 +3368,8 @@ fn rbce_walk(
     engine.body.for_each_child(node, |c| frames.push(c));
     for i in base..frames.len() {
         let c = frames[i];
-        changed |= rbce_walk(engine, c, facts, binds, frames);
-        invalidate(engine, c, facts);
+        changed |= rbce_walk(engine, c, facts, binds, frames, summaries);
+        invalidate(engine, c, facts, summaries);
         push_len_minus_facts(engine, binds, c, facts);
     }
     frames.truncate(base);

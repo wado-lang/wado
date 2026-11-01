@@ -489,6 +489,10 @@ struct Graph {
     marks: Vec<Mark>,
     /// The number of cycle searches so far.
     search: u32,
+    /// The first search made since the latest copy edge. A node it or a later
+    /// one reached has had every cycle through it merged, and what it reaches
+    /// has too, so another search stops there rather than walk it again.
+    stable_from: u32,
     /// What each node gained since its edges last carried its set.
     delta: Vec<LocSet>,
     /// For each node merging others since it last settled, what each node
@@ -616,6 +620,7 @@ impl Graph {
             return;
         }
         self.copy_to[from as usize].push(to);
+        self.stable_from = self.search + 1;
         let carried = std::mem::take(&mut self.pts[from as usize]);
         self.add_all(to, &carried);
         self.pts[from as usize] = carried;
@@ -877,7 +882,9 @@ impl Graph {
     /// node on a cycle ends up with the same set, which one node then holds.
     fn collapse_cycles_from(&mut self, start: u32) {
         // Tarjan's algorithm, iteratively, over marks reused across searches:
-        // a mark from an earlier search is a node this one has not visited.
+        // a mark from an earlier search is a node this one has not visited, and
+        // need not visit when that search came at or after `stable_from`.
+        assert!(self.stable_from > 0, "a cycle search follows a copy edge");
         self.search += 1;
         let search = self.search;
         self.marks.resize(self.pts.len(), Mark::default());
@@ -907,7 +914,9 @@ impl Graph {
                 }
                 let mark = self.marks[w as usize];
                 if mark.search != search {
-                    next = Some(w);
+                    if mark.search < self.stable_from {
+                        next = Some(w);
+                    }
                 } else if mark.on_stack {
                     let low = &mut self.marks[v as usize].low;
                     *low = (*low).min(mark.index);

@@ -1,0 +1,26 @@
+// A reference bound to another reference points where that one does: the
+// immutable parameter binding it was read from says nothing of the caller's
+// storage behind it, so `kept` stays a copy across the write.
+
+struct Rows {
+    items: List<i32>,
+}
+
+#[inline("never")]
+fn len_across_push(rows: &mut Rows) -> i32 {
+    let alias = rows;
+    let kept = alias.items;
+    alias.items.push(9);
+    return kept.len();
+}
+
+export fn run() {
+    let mut rows = Rows { items: [1, 2, 3] };
+    assert len_across_push(&mut rows) == 3;
+    assert rows.items.len() == 4;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

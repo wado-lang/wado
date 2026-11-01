@@ -1,0 +1,12 @@
+// `Hidden` is declared in the module imported from but not imported here, so
+// the turbofish naming it is reported where it is written.
+
+use { Shown, made } from "./sub/turbofish_unimported_type_dep.wado";
+
+export fn run() {
+    let v = made::<f32, [Shown, Hidden]>();
+    assert v.id == 1;
+}
+
+__DATA__
+{"compile_error": ":7:33: analysis error: unknown type 'Hidden'"}

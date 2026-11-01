@@ -128,6 +128,9 @@ pub struct TestSelection {
     /// (`test { … }`) carry no name to match, so they are dropped whenever any
     /// filter is active.
     pub names: Vec<String>,
+    /// Substring filters a kept test must not match, as `cargo test --skip`'s.
+    /// An unnamed test matches none.
+    pub skipped: Vec<String>,
     /// Only the `#[workload]` tests, which `wado test --pgo` records.
     pub workloads_only: bool,
 }
@@ -138,12 +141,21 @@ impl TestSelection {
         if self.workloads_only && !test.is_workload {
             return false;
         }
+        if self.skips(test.name.as_deref()) {
+            return false;
+        }
         if self.names.is_empty() {
             return true;
         }
         test.name
             .as_deref()
             .is_some_and(|name| self.names.iter().any(|f| name.contains(f.as_str())))
+    }
+
+    /// Whether `skipped` leaves out a test named `name`.
+    #[must_use]
+    pub fn skips(&self, name: Option<&str>) -> bool {
+        name.is_some_and(|name| self.skipped.iter().any(|f| name.contains(f.as_str())))
     }
 }
 
@@ -261,7 +273,7 @@ mod tests {
     fn by_names(names: &[&str]) -> TestSelection {
         TestSelection {
             names: names.iter().map(|n| (*n).to_string()).collect(),
-            workloads_only: false,
+            ..TestSelection::default()
         }
     }
 
@@ -308,10 +320,21 @@ mod tests {
     #[test]
     fn workloads_only_drops_every_other_test() {
         let workloads = TestSelection {
-            names: Vec::new(),
             workloads_only: true,
+            ..TestSelection::default()
         };
         assert!(workloads.selects(&test(None, true)));
         assert!(!workloads.selects(&test(None, false)));
+    }
+
+    #[test]
+    fn a_skipped_name_drops_the_tests_it_matches() {
+        let selection = TestSelection {
+            skipped: vec!["fuel".to_string()],
+            ..TestSelection::default()
+        };
+        assert!(!selects(&selection, Some("fuel")));
+        assert!(selects(&selection, Some("smoke")));
+        assert!(selects(&selection, None));
     }
 }

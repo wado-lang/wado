@@ -409,10 +409,17 @@ A profile never removes an author's `cold_path()`. Where the profile ran one,
 the marker stays, and the compile names it and the count at
 `--log-level info`.
 
+A compile reads each count against the profile as a whole. With every count
+sorted from the largest down, the hot line is the smallest count still inside
+the share of all runs that `--optimize-profile-summary-cutoff-hot` names, and
+the cold line the same for `--optimize-profile-summary-cutoff-cold`. Both are in
+parts per million, 990000 and 999999 by default. A count at or above the hot
+line is hot, and any other at or below the cold line is cold.
+
 The compiler marks the failure path of a `?` cold as an author would. Where the
-profile ran that path in 1% or more of the runs of the region holding the `?`,
-the marker is dropped, and the compile names it, the count and the share at
-`--log-level info`. Below 1% the marker stays, and the compile says nothing.
+profile's count for that path is not cold, the marker is dropped, and the
+compile names it and the count at `--log-level info`. Where it is cold, the
+marker stays, and the compile says nothing.
 
 > Not yet implemented: a `?`'s marker is never dropped. Where the profile ran
 > its failure path at all, the marker stays and the compile names it and the

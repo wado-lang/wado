@@ -1,0 +1,13 @@
+# A decoder whose keys grow by the positions each pass computes, beside a state
+# of fixed extents, each handed from one pass to the next. The mask spans the
+# past and the sequence, so the graph owes the past's length.
+<ir_version: 8, opset_import: [ "" : 13 ]>
+cached (float[1, N, 2] X, float[1, 1, T] mask, float[1, P, 2] past_key, float[3] past_state) => (float[1, 2] Y, float[1, ?, 2] present_key, float[3] present_state)
+{
+    present_key = Concat<axis = 1>(past_key, X)
+    keys = Transpose<perm = [0, 2, 1]>(present_key)
+    masked = Mul(keys, mask)
+    axes = Constant<value_ints = [2]>()
+    Y = ReduceSum<keepdims = 0>(masked, axes)
+    present_state = Neg(past_state)
+}

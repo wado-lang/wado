@@ -10,7 +10,8 @@ By capability: in the `wado-bundled-icu/` spike an all-features ICU4X component
 is ~3.7 MB, of which segmentation is ~2.35 MB and collation ~1.12 MB, against
 ~44 KB for the character property tries.
 
-By locale, measured with `bdp-spike/datagen` against icu4x 2.2 and CLDR 48.2.0:
+By locale, measured with `wado-bundled-icu/bdp-spike/datagen` (at e52a46286)
+against icu4x 2.2 and CLDR 48.2.0:
 
 | markers                                       | root (`und`) | `und,ja` | every locale |
 | --------------------------------------------- | -----------: | -------: | -----------: |
@@ -214,17 +215,38 @@ package resolution.
 They are resource-free, need no locale, and their data does not vary by one, so
 they need neither the handle kinds above nor the data image below.
 
-The surface names a property two ways. A name written into the source is a WIT
-enum case: it resolves at the call site, carries no string, and cannot fail,
-which is what a per-character predicate like `is_upper` needs. A name a program
-reads at run time stays a string, matched loosely per UAX #44 and answered with
-`none` where it does not resolve. That is the `\p{...}` in a grammar. Both reach
-the same baked data, so neither approximates the other.
+A property is named by an enum case, and only so. Each property has its own
+Wado enum: `BinaryProperty`, `GeneralCategoryGroup`, `Script`, and one per
+enumerated property. `icu::ranges(p)` and `icu::contains(p, ch)` take any of
+them through the `CodePointSet` trait. A case resolves at the call site,
+carries no string, and cannot fail, which is what a per-character predicate
+like `is_upper` needs.
 
-The enum is not a size knob. ICU4X bakes every property as a static and the
-dispatch reaches every case, so naming a property as an enum case does not
-narrow what the call roots. What a program carries is decided by the collection
-instead.
+A name a program reads at run time is parsed into a case first. `FromStr`
+matches the names the UCD spells, and `LenientFromStr` matches loosely per
+UAX #44. `Property` is the variant over all the enums, and it parses
+`name=value` or a bare binary property name. That is the `\p{...}` in a
+grammar. A parse is a conversion, not a lookup of its own, so it reaches the
+same baked data the case does and approximates nothing.
+
+The enum is the size knob. Each property has its own exports in the asset, one
+for its ranges, one for a single character and one for its parser, so a call
+roots one property and the collection keeps that property's data alone. The
+binary properties share one set of exports, which is a known gap below. Two
+choices follow from it:
+
+- A value crosses the boundary as its position in its enum, a `u16`, rather
+  than as a WIT enum. A WIT enum names every case in the component's type
+  section, and the program carries those names whichever case it uses. The
+  generated Wado enum converts to and from the position with
+  `ReflectEnum::discriminant` and `from_discriminant`, and a generated Rust
+  table maps the position to the ICU4X value.
+- A name is parsed in the asset, through ICU4X's own name tables. A program
+  that never parses a name never roots one.
+
+The three files that must agree are generated together from ICU4X, by
+`wado-bundled-icu/gen`: the WIT, the Rust tables and the Wado enums. A property
+ICU4X adds appears in all three at the next regeneration.
 
 Three UCD properties are deliberately not answered:
 
@@ -391,24 +413,19 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   ([#2068](https://github.com/wado-lang/wado/issues/2068)). `core:icu` exports
   interfaces only, so it costs nothing here.
 
-- **The collection stops at the export.** A program reaching one property
-  carries the code and data of every property that export's dispatch can reach.
-  `has` matches over all 63 binary properties, so naming one case does not
-  narrow what the function roots, and a program wanting `Uppercase` alone pays
-  for all of them.
-
-  Splitting that needs a root finer than an export, which neither the
-  collection nor a re-link can express today. The export-level split already
-  separates the two paths: the string-named `ranges` and `contains` pull the
-  enumerated properties, `General_Category` and the name tables, which the
-  enum-named `has` and `set` do not.
+- **The collection stops at the export.** A program reaching one binary
+  property carries the code and data of all 63. Their exports take the
+  position of a case and match over every one, so naming `Uppercase` does not
+  narrow what the function roots. An enumerated property does not have this
+  gap: its values share one map, which any of them reaches anyway.
 
 - **A dropped lift leaves a stub, not a hole.** A lift the program does not
   import keeps its name and signature in the core module, because the
   component's `canon lift` still aliases it. Dropping it outright would mean
-  renumbering the component's own index spaces. What remains is one short
-  function per unused lift — the data and code it reached are already gone, so
-  the cost is bytes rather than kilobytes.
+  renumbering the component's own index spaces. The data and code a lift
+  reached are gone, but its stub, its export name and the component's alias of
+  it remain. With three exports per property that comes to kilobytes in every
+  program that uses `core:icu` at all.
 
 - **A collator takes no options.** The keywords a `-u-` extension carries
   (`co`, `kn`, …) are dropped with the extension, and `Collator::new` takes
@@ -469,8 +486,24 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   every other section copied byte for byte, so nothing is renumbered and
   each `alias core export` still resolves. The root set is the lifted
   functions the program imports; the rest keep their name and signature as
-  a stub. A program reaching one property carries 104 KB of the 303 KB
-  asset.
+  a stub.
+- [x] Name each property by its own enum, with its own exports, as
+  [Character properties are the first capability](#character-properties-are-the-first-capability)
+  says. Against a program printing one line (4.5 KB), each program below
+  carries:
+
+  | The program asks                                        | Size     |
+  | ------------------------------------------------------- | -------- |
+  | `contains(BinaryProperty::Uppercase, c)`                | 119.5 KB |
+  | `contains(Script::Latin, c)`                            | 58.0 KB  |
+  | `ranges` of `GeneralCategoryGroup::Letter` and `Number` | 53.7 KB  |
+  | `Script::from_str_lenient(name)`                        | 82.1 KB  |
+  | `Property::from_str_lenient(name)`, every property      | 373.8 KB |
+  | `Locale::uppercase`, no property                        | 85.0 KB  |
+
+  Each is `wado compile -O2` of a `run` that asks it once. The
+  `GeneralCategoryGroup` pair was 296 KB through the string-named lookup this
+  replaces.
 - [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
   data range or a function. A live data range can root a function, so the
   data and code edges close over one worklist rather than the code seeding
@@ -493,7 +526,8 @@ dedup following genuine runtime data dependencies rather than taxonomy.
   — the mechanism this consumes, here reduced to an archive lookup.
 - [research: splitting large libraries](./research-library-splitting.md) — the
   capability-axis measurements. The locale-axis table in Context comes from
-  `bdp-spike/datagen`'s `coll-loc` and `fmt-loc` sets, which reproduce it.
+  `bdp-spike/datagen`'s `coll-loc` and `fmt-loc` sets, which reproduce it at
+  e52a46286.
 - [Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md) — how
   the implementation asset is consumed and composed.
 - [Provider Metadata](./wep-2026-07-26-provider-metadata.md) — why a `core:*` API

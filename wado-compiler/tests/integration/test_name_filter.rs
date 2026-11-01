@@ -41,7 +41,7 @@ fn compiled_test_names(filters: &[&str]) -> Vec<(String, Option<String>)> {
         target_world: Some("test".to_string()),
         test_selection: wado_compiler::TestSelection {
             names: filters.iter().map(|s| (*s).to_string()).collect(),
-            workloads_only: false,
+            ..Default::default()
         },
         ..Default::default()
     };

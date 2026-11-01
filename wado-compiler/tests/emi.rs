@@ -2,9 +2,10 @@
 //! keeps the sources an injected `builtin::black_box(false)` guard leaves
 //! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
 //!
-//! The material comes from every [`Root`]: the e2e fixtures, the stdlib modules
-//! that carry `test` blocks, and the `example/` programs. Each guard is written
-//! in every [`Shape`], so a dead region is compiled as a branch and as a loop.
+//! The material comes from every [`Root`] in [`ROOTS`]: the e2e fixtures, the
+//! stdlib modules that carry `test` blocks, the `example/` programs, and the
+//! `test` blocks of some packages and of `benchmark/`. Each guard is written in
+//! every [`Shape`], so a dead region is compiled as a branch and as a loop.
 //!
 //! The design and what is left to build are in
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
@@ -23,13 +24,14 @@ use common::repository_root;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
 use wado_compiler::ast::{
     AstVisitor, Block, Condition, ConditionElement, Expr, Function, Item, MatchExpr, Module, Param,
     Pattern, SelfKind, Stmt, walk_block, walk_expr, walk_function, walk_item, walk_stmt,
 };
 use wado_compiler::hashmap::{IndexMap, IndexSet};
 use wado_compiler::trace::parse_env_list;
-use wado_compiler::{CompilerOptions, OptLevel};
+use wado_compiler::{CompilerOptions, OptLevel, TestSelection};
 
 /// The levels both stages compare a mutant against its own baseline at. Each
 /// answers only for the pipeline it runs, and `O2` is what a release build and
@@ -128,12 +130,30 @@ enum Root {
     /// The standard library, whose `test` blocks are the observable output.
     Stdlib,
     /// The examples: CLI programs observed through stdout. Only the top-level
-    /// files; the directories under it are packages, which the runner cannot
-    /// draw from yet.
+    /// files; the directories under it are packages.
     Example,
+    /// A tree, by its directory: the `test` blocks of its sources, each
+    /// compiled in the package its `wado.toml` files put it in.
+    Tree(&'static str),
+    /// The benchmarks, a tree whose `test "fuel"` blocks are left out: each is
+    /// sized for measuring at `-O2`, and reads fuel through a host this
+    /// harness does not provide.
+    Benchmark,
 }
 
-const ROOTS: [Root; 3] = [Root::Fixtures, Root::Stdlib, Root::Example];
+/// The packages are the ones whose code shapes are worth their compile time
+/// every night. The rest cost far more for what they add: Gale's and Loam's
+/// generated code, Grog through Gale, and `SurfaceDom`'s tests. The
+/// benchmarks reach Gale's generated code too, but one parser each.
+const ROOTS: [Root; 7] = [
+    Root::Fixtures,
+    Root::Stdlib,
+    Root::Example,
+    Root::Tree("package-cm-catalog"),
+    Root::Tree("package-jade"),
+    Root::Tree("package-marl"),
+    Root::Benchmark,
+];
 
 impl Root {
     fn name(self) -> &'static str {
@@ -141,6 +161,8 @@ impl Root {
             Root::Fixtures => "fixtures",
             Root::Stdlib => "stdlib",
             Root::Example => "example",
+            Root::Tree(dir) => dir,
+            Root::Benchmark => "benchmark",
         }
     }
 
@@ -151,6 +173,20 @@ impl Root {
             Root::Fixtures => "wado-compiler/tests/fixtures",
             Root::Stdlib => "wado-compiler/lib",
             Root::Example => "example",
+            Root::Tree(dir) => dir,
+            Root::Benchmark => "benchmark",
+        }
+    }
+
+    /// The `test` blocks a compile here keeps.
+    fn test_selection(self) -> TestSelection {
+        let skipped = match self {
+            Root::Benchmark => vec!["fuel".to_string()],
+            Root::Fixtures | Root::Stdlib | Root::Example | Root::Tree(_) => Vec::new(),
+        };
+        TestSelection {
+            skipped,
+            ..TestSelection::default()
         }
     }
 
@@ -158,9 +194,15 @@ impl Root {
         repository_root().join(self.rel_dir())
     }
 
-    /// The stdlib is a tree; the other two are flat.
+    /// The fixtures and the examples are flat; the rest are trees.
     fn is_recursive(self) -> bool {
-        self == Root::Stdlib
+        !matches!(self, Root::Fixtures | Root::Example)
+    }
+
+    /// Whether a source here is compiled in the package its `wado.toml` puts it
+    /// in, rather than on its own.
+    fn reads_manifests(self) -> bool {
+        matches!(self, Root::Tree(_) | Root::Benchmark)
     }
 
     /// How a source here runs when it carries no `__DATA__` section.
@@ -172,6 +214,7 @@ impl Root {
         Spec {
             test_world: self != Root::Example,
             allocator: "debug".to_string(),
+            root: self,
         }
     }
 
@@ -193,9 +236,10 @@ impl Root {
             return true;
         };
         let items = wado_compiler::parse(&source).ast.items;
+        let selection = self.test_selection();
         items.iter().any(|item| {
             if spec.test_world {
-                matches!(item, Item::Test(_))
+                matches!(item, Item::Test(test) if !selection.skips(test.name.as_deref()))
             } else {
                 matches!(item, Item::Function(f) if f.is_export && f.name == "run")
             }
@@ -235,7 +279,7 @@ impl Source {
     fn from_name(name: &str) -> Self {
         let root = ROOTS
             .into_iter()
-            .find(|root| name.starts_with(root.rel_dir()))
+            .find(|root| Path::new(name).starts_with(root.rel_dir()))
             .unwrap_or_else(|| panic!("`{name}` is under no corpus root"));
         Self::new(root, repository_root().join(name))
     }
@@ -273,6 +317,8 @@ fn key_is_understood(key: &str) -> bool {
             | "warnings_contains"
             | "warnings_not_contains"
             | "wat_lines"
+            | "wir_scope"
+            | "remarks"
     ) || key.starts_with("wir_expect:")
         || key.starts_with("wir_not_expect:")
 }
@@ -281,6 +327,8 @@ fn key_is_understood(key: &str) -> bool {
 struct Spec {
     test_world: bool,
     allocator: String,
+    /// What the source is compiled under: its package, and the tests left out.
+    root: Root,
 }
 
 impl Spec {
@@ -321,6 +369,7 @@ impl Spec {
         Ok(Self {
             test_world: object.contains_key("test"),
             allocator: allocator.to_string(),
+            root,
         })
     }
 
@@ -329,6 +378,7 @@ impl Spec {
             opt_level,
             target_world: self.test_world.then(|| "test".to_string()),
             allocator: Some(self.allocator.clone()),
+            test_selection: self.root.test_selection(),
             ..Default::default()
         }
     }
@@ -352,6 +402,10 @@ enum Excluded {
         level: OptLevel,
         detail: String,
     },
+    BaselineOutOfBudget {
+        level: OptLevel,
+        detail: String,
+    },
     GuardRejected {
         level: OptLevel,
         detail: String,
@@ -360,6 +414,18 @@ enum Excluded {
     /// something an injection perturbs, so a real mutation could not be told
     /// apart from that.
     GuardChangedOutput {
+        level: OptLevel,
+        detail: String,
+    },
+    /// The empty guard made the program trap or a test fail, or stop doing
+    /// so. Kept apart from a changed text, which a source that prints its own
+    /// source or positions explains: this one is a trap to read.
+    GuardTrapped {
+        level: OptLevel,
+        detail: String,
+    },
+    /// The guard's own cost pushed the run past the harness's budget.
+    GuardOutOfBudget {
         level: OptLevel,
         detail: String,
     },
@@ -390,8 +456,11 @@ impl Excluded {
             Excluded::NoBindingInScope => "no binding in scope",
             Excluded::BaselineCompileFailed { .. } => "baseline failed to compile",
             Excluded::BaselineUnhealthy { .. } => "baseline did not pass",
+            Excluded::BaselineOutOfBudget { .. } => "baseline ran out of budget",
             Excluded::GuardRejected { .. } => "guard failed to compile",
             Excluded::GuardChangedOutput { .. } => "guard changed the output",
+            Excluded::GuardTrapped { .. } => "guard changed whether it traps",
+            Excluded::GuardOutOfBudget { .. } => "guard ran out of budget",
             Excluded::Nondeterministic { .. } => "source is nondeterministic",
             Excluded::GuardCrashed { .. } => "guard crashed the compiler",
         }
@@ -406,8 +475,11 @@ impl Excluded {
             }
             Excluded::BaselineCompileFailed { level, detail }
             | Excluded::BaselineUnhealthy { level, detail }
+            | Excluded::BaselineOutOfBudget { level, detail }
             | Excluded::GuardRejected { level, detail }
             | Excluded::GuardChangedOutput { level, detail }
+            | Excluded::GuardTrapped { level, detail }
+            | Excluded::GuardOutOfBudget { level, detail }
             | Excluded::Nondeterministic { level, detail }
             | Excluded::GuardCrashed { level, detail } => {
                 format!("[{}] {detail}", common::opt_level_name(*level))
@@ -429,6 +501,8 @@ struct Site {
     mutables: Vec<String>,
     /// The bindings in scope here, all of them. A payload may read any.
     readables: Vec<String>,
+    /// Whether `self` names a method's receiver here.
+    receiver: bool,
 }
 
 /// A binding a payload may name, and whether it may be assigned to.
@@ -474,6 +548,8 @@ struct SiteCollector {
     /// Where the innermost body's own scopes start. Below it stands a closure
     /// capture: readable, but not assignable.
     capture_floor: usize,
+    /// Whether the innermost function body is a method's. A closure keeps it.
+    receiver: bool,
 }
 
 impl SiteCollector {
@@ -483,6 +559,7 @@ impl SiteCollector {
             body_depth: 0,
             scopes: Vec::new(),
             capture_floor: 0,
+            receiver: false,
         };
         for item in &module.items {
             collector.visit_item(item);
@@ -523,14 +600,16 @@ impl SiteCollector {
     /// Enter a function or `test` body with its own scope stack, seeded with
     /// its parameters, so a nested body does not inherit bindings it cannot
     /// name.
-    fn in_body(&mut self, params: Vec<Binding>, walk: impl FnOnce(&mut Self)) {
+    fn in_body(&mut self, params: Vec<Binding>, receiver: bool, walk: impl FnOnce(&mut Self)) {
         self.body_depth += 1;
         let outer = std::mem::take(&mut self.scopes);
         let floor = std::mem::replace(&mut self.capture_floor, 0);
+        let outer_receiver = std::mem::replace(&mut self.receiver, receiver);
         self.scopes.push(params);
         walk(self);
         self.scopes = outer;
         self.capture_floor = floor;
+        self.receiver = outer_receiver;
         self.body_depth -= 1;
     }
 
@@ -655,14 +734,20 @@ impl AstVisitor<'_> for SiteCollector {
         // A `test` body is a function body in every way that matters here; the
         // rest reach their bodies through `visit_function`.
         if matches!(item, Item::Test(_)) {
-            self.in_body(Vec::new(), |s| walk_item(s, item));
+            self.in_body(Vec::new(), false, |s| walk_item(s, item));
         } else {
             walk_item(self, item);
         }
     }
 
     fn visit_function(&mut self, func: &Function) {
-        self.in_body(params_of(&func.params), |s| walk_function(s, func));
+        let receiver = func
+            .params
+            .iter()
+            .any(|param| param.self_kind != SelfKind::None);
+        self.in_body(params_of(&func.params), receiver, |s| {
+            walk_function(s, func);
+        });
     }
 
     /// A closure body keeps the enclosing scopes: it may read a capture, while
@@ -761,6 +846,7 @@ impl AstVisitor<'_> for SiteCollector {
                     kind: stmt_kind(stmt),
                     mutables: self.visible_mutables(),
                     readables: self.visible_readables(),
+                    receiver: self.receiver,
                 });
             }
             self.visit_stmt(stmt);
@@ -857,8 +943,9 @@ struct Payload {
 }
 
 /// Ordered by the analysis family each attacks: alias and mod/ref for the
-/// write, liveness and escape for the read.
-static PAYLOADS: [Payload; 2] = [
+/// write, liveness and escape for the read, the boxing rewrite and
+/// scalarization for the reference.
+static PAYLOADS: [Payload; 3] = [
     Payload {
         name: "write",
         render: opaque_writes,
@@ -866,6 +953,10 @@ static PAYLOADS: [Payload; 2] = [
     Payload {
         name: "read",
         render: opaque_reads,
+    },
+    Payload {
+        name: "reference",
+        render: opaque_references,
     },
 ];
 
@@ -885,6 +976,29 @@ fn opaque_reads(site: &Site) -> String {
     render(&site.readables, |name| {
         format!("builtin::black_box({name});")
     })
+}
+
+/// An opaque reference to every binding the dead region can name, which makes
+/// each a referenced place. Unlike a read, taking a reference moves nothing, so
+/// it reaches the resources the read payload is refused at. A receiver takes
+/// `&`, the one reference every receiver kind admits.
+fn opaque_references(site: &Site) -> String {
+    let receiver = site
+        .receiver
+        .then(|| "builtin::black_box(&self);".to_string());
+    let bindings = site.readables.iter().map(|name| {
+        let reference = if site.mutables.contains(name) {
+            "&mut "
+        } else {
+            "&"
+        };
+        format!("builtin::black_box({reference}{name});")
+    });
+    receiver
+        .into_iter()
+        .chain(bindings)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn render(names: &[String], one: impl Fn(&String) -> String) -> String {
@@ -914,6 +1028,18 @@ struct Outcome {
 }
 
 impl Outcome {
+    /// What `mutant` did that this baseline did not: a flipped trap or test
+    /// verdict is `Trapped` even when its output moved too.
+    fn misbehaviour(&self, mutant: &Self) -> Option<Misbehaviour> {
+        if self.trapped != mutant.trapped || self.test_failed != mutant.test_failed {
+            Some(Misbehaviour::Trapped)
+        } else if self.differences(mutant).is_empty() {
+            None
+        } else {
+            Some(Misbehaviour::Diverged)
+        }
+    }
+
     fn differences(&self, other: &Self) -> Vec<String> {
         let mut out = Vec::new();
         if self.stdout != other.stdout {
@@ -963,6 +1089,9 @@ enum Evaluation {
     /// On a mutant this is a finding, not an exclusion: an injection that is
     /// unreachable at run time must not be able to crash the compiler.
     Crashed(String),
+    /// The run spent the harness's fuel or time budget, which says how heavy
+    /// the program is at this level, not what it computes.
+    OutOfBudget(String),
 }
 
 /// Compile and run `source`, catching a panic so one bad subject cannot take
@@ -982,7 +1111,12 @@ fn evaluate(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
 
 fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Evaluation {
     let options = spec.compiler_options(opt_level);
-    let compiled = match common::compile_source_with_compiler_options(path, source, options) {
+    let compiled = if spec.root.reads_manifests() {
+        common::compile_in_package(path, source, options)
+    } else {
+        common::compile_source_with_compiler_options(path, source, options)
+    };
+    let compiled = match compiled {
         Ok(compiled) => compiled,
         Err(e) => return Evaluation::CompileError(e.to_string()),
     };
@@ -1002,6 +1136,9 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
                 test_failed: false,
                 detail: String::new(),
             }),
+            Err(e) if e.is::<common::BudgetExhausted>() => {
+                Evaluation::OutOfBudget(format!("{e:#}"))
+            }
             Err(e) => Evaluation::Ran(Outcome {
                 stdout: String::new(),
                 trapped: false,
@@ -1020,6 +1157,7 @@ fn run_once(path: &Path, source: &str, spec: &Spec, opt_level: OptLevel) -> Eval
             test_failed: false,
             detail: result.stderr,
         }),
+        Err(e) if e.is::<common::BudgetExhausted>() => Evaluation::OutOfBudget(format!("{e:#}")),
         Err(e) => Evaluation::Crashed(format!("runtime error: {e}")),
     }
 }
@@ -1080,6 +1218,7 @@ fn baseline(
         Evaluation::Ran(outcome) => Ok(outcome),
         Evaluation::CompileError(detail) => Err(Excluded::BaselineCompileFailed { level, detail }),
         Evaluation::Crashed(detail) => Err(Excluded::BaselineUnhealthy { level, detail }),
+        Evaluation::OutOfBudget(detail) => Err(Excluded::BaselineOutOfBudget { level, detail }),
     }
 }
 
@@ -1097,7 +1236,9 @@ fn baseline_moved(
             let differences = first.differences(&second);
             (!differences.is_empty()).then(|| differences.join("; "))
         }
-        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
+        Evaluation::CompileError(detail)
+        | Evaluation::Crashed(detail)
+        | Evaluation::OutOfBudget(detail) => {
             Some(format!("the baseline stopped running: {detail}"))
         }
     }
@@ -1182,7 +1323,10 @@ fn site_positions(source: &str, sites: &[Site]) -> String {
 /// What a mutant did that an unreachable guard is not allowed to do.
 #[derive(Clone, Copy, PartialEq)]
 enum Misbehaviour {
+    /// The output text or exit code moved.
     Diverged,
+    /// Whether it traps, or fails a test, moved.
+    Trapped,
     Crashed,
 }
 
@@ -1198,7 +1342,9 @@ fn sites_for(sites: &[Site], payload: &Payload) -> Vec<Site> {
 fn is_finding(excluded: &Excluded) -> bool {
     matches!(
         excluded,
-        Excluded::GuardCrashed { .. } | Excluded::GuardChangedOutput { .. }
+        Excluded::GuardCrashed { .. }
+            | Excluded::GuardChangedOutput { .. }
+            | Excluded::GuardTrapped { .. }
     )
 }
 
@@ -1309,10 +1455,9 @@ impl Injection<'_> {
         let level = self.level;
         match evaluate(self.path, &self.mutant(sites), self.spec, level) {
             Evaluation::Ran(outcome) => {
-                let differences = self.baseline.differences(&outcome);
-                if differences.is_empty() {
+                let Some(what) = self.baseline.misbehaviour(&outcome) else {
                     return Ok(());
-                }
+                };
                 if let Some(detail) =
                     baseline_moved(self.path, self.canonical, self.spec, level, self.baseline)
                 {
@@ -1321,7 +1466,8 @@ impl Injection<'_> {
                         detail: self.report(&detail),
                     });
                 }
-                Err(self.excluded(Misbehaviour::Diverged, sites, &differences.join("; ")))
+                let differences = self.baseline.differences(&outcome).join("; ");
+                Err(self.excluded(what, sites, &differences))
             }
             // A guard is valid wherever a statement is, except where the
             // surrounding value must stay constant; that is a rejection, not a
@@ -1333,6 +1479,10 @@ impl Injection<'_> {
             Evaluation::Crashed(detail) => {
                 Err(self.excluded(Misbehaviour::Crashed, sites, &detail))
             }
+            Evaluation::OutOfBudget(detail) => Err(Excluded::GuardOutOfBudget {
+                level,
+                detail: self.report(&detail),
+            }),
         }
     }
 
@@ -1346,11 +1496,9 @@ impl Injection<'_> {
 
     fn reproduces(&self, subset: &[Site], what: Misbehaviour) -> bool {
         match evaluate(self.path, &self.mutant(subset), self.spec, self.level) {
-            Evaluation::Ran(outcome) => {
-                what == Misbehaviour::Diverged && !self.baseline.differences(&outcome).is_empty()
-            }
+            Evaluation::Ran(outcome) => self.baseline.misbehaviour(&outcome) == Some(what),
             Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
-            Evaluation::CompileError(_) => false,
+            Evaluation::CompileError(_) | Evaluation::OutOfBudget(_) => false,
         }
     }
 
@@ -1361,6 +1509,7 @@ impl Injection<'_> {
         let level = self.level;
         let build = |detail: String| match what {
             Misbehaviour::Diverged => Excluded::GuardChangedOutput { level, detail },
+            Misbehaviour::Trapped => Excluded::GuardTrapped { level, detail },
             Misbehaviour::Crashed => Excluded::GuardCrashed { level, detail },
         };
         let reported = build(self.report(seen));
@@ -1496,7 +1645,8 @@ fn wado_files(dir: &Path, recursive: bool) -> Vec<PathBuf> {
     for entry in entries {
         let path = entry.expect("directory entry").path();
         if path.is_dir() {
-            if recursive {
+            // `build/` holds what a package's generators wrote, not its source.
+            if recursive && !path.ends_with("build") {
                 paths.extend(wado_files(&path, true));
             }
         } else if path.extension().is_some_and(|ext| ext == "wado") {
@@ -1586,6 +1736,9 @@ struct Results {
     eligible: Vec<Eligible>,
     excluded: Vec<(String, Excluded)>,
     findings: Vec<(String, Excluded)>,
+    /// What each source cost the stage, so material can be weighed against
+    /// the sites it brings.
+    costs: Vec<(String, Duration)>,
 }
 
 /// Silences the panic hook for as long as it is alive.
@@ -1645,13 +1798,16 @@ fn campaign(
                         std::fs::read_to_string(&subject.path).expect("source is readable");
                     let name = subject.name();
 
+                    let started = Instant::now();
                     let outcome = stage(subject, &source);
+                    let cost = started.elapsed();
                     let finished = done.fetch_add(1, Ordering::Relaxed) + 1;
                     if finished.is_multiple_of(50) {
                         eprintln!("[emi] {finished}/{total}");
                     }
 
                     let mut results = results.lock().expect("results lock");
+                    results.costs.push((name.clone(), cost));
                     match outcome {
                         Ok(eligible) => results.eligible.push(eligible),
                         Err(excluded) if is_finding(&excluded) => {
@@ -1672,6 +1828,9 @@ fn campaign(
     results.eligible.sort_by(|a, b| a.name.cmp(&b.name));
     results.excluded.sort_by(|a, b| a.0.cmp(&b.0));
     results.findings.sort_by(|(a, _), (b, _)| a.cmp(b));
+    results
+        .costs
+        .sort_by(|(a, a_cost), (b, b_cost)| b_cost.cmp(a_cost).then(a.cmp(b)));
     results
 }
 
@@ -1755,7 +1914,9 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
         results.excluded.len(),
         results.findings.len(),
     ));
+    report.push_str(&per_reason(results));
     report.push_str(&per_root(results, subjects));
+    report.push_str(&costliest(results));
     report.push_str(&per_shape(results));
     report.push_str(&dropped(results));
 
@@ -1791,6 +1952,21 @@ fn write_report(results: &Results, subjects: &[Source], stage: &str) {
     );
 }
 
+/// How many sources each reason excluded, most first, so the loss worth
+/// winning back leads the report.
+fn per_reason(results: &Results) -> String {
+    let mut counts: IndexMap<&str, usize> = IndexMap::default();
+    for (_, excluded) in &results.excluded {
+        *counts.entry(excluded.kind()).or_default() += 1;
+    }
+    counts.sort_by(|kind_a, a, kind_b, b| b.cmp(a).then(kind_a.cmp(kind_b)));
+    let mut out = String::from("\n=== excluded by reason ===\n");
+    for (kind, count) in counts {
+        out.push_str(&format!("{count:>5}  {kind}\n"));
+    }
+    out
+}
+
 /// What each root contributed, so material that pays for its compile time can
 /// be told from material that does not.
 fn per_root(results: &Results, subjects: &[Source]) -> String {
@@ -1809,11 +1985,34 @@ fn per_root(results: &Results, subjects: &[Source]) -> String {
             .filter(|(name, _)| drawn(name))
             .count();
         let findings = results.findings.iter().filter(|(n, _)| drawn(n)).count();
+        let cost: Duration = results
+            .costs
+            .iter()
+            .filter(|(name, _)| drawn(name))
+            .map(|(_, cost)| *cost)
+            .sum();
         out.push_str(&format!(
-            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s)\n",
+            "{}: {}/{scanned} eligible ({sites} sites), {excluded} excluded, {findings} finding(s), {:.0}s\n",
             root.name(),
             eligible.len(),
+            cost.as_secs_f64(),
         ));
+    }
+    out
+}
+
+/// The sources that cost the stage most, with the sites each brought: a
+/// source dear for its sites is the first to sample or drop.
+fn costliest(results: &Results) -> String {
+    const SHOWN: usize = 20;
+    let mut out = String::from("\n=== costliest sources ===\n");
+    for (name, cost) in results.costs.iter().take(SHOWN) {
+        let sites = results
+            .eligible
+            .iter()
+            .find(|e| &e.name == name)
+            .map_or_else(|| "excluded".to_string(), |e| format!("{} sites", e.sites));
+        out.push_str(&format!("{:>7.1}s  {name} ({sites})\n", cost.as_secs_f64()));
     }
     out
 }
@@ -2134,8 +2333,10 @@ fn a_stdlib_module_runs_from_its_own_path() {
             "the stdlib's own tests must pass: {}",
             outcome.detail
         ),
-        Evaluation::CompileError(detail) | Evaluation::Crashed(detail) => {
-            panic!("a stdlib module must compile from its own path: {detail}")
+        Evaluation::CompileError(detail)
+        | Evaluation::Crashed(detail)
+        | Evaluation::OutOfBudget(detail) => {
+            panic!("a stdlib module must compile and run from its own path: {detail}")
         }
     }
 }
@@ -2265,6 +2466,61 @@ fn a_site_sees_the_readable_bindings_in_scope() {
     assert_eq!(seen, expected);
 }
 
+/// The reference payload makes every binding in scope a referenced place, and
+/// takes a `&mut` to an assignable one, the stronger claim the passes must
+/// honour.
+#[test]
+fn the_reference_payload_takes_a_mutable_reference_to_an_assignable_binding() {
+    let source = r#"fn f(n: i32) -> i32 {
+    let a = 1;
+    let mut b = 2;
+    return n + a + b;
+}
+"#;
+    let last = injection_sites(source)
+        .pop()
+        .expect("the return statement is a site");
+    assert_eq!(
+        opaque_references(&last),
+        "builtin::black_box(&n); builtin::black_box(&a); builtin::black_box(&mut b);"
+    );
+}
+
+/// A receiver is a reference parameter like any other to the reference
+/// payload, inside the method and the closures it holds, and taken by `&`
+/// whatever its kind. The read and write payloads leave it alone.
+#[test]
+fn the_reference_payload_takes_a_reference_to_the_receiver() {
+    let source = r#"struct P { x: i32 }
+impl P {
+    fn add(&mut self, n: i32) -> i32 {
+        let f = || { return self.x + n; };
+        return f();
+    }
+}
+"#;
+    let sites = injection_sites(source);
+    let seen: Vec<(Vec<String>, String)> = sites
+        .iter()
+        .map(|site| (site.readables.clone(), opaque_references(site)))
+        .collect();
+    let expected: Vec<(Vec<String>, String)> = vec![
+        (
+            vec!["n".into()],
+            "builtin::black_box(&self); builtin::black_box(&n);".into(),
+        ),
+        (
+            vec!["n".into()],
+            "builtin::black_box(&self); builtin::black_box(&n);".into(),
+        ),
+        (
+            vec!["n".into(), "f".into()],
+            "builtin::black_box(&self); builtin::black_box(&n); builtin::black_box(&f);".into(),
+        ),
+    ];
+    assert_eq!(seen, expected);
+}
+
 /// A name reaches the binding that shadows it, so an outer `let mut` an inner
 /// `let` shadows is not assignable — writing to it would not compile.
 #[test]
@@ -2381,6 +2637,7 @@ fn reduction_keeps_only_the_sites_that_matter() {
             kind: "let",
             mutables: Vec::new(),
             readables: Vec::new(),
+            receiver: false,
         })
         .collect();
     let culprits = [3, 11];
@@ -2419,6 +2676,7 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
             kind: "let",
             mutables: Vec::new(),
             readables: Vec::new(),
+            receiver: false,
         })
         .collect();
 
@@ -2447,6 +2705,7 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     let spec = Spec {
         test_world: false,
         allocator: "freelist".to_string(),
+        root: Root::Fixtures,
     };
     let injection = Injection {
         path: Path::new("never-read.wado"),
@@ -2468,4 +2727,95 @@ fn a_stage_reduces_only_what_it_calls_a_finding() {
     };
     assert_eq!(detail, "if guard: stdout differs");
     assert!(!out_dir().join("findings/never-written").exists());
+}
+
+/// A test asserting on a closure's rendered source fails once a guard lands in
+/// that source: a verdict the guard flips is reported apart from moved text.
+#[test]
+fn a_guard_that_flips_a_verdict_is_reported_as_a_trap() {
+    let source = r#"fn show(f: fn() -> i32) -> String {
+    return `${f:#?}`;
+}
+
+test {
+    let f = || {
+        let n = 1;
+        return n;
+    };
+    assert show(f) == "|| {\n    let n: i32 = 1;\n    return n;\n}";
+}
+"#;
+    let canonical = wado_compiler::format(source).expect("the source formats");
+    let spec = Root::Fixtures.default_spec();
+    let path = Path::new("closure_source.wado");
+    let level = OptLevel::O0;
+    let baseline = baseline(path, &canonical, &spec, level).expect("the baseline runs");
+    assert!(!baseline.test_failed, "{}", baseline.detail);
+    let injection = Injection {
+        path,
+        canonical: &canonical,
+        spec: &spec,
+        level,
+        baseline: &baseline,
+        shape: &SHAPES[0],
+        render: &|_| String::new(),
+        label: "if guard".to_string(),
+        finding: "never-written".to_string(),
+        is_finding: is_calibration_finding,
+    };
+
+    let excluded = injection
+        .run(&injection_sites(&canonical))
+        .expect_err("the rendered source moves");
+    assert!(
+        matches!(excluded, Excluded::GuardTrapped { .. }),
+        "{excluded:?}"
+    );
+}
+
+#[test]
+fn a_run_that_spends_its_budget_is_told_apart() {
+    let source = "#[timeout_ms(100)]\ntest {\n    while builtin::black_box(true) {}\n}\n";
+    let spec = Root::Fixtures.default_spec();
+    let excluded = baseline(Path::new("never_ends.wado"), source, &spec, OptLevel::O0)
+        .err()
+        .expect("the baseline never finishes");
+    assert!(
+        matches!(excluded, Excluded::BaselineOutOfBudget { .. }),
+        "{excluded:?}"
+    );
+}
+
+/// A key that only states what the compiler emits says nothing about the run,
+/// so it keeps a fixture in the corpus.
+#[test]
+fn a_compile_time_expectation_keeps_the_fixture() {
+    let source =
+        "fn f() {}\n\n__DATA__\n{\"stdout\": \"\", \"wir_scope\": \"f\", \"remarks\": {}}\n";
+    assert!(Spec::parse(Root::Fixtures, source).is_ok());
+}
+
+/// A benchmark whose every test is skipped has nothing left to run.
+#[test]
+fn a_source_with_only_skipped_tests_is_no_subject() {
+    let dir = Root::Benchmark.dir();
+    assert!(!Root::Benchmark.is_subject(&dir.join("gale_gen/gale_gen.wado")));
+    assert!(Root::Benchmark.is_subject(&dir.join("sieve/sieve.wado")));
+}
+
+/// Reduction keeps the misbehaviour it reduces: a subset whose output moved
+/// and whose trap flipped is a trap, never a divergence.
+#[test]
+fn an_outcome_that_flips_a_trap_is_never_a_divergence() {
+    let outcome = |stdout: &str, trapped: bool| Outcome {
+        stdout: stdout.to_string(),
+        trapped,
+        exit_code: None,
+        test_failed: false,
+        detail: String::new(),
+    };
+    let baseline = outcome("a", false);
+    assert!(baseline.misbehaviour(&outcome("a", false)).is_none());
+    assert!(baseline.misbehaviour(&outcome("b", false)) == Some(Misbehaviour::Diverged));
+    assert!(baseline.misbehaviour(&outcome("b", true)) == Some(Misbehaviour::Trapped));
 }

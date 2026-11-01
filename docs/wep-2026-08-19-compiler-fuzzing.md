@@ -37,8 +37,8 @@ is why the oracle transfers unchanged to inputs from any source.
 ### Inputs are transformed, not generated
 
 The corpus is the repository's own Wado, drawn from a set of roots: the e2e
-fixtures, the stdlib modules that carry `test` blocks, and the `example/`
-programs. Every mutant is an existing program plus guards; nothing invents a
+fixtures, the stdlib modules that carry `test` blocks, the `example/` programs,
+and the `test` blocks of some packages and of `benchmark/`. Every mutant is an existing program plus guards; nothing invents a
 program. Compiler coverage is therefore bounded by what that material happens to
 exercise, which is the known cost of this choice. The roadmap states the
 condition for lifting it.
@@ -68,6 +68,11 @@ Payload decides what the dead region does to the live program:
 - An opaque read of every binding in scope makes live values appear used. It
   demands no mutability, so it reaches every site, and it attacks liveness, DCE,
   escape analysis and value-copy elision instead.
+- An opaque reference to every binding in scope makes each a referenced place:
+  `&mut` where the binding is assignable, `&` elsewhere, a method's receiver
+  included. It attacks the boxing rewrite, `field_scalarize`, `sroa` and escape
+  analysis. Taking a reference moves nothing, so it also reaches the resources
+  the read payload is refused at.
 - Statements harvested from elsewhere in the same function reach the rest, at
   the cost of a free-variable analysis to keep them type-correct.
 
@@ -89,6 +94,14 @@ A fixture whose own output moves between runs of the same program is a separate
 case, and conflating it with a guard's doing is how a campaign learns to cry
 wolf. A divergence re-runs the baseline first, and a baseline that disagrees
 with itself is recorded as nondeterministic.
+
+Calibration still reports only a crash as a finding. An empty guard can make a
+test fail legitimately: a test that asserts on a closure's rendered source sees
+the guard in it. So the report keeps such a case apart, under its own reason,
+from a guard that only moved text, and a person reads it there. A run that
+spends the harness's fuel or time budget is a reason of its own too. It says
+the program is heavy at that level, not what it computes. The report opens
+with the count for each reason, largest first.
 
 ### A finding is reduced before it is reported
 
@@ -125,8 +138,6 @@ each shape and payload reached.
   names. A resource binding whose read is a move costs a fixture the whole
   read payload; the report names each one under `dropped combinations`, so
   the cost of leaving this undone is on the page.
-- [ ] Recompile determinism as a second oracle: compile each fixture twice and
-  compare the Wasm byte for byte. Catches what no output comparison can see.
 - [x] `while builtin::black_box(false) { … }` as a second guard shape. A source
   is calibrated for each shape and loses one at a time, as it does a
   payload. The loop's own value block puts a reference in a call argument,
@@ -144,13 +155,19 @@ each shape and payload reached.
   stdlib's own tests under `O3`, which nothing else does — `wado test` runs
   them at `O2` — and the baselines that failed there were two wrong-code
   bugs the fixtures never reached.
-- [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
-  package is many files behind a manifest, so the runner needs to resolve
-  dependencies and to compile an entry while one module below it carries the
-  injection — neither of which a single-file subject asks for.
+- [x] Draw the corpus from packages and `benchmark/` too. A source there
+  compiles in the package its `wado.toml` puts it in, with the dependencies
+  and generators the manifests declare. The report gives each root's time and
+  the costliest sources, and that cost chose the packages: Marl, Jade and the
+  CM catalog every night, and the benchmarks without their `test "fuel"`
+  blocks, which are sized for `-O2`. Gale, Loam, Grog and `SurfaceDom`'s tests
+  cost several times more for the shapes they add and stay out.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.
+- [ ] Recompile determinism as a second oracle: compile each fixture twice and
+  compare the Wasm byte for byte. Catches what no output comparison can see.
+  Last, because the WIR goldens already show drift on every change.
 
 ### When to generate programs
 
@@ -164,3 +181,15 @@ itself: it must emit programs that type-check, terminate, are deterministic and
 produce observable output, which is what the oracle requires of any subject.
 Generating from the typed AST, so well-typedness holds by construction, is the
 approach this design assumes.
+
+## Known gaps
+
+The harness reads the scope at a site from the syntax alone, so it offers a
+payload names the compiler does not take there. A source where that happens
+loses the payload at every site, and the report lists it under
+`guard failed to compile`.
+
+- A binding an earlier statement moved, such as `rx` after `rx.drop()`, still
+  counts as in scope. Every payload then uses it after the move.
+- A bare case name in a `let` pattern (`let Only = e;`) matches rather than
+  binds, but the harness counts it as a binding.

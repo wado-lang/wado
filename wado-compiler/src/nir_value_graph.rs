@@ -530,19 +530,20 @@ pub struct ValuePool {
     /// is the kind for `id`. CSE is pure hash-consing (no e-class merges), so a
     /// `ValueId` is stable once allocated and needs no representative lookup.
     values: Vec<ValueKind>,
-    /// Reverse index: kind → `ValueId`. The hash-cons memo.
+    /// Reverse index: kind → `ValueId`, the hash-cons memo. It holds every kind
+    /// but `Opaque`: an opaque is fresh by definition, so hashing one shares
+    /// nothing, and a builder mints one per escaped local at every call.
     interned: IndexMap<ValueKind, ValueId>,
-    /// Next `OpaqueId` to allocate.
-    next_opaque: u32,
     /// Per-`ValueId` source type, indexed by raw id. `ValueKind` is type-erased
     /// (an `Int(u64)` carries no width), so extraction — which materialises a
     /// promoted `Operand::Value` back to WIR once the typed `ExprNode` is gone —
     /// reads the value's type here. Populated by the builder / `lower` at
     /// creation; `None` until set.
     types: Vec<Option<TypeId>>,
-    /// The local an `Opaque` reads, which extraction re-emits as `local.get`.
-    /// Absent for an opaque with any other origin, which extraction refuses.
-    opaque_locals: IndexMap<OpaqueId, u32>,
+    /// The local each `Opaque` reads, by `OpaqueId`, which extraction re-emits
+    /// as `local.get`. `None` for an opaque with any other origin, which
+    /// extraction refuses.
+    opaque_locals: Vec<Option<u32>>,
     /// One stable `Opaque(Local idx)` per local, memoized so repeated requests
     /// (e.g. a loop-stability re-seed of a local's reads after maintenance
     /// dropped them) share a single identity — the precondition for matching the
@@ -575,10 +576,13 @@ impl ValuePool {
     /// `values` vector); a repeat lookup hits the index and returns the
     /// existing id without copying.
     pub fn intern(&mut self, kind: ValueKind) -> ValueId {
+        assert!(
+            !matches!(kind, ValueKind::Opaque(_)),
+            "an opaque is minted fresh, never interned"
+        );
         if let Some(&id) = self.interned.get(&kind) {
             return id;
         }
-        let id = ValueId(self.values.len() as u32);
         // A typed literal carries its width in the kind; record it so extraction
         // (which reads `type_of`) sees it without a separate `set_type` call.
         let carried_type = match &kind {
@@ -597,9 +601,16 @@ impl ValuePool {
             | ValueKind::LoopPhi { .. }
             | ValueKind::FieldAccess { .. } => None,
         };
-        self.values.push(kind.clone());
-        self.types.push(carried_type);
+        let id = self.alloc(kind.clone(), carried_type);
         self.interned.insert(kind, id);
+        id
+    }
+
+    /// A new `ValueId` for `kind`, shared with no other.
+    fn alloc(&mut self, kind: ValueKind, type_id: Option<TypeId>) -> ValueId {
+        let id = ValueId(self.values.len() as u32);
+        self.values.push(kind);
+        self.types.push(type_id);
         id
     }
 
@@ -634,10 +645,7 @@ impl ValuePool {
     /// constant's width: `ValueKind` is type-erased, so `7: i32` and `7: i64`
     /// would otherwise hash-cons to one id with one recorded type.
     pub fn alloc_unshared(&mut self, kind: ValueKind, type_id: TypeId) -> ValueId {
-        let id = ValueId(self.values.len() as u32);
-        self.values.push(kind);
-        self.types.push(Some(type_id));
-        id
+        self.alloc(kind, Some(type_id))
     }
 
     /// Name an evaluated constant, whatever its shape — the single place that
@@ -661,23 +669,24 @@ impl ValuePool {
     /// Allocate a fresh `Opaque` value. Each call returns a `ValueId`
     /// distinct from every prior call to `fresh_opaque` on this pool.
     pub fn fresh_opaque(&mut self) -> ValueId {
-        let opaque = OpaqueId(self.next_opaque);
-        self.next_opaque += 1;
-        self.intern(ValueKind::Opaque(opaque))
+        self.mint_opaque(None)
     }
 
     /// Allocate a fresh `Opaque` reading local `idx`.
     pub fn fresh_opaque_local(&mut self, idx: u32) -> ValueId {
-        let opaque = OpaqueId(self.next_opaque);
-        self.next_opaque += 1;
-        self.opaque_locals.insert(opaque, idx);
-        self.intern(ValueKind::Opaque(opaque))
+        self.mint_opaque(Some(idx))
+    }
+
+    fn mint_opaque(&mut self, local: Option<u32>) -> ValueId {
+        let opaque = OpaqueId(u32::try_from(self.opaque_locals.len()).expect("opaques fit u32"));
+        self.opaque_locals.push(local);
+        self.alloc(ValueKind::Opaque(opaque), None)
     }
 
     /// The local an `Opaque` reads, if it reads one.
     #[inline]
     pub fn opaque_local(&self, opaque: OpaqueId) -> Option<u32> {
-        self.opaque_locals.get(&opaque).copied()
+        self.opaque_locals[opaque.0 as usize]
     }
 
     /// The local an `Opaque` in a promoted operand reads, as every one does.
@@ -905,14 +914,9 @@ impl ValuePool {
             .iter()
             .filter_map(|(&idx, &v)| remap[idx as usize].map(|new| (new, v)))
             .collect();
-        self.opaque_locals
-            .retain(|_, idx| match remap[*idx as usize] {
-                Some(new) => {
-                    *idx = new;
-                    true
-                }
-                None => false,
-            });
+        for local in &mut self.opaque_locals {
+            *local = local.and_then(|idx| remap[idx as usize]);
+        }
     }
 
     /// Whether `id`'s value can be re-emitted purely from the graph and

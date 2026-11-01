@@ -1,0 +1,14 @@
+// `Hidden` is declared in the module imported from but not imported here, so
+// the method turbofish naming it is reported. Passed on to a parameter that
+// names it through a projection, its value once reached codegen as `unknown`.
+
+use { Recorder, Shown, taken } from "./sub/turbofish_unimported_type_dep.wado";
+
+test "an unimported type in a method turbofish is reported" {
+    let mut r = Recorder {};
+    let v = r.parameter::<f32, [Shown, Hidden]>([1]);
+    assert taken(&mut r, &v) == 1;
+}
+
+__DATA__
+{"compile_error": ":9:40: analysis error: unknown type 'Hidden'"}

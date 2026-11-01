@@ -417,8 +417,12 @@ impl RefTargets {
 }
 
 #[must_use]
-pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTargets {
-    let mut roots = IndexMap::default();
+pub fn compute_ref_targets(
+    func: &TirFunction,
+    resolver: &Resolver<'_>,
+    type_table: &TypeTable,
+) -> RefTargets {
+    let mut taken_over: IndexMap<u32, u32> = IndexMap::default();
     for local in 0..func.local_count {
         // A path through a reference names the slot holding the reference, not what it
         // points at, so it yields no referent.
@@ -426,9 +430,27 @@ pub fn compute_ref_targets(func: &TirFunction, resolver: &Resolver<'_>) -> RefTa
             && place.root != local
             && !place.through_ref
         {
-            roots.insert(local, place.root);
+            taken_over.insert(local, place.root);
         }
     }
+    // A root that is itself a reference owns nothing: `let b = a` with `a: &T`
+    // points where `a` does, which is no local at all for a parameter. Rebound
+    // `mut` reference parameters can close a loop (`x = y; y = z; z = x;`),
+    // and a loop of references reaches no storage either.
+    let referent = |mut root: u32| {
+        let mut seen = IndexSet::default();
+        while is_reference_local(func, root, type_table) {
+            if !seen.insert(root) {
+                return None;
+            }
+            root = *taken_over.get(&root)?;
+        }
+        Some(root)
+    };
+    let roots = taken_over
+        .keys()
+        .filter_map(|&local| Some((local, referent(taken_over[&local])?)))
+        .collect();
     RefTargets { roots }
 }
 

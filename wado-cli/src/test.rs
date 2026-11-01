@@ -151,6 +151,7 @@ impl TestOptions {
             test_selection: TestSelection {
                 names: self.test_name_filters.clone(),
                 workloads_only: matches!(self.measurement, Some(Measurement::Pgo { .. })),
+                ..TestSelection::default()
             },
             coverage: self.measurement.as_ref().map(Measurement::scope),
             ..CompileFlags::default()

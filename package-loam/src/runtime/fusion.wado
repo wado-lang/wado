@@ -1,0 +1,528 @@
+//! How a device's compiler groups a recorded pass into kernels. A value fuses
+//! into the kernel all its readers are in, a fold along the last axis joins the
+//! row it folds, and a view of a value the kernel computes moves nothing. A node
+//! that reads no argument is computed once, when the pass is compiled. See
+//! `package-loam/webgpu.md`.
+
+use { HashMap } from "core:collections";
+use { Binary, Comparison, Unary } from "./hlo.wado";
+use { Any, Recorded, RecordedNode, Region } from "./recorded.wado";
+use { BinaryOp, Cpu, Expr, RowOp, UnaryOp, constant, operand } from "./tensor.wado";
+
+/// What a program runs for one region, in order, and the nodes it yields.
+pub struct Plan {
+    pub launches: List<Launch>,
+    pub results: List<i32>,
+}
+
+pub variant Launch {
+    /// A node the device computes as its `Graph` adds it.
+    Node(i32),
+    Kernel(Kernel),
+    /// A `Case` node, each branch planned on its own.
+    Case([i32, Plan, Plan]),
+}
+
+/// One kernel: `op` over `operands` at each element of `extents`, row by row
+/// of its last axis where a step folds one, computing the node `root`. Where
+/// it computes a `product`, a `DotGeneral` node, `op` is that product's
+/// epilogue: `operand(0)` is the product, and `operand(i)` the `i - 1`th of
+/// `operands`.
+pub struct Kernel {
+    pub op: Expr,
+    pub operands: List<KernelOperand>,
+    pub root: i32,
+    pub extents: List<i32>,
+    /// Whether it writes one value per row of `extents`.
+    pub reduced: bool,
+    pub product: Option<i32>,
+}
+
+/// A node a kernel reads, under the extents it reads it at: the kernel's, or
+/// one value per row.
+pub struct KernelOperand {
+    pub node: i32,
+    pub extents: List<i32>,
+}
+
+impl Plan {
+    /// The nodes it returns, and every node a launch of it, or of a branch
+    /// within it, reads.
+    pub fn reads(&self, recorded: &Recorded) -> List<i32> {
+        let mut reads = self.results;
+        for let launch of self.launches {
+            match launch {
+                Node(id) => reads.extend(&recorded.nodes[id].operands),
+                Kernel(k) => {
+                    for let o of k.operands {
+                        reads.push(o.node);
+                    }
+                    if let Some(p) = k.product {
+                        reads.extend(&recorded.nodes[p].operands);
+                    }
+                },
+                Case([id, first, second]) => {
+                    reads.push(recorded.nodes[id].operands[0]);
+                    reads.extend(&first.reads(recorded));
+                    reads.extend(&second.reads(recorded));
+                },
+            }
+        }
+        return reads;
+    }
+}
+
+/// Each node `constants` holds, by the one value every element of it holds
+/// where there is one.
+pub fn splats_of(constants: &HashMap<i32, Any<Cpu>>) -> HashMap<i32, Option<f32>> {
+    let mut splats = HashMap::<i32, Option<f32>>::new();
+    for let [id, value] of constants.entries() {
+        splats[*id] = match value {
+            F32(t) => splat(&t.data),
+            Bool(t) => splat(&t.data.into_iter().map(|b| if b { 1.0 as f32 } else { 0.0 }).collect()),
+            I64(_) => null,
+        };
+    }
+    return splats;
+}
+
+fn splat(values: &List<f32>) -> Option<f32> {
+    if values.is_empty() {
+        return null;
+    }
+    let first = values[0];
+    return if values.into_iter().all(|v| v.to_bits() == first.to_bits()) { Option::Some(first) } else { null };
+}
+
+/// The launches of `recorded`'s body. `splats` holds each node that reads no
+/// argument, which no launch computes, by its one value where it has one,
+/// which a kernel folds in.
+pub fn planned(recorded: &Recorded, splats: &HashMap<i32, Option<f32>>) -> Plan {
+    return planned_region(recorded, &recorded.body, splats);
+}
+
+/// The nodes a kernel computes, the last of them `root`.
+struct Group {
+    root: i32,
+    /// The extents the kernel iterates: the rows a fold among its nodes
+    /// reads, or the root's.
+    space: List<i32>,
+    folds: bool,
+    /// The one product among its nodes, which a fold never joins.
+    product: Option<i32>,
+    members: List<i32>,
+}
+
+/// The reader standing for a branch or the region's results, which no
+/// kernel of the region holds.
+global OUTSIDE: i32 = -1;
+
+/// The nodes are read last to first, so each node's readers have their
+/// kernels already. A node joins its readers' kernel where they all share one.
+fn planned_region(recorded: &Recorded, region: &Region, splats: &HashMap<i32, Option<f32>>) -> Plan {
+    let mut readers = HashMap::<i32, List<i32>>::new();
+    for let id of region.nodes {
+        let node = &recorded.nodes[id];
+        for let o of node.operands {
+            read_by(&mut readers, o, id);
+        }
+        if let Case([first, second]) = node.op {
+            for let o of branch_reads(recorded, &first).into_iter().chain(branch_reads(recorded, &second).into_iter()) {
+                read_by(&mut readers, o, OUTSIDE);
+            }
+        }
+    }
+    for let r of region.results {
+        read_by(&mut readers, r, OUTSIDE);
+    }
+    let mut group_of = HashMap::<i32, i32>::new();
+    let mut groups: List<Group> = [];
+    for let mut i = region.nodes.len() - 1; i >= 0; i -= 1 {
+        let id = region.nodes[i];
+        let node = &recorded.nodes[id];
+        if splats.contains_key(id) || !fusable(recorded, node) {
+            continue;
+        }
+        if let Some(g) = shared_group(&readers, &group_of, id)
+            && !groups[g].product matches { Some(p) && readers[id].contains(&p) }
+            && let Some(joined) = joined(recorded, &groups[g], id, splats) {
+            groups[g] = joined;
+            group_of[id] = g;
+            continue;
+        }
+        if moves_nothing(recorded, node) {
+            continue;
+        }
+        let alone = Group {
+            root: id,
+            space: node.extents,
+            folds: false,
+            product: null,
+            members: [id],
+        };
+        let group = match node.op {
+            Reduce(_) => Group { ..alone, space: recorded.nodes[node.operands[0]].extents, folds: true },
+            DotGeneral(_) => Group { ..alone, product: Option::Some(id) },
+            _ => alone,
+        };
+        groups.push(group);
+        group_of[id] = groups.len() - 1;
+    }
+    let mut launches: List<Launch> = [];
+    for let id of region.nodes {
+        if splats.contains_key(id) {
+            continue;
+        }
+        if let Case([first, second]) = recorded.nodes[id].op {
+            launches.push(Launch::Case([
+                id,
+                planned_region(recorded, &first, splats),
+                planned_region(recorded, &second, splats),
+            ]));
+        } else if let Some(g) = group_of.get(id) {
+            if groups[g].root == id {
+                launches.push(Launch::Kernel(kernel_of(recorded, &groups[g], splats)));
+            }
+        } else {
+            launches.push(Launch::Node(id));
+        }
+    }
+    return Plan { launches, results: region.results };
+}
+
+fn read_by(readers: &mut HashMap<i32, List<i32>>, of: i32, by: i32) {
+    let mut by_now = readers.get(of).unwrap_or([]);
+    by_now.push(by);
+    readers[of] = by_now;
+}
+
+/// Every node a node of `region`, or of a branch within it, reads.
+fn branch_reads(recorded: &Recorded, region: &Region) -> List<i32> {
+    let mut reads: List<i32> = region.results;
+    for let id of region.nodes {
+        let node = &recorded.nodes[id];
+        reads.extend(&node.operands);
+        if let Case([first, second]) = node.op {
+            reads.extend(&branch_reads(recorded, &first));
+            reads.extend(&branch_reads(recorded, &second));
+        }
+    }
+    return reads;
+}
+
+/// The group every reader of `id` is in, where they share one.
+fn shared_group(readers: &HashMap<i32, List<i32>>, group_of: &HashMap<i32, i32>, id: i32) -> Option<i32> {
+    let by = readers.get(id).unwrap_or([]);
+    if by.is_empty() {
+        return null;
+    }
+    let mut shared: Option<i32> = null;
+    for let r of by {
+        let Some(g) = group_of.get(r) else {
+            return null;
+        };
+        if shared matches { Some(other) && other != g } {
+            return null;
+        }
+        shared = Option::Some(g);
+    }
+    return shared;
+}
+
+/// Whether a kernel computes `node`: an elementwise step, a view, or a sum or
+/// a maximum along the last axis, over elements a device holds as f32.
+fn fusable(recorded: &Recorded, node: &RecordedNode) -> bool {
+    let held = |id: i32| !recorded.nodes[id].kind matches { I64 };
+    if node.kind matches { I64 } || !node.operands.into_iter().all(|o| held(o)) {
+        return false;
+    }
+    return match node.op {
+        Unary(_) | Binary(_) | Compare(_) | Select | Convert | Reshape | BroadcastInDim(_) => true,
+        Reduce([op, init, dims]) => {
+            let x = &recorded.nodes[node.operands[0]].extents;
+            let last = x.len() - 1;
+            dims == [last] as List<i32>
+                && x[last] != 1
+                && match op {
+                    Add => init.to_bits() == 0,
+                    Maximum => init == f32::NEG_INFINITY,
+                    _ => false,
+                };
+        },
+        // The epilogue reads a value per row of the product's own rows, which
+        // are the result's last axis where its right operand leaves one free.
+        DotGeneral(dims) => {
+            let [lhs, rhs] = [
+                recorded.nodes[node.operands[0]].extents.len(),
+                recorded.nodes[node.operands[1]].extents.len(),
+            ];
+            lhs > dims.lhs_batch.len() + dims.lhs_contracting.len()
+                && rhs == dims.rhs_batch.len() + dims.rhs_contracting.len() + 1;
+        },
+        _ => false,
+    };
+}
+
+/// Whether `node` computes nothing on a device, so it starts no kernel of its
+/// own: a view, or a conversion from a bool or to its own element.
+fn moves_nothing(recorded: &Recorded, node: &RecordedNode) -> bool {
+    return match node.op {
+        Reshape | BroadcastInDim(_) => true,
+        Convert => {
+            let from = recorded.nodes[node.operands[0]].kind;
+            from matches { Bool } || from == node.kind;
+        },
+        _ => false,
+    };
+}
+
+/// `group` with `id` in it, or `None` where the kernel cannot compute it: each
+/// element it holds must be one the kernel computes at an element, or at a
+/// row, of the space it iterates.
+fn joined(recorded: &Recorded, group: &Group, id: i32, splats: &HashMap<i32, Option<f32>>) -> Option<Group> {
+    let node = &recorded.nodes[id];
+    let e = &node.extents;
+    let mut members = group.members;
+    members.push(id);
+    let added = Group { ..*group, members };
+    return match node.op {
+        Reduce(_) => {
+            let rows = &recorded.nodes[node.operands[0]].extents;
+            let whole = same_space(rows, &group.space) && rows[rows.len() - 1] == group.space[group.space.len() - 1];
+            let fits = group.product matches { None } && (whole || !group.folds && per_row(&group.space, rows));
+            if fits && reads_fit(recorded, &group.members, rows, splats) {
+                Option::Some(Group { ..added, space: *rows, folds: true });
+            } else {
+                null;
+            }
+        },
+        Reshape => {
+            let x = &recorded.nodes[node.operands[0]].extents;
+            if fits_in(e, &group.space) && squeezed(x) == squeezed(e) {
+                Option::Some(added);
+            } else {
+                null;
+            }
+        },
+        BroadcastInDim(dims) => {
+            let x = &recorded.nodes[node.operands[0]].extents;
+            if fits_in(e, &group.space) && (adds_unit_axes(x, e, &dims) || spreads_rows(x, e, &dims, &group.space)) {
+                Option::Some(added);
+            } else {
+                null;
+            }
+        },
+        DotGeneral(_) => if group.product matches { None } && !group.folds && same_space(e, &group.space) {
+            Option::Some(Group { ..added, product: Option::Some(id) });
+        } else {
+            null;
+        },
+        _ => if fits_in(e, &group.space) { Option::Some(added) } else { null },
+    };
+}
+
+/// Whether a kernel iterating `space` computes each of `members` and reads
+/// each value they read from outside it, a folded constant aside.
+fn reads_fit(recorded: &Recorded, members: &List<i32>, space: &List<i32>, splats: &HashMap<i32, Option<f32>>) -> bool {
+    for let m of *members {
+        let node = &recorded.nodes[m];
+        if !fits_in(&node.extents, space) {
+            return false;
+        }
+        for let o of node.operands {
+            let folded = splats.get(o) matches { Some(Some(_)) };
+            if !members.contains(&o) && !folded && !fits_in(&recorded.nodes[o].extents, space) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+/// Whether a broadcast of `x` to `e` along `dims` only adds axes of 1, so it
+/// keeps every element where it is.
+fn adds_unit_axes(x: &List<i32>, e: &List<i32>, dims: &List<i32>) -> bool {
+    return squeezed(x) == squeezed(e) && increasing(dims);
+}
+
+/// Whether a broadcast of `x`, one value per row of `space`, to `e`, the
+/// whole of `space`, reads each row's value at every element of its row.
+fn spreads_rows(x: &List<i32>, e: &List<i32>, dims: &List<i32>, space: &List<i32>) -> bool {
+    if !same_space(e, space) || !per_row(x, space) || !increasing(dims) {
+        return false;
+    }
+    let mut landed: List<i32> = [];
+    for let i of 0..<dims.len() {
+        if x[i] != 1 {
+            landed.push(dims[i]);
+        }
+    }
+    let mut row_axes: List<i32> = [];
+    for let a of 0..<e.len() {
+        if e[a] != 1 {
+            row_axes.push(a);
+        }
+    }
+    row_axes.pop();
+    return landed == row_axes;
+}
+
+fn increasing(dims: &List<i32>) -> bool {
+    for let i of 1..<dims.len() {
+        if dims[i] <= dims[i - 1] {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// `extents` without its axes of 1, which order no element.
+fn squeezed(extents: &List<i32>) -> List<i32> {
+    return (*extents).into_iter().filter(|e| e != 1).collect();
+}
+
+/// Whether `a` and `b` hold their elements in one order: a reshape between
+/// them moves none.
+fn same_space(a: &List<i32>, b: &List<i32>) -> bool {
+    return squeezed(a) == squeezed(b);
+}
+
+/// Whether `a` holds one value per row of `space`, a row being its last axis.
+fn per_row(a: &List<i32>, space: &List<i32>) -> bool {
+    let last = space.len() - 1;
+    return space.len() > 0 && space[last] != 1 && squeezed(a) == squeezed(&space[0..<last].to_list());
+}
+
+/// Whether a kernel iterating `space` computes a value of extents `e`: at
+/// each element, or at each row.
+fn fits_in(e: &List<i32>, space: &List<i32>) -> bool {
+    return same_space(e, space) || per_row(e, space);
+}
+
+/// The extents a kernel iterating `space` reads a value of extents `e` at.
+fn read_at(e: &List<i32>, space: &List<i32>) -> List<i32> {
+    if same_space(e, space) {
+        return *space;
+    }
+    assert per_row(e, space), "a kernel reads a value per element or per row";
+    let mut at = space[0..<space.len() - 1].to_list();
+    at.push(1);
+    return at;
+}
+
+/// The kernel computing `group`.
+fn kernel_of(recorded: &Recorded, group: &Group, splats: &HashMap<i32, Option<f32>>) -> Kernel {
+    let mut built = Built { recorded, group, splats, operands: [], exprs: HashMap::new() };
+    let op = built.expr(group.root);
+    let root = &recorded.nodes[group.root].extents;
+    return Kernel {
+        op,
+        operands: built.operands,
+        root: group.root,
+        extents: group.space,
+        reduced: !same_space(root, &group.space),
+        product: group.product,
+    };
+}
+
+/// A kernel's `Expr` as it is built from its root down.
+struct Built {
+    recorded: &Recorded,
+    group: &Group,
+    splats: &HashMap<i32, Option<f32>>,
+    operands: List<KernelOperand>,
+    exprs: HashMap<i32, Expr>,
+}
+
+impl Built {
+    /// What the kernel computes for node `id`: a step of its own where the
+    /// group holds it, and otherwise an operand or the constant it folds in.
+    fn expr(&mut self, id: i32) -> Expr {
+        if let Some(e) = self.exprs.get(id) {
+            return e;
+        }
+        let e = if self.group.members.contains(&id) {
+            self.step(id);
+        } else if let Some(Some(v)) = self.splats.get(id) {
+            constant(v);
+        } else {
+            self.read(id);
+        };
+        self.exprs[id] = e;
+        return e;
+    }
+
+    fn step(&mut self, id: i32) -> Expr {
+        let node = &self.recorded.nodes[id];
+        // The product kernel computes the product itself from its operands.
+        if node.op matches { DotGeneral(_) } {
+            return operand(0);
+        }
+        let x = self.expr(node.operands[0]);
+        return match node.op {
+            Unary(op) => unary_of(&x, op),
+            Binary(op) => x.binary(binary_op(op), &self.expr(node.operands[1])),
+            Compare(direction) => x.binary(compared_op(direction), &self.expr(node.operands[1])),
+            Select => x.select(&self.expr(node.operands[1]), &self.expr(node.operands[2])),
+            Convert => if node.kind matches { Bool } && self.recorded.nodes[node.operands[0]].kind matches { F32 } {
+                x.binary(BinaryOp::Ne, &constant(0.0));
+            } else {
+                x;
+            },
+            Reshape | BroadcastInDim(_) => x,
+            Reduce([Add, _, _]) => x.row(RowOp::Sum),
+            Reduce(_) => x.row(RowOp::Max),
+            _ => unreachable(),
+        };
+    }
+
+    fn read(&mut self, id: i32) -> Expr {
+        let at = match self.operands.position(|o| o.node == id) {
+            Some(k) => k,
+            None => {
+                let extents = read_at(&self.recorded.nodes[id].extents, &self.group.space);
+                self.operands.push(KernelOperand { node: id, extents });
+                self.operands.len() - 1;
+            },
+        };
+        return operand(if self.group.product matches { Some(_) } { at + 1 } else { at });
+    }
+}
+
+/// `op` applied to `x`.
+pub fn unary_of(x: &Expr, op: Unary) -> Expr {
+    return match op {
+        Abs => x.unary(UnaryOp::Abs),
+        Erf => x.unary(UnaryOp::Erf),
+        Exponential => x.unary(UnaryOp::Exp),
+        Log => x.unary(UnaryOp::Log),
+        Logistic => x.unary(UnaryOp::Sigmoid),
+        Negate => x.unary(UnaryOp::Neg),
+        Rsqrt => constant(1.0).binary(BinaryOp::Div, &x.unary(UnaryOp::Sqrt)),
+        Sqrt => x.unary(UnaryOp::Sqrt),
+        Tanh => x.unary(UnaryOp::Tanh),
+    };
+}
+
+pub fn binary_op(op: Binary) -> BinaryOp {
+    return match op {
+        Add => BinaryOp::Add,
+        Divide => BinaryOp::Div,
+        Maximum => BinaryOp::Maximum,
+        Minimum => BinaryOp::Minimum,
+        Multiply => BinaryOp::Mul,
+        Power => BinaryOp::Pow,
+        Subtract => BinaryOp::Sub,
+    };
+}
+
+pub fn compared_op(direction: Comparison) -> BinaryOp {
+    return match direction {
+        Eq => BinaryOp::Eq,
+        Ne => BinaryOp::Ne,
+        Ge => BinaryOp::Ge,
+        Gt => BinaryOp::Gt,
+        Le => BinaryOp::Le,
+        Lt => BinaryOp::Lt,
+    };
+}

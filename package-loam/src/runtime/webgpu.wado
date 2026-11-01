@@ -26,6 +26,8 @@ use {
     Window,
     broadcast_extents,
     element_count,
+    fused,
+    fused_rows,
     group_query_attention,
     operand,
     optional,
@@ -99,7 +101,7 @@ pub variant Placed<E, Axes> {
 /// An operand of a fused or row kernel whose output has the axes `Axes`: a
 /// view under its own extents, aligned with the output's from the end.
 pub struct PlacedRead<Axes> {
-    view: DeviceTensor,
+    internal view: DeviceTensor,
 }
 
 /// A buffer the backend owns. A struct, so a list hands one out by reference,
@@ -1083,13 +1085,54 @@ impl WebGpuBackend {
         &mut self,
         operands: &List<DeviceTensor>,
         op: &Expr,
+    ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract !op.folds_rows()
+    {
+        return self.grouped(operands, broadcast_all(operands), op, false);
+    }
+
+    /// `op` over `operands` at each element of `extents`, or row by row of its
+    /// last axis where it folds one, writing one value a row where `reduced`:
+    /// on the device where they fit a dispatch and on the CPU otherwise.
+    internal fn grouped<Axes>(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        extents: List<i32>,
+        op: &Expr,
+        reduced: bool,
     ) -> Placed<f32, Axes> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let extents = broadcast_all(operands);
+        if op.folds_rows() {
+            return self.rows_over::<Axes, Axes>(operands, extents, op, 1, reduced);
+        }
         if let Some(out) = self.elementwise(operands, extents, op) {
             return Placed::Device(out);
         }
         let held = self.held(operands);
-        return Placed::Host(self.cpu.fused(self.cpu_reads::<Axes>(&held, operands), op));
+        return Placed::Host(fused(&self.cpu_reads::<Axes>(&held, operands), op, extents));
+    }
+
+    /// `op` over `operands` row by row of `extents`, a row being its last
+    /// `row_axes` axes, writing one value a row where `reduced`: on the device
+    /// where they fit a dispatch and on the CPU otherwise.
+    fn rows_over<In, Out>(
+        &mut self,
+        operands: &List<DeviceTensor>,
+        extents: List<i32>,
+        op: &Expr,
+        row_axes: i32,
+        reduced: bool,
+    ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+        if let Some(out) = self.row_kernel(operands, extents, op, row_axes, reduced) {
+            return Placed::Device(out);
+        }
+        let held = self.held(operands);
+        return Placed::Host(fused_rows::<In, Out>(
+            &self.cpu_reads::<In>(&held, operands),
+            op,
+            row_axes,
+            reduced,
+            extents,
+        ));
     }
 
     /// Each operand's elements on the host, for a kernel the device cannot run.
@@ -1512,7 +1555,9 @@ impl WebGpuBackend {
     /// turned, and values to the attention cache, one attends each
     /// query row over each part of its positions in a workgroup of its own,
     /// and one joins each row's parts. `rotary` is the cosine and sine
-    /// tables. `None` where the operands outgrow what a dispatch binds.
+    /// tables. The past is the first `past` positions `past_k` and `past_v`
+    /// hold, and the cache holds every position they do. `None` where the
+    /// operands outgrow what a dispatch binds.
     internal fn attended(
         &mut self,
         q: &DeviceTensor,
@@ -1520,15 +1565,18 @@ impl WebGpuBackend {
         v: &DeviceTensor,
         past_k: &DeviceTensor,
         past_v: &DeviceTensor,
+        past: i32,
         rotary: &Option<[DeviceTensor, DeviceTensor]>,
         bias: &Option<DeviceTensor>,
         options: &Attention,
-    ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
-        let [batch, s, past, d] = [q.extents[0], q.extents[1], past_k.extents[2], past_k.extents[3]];
+    ) -> Option<[DeviceTensor, DeviceTensor, DeviceTensor]> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder)
+        contract 0 <= past <= past_k.extents[2]
+    {
+        let [batch, s, d] = [q.extents[0], q.extents[1], past_k.extents[3]];
         let [heads, kv] = [options.heads, options.kv_heads];
         let total = past + s;
         let rows = batch * s * heads;
-        let capacity = self.cache_capacity(batch * kv * d, total);
+        let capacity = self.cache_capacity(batch * kv * d, i32::max(total, past_k.extents[2]));
         let n = batch * kv * capacity * d;
         // The parts are held for every position the cache holds, as its
         // views are, so their bindings too stay those of the step before.
@@ -1844,11 +1892,7 @@ impl Backend for WebGpuBackend {
         reduced: bool,
     ) -> Placed<f32, Out> with (GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
         let all = operand_views(&operands);
-        if let Some(out) = self.row_kernel(&all, broadcast_all(&all), op, row_axes, reduced) {
-            return Placed::Device(out);
-        }
-        let held = self.held(&all);
-        return Placed::Host(self.cpu.rows::<In, Out>(self.cpu_reads::<In>(&held, &all), op, row_axes, reduced));
+        return self.rows_over::<In, Out>(&all, broadcast_all(&all), op, row_axes, reduced);
     }
 
     fn cast<A: Element, B: Element, Axes>(
@@ -2151,6 +2195,7 @@ impl Backend for WebGpuBackend {
             &self.device_view(v),
             &self.device_view(past_k),
             &self.device_view(past_v),
+            self.extents_of(past_k)[2],
             &rotary,
             &bias_view,
             options,
@@ -2474,7 +2519,7 @@ fn reach(t: &DeviceTensor) -> [i32, i32] {
 }
 
 /// `t` along `axis` from `start`, `length` of it.
-fn sliced(t: &DeviceTensor, axis: i32, start: i32, length: i32) -> DeviceTensor {
+internal fn sliced(t: &DeviceTensor, axis: i32, start: i32, length: i32) -> DeviceTensor {
     let mut view = *t;
     view.offset += start * t.strides[axis];
     view.extents[axis] = length;

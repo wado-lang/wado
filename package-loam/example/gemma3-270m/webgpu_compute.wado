@@ -1,0 +1,52 @@
+//! Gemma 3 (270M) on a WebGPU device, a token a `compute` through the program
+//! the backend compiled for its shape class. It prints what `webgpu.wado` does,
+//! for the two to be compared. `README.md` says how to run it.
+
+use { eprintln, Stderr, Stdout } from "core:cli";
+use fs from "core:fs";
+use { Preopens } from "core:fs";
+use { MonotonicClock } from "wasi:clocks";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuSupportedLimits,
+    RecordOptionGpuSize64,
+} from "wasi:webgpu";
+use { WebGpuBackend } from "lib:loam";
+use { continued, recorded } from "./continued.wado";
+use { Built } from "./model.wado";
+
+export fn run() with (Stdout, Stderr, Preopens, MonotonicClock, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder, GpuSupportedLimits, RecordOptionGpuSize64) {
+    let checkpoint = match fs::read_linear("build/model.onnx_data") {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            eprintln(`${e}; run fetch.sh first`);
+            return;
+        },
+    };
+    let Some(generate) = recorded() else {
+        return;
+    };
+    let Some(gpu) = WebGpuBackend::new() else {
+        eprintln("no WebGPU adapter");
+        return;
+    };
+    let mut built = Built::load(gpu, &checkpoint).unwrap();
+    // The device holds the weights.
+    builtin::drop(checkpoint);
+    continued(generate, |ids| built.next_token(ids), || [
+        built.backend().read_backs(),
+        built.backend().dispatches(),
+    ]);
+}
