@@ -11,10 +11,9 @@ use crate::module_source::ModuleSource;
 use crate::name::mangle_generic_name;
 use crate::tir::{
     LetStorage, MonomorphInfo, ResolvedType, StructDef, TirBlock, TirExpr, TirExprKind, TirField,
-    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp,
-    TypeId,
+    TirFunction, TirLocal, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId,
 };
-use crate::tir_visitor::TirRefVisitor;
+use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 use crate::token::Span;
 use crate::type_table::{TypeKey, TypeTable};
 
@@ -64,33 +63,27 @@ pub fn prepare_types(flat: &mut FlatPackage) -> BoxPlan {
 }
 
 /// Per function: for address-taken parameters, allocate a `Box`
-/// shadow local + prelude `Let` + remap reads; for non-param
+/// shadow local + prelude `Let` + remap the `&` (and a `mut` one's reads); for non-param
 /// address-taken locals, retag the declaration to its box type.
 /// Function bodies are otherwise untouched.
 pub fn shadow_params(flat: &mut FlatPackage, plan: &BoxPlan) {
-    let type_table = flat.type_table.clone();
-    let type_table = type_table.borrow();
     for func_rc in &flat.functions {
-        let mut func = func_rc.borrow_mut();
-        shadow_one_function(&mut func, plan, &type_table);
+        shadow_one_function(&mut func_rc.borrow_mut(), plan);
     }
 }
 
 pub fn shadow_new_functions(flat: &mut FlatPackage, plan: &BoxPlan, start: usize) {
-    let type_table = flat.type_table.clone();
-    let type_table = type_table.borrow();
     for func_rc in &flat.functions[start..] {
-        let mut func = func_rc.borrow_mut();
-        shadow_one_function(&mut func, plan, &type_table);
+        shadow_one_function(&mut func_rc.borrow_mut(), plan);
     }
 }
 
-fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &TypeTable) {
+fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan) {
     let address_taken = still_taken(func);
     let param_count = u32::try_from(func.params.len()).unwrap();
 
-    // (param_idx, shadow_local_idx, box_type_id, original_type_id, name)
-    let mut shadowed_params: Vec<(u32, u32, TypeId, TypeId, String)> = Vec::new();
+    // (param_idx, shadow_local_idx, original_type_id, name)
+    let mut shadowed_params: Vec<(u32, u32, TypeId, String)> = Vec::new();
     let mut effective_address_taken = address_taken.clone();
 
     for &local_idx in &address_taken {
@@ -110,7 +103,7 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
             });
             effective_address_taken.swap_remove(&local_idx);
             effective_address_taken.insert(shadow_idx);
-            shadowed_params.push((local_idx, shadow_idx, box_type_id, local_type_id, name));
+            shadowed_params.push((local_idx, shadow_idx, local_type_id, name));
         } else {
             // Retag the declaration so `convert_local` sees the box
             // type without the fold having to consult `BoxPlan`.
@@ -121,17 +114,23 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
     if !shadowed_params.is_empty()
         && let Some(body) = &mut func.body
     {
-        let mut remap: IndexMap<u32, u32> = IndexMap::default();
-        for (param_idx, shadow_idx, _, _, _) in &shadowed_params {
-            remap.insert(*param_idx, *shadow_idx);
-        }
-        remap_locals_in_block(body, &remap);
+        // An immutable parameter's box only gives `&param` an address: nothing
+        // writes it, so every other read stays on the parameter, where a
+        // constant argument stays visible to `param_spec` in the same round.
+        let (mutable, immutable): (Vec<_>, Vec<_>) = shadowed_params
+            .iter()
+            .map(|(param_idx, shadow_idx, _, _)| (*param_idx, *shadow_idx))
+            .partition(|(param_idx, _)| func.params[*param_idx as usize].is_mut);
+        remap_locals_in_block(body, &mutable.into_iter().collect());
+        RemapReferences(immutable.into_iter().collect()).visit_block(body);
 
+        // The shadow is declared as a boxed `let` local is: of the parameter's
+        // own type, which the lowering wraps in the box, sharing the
+        // parameter's storage. A `let` of the box itself, or one that owns its
+        // value, would hide from every analysis that the box holds what the
+        // parameter does, the caller's storage included.
         let mut prelude_stmts: Vec<TirStmt> = Vec::with_capacity(shadowed_params.len());
-        for (param_idx, shadow_idx, box_type_id, original_type_id, name) in &shadowed_params {
-            let box_struct_name = type_table
-                .struct_list_name(*box_type_id)
-                .expect("Box type should be a struct");
+        for (param_idx, shadow_idx, original_type_id, name) in &shadowed_params {
             let span = func.span;
             let param_read = TirExpr::new(
                 TirExprKind::Local {
@@ -141,27 +140,14 @@ fn shadow_one_function(func: &mut TirFunction, plan: &BoxPlan, type_table: &Type
                 *original_type_id,
                 span,
             );
-            let wrap = TirExpr::new(
-                TirExprKind::StructLiteral {
-                    struct_type: *box_type_id,
-                    struct_name: box_struct_name,
-                    fields: vec![TirStructField {
-                        name: "value".to_string(),
-                        value: param_read,
-                        field_index: 0,
-                    }],
-                },
-                *box_type_id,
-                span,
-            );
             prelude_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: format!("$boxed_param_{param_idx}"),
                     local_index: *shadow_idx,
                     is_mut: false,
-                    type_id: *box_type_id,
-                    value: wrap,
-                    storage: LetStorage::Taken,
+                    type_id: *original_type_id,
+                    value: param_read,
+                    storage: LetStorage::Aliased,
                 },
                 span,
             ));
@@ -352,6 +338,21 @@ impl TypeBuilder {
             let box_type = self.get_or_create_box_type(key, type_table);
             self.box_struct_types.insert(base_type_id, box_type);
         }
+        // A referent's id need not be the one its `&` spells: a closure local
+        // is `fn(i32) -> i32` while `&f` reads `&fn(i32) -> i32 with($e)`. Each
+        // id sharing a boxed representation maps to that box, or the local
+        // stays unboxed while its `&` reads a box.
+        for type_id in type_table.iter_type_ids().collect::<Vec<_>>() {
+            if self.box_struct_types.contains_key(&type_id)
+                || !type_table.is_boxed_reference_target(type_id)
+            {
+                continue;
+            }
+            let key = self.box_key(type_id, type_table);
+            if let Some(&box_type) = self.box_struct_types.get(&key) {
+                self.box_struct_types.insert(type_id, box_type);
+            }
+        }
         for ty in boxed_slots {
             type_table.register_slot_box(ty, self.box_struct_types[&ty]);
         }
@@ -396,9 +397,33 @@ impl TypeBuilder {
     }
 }
 
+/// Point each `&local` and `&mut local` at the local's shadow, leaving its
+/// value reads alone. A closure body numbers its own locals, so it is not
+/// entered.
+struct RemapReferences(IndexMap<u32, u32>);
+
+impl TirMutVisitor for RemapReferences {
+    fn visit_expr(&mut self, expr: &mut TirExpr) {
+        match &mut expr.kind {
+            TirExprKind::Unary {
+                op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
+                expr: inner,
+            } if matches!(inner.kind, TirExprKind::Local { .. }) => {
+                if let TirExprKind::Local { index, .. } = &mut inner.kind
+                    && let Some(&shadow) = self.0.get(index)
+                {
+                    *index = shadow;
+                }
+            }
+            TirExprKind::Closure { .. } => {}
+            _ => self.walk_expr(expr),
+        }
+    }
+}
+
 /// Rewrite every `Local { index }` reference in `block` according to
-/// `remap`. Used by [`shadow_one_function`] to redirect address-taken
-/// parameter reads to the param's `Box`-typed shadow local.
+/// `remap`. Used by [`shadow_one_function`] to redirect an address-taken
+/// `mut` parameter's reads to its `Box`-typed shadow local.
 ///
 /// Closure bodies are skipped: closure locals live in their own scope
 /// and reuse the same indices, so descending would cause unrelated

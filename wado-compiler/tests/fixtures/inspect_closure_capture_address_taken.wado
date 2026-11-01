@@ -1,0 +1,30 @@
+// A capture whose binding's address is taken is read through a reference
+// lowering adds, and `:#?` shows the closure as written, without that `*`.
+
+fn make_adder(n: i32) -> fn(i32) -> i32 {
+    builtin::black_box(&n);
+    return |z: i32| z + n;
+}
+
+test "a captured parameter whose address is taken prints bare" {
+    assert `${make_adder(42):#?}` == "|z: i32| captures[n] (z + n)";
+}
+
+test "a captured local whose address is taken prints bare" {
+    let m = 7;
+    builtin::black_box(&m);
+    let f = |x: i32| x + m;
+    assert `${f:#?}` == "|x: i32| captures[m] (x + m)";
+}
+
+test "a dereference the source wrote still prints" {
+    let k = 5;
+    let r = &k;
+    let g = |x: i32| x + *r;
+    assert `${g:#?}` == "|x: i32| captures[r] (x + *r)";
+}
+
+__DATA__
+{
+    "test": {}
+}
