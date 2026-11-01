@@ -546,6 +546,17 @@ struct OwnerSite {
     gone: Option<Gone>,
 }
 
+impl OwnerSite {
+    /// Whether a reference so taken can raise anything: a move or a drop ends
+    /// only what reaches an affine local, and only a write through the value
+    /// disturbs one or stores into it. A shared reference into a local that
+    /// does not move is neither, and a generated pass hands thousands of them
+    /// to the one `&mut` backend every value then refers into.
+    fn matters(&self) -> bool {
+        self.affine || self.writes
+    }
+}
+
 /// A `&mut` use of a place: `via` is the binding it went through.
 #[derive(Clone)]
 struct Disturbance {
@@ -1328,7 +1339,9 @@ impl MoveWalker<'_, '_> {
                 writes,
                 gone: None,
             };
-            owners.insert(self.owner(def, Vec::new()), site);
+            if site.matters() {
+                owners.insert(self.owner(def, Vec::new()), site);
+            }
             if !self.is_own_local(def) {
                 self.captures.insert(def, name);
                 if writes {
@@ -1456,22 +1469,20 @@ impl MoveWalker<'_, '_> {
 
     /// The locals a write through `target` may land in: its root, and what the
     /// root refers into.
-    fn write_targets(&self, target: &Expr) -> Vec<AstId> {
-        let mut targets = Vec::new();
+    fn write_targets(&self, target: &Expr) -> IndexSet<AstId> {
+        let mut targets = IndexSet::default();
         let Some(root) = write_root(target) else {
             return targets;
         };
         let Some(def) = self.sem().referenced_symbol(root.id) else {
             return targets;
         };
-        targets.push(def);
+        targets.insert(def);
         let mut at = 0;
         while at < targets.len() {
             if let Some(owners) = self.flow.holders.get(&targets[at]) {
                 for owner in owners.keys() {
-                    if !targets.contains(&owner.def) {
-                        targets.push(owner.def);
-                    }
+                    targets.insert(owner.def);
                 }
             }
             at += 1;
@@ -1494,7 +1505,7 @@ impl MoveWalker<'_, '_> {
                 through.push((Operand::Arg(i), arg));
             }
         }
-        let stores: Vec<(Vec<AstId>, Owners)> = through
+        let stores: Vec<(IndexSet<AstId>, Owners)> = through
             .iter()
             .map(|(operand, target)| {
                 let owners = self.operands_owners(call, Destination::Through(*operand));
@@ -1678,16 +1689,16 @@ impl MoveWalker<'_, '_> {
                 if let Some(writes) = borrow
                     && self.sem().local_type(def).is_some()
                 {
-                    owners.insert(
-                        self.owner(def, place.owned_fields()),
-                        OwnerSite {
-                            name: place.root.name.clone(),
-                            span: expr.span(),
-                            affine: self.is_affine_local(def),
-                            writes,
-                            gone: None,
-                        },
-                    );
+                    let site = OwnerSite {
+                        name: place.root.name.clone(),
+                        span: expr.span(),
+                        affine: self.is_affine_local(def),
+                        writes,
+                        gone: None,
+                    };
+                    if site.matters() {
+                        owners.insert(self.owner(def, place.owned_fields()), site);
+                    }
                 }
                 owners
             }
