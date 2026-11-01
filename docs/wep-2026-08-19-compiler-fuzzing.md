@@ -155,10 +155,13 @@ each shape and payload reached.
   stdlib's own tests under `O3`, which nothing else does — `wado test` runs
   them at `O2` — and the baselines that failed there were two wrong-code
   bugs the fixtures never reached.
-- [ ] Draw the corpus from the packages (`package-gale` and its siblings) too. A
-  package is many files behind a manifest, so the runner needs to resolve
-  dependencies and to compile an entry while one module below it carries the
-  injection — neither of which a single-file subject asks for.
+- [x] Draw the corpus from packages and `benchmark/` too. A source there
+  compiles in the package its `wado.toml` puts it in, with the dependencies
+  and generators the manifests declare. The report gives each root's time and
+  the costliest sources, and that cost chose the packages: Marl, Jade and the
+  CM catalog every night, and the benchmarks without their `test "fuel"`
+  blocks, which are sized for `-O2`. Gale, Loam, Grog and `SurfaceDom`'s tests
+  cost several times more for the shapes they add and stay out.
 - [ ] Harvested-statement payload.
 - [ ] Name the pass behind a finding by bisecting `WADO_LIST_PASSES` with
   `WADO_SKIP_PASS`, and write the reduced program out as a fixture.

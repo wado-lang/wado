@@ -2,9 +2,10 @@
 //! keeps the sources an injected `builtin::black_box(false)` guard leaves
 //! alone, and [`mutate_corpus`] reports the ones a [`Payload`] behind it moves.
 //!
-//! The material comes from every [`Root`]: the e2e fixtures, the stdlib modules
-//! that carry `test` blocks, and the `example/` programs. Each guard is written
-//! in every [`Shape`], so a dead region is compiled as a branch and as a loop.
+//! The material comes from every [`Root`] in [`ROOTS`]: the e2e fixtures, the
+//! stdlib modules that carry `test` blocks, the `example/` programs, and the
+//! `test` blocks of some packages and of `benchmark/`. Each guard is written in
+//! every [`Shape`], so a dead region is compiled as a branch and as a loop.
 //!
 //! The design and what is left to build are in
 //! [WEP: Compiler Fuzzing](../../docs/wep-2026-08-19-compiler-fuzzing.md).
