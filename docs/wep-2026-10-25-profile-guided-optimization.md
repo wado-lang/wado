@@ -53,9 +53,9 @@ test "sieve to 200k" {
 
 `wado test` runs a workload like any other test, so a workload that breaks
 fails the suite instead of rotting. The attribute combines with
-`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]` it is a
-compile error: such a test traps by design, and a workload that traps fails
-the recording (below).
+`#[timeout_ms]` and `#[synopsis]`. With `#[expect_trap]` or `#[TODO]`, or in a
+module marked `#![TODO]`, it is a compile error: such a test traps by design,
+and a workload that traps fails the recording (below).
 
 A workload should be deterministic and small. Its counts then come out the same
 on every run, so the committed profile changes only when the code or the
@@ -323,9 +323,6 @@ level.
 - [ ] A region is measured once for all of a generic function's
   instantiations, so an instantiation the workload never ran shares the counts
   of one it ran.
-- [ ] `#[workload]` in a module marked `#![TODO]` compiles. Every test of such
-  a module is pending, so the workload fails the recording if it traps, and is
-  reported as unexpectedly passing if it returns.
 - [ ] A NIR `match` is read as if every arm's guard ran only on some paths. The
   first arm's guard runs on every path through the `match`, so a marker under
   it covers the `match` but is not read that way.

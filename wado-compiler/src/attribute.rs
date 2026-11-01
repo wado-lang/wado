@@ -600,6 +600,8 @@ pub enum AttributeFault {
     StdlibOnly,
     /// `#[workload]` on a test that `other` marks as trapping by design.
     TrapsByDesign { other: &'static str },
+    /// `#[workload]` on a test in a `#![TODO]` module.
+    WorkloadInTodoModule,
 }
 
 impl AttributeFault {
@@ -648,6 +650,10 @@ impl AttributeFault {
             Self::TrapsByDesign { other } => format!(
                 "`{WORKLOAD}` cannot mark a test that `{other}` marks: a workload must return, \
                  and such a test traps by design"
+            ),
+            Self::WorkloadInTodoModule => format!(
+                "`{WORKLOAD}` cannot mark a test in a module that `#![{TODO}]` marks: a workload \
+                 must return, and every test there traps by design"
             ),
         }
     }
@@ -708,6 +714,9 @@ pub fn check(written: &WrittenAttribute<'_>, in_program: bool) -> Option<Attribu
     }
     if name == COVERAGE && !matches!(args, [AttrArg::Ident(word)] if word == "off") {
         return Some(AttributeFault::Arguments { schema });
+    }
+    if name == WORKLOAD && written.in_todo_module {
+        return Some(AttributeFault::WorkloadInTodoModule);
     }
     traps_by_design_beside_workload(name, written.earlier)
         .map(|other| AttributeFault::TrapsByDesign { other })
@@ -808,10 +817,17 @@ pub struct WrittenAttribute<'a> {
     pub span: Span,
     /// The attributes written before this one on the same declaration.
     pub earlier: &'a [Attribute],
+    /// The module is marked `#![TODO]`, so each of its tests traps by design.
+    pub in_todo_module: bool,
 }
 
 impl<'a> WrittenAttribute<'a> {
-    fn outer(attrs: &'a [Attribute], index: usize, target: AttrTarget) -> Self {
+    fn outer(
+        attrs: &'a [Attribute],
+        index: usize,
+        target: AttrTarget,
+        in_todo_module: bool,
+    ) -> Self {
         let attr = &attrs[index];
         Self {
             name: &attr.name,
@@ -819,6 +835,7 @@ impl<'a> WrittenAttribute<'a> {
             target,
             span: attr.span,
             earlier: &attrs[..index],
+            in_todo_module,
         }
     }
 
@@ -829,6 +846,7 @@ impl<'a> WrittenAttribute<'a> {
             target: AttrTarget::Module,
             span: attr.span,
             earlier: &[],
+            in_todo_module: false,
         }
     }
 }
@@ -838,7 +856,10 @@ pub fn for_each_attribute(module: &Module, mut f: impl FnMut(WrittenAttribute<'_
     for attr in module.inner_attributes() {
         f(WrittenAttribute::inner(attr));
     }
-    let mut walk = AttributeWalk { report: &mut f };
+    let mut walk = AttributeWalk {
+        report: &mut f,
+        in_todo_module: module.has_todo(),
+    };
     for item in &module.items {
         walk.visit_item(item);
     }
@@ -846,12 +867,18 @@ pub fn for_each_attribute(module: &Module, mut f: impl FnMut(WrittenAttribute<'_
 
 struct AttributeWalk<'a, F: FnMut(WrittenAttribute<'_>)> {
     report: &'a mut F,
+    in_todo_module: bool,
 }
 
 impl<F: FnMut(WrittenAttribute<'_>)> AttributeWalk<'_, F> {
     fn report(&mut self, attrs: &[Attribute], target: AttrTarget) {
         for index in 0..attrs.len() {
-            (self.report)(WrittenAttribute::outer(attrs, index, target));
+            (self.report)(WrittenAttribute::outer(
+                attrs,
+                index,
+                target,
+                self.in_todo_module,
+            ));
         }
     }
 }
@@ -963,6 +990,7 @@ mod tests {
                 target,
                 span: Span::default(),
                 earlier: &[],
+                in_todo_module: false,
             },
             false,
         )
@@ -977,6 +1005,7 @@ mod tests {
             target: AttrTarget::Module,
             span: Span::default(),
             earlier: &[],
+            in_todo_module: false,
         };
         assert_eq!(check(&written, true), Some(AttributeFault::StdlibOnly));
         assert_eq!(check(&written, false), None);

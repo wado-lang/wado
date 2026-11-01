@@ -301,7 +301,7 @@ often each region ran into a profile the package commits, `pgo/default.pgo`
 (see [Profiles](./spec-testing.md#profiles)). A compile that reads the profile
 changes only what the program costs, never what it computes. It combines with
 `#[timeout_ms]` and `#[synopsis]`, and is an error with `#[expect_trap]` or
-`#[TODO]`, since a workload must not trap.
+`#[TODO]`, or in a module marked `#![TODO]`, since a workload must not trap.
 
 Rationale: [WEP: Profile-Guided Optimization](./wep-2026-10-25-profile-guided-optimization.md).
 
