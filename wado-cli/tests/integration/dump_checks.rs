@@ -1,5 +1,6 @@
 //! `wado dump` runs the checks `wado compile` runs before synthesis, with the
-//! same inputs, so it reports what they reject and dumps what they accept.
+//! same inputs: it fails on what they reject, after printing what it could
+//! dump, and dumps what they accept.
 
 use std::fs;
 
@@ -26,11 +27,28 @@ fn dump_rejects_what_compile_rejects() {
         .failure()
         .stderr(predicate::str::contains(rejection));
     wado_in(root)
-        .args(["dump", "--tir-monomorphized", "entry.wado"])
+        .args(["dump", "--ast", "entry.wado"])
         .assert()
+        .failure()
+        .stdout(predicate::str::contains("fn eat"))
         .stderr(
             predicate::str::contains(rejection).and(predicate::str::contains("panicked").not()),
         );
+}
+
+#[test]
+fn dump_fails_on_a_type_error() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("entry.wado"),
+        "export fn run() {\n    let _x: i32 = \"s\";\n}\n",
+    )
+    .unwrap();
+    wado_in(root)
+        .args(["dump", "--tir-monomorphized", "entry.wado"])
+        .assert()
+        .failure();
 }
 
 /// A provider discharges the guest effect its dependency imports. `dump`

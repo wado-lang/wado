@@ -428,6 +428,9 @@ pub struct DumpResult {
     pub wir_package: Option<wir::WirPackage>,
     /// AstId-keyed trivia for unparsing the dumped AST.
     pub trivia: comment::TriviaMap,
+    /// Whether the checks `compile` runs before synthesis rejected the
+    /// program, reported already, leaving the views after them empty.
+    pub rejected: bool,
 }
 
 /// A provider component supplied to satisfy a dependency's guest-effect import.
@@ -2763,6 +2766,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
         optimized_package,
         wir_package,
         trivia,
+        rejected: !checked,
     })
 }
 
